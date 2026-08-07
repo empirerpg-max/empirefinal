@@ -96,6 +96,19 @@ async function main() {
     );
   }
 
+  if (process.env.DEBUG_ORDER === "true") {
+    console.log("\n--- DEBUG_ORDER: linha (ordem na planilha) x ID da mensagem já preenchido ---");
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (normalize(row[fonteCol] || "") !== "telegram") continue;
+      const existingId = row[idMensagemCol];
+      if (existingId && /^\d+$/.test(existingId)) {
+        console.log(`row=${i + 1} id=${existingId}`);
+      }
+    }
+    console.log("--- FIM DEBUG_ORDER ---\n");
+  }
+
   const used = new Set<number>();
   const updates: { range: string; values: string[][] }[] = [];
   const lowConfidence: string[] = [];
