@@ -1,16 +1,23 @@
 # Empire Telegram Media
 
-Serviço separado (Fly.io) que loga como **bot** via MTProto (não a API HTTP
-do bot) e transmite vídeos grandes do grupo pra dentro do app. Via MTProto o
-limite de 20MB da API HTTP não existe — o bot consegue ler arquivos grandes
-normalmente. Nenhuma credencial chega ao navegador: o `empirefinal` fala com
-esse serviço por trás (`src/server.ts` → `/api/telegram-video/:messageId`).
+Serviço separado (Google Cloud Run) que loga como **bot** via MTProto (não a
+API HTTP do bot) e transmite vídeos grandes do grupo pra dentro do app. Via
+MTProto o limite de 20MB da API HTTP não existe — o bot consegue ler
+arquivos grandes normalmente. Nenhuma credencial chega ao navegador: o
+`empirefinal` fala com esse serviço por trás (`src/server.ts` →
+`/api/telegram-video/:messageId`).
+
+Por que Cloud Run e não o Cloudflare Workers do resto do app: o protocolo do
+Telegram (MTProto) precisa de conexão TCP persistente, o que o Workers não
+suporta — mas o Cloud Run roda um container Node.js de verdade, igual ao que
+o Google AI Studio já usa por trás dos panos.
 
 ## 1. Secrets no GitHub (repo `empirefinal`, aba Settings → Secrets → Actions)
 
 | Secret | O que é | Onde conseguir |
 |---|---|---|
-| `FLY_API_TOKEN` | Token da sua conta Fly.io | Fly.io dashboard → Account → Tokens |
+| `GCP_PROJECT_ID` | ID do seu projeto Google Cloud | Console do Google Cloud |
+| `GCP_SA_KEY` | Chave JSON de uma conta de serviço com permissão de deploy no Cloud Run | Console → IAM → Contas de serviço → Chaves (dê os papéis "Cloud Run Admin" e "Service Account User") |
 | `TELEGRAM_API_ID` | ID do app | my.telegram.org → API development tools |
 | `TELEGRAM_API_HASH` | Hash do app | my.telegram.org → API development tools |
 | `TELEGRAM_BOT_TOKEN` | Token do bot | @BotFather no Telegram |
@@ -24,14 +31,21 @@ membro normal (não precisa ser admin, só conseguir ver as mensagens).
 
 ## 3. Deploy
 
-Cadastre os 5 secrets acima e dê push (ou rode manualmente o workflow
+Cadastre os 6 secrets acima e dê push (ou rode manualmente o workflow
 "Deploy Telegram Media Service" na aba Actions do GitHub). Não tem passo de
 login manual — o bot loga sozinho a cada vez que o serviço sobe.
 
-Confirme que subiu:
+Depois do primeiro deploy, pegue a URL do serviço nos logs do workflow
+(campo "URL" no final do passo "Deploy no Cloud Run" — algo como
+`https://empire-telegram-media-xxxxxxxx.a.run.app`) e:
+
+1. Cole essa URL em `wrangler.jsonc` (raiz do repo), no campo `TELEGRAM_MEDIA_SERVICE_URL`
+2. Dê commit/push pra redeployar o `empirefinal` com a URL certa
+
+Confirme que o serviço subiu:
 
 ```
-curl https://empire-telegram-media.fly.dev/health
+curl https://SUA-URL-AQUI.a.run.app/health
 ```
 
 Deve responder `{"ok":true,"loggedIn":true}`.
@@ -51,3 +65,6 @@ Na aba **Music Videos**, para cada linha que usa o Telegram:
   Telegram: quem chama `/video/*` é o Worker do `empirefinal`, que injeta o
   token no lado do servidor (secret `TELEGRAM_MEDIA_ADMIN_TOKEN` também
   cadastrado lá).
+- O serviço aceita chamadas sem autenticação do próprio Cloud Run
+  (`--allow-unauthenticated`) porque a proteção é feita pela própria
+  aplicação (`x-admin-token`), não pelo IAM do Google Cloud.

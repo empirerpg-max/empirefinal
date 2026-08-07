@@ -27,3 +27,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: echo "${{ secrets.TELEGRAM_MEDIA_ADMIN_TOKEN }}" | bunx wrangler secret put TELEGRAM_MEDIA_ADMIN_TOKEN -c dist/tanstack_start_app/wrangler.json
+
+      - name: Set Google Sheets service account secret
+        if: ${{ secrets.GOOGLE_CREDENTIALS_JSON != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' | bunx wrangler secret put GOOGLE_SHEETS_CREDENTIALS -c dist/tanstack_start_app/wrangler.json

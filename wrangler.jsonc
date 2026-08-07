@@ -11,6 +11,9 @@
     }
   ],
   "vars": {
-    "TELEGRAM_MEDIA_SERVICE_URL": "https://empire-telegram-media.fly.dev"
+    // Atualize com a URL real depois do primeiro deploy do telegram-media no
+    // Cloud Run (aparece nos logs do workflow "Deploy Telegram Media
+    // Service" — algo como https://empire-telegram-media-XXXXX.a.run.app).
+    "TELEGRAM_MEDIA_SERVICE_URL": "https://empire-telegram-media-PLACEHOLDER.a.run.app"
   }
 }
