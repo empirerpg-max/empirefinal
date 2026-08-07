@@ -96,19 +96,6 @@ async function main() {
     );
   }
 
-  if (process.env.DEBUG_ORDER === "true") {
-    console.log("\n--- DEBUG_ORDER: linha (ordem na planilha) x ID da mensagem já preenchido ---");
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (normalize(row[fonteCol] || "") !== "telegram") continue;
-      const existingId = row[idMensagemCol];
-      if (existingId && /^\d+$/.test(existingId)) {
-        console.log(`row=${i + 1} id=${existingId} title=${JSON.stringify(row[titleCol] || "")} desc=${JSON.stringify((row[descricaoCol] || "").slice(0, 80))}`);
-      }
-    }
-    console.log("--- FIM DEBUG_ORDER ---\n");
-  }
-
   const used = new Set<number>();
   const updates: { range: string; values: string[][] }[] = [];
   const lowConfidence: string[] = [];
@@ -181,10 +168,130 @@ async function main() {
   console.log(
     `\n${exact} casados por Descrição (alta confiança), ${fallback} por título (confiança menor), ${corrected} corrigidos.`
   );
-  console.log(`${lowConfidence.length} sem correspondência confiável.`);
-  if (lowConfidence.length) {
-    console.log("Sem correspondência:");
-    for (const title of lowConfidence) console.log(`  - ${title}`);
+  console.log(`${lowConfidence.length} sem correspondência confiável (antes do casamento por ordem).`);
+
+  // --- Passo 3: casamento por ordem cronológica ---
+  // A ordem das linhas na planilha segue a mesma ordem das mensagens no
+  // Telegram (o vídeo é enviado poucos segundos depois de o tópico ser
+  // criado). Usamos as correspondências já confirmadas como "âncoras" e
+  // preenchemos os vídeos entre duas âncoras na mesma ordem, mas só quando
+  // a quantidade de linhas vazias bate exatamente com a quantidade de
+  // mensagens de vídeo disponíveis naquele intervalo — senão fica sem
+  // corresponder, pra não arriscar errar.
+
+  type TgRow = { rowIndex: number; sheetRow: number; title: string; existingId: string | null };
+  const finalId = new Map<number, string>(); // rowIndex -> id (após passos 1 e 2)
+  for (const u of updates) {
+    const m = u.range.match(/(\d+)$/);
+    if (m) finalId.set(Number(m[1]) - 1, u.values[0][0]);
+  }
+
+  const tgRows: TgRow[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (normalize(row[fonteCol] || "") !== "telegram") continue;
+    const id = finalId.get(i) ?? (row[idMensagemCol] || null);
+    tgRows.push({ rowIndex: i, sheetRow: i + 1, title: row[titleCol] || "", existingId: id });
+  }
+
+  // Só olhamos linhas com ID numérico válido pra montar as âncoras.
+  const withId = tgRows
+    .map((r, idx) => ({ ...r, order: idx, id: r.existingId && /^\d+$/.test(r.existingId) ? Number(r.existingId) : null }))
+    .filter((r): r is TgRow & { order: number; id: number } => r.id !== null);
+
+  // Maior subsequência estritamente crescente de IDs (na ordem das linhas).
+  const tails: number[] = [];
+  const tailsRowIdx: number[] = [];
+  const prevOf: number[] = new Array(withId.length).fill(-1);
+  for (let i = 0; i < withId.length; i++) {
+    const v = withId[i].id;
+    let lo = 0, hi = tails.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (tails[mid] < v) lo = mid + 1;
+      else hi = mid;
+    }
+    tails[lo] = v;
+    tailsRowIdx[lo] = i;
+    prevOf[i] = lo > 0 ? tailsRowIdx[lo - 1] : -1;
+  }
+  const lisIndexes = new Set<number>();
+  let k = tailsRowIdx[tailsRowIdx.length - 1];
+  while (k !== undefined && k !== -1) {
+    lisIndexes.add(k);
+    k = prevOf[k];
+  }
+
+  const idCounts = new Map<number, number>();
+  for (const r of withId) idCounts.set(r.id, (idCounts.get(r.id) || 0) + 1);
+
+  // IDs "reservados" (não disponíveis pra preencher lacunas): qualquer ID já
+  // usado por alguma linha, seja âncora confiável ou não.
+  const reserved = new Set<number>(withId.map((r) => r.id));
+
+  const clearUpdates: { range: string; values: string[][] }[] = [];
+  const anchors: { rowIndex: number; id: number }[] = [];
+  withId.forEach((r, idx) => {
+    const isDuplicate = (idCounts.get(r.id) || 0) > 1;
+    if (lisIndexes.has(idx)) {
+      anchors.push({ rowIndex: r.rowIndex, id: r.id });
+    } else if (isDuplicate) {
+      // ID duplicado e essa ocorrência não é a que se encaixa na ordem
+      // cronológica → provavelmente foi atribuída errada. Limpa.
+      const colLetter = String.fromCharCode(65 + idMensagemCol);
+      clearUpdates.push({ range: `${SHEET_NAME}!${colLetter}${r.sheetRow}`, values: [[""]] });
+      reserved.delete(r.id); // libera pro casamento por ordem, se sobrar sem dono
+      console.log(`✗ "${r.title}" tinha ID duplicado (${r.id}, já usado por outra linha em posição mais coerente) — removido.`);
+    }
+    // se não é duplicado e não está na LIS: mantém como está (é um vídeo
+    // repetido no arquivo do Telegram, conteúdo correto, só não bate a
+    // ordem — sem problema).
+  });
+
+  const clearedRowIndexes = new Set(clearUpdates.map((u) => Number(u.range.match(/(\d+)$/)![1]) - 1));
+
+  const candidatesById = new Map(candidates.map((c) => [c.id, c] as const));
+  const sortedCandidateIds = [...candidatesById.keys()].sort((a, b) => a - b);
+
+  let ordinalMatched = 0;
+  const ordinalUnmatched: string[] = [];
+
+  for (let a = 0; a < anchors.length - 1; a++) {
+    const [prev, next] = [anchors[a], anchors[a + 1]];
+    const gapRows = tgRows.filter(
+      (r) =>
+        r.rowIndex > prev.rowIndex &&
+        r.rowIndex < next.rowIndex &&
+        (clearedRowIndexes.has(r.rowIndex) || !r.existingId)
+    );
+    if (gapRows.length === 0) continue;
+
+    const gapCandidateIds = sortedCandidateIds.filter((id) => id > prev.id && id < next.id && !reserved.has(id));
+
+    if (gapRows.length === gapCandidateIds.length) {
+      for (let g = 0; g < gapRows.length; g++) {
+        const id = gapCandidateIds[g];
+        reserved.add(id);
+        const colLetter = String.fromCharCode(65 + idMensagemCol);
+        updates.push({ range: `${SHEET_NAME}!${colLetter}${gapRows[g].sheetRow}`, values: [[String(id)]] });
+        ordinalMatched += 1;
+        console.log(`⇢ [ordem] "${gapRows[g].title}" -> mensagem ${id}`);
+      }
+    } else {
+      for (const r of gapRows) ordinalUnmatched.push(r.title);
+      console.log(
+        `? Intervalo entre linha ${prev.rowIndex + 1} (id ${prev.id}) e linha ${next.rowIndex + 1} (id ${next.id}): ${gapRows.length} linha(s) sem vídeo x ${gapCandidateIds.length} vídeo(s) disponível(is) — não bate, deixado sem correspondência.`
+      );
+    }
+  }
+
+  for (const u of clearUpdates) updates.push(u);
+
+  console.log(`\n${ordinalMatched} casados por ordem cronológica.`);
+  console.log(`${ordinalUnmatched.length} ainda sem correspondência confiável (contagem não bateu no intervalo).`);
+  if (ordinalUnmatched.length) {
+    console.log("Sem correspondência (contagem não bateu):");
+    for (const title of ordinalUnmatched) console.log(`  - ${title}`);
   }
 
   if (DRY_RUN) {

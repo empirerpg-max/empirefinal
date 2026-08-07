@@ -27,5 +27,4 @@ jobs:
         env:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GCP_SA_KEY }}
           DRY_RUN: ${{ inputs.dry_run }}
-          DEBUG_ORDER: "true"
         run: npm run match-messages
