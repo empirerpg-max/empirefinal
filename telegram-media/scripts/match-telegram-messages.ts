@@ -103,7 +103,7 @@ async function main() {
       if (normalize(row[fonteCol] || "") !== "telegram") continue;
       const existingId = row[idMensagemCol];
       if (existingId && /^\d+$/.test(existingId)) {
-        console.log(`row=${i + 1} id=${existingId}`);
+        console.log(`row=${i + 1} id=${existingId} title=${JSON.stringify(row[titleCol] || "")} desc=${JSON.stringify((row[descricaoCol] || "").slice(0, 80))}`);
       }
     }
     console.log("--- FIM DEBUG_ORDER ---\n");
