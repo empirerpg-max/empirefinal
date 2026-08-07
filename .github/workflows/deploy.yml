@@ -21,3 +21,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: bun run deploy
+
+      - name: Set Telegram media proxy secret
+        if: ${{ secrets.TELEGRAM_MEDIA_ADMIN_TOKEN != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: echo "${{ secrets.TELEGRAM_MEDIA_ADMIN_TOKEN }}" | bunx wrangler secret put TELEGRAM_MEDIA_ADMIN_TOKEN -c dist/tanstack_start_app/wrangler.json

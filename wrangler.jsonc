@@ -9,5 +9,8 @@
       "binding": "FLAGS",
       "id": "4abe95776fd846ab8a861101692d034f"
     }
-  ]
+  ],
+  "vars": {
+    "TELEGRAM_MEDIA_SERVICE_URL": "https://empire-telegram-media.fly.dev"
+  }
 }

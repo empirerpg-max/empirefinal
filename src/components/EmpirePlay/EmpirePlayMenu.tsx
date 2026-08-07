@@ -255,14 +255,16 @@ export function EmpirePlayMenu() {
         item.capa_url ||
         item.poster_url,
       poster_url: item.coverUrl || item.thumb || item.poster_url || item.capa_url,
-      // Vídeos são sempre servidos direto do Google Drive ou do YouTube.
-      link:
-        item.videoUrl ||
-        item.audioUrl ||
-        item.link ||
-        item.youtube_url ||
-        item.id_do_arquivo ||
-        item.link_do_video,
+      // Vídeos são servidos do Google Drive/YouTube direto, ou do Telegram
+      // (grupo de vídeos grandes) via proxy do próprio Worker — nesse caso a
+      // planilha guarda só o ID da mensagem, não uma URL tocável.
+      link: (() => {
+        const source = item.videoSource || item.fonte;
+        const raw =
+          item.videoUrl || item.audioUrl || item.link || item.youtube_url || item.id_do_arquivo || item.link_do_video;
+        if (source === "telegram" && raw) return `/api/telegram-video/${encodeURIComponent(raw)}`;
+        return raw;
+      })(),
       youtube_url: item.videoUrl || item.audioUrl || item.youtube_url || item.link,
       descricao: item.description || item.descricao || "",
       tipo_video: item.category || item.tipo_video || item.tipo || "Vídeo",

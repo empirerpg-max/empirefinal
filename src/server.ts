@@ -14,6 +14,30 @@ const ACTION_TABLE: Record<string, string> = {
   music_videos: "Music Videos",
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Proxy de vídeos grandes do Telegram (serviço separado em telegram-media/,
+// que fala MTProto). O token de admin do serviço nunca chega ao navegador —
+// só este Worker o conhece, via secret.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleTelegramVideoProxy(
+  request: Request,
+  env: { TELEGRAM_MEDIA_SERVICE_URL?: string; TELEGRAM_MEDIA_ADMIN_TOKEN?: string },
+  messageId: string,
+): Promise<Response> {
+  if (!env.TELEGRAM_MEDIA_SERVICE_URL || !env.TELEGRAM_MEDIA_ADMIN_TOKEN) {
+    return new Response("Serviço de vídeo do Telegram não configurado.", { status: 503 });
+  }
+  const upstreamUrl = `${env.TELEGRAM_MEDIA_SERVICE_URL.replace(/\/$/, "")}/video/${encodeURIComponent(messageId)}`;
+  const headers = new Headers({ "x-admin-token": env.TELEGRAM_MEDIA_ADMIN_TOKEN });
+  const range = request.headers.get("range");
+  if (range) headers.set("range", range);
+
+  const upstream = await fetch(upstreamUrl, { headers });
+  const responseHeaders = new Headers(upstream.headers);
+  responseHeaders.delete("x-admin-token");
+  return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
+}
+
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -299,6 +323,16 @@ export default {
     // Log de erros do cliente (blank screens, exceptions), lido pelo Empire Admin.
     if (url.pathname === "/api/log-error" && request.method === "POST") {
       return handleLogErrorApi(request, env as { FLAGS?: FlagsKv });
+    }
+
+    // Proxy de vídeos grandes do Telegram (Music Videos).
+    if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
+      const messageId = url.pathname.slice("/api/telegram-video/".length);
+      return handleTelegramVideoProxy(
+        request,
+        env as { TELEGRAM_MEDIA_SERVICE_URL?: string; TELEGRAM_MEDIA_ADMIN_TOKEN?: string },
+        messageId,
+      );
     }
 
     // Rota normal: SSR do TanStack Start
