@@ -1,18 +1,37 @@
 // Casa as linhas da aba "Music Videos" com as mensagens de vídeo do grupo
-// do Telegram usando um export local (Telegram Desktop → Exportar histórico
-// do chat → JSON), em vez de escanear a API ao vivo (mais rápido, sem
-// "flood wait", e usa a coluna Descrição — que guarda a legenda original
-// de cada vídeo — pra um casamento quase perfeito, em vez de comparar só
-// pelo título "bonito").
+// de arquivo do Telegram (pra onde tudo foi encaminhado), usando dois
+// exports locais (Telegram Desktop → Exportar histórico do chat → JSON):
+//   - TELEGRAM_EXPORT_PATH: o grupo de arquivo (o que o bot realmente lê
+//     pra tocar os vídeos — os IDs que vão na planilha são de lá).
+//   - SOURCE_EXPORT_PATH: o grupo original, onde os nomes de arquivo e as
+//     legendas costumam bater melhor com o título do tópico. Serve só
+//     pra achar a correspondência; o ID final gravado é sempre do grupo
+//     de arquivo (via nome do arquivo, que se mantém igual ao encaminhar).
+//
+// Passos, em ordem de confiança:
+//   1) Descrição da planilha == legenda da mensagem no grupo de arquivo
+//      (quase certeza).
+//   2) Título do tópico ~= legenda/nome do arquivo no grupo de arquivo
+//      (fallback mais fraco).
+//   3) Ordem cronológica: a ordem das linhas na planilha segue a mesma
+//      ordem das mensagens no grupo de arquivo (vídeo enviado poucos
+//      segundos após o tópico ser criado) — preenche lacunas entre
+//      pontos já confirmados, só quando a contagem bate exatamente.
+//   4) Título do tópico ~= legenda/nome do arquivo no grupo ORIGINAL,
+//      resolvendo pro ID correspondente no grupo de arquivo via nome de
+//      arquivo (usa uma cópia ainda não usada, já que o grupo de arquivo
+//      tem vídeos duplicados).
 import { readFileSync } from "node:fs";
 import { google } from "googleapis";
 
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID || "1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo";
 const SHEET_NAME = process.env.SHEET_NAME || "Music Videos";
 const EXPORT_PATH = process.env.TELEGRAM_EXPORT_PATH || "data/telegram-export.json";
+const SOURCE_EXPORT_PATH = process.env.SOURCE_EXPORT_PATH || "data/telegram-source-export.json";
 const DRY_RUN = process.env.DRY_RUN === "true";
 const DESCRICAO_THRESHOLD = 0.85;
 const TITLE_FALLBACK_THRESHOLD = 0.55;
+const SOURCE_TITLE_THRESHOLD = 0.55;
 
 const googleCredsRaw = process.env.GOOGLE_CREDENTIALS_JSON;
 if (!googleCredsRaw) {
@@ -46,7 +65,7 @@ type ExportMessage = {
   file_name?: string;
 };
 
-type Candidate = { id: number; text: string; tokens: Set<string> };
+type Candidate = { id: number; text: string; tokens: Set<string>; fileNameNorm: string };
 
 function extractText(message: ExportMessage): string {
   if (typeof message.text === "string") return message.text;
@@ -54,14 +73,15 @@ function extractText(message: ExportMessage): string {
   return message.text.map((part) => (typeof part === "string" ? part : part.text)).join("");
 }
 
-function loadCandidates(): Candidate[] {
-  const raw = JSON.parse(readFileSync(EXPORT_PATH, "utf8")) as { messages: ExportMessage[] };
+function loadCandidates(path: string): Candidate[] {
+  const raw = JSON.parse(readFileSync(path, "utf8")) as { messages: ExportMessage[] };
   const candidates: Candidate[] = [];
   for (const message of raw.messages) {
     if (message.media_type !== "video_file") continue;
-    const text = [extractText(message), message.file_name].filter(Boolean).join(" ");
+    const fileName = message.file_name || "";
+    const text = [extractText(message), fileName].filter(Boolean).join(" ");
     if (!text.trim()) continue;
-    candidates.push({ id: message.id, text, tokens: tokenSet(text) });
+    candidates.push({ id: message.id, text, tokens: tokenSet(text), fileNameNorm: fileName.trim().toLowerCase() });
   }
   return candidates;
 }
@@ -76,8 +96,16 @@ async function getSheetsClient() {
 }
 
 async function main() {
-  const candidates = loadCandidates();
-  console.log(`${candidates.length} mensagens com vídeo no export local.`);
+  const candidates = loadCandidates(EXPORT_PATH);
+  console.log(`${candidates.length} mensagens com vídeo no export do grupo de arquivo.`);
+
+  let sourceCandidates: Candidate[] = [];
+  try {
+    sourceCandidates = loadCandidates(SOURCE_EXPORT_PATH);
+    console.log(`${sourceCandidates.length} mensagens com vídeo no export do grupo original.`);
+  } catch {
+    console.log("Sem export do grupo original (SOURCE_EXPORT_PATH não encontrado) — pulando passo 4.");
+  }
 
   const sheets = await getSheetsClient();
   const range = `${SHEET_NAME}!A:Z`;
@@ -95,40 +123,66 @@ async function main() {
       `Não encontrei as colunas esperadas (título/fonte/ID da mensagem/descrição). Cabeçalho: ${rows[0].join(" | ")}`
     );
   }
+  const colLetter = String.fromCharCode(65 + idMensagemCol);
 
-  const used = new Set<number>();
+  // Estado compartilhado por todas as etapas: id atual de cada linha
+  // (índice na array `rows`) e quais IDs do grupo de arquivo já estão em uso.
+  const currentId = new Map<number, string>();
+  for (let i = 1; i < rows.length; i++) {
+    if (normalize(rows[i][fonteCol] || "") !== "telegram") continue;
+    const v = rows[i][idMensagemCol];
+    if (v) currentId.set(i, v);
+  }
+  const usedArchiveIds = new Set<number>(
+    [...currentId.values()].filter((v) => /^\d+$/.test(v)).map((v) => Number(v))
+  );
   const updates: { range: string; values: string[][] }[] = [];
-  const lowConfidence: string[] = [];
-  let exact = 0;
-  let fallback = 0;
-  let corrected = 0;
 
-  const findBest = (tokens: Set<string>) => {
+  function assign(rowIndex: number, id: number, label: string) {
+    currentId.set(rowIndex, String(id));
+    usedArchiveIds.add(id);
+    const sheetRow = rowIndex + 1;
+    updates.push({ range: `${SHEET_NAME}!${colLetter}${sheetRow}`, values: [[String(id)]] });
+    console.log(`${label} -> mensagem ${id}`);
+  }
+  function clear(rowIndex: number, id: number, reason: string) {
+    currentId.delete(rowIndex);
+    usedArchiveIds.delete(id);
+    const sheetRow = rowIndex + 1;
+    updates.push({ range: `${SHEET_NAME}!${colLetter}${sheetRow}`, values: [[""]] });
+    console.log(`✗ ${reason}`);
+  }
+
+  const findBest = (tokens: Set<string>, pool: Candidate[], exclude: (id: number) => boolean) => {
     let best: { candidate: Candidate; score: number } | null = null;
-    for (const candidate of candidates) {
-      if (used.has(candidate.id)) continue;
+    for (const candidate of pool) {
+      if (exclude(candidate.id)) continue;
       const score = jaccard(tokens, candidate.tokens);
       if (score > (best?.score ?? 0)) best = { candidate, score };
     }
     return best;
   };
 
+  // --- Passo 1 e 2: Descrição (alta confiança) e título (fallback) ---
+  let exact = 0;
+  let fallback = 0;
+  let corrected = 0;
+
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    const fonte = normalize(row[fonteCol] || "");
-    if (fonte !== "telegram") continue;
+    if (normalize(row[fonteCol] || "") !== "telegram") continue;
     const title = row[titleCol] || "";
     const descricao = row[descricaoCol] || "";
-    const existingId = row[idMensagemCol];
+    const existingId = currentId.get(i) || null;
 
     let best: { candidate: Candidate; score: number } | null = null;
     let viaDescricao = false;
     if (descricao.trim()) {
-      best = findBest(tokenSet(descricao));
+      best = findBest(tokenSet(descricao), candidates, (id) => usedArchiveIds.has(id));
       viaDescricao = true;
     }
     if ((!best || best.score < DESCRICAO_THRESHOLD) && title.trim()) {
-      const titleBest = findBest(tokenSet(title));
+      const titleBest = findBest(tokenSet(title), candidates, (id) => usedArchiveIds.has(id));
       if (titleBest && (!best || titleBest.score > best.score)) {
         best = titleBest;
         viaDescricao = false;
@@ -136,76 +190,54 @@ async function main() {
     }
 
     const threshold = viaDescricao ? DESCRICAO_THRESHOLD : TITLE_FALLBACK_THRESHOLD;
-    if (!best || best.score < threshold) {
-      if (!existingId) lowConfidence.push(title);
-      continue;
+    if (!best || best.score < threshold) continue;
+
+    const newId = best.candidate.id;
+    if (existingId && Number(existingId) === newId) continue; // já está certo
+    if (existingId && Number(existingId) !== newId && !(viaDescricao && best.score >= DESCRICAO_THRESHOLD)) {
+      continue; // só corrige valor já preenchido com evidência de alta confiança
     }
 
-    const newId = String(best.candidate.id);
-    if (existingId && existingId === newId) continue; // já está certo, nada a fazer
-    if (existingId && existingId !== newId && !(viaDescricao && best.score >= DESCRICAO_THRESHOLD)) {
-      // só corrige um valor já preenchido se a nova evidência for de alta confiança (via Descrição)
-      continue;
-    }
-
-    used.add(best.candidate.id);
-    const sheetRow = i + 1;
-    const colLetter = String.fromCharCode(65 + idMensagemCol);
-    updates.push({ range: `${SHEET_NAME}!${colLetter}${sheetRow}`, values: [[newId]] });
-
-    if (existingId && existingId !== newId) {
+    if (existingId && Number(existingId) !== newId) {
       corrected += 1;
-      console.log(`↻ [${best.score.toFixed(2)}] "${title}" corrigido: ${existingId} -> ${newId}`);
+      assign(i, newId, `↻ [${best.score.toFixed(2)}] "${title}" corrigido: ${existingId}`);
     } else if (viaDescricao) {
       exact += 1;
-      console.log(`✓ [desc ${best.score.toFixed(2)}] "${title}" -> mensagem ${newId}`);
+      assign(i, newId, `✓ [desc ${best.score.toFixed(2)}] "${title}"`);
     } else {
       fallback += 1;
-      console.log(`~ [título ${best.score.toFixed(2)}] "${title}" -> mensagem ${newId}`);
+      assign(i, newId, `~ [título ${best.score.toFixed(2)}] "${title}"`);
     }
   }
-
   console.log(
-    `\n${exact} casados por Descrição (alta confiança), ${fallback} por título (confiança menor), ${corrected} corrigidos.`
+    `\n${exact} casados por Descrição, ${fallback} por título (grupo de arquivo), ${corrected} corrigidos.`
   );
-  console.log(`${lowConfidence.length} sem correspondência confiável (antes do casamento por ordem).`);
 
-  // --- Passo 3: casamento por ordem cronológica ---
+  // --- Passo 3: ordem cronológica ---
   // A ordem das linhas na planilha segue a mesma ordem das mensagens no
-  // Telegram (o vídeo é enviado poucos segundos depois de o tópico ser
-  // criado). Usamos as correspondências já confirmadas como "âncoras" e
-  // preenchemos os vídeos entre duas âncoras na mesma ordem, mas só quando
-  // a quantidade de linhas vazias bate exatamente com a quantidade de
-  // mensagens de vídeo disponíveis naquele intervalo — senão fica sem
-  // corresponder, pra não arriscar errar.
+  // grupo de arquivo. Usamos as correspondências já confirmadas como
+  // âncoras e preenchemos os vídeos entre duas âncoras na mesma ordem,
+  // só quando a quantidade de linhas vazias bate exatamente com a
+  // quantidade de mensagens de vídeo disponíveis no intervalo.
 
-  type TgRow = { rowIndex: number; sheetRow: number; title: string; existingId: string | null };
-  const finalId = new Map<number, string>(); // rowIndex -> id (após passos 1 e 2)
-  for (const u of updates) {
-    const m = u.range.match(/(\d+)$/);
-    if (m) finalId.set(Number(m[1]) - 1, u.values[0][0]);
-  }
-
+  type TgRow = { rowIndex: number; sheetRow: number; title: string };
   const tgRows: TgRow[] = [];
   for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (normalize(row[fonteCol] || "") !== "telegram") continue;
-    const id = finalId.get(i) ?? (row[idMensagemCol] || null);
-    tgRows.push({ rowIndex: i, sheetRow: i + 1, title: row[titleCol] || "", existingId: id });
+    if (normalize(rows[i][fonteCol] || "") !== "telegram") continue;
+    tgRows.push({ rowIndex: i, sheetRow: i + 1, title: rows[i][titleCol] || "" });
   }
 
-  // Só olhamos linhas com ID numérico válido pra montar as âncoras.
   const withId = tgRows
-    .map((r, idx) => ({ ...r, order: idx, id: r.existingId && /^\d+$/.test(r.existingId) ? Number(r.existingId) : null }))
-    .filter((r): r is TgRow & { order: number; id: number } => r.id !== null);
+    .map((r) => ({ ...r, id: currentId.has(r.rowIndex) ? Number(currentId.get(r.rowIndex)) : null }))
+    .filter((r): r is TgRow & { id: number } => r.id !== null);
 
-  // Maior subsequência estritamente crescente de IDs (na ordem das linhas).
   const tails: number[] = [];
   const tailsRowIdx: number[] = [];
   const prevOf: number[] = new Array(withId.length).fill(-1);
   for (let i = 0; i < withId.length; i++) {
     const v = withId[i].id;
-    let lo = 0, hi = tails.length;
+    let lo = 0,
+      hi = tails.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
       if (tails[mid] < v) lo = mid + 1;
@@ -225,73 +257,112 @@ async function main() {
   const idCounts = new Map<number, number>();
   for (const r of withId) idCounts.set(r.id, (idCounts.get(r.id) || 0) + 1);
 
-  // IDs "reservados" (não disponíveis pra preencher lacunas): qualquer ID já
-  // usado por alguma linha, seja âncora confiável ou não.
-  const reserved = new Set<number>(withId.map((r) => r.id));
-
-  const clearUpdates: { range: string; values: string[][] }[] = [];
   const anchors: { rowIndex: number; id: number }[] = [];
   withId.forEach((r, idx) => {
     const isDuplicate = (idCounts.get(r.id) || 0) > 1;
     if (lisIndexes.has(idx)) {
       anchors.push({ rowIndex: r.rowIndex, id: r.id });
     } else if (isDuplicate) {
-      // ID duplicado e essa ocorrência não é a que se encaixa na ordem
-      // cronológica → provavelmente foi atribuída errada. Limpa.
-      const colLetter = String.fromCharCode(65 + idMensagemCol);
-      clearUpdates.push({ range: `${SHEET_NAME}!${colLetter}${r.sheetRow}`, values: [[""]] });
-      reserved.delete(r.id); // libera pro casamento por ordem, se sobrar sem dono
-      console.log(`✗ "${r.title}" tinha ID duplicado (${r.id}, já usado por outra linha em posição mais coerente) — removido.`);
+      clear(r.rowIndex, r.id, `"${r.title}" tinha ID duplicado (${r.id}, já usado por outra linha em posição mais coerente) — removido.`);
     }
-    // se não é duplicado e não está na LIS: mantém como está (é um vídeo
-    // repetido no arquivo do Telegram, conteúdo correto, só não bate a
-    // ordem — sem problema).
+    // se não é duplicado e não está na ordem: mantém (é um vídeo repetido
+    // no arquivo, conteúdo correto, só não bate a ordem).
   });
 
-  const clearedRowIndexes = new Set(clearUpdates.map((u) => Number(u.range.match(/(\d+)$/)![1]) - 1));
-
-  const candidatesById = new Map(candidates.map((c) => [c.id, c] as const));
-  const sortedCandidateIds = [...candidatesById.keys()].sort((a, b) => a - b);
-
+  const sortedArchiveIds = candidates.map((c) => c.id).sort((a, b) => a - b);
   let ordinalMatched = 0;
-  const ordinalUnmatched: string[] = [];
+  const gapMismatches: string[] = [];
 
   for (let a = 0; a < anchors.length - 1; a++) {
     const [prev, next] = [anchors[a], anchors[a + 1]];
     const gapRows = tgRows.filter(
-      (r) =>
-        r.rowIndex > prev.rowIndex &&
-        r.rowIndex < next.rowIndex &&
-        (clearedRowIndexes.has(r.rowIndex) || !r.existingId)
+      (r) => r.rowIndex > prev.rowIndex && r.rowIndex < next.rowIndex && !currentId.has(r.rowIndex)
     );
     if (gapRows.length === 0) continue;
 
-    const gapCandidateIds = sortedCandidateIds.filter((id) => id > prev.id && id < next.id && !reserved.has(id));
+    const gapCandidateIds = sortedArchiveIds.filter((id) => id > prev.id && id < next.id && !usedArchiveIds.has(id));
 
     if (gapRows.length === gapCandidateIds.length) {
       for (let g = 0; g < gapRows.length; g++) {
-        const id = gapCandidateIds[g];
-        reserved.add(id);
-        const colLetter = String.fromCharCode(65 + idMensagemCol);
-        updates.push({ range: `${SHEET_NAME}!${colLetter}${gapRows[g].sheetRow}`, values: [[String(id)]] });
+        assign(gapRows[g].rowIndex, gapCandidateIds[g], `⇢ [ordem] "${gapRows[g].title}"`);
         ordinalMatched += 1;
-        console.log(`⇢ [ordem] "${gapRows[g].title}" -> mensagem ${id}`);
       }
     } else {
-      for (const r of gapRows) ordinalUnmatched.push(r.title);
-      console.log(
-        `? Intervalo entre linha ${prev.rowIndex + 1} (id ${prev.id}) e linha ${next.rowIndex + 1} (id ${next.id}): ${gapRows.length} linha(s) sem vídeo x ${gapCandidateIds.length} vídeo(s) disponível(is) — não bate, deixado sem correspondência.`
+      gapMismatches.push(
+        `Intervalo entre linha ${prev.rowIndex + 1} (id ${prev.id}) e linha ${next.rowIndex + 1} (id ${next.id}): ${gapRows.length} linha(s) sem vídeo x ${gapCandidateIds.length} vídeo(s) disponível(is).`
       );
     }
   }
+  console.log(`${ordinalMatched} casados por ordem cronológica.`);
 
-  for (const u of clearUpdates) updates.push(u);
+  // --- Passo 4: grupo original (nome do arquivo/legenda mais parecido
+  // com o título), resolvendo pro ID do grupo de arquivo via nome de
+  // arquivo (usa uma cópia ainda não usada). ---
+  let sourceMatched = 0;
+  const sourceConflicts: string[] = [];
+  if (sourceCandidates.length > 0) {
+    const archiveByFilename = new Map<string, number[]>();
+    for (const c of candidates) {
+      if (!c.fileNameNorm) continue;
+      const list = archiveByFilename.get(c.fileNameNorm) || [];
+      list.push(c.id);
+      archiveByFilename.set(c.fileNameNorm, list);
+    }
 
-  console.log(`\n${ordinalMatched} casados por ordem cronológica.`);
-  console.log(`${ordinalUnmatched.length} ainda sem correspondência confiável (contagem não bateu no intervalo).`);
-  if (ordinalUnmatched.length) {
-    console.log("Sem correspondência (contagem não bateu):");
-    for (const title of ordinalUnmatched) console.log(`  - ${title}`);
+    const sourceUsed = new Set<Candidate>();
+    for (const r of tgRows) {
+      if (currentId.has(r.rowIndex)) continue;
+      if (!r.title.trim()) continue;
+
+      const best = findBest(tokenSet(r.title), sourceCandidates, () => false);
+      // como cada mensagem do grupo original só pode ser usada uma vez,
+      // filtramos manualmente pelos já usados (o Set de objetos não dá
+      // pra passar direto no `exclude`, que trabalha com ids do arquivo).
+      let pick: { candidate: Candidate; score: number } | null = null;
+      if (best && !sourceUsed.has(best.candidate) && best.score >= SOURCE_TITLE_THRESHOLD) {
+        pick = best;
+      } else if (best && sourceUsed.has(best.candidate)) {
+        // procura o próximo melhor não usado
+        let alt: { candidate: Candidate; score: number } | null = null;
+        for (const c of sourceCandidates) {
+          if (sourceUsed.has(c)) continue;
+          const score = jaccard(tokenSet(r.title), c.tokens);
+          if (score > (alt?.score ?? 0)) alt = { candidate: c, score };
+        }
+        if (alt && alt.score >= SOURCE_TITLE_THRESHOLD) pick = alt;
+      }
+      if (!pick) continue;
+
+      const archiveIds = (archiveByFilename.get(pick.candidate.fileNameNorm) || []).filter(
+        (id) => !usedArchiveIds.has(id)
+      );
+      if (archiveIds.length === 0) {
+        sourceConflicts.push(
+          `"${r.title}" bateu com o vídeo original "${pick.candidate.fileNameNorm}" [${pick.score.toFixed(2)}], mas não sobrou nenhuma cópia livre no grupo de arquivo.`
+        );
+        continue;
+      }
+
+      sourceUsed.add(pick.candidate);
+      assign(r.rowIndex, archiveIds[0], `⟲ [original ${pick.score.toFixed(2)}] "${r.title}"`);
+      sourceMatched += 1;
+    }
+  }
+  console.log(`${sourceMatched} casados via grupo original.`);
+
+  const stillUnmatched = tgRows.filter((r) => !currentId.has(r.rowIndex));
+  console.log(`\n${stillUnmatched.length} linhas ainda sem correspondência confiável.`);
+  if (gapMismatches.length) {
+    console.log("\nIntervalos onde a contagem não bateu (casamento por ordem):");
+    for (const line of gapMismatches) console.log(`  ? ${line}`);
+  }
+  if (sourceConflicts.length) {
+    console.log("\nBateu com o grupo original mas sem cópia livre no grupo de arquivo:");
+    for (const line of sourceConflicts) console.log(`  ! ${line}`);
+  }
+  if (stillUnmatched.length) {
+    console.log("\nSem correspondência:");
+    for (const r of stillUnmatched) console.log(`  - ${r.title}`);
   }
 
   if (DRY_RUN) {
