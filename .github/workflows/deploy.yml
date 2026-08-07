@@ -34,8 +34,8 @@ jobs:
       - name: Set Google Sheets service account secret
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
-          if [ -n "$GOOGLE_CREDENTIALS_JSON" ]; then
-            echo "$GOOGLE_CREDENTIALS_JSON" | bunx wrangler secret put GOOGLE_SHEETS_CREDENTIALS -c dist/tanstack_start_app/wrangler.json
+          if [ -n "$GCP_SA_KEY" ]; then
+            echo "$GCP_SA_KEY" | bunx wrangler secret put GOOGLE_SHEETS_CREDENTIALS -c dist/tanstack_start_app/wrangler.json
           fi
