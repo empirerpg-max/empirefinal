@@ -58,20 +58,33 @@ async function fetchTelegramCandidates(): Promise<TelegramCandidate[]> {
   const client = new TelegramClient(session, API_ID, API_HASH, { connectionRetries: 5 });
   await client.start({ botAuthToken: BOT_TOKEN });
 
+  // Bots não podem "listar histórico" de um chat (messages.getHistory dá
+  // BOT_METHOD_INVALID) — só buscar mensagens específicas por ID
+  // (messages.getMessages, que já usamos pra tocar vídeo). Por isso
+  // varremos um intervalo de IDs em lotes em vez de iterar o histórico.
+  const MAX_MESSAGE_ID = Number(process.env.TELEGRAM_MAX_MESSAGE_ID || 3000);
+  const BATCH_SIZE = 100;
+
   const candidates: TelegramCandidate[] = [];
-  for await (const message of client.iterMessages(CHAT_ID, { limit: 0 })) {
-    const document = (message.media as any)?.document;
-    if (!document) continue;
-    const isVideo =
-      document.mimeType?.startsWith("video/") ||
-      document.attributes?.some((a: any) => a.className === "DocumentAttributeVideo");
-    if (!isVideo) continue;
+  for (let start = 1; start <= MAX_MESSAGE_ID; start += BATCH_SIZE) {
+    const ids = Array.from({ length: Math.min(BATCH_SIZE, MAX_MESSAGE_ID - start + 1) }, (_, i) => start + i);
+    const messages = await client.getMessages(CHAT_ID, { ids });
+    for (const message of messages) {
+      if (!message) continue;
+      const document = (message.media as any)?.document;
+      if (!document) continue;
+      const isVideo =
+        document.mimeType?.startsWith("video/") ||
+        document.attributes?.some((a: any) => a.className === "DocumentAttributeVideo");
+      if (!isVideo) continue;
 
-    const fileNameAttr = document.attributes?.find((a: any) => a.className === "DocumentAttributeFilename");
-    const text = [message.message, fileNameAttr?.fileName].filter(Boolean).join(" ");
-    if (!text.trim()) continue;
+      const fileNameAttr = document.attributes?.find((a: any) => a.className === "DocumentAttributeFilename");
+      const text = [message.message, fileNameAttr?.fileName].filter(Boolean).join(" ");
+      if (!text.trim()) continue;
 
-    candidates.push({ messageId: message.id, text, tokens: tokenSet(text) });
+      candidates.push({ messageId: message.id, text, tokens: tokenSet(text) });
+    }
+    if (start % 500 === 1) console.log(`  ...varridos IDs até ${start + BATCH_SIZE - 1} (${candidates.length} vídeos até agora)`);
   }
 
   await client.disconnect();
