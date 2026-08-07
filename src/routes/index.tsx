@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   RefreshCw,
   TrendingUp,
@@ -15,7 +15,7 @@ import {
 import { toast } from "sonner";
 import { useTelegramUser, haptic, openExternal } from "@/lib/telegram";
 import { api, driveImg, fmtEC, type Artist, invalidateCache, type ChartData } from "@/lib/api";
-import { useHomeFlags } from "@/lib/homeFlags";
+import { useHomeConfig } from "@/lib/homeFlags";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -23,12 +23,20 @@ export const Route = createFileRoute("/")({
 
 type LoadState<T> = { status: "loading" } | { status: "error"; error: string } | { status: "ok"; data: T };
 
+const PLATFORM_META: Record<string, { label: string; icon: typeof Music2; color: string }> = {
+  spotify: { label: "Spotify", icon: Music2, color: "text-[#1DB954]" },
+  apple_music: { label: "Apple Music", icon: Music, color: "text-[#FC3C44]" },
+  youtube: { label: "YouTube", icon: PlayCircle, color: "text-[#FF0000]" },
+  billboard_200: { label: "Billboard 200", icon: Disc, color: "text-primary" },
+  digital_sales: { label: "Digital Sales", icon: BarChart3, color: "text-blue-500" },
+};
+
 function Index() {
   const [myArtists, setMyArtists] = useState<LoadState<Artist[]>>({ status: "loading" });
   const [topCharts, setTopCharts] = useState<Record<string, ChartData>>({});
   const [syncing, setSyncing] = useState(false);
   const { user, ready } = useTelegramUser();
-  const flags = useHomeFlags();
+  const config = useHomeConfig();
 
   const fetchData = async (silent = false) => {
     if (!silent) setSyncing(true);
@@ -73,46 +81,8 @@ function Index() {
     (window as any).setShowLinkModal?.(true);
   };
 
-  return (
-    <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen">
-      {/* Header */}
-      <header className="flex items-center justify-between mb-6 animate-in fade-in duration-500">
-        <div>
-          <h1 className="text-2xl font-black italic tracking-tighter uppercase leading-none mb-1">
-            Empire <span className="text-primary">Hub</span>
-          </h1>
-          <p className="text-[11px] uppercase font-bold text-muted-foreground tracking-[0.15em]">
-            Plataforma de Gestão Imperial
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            aria-label={syncing ? "Sincronizando" : "Sincronizar dados"}
-            aria-busy={syncing}
-            className="size-11 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform hover:bg-primary/10 hover:text-primary disabled:opacity-60"
-          >
-            <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
-          </button>
-          <div className="size-11 rounded-full bg-primary/20 border border-primary/30 grid place-items-center overflow-hidden">
-            {user?.photo_url ? (
-              <img
-                src={user.photo_url}
-                className="size-11 rounded-full object-cover"
-                alt={user?.name ? `Foto de ${user.name}` : "Foto do usuário"}
-                loading="lazy"
-                decoding="async"
-              />
-            ) : (
-              <User className="size-5 text-primary" aria-hidden="true" />
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* MEUS ARTISTAS */}
-      {flags.meusArtistas && (
+  const sections: Record<string, () => ReactNode> = {
+    meusArtistas: () => (
       <section className="mb-10" aria-labelledby="meus-artistas-h">
         <div className="flex items-center justify-between mb-4">
           <h2 id="meus-artistas-h" className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
@@ -191,96 +161,90 @@ function Index() {
           </div>
         )}
       </section>
-      )}
+    ),
 
-      {/* BILLBOARD HOT 100 */}
-      {flags.billboard && (() => {
-        const data = topCharts.billboard_hot_100;
-        const finalUrl = data?.url || "https://empirerpg-max.github.io/central/charts.html?tab=BILLBOARD%20HOT%20100";
+    billboard: () => {
+      const data = topCharts.billboard_hot_100;
+      const finalUrl = data?.url || config.sections.billboard.fallbackUrl;
 
-        return (
-          <section className="mb-12" aria-labelledby="billboard-h">
-            <div className="flex items-center justify-between mb-4">
-              <h2 id="billboard-h" className="text-xs font-black uppercase tracking-[0.2em]">
-                Billboard Hot 100 #1
-              </h2>
+      return (
+        <section className="mb-12" aria-labelledby="billboard-h">
+          <div className="flex items-center justify-between mb-4">
+            <h2 id="billboard-h" className="text-xs font-black uppercase tracking-[0.2em]">
+              Billboard Hot 100 #1
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              haptic.light();
+              openExternal(finalUrl);
+            }}
+            className="group relative block w-full aspect-[16/10] rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl bg-white/5 text-left"
+          >
+            {data?.foto ? (
+              <img
+                src={driveImg(data.foto, 800)}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                alt={data.musica ? `Capa: ${data.musica}` : "Billboard Hot 100"}
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4 opacity-20">
+                <TrendingUp className="size-20" aria-hidden="true" />
+                <span className="text-xs font-black uppercase tracking-[0.3em]">Global Chart</span>
+              </div>
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
+
+            <div className="absolute inset-x-4 bottom-4 p-4 rounded-[1.5rem] bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl">
+              <div className="flex items-center gap-3">
+                <div className="size-12 rounded-full bg-primary grid place-items-center flex-shrink-0">
+                  <TrendingUp className="size-6 text-black" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-white text-sm font-black uppercase tracking-tight leading-tight mb-0.5 line-clamp-1">
+                    {data?.musica || "Ver Billboard Hot 100"}
+                  </h3>
+                  <p className="text-primary text-[11px] font-bold uppercase tracking-wider truncate">
+                    {data?.artista || "Dados semanais"}
+                  </p>
+                </div>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                haptic.light();
-                openExternal(finalUrl);
-              }}
-              className="group relative block w-full aspect-[16/10] rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl bg-white/5 text-left"
-            >
-              {data?.foto ? (
-                <img
-                  src={driveImg(data.foto, 800)}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                  alt={data.musica ? `Capa: ${data.musica}` : "Billboard Hot 100"}
-                  loading="lazy"
-                  decoding="async"
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-4 opacity-20">
-                  <TrendingUp className="size-20" aria-hidden="true" />
-                  <span className="text-xs font-black uppercase tracking-[0.3em]">Global Chart</span>
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
 
-              <div className="absolute inset-x-4 bottom-4 p-4 rounded-[1.5rem] bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl">
-                <div className="flex items-center gap-3">
-                  <div className="size-12 rounded-full bg-primary grid place-items-center flex-shrink-0">
-                    <TrendingUp className="size-6 text-black" aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-white text-sm font-black uppercase tracking-tight leading-tight mb-0.5 line-clamp-1">
-                      {data?.musica || "Ver Billboard Hot 100"}
-                    </h3>
-                    <p className="text-primary text-[11px] font-bold uppercase tracking-wider truncate">
-                      {data?.artista || "Dados semanais"}
-                    </p>
-                  </div>
-                </div>
-              </div>
+            <div className="absolute top-4 right-4">
+              <span className="px-3 py-1.5 rounded-full bg-primary text-black text-[10px] font-black uppercase tracking-wider shadow-lg">
+                This week
+              </span>
+            </div>
+          </button>
+        </section>
+      );
+    },
 
-              <div className="absolute top-4 right-4">
-                <span className="px-3 py-1.5 rounded-full bg-primary text-black text-[10px] font-black uppercase tracking-wider shadow-lg">
-                  This week
-                </span>
-              </div>
-            </button>
-          </section>
-        );
-      })()}
-
-      {/* PLATFORM CHARTS */}
-      {flags.topPlataformas && (
+    topPlataformas: () => (
       <section className="mb-12" aria-labelledby="platforms-h">
         <h2 id="platforms-h" className="text-xs font-black uppercase tracking-[0.2em] mb-4 text-muted-foreground">
           Top por plataforma
         </h2>
         <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x">
-          {[
-            { id: "spotify", label: "Spotify", icon: Music2, color: "text-[#1DB954]", link: "https://empirerpg-max.github.io/central/charts.html?tab=SPOTIFY" },
-            { id: "apple_music", label: "Apple Music", icon: Music, color: "text-[#FC3C44]", link: "https://empirerpg-max.github.io/central/charts.html?tab=APPLE%20MUSIC" },
-            { id: "youtube", label: "YouTube", icon: PlayCircle, color: "text-[#FF0000]", link: "https://empirerpg-max.github.io/central/charts.html?tab=YOUTUBE" },
-            { id: "billboard_200", label: "Billboard 200", icon: Disc, color: "text-primary", link: "https://empirerpg-max.github.io/central/charts.html?tab=DADOS%20%C3%81LBUNS" },
-            { id: "digital_sales", label: "Digital Sales", icon: BarChart3, color: "text-blue-500", link: "https://empirerpg-max.github.io/central/charts.html?tab=DIGITAL%20SALES" },
-          ].map((plat) => {
-            const data = topCharts[plat.id];
-            const finalUrl = data?.url || plat.link;
-            const Icon = plat.icon;
+          {Object.entries(config.sections.topPlataformas.links).map(([id, link]) => {
+            const meta = PLATFORM_META[id];
+            if (!meta) return null;
+            const data = topCharts[id];
+            const finalUrl = data?.url || link;
+            const Icon = meta.icon;
             return (
               <button
                 type="button"
-                key={plat.id}
+                key={id}
                 onClick={() => {
                   haptic.light();
                   openExternal(finalUrl);
                 }}
-                aria-label={`Abrir parada ${plat.label}`}
+                aria-label={`Abrir parada ${meta.label}`}
                 className="min-w-[160px] snap-center group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/5 backdrop-blur-md active:scale-95 transition-all shadow-xl text-left"
               >
                 <div className="aspect-square overflow-hidden relative">
@@ -288,23 +252,23 @@ function Index() {
                     <img
                       src={driveImg(data.foto, 400)}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      alt={`${plat.label} #1`}
+                      alt={`${meta.label} #1`}
                       loading="lazy"
                       decoding="async"
                     />
                   ) : (
                     <div className="w-full h-full bg-secondary flex flex-col items-center justify-center p-4">
-                      <Icon className={`size-12 ${plat.color} opacity-30 mb-2`} aria-hidden="true" />
+                      <Icon className={`size-12 ${meta.color} opacity-30 mb-2`} aria-hidden="true" />
                       <span className="text-[11px] font-bold uppercase opacity-50 text-center">Abrir parada</span>
                     </div>
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                   <div className="absolute top-3 left-3 size-9 rounded-full bg-black/60 backdrop-blur-md grid place-items-center border border-white/10">
-                    <Icon className={`size-5 ${plat.color}`} aria-hidden="true" />
+                    <Icon className={`size-5 ${meta.color}`} aria-hidden="true" />
                   </div>
                 </div>
                 <div className="p-3.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary mb-1 block">{plat.label}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary mb-1 block">{meta.label}</span>
                   <h4 className="text-[13px] font-black uppercase leading-tight line-clamp-1">
                     {data?.musica || "Ver parada"}
                   </h4>
@@ -317,6 +281,52 @@ function Index() {
           })}
         </div>
       </section>
+    ),
+  };
+
+  const isEnabled = (key: string) =>
+    key in config.sections && (config.sections as Record<string, { enabled: boolean }>)[key].enabled;
+
+  return (
+    <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen">
+      {/* Header */}
+      <header className="flex items-center justify-between mb-6 animate-in fade-in duration-500">
+        <div>
+          <h1 className="text-2xl font-black italic tracking-tighter uppercase leading-none mb-1">
+            Empire <span className="text-primary">Hub</span>
+          </h1>
+          <p className="text-[11px] uppercase font-bold text-muted-foreground tracking-[0.15em]">
+            Plataforma de Gestão Imperial
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            aria-label={syncing ? "Sincronizando" : "Sincronizar dados"}
+            aria-busy={syncing}
+            className="size-11 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform hover:bg-primary/10 hover:text-primary disabled:opacity-60"
+          >
+            <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
+          </button>
+          <div className="size-11 rounded-full bg-primary/20 border border-primary/30 grid place-items-center overflow-hidden">
+            {user?.photo_url ? (
+              <img
+                src={user.photo_url}
+                className="size-11 rounded-full object-cover"
+                alt={user?.name ? `Foto de ${user.name}` : "Foto do usuário"}
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <User className="size-5 text-primary" aria-hidden="true" />
+            )}
+          </div>
+        </div>
+      </header>
+
+      {config.order.map((key) =>
+        isEnabled(key) && sections[key] ? <div key={key}>{sections[key]()}</div> : null
       )}
 
       <footer className="mt-12 text-center pb-6 border-t border-white/5 pt-6">

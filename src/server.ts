@@ -187,21 +187,92 @@ function injectRuntimeEnv(env: unknown): void {
   }
 }
 
-const DEFAULT_HOME_FLAGS = {
-  meusArtistas: true,
-  billboard: true,
-  topPlataformas: true,
+const DEFAULT_HOME_CONFIG = {
+  order: ["meusArtistas", "billboard", "topPlataformas"] as string[],
+  sections: {
+    meusArtistas: { enabled: true },
+    billboard: {
+      enabled: true,
+      fallbackUrl: "https://empirerpg-max.github.io/central/charts.html?tab=BILLBOARD%20HOT%20100",
+    },
+    topPlataformas: {
+      enabled: true,
+      links: {
+        spotify: "https://empirerpg-max.github.io/central/charts.html?tab=SPOTIFY",
+        apple_music: "https://empirerpg-max.github.io/central/charts.html?tab=APPLE%20MUSIC",
+        youtube: "https://empirerpg-max.github.io/central/charts.html?tab=YOUTUBE",
+        billboard_200: "https://empirerpg-max.github.io/central/charts.html?tab=DADOS%20%C3%81LBUNS",
+        digital_sales: "https://empirerpg-max.github.io/central/charts.html?tab=DIGITAL%20SALES",
+      } as Record<string, string>,
+    },
+  },
 };
 
-async function handleFlagsApi(env: {
-  FLAGS?: { get: (key: string) => Promise<string | null> };
-}): Promise<Response> {
-  if (!env.FLAGS) {
-    return Response.json(DEFAULT_HOME_FLAGS, { headers: { "Cache-Control": "public, max-age=15" } });
+type FlagsKv = { get: (key: string) => Promise<string | null>; put: (key: string, value: string) => Promise<void> };
+
+function deepMerge<T>(base: T, override: unknown): T {
+  if (!override || typeof override !== "object") return base;
+  const result: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(override as Record<string, unknown>)) {
+    const current = result[key];
+    result[key] =
+      value && typeof value === "object" && !Array.isArray(value) && current && typeof current === "object"
+        ? deepMerge(current, value)
+        : value;
   }
-  const raw = await env.FLAGS.get("home-sections");
-  const flags = raw ? { ...DEFAULT_HOME_FLAGS, ...JSON.parse(raw) } : DEFAULT_HOME_FLAGS;
-  return Response.json(flags, { headers: { "Cache-Control": "public, max-age=15" } });
+  return result as T;
+}
+
+async function handleHomeConfigApi(env: { FLAGS?: FlagsKv }): Promise<Response> {
+  if (!env.FLAGS) {
+    return Response.json(DEFAULT_HOME_CONFIG, { headers: { "Cache-Control": "public, max-age=15" } });
+  }
+  const raw = await env.FLAGS.get("home-config");
+  const config = raw ? deepMerge(DEFAULT_HOME_CONFIG, JSON.parse(raw)) : DEFAULT_HOME_CONFIG;
+  return Response.json(config, { headers: { "Cache-Control": "public, max-age=15" } });
+}
+
+const MAX_ERROR_LOG_ENTRIES = 50;
+
+async function handleLogErrorApi(request: Request, env: { FLAGS?: FlagsKv }): Promise<Response> {
+  if (!env.FLAGS) return new Response(null, { status: 204 });
+  let body: { message?: string; stack?: string; path?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(null, { status: 204 });
+  }
+  const entry = {
+    ts: Date.now(),
+    source: "client",
+    message: String(body.message || "Erro desconhecido").slice(0, 500),
+    stack: body.stack ? String(body.stack).slice(0, 2000) : undefined,
+    path: body.path ? String(body.path).slice(0, 200) : undefined,
+  };
+  const raw = await env.FLAGS.get("error-log");
+  const list = raw ? JSON.parse(raw) : [];
+  list.unshift(entry);
+  await env.FLAGS.put("error-log", JSON.stringify(list.slice(0, MAX_ERROR_LOG_ENTRIES)));
+  return new Response(null, { status: 204 });
+}
+
+async function logServerError(env: { FLAGS?: FlagsKv }, error: unknown, path?: string) {
+  if (!env.FLAGS) return;
+  try {
+    const entry = {
+      ts: Date.now(),
+      source: "server",
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack?.slice(0, 2000) : undefined,
+      path,
+    };
+    const raw = await env.FLAGS.get("error-log");
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift(entry);
+    await env.FLAGS.put("error-log", JSON.stringify(list.slice(0, MAX_ERROR_LOG_ENTRIES)));
+  } catch {
+    // Nunca deixar o log de erro derrubar a resposta original.
+  }
 }
 
 export default {
@@ -220,9 +291,14 @@ export default {
       return handleCatalogoApi(request);
     }
 
-    // Feature flags das seções da Home, geridas pelo Empire Admin (mesmo KV).
+    // Config da Home (seções, ordem, textos/links), gerida pelo Empire Admin (mesmo KV).
     if (url.pathname === "/api/flags" && request.method === "GET") {
-      return handleFlagsApi(env as { FLAGS?: { get: (key: string) => Promise<string | null> } });
+      return handleHomeConfigApi(env as { FLAGS?: FlagsKv });
+    }
+
+    // Log de erros do cliente (blank screens, exceptions), lido pelo Empire Admin.
+    if (url.pathname === "/api/log-error" && request.method === "POST") {
+      return handleLogErrorApi(request, env as { FLAGS?: FlagsKv });
     }
 
     // Rota normal: SSR do TanStack Start
@@ -232,6 +308,7 @@ export default {
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);
+      await logServerError(env as { FLAGS?: FlagsKv }, error, url.pathname);
       return brandedErrorResponse();
     }
   },

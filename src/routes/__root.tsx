@@ -380,6 +380,32 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <html lang="pt-BR" className="dark">
       <head>
         <HeadContent />
+        {/* Roda antes do bundle React carregar — pega falhas que deixariam a tela em branco. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                function report(message, stack) {
+                  try {
+                    fetch("/api/log-error", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ message: message, stack: stack, path: location.pathname }),
+                      keepalive: true,
+                    }).catch(function () {});
+                  } catch (e) {}
+                }
+                window.addEventListener("error", function (event) {
+                  report(event.message || "Erro desconhecido antes do carregamento", event.error && event.error.stack);
+                });
+                window.addEventListener("unhandledrejection", function (event) {
+                  var reason = event.reason;
+                  report(reason && reason.message ? reason.message : String(reason), reason && reason.stack);
+                });
+              })();
+            `,
+          }}
+        />
       </head>
       <body className="dark bg-background text-foreground">
         {children}
