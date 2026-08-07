@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: empire-telegram-media
+    runtime: docker
+    rootDir: telegram-media
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: TELEGRAM_SOURCE_CHAT_ID
+        value: "-1004353239109"
