@@ -187,6 +187,23 @@ function injectRuntimeEnv(env: unknown): void {
   }
 }
 
+const DEFAULT_HOME_FLAGS = {
+  meusArtistas: true,
+  billboard: true,
+  topPlataformas: true,
+};
+
+async function handleFlagsApi(env: {
+  FLAGS?: { get: (key: string) => Promise<string | null> };
+}): Promise<Response> {
+  if (!env.FLAGS) {
+    return Response.json(DEFAULT_HOME_FLAGS, { headers: { "Cache-Control": "public, max-age=15" } });
+  }
+  const raw = await env.FLAGS.get("home-sections");
+  const flags = raw ? { ...DEFAULT_HOME_FLAGS, ...JSON.parse(raw) } : DEFAULT_HOME_FLAGS;
+  return Response.json(flags, { headers: { "Cache-Control": "public, max-age=15" } });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     const url = new URL(request.url);
@@ -201,6 +218,11 @@ export default {
     // Intercepta /api/catalogo antes do SSR
     if (url.pathname.startsWith("/api/catalogo")) {
       return handleCatalogoApi(request);
+    }
+
+    // Feature flags das seções da Home, geridas pelo Empire Admin (mesmo KV).
+    if (url.pathname === "/api/flags" && request.method === "GET") {
+      return handleFlagsApi(env as { FLAGS?: { get: (key: string) => Promise<string | null> } });
     }
 
     // Rota normal: SSR do TanStack Start

@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { useTelegramUser, haptic, openExternal } from "@/lib/telegram";
 import { api, driveImg, fmtEC, type Artist, invalidateCache, type ChartData } from "@/lib/api";
+import { useHomeFlags } from "@/lib/homeFlags";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -27,6 +28,7 @@ function Index() {
   const [topCharts, setTopCharts] = useState<Record<string, ChartData>>({});
   const [syncing, setSyncing] = useState(false);
   const { user, ready } = useTelegramUser();
+  const flags = useHomeFlags();
 
   const fetchData = async (silent = false) => {
     if (!silent) setSyncing(true);
@@ -110,6 +112,7 @@ function Index() {
       </header>
 
       {/* MEUS ARTISTAS */}
+      {flags.meusArtistas && (
       <section className="mb-10" aria-labelledby="meus-artistas-h">
         <div className="flex items-center justify-between mb-4">
           <h2 id="meus-artistas-h" className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
@@ -188,9 +191,10 @@ function Index() {
           </div>
         )}
       </section>
+      )}
 
       {/* BILLBOARD HOT 100 */}
-      {(() => {
+      {flags.billboard && (() => {
         const data = topCharts.billboard_hot_100;
         const finalUrl = data?.url || "https://empirerpg-max.github.io/central/charts.html?tab=BILLBOARD%20HOT%20100";
 
@@ -252,6 +256,7 @@ function Index() {
       })()}
 
       {/* PLATFORM CHARTS */}
+      {flags.topPlataformas && (
       <section className="mb-12" aria-labelledby="platforms-h">
         <h2 id="platforms-h" className="text-xs font-black uppercase tracking-[0.2em] mb-4 text-muted-foreground">
           Top por plataforma
@@ -312,6 +317,7 @@ function Index() {
           })}
         </div>
       </section>
+      )}
 
       <footer className="mt-12 text-center pb-6 border-t border-white/5 pt-6">
         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/40">
