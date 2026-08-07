@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>O Produtor de Hits — Empire Games</title>
+
+    <!-- Cabinet Grotesk + Satoshi (Fontshare) -->
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
+    <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,900&f[]=satoshi@500,700,900&display=swap" />
+
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <!-- Canvas do jogo -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Camada de UI sobreposta -->
+    <div class="ui-layer">
+      <!-- HUD durante o jogo -->
+      <div id="hud" class="hud hidden">
+        <div class="hud-top">
+          <div>
+            <span class="hud-label">Score</span>
+            <span id="hud-score-val" class="hud-value">0</span>
+          </div>
+          <div>
+            <span class="hud-label">Combo</span>
+            <span id="hud-combo-val" class="combo-value">x0</span>
+          </div>
+          <div>
+            <span class="hud-label">Vidas</span>
+            <span id="hud-lives-val" class="hud-value">❤️❤️❤️</span>
+          </div>
+        </div>
+        <div class="hype-container">
+          <span class="hud-label">Hype Meter</span>
+          <div class="hype-bar-bg">
+            <div id="hype-bar" class="hype-bar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- START SCREEN -->
+      <section id="screen-start" class="screen active">
+        <div class="screen-inner">
+          <h1 class="game-title">O Produtor<br />de Hits</h1>
+          <p class="subtitle">Acerte as notas no ritmo. Quanto mais perfeito, maior o prêmio.</p>
+
+          <span class="wager-label">Sua aposta</span>
+          <div class="wager-buttons">
+            <button class="btn-wager" data-amount="50">50 E$C</button>
+            <button class="btn-wager" data-amount="100">100 E$C</button>
+            <button class="btn-wager" data-amount="200">200 E$C</button>
+          </div>
+
+          <p class="rules">
+            <strong>D&nbsp;F&nbsp;J&nbsp;K</strong> ou toque nas pistas. <br />
+            Acerto <strong>PERFECT</strong> rende mais pontos e <strong>combo</strong>. <br />
+            Zerou o <strong>Hype</strong>? Game over.
+          </p>
+        </div>
+      </section>
+
+      <!-- LOADING -->
+      <section id="screen-loading" class="screen">
+        <div class="screen-inner">
+          <div class="spinner"></div>
+          <p class="loading-text">Debitando aposta no Império…</p>
+        </div>
+      </section>
+
+      <!-- PAUSED -->
+      <section id="screen-paused" class="screen">
+        <div class="screen-inner">
+          <h2 class="screen-title">Pausa</h2>
+          <p class="subtitle">Respira. Quando voltar, o público continua de onde parou.</p>
+          <button id="btn-resume" class="btn-primary">Continuar</button>
+        </div>
+      </section>
+
+      <!-- GAME OVER -->
+      <section id="screen-gameover" class="screen">
+        <div class="screen-inner">
+          <h2 class="screen-title loss">Game Over</h2>
+          <p id="go-wager-lost" class="go-detail">Aposta perdida: 0 🪙</p>
+          <p id="go-score" class="go-detail">Pontuação: 0 | Combo máx: x0</p>
+          <div id="go-saving" class="saving-msg hidden">
+            <div class="spinner small"></div>
+            Salvando no Império…
+          </div>
+          <button id="btn-retry" class="btn-primary">Tentar novamente</button>
+          <button id="btn-menu-go" class="btn-secondary">Voltar ao menu</button>
+        </div>
+      </section>
+
+      <!-- VICTORY -->
+      <section id="screen-victory" class="screen">
+        <div class="screen-inner">
+          <h2 class="screen-title win">Hit confirmado!</h2>
+          <p class="subtitle">Prêmio creditado na conta do artista</p>
+          <div id="vic-prize" class="prize-display">+0 🪙</div>
+          <p id="vic-score" class="go-detail">Score: 0 | Precisão: 0%</p>
+          <div id="vic-saving" class="saving-msg hidden">
+            <div class="spinner small"></div>
+            Salvando no Império…
+          </div>
+          <button id="btn-play-again" class="btn-primary">Jogar de novo</button>
+          <button id="btn-menu-vic" class="btn-secondary">Voltar ao menu</button>
+        </div>
+      </section>
+
+      <!-- Botões de toque (uma área por pista) -->
+      <div id="tap-buttons" class="tap-buttons hidden">
+        <button class="tap-btn" data-lane="0" aria-label="Pista 1"></button>
+        <button class="tap-btn" data-lane="1" aria-label="Pista 2"></button>
+        <button class="tap-btn" data-lane="2" aria-label="Pista 3"></button>
+        <button class="tap-btn" data-lane="3" aria-label="Pista 4"></button>
+      </div>
+    </div>
+
+    <script src="./game.js"></script>
+  </body>
+</html>

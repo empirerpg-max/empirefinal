@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Memória da Fama — Empire Games</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <canvas id="confetti"></canvas>
+
+    <div class="ui-layer">
+      <!-- HUD -->
+      <header id="hud" class="hud hidden">
+        <div class="hud-row">
+          <div class="hud-cell">
+            <span class="hud-label">Tempo</span>
+            <span id="hud-time" class="hud-value">40s</span>
+          </div>
+          <div class="hud-cell">
+            <span class="hud-label">Pares</span>
+            <span id="hud-pairs" class="hud-value">0/8</span>
+          </div>
+          <div class="hud-cell">
+            <span class="hud-label">Erros</span>
+            <span id="hud-errors" class="hud-value">0</span>
+          </div>
+        </div>
+        <div class="time-bar-bg">
+          <div id="time-bar" class="time-bar"></div>
+        </div>
+      </header>
+
+      <!-- BOARD -->
+      <main id="board-wrap" class="board-wrap hidden">
+        <div id="board" class="board"></div>
+      </main>
+
+      <!-- MENU -->
+      <section id="screen-menu" class="screen active">
+        <div class="screen-inner">
+          <h1 class="game-title">Memória<br/>da <span class="accent">Fama</span></h1>
+          <p class="subtitle">Encontre os pares de talentos escondidos antes do tempo acabar.</p>
+          <ul class="rules">
+            <li>Grade 4×4 · 8 pares · 40 segundos</li>
+            <li>Ganho = tempo restante × 8 + bônus de precisão</li>
+            <li>Sem erros = <strong>FLAWLESS</strong> (+50%)</li>
+            <li>Completar em &lt; 30s = até <strong>3× a entrada</strong></li>
+          </ul>
+          <p class="entry">Entrada: <strong>30 E$C</strong></p>
+          <button id="btn-start" class="btn-primary">Começar</button>
+        </div>
+      </section>
+
+      <!-- LOADING -->
+      <section id="screen-loading" class="screen">
+        <div class="screen-inner">
+          <div class="spinner"></div>
+          <p class="loading-text" id="loading-text">Reunindo o elenco do Império…</p>
+        </div>
+      </section>
+
+      <!-- TIME UP -->
+      <section id="screen-timeup" class="screen">
+        <div class="screen-inner">
+          <h2 class="screen-title loss">Tempo esgotado</h2>
+          <p id="tu-detail" class="go-detail">Pares: 0/8 · Erros: 0</p>
+          <p class="go-detail">Você perdeu a entrada de <strong>30 E$C</strong>.</p>
+          <div id="tu-saving" class="saving-msg hidden"><div class="spinner small"></div>Salvando…</div>
+          <button id="btn-retry" class="btn-primary">Tentar de novo</button>
+          <button id="btn-menu-tu" class="btn-secondary">Voltar ao menu</button>
+        </div>
+      </section>
+
+      <!-- VICTORY -->
+      <section id="screen-victory" class="screen">
+        <div class="screen-inner">
+          <h2 class="screen-title win">Talentos descobertos!</h2>
+          <p id="vic-flawless" class="flawless hidden">★ FLAWLESS ★</p>
+          <div id="vic-prize" class="prize-display">+0 E$C</div>
+          <p id="vic-detail" class="go-detail">Tempo restante: 0s · Erros: 0</p>
+          <div id="vic-saving" class="saving-msg hidden"><div class="spinner small"></div>Creditando no Império…</div>
+          <button id="btn-again" class="btn-primary">Jogar de novo</button>
+          <button id="btn-menu-vic" class="btn-secondary">Voltar ao menu</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="./game.js"></script>
+  </body>
+</html>

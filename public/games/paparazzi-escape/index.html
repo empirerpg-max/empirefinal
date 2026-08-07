@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Fuga do Paparazzi</title>
+<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;700;900&family=Satoshi:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="ui" class="ui-layer">
+
+    <!-- MENU -->
+    <div id="screen-menu" class="screen active">
+      <div class="screen-inner">
+        <div class="game-icon">📸</div>
+        <h1 class="game-title">Fuga do<br>Paparazzi</h1>
+        <p class="subtitle">Colete moedas. Fuja na hora certa.<br>Ou perca tudo.</p>
+        <div class="entry-fee">
+          <span class="fee-label">Taxa de Entrada</span>
+          <span class="fee-value">50 🪙</span>
+        </div>
+        <div class="rules">
+          <p>⬅️➡️ Swipe / setas para trocar de pista</p>
+          <p>⬆️ Swipe pra cima ou tap para pular barricadas</p>
+          <p>⬇️ Swipe pra baixo para esquivar dos drones</p>
+          <p>💰 Colete moedas entre os obstáculos</p>
+          <p>🟢 FUGIR = garante o saldo da partida</p>
+          <p>💀 Bater = perde tudo</p>
+        </div>
+        <button id="btn-play" class="btn-primary">▶ JOGAR (50 🪙)</button>
+      </div>
+    </div>
+
+    <!-- LOADING -->
+    <div id="screen-loading" class="screen">
+      <div class="screen-inner">
+        <div class="spinner"></div>
+        <p class="loading-text">Deduzindo entrada...</p>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="hud hidden">
+      <div class="hud-top">
+        <div class="hud-block">
+          <span class="hud-label">SALDO DA PARTIDA</span>
+          <span id="hud-coins" class="hud-value gold">0 🪙</span>
+        </div>
+        <div class="hud-block">
+          <span class="hud-label">DISTÂNCIA</span>
+          <span id="hud-dist" class="hud-value">0m</span>
+        </div>
+      </div>
+      <button id="btn-cashout" class="btn-cashout">💰 FUGIR</button>
+    </div>
+
+    <!-- CASHOUT LOADING -->
+    <div id="screen-cashout" class="screen">
+      <div class="screen-inner">
+        <div class="spinner"></div>
+        <p class="loading-text">Transferindo saldo...</p>
+        <p id="cashout-amount" class="prize-display"></p>
+      </div>
+    </div>
+
+    <!-- DEAD -->
+    <div id="screen-dead" class="screen">
+      <div class="screen-inner">
+        <div class="game-icon">💥</div>
+        <h2 class="screen-title loss">CAPTURADO!</h2>
+        <p class="go-detail">Os paparazzi te pegaram.</p>
+        <p id="dead-coins" class="go-detail loss-text"></p>
+        <div id="dead-saving" class="saving-msg hidden">
+          <div class="spinner small"></div>
+          <span>Registrando derrota...</span>
+        </div>
+        <button id="btn-retry" class="btn-primary" disabled>Tentar Novamente</button>
+        <button id="btn-menu-dead" class="btn-secondary">Menu</button>
+      </div>
+    </div>
+
+    <!-- SUCCESS -->
+    <div id="screen-success" class="screen">
+      <div class="screen-inner">
+        <div class="game-icon">🏃</div>
+        <h2 class="screen-title win">FUGA PERFEITA!</h2>
+        <p id="success-prize" class="prize-display"></p>
+        <p id="success-dist" class="go-detail"></p>
+        <div id="success-saving" class="saving-msg hidden">
+          <div class="spinner small"></div>
+          <span>Depositando recompensa...</span>
+        </div>
+        <button id="btn-play-again" class="btn-primary" disabled>Jogar Novamente</button>
+        <button id="btn-menu-suc" class="btn-secondary">Menu</button>
+      </div>
+    </div>
+
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>

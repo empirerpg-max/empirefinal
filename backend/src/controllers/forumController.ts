@@ -1,0 +1,301 @@
+import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
+
+export interface CreateCommentBody {
+  tipoMedia: "musica" | "music-video" | "video" | "album";
+  tituloMedia: string;
+  topicId?: string;
+  jogadorId?: string;
+  nomeJogador: string;
+  comentario: string;
+  intervalo: string; // "45 - 60" | "61 - 75" | "76 - 90" | "91 - 100"
+}
+
+/**
+ * Monta a linha a ser gravada na aba de comentários certa — cada aba tem um
+ * schema de colunas diferente (confirmado no documento oficial do Empire
+ * Play), então NÃO dá pra usar a mesma ordem [data, titulo, jogador,
+ * comentario, nota] para todas, como o código antigo fazia (isso corrompia
+ * a planilha real a cada comentário).
+ */
+function buildCommentRow(
+  tipoMedia: CreateCommentBody["tipoMedia"],
+  params: { topicId: string; jogadorId: string; playerClean: string; comentario: string; nowStr: string },
+): string[] {
+  const { topicId, jogadorId, playerClean, comentario, nowStr } = params;
+
+  if (tipoMedia === "video") {
+    // Comentarios_Videos: telegram_topic_id, telegram_message_id, texto, autor, id_usuario, data, reacoes
+    return [topicId, "", comentario, playerClean, jogadorId, nowStr, ""];
+  }
+  if (tipoMedia === "musica") {
+    // Comentarios_Musicas: ID do tópico, ID do jogador, Nome do jogador, Comentário
+    return [topicId, jogadorId, playerClean, comentario];
+  }
+  // Comentarios_MV / Comentarios_Albuns: ID do tópico, ID do jogador, Nome do jogador, Comentário, Data
+  return [topicId, jogadorId, playerClean, comentario, nowStr];
+}
+
+export function rollRandomScore(intervaloStr: string): number {
+  const match = (intervaloStr || "").match(/(\d+)\s*-\s*(\d+)/);
+  let min = 45;
+  let max = 100;
+  if (match) {
+    min = parseInt(match[1], 10);
+    max = parseInt(match[2], 10);
+  }
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+export function colIndexToA1Letter(colIndex: number): string {
+  let temp = colIndex;
+  let letter = "";
+  while (temp >= 0) {
+    letter = String.fromCharCode((temp % 26) + 65) + letter;
+    temp = Math.floor(temp / 26) - 1;
+  }
+  return letter;
+}
+
+export function calculateAverageFromRatings(ratingsStr: string): number {
+  if (!ratingsStr) return 0;
+  const numbers = ratingsStr.match(/\d+/g);
+  if (!numbers || numbers.length === 0) return 0;
+  const sum = numbers.reduce((acc, val) => acc + parseInt(val, 10), 0);
+  return Math.round(sum / numbers.length);
+}
+
+export async function createCommentController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as CreateCommentBody;
+
+    const { tipoMedia, tituloMedia, topicId, jogadorId, nomeJogador, comentario, intervalo } = body;
+
+    if (!tipoMedia || !tituloMedia || !nomeJogador || !comentario) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Campos obrigatórios ausentes (tipoMedia, tituloMedia, nomeJogador, comentario).",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const score = rollRandomScore(intervalo);
+    const playerClean = nomeJogador.trim();
+    const titleClean = tituloMedia.trim();
+    const topicIdClean = (topicId || "").trim();
+    const jogadorIdClean = (jogadorId || "").trim();
+
+    // Configuração de abas e colunas conforme tipo da mídia
+    let targetSheet = "Musicas";
+    let commentSheet = "Comentarios_Musicas";
+    let colRatingsIndex = 21; // Coluna V (0-based 21)
+    let colAvgIndex = 22; // Coluna W (0-based 22)
+
+    if (tipoMedia === "album") {
+      targetSheet = "Albuns";
+      commentSheet = "Comentarios_Albuns";
+      colRatingsIndex = 7; // Coluna H
+      colAvgIndex = 8; // Coluna I
+    } else if (tipoMedia === "music-video") {
+      targetSheet = "Music Videos";
+      commentSheet = "Comentarios_MV";
+      colRatingsIndex = 18; // Coluna S (0-based 18)
+      colAvgIndex = 19; // Coluna T (0-based 19)
+    } else if (tipoMedia === "video") {
+      targetSheet = "Videos";
+      commentSheet = "Comentarios_Videos";
+      colRatingsIndex = 10; // Coluna K (0-based 10)
+      colAvgIndex = 11; // Coluna L (0-based 11)
+    }
+
+    // 1. Atualizar nota/likes e média na planilha principal
+    const rows = await googleSheetsService.principal.readValues(targetSheet);
+
+    if (rows && rows.length > 0) {
+      // Busca pela Coluna B (índice 1) = "ID do tópico" / "telegram_topic_id"
+      // — mesma posição em Musicas/Videos/Music Videos/Albuns. Só cai para
+      // busca por título (substring, menos confiável) se o topicId não vier.
+      let foundRowIndex = -1;
+
+      if (topicIdClean) {
+        const topicNorm = normalizeComparison(topicIdClean);
+        for (let i = 1; i < rows.length; i++) {
+          if (normalizeComparison(rows[i][1] || "") === topicNorm) {
+            foundRowIndex = i + 1; // A1 row number (1-based)
+            break;
+          }
+        }
+      }
+
+      if (foundRowIndex === -1) {
+        const titleNorm = normalizeComparison(titleClean);
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const rowText = row.join(" ");
+          if (normalizeComparison(rowText).includes(titleNorm)) {
+            foundRowIndex = i + 1; // A1 row number (1-based)
+            break;
+          }
+        }
+      }
+
+      if (foundRowIndex > 0) {
+        const rowData = rows[foundRowIndex - 1] || [];
+        const currentRatings = rowData[colRatingsIndex] || "";
+
+        const updatedRatings = currentRatings.trim()
+          ? `${currentRatings.trim()}, ${playerClean}: ${score}`
+          : `${playerClean}: ${score}`;
+
+        const newAvg = calculateAverageFromRatings(updatedRatings);
+
+        const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
+        const avgColLetter = colIndexToA1Letter(colAvgIndex);
+
+        // Atualiza a coluna de ratings por jogador e coluna de média
+        await googleSheetsService.principal.updateValues(
+          targetSheet,
+          `${ratingColLetter}${foundRowIndex}`,
+          [[updatedRatings]],
+        );
+
+        await googleSheetsService.principal.updateValues(
+          targetSheet,
+          `${avgColLetter}${foundRowIndex}`,
+          [[String(newAvg)]],
+        );
+      }
+    }
+
+    // 2. Salvar comentário na aba de comentários correspondente
+    const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    try {
+      await googleSheetsService.principal.appendRow(
+        commentSheet,
+        buildCommentRow(tipoMedia, {
+          topicId: topicIdClean,
+          jogadorId: jogadorIdClean,
+          playerClean,
+          comentario: comentario.trim(),
+          nowStr,
+        }),
+      );
+    } catch (err) {
+      console.warn(`[ForumController] Não foi possível salvar em ${commentSheet}:`, err);
+    }
+
+    // 3. Registrar Audit Log na Planilha REGISTRO (1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg)
+    const auditTitle = tipoMedia === "album" ? `(ALBUM) — ${titleClean}` : titleClean;
+    const auditType =
+      tipoMedia === "album"
+        ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
+        : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)";
+
+    try {
+      await googleSheetsService.registrosCharts.appendRow("REGISTRO", [
+        nowStr,
+        playerClean,
+        auditTitle,
+        auditType,
+      ]);
+    } catch (auditErr) {
+      console.warn("[ForumController] Erro ao gravar Audit Log no REGISTRO:", auditErr);
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          tipoMedia,
+          tituloMedia: titleClean,
+          nomeJogador: playerClean,
+          notaCalculada: score,
+          mensagem: "Comentário e avaliação processados com sucesso!",
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  } catch (error: any) {
+    console.error("[createCommentController] Erro:", error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro interno ao processar comentário.",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+export async function getCommentsController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const tituloParam = url.searchParams.get("titulo") || "";
+  const topicIdParam = url.searchParams.get("topicId") || "";
+
+  try {
+    const [musicaComments, mvComments, videoComments, albumComments] = await Promise.all([
+      googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
+      googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
+      googleSheetsService.principal.readValues("Comentarios_Videos").catch(() => []),
+      googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
+    ]);
+
+    // Cada aba tem seu próprio schema de colunas (ver buildCommentRow acima) —
+    // o parse precisa respeitar isso, não dá pra usar posições genéricas.
+    const formatMusicaOrAlbumStyle = (rows: string[][], tipo: string, hasData: boolean) => {
+      if (!rows || rows.length <= 1) return [];
+      return rows.slice(1).map((r, idx) => ({
+        id: `${tipo}_${idx + 1}`,
+        tipo,
+        topicId: r[0] || "",
+        jogadorId: r[1] || "",
+        jogador: r[2] || "",
+        comentario: r[3] || "",
+        data: hasData ? r[4] || "" : "",
+      }));
+    };
+
+    const formatVideoComments = (rows: string[][]) => {
+      if (!rows || rows.length <= 1) return [];
+      // Comentarios_Videos: telegram_topic_id, telegram_message_id, texto, autor, id_usuario, data, reacoes
+      return rows.slice(1).map((r, idx) => ({
+        id: `video_${idx + 1}`,
+        tipo: "video",
+        topicId: r[0] || "",
+        jogadorId: r[4] || "",
+        jogador: r[3] || "",
+        comentario: r[2] || "",
+        data: r[5] || "",
+      }));
+    };
+
+    let allComments = [
+      ...formatMusicaOrAlbumStyle(musicaComments, "musica", false),
+      ...formatMusicaOrAlbumStyle(mvComments, "music-video", true),
+      ...formatVideoComments(videoComments),
+      ...formatMusicaOrAlbumStyle(albumComments, "album", true),
+    ];
+
+    if (topicIdParam) {
+      const norm = normalizeComparison(topicIdParam);
+      allComments = allComments.filter((c) => normalizeComparison(c.topicId) === norm);
+    } else if (tituloParam) {
+      const norm = normalizeComparison(tituloParam);
+      allComments = allComments.filter((c) => normalizeComparison(c.topicId).includes(norm));
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: allComments,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  } catch (err: any) {
+    return new Response(
+      JSON.stringify({ success: false, error: err.message || "Erro ao buscar comentários." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}

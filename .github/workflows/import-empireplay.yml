@@ -1,0 +1,31 @@
+name: Importar Empire Play → Supabase
+
+on:
+  workflow_dispatch:   # disparo manual pelo botão no GitHub
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: pip install gspread supabase
+
+      - name: Escrever credentials.json
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > scripts/credentials.json
+
+      - name: Executar importador
+        env:
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          cd scripts
+          python import-empireplay.py
