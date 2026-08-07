@@ -14,10 +14,13 @@ export default defineConfig({
   plugins: [
     tsConfigPaths(),
     tailwindcss(),
-    tanstackStart({ server: { entry: "server" } }),
-    viteReact(),
-    // Only takes effect during `vite build` for Cloudflare Workers deploys.
+    // Precisa vir antes de tanstackStart(): se rodar depois, a orquestração de
+    // build multi-ambiente do Cloudflare assume o controle do `builder.buildApp`
+    // e builda server/client como passos separados, deixando o manifest de
+    // produção apontando para o módulo de dev (`/@id/virtual:...`) — tela em branco.
     cloudflare(),
+    tanstackStart({ client: { entry: "client" }, server: { entry: "server" } }),
+    viteReact(),
   ],
   server: {
     proxy: {

@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build && node scripts/fix-start-manifest.mjs",
     "build:dev": "vite build --mode development",
-    "cf:build": "bun install && vite build",
+    "cf:build": "bun install && vite build && node scripts/fix-start-manifest.mjs",
     "preview": "vite preview",
-    "deploy": "vite build && wrangler deploy -c dist/tanstack_start_app/wrangler.json",
+    "deploy": "vite build && node scripts/fix-start-manifest.mjs && wrangler deploy -c dist/tanstack_start_app/wrangler.json",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
