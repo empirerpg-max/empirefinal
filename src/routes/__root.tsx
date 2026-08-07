@@ -734,7 +734,7 @@ function RootInner() {
 }
 
 function RouteTransitionOverlay() {
-  const isLoading = useRouterState({ select: (s) => s.isLoading || s.isTransitioning });
+  const isLoading = useRouterState({ select: (s) => s.isLoading });
   return (
     <AnimatePresence>
       {isLoading && (
