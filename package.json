@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "cf:build": "bun install && vite build",
     "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy -c dist/tanstack_start_app/wrangler.json",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -88,6 +89,7 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "wrangler": "^4.28.0"
   }
 }
