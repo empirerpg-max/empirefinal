@@ -6,17 +6,15 @@ import {
   TrendingUp,
   User,
   Plus,
-  Radio,
   Music2,
   Music,
   PlayCircle,
   Disc,
   BarChart3,
-  ListMusic,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTelegramUser, haptic, openExternal } from "@/lib/telegram";
-import { api, driveImg, fmtEC, type Artist, type RadarItem, invalidateCache, type ChartData } from "@/lib/api";
+import { api, driveImg, fmtEC, type Artist, invalidateCache, type ChartData } from "@/lib/api";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -26,7 +24,6 @@ type LoadState<T> = { status: "loading" } | { status: "error"; error: string } |
 
 function Index() {
   const [myArtists, setMyArtists] = useState<LoadState<Artist[]>>({ status: "loading" });
-  const [radarFeed, setRadarFeed] = useState<LoadState<RadarItem[]>>({ status: "loading" });
   const [topCharts, setTopCharts] = useState<Record<string, ChartData>>({});
   const [syncing, setSyncing] = useState(false);
   const { user, ready } = useTelegramUser();
@@ -47,14 +44,6 @@ function Index() {
     } else {
       setMyArtists({ status: "ok", data: [] });
     }
-
-    setRadarFeed({ status: "loading" });
-    tasks.push(
-      api
-        .radar()
-        .then((d) => setRadarFeed({ status: "ok", data: d }))
-        .catch((e) => setRadarFeed({ status: "error", error: String(e?.message || e) }))
-    );
 
     tasks.push(api.topCharts().then(setTopCharts).catch(() => {}));
 
@@ -321,115 +310,6 @@ function Index() {
               </button>
             );
           })}
-        </div>
-      </section>
-
-      {/* EMPIRE PLAYLISTS */}
-      <section className="mb-12" aria-labelledby="playlists-h">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="playlists-h" className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
-            <ListMusic className="size-4 text-primary" aria-hidden="true" />
-            Empire Playlists
-          </h2>
-          <Link
-            to="/playlists"
-            onClick={() => haptic.selection()}
-            className="text-[11px] font-bold uppercase text-primary tracking-wider hover:underline min-h-11 grid place-items-center"
-          >
-            Explorar
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => { haptic.light(); openExternal("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"); }}
-            className="group relative h-32 rounded-[1.75rem] overflow-hidden border border-white/5 bg-[#1DB954]/10 transition-all hover:border-[#1DB954]/40 text-left"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-[#1DB954]/20 to-transparent" />
-            <div className="relative p-4 h-full flex flex-col justify-between">
-              <Music2 className="size-7 text-[#1DB954]" aria-hidden="true" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#1DB954]">Spotify</p>
-                <h3 className="text-sm font-black uppercase tracking-tight leading-tight">Elite Hits</h3>
-              </div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { haptic.light(); openExternal("https://music.apple.com/us/playlist/todays-hits/pl.f4d1e2e1"); }}
-            className="group relative h-32 rounded-[1.75rem] overflow-hidden border border-white/5 bg-[#FC3C44]/10 transition-all hover:border-[#FC3C44]/40 text-left"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-[#FC3C44]/20 to-transparent" />
-            <div className="relative p-4 h-full flex flex-col justify-between">
-              <Music className="size-7 text-[#FC3C44]" aria-hidden="true" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#FC3C44]">Apple Music</p>
-                <h3 className="text-sm font-black uppercase tracking-tight leading-tight">Chart Top 50</h3>
-              </div>
-            </div>
-          </button>
-        </div>
-      </section>
-
-      {/* RADAR FEED */}
-      <section aria-labelledby="radar-h">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="radar-h" className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
-            <Radio className="size-4 text-red-500 animate-pulse" aria-hidden="true" />
-            Radar Feed
-          </h2>
-          <span className="text-[11px] font-bold uppercase text-muted-foreground">Ao vivo</span>
-        </div>
-
-        <div className="space-y-3">
-          {radarFeed.status === "loading" ? (
-            [1, 2, 3].map((i) => <div key={i} className="h-20 rounded-[1.5rem] bg-white/5 animate-pulse" />)
-          ) : radarFeed.status === "error" ? (
-            <div className="p-5 rounded-[1.5rem] bg-destructive/10 border border-destructive/20 text-center">
-              <p className="text-xs font-bold text-destructive mb-2">Radar indisponível</p>
-              <button
-                onClick={() => fetchData(false)}
-                className="text-[11px] font-black uppercase tracking-wider text-primary underline min-h-11"
-              >
-                Tentar novamente
-              </button>
-            </div>
-          ) : radarFeed.data.length === 0 ? (
-            <div className="p-8 text-center text-xs uppercase font-bold text-muted-foreground">
-              Silêncio no radar — nada por aqui ainda.
-            </div>
-          ) : (
-            radarFeed.data.map((item, idx) => (
-              <article
-                key={idx}
-                className="flex items-center gap-3 p-4 rounded-[1.5rem] bg-card/40 border border-white/5 hover:bg-white/5 transition-colors group"
-              >
-                <div className="size-12 rounded-2xl bg-secondary flex-shrink-0 overflow-hidden border border-white/10">
-                  <img
-                    src={driveImg(item.foto, 150)}
-                    className="w-full h-full object-cover"
-                    alt={item.nome ? `Foto de ${item.nome}` : "Radar"}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <h3 className="text-sm font-black uppercase truncate group-hover:text-primary transition-colors">
-                      {item.nome}
-                    </h3>
-                    <span className="text-[10px] font-bold text-primary/70 flex-shrink-0 uppercase tracking-wider">
-                      Live
-                    </span>
-                  </div>
-                  <p className="text-[12px] text-muted-foreground font-medium line-clamp-1 mt-0.5">
-                    {item.acao}
-                  </p>
-                </div>
-              </article>
-            ))
-          )}
         </div>
       </section>
 

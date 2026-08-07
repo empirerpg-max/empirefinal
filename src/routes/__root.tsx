@@ -44,6 +44,8 @@ import { Toaster, toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import { useTelegramUser, haptic, useTelegramBackButton } from "@/lib/telegram";
 import { api, driveImg, type Artist } from "@/lib/api";
+import { registerServiceWorker } from "@/lib/pwa";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 function GlobalLinkModal({ onClose }: { onClose: () => void }) {
   const { user } = useTelegramUser();
@@ -320,6 +322,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { name: "theme-color", content: "#000000" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Empire" },
       { title: "Empire Hub" },
       {
         name: "description",
@@ -351,8 +357,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "icon", type: "image/png", href: logoIcon },
-      { rel: "apple-touch-icon", href: logoIcon },
+      { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "" },
       {
@@ -457,6 +464,10 @@ function RootInner() {
   useEffect(() => {
     (window as any).setShowIdModal = setShowIdModal;
     (window as any).setShowLinkModal = setShowLinkModal;
+  }, []);
+
+  useEffect(() => {
+    registerServiceWorker();
   }, []);
 
   useEffect(() => {
@@ -716,6 +727,7 @@ function RootInner() {
       <Outlet />
 
       <BottomNav />
+      <InstallPrompt />
       <Toaster position="top-center" richColors closeButton offset={80} />
     </div>
   );
