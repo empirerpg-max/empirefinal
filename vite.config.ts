@@ -11,16 +11,13 @@ const GAS_URL = process.env.VITE_GAS_URL ||
   'https://script.google.com/macros/s/AKfycby7Epe3MHPMvje5OKtSlNn-tSWpowLPOJ7DVflFJqgZNOKCnN9IcGwWYL1QSeRtgJrQ7w/exec';
 
 export default defineConfig({
+  build: process.env.DEBUG_BUILD ? { minify: false, sourcemap: true } : undefined,
   plugins: [
     tsConfigPaths(),
     tailwindcss(),
-    // Precisa vir antes de tanstackStart(): se rodar depois, a orquestração de
-    // build multi-ambiente do Cloudflare assume o controle do `builder.buildApp`
-    // e builda server/client como passos separados, deixando o manifest de
-    // produção apontando para o módulo de dev (`/@id/virtual:...`) — tela em branco.
-    cloudflare(),
     tanstackStart({ client: { entry: "client" }, server: { entry: "server" } }),
     viteReact(),
+    cloudflare(),
   ],
   server: {
     proxy: {
