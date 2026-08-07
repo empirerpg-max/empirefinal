@@ -1,0 +1,33 @@
+name: Casar vídeos do Telegram com a planilha
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Só simular (não escrever na planilha)?"
+        type: boolean
+        default: true
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: telegram-media
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install
+
+      - name: Rodar o matching
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: npm run match-messages
