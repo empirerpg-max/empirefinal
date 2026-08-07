@@ -174,15 +174,17 @@ async function main() {
     const title = row[titleCol] || "";
     const descricao = row[descricaoCol] || "";
     const existingId = currentId.get(i) || null;
+    const ownId = existingId && /^\d+$/.test(existingId) ? Number(existingId) : null;
+    const isUsedByAnother = (id: number) => usedArchiveIds.has(id) && id !== ownId;
 
     let best: { candidate: Candidate; score: number } | null = null;
     let viaDescricao = false;
     if (descricao.trim()) {
-      best = findBest(tokenSet(descricao), candidates, (id) => usedArchiveIds.has(id));
+      best = findBest(tokenSet(descricao), candidates, isUsedByAnother);
       viaDescricao = true;
     }
     if ((!best || best.score < DESCRICAO_THRESHOLD) && title.trim()) {
-      const titleBest = findBest(tokenSet(title), candidates, (id) => usedArchiveIds.has(id));
+      const titleBest = findBest(tokenSet(title), candidates, isUsedByAnother);
       if (titleBest && (!best || titleBest.score > best.score)) {
         best = titleBest;
         viaDescricao = false;
@@ -191,6 +193,16 @@ async function main() {
 
     const threshold = viaDescricao ? DESCRICAO_THRESHOLD : TITLE_FALLBACK_THRESHOLD;
     if (!best || best.score < threshold) continue;
+
+    if (ownId !== null && best.candidate.id !== ownId) {
+      // se o próprio candidato atual empata (ex.: legenda duplicada em
+      // outra mensagem), não troca por um "achado" que não é melhor.
+      const ownCandidate = candidates.find((c) => c.id === ownId);
+      if (ownCandidate) {
+        const ownScore = jaccard(viaDescricao ? tokenSet(descricao) : tokenSet(title), ownCandidate.tokens);
+        if (ownScore >= best.score) continue;
+      }
+    }
 
     const newId = best.candidate.id;
     if (existingId && Number(existingId) === newId) continue; // já está certo
