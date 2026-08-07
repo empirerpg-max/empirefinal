@@ -1,55 +1,40 @@
 # Empire Telegram Media
 
-Serviço separado (Fly.io) que autentica como usuário do Telegram (MTProto,
-não Bot API) e transmite vídeos grandes do grupo pra dentro do app, sem
-expor nenhuma credencial pro navegador. O `empirefinal` fala com ele por
-trás (`src/server.ts` → `/api/telegram-video/:messageId`).
+Serviço separado (Fly.io) que loga como **bot** via MTProto (não a API HTTP
+do bot) e transmite vídeos grandes do grupo pra dentro do app. Via MTProto o
+limite de 20MB da API HTTP não existe — o bot consegue ler arquivos grandes
+normalmente. Nenhuma credencial chega ao navegador: o `empirefinal` fala com
+esse serviço por trás (`src/server.ts` → `/api/telegram-video/:messageId`).
 
 ## 1. Secrets no GitHub (repo `empirefinal`, aba Settings → Secrets → Actions)
 
-| Secret | O que é |
-|---|---|
-| `FLY_API_TOKEN` | Token da sua conta Fly.io (dashboard → Account → Tokens) |
-| `TELEGRAM_API_ID` | Gerado em my.telegram.org |
-| `TELEGRAM_API_HASH` | Gerado em my.telegram.org |
-| `TELEGRAM_MEDIA_ADMIN_TOKEN` | Uma senha forte qualquer, você inventa (protege as rotas do serviço) |
-| `TELEGRAM_SESSION` | Deixe **vazio** no primeiro deploy — vem do passo 3 |
+| Secret | O que é | Onde conseguir |
+|---|---|---|
+| `FLY_API_TOKEN` | Token da sua conta Fly.io | Fly.io dashboard → Account → Tokens |
+| `TELEGRAM_API_ID` | ID do app | my.telegram.org → API development tools |
+| `TELEGRAM_API_HASH` | Hash do app | my.telegram.org → API development tools |
+| `TELEGRAM_BOT_TOKEN` | Token do bot | @BotFather no Telegram |
+| `TELEGRAM_MEDIA_ADMIN_TOKEN` | Uma senha forte qualquer, você inventa | — |
 
-Depois de cadastrar os 4 primeiros, dê push (ou rode o workflow "Deploy
-Telegram Media Service" manualmente na aba Actions) pra criar o serviço.
+## 2. Adicione o bot ao grupo
 
-## 2. Confirme que subiu
+O bot precisa estar **dentro** do grupo `-1004353239109` (o pra onde você
+encaminhou os vídeos) pra conseguir ler as mensagens. Adicione ele como
+membro normal (não precisa ser admin, só conseguir ver as mensagens).
+
+## 3. Deploy
+
+Cadastre os 5 secrets acima e dê push (ou rode manualmente o workflow
+"Deploy Telegram Media Service" na aba Actions do GitHub). Não tem passo de
+login manual — o bot loga sozinho a cada vez que o serviço sobe.
+
+Confirme que subiu:
 
 ```
 curl https://empire-telegram-media.fly.dev/health
 ```
 
-## 3. Login único (uma vez só, depois nunca mais precisa)
-
-```
-# Passo A — pede o código de confirmação
-curl -X POST https://empire-telegram-media.fly.dev/auth/send-code \
-  -H "x-admin-token: SEU_TELEGRAM_MEDIA_ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"phone": "+5511999999999"}'
-```
-
-Isso te devolve um `phoneCodeHash` e manda um código no seu Telegram.
-
-```
-# Passo B — confirma com o código recebido
-curl -X POST https://empire-telegram-media.fly.dev/auth/confirm \
-  -H "x-admin-token: SEU_TELEGRAM_MEDIA_ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"phone": "+5511999999999", "code": "12345", "phoneCodeHash": "HASH_DO_PASSO_A"}'
-```
-
-Se sua conta tem senha de duas etapas, adicione `"password": "sua senha"` no
-corpo do passo B.
-
-A resposta traz `sessionString`. **Copie esse valor**, cole no secret do
-GitHub `TELEGRAM_SESSION`, e rode o workflow de novo (push vazio ou "Run
-workflow" na aba Actions) pra persistir o login.
+Deve responder `{"ok":true,"loggedIn":true}`.
 
 ## 4. Como a planilha deve referenciar o vídeo
 
@@ -61,6 +46,8 @@ Na aba **Music Videos**, para cada linha que usa o Telegram:
 
 ## 5. Segurança
 
-- `x-admin-token` protege as 3 rotas (`/auth/*` e `/video/*`) — sem ele, 401.
-- O navegador do jogador **nunca** vê esse token: quem chama `/video/*` é o
-  Worker do `empirefinal`, que injeta o token no lado do servidor.
+- `x-admin-token` protege a rota `/video/*` — sem ele, 401.
+- O navegador do jogador **nunca** vê esse token nem as credenciais do
+  Telegram: quem chama `/video/*` é o Worker do `empirefinal`, que injeta o
+  token no lado do servidor (secret `TELEGRAM_MEDIA_ADMIN_TOKEN` também
+  cadastrado lá).
