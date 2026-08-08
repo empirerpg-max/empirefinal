@@ -329,22 +329,36 @@ export async function createMusicVideoController(request: Request): Promise<Resp
     }
 
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const featsStr = participantes.filter(Boolean).join(", ");
+    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const fullTitle = tituloMusicVideo.includes(" - ")
       ? tituloMusicVideo
       : `${artistaResponsavel} - ${tituloMusicVideo}`;
 
-    // 1. Gravar em Music Videos na planilha principal
+    // 1. Gravar em Music Videos na planilha principal — mapeamento exato do
+    // cabeçalho real da aba (ID do usuário, Título do tópico, ID da mensagem,
+    // chat_id, chat_id_interno, message_thread_id, Link direto (t.me), Tipo
+    // de vídeo, Descrição, Data do envio, fonte, ID da mensagem [duplicada —
+    // não usar], Link do vídeo, Likes por jogador, Média Likes, Nome
+    // original nos charts). C/D/E/F/G são específicas de tópicos importados
+    // do Telegram e não se aplicam a um vídeo enviado direto pelo app.
     try {
       await googleSheetsService.principal.appendRow("Music Videos", [
-        nowStr,
-        fullTitle,
-        artistaResponsavel,
-        featsStr,
-        musicaVinculada || fullTitle,
-        mediaUrl || "",
-        capaUrl || "",
-        "Não",
+        "", // A - ID do usuário
+        fullTitle, // B - Título do tópico
+        "", // C - ID da mensagem
+        "", // D - chat_id
+        "", // E - chat_id_interno
+        "", // F - message_thread_id
+        "", // G - Link direto (t.me)
+        "Music Video", // H - Tipo de vídeo
+        "", // I - Descrição
+        dataFormatada, // J - Data do envio
+        "drive", // K - fonte
+        "", // L - ID da mensagem (duplicada, não usar)
+        mediaUrl || "", // M - Link do vídeo
+        "", // N - Likes por jogador
+        "", // O - Média Likes
+        musicaVinculada || fullTitle, // P - Nome original nos charts
       ]);
     } catch (err) {
       console.warn("[createMusicVideoController] Erro em Music Videos:", err);
@@ -410,11 +424,15 @@ export async function createAlbumController(request: Request): Promise<Response>
     }
 
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const albumFullTitle = `${artistaAlbum} - ${tituloAlbum}`;
     const encartesStr = encartesUrls.join(", ");
-    const tracklistStr = faixas.map((f, idx) => `${idx + 1}. ${f.titulo}`).join("\n");
+    const albumTopicId = `album_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // 1. Processar faixas inéditas: registrar em 'Musicas' com Pendente? = "Sim"
+    // 1. Processar faixas inéditas: registrar em 'Musicas' com Pendente? = "Sim".
+    // Mesmo mapeamento de 24 colunas do createSongController, mas com o nome
+    // do álbum na coluna K (ALBUM) em vez de referência a tópico em F — a
+    // faixa fica pendente até o jogador promovê-la a tópico próprio.
     for (const faixa of faixas) {
       if (faixa.inedita) {
         const songTitle = faixa.titulo.includes(" - ")
@@ -423,16 +441,30 @@ export async function createAlbumController(request: Request): Promise<Response>
 
         try {
           await googleSheetsService.principal.appendRow("Musicas", [
-            nowStr,
-            songTitle,
-            artistaAlbum,
-            "",
-            faixa.tipoSingle || "Faixa de Álbum",
-            faixa.tipoMusica || "Solo",
-            "a) Registrar essa música em chart",
-            capaUrl || "",
-            "",
-            "Sim",
+            dataFormatada, // A - Data de lançamento
+            "", // B - ID do tópico (nenhum: faixa não vira tópico próprio ainda)
+            "", // C - ID do arquivo
+            capaUrl || "", // D - Capa da música
+            "", // E - Letra
+            "", // F - Comentários para
+            "", // G - ID do Criador
+            songTitle, // H - Nome da música
+            faixa.tipoSingle || "TRACKLIST ALBUM", // I - TIPO DE SINGLE
+            faixa.tipoMusica || "SOLO", // J - TIPO DE MÚSICA
+            albumFullTitle, // K - ALBUM
+            "", // L - WEEKS
+            "", // M - WEEKS VIDEO
+            artistaAlbum, // N - ACT PRINCIPAL
+            "", // O - ARTISTA 2
+            "", // P - ARTISTA 3
+            "", // Q - ARTISTA 4
+            "", // R - ARTISTA 5
+            "", // S - ARTISTA 6
+            "", // T - GÊNERO
+            String(faixa.num || ""), // U - Ordem
+            "", // V - Metacritic por jogador
+            "", // W - Média Metacritic
+            "Sim", // X - Pendente?
           ]);
 
           await googleSheetsService.registrosCharts.appendRow("REGISTRO DE MÚSICA", [
@@ -448,16 +480,23 @@ export async function createAlbumController(request: Request): Promise<Response>
       }
     }
 
-    // 2. Gravar Álbum na planilha principal
+    // 2. Gravar Álbum na planilha principal — mapeamento exato do cabeçalho
+    // oficial (Data, ID do tópico, Capa, Comentários para, ID do Criador,
+    // Nome do criador, Nome, Metacritic por jogador, Média Metacritic,
+    // Encarte, Tipo).
     try {
       await googleSheetsService.principal.appendRow("Albuns", [
-        nowStr,
-        albumFullTitle,
-        artistaAlbum,
-        capaUrl || "",
-        encartesStr,
-        tracklistStr,
-        nomeJogador,
+        dataFormatada, // A - Data de lançamento
+        albumTopicId, // B - ID do tópico
+        capaUrl || "", // C - Capa
+        albumTopicId, // D - Comentários para
+        "", // E - ID do Criador
+        nomeJogador, // F - Nome do criador
+        albumFullTitle, // G - Nome
+        "", // H - Metacritic por jogador
+        "", // I - Média Metacritic
+        encartesStr, // J - Encarte
+        "", // K - Tipo (EP/Álbum/Deluxe — não informado no formulário atual)
       ]);
     } catch (err) {
       console.warn("[createAlbumController] Erro ao gravar em Albuns (Principal):", err);

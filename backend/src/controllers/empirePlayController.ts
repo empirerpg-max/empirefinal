@@ -117,9 +117,10 @@ function resolveVideoSource(
  * coluna (telegram_file_id / drive_url / youtube_url); na aba "Videos" as
  * três fontes compartilham uma única coluna genérica ("ID do arquivo").
  */
-function resolveVideoUrlAndSource(
-  record: SheetRecord,
-): { videoUrl: string | null; videoSource: "youtube" | "drive" | "telegram" | null } {
+function resolveVideoUrlAndSource(record: SheetRecord): {
+  videoUrl: string | null;
+  videoSource: "youtube" | "drive" | "telegram" | null;
+} {
   const explicitFonte = normalizeComparison(getValue(record, ["arquivo_fonte", "fonte"]) || "");
 
   if (explicitFonte === "telegram" || explicitFonte === "drive" || explicitFonte === "youtube") {
@@ -127,12 +128,24 @@ function resolveVideoUrlAndSource(
       // "id_da_mensagem"/"message_id" é a chave permanente do streaming
       // (message_id do Telegram) e deve ter prioridade sobre telegram_file_id,
       // que pode conter um file_id efêmero em vez do message_id numérico.
-      telegram: ["id_da_mensagem", "message_id", "id_mensagem", "telegram_file_id", "id_do_arquivo"],
-      drive: ["drive_url", "id_do_arquivo"],
-      youtube: ["youtube_url", "id_do_arquivo"],
+      telegram: [
+        "id_da_mensagem",
+        "message_id",
+        "id_mensagem",
+        "telegram_file_id",
+        "id_do_arquivo",
+      ],
+      // "link_do_video" (coluna "Link do vídeo" da aba Music Videos) é onde
+      // o Gestão grava o link de vídeos enviados direto pelo app ao Drive —
+      // não há uma coluna "drive_url" dedicada nessa aba.
+      drive: ["drive_url", "link_do_video", "id_do_arquivo"],
+      youtube: ["youtube_url", "link_do_video", "id_do_arquivo"],
     };
     const value = getValue(record, specificAliases[explicitFonte]);
-    return { videoUrl: value, videoSource: value ? (explicitFonte as "youtube" | "drive" | "telegram") : null };
+    return {
+      videoUrl: value,
+      videoSource: value ? (explicitFonte as "youtube" | "drive" | "telegram") : null,
+    };
   }
 
   // Sem "arquivo_fonte" preenchido: cai para a heurística por conteúdo/coluna
@@ -252,7 +265,11 @@ function buildCleanItem(
   const { videoUrl, videoSource } = resolveVideoUrlAndSource(record);
   // Mesma prioridade do empireuploadsfinal/src/utils/mediaUtils.ts (getTelegramPostPath):
   // ref_telegram_id > telegram_topic_id > id.
-  const telegramTopicId = getValue(record, ["ref_telegram_id", "telegram_topic_id", "id_do_topico"]);
+  const telegramTopicId = getValue(record, [
+    "ref_telegram_id",
+    "telegram_topic_id",
+    "id_do_topico",
+  ]);
   const releaseDate = getValue(record, [
     "data_de_lancamento",
     "data_lancamento",
