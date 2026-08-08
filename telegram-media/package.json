@@ -6,7 +6,8 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "match-messages": "tsx scripts/match-telegram-messages.ts"
+    "match-messages": "tsx scripts/match-telegram-messages.ts",
+    "retranscode-videos": "tsx scripts/retranscode-videos.ts"
   },
   "dependencies": {
     "express": "^4.21.2",

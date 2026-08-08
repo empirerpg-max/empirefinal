@@ -117,19 +117,48 @@ function resolveVideoSource(
  * coluna (telegram_file_id / drive_url / youtube_url); na aba "Videos" as
  * três fontes compartilham uma única coluna genérica ("ID do arquivo").
  */
-function resolveVideoUrlAndSource(
-  record: SheetRecord,
-): { videoUrl: string | null; videoSource: "youtube" | "drive" | "telegram" | null } {
+function resolveVideoUrlAndSource(record: SheetRecord): {
+  videoUrl: string | null;
+  videoSource: "youtube" | "drive" | "telegram" | null;
+} {
   const explicitFonte = normalizeComparison(getValue(record, ["arquivo_fonte", "fonte"]) || "");
 
   if (explicitFonte === "telegram" || explicitFonte === "drive" || explicitFonte === "youtube") {
     const specificAliases: Record<string, string[]> = {
-      telegram: ["telegram_file_id", "id_do_arquivo"],
-      drive: ["drive_url", "id_do_arquivo"],
-      youtube: ["youtube_url", "id_do_arquivo"],
+      // "ID da mensagem (reconvertido)" é preenchida pelo script de
+      // reconversão (telegram-media/scripts/retranscode-videos.ts): aponta
+      // pra uma cópia leve/compatível do mesmo vídeo, já reenviada ao grupo
+      // de arquivo. Tem prioridade máxima — assim que um vídeo é
+      // reconvertido, o app passa a servir a cópia leve automaticamente.
+      //
+      // A aba "Music Videos" também tem DUAS colunas "ID da mensagem": a
+      // primeira (logo após o título) é o ID no grupo ORIGINAL do Telegram;
+      // a segunda (logo após "fonte", sufixada "id_da_mensagem_2" pelo
+      // dedupeHeaders) é o ID no grupo de ARQUIVO — o único que o serviço
+      // de streaming (telegram-media) realmente lê, já que o proxy do
+      // Worker nunca envia um chatId alternativo. Por isso ela tem
+      // prioridade sobre a primeira; a primeira coluna não serve pra tocar
+      // o vídeo.
+      telegram: [
+        "id_da_mensagem_reconvertido",
+        "id_da_mensagem_2",
+        "message_id",
+        "id_mensagem",
+        "id_da_mensagem",
+        "telegram_file_id",
+        "id_do_arquivo",
+      ],
+      // "link_do_video" (coluna "Link do vídeo" da aba Music Videos) é onde
+      // o Gestão grava o link de vídeos enviados direto pelo app ao Drive —
+      // não há uma coluna "drive_url" dedicada nessa aba.
+      drive: ["drive_url", "link_do_video", "id_do_arquivo"],
+      youtube: ["youtube_url", "link_do_video", "id_do_arquivo"],
     };
     const value = getValue(record, specificAliases[explicitFonte]);
-    return { videoUrl: value, videoSource: value ? (explicitFonte as "youtube" | "drive" | "telegram") : null };
+    return {
+      videoUrl: value,
+      videoSource: value ? (explicitFonte as "youtube" | "drive" | "telegram") : null,
+    };
   }
 
   // Sem "arquivo_fonte" preenchido: cai para a heurística por conteúdo/coluna
@@ -249,7 +278,11 @@ function buildCleanItem(
   const { videoUrl, videoSource } = resolveVideoUrlAndSource(record);
   // Mesma prioridade do empireuploadsfinal/src/utils/mediaUtils.ts (getTelegramPostPath):
   // ref_telegram_id > telegram_topic_id > id.
-  const telegramTopicId = getValue(record, ["ref_telegram_id", "telegram_topic_id", "id_do_topico"]);
+  const telegramTopicId = getValue(record, [
+    "ref_telegram_id",
+    "telegram_topic_id",
+    "id_do_topico",
+  ]);
   const releaseDate = getValue(record, [
     "data_de_lancamento",
     "data_lancamento",

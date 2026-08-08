@@ -72,26 +72,28 @@ export async function getReleasesForEditController(request: Request): Promise<Re
       let cover = "";
 
       if (tipoParam === "musicas") {
-        // Coluna H = index 7 (Título), Artista = index 2 ou busca por header
+        // Coluna H = index 7 (Nome da música), Coluna D = index 3 (Capa),
+        // Coluna N = index 13 (ACT PRINCIPAL)
         title = row[7] || row[1] || "";
-        artist = row[2] || row[1] || "";
-        cover = row[7] || row[8] || ""; // Capa se houver
+        artist = row[13] || "";
+        cover = row[3] || "";
       } else if (tipoParam === "videos") {
         // Coluna G = index 6 (Título), Coluna M = index 12 (Descrição)
         title = row[6] || row[0] || "";
         artist = row[1] || row[2] || "";
         description = row[12] || "";
       } else if (tipoParam === "music-videos") {
-        // Coluna C = index 2 (Título), Coluna N = index 13 (Descrição), Coluna J = index 9 (Thumb/Capa)
-        title = row[2] || row[0] || "";
-        artist = row[1] || "";
-        cover = row[9] || "";
-        description = row[13] || "";
+        // Coluna B = index 1 (Título do tópico), Coluna I = index 8
+        // (Descrição). Não há coluna de artista nem de capa nesta aba — o
+        // artista fica embutido no título ("Artista - Música").
+        title = row[1] || row[0] || "";
+        description = row[8] || "";
       } else if (tipoParam === "albuns") {
-        // Coluna B = index 1 (Título/Artista - Álbum), Coluna C = index 2 (Artista), Coluna D = index 3 (Capa)
-        title = row[1] || "";
-        artist = row[2] || row[1] || "";
-        cover = row[3] || "";
+        // Coluna G = index 6 (Nome), Coluna F = index 5 (Nome do criador),
+        // Coluna C = index 2 (Capa)
+        title = row[6] || "";
+        artist = row[5] || "";
+        cover = row[2] || "";
       }
 
       // fallback de busca por headers se disponível
@@ -203,7 +205,7 @@ export async function updateReleaseController(request: Request): Promise<Respons
         ]);
       }
 
-      // Atualizar o novo título na planilha Edição Charts (1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8), aba EDIÇÃO CHARTS, Coluna B
+      // Atualizar o novo título na planilha Edição Charts (1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8), aba EDIÇÃO CHARTS, Coluna A (MÚSICA)
       try {
         const edicaoRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
         if (edicaoRows.length > 1) {
@@ -214,7 +216,7 @@ export async function updateReleaseController(request: Request): Promise<Respons
               const eRowNumber = eIdx + 1;
               await googleSheetsService.edicaoCharts.updateValues(
                 "EDIÇÃO CHARTS",
-                `B${eRowNumber}`,
+                `A${eRowNumber}`,
                 [[titulo.trim()]],
               );
               break;
@@ -236,29 +238,35 @@ export async function updateReleaseController(request: Request): Promise<Respons
         ]);
       }
     } else if (tipoClean === "music-videos") {
-      // Music Videos:
-      // Alterar Título (Coluna C = Col 3), Descrição (Coluna N = Col 14) e Thumb/Imagem (Coluna J = Col 10) na pasta Drive 1Jk9Jk-Zd6QAoZnW3nAqFhBiJCNAnw3wR
-      await googleSheetsService.principal.updateValues(sheetName, `C${rowIndex}`, [
-        [titulo.trim()],
-      ]);
-      if (descricao !== undefined) {
-        await googleSheetsService.principal.updateValues(sheetName, `N${rowIndex}`, [
-          [descricao.trim()],
-        ]);
-      }
-      if (finalCapaUrl) {
-        await googleSheetsService.principal.updateValues(sheetName, `J${rowIndex}`, [
-          [finalCapaUrl],
-        ]);
-      }
-    } else if (tipoClean === "albuns") {
-      // Álbuns:
-      // Alterar Título (Coluna B = Col 2) e Capa (Coluna D = Col 4)
+      // Music Videos — cabeçalho real confirmado: ID do usuário, Título do
+      // tópico, ID da mensagem, chat_id, chat_id_interno, message_thread_id,
+      // Link direto (t.me), Tipo de vídeo, Descrição, Data do envio, fonte,
+      // ID da mensagem [duplicada], Link do vídeo, Likes por jogador, Média
+      // Likes, Nome original nos charts.
+      // Alterar Título (Coluna B) e Descrição (Coluna I). A coluna C é o
+      // ID da mensagem do Telegram — a chave de streaming do vídeo — e NUNCA
+      // deve ser sobrescrita aqui. Não há coluna de thumbnail/capa nesta
+      // aba, então uma capa nova não é gravada (o upload em si ainda é
+      // enviado ao Drive, só não há onde referenciar o link na planilha).
       await googleSheetsService.principal.updateValues(sheetName, `B${rowIndex}`, [
         [titulo.trim()],
       ]);
+      if (descricao !== undefined) {
+        await googleSheetsService.principal.updateValues(sheetName, `I${rowIndex}`, [
+          [descricao.trim()],
+        ]);
+      }
+    } else if (tipoClean === "albuns") {
+      // Álbuns — cabeçalho real confirmado: Data de lançamento, ID do
+      // tópico, Capa, Comentários para, ID do Criador, Nome do criador,
+      // Nome, Metacritic por jogador, Média Metacritic, Encarte, Tipo.
+      // Alterar Título (Coluna G = Nome) e Capa (Coluna C = Capa). B é o ID
+      // do tópico e D é a referência de comentários — nunca sobrescrever.
+      await googleSheetsService.principal.updateValues(sheetName, `G${rowIndex}`, [
+        [titulo.trim()],
+      ]);
       if (finalCapaUrl) {
-        await googleSheetsService.principal.updateValues(sheetName, `D${rowIndex}`, [
+        await googleSheetsService.principal.updateValues(sheetName, `C${rowIndex}`, [
           [finalCapaUrl],
         ]);
       }
