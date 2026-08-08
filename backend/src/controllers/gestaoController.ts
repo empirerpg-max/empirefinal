@@ -196,7 +196,7 @@ export async function createSongController(request: Request): Promise<Response> 
 
     // 4. Gravar em Edição Charts
     try {
-      await googleSheetsService.edicaoCharts.appendRow("Edição", [
+      await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
         nowStr,
         fullTitle,
         artistaPrincipal,
@@ -293,7 +293,7 @@ export async function createVideoController(request: Request): Promise<Response>
 
     // 3. Gravar em Edição Charts
     try {
-      await googleSheetsService.edicaoCharts.appendRow("Edição", [
+      await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
         nowStr,
         fullTitle,
         artistaResponsavel,
@@ -389,7 +389,7 @@ export async function createMusicVideoController(request: Request): Promise<Resp
 
     // 3. Edição Charts
     try {
-      await googleSheetsService.edicaoCharts.appendRow("Edição", [
+      await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
         nowStr,
         fullTitle,
         artistaResponsavel,
@@ -517,7 +517,7 @@ export async function createAlbumController(request: Request): Promise<Response>
 
     // 4. Gravar em Edição Charts
     try {
-      await googleSheetsService.edicaoCharts.appendRow("Edição", [
+      await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
         nowStr,
         `(ALBUM) ${albumFullTitle}`,
         artistaAlbum,
