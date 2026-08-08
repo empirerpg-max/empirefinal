@@ -75,9 +75,18 @@ type ExportMessage = {
   media_type?: string;
   text?: string | Array<string | { type: string; text: string }>;
   file_name?: string;
+  duration_seconds?: number;
+  file_size?: number;
 };
 
-type Candidate = { id: number; text: string; tokens: Set<string>; fileNameNorm: string };
+type Candidate = {
+  id: number;
+  text: string;
+  tokens: Set<string>;
+  fileNameNorm: string;
+  duration?: number;
+  fileSize?: number;
+};
 
 function extractText(message: ExportMessage): string {
   if (typeof message.text === "string") return message.text;
@@ -93,7 +102,14 @@ function loadCandidates(path: string): Candidate[] {
     const fileName = message.file_name || "";
     const text = [extractText(message), fileName].filter(Boolean).join(" ");
     if (!text.trim()) continue;
-    candidates.push({ id: message.id, text, tokens: tokenSet(text), fileNameNorm: fileName.trim().toLowerCase() });
+    candidates.push({
+      id: message.id,
+      text,
+      tokens: tokenSet(text),
+      fileNameNorm: fileName.trim().toLowerCase(),
+      duration: message.duration_seconds,
+      fileSize: message.file_size,
+    });
   }
   return candidates;
 }
@@ -127,25 +143,15 @@ async function main() {
 
   const header = rows[0].map((h) => normalize(String(h)));
 
-  if (process.env.DEBUG_HEADER === "true") {
-    console.log("\n--- DEBUG_HEADER ---");
-    rows[0].forEach((h: string, i: number) => console.log(i, String.fromCharCode(65 + i), JSON.stringify(h)));
-    console.log("--- coluna C (idx 2) x coluna L (idx 11) pra cada linha telegram ---");
-    for (let i = 1; i < rows.length; i++) {
-      if (normalize(rows[i][10] || "") !== "telegram") continue;
-      console.log(`row=${i + 1} title=${JSON.stringify(rows[i][1] || "")} C=${JSON.stringify(rows[i][2] || "")} L=${JSON.stringify(rows[i][11] || "")}`);
-    }
-    console.log("--- índice calculado pelo findIndex ---");
-    console.log("titleCol calc:", header.findIndex((h) => h.includes("titulo do topico") || h.includes("titulo")));
-    console.log("idMensagemCol calc:", header.findIndex((h) => h.includes("id da mensagem")));
-    console.log("--- FIM DEBUG_HEADER ---\n");
-    return;
-  }
-
   const titleCol = header.findIndex((h) => h.includes("titulo do topico") || h.includes("titulo"));
   const fonteCol = header.findIndex((h) => h === "fonte");
-  const idMensagemCol = header.findIndex((h) => h.includes("id da mensagem"));
   const descricaoCol = header.findIndex((h) => h.includes("descricao"));
+  // A aba tem DUAS colunas "ID da mensagem": uma logo após o título (ID do
+  // grupo ORIGINAL — junto com chat_id/message_thread_id/Link direto) e
+  // outra depois de "fonte" (ID do grupo de ARQUIVO — a que o app usa pra
+  // tocar o vídeo). Pegamos sempre a que vem depois de "fonte".
+  const origIdCol = header.findIndex((h) => h.includes("id da mensagem"));
+  const idMensagemCol = header.findIndex((h, i) => h.includes("id da mensagem") && i > fonteCol);
   if (titleCol < 0 || fonteCol < 0 || idMensagemCol < 0 || descricaoCol < 0) {
     throw new Error(
       `Não encontrei as colunas esperadas (título/fonte/ID da mensagem/descrição). Cabeçalho: ${rows[0].join(" | ")}`
@@ -190,6 +196,62 @@ async function main() {
     }
     return best;
   };
+
+  // --- Passo 0: ID do grupo original (o mais confiável de todos) ---
+  // A coluna logo após o título já traz o ID exato da mensagem no grupo
+  // ORIGINAL (chat -1002092995685) — preenchido desde a criação do
+  // tópico, sem precisar de nenhuma heurística. Resolvemos esse ID pro
+  // vídeo correspondente no grupo de ARQUIVO comparando nome de
+  // arquivo + duração + tamanho (que são idênticos, já que é o mesmo
+  // arquivo encaminhado).
+  let origMatched = 0;
+  const origConflicts: string[] = [];
+  const origNotFoundInSource: string[] = [];
+  const origNotFoundInArchive: string[] = [];
+  if (origIdCol >= 0 && sourceCandidates.length > 0) {
+    const sourceById = new Map<number, Candidate>(sourceCandidates.map((c) => [c.id, c] as const));
+    const archiveByFilename = new Map<string, Candidate[]>();
+    for (const c of candidates) {
+      if (!c.fileNameNorm) continue;
+      const list = archiveByFilename.get(c.fileNameNorm) || [];
+      list.push(c);
+      archiveByFilename.set(c.fileNameNorm, list);
+    }
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (normalize(row[fonteCol] || "") !== "telegram") continue;
+      if (currentId.has(i)) continue; // já tem ID do grupo de arquivo
+      const rawOrigId = (row[origIdCol] || "").trim();
+      if (!rawOrigId || !/^\d+$/.test(rawOrigId)) continue;
+      const origId = Number(rawOrigId);
+      const title = row[titleCol] || "";
+
+      const src = sourceById.get(origId);
+      if (!src) {
+        origNotFoundInSource.push(`"${title}" (ID original ${origId} não está no export do grupo original)`);
+        continue;
+      }
+
+      const sameName = (archiveByFilename.get(src.fileNameNorm) || []).filter((c) => !usedArchiveIds.has(c.id));
+      if (sameName.length === 0) {
+        origNotFoundInArchive.push(`"${title}" (arquivo "${src.fileNameNorm}" não sobrou livre no grupo de arquivo)`);
+        continue;
+      }
+      // se houver mais de uma cópia livre com o mesmo nome, prefere a que
+      // também bate duração + tamanho (é o mesmo arquivo, com certeza).
+      const exactMatch = sameName.find((c) => c.duration === src.duration && c.fileSize === src.fileSize);
+      const chosen = exactMatch || sameName[0];
+
+      assign(i, chosen.id, `⚑ [id original ${origId}] "${title}"`);
+      origMatched += 1;
+    }
+  }
+  console.log(
+    `${origMatched} casados via ID do grupo original.` +
+      (origNotFoundInSource.length ? ` ${origNotFoundInSource.length} não encontrados no export original.` : "") +
+      (origNotFoundInArchive.length ? ` ${origNotFoundInArchive.length} sem cópia livre no arquivo.` : "")
+  );
 
   // --- Passo 1 e 2: Descrição (alta confiança) e título (fallback) ---
   let exact = 0;
@@ -402,6 +464,14 @@ async function main() {
   if (sourceConflicts.length) {
     console.log("\nBateu com o grupo original mas sem cópia livre no grupo de arquivo:");
     for (const line of sourceConflicts) console.log(`  ! ${line}`);
+  }
+  if (origNotFoundInSource.length) {
+    console.log("\nTinham ID do grupo original na planilha, mas esse ID não está no export do grupo original:");
+    for (const line of origNotFoundInSource) console.log(`  ✕ ${line}`);
+  }
+  if (origNotFoundInArchive.length) {
+    console.log("\nTinham ID do grupo original e foram achados lá, mas o arquivo não sobrou livre no grupo de arquivo:");
+    for (const line of origNotFoundInArchive) console.log(`  ✕ ${line}`);
   }
   if (stillUnmatched.length) {
     console.log("\nSem correspondência:");
