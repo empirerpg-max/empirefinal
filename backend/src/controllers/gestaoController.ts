@@ -143,7 +143,8 @@ export async function createSongController(request: Request): Promise<Response> 
     // colunas definidas no documento oficial (B, C, D, H, I-L, N, P), na
     // primeira linha vazia (verificada pela Coluna B).
     try {
-      const registroRows = await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
+      const registroRows =
+        await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
       let targetRow = (registroRows?.length || 0) + 1;
       if (registroRows && registroRows.length > 1) {
         for (let i = 1; i < registroRows.length; i++) {
@@ -159,25 +160,29 @@ export async function createSongController(request: Request): Promise<Response> 
       const substituir = (opcaoChart || "").trim().startsWith("b)") ? "Sim" : "";
 
       // B, C, D, E, F, G, H, I, J, K, L, M, N, O, P
-      await googleSheetsService.registrosCharts.updateValues("REGISTRO DE MÚSICA", `B${targetRow}:P${targetRow}`, [
+      await googleSheetsService.registrosCharts.updateValues(
+        "REGISTRO DE MÚSICA",
+        `B${targetRow}:P${targetRow}`,
         [
-          fullTitle, // B - Título da música
-          tipoSingle || "LEAD SINGLE", // C - Tipo de Single
-          tipoMusica || "SOLO", // D - Tipo de Música
-          "", // E
-          "", // F
-          "", // G
-          artistaPrincipal, // H - Nome do Artista Principal
-          participantesLimpos[0] || "", // I - Artista 2
-          participantesLimpos[1] || "", // J - Artista 3
-          participantesLimpos[2] || "", // K - Artista 4
-          participantesLimpos[3] || "", // L - Artista 5
-          "", // M
-          substituir, // N - SUBSTITUIR NOS CHARTS?
-          "", // O
-          "Ok", // P - ENVIAR
+          [
+            fullTitle, // B - Título da música
+            tipoSingle || "LEAD SINGLE", // C - Tipo de Single
+            tipoMusica || "SOLO", // D - Tipo de Música
+            "", // E
+            "", // F
+            "", // G
+            artistaPrincipal, // H - Nome do Artista Principal
+            participantesLimpos[0] || "", // I - Artista 2
+            participantesLimpos[1] || "", // J - Artista 3
+            participantesLimpos[2] || "", // K - Artista 4
+            participantesLimpos[3] || "", // L - Artista 5
+            "", // M
+            substituir, // N - SUBSTITUIR NOS CHARTS?
+            "", // O
+            "Ok", // P - ENVIAR
+          ],
         ],
-      ]);
+      );
     } catch (err) {
       console.warn("[createSongController] Erro ao gravar em REGISTRO DE MÚSICA:", err);
     }
@@ -192,21 +197,6 @@ export async function createSongController(request: Request): Promise<Response> 
       ]);
     } catch (err) {
       console.warn("[createSongController] Erro ao gravar no Audit Log REGISTRO:", err);
-    }
-
-    // 4. Gravar em Edição Charts
-    try {
-      await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
-        nowStr,
-        fullTitle,
-        artistaPrincipal,
-        participantesLimpos.join(", "),
-        opcaoChart || "a) Registrar essa música em chart",
-        capaUrl || "",
-        nomeJogador,
-      ]);
-    } catch (err) {
-      console.warn("[createSongController] Erro ao gravar em Edição Charts:", err);
     }
 
     return new Response(
@@ -291,21 +281,6 @@ export async function createVideoController(request: Request): Promise<Response>
       console.warn("[createVideoController] Erro no audit log:", err);
     }
 
-    // 3. Gravar em Edição Charts
-    try {
-      await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
-        nowStr,
-        fullTitle,
-        artistaResponsavel,
-        featsStr,
-        `Lançamento de Vídeo (${categoriaVideo})`,
-        capaUrl || "",
-        nomeJogador,
-      ]);
-    } catch (err) {
-      console.warn("[createVideoController] Erro em Edição Charts:", err);
-    }
-
     return new Response(
       JSON.stringify({
         success: true,
@@ -385,21 +360,6 @@ export async function createMusicVideoController(request: Request): Promise<Resp
       ]);
     } catch (err) {
       console.warn("[createMusicVideoController] Erro em audit log:", err);
-    }
-
-    // 3. Edição Charts
-    try {
-      await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
-        nowStr,
-        fullTitle,
-        artistaResponsavel,
-        featsStr,
-        "Lançamento de Music Video",
-        capaUrl || "",
-        nomeJogador,
-      ]);
-    } catch (err) {
-      console.warn("[createMusicVideoController] Erro em Edição Charts:", err);
     }
 
     return new Response(
@@ -513,21 +473,6 @@ export async function createAlbumController(request: Request): Promise<Response>
       ]);
     } catch (err) {
       console.warn("[createAlbumController] Erro ao gravar Audit Log de Álbum:", err);
-    }
-
-    // 4. Gravar em Edição Charts
-    try {
-      await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
-        nowStr,
-        `(ALBUM) ${albumFullTitle}`,
-        artistaAlbum,
-        "",
-        "Lançamento de Álbum",
-        capaUrl || "",
-        nomeJogador,
-      ]);
-    } catch (err) {
-      console.warn("[createAlbumController] Erro ao gravar em Edição Charts:", err);
     }
 
     return new Response(

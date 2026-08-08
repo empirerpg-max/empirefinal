@@ -203,7 +203,7 @@ export async function updateReleaseController(request: Request): Promise<Respons
         ]);
       }
 
-      // Atualizar o novo título na planilha Edição Charts (1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8), aba EDIÇÃO CHARTS, Coluna B
+      // Atualizar o novo título na planilha Edição Charts (1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8), aba EDIÇÃO CHARTS, Coluna A (MÚSICA)
       try {
         const edicaoRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
         if (edicaoRows.length > 1) {
@@ -214,7 +214,7 @@ export async function updateReleaseController(request: Request): Promise<Respons
               const eRowNumber = eIdx + 1;
               await googleSheetsService.edicaoCharts.updateValues(
                 "EDIÇÃO CHARTS",
-                `B${eRowNumber}`,
+                `A${eRowNumber}`,
                 [[titulo.trim()]],
               );
               break;
