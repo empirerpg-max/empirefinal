@@ -125,14 +125,22 @@ function resolveVideoUrlAndSource(record: SheetRecord): {
 
   if (explicitFonte === "telegram" || explicitFonte === "drive" || explicitFonte === "youtube") {
     const specificAliases: Record<string, string[]> = {
-      // A aba "Music Videos" tem DUAS colunas "ID da mensagem": a primeira
-      // (logo após o título) é o ID no grupo ORIGINAL do Telegram; a
-      // segunda (logo após "fonte", sufixada "id_da_mensagem_2" pelo
+      // "ID da mensagem (reconvertido)" é preenchida pelo script de
+      // reconversão (telegram-media/scripts/retranscode-videos.ts): aponta
+      // pra uma cópia leve/compatível do mesmo vídeo, já reenviada ao grupo
+      // de arquivo. Tem prioridade máxima — assim que um vídeo é
+      // reconvertido, o app passa a servir a cópia leve automaticamente.
+      //
+      // A aba "Music Videos" também tem DUAS colunas "ID da mensagem": a
+      // primeira (logo após o título) é o ID no grupo ORIGINAL do Telegram;
+      // a segunda (logo após "fonte", sufixada "id_da_mensagem_2" pelo
       // dedupeHeaders) é o ID no grupo de ARQUIVO — o único que o serviço
       // de streaming (telegram-media) realmente lê, já que o proxy do
       // Worker nunca envia um chatId alternativo. Por isso ela tem
-      // prioridade; a primeira coluna não serve pra tocar o vídeo.
+      // prioridade sobre a primeira; a primeira coluna não serve pra tocar
+      // o vídeo.
       telegram: [
+        "id_da_mensagem_reconvertido",
         "id_da_mensagem_2",
         "message_id",
         "id_mensagem",
