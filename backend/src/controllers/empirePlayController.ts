@@ -124,7 +124,10 @@ function resolveVideoUrlAndSource(
 
   if (explicitFonte === "telegram" || explicitFonte === "drive" || explicitFonte === "youtube") {
     const specificAliases: Record<string, string[]> = {
-      telegram: ["telegram_file_id", "id_do_arquivo"],
+      // "id_da_mensagem"/"message_id" é a chave permanente do streaming
+      // (message_id do Telegram) e deve ter prioridade sobre telegram_file_id,
+      // que pode conter um file_id efêmero em vez do message_id numérico.
+      telegram: ["id_da_mensagem", "message_id", "id_mensagem", "telegram_file_id", "id_do_arquivo"],
       drive: ["drive_url", "id_do_arquivo"],
       youtube: ["youtube_url", "id_do_arquivo"],
     };

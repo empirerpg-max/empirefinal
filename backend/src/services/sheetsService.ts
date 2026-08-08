@@ -99,6 +99,7 @@ export async function readSheetObjects(sheetName: string, range = "A:ZZ"): Promi
     const normalized = normalizeHeader(header);
     return normalized || `coluna_${index + 1}`;
   });
+  warnOnDuplicateHeaders(sheetName, headers);
 
   return rows
     .slice(1)
@@ -106,10 +107,26 @@ export async function readSheetObjects(sheetName: string, range = "A:ZZ"): Promi
     .map((row) => {
       const record: SheetRecord = {};
       headers.forEach((header, index) => {
+        if (header in record) return;
         record[header] = normalizeText(row[index]);
       });
       return record;
     });
+}
+
+function warnOnDuplicateHeaders(sheetName: string, headers: string[]): void {
+  const seen = new Map<string, number>();
+  headers.forEach((header, index) => {
+    if (seen.has(header)) {
+      console.warn(
+        `[sheetsService] Cabeçalhos duplicados na aba "${sheetName}": coluna ${index + 1} colide com a coluna ${
+          (seen.get(header) as number) + 1
+        } (chave "${header}"). Usando o valor da primeira ocorrência.`,
+      );
+    } else {
+      seen.set(header, index);
+    }
+  });
 }
 
 /**
@@ -201,6 +218,7 @@ export async function readSheetObjectsCamelCase(
     const camel = toCamelCase(header);
     return camel || `coluna${index + 1}`;
   });
+  warnOnDuplicateHeaders(sheetName, headers);
 
   return rows
     .slice(1)
@@ -208,6 +226,7 @@ export async function readSheetObjectsCamelCase(
     .map((row) => {
       const record: Record<string, string> = {};
       headers.forEach((header, index) => {
+        if (header in record) return;
         record[header] = normalizeText(row[index]);
       });
       return record;
