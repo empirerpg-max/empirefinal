@@ -31,7 +31,7 @@ const SOURCE_EXPORT_PATH = process.env.SOURCE_EXPORT_PATH || "data/telegram-sour
 const DRY_RUN = process.env.DRY_RUN === "true";
 const DESCRICAO_THRESHOLD = 0.85;
 const TITLE_FALLBACK_THRESHOLD = 0.55;
-const SOURCE_TITLE_THRESHOLD = 0.55;
+const SOURCE_TITLE_THRESHOLD = 0.5;
 
 const googleCredsRaw = process.env.GOOGLE_CREDENTIALS_JSON;
 if (!googleCredsRaw) {
@@ -56,6 +56,18 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   for (const t of a) if (b.has(t)) intersection += 1;
   const union = a.size + b.size - intersection;
   return union === 0 ? 0 : intersection / union;
+}
+
+// Coeficiente de sobreposição (intersection / menor conjunto): melhor que
+// Jaccard pra comparar um título curto contra uma legenda bem mais longa
+// (ex.: "SA5M - new face" vs "new face\nstarring: SA5M, Denver\ndirected
+// by: melina matsoukas") — o Jaccard penaliza demais as palavras extras
+// da legenda; o overlap não.
+function overlapCoefficient(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const t of a) if (b.has(t)) intersection += 1;
+  return intersection / Math.min(a.size, b.size);
 }
 
 type ExportMessage = {
@@ -114,6 +126,16 @@ async function main() {
   if (rows.length < 2) throw new Error(`Aba "${SHEET_NAME}" vazia ou não encontrada.`);
 
   const header = rows[0].map((h) => normalize(String(h)));
+
+  if (process.env.DEBUG_HEADER === "true") {
+    console.log("\n--- DEBUG_HEADER ---");
+    rows[0].forEach((h: string, i: number) => console.log(i, String.fromCharCode(65 + i), JSON.stringify(h)));
+    console.log("--- linha de exemplo (row 2) ---");
+    rows[1]?.forEach((v: string, i: number) => console.log(i, String.fromCharCode(65 + i), JSON.stringify(v)));
+    console.log("--- FIM DEBUG_HEADER ---\n");
+    return;
+  }
+
   const titleCol = header.findIndex((h) => h.includes("titulo do topico") || h.includes("titulo"));
   const fonteCol = header.findIndex((h) => h === "fonte");
   const idMensagemCol = header.findIndex((h) => h.includes("id da mensagem"));
@@ -307,9 +329,15 @@ async function main() {
   }
   console.log(`${ordinalMatched} casados por ordem cronológica.`);
 
-  // --- Passo 4: grupo original (nome do arquivo/legenda mais parecido
+  // --- Passo 4: grupo original (legenda/nome do arquivo mais parecido
   // com o título), resolvendo pro ID do grupo de arquivo via nome de
-  // arquivo (usa uma cópia ainda não usada). ---
+  // arquivo (usa uma cópia ainda não usada). Usa coeficiente de
+  // sobreposição em vez de Jaccard, porque o título da planilha é bem
+  // mais curto que a legenda original (ex.: "SA5M - new face" vs "new
+  // face\nstarring: SA5M, Denver\ndirected by: melina matsoukas") — e
+  // exige pelo menos 2 palavras em comum, pra não bater por coincidência
+  // de uma palavra só (ex. "TED" aparecendo em qualquer legenda). ---
+  const SOURCE_MIN_OVERLAP_WORDS = 2;
   let sourceMatched = 0;
   const sourceConflicts: string[] = [];
   if (sourceCandidates.length > 0) {
@@ -321,29 +349,26 @@ async function main() {
       archiveByFilename.set(c.fileNameNorm, list);
     }
 
+    const findBestOverlap = (tokens: Set<string>, exclude: Set<Candidate>) => {
+      let best: { candidate: Candidate; score: number } | null = null;
+      for (const c of sourceCandidates) {
+        if (exclude.has(c)) continue;
+        let shared = 0;
+        for (const t of tokens) if (c.tokens.has(t)) shared += 1;
+        if (shared < SOURCE_MIN_OVERLAP_WORDS) continue;
+        const score = shared / Math.min(tokens.size, c.tokens.size);
+        if (score > (best?.score ?? 0)) best = { candidate: c, score };
+      }
+      return best;
+    };
+
     const sourceUsed = new Set<Candidate>();
     for (const r of tgRows) {
       if (currentId.has(r.rowIndex)) continue;
       if (!r.title.trim()) continue;
 
-      const best = findBest(tokenSet(r.title), sourceCandidates, () => false);
-      // como cada mensagem do grupo original só pode ser usada uma vez,
-      // filtramos manualmente pelos já usados (o Set de objetos não dá
-      // pra passar direto no `exclude`, que trabalha com ids do arquivo).
-      let pick: { candidate: Candidate; score: number } | null = null;
-      if (best && !sourceUsed.has(best.candidate) && best.score >= SOURCE_TITLE_THRESHOLD) {
-        pick = best;
-      } else if (best && sourceUsed.has(best.candidate)) {
-        // procura o próximo melhor não usado
-        let alt: { candidate: Candidate; score: number } | null = null;
-        for (const c of sourceCandidates) {
-          if (sourceUsed.has(c)) continue;
-          const score = jaccard(tokenSet(r.title), c.tokens);
-          if (score > (alt?.score ?? 0)) alt = { candidate: c, score };
-        }
-        if (alt && alt.score >= SOURCE_TITLE_THRESHOLD) pick = alt;
-      }
-      if (!pick) continue;
+      const pick = findBestOverlap(tokenSet(r.title), sourceUsed);
+      if (!pick || pick.score < SOURCE_TITLE_THRESHOLD) continue;
 
       const archiveIds = (archiveByFilename.get(pick.candidate.fileNameNorm) || []).filter(
         (id) => !usedArchiveIds.has(id)
