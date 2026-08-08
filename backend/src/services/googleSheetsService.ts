@@ -178,11 +178,11 @@ export async function readSheetObjects(
   const rows = await readValues(spreadsheetKeyOrId, sheetName, range);
   if (rows.length < 2) return [];
 
-  const headers = rows[0].map((header, index) => {
+  const rawHeaders = rows[0].map((header, index) => {
     const normalized = normalizeHeader(header);
     return normalized || `coluna_${index + 1}`;
   });
-  warnOnDuplicateHeaders(sheetName, headers);
+  const headers = dedupeHeaders(sheetName, rawHeaders);
 
   return rows
     .slice(1)
@@ -190,25 +190,30 @@ export async function readSheetObjects(
     .map((row) => {
       const record: SheetRecord = {};
       headers.forEach((header, index) => {
-        if (header in record) return;
         record[header] = normalizeText(row[index]);
       });
       return record;
     });
 }
 
-function warnOnDuplicateHeaders(sheetName: string, headers: string[]): void {
+/**
+ * Duas colunas podem ter o mesmo cabeçalho (ex.: a aba "Music Videos" tem
+ * "ID da mensagem" duas vezes — uma para o grupo original do Telegram, outra
+ * para o grupo de arquivo, que é o que o app realmente lê). Em vez de
+ * descartar a segunda em silêncio, sufixamos com _2, _3... para preservar
+ * as duas; quem consome decide explicitamente qual das colunas usar.
+ */
+export function dedupeHeaders(sheetName: string, headers: string[]): string[] {
   const seen = new Map<string, number>();
-  headers.forEach((header, index) => {
-    if (seen.has(header)) {
-      console.warn(
-        `[googleSheetsService] Cabeçalhos duplicados na aba "${sheetName}": coluna ${index + 1} colide com a coluna ${
-          (seen.get(header) as number) + 1
-        } (chave "${header}"). Usando o valor da primeira ocorrência.`,
-      );
-    } else {
-      seen.set(header, index);
-    }
+  return headers.map((header, index) => {
+    const count = seen.get(header) ?? 0;
+    seen.set(header, count + 1);
+    if (count === 0) return header;
+    const suffixed = `${header}_${count + 1}`;
+    console.warn(
+      `[googleSheetsService] Cabeçalhos duplicados na aba "${sheetName}": coluna ${index + 1} (chave "${header}") virou "${suffixed}" para não colidir com uma coluna anterior.`,
+    );
+    return suffixed;
   });
 }
 

@@ -335,17 +335,20 @@ export async function createMusicVideoController(request: Request): Promise<Resp
       : `${artistaResponsavel} - ${tituloMusicVideo}`;
 
     // 1. Gravar em Music Videos na planilha principal — mapeamento exato do
-    // cabeçalho real da aba (ID do usuário, Título do tópico, ID da mensagem,
-    // chat_id, chat_id_interno, message_thread_id, Link direto (t.me), Tipo
-    // de vídeo, Descrição, Data do envio, fonte, ID da mensagem [duplicada —
-    // não usar], Link do vídeo, Likes por jogador, Média Likes, Nome
-    // original nos charts). C/D/E/F/G são específicas de tópicos importados
-    // do Telegram e não se aplicam a um vídeo enviado direto pelo app.
+    // cabeçalho real da aba (ID do usuário, Título do tópico, ID da mensagem
+    // [grupo ORIGINAL do Telegram], chat_id, chat_id_interno,
+    // message_thread_id, Link direto (t.me), Tipo de vídeo, Descrição, Data
+    // do envio, fonte, ID da mensagem [grupo de ARQUIVO — é esta que o app
+    // usa pra tocar o vídeo], Link do vídeo, Likes por jogador, Média
+    // Likes, Nome original nos charts). C-G são específicas de tópicos
+    // importados do Telegram e não se aplicam a um vídeo enviado direto
+    // pelo app; L também fica vazia aqui porque não existe mensagem no
+    // grupo de arquivo para um upload feito direto no Drive.
     try {
       await googleSheetsService.principal.appendRow("Music Videos", [
         "", // A - ID do usuário
         fullTitle, // B - Título do tópico
-        "", // C - ID da mensagem
+        "", // C - ID da mensagem (grupo original)
         "", // D - chat_id
         "", // E - chat_id_interno
         "", // F - message_thread_id
@@ -354,7 +357,7 @@ export async function createMusicVideoController(request: Request): Promise<Resp
         "", // I - Descrição
         dataFormatada, // J - Data do envio
         "drive", // K - fonte
-        "", // L - ID da mensagem (duplicada, não usar)
+        "", // L - ID da mensagem (grupo de arquivo — não aplicável a upload via Drive)
         mediaUrl || "", // M - Link do vídeo
         "", // N - Likes por jogador
         "", // O - Média Likes

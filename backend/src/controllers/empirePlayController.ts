@@ -125,13 +125,18 @@ function resolveVideoUrlAndSource(record: SheetRecord): {
 
   if (explicitFonte === "telegram" || explicitFonte === "drive" || explicitFonte === "youtube") {
     const specificAliases: Record<string, string[]> = {
-      // "id_da_mensagem"/"message_id" é a chave permanente do streaming
-      // (message_id do Telegram) e deve ter prioridade sobre telegram_file_id,
-      // que pode conter um file_id efêmero em vez do message_id numérico.
+      // A aba "Music Videos" tem DUAS colunas "ID da mensagem": a primeira
+      // (logo após o título) é o ID no grupo ORIGINAL do Telegram; a
+      // segunda (logo após "fonte", sufixada "id_da_mensagem_2" pelo
+      // dedupeHeaders) é o ID no grupo de ARQUIVO — o único que o serviço
+      // de streaming (telegram-media) realmente lê, já que o proxy do
+      // Worker nunca envia um chatId alternativo. Por isso ela tem
+      // prioridade; a primeira coluna não serve pra tocar o vídeo.
       telegram: [
-        "id_da_mensagem",
+        "id_da_mensagem_2",
         "message_id",
         "id_mensagem",
+        "id_da_mensagem",
         "telegram_file_id",
         "id_do_arquivo",
       ],

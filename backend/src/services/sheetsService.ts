@@ -4,6 +4,7 @@ import {
   findRows as findRowsFor,
   updateValues as updateValuesFor,
   appendRow as appendRowFor,
+  dedupeHeaders,
   normalizeText,
   SheetRecord,
   GoogleSheetRow,
@@ -61,21 +62,6 @@ export function toCamelCase(str: string): string {
     .replace(/[\s_]+(.)/g, (_, c) => c.toUpperCase());
 }
 
-function warnOnDuplicateHeaders(sheetName: string, headers: string[]): void {
-  const seen = new Map<string, number>();
-  headers.forEach((header, index) => {
-    if (seen.has(header)) {
-      console.warn(
-        `[sheetsService] Cabeçalhos duplicados na aba "${sheetName}": coluna ${index + 1} colide com a coluna ${
-          (seen.get(header) as number) + 1
-        } (chave "${header}"). Usando o valor da primeira ocorrência.`,
-      );
-    } else {
-      seen.set(header, index);
-    }
-  });
-}
-
 /**
  * Lê uma aba e converte as linhas em objetos utilizando o cabeçalho formatado em camelCase
  */
@@ -86,11 +72,11 @@ export async function readSheetObjectsCamelCase(
   const rows = await readValues(sheetName, range);
   if (rows.length < 2) return [];
 
-  const headers = rows[0].map((header, index) => {
+  const rawHeaders = rows[0].map((header, index) => {
     const camel = toCamelCase(header);
     return camel || `coluna${index + 1}`;
   });
-  warnOnDuplicateHeaders(sheetName, headers);
+  const headers = dedupeHeaders(sheetName, rawHeaders);
 
   return rows
     .slice(1)
@@ -98,7 +84,6 @@ export async function readSheetObjectsCamelCase(
     .map((row) => {
       const record: Record<string, string> = {};
       headers.forEach((header, index) => {
-        if (header in record) return;
         record[header] = normalizeText(row[index]);
       });
       return record;
