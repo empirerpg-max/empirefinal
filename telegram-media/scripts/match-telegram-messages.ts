@@ -130,8 +130,14 @@ async function main() {
   if (process.env.DEBUG_HEADER === "true") {
     console.log("\n--- DEBUG_HEADER ---");
     rows[0].forEach((h: string, i: number) => console.log(i, String.fromCharCode(65 + i), JSON.stringify(h)));
-    console.log("--- linha de exemplo (row 2) ---");
-    rows[1]?.forEach((v: string, i: number) => console.log(i, String.fromCharCode(65 + i), JSON.stringify(v)));
+    console.log("--- coluna C (idx 2) x coluna L (idx 11) pra cada linha telegram ---");
+    for (let i = 1; i < rows.length; i++) {
+      if (normalize(rows[i][10] || "") !== "telegram") continue;
+      console.log(`row=${i + 1} title=${JSON.stringify(rows[i][1] || "")} C=${JSON.stringify(rows[i][2] || "")} L=${JSON.stringify(rows[i][11] || "")}`);
+    }
+    console.log("--- índice calculado pelo findIndex ---");
+    console.log("titleCol calc:", header.findIndex((h) => h.includes("titulo do topico") || h.includes("titulo")));
+    console.log("idMensagemCol calc:", header.findIndex((h) => h.includes("id da mensagem")));
     console.log("--- FIM DEBUG_HEADER ---\n");
     return;
   }
