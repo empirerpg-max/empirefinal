@@ -143,9 +143,10 @@ async function main() {
         const sizeMb = (statSync(filePath).size / 1024 / 1024).toFixed(1);
         console.log(`[msg ${item.messageId}] baixado (${sizeMb} MB), subindo pro Drive...`);
 
+        const safeName = item.title.replace(/[\\/]/g, "-").trim();
         const uploadRes = await drive.files.create({
           requestBody: {
-            name: `${item.title}.mp4`,
+            name: `${safeName}.mp4`,
             parents: [DRIVE_FOLDER_ID],
           },
           media: {
