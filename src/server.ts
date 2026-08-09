@@ -54,7 +54,7 @@ const RUNTIME_ENV_KEYS = [
   "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_ID",
   "GOOGLE_SERVICE_ACCOUNT_PROJECT_ID",
   "GOOGLE_SERVICE_ACCOUNT_TOKEN_URI",
-  "GITHUB_DISPATCH_TOKEN",
+  "GH_DISPATCH_TOKEN",
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────

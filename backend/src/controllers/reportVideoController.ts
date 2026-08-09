@@ -125,9 +125,9 @@ function columnLetter(zeroBasedIndex: number): string {
 async function dispatchRetranscodeWorkflow(
   messageId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const token = readRuntimeEnv("GITHUB_DISPATCH_TOKEN");
+  const token = readRuntimeEnv("GH_DISPATCH_TOKEN");
   if (!token) {
-    return { ok: false, error: "GITHUB_DISPATCH_TOKEN não configurado no Worker." };
+    return { ok: false, error: "GH_DISPATCH_TOKEN não configurado no Worker." };
   }
 
   const response = await fetch(
