@@ -7,7 +7,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "match-messages": "tsx scripts/match-telegram-messages.ts",
-    "retranscode-videos": "tsx scripts/retranscode-videos.ts"
+    "retranscode-videos": "tsx scripts/retranscode-videos.ts",
+    "migrate-to-drive": "tsx scripts/migrate-to-drive.ts"
   },
   "dependencies": {
     "big-integer": "^1.6.52",
