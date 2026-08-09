@@ -10,6 +10,7 @@
     "retranscode-videos": "tsx scripts/retranscode-videos.ts"
   },
   "dependencies": {
+    "big-integer": "^1.6.52",
     "express": "^4.21.2",
     "google-auth-library": "^9.15.0",
     "googleapis": "^144.0.0",

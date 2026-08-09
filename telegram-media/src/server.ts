@@ -1,6 +1,10 @@
 import express from "express";
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
+// GramJS espera um bigInt da lib "big-integer" (tem métodos como .mod()) —
+// o BigInt nativo do JS não é compatível e quebra iterDownload com
+// "this.request.offset.mod is not a function".
+import bigInt from "big-integer";
 
 const API_ID = Number(process.env.TELEGRAM_API_ID || 0);
 const API_HASH = process.env.TELEGRAM_API_HASH || "";
@@ -103,7 +107,7 @@ app.get("/video/:messageId", async (req, res) => {
 
     const iter = client.iterDownload({
       file: message.media as any,
-      offset: BigInt(alignedStart) as any,
+      offset: bigInt(alignedStart),
       requestSize: MAX_CHUNK,
     });
 
