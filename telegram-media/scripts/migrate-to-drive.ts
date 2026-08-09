@@ -27,12 +27,23 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID || "-1004353239109";
 
 const googleCredsRaw = process.env.GOOGLE_CREDENTIALS_JSON;
+const DRIVE_OAUTH_CLIENT_ID = process.env.DRIVE_OAUTH_CLIENT_ID || "";
+const DRIVE_OAUTH_CLIENT_SECRET = process.env.DRIVE_OAUTH_CLIENT_SECRET || "";
+const DRIVE_OAUTH_REFRESH_TOKEN = process.env.DRIVE_OAUTH_REFRESH_TOKEN || "";
 if (!googleCredsRaw) {
   console.error("Faltando GOOGLE_CREDENTIALS_JSON.");
   process.exit(1);
 }
 if (!API_ID || !API_HASH || !BOT_TOKEN) {
   console.error("Faltando TELEGRAM_API_ID / TELEGRAM_API_HASH / TELEGRAM_BOT_TOKEN.");
+  process.exit(1);
+}
+if (!DRIVE_OAUTH_CLIENT_ID || !DRIVE_OAUTH_CLIENT_SECRET || !DRIVE_OAUTH_REFRESH_TOKEN) {
+  console.error(
+    "Faltando DRIVE_OAUTH_CLIENT_ID / DRIVE_OAUTH_CLIENT_SECRET / DRIVE_OAUTH_REFRESH_TOKEN — " +
+      "contas de serviço não têm cota de armazenamento própria no Drive, então o upload precisa " +
+      "ser autenticado como a conta pessoal dona da pasta de destino.",
+  );
   process.exit(1);
 }
 
@@ -55,22 +66,29 @@ function columnLetter(zeroBasedIndex: number): string {
   return letters;
 }
 
-async function getGoogleAuth() {
+async function getSheetsAuth() {
   const creds = JSON.parse(googleCredsRaw!);
-  console.log(`Usando service account: ${creds.client_email}`);
-  console.log(
-    `(se o upload falhar com 403/404, compartilhe a pasta do Drive com esse e-mail, papel "Editor")`,
-  );
   return new google.auth.GoogleAuth({
     credentials: { client_email: creds.client_email, private_key: creds.private_key },
-    scopes: ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"],
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
 }
 
+// O upload precisa ser autenticado como a conta pessoal do usuário (via
+// OAuth, com refresh token obtido uma vez no OAuth Playground) — contas de
+// serviço não têm cota de armazenamento própria no Drive, então
+// drive.files.create com uma service account sempre falha com "Service
+// Accounts do not have storage quota", mesmo com a pasta compartilhada.
+function getDriveOAuthClient() {
+  const oauth2Client = new google.auth.OAuth2(DRIVE_OAUTH_CLIENT_ID, DRIVE_OAUTH_CLIENT_SECRET);
+  oauth2Client.setCredentials({ refresh_token: DRIVE_OAUTH_REFRESH_TOKEN });
+  return oauth2Client;
+}
+
 async function main() {
-  const auth = await getGoogleAuth();
-  const sheets = google.sheets({ version: "v4", auth });
-  const drive = google.drive({ version: "v3", auth });
+  const sheetsAuth = await getSheetsAuth();
+  const sheets = google.sheets({ version: "v4", auth: sheetsAuth });
+  const drive = google.drive({ version: "v3", auth: getDriveOAuthClient() });
 
   const range = `${SHEET_NAME}!A:ZZ`;
   const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
