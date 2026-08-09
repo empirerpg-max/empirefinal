@@ -54,6 +54,7 @@ const RUNTIME_ENV_KEYS = [
   "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_ID",
   "GOOGLE_SERVICE_ACCOUNT_PROJECT_ID",
   "GOOGLE_SERVICE_ACCOUNT_TOKEN_URI",
+  "GH_DISPATCH_TOKEN",
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -225,14 +226,18 @@ const DEFAULT_HOME_CONFIG = {
         spotify: "https://empirerpg-max.github.io/central/charts.html?tab=SPOTIFY",
         apple_music: "https://empirerpg-max.github.io/central/charts.html?tab=APPLE%20MUSIC",
         youtube: "https://empirerpg-max.github.io/central/charts.html?tab=YOUTUBE",
-        billboard_200: "https://empirerpg-max.github.io/central/charts.html?tab=DADOS%20%C3%81LBUNS",
+        billboard_200:
+          "https://empirerpg-max.github.io/central/charts.html?tab=DADOS%20%C3%81LBUNS",
         digital_sales: "https://empirerpg-max.github.io/central/charts.html?tab=DIGITAL%20SALES",
       } as Record<string, string>,
     },
   },
 };
 
-type FlagsKv = { get: (key: string) => Promise<string | null>; put: (key: string, value: string) => Promise<void> };
+type FlagsKv = {
+  get: (key: string) => Promise<string | null>;
+  put: (key: string, value: string) => Promise<void>;
+};
 
 function deepMerge<T>(base: T, override: unknown): T {
   if (!override || typeof override !== "object") return base;
@@ -240,7 +245,11 @@ function deepMerge<T>(base: T, override: unknown): T {
   for (const [key, value] of Object.entries(override as Record<string, unknown>)) {
     const current = result[key];
     result[key] =
-      value && typeof value === "object" && !Array.isArray(value) && current && typeof current === "object"
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      current &&
+      typeof current === "object"
         ? deepMerge(current, value)
         : value;
   }
@@ -249,7 +258,9 @@ function deepMerge<T>(base: T, override: unknown): T {
 
 async function handleHomeConfigApi(env: { FLAGS?: FlagsKv }): Promise<Response> {
   if (!env.FLAGS) {
-    return Response.json(DEFAULT_HOME_CONFIG, { headers: { "Cache-Control": "public, max-age=15" } });
+    return Response.json(DEFAULT_HOME_CONFIG, {
+      headers: { "Cache-Control": "public, max-age=15" },
+    });
   }
   const raw = await env.FLAGS.get("home-config");
   const config = raw ? deepMerge(DEFAULT_HOME_CONFIG, JSON.parse(raw)) : DEFAULT_HOME_CONFIG;

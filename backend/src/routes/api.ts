@@ -25,6 +25,7 @@ import {
   getEmpirePlayForumTopicController,
   getEmpirePlayUserController,
 } from "../controllers/empirePlayController";
+import { reportVideoIssueController } from "../controllers/reportVideoController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -70,6 +71,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/empire-play/music-videos",
     "/api/empire-play/videos",
     "/api/empire-play/albuns",
+    "/api/empire-play/report-video-issue",
   ]);
 
   if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath) {
@@ -102,6 +104,17 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await getEmpirePlayVideosController(request);
   } else if (url.pathname === "/api/empire-play/albuns") {
     response = await getEmpirePlayAlbunsController();
+  } else if (url.pathname === "/api/empire-play/report-video-issue") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Use POST para /api/empire-play/report-video-issue.",
+        }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await reportVideoIssueController(request);
   } else if (isEditarPath) {
     if (request.method === "GET") {
       response = await getReleasesForEditController(request);

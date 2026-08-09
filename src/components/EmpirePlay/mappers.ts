@@ -81,5 +81,7 @@ export function toPlayableVideo(item: any): PlayableVideo {
     descricao: item.description || item.descricao || "",
     tipo_video: item.category || item.tipo_video || item.tipo || "Vídeo",
     fonte: item.videoSource || item.fonte,
+    telegramMessageId: item.telegramMessageId || null,
+    reportPending: !!item.reportPending,
   };
 }

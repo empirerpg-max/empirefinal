@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { X, Tv, Sparkles, AlertCircle } from "lucide-react";
+import { X, Tv, Sparkles, AlertCircle, Flag, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { driveImg } from "@/lib/api";
+import { haptic } from "@/lib/telegram";
 
 export interface PlayableVideo {
   id?: string;
@@ -15,6 +17,8 @@ export interface PlayableVideo {
   fonte?: "youtube" | "drive" | string;
   metodo_exibicao?: "iframe_drive" | "iframe_youtube" | string;
   url_final_player?: string;
+  telegramMessageId?: string | null;
+  reportPending?: boolean;
 }
 
 interface VideoPlayerProps {
@@ -24,8 +28,41 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
   const [streamError, setStreamError] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  // Otimista: assim que o report é aceito, já reflete no botão sem esperar
+  // o próximo carregamento da lista (que traria reportPending do servidor).
+  const [justReported, setJustReported] = useState(false);
 
   if (!video) return null;
+
+  const reportPending = justReported || !!video.reportPending;
+
+  async function handleReportIssue() {
+    if (!video?.telegramMessageId || reporting || reportPending) return;
+    haptic.selection();
+    setReporting(true);
+    try {
+      const res = await fetch("/api/empire-play/report-video-issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: video.telegramMessageId }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setJustReported(true);
+        toast.success("Problema reportado!", {
+          description:
+            "Em até 6 horas o vídeo estará reprocessado, volte quando sentir que já deu certo.",
+        });
+      } else {
+        toast.error(json.error || "Não foi possível reportar o problema.");
+      }
+    } catch {
+      toast.error("Erro de conexão ao reportar o problema.");
+    } finally {
+      setReporting(false);
+    }
+  }
 
   const rawLink =
     video.url_final_player || video.link || (video as any).videoUrl || video.youtube_url || "";
@@ -87,12 +124,32 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
           </div>
         </div>
 
-        <button
-          onClick={onClose}
-          className="size-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 grid place-items-center text-white active:scale-90 transition-all ml-4 flex-shrink-0"
-        >
-          <X className="size-5" />
-        </button>
+        <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+          {video.fonte === "telegram" && video.telegramMessageId && (
+            <button
+              onClick={handleReportIssue}
+              disabled={reporting || reportPending}
+              title={
+                reportPending
+                  ? "Já reportado — reprocessando"
+                  : "Reportar problema neste vídeo (travando ou não abrindo)"
+              }
+              className="size-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 grid place-items-center text-neutral-400 hover:text-white active:scale-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+            >
+              {reporting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Flag className="size-4" />
+              )}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="size-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 grid place-items-center text-white active:scale-90 transition-all flex-shrink-0"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
       </div>
 
       {/* Área Central do Player */}

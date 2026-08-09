@@ -17,6 +17,13 @@ export interface EmpirePlayCleanItem {
   audioUrl?: string | null;
   videoUrl?: string | null;
   videoSource?: "youtube" | "drive" | "telegram" | null;
+  // ID da mensagem no grupo de arquivo do Telegram (já resolvido com a
+  // prioridade certa por resolveVideoUrlAndSource — inclui a versão
+  // reconvertida quando existir). Usado pelo botão "Reportar problema".
+  telegramMessageId?: string | null;
+  // true enquanto o vídeo está com reprocessamento em andamento (coluna
+  // "Reportado em" preenchida há menos de 6h) — desabilita o botão no app.
+  reportPending?: boolean;
   telegramTopicId?: string | null;
   topicId?: string | null;
   releaseDate?: string | null;
@@ -199,6 +206,21 @@ function parseDateToIso(value: string | null): string | null {
   return date.toISOString().slice(0, 10);
 }
 
+const REPORT_PENDING_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * A coluna "Reportado em" (ISO, gravada por reportVideoController) marca um
+ * reprocessamento em andamento. O script de reconversão a limpa assim que
+ * termina; a janela de 6h aqui é só uma rede de segurança caso o workflow
+ * nunca rode ou falhe silenciosamente, pra o botão não travar pra sempre.
+ */
+function isReportPending(reportedAtRaw: string | null): boolean {
+  if (!reportedAtRaw) return false;
+  const reportedAt = new Date(reportedAtRaw);
+  if (Number.isNaN(reportedAt.getTime())) return false;
+  return Date.now() - reportedAt.getTime() < REPORT_PENDING_WINDOW_MS;
+}
+
 function extractReleaseMonth(isoDate: string | null): string | null {
   if (!isoDate) return null;
   const [year, month] = isoDate.split("-");
@@ -276,6 +298,8 @@ function buildCleanItem(
     "telegram_file_url",
   ]);
   const { videoUrl, videoSource } = resolveVideoUrlAndSource(record);
+  const telegramMessageId = videoSource === "telegram" ? videoUrl : null;
+  const reportPending = isReportPending(getValue(record, ["reportado_em"]));
   // Mesma prioridade do empireuploadsfinal/src/utils/mediaUtils.ts (getTelegramPostPath):
   // ref_telegram_id > telegram_topic_id > id.
   const telegramTopicId = getValue(record, [
@@ -327,6 +351,8 @@ function buildCleanItem(
   if (audioUrl) item.audioUrl = audioUrl;
   if (videoUrl) item.videoUrl = videoUrl;
   if (videoSource) item.videoSource = videoSource;
+  if (telegramMessageId) item.telegramMessageId = telegramMessageId;
+  if (reportPending) item.reportPending = true;
   if (telegramTopicId) item.telegramTopicId = telegramTopicId;
   if (releaseDate) item.releaseDate = releaseDate;
   if (releaseDateIso) {
