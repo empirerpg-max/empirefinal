@@ -192,3 +192,62 @@ export async function getGoogleAccessToken(scopes: string[]): Promise<string> {
 
   return body.access_token;
 }
+
+const DRIVE_OAUTH_CACHE_KEY = "__drive_oauth__";
+
+/**
+ * Token de acesso ao Drive autenticado como a conta pessoal do usuário (via
+ * refresh token), não a conta de serviço. Contas de serviço não têm cota de
+ * armazenamento própria — todo upload de arquivo real (não metadados de
+ * planilha) falha com "Service Accounts do not have storage quota" mesmo
+ * com a pasta compartilhada como Editor. Usado por qualquer upload de mídia
+ * pro Drive (vídeo/áudio/capa), tanto os enviados pelo app quanto os
+ * migrados do Telegram.
+ */
+export async function getDriveOAuthAccessToken(): Promise<string> {
+  const cached = GOOGLE_TOKEN_CACHE.get(DRIVE_OAUTH_CACHE_KEY);
+  if (cached && cached.expiresAt > Date.now() + ONE_MINUTE_MS) {
+    return cached.accessToken;
+  }
+
+  const clientId = readRuntimeEnv("DRIVE_OAUTH_CLIENT_ID");
+  const clientSecret = readRuntimeEnv("DRIVE_OAUTH_CLIENT_SECRET");
+  const refreshToken = readRuntimeEnv("DRIVE_OAUTH_REFRESH_TOKEN");
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error(
+      "Faltando DRIVE_OAUTH_CLIENT_ID / DRIVE_OAUTH_CLIENT_SECRET / DRIVE_OAUTH_REFRESH_TOKEN.",
+    );
+  }
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }).toString(),
+  });
+
+  const body = (await response.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    error?: string;
+    error_description?: string;
+  };
+
+  if (!response.ok || !body.access_token) {
+    throw new Error(
+      `Falha ao renovar token do Drive: ${body.error || response.status} ${body.error_description || ""}`.trim(),
+    );
+  }
+
+  const expiresInMs = (body.expires_in ?? 3600) * 1000;
+  GOOGLE_TOKEN_CACHE.set(DRIVE_OAUTH_CACHE_KEY, {
+    accessToken: body.access_token,
+    expiresAt: Date.now() + expiresInMs,
+  });
+
+  return body.access_token;
+}

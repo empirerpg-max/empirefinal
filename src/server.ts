@@ -76,6 +76,9 @@ const RUNTIME_ENV_KEYS = [
   "GOOGLE_SERVICE_ACCOUNT_PROJECT_ID",
   "GOOGLE_SERVICE_ACCOUNT_TOKEN_URI",
   "GH_DISPATCH_TOKEN",
+  "DRIVE_OAUTH_CLIENT_ID",
+  "DRIVE_OAUTH_CLIENT_SECRET",
+  "DRIVE_OAUTH_REFRESH_TOKEN",
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
