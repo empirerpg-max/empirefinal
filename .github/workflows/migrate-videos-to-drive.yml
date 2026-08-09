@@ -1,0 +1,39 @@
+name: Migrar vídeos do Telegram pro Google Drive (Music Videos)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Só simular (não baixar/enviar nem escrever na planilha)?"
+        type: boolean
+        default: true
+      limit:
+        description: "Migrar no máximo N vídeos pendentes (vazio = todos)"
+        type: string
+        default: "3"
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    defaults:
+      run:
+        working-directory: telegram-media
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install
+
+      - name: Rodar a migração
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GCP_SA_KEY }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          LIMIT: ${{ inputs.limit }}
+        run: npm run migrate-to-drive
