@@ -87,21 +87,10 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
     return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : url;
   };
 
-  // 2. Google Drive — o iframe /preview do próprio Drive já faz streaming
-  // nativo com suporte a seek, sem precisar de nenhum proxy no backend.
-  const isDriveUrl = (url?: string) => {
-    if (!url) return false;
-    if (/drive\.google\.com|googleusercontent\.com/i.test(url)) return true;
-    return /^[-\w]{25,}$/.test(url.trim());
-  };
-
-  const getDriveEmbedUrl = (url: string) => {
-    const match = url.match(/[-\w]{25,}/);
-    return match ? `https://drive.google.com/file/d/${match[0]}/preview` : url;
-  };
-
+  // Drive e Telegram tocam via <video> nativo apontando pro proxy do próprio
+  // Worker (/api/media/video, /api/telegram-video) — o jogador nunca vê a
+  // interface do Drive, só o player do app, como o resto da mídia.
   const isYt = video.metodo_exibicao === "iframe_youtube" || isYouTubeUrl(rawLink);
-  const isDrive = !isYt && (video.metodo_exibicao === "iframe_drive" || isDriveUrl(rawLink));
 
   const poster =
     video.poster_url || video.capa_url
@@ -163,14 +152,6 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
             />
-          ) : isDrive ? (
-            <iframe
-              src={getDriveEmbedUrl(rawLink)}
-              title={video.titulo}
-              className="w-full aspect-video border-0"
-              allow="autoplay; encrypted-media"
-              allowFullScreen
-            />
           ) : (
             <>
               <video
@@ -191,8 +172,7 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
                     Não foi possível carregar o vídeo
                   </h3>
                   <p className="text-xs text-neutral-400 max-w-md mb-4">
-                    Verifique se o link informado é um vídeo válido do YouTube ou Google Drive com
-                    permissão pública.
+                    O vídeo pode estar indisponível no momento. Tente novamente em instantes.
                   </p>
                   {rawLink && (
                     <a
@@ -223,7 +203,7 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
             <div className="flex items-center gap-2">
               <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-neutral-300 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="size-3.5 text-red-500" />
-                {isDrive ? "Google Drive HD" : isYt ? "YouTube HD" : "Direct Stream"}
+                {isYt ? "YouTube HD" : "Empire Play HD"}
               </span>
             </div>
           </div>

@@ -75,6 +75,11 @@ export function toPlayableVideo(item: any): PlayableVideo {
         item.id_do_arquivo ||
         item.link_do_video;
       if (source === "telegram" && raw) return `/api/telegram-video/${encodeURIComponent(raw)}`;
+      if (source === "drive" && raw) {
+        const match = raw.match(/[-\w]{25,}/);
+        const fileId = match ? match[0] : raw;
+        return `/api/media/video?id=${fileId}`;
+      }
       return raw;
     })(),
     youtube_url: item.videoUrl || item.audioUrl || item.youtube_url || item.link,

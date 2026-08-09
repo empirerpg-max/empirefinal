@@ -111,10 +111,6 @@ export function MusicPlayer({
       driveFileId),
   );
 
-  const drivePreviewUrl = driveFileId
-    ? `https://drive.google.com/file/d/${driveFileId}/preview`
-    : null;
-
   // Reseta erro ao trocar de faixa
   useEffect(() => {
     setAudioError(false);
@@ -281,15 +277,6 @@ export function MusicPlayer({
                   referrerPolicy="strict-origin-when-cross-origin"
                 />
               </div>
-            ) : isDriveAudio && audioError && drivePreviewUrl ? (
-              <div className="relative aspect-square w-full rounded-3xl bg-neutral-900 border border-white/10 overflow-hidden shadow-2xl p-2">
-                <iframe
-                  src={drivePreviewUrl}
-                  title={currentTrack.titulo}
-                  className="w-full h-full border-0 rounded-2xl"
-                  allow="autoplay"
-                />
-              </div>
             ) : (
               <div className="relative aspect-square w-full rounded-3xl bg-neutral-900 border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] group">
                 {cover ? (
@@ -305,6 +292,13 @@ export function MusicPlayer({
                       <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
                       <p className="text-xs font-semibold text-emerald-400">Carregando áudio...</p>
                     </div>
+                  </div>
+                )}
+                {audioError && (
+                  <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <p className="text-xs text-center font-semibold text-red-400">
+                      Não foi possível carregar o áudio. Tente novamente em instantes.
+                    </p>
                   </div>
                 )}
               </div>
