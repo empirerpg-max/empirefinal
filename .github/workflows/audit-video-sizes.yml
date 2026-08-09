@@ -1,0 +1,28 @@
+name: Auditar tamanho dos vídeos do Telegram (Music Videos)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: telegram-media
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install
+
+      - name: Somar o tamanho de todos os vídeos
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GCP_SA_KEY }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: npx tsx scripts/audit-video-sizes.ts
