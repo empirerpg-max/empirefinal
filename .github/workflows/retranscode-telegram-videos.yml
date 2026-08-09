@@ -11,6 +11,10 @@ on:
         description: "Processar no máximo N vídeos pendentes (vazio = todos)"
         type: string
         default: "3"
+      target_message_id:
+        description: "ID da mensagem de um vídeo específico a reprocessar (ignora 'limit' e o filtro de pendentes; dry_run ainda se aplica — usado pelo botão 'Reportar problema' do app)"
+        type: string
+        default: ""
 
 jobs:
   retranscode:
@@ -39,4 +43,5 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run }}
           LIMIT: ${{ inputs.limit }}
+          TARGET_MESSAGE_ID: ${{ inputs.target_message_id }}
         run: npm run retranscode-videos

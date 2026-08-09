@@ -14,7 +14,7 @@ interface GoogleTokenCacheEntry {
 const GOOGLE_TOKEN_CACHE = new Map<string, GoogleTokenCacheEntry>();
 const ONE_MINUTE_MS = 60_000;
 
-function readRuntimeEnv(name: string): string {
+export function readRuntimeEnv(name: string): string {
   const processValue =
     typeof process !== "undefined" && process.env ? process.env[name] : undefined;
 

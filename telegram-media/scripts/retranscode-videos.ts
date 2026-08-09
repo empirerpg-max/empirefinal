@@ -7,7 +7,12 @@
 //
 // Uso: dry-run por padrão. Passe DRY_RUN=false pra escrever de verdade, e
 // LIMIT=<n> pra processar só os primeiros N vídeos pendentes (útil pra
-// validar num lote pequeno antes de rodar o catálogo inteiro).
+// validar num lote pequeno antes de rodar o catálogo inteiro). Passe
+// TARGET_MESSAGE_ID=<id> pra reprocessar só aquele vídeo específico (usado
+// pelo botão "Reportar problema" do app) — nesse modo o vídeo é reprocessado
+// mesmo que já tenha uma coluna "reconvertido" preenchida, e a coluna
+// "Reportado em" daquela linha é limpa ao final (sucesso ou erro), pra
+// reabilitar o botão no app.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +25,7 @@ const SPREADSHEET_ID = process.env.SPREADSHEET_ID || "1XYa6Pzd-lou3fzqaZgjhBYNb3
 const SHEET_NAME = process.env.SHEET_NAME || "Music Videos";
 const DRY_RUN = process.env.DRY_RUN !== "false";
 const LIMIT = process.env.LIMIT ? Number(process.env.LIMIT) : undefined;
+const TARGET_MESSAGE_ID = process.env.TARGET_MESSAGE_ID?.trim() || undefined;
 
 const API_ID = Number(process.env.TELEGRAM_API_ID || 0);
 const API_HASH = process.env.TELEGRAM_API_HASH || "";
@@ -28,6 +34,7 @@ const CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID || "-1004353239109";
 
 const NEW_ID_HEADER = "ID da mensagem (reconvertido)";
 const STATUS_HEADER = "Status da reconversão";
+const REPORTED_AT_HEADER = "Reportado em";
 
 const googleCredsRaw = process.env.GOOGLE_CREDENTIALS_JSON;
 if (!googleCredsRaw) {
@@ -134,6 +141,7 @@ async function main() {
   // meio — regra do projeto, e evita deslocar qualquer coluna já em uso).
   let newIdCol = header.findIndex((h) => h.includes("id da mensagem (reconvertido)"));
   let statusCol = header.findIndex((h) => h.includes("status da reconvers"));
+  let reportedAtCol = header.findIndex((h) => h.includes("reportado em"));
   const headerUpdates: { range: string; values: string[][] }[] = [];
   if (newIdCol < 0) {
     newIdCol = header.length;
@@ -151,28 +159,60 @@ async function main() {
     });
     header.push(normalize(STATUS_HEADER));
   }
-
-  type PendingRow = { rowIndex: number; sheetRow: number; title: string; messageId: number };
-  const pending: PendingRow[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (normalize(row[fonteCol] || "") !== "telegram") continue;
-    if ((row[newIdCol] || "").trim()) continue; // já reconvertido
-    const rawId = (row[idMensagemCol] || "").trim();
-    if (!rawId || !/^\d+$/.test(rawId)) continue;
-    pending.push({
-      rowIndex: i,
-      sheetRow: i + 1,
-      title: row[titleCol] || `(linha ${i + 1})`,
-      messageId: Number(rawId),
+  if (reportedAtCol < 0) {
+    reportedAtCol = header.length;
+    headerUpdates.push({
+      range: `${SHEET_NAME}!${columnLetter(reportedAtCol)}1`,
+      values: [[REPORTED_AT_HEADER]],
     });
+    header.push(normalize(REPORTED_AT_HEADER));
   }
 
-  const batch = LIMIT ? pending.slice(0, LIMIT) : pending;
-  console.log(
-    `${pending.length} vídeo(s) pendente(s) de reconversão na aba "${SHEET_NAME}"` +
-      (LIMIT ? `; processando os primeiros ${batch.length} (LIMIT=${LIMIT}).` : "."),
-  );
+  type PendingRow = { rowIndex: number; sheetRow: number; title: string; messageId: number };
+  let batch: PendingRow[];
+
+  if (TARGET_MESSAGE_ID) {
+    // Modo de alvo único (botão "Reportar problema"): processa só a linha
+    // pedida, mesmo que já tenha sido reconvertida antes.
+    const rowIndex = rows.findIndex(
+      (row, i) => i > 0 && (row[idMensagemCol] || "").trim() === TARGET_MESSAGE_ID,
+    );
+    if (rowIndex < 0) {
+      throw new Error(`Nenhuma linha encontrada com ID da mensagem "${TARGET_MESSAGE_ID}".`);
+    }
+    batch = [
+      {
+        rowIndex,
+        sheetRow: rowIndex + 1,
+        title: rows[rowIndex][titleCol] || `(linha ${rowIndex + 1})`,
+        messageId: Number(TARGET_MESSAGE_ID),
+      },
+    ];
+    console.log(
+      `Modo de alvo único: reprocessando só "${batch[0].title}" [msg ${TARGET_MESSAGE_ID}].`,
+    );
+  } else {
+    const pending: PendingRow[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (normalize(row[fonteCol] || "") !== "telegram") continue;
+      if ((row[newIdCol] || "").trim()) continue; // já reconvertido
+      const rawId = (row[idMensagemCol] || "").trim();
+      if (!rawId || !/^\d+$/.test(rawId)) continue;
+      pending.push({
+        rowIndex: i,
+        sheetRow: i + 1,
+        title: row[titleCol] || `(linha ${i + 1})`,
+        messageId: Number(rawId),
+      });
+    }
+
+    batch = LIMIT ? pending.slice(0, LIMIT) : pending;
+    console.log(
+      `${pending.length} vídeo(s) pendente(s) de reconversão na aba "${SHEET_NAME}"` +
+        (LIMIT ? `; processando os primeiros ${batch.length} (LIMIT=${LIMIT}).` : "."),
+    );
+  }
 
   if (DRY_RUN) {
     console.log(
@@ -246,6 +286,16 @@ async function main() {
           values: [[`erro: ${message.slice(0, 200)}`]],
         });
         failed += 1;
+      }
+
+      // No modo de alvo único, limpa "Reportado em" ao terminar (sucesso ou
+      // erro) pra reabilitar o botão "Reportar problema" no app — o app não
+      // deve depender só do timeout de 6h pra isso.
+      if (TARGET_MESSAGE_ID) {
+        rowUpdates.push({
+          range: `${SHEET_NAME}!${columnLetter(reportedAtCol)}${item.sheetRow}`,
+          values: [[""]],
+        });
       }
 
       if (rowUpdates.length > 0) {
