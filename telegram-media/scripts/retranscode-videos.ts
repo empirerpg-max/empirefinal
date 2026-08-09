@@ -273,7 +273,14 @@ async function main() {
   console.log(`\nConcluído: ${ok} reconvertido(s), ${failed} com erro.`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    // GramJS deixa handles/timers pendurados mesmo depois de "disconnected"
+    // (confirmado num run real: o processo ficou parado por 40+ minutos
+    // depois do log "Concluído"). Força a saída para não travar o job.
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
