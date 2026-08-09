@@ -1,4 +1,4 @@
-import { streamAudioController } from "../controllers/mediaController";
+import { streamDriveFileController } from "../controllers/mediaController";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -10,9 +10,9 @@ export async function handleMediaRoutes(request: Request): Promise<Response | nu
   const url = new URL(request.url);
   const pathname = url.pathname;
 
-  const isAudioRoute = pathname === "/api/media/audio" || pathname.startsWith("/api/media/audio");
+  const isMediaRoute = pathname.startsWith("/api/media/audio") || pathname.startsWith("/api/media/video");
 
-  if (!isAudioRoute) {
+  if (!isMediaRoute) {
     return null;
   }
 
@@ -24,13 +24,13 @@ export async function handleMediaRoutes(request: Request): Promise<Response | nu
     return new Response(
       JSON.stringify({
         success: false,
-        error: "Método HTTP não suportado. Use GET para streaming de áudio.",
+        error: "Método HTTP não suportado. Use GET para streaming de mídia.",
       }),
       { status: 405, headers: { "Content-Type": "application/json" } },
     );
   }
 
-  const response = await streamAudioController(request);
+  const response = await streamDriveFileController(request);
 
   // Anexa cabeçalhos CORS
   const headers = new Headers(response.headers);
