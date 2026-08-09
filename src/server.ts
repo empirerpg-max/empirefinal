@@ -32,7 +32,28 @@ async function handleTelegramVideoProxy(
   const range = request.headers.get("range");
   if (range) headers.set("range", range);
 
-  const upstream = await fetch(upstreamUrl, { headers });
+  // O serviço no Render (plano gratuito) às vezes trava — "acordando" de um
+  // sono prolongado, sobrecarregado por outro download simultâneo, ou preso
+  // numa mensagem gigante do Telegram. Sem prazo aqui, a requisição fica
+  // pendurada pro sempre e o player só mostra uma tela de carregando infinita.
+  // Um teto curto transforma isso num erro rápido e claro, que o player já
+  // sabe mostrar com um botão de link direto — melhor do que travar.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  let upstream: Response;
+  try {
+    upstream = await fetch(upstreamUrl, { headers, signal: controller.signal });
+  } catch (error: any) {
+    const timedOut = error?.name === "AbortError";
+    return new Response(
+      timedOut
+        ? "O serviço de vídeo do Telegram demorou demais para responder (pode estar acordando ou sobrecarregado). Tente novamente em instantes."
+        : "Falha ao conectar com o serviço de vídeo do Telegram.",
+      { status: timedOut ? 504 : 502 },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
   const responseHeaders = new Headers(upstream.headers);
   responseHeaders.delete("x-admin-token");
   return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
