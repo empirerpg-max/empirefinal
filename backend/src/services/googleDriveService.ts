@@ -1,4 +1,4 @@
-import { getGoogleAccessToken } from "../google/service-account";
+import { getDriveOAuthAccessToken } from "../google/service-account";
 
 export const DRIVE_FOLDERS = {
   musicas: "1hd_ZJwbVsESwtGniorw0bxQmkhsKcslT",
@@ -16,10 +16,7 @@ export async function deleteFileFromDrive(fileUrl: string): Promise<boolean> {
     const match = fileUrl.match(/(?:d\/|id=)([\w-]+)/);
     if (!match || !match[1]) return false;
     const fileId = match[1];
-    const token = await getGoogleAccessToken([
-      "https://www.googleapis.com/auth/drive",
-      "https://www.googleapis.com/auth/drive.file",
-    ]);
+    const token = await getDriveOAuthAccessToken();
     const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
@@ -38,10 +35,7 @@ export async function uploadFileToDrive(
   base64Data: string,
 ): Promise<string> {
   try {
-    const token = await getGoogleAccessToken([
-      "https://www.googleapis.com/auth/drive",
-      "https://www.googleapis.com/auth/drive.file",
-    ]);
+    const token = await getDriveOAuthAccessToken();
 
     const metadata = {
       name: fileName,
