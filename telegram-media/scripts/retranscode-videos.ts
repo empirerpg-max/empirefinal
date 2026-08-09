@@ -173,9 +173,14 @@ async function main() {
 
   if (TARGET_MESSAGE_ID) {
     // Modo de alvo único (botão "Reportar problema"): processa só a linha
-    // pedida, mesmo que já tenha sido reconvertida antes.
+    // pedida, mesmo que já tenha sido reconvertida antes. O app manda o ID
+    // já resolvido (prioriza a versão reconvertida quando existe), então
+    // precisa bater tanto com a coluna original quanto com a "reconvertido".
     const rowIndex = rows.findIndex(
-      (row, i) => i > 0 && (row[idMensagemCol] || "").trim() === TARGET_MESSAGE_ID,
+      (row, i) =>
+        i > 0 &&
+        ((row[idMensagemCol] || "").trim() === TARGET_MESSAGE_ID ||
+          (row[newIdCol] || "").trim() === TARGET_MESSAGE_ID),
     );
     if (rowIndex < 0) {
       throw new Error(`Nenhuma linha encontrada com ID da mensagem "${TARGET_MESSAGE_ID}".`);

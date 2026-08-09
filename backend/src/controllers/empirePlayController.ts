@@ -250,28 +250,43 @@ function buildCleanItem(
   record: SheetRecord,
   index: number,
 ): EmpirePlayCleanItem {
-  const title =
-    getValue(record, [
-      "nome_da_musica",
-      "nome_do_video",
-      "nome_do_album",
-      "nome",
-      "titulo",
-      "titulo_do_video",
-      "titulo_do_album",
-      "musica",
-    ]) || `Item ${index + 1}`;
+  let title = getValue(record, [
+    "nome_da_musica",
+    "nome_do_video",
+    "nome_do_album",
+    "nome",
+    "titulo",
+    "titulo_do_video",
+    "titulo_do_album",
+    "musica",
+  ]);
 
-  const artist =
-    getValue(record, [
-      "act_principal",
-      "artista",
-      "nome_do_criador",
-      "nome_do_artista",
-      "act",
-      "enviado_por",
-      "id_do_criador",
-    ]) || "Artista Independente";
+  let artist = getValue(record, [
+    "act_principal",
+    "artista",
+    "nome_do_criador",
+    "nome_do_artista",
+    "act",
+    "enviado_por",
+    "id_do_criador",
+  ]);
+
+  // A aba "Music Videos" não tem colunas dedicadas de título/artista — o
+  // jogador nomeia o tópico do Telegram como "Artista - Nome do vídeo" e é
+  // esse texto (coluna "Título do tópico") que carrega os dois dados.
+  if ((!title || !artist) && sheetName === "Music Videos") {
+    const topicTitle = getValue(record, ["titulo_do_topico"]);
+    const dashMatch = topicTitle?.match(/^(.+?)\s[-–—]\s(.+)$/);
+    if (dashMatch) {
+      if (!artist) artist = dashMatch[1].trim();
+      if (!title) title = dashMatch[2].trim();
+    } else if (!title && topicTitle) {
+      title = topicTitle;
+    }
+  }
+
+  title = title || `Item ${index + 1}`;
+  artist = artist || "Artista Independente";
 
   const album = getValue(record, ["album", "nome_do_album", "album_nome"]);
   const coverUrl = getValue(record, [
