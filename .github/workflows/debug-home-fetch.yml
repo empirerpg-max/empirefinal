@@ -1,0 +1,20 @@
+name: Debug Home Fetch
+on:
+  workflow_dispatch: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch home
+        run: |
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/home" > /tmp/home.json
+          python3 -c "
+import json
+d = json.load(open('/tmp/home.json'))
+data = d.get('data', {})
+for key in ['topSpotify','topAppleMusic','topYoutube','recentMusicas']:
+    items = data.get(key, [])
+    print('--- ' + key + ' (' + str(len(items)) + ') ---')
+    for it in items[:3]:
+        print(json.dumps(it, ensure_ascii=False))
+"
