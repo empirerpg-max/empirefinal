@@ -30,7 +30,6 @@ import {
 } from "../controllers/empirePlayController";
 import { reportVideoIssueController } from "../controllers/reportVideoController";
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
-import { importLegacyCommentsController } from "../controllers/adminImportLegacyCommentsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -65,7 +64,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/forum/comment",
     "/api/forum/comments",
     "/api/forum/comment-reaction",
-    "/api/admin/import-legacy-comments",
     "/api/gestao/musica",
     "/api/gestao/video",
     "/api/gestao/music-video",
@@ -213,8 +211,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await toggleCommentReactionController(request);
-  } else if (url.pathname === "/api/admin/import-legacy-comments") {
-    response = await importLegacyCommentsController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(
