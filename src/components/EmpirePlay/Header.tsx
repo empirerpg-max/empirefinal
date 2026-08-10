@@ -85,7 +85,7 @@ export function EmpirePlayHeader() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
                 <Sparkles className="size-3" />
-                Empire Play
+                Catálogo
               </span>
               {telegramSdkUser?.id && (
                 <span className="text-[10px] font-mono text-neutral-400">
