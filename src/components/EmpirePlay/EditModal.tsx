@@ -345,12 +345,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                 </div>
               )}
 
-              {/* CAPA / THUMB (apenas para Músicas, Music Videos e Álbuns) */}
-              {category !== "videos" && (
-                <div className="space-y-3">
+              {/* CAPA / THUMB — pra vídeos, essa é a "Thumb" (coluna T da
+                  aba Music Videos) que vira a capa/fundo do vídeo no
+                  catálogo; pra música/álbum, a capa do lançamento. */}
+              <div className="space-y-3">
                   <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
                     <ImageIcon className="size-3.5 text-amber-400" />
-                    Substituir Capa / Imagem
+                    {category === "videos" ? "Substituir Thumb de Destaque" : "Substituir Capa / Imagem"}
                   </label>
 
                   <div className="flex items-center gap-4 p-4 bg-neutral-800/40 border border-white/10 rounded-2xl">
@@ -392,8 +393,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                       </p>
                     </div>
                   </div>
-                </div>
-              )}
+              </div>
 
               {/* ALERTAS */}
               {successMsg && (
