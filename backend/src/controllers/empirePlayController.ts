@@ -610,11 +610,15 @@ export async function getEmpirePlayMusicasController(request: Request): Promise<
       });
     }
 
-    // Ordenar por data de lançamento (mais recente primeiro)
+    // Ordenar por data de lançamento (mais recente primeiro) — itens sem
+    // data ficam por último, na ordem em que já vieram da planilha, em vez
+    // de espalhados aleatoriamente entre os datados (bug antigo: retornar 0
+    // pra qualquer par onde um dos dois não tinha data deixava o array
+    // praticamente na ordem crua da planilha).
     items.sort((a, b) => {
-      if (a.releaseDateIso && b.releaseDateIso) {
-        return b.releaseDateIso.localeCompare(a.releaseDateIso);
-      }
+      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
+      if (a.releaseDateIso) return -1;
+      if (b.releaseDateIso) return 1;
       return 0;
     });
 
@@ -766,6 +770,15 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         metacriticAvg,
         tracks,
       };
+    });
+
+    // Álbuns não tinham NENHUMA ordenação — voltavam na ordem crua da
+    // planilha. Mais recente primeiro, igual Músicas/Vídeos.
+    albuns.sort((a, b) => {
+      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
+      if (a.releaseDateIso) return -1;
+      if (b.releaseDateIso) return 1;
+      return 0;
     });
 
     return new Response(JSON.stringify({ success: true, data: albuns }), {
