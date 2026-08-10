@@ -105,9 +105,17 @@ export async function createSongController(request: Request): Promise<Response> 
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const participantesLimpos = participantes.filter(Boolean);
-    const fullTitle = tituloMusica.includes(" - ")
-      ? tituloMusica
-      : `${artistaPrincipal} - ${nomeMusica || tituloMusica}`;
+    // Rede de segurança contra "Artista - Artista - Nome": se o título
+    // recebido já vier com o prefixo do artista duplicado (cliente antigo,
+    // ou o jogador digitou o artista de novo no campo de nome), remove a
+    // repetição em vez de empilhar o prefixo de novo.
+    const artistPrefix = `${artistaPrincipal} - `;
+    const tituloSemPrefixoDuplicado = tituloMusica.toLowerCase().startsWith(artistPrefix.toLowerCase())
+      ? tituloMusica.slice(artistPrefix.length).trim()
+      : tituloMusica;
+    const fullTitle = tituloSemPrefixoDuplicado.includes(" - ")
+      ? tituloSemPrefixoDuplicado
+      : `${artistaPrincipal} - ${nomeMusica || tituloSemPrefixoDuplicado}`;
 
     // ID único do tópico gerado para essa música — usado tanto como chave do
     // registro em Musicas (Coluna B) quanto como "Comentários para" (Coluna F).
@@ -169,7 +177,9 @@ export async function createSongController(request: Request): Promise<Response> 
         targetRow = 2;
       }
 
-      const substituir = (opcaoChart || "").trim().startsWith("b)") ? "Sim" : "";
+      // Coluna N espera "Sim"/"Não" — antes ficava em branco quando não era
+      // opção b), em vez de gravar "Não" explicitamente.
+      const substituir = (opcaoChart || "").trim().startsWith("b)") ? "Sim" : "Não";
 
       // B, C, D, E, F, G, H, I, J, K, L, M, N, O, P
       await googleSheetsService.registrosCharts.updateValues(
@@ -191,7 +201,7 @@ export async function createSongController(request: Request): Promise<Response> 
             "", // M
             substituir, // N - SUBSTITUIR NOS CHARTS?
             "", // O
-            "Ok", // P - ENVIAR
+            "OK", // P - ENVIAR
           ],
         ],
       );

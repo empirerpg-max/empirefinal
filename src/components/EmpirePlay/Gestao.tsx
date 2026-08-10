@@ -97,6 +97,22 @@ const CATEGORIAS_VIDEO = [
   "Outro",
 ];
 
+// Alguns jogadores digitam "Artista - Nome" de novo no campo de nome da
+// música, achando que precisa — como o título final já prefixa o artista
+// automaticamente, isso duplicava o nome (ex: "Purple Sheeps - Purple
+// Sheeps - Teste 1"). Remove esse prefixo redundante antes de montar o
+// título final.
+function stripArtistPrefix(nome: string, artista: string): string {
+  const trimmedNome = nome.trim();
+  const trimmedArtista = artista.trim();
+  if (!trimmedArtista) return trimmedNome;
+  const prefix = `${trimmedArtista} - `;
+  if (trimmedNome.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return trimmedNome.slice(prefix.length).trim();
+  }
+  return trimmedNome;
+}
+
 export const Gestao: React.FC = () => {
   const { user: telegramUser } = useTelegramUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -388,11 +404,12 @@ export const Gestao: React.FC = () => {
 
       setUploadProgress("Registrando lançamento de música...");
 
-      const fullTitle = `${artistaResponsavel} - ${nomeMusica}`;
+      const nomeMusicaLimpo = stripArtistPrefix(nomeMusica, artistaResponsavel);
+      const fullTitle = `${artistaResponsavel} - ${nomeMusicaLimpo}`;
       const payload = {
         opcaoChart,
         tituloMusica: fullTitle,
-        nomeMusica,
+        nomeMusica: nomeMusicaLimpo,
         artistaPrincipal: artistaResponsavel,
         participantes: participantes.filter((p) => p.trim().length > 0),
         tipoSingle,
