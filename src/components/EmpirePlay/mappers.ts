@@ -39,6 +39,7 @@ export function toPlayableTrack(item: any): PlayableTrack {
     drive_url: item.audioUrl || item.id_do_arquivo || item.link || item.drive_url,
     letra: item.lyrics || item.letra,
     album: item.album || item.nome_do_album || "Single",
+    metacriticAvg: item.metacriticAvg ?? item.metacritic ?? item.nota,
   };
 }
 
@@ -88,5 +89,6 @@ export function toPlayableVideo(item: any): PlayableVideo {
     fonte: item.videoSource || item.fonte,
     telegramMessageId: item.telegramMessageId || null,
     reportPending: !!item.reportPending,
+    metacriticAvg: item.metacriticAvg ?? item.likes ?? item.nota,
   };
 }

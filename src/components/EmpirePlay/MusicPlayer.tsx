@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { driveImg } from "@/lib/api";
 import { haptic } from "@/lib/telegram";
+import { ScoreBadge } from "./ScoreBadge";
 
 export interface PlayableTrack {
   id?: string;
@@ -29,6 +30,7 @@ export interface PlayableTrack {
   album?: string;
   url?: string;
   link?: string;
+  metacriticAvg?: number | string | null;
 }
 
 interface MusicPlayerProps {
@@ -368,9 +370,12 @@ export function MusicPlayer({
                 <h3 className="text-xl font-black text-white truncate tracking-tight">
                   {currentTrack.titulo}
                 </h3>
-                <p className="text-sm font-bold text-emerald-400 truncate">
-                  {currentTrack.artista}
-                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-sm font-bold text-emerald-400 truncate">
+                    {currentTrack.artista}
+                  </p>
+                  <ScoreBadge score={currentTrack.metacriticAvg} variant="metacritic" />
+                </div>
               </div>
               {currentTrack.letra && (
                 <button
@@ -450,9 +455,16 @@ export function MusicPlayer({
               <h4 className="text-xs font-black text-white truncate group-hover:text-emerald-400 transition-colors">
                 {currentTrack.titulo}
               </h4>
-              <p className="text-[11px] font-medium text-neutral-400 truncate">
-                {currentTrack.artista}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-[11px] font-medium text-neutral-400 truncate">
+                  {currentTrack.artista}
+                </p>
+                <ScoreBadge
+                  score={currentTrack.metacriticAvg}
+                  variant="metacritic"
+                  className="!px-1.5 !py-0 !text-[10px] shrink-0"
+                />
+              </div>
             </div>
           </button>
 
