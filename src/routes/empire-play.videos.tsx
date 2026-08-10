@@ -5,6 +5,7 @@ import { driveImg } from "@/lib/api";
 import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableVideo } from "@/components/EmpirePlay/VideoPlayer";
+import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 
 export const Route = createFileRoute("/empire-play/videos")({
   component: EmpirePlayVideos,
@@ -49,6 +50,9 @@ function EmpirePlayVideos() {
                   <Tv className="size-10" />
                 </div>
               )}
+              <div className="absolute top-2 right-2 pointer-events-none">
+                <ScoreBadge score={v.metacriticAvg} variant="likes" />
+              </div>
             </div>
             <h4 className="font-bold text-xs text-white truncate group-hover:text-red-400">
               {v.titulo}
