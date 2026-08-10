@@ -13,8 +13,10 @@ import {
   createAlbumController,
   createSongController,
   createVideoController,
+  getAlbumFaixasController,
   getMeusAlbunsController,
   getMusicasEmChartController,
+  reordenarAlbumFaixasController,
   substituirAlbumController,
   uploadDriveController,
 } from "../controllers/gestaoController";
@@ -74,6 +76,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/gestao/video",
     "/api/gestao/album",
     "/api/gestao/album/substituir",
+    "/api/gestao/album-faixas",
+    "/api/gestao/album-faixas/reordenar",
     "/api/gestao/musicas-em-chart",
     "/api/gestao/meus-albuns",
     "/api/gestao/upload",
@@ -187,6 +191,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await substituirAlbumController(request);
+  } else if (url.pathname === "/api/gestao/album-faixas/reordenar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/gestao/album-faixas/reordenar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await reordenarAlbumFaixasController(request);
   } else if (url.pathname === "/api/gestao/upload") {
     if (request.method !== "POST") {
       return new Response(
@@ -247,6 +259,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         break;
       case "/api/gestao/meus-albuns":
         response = await getMeusAlbunsController();
+        break;
+      case "/api/gestao/album-faixas":
+        response = await getAlbumFaixasController(request);
         break;
       case "/api/top-playlists":
         response = await getTopPlaylistsController();

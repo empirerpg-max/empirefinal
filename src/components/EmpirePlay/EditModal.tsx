@@ -14,6 +14,10 @@ import {
   Loader2,
   Image as ImageIcon,
   Save,
+  ListMusic,
+  Plus,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 // "music-videos" foi consolidado dentro de "videos" — vivem na mesma aba
@@ -28,7 +32,36 @@ export interface ReleaseItem {
   artista: string;
   descricao?: string;
   capaUrl?: string;
+  fields?: Record<string, string>;
 }
+
+interface AlbumFaixa {
+  musicaRowIndex: number;
+  titulo: string;
+  ordem: number;
+  audioUrl: string;
+}
+
+interface MusicaEmChart {
+  label: string;
+  artist: string;
+  title: string;
+}
+
+const TIPOS_SINGLE_FAIXA = [
+  "TRACKLIST ALBUM",
+  "LEAD SINGLE",
+  "PRÉ-ALBUM",
+  "AVULSO",
+  "PÓS-ALBUM",
+  "PÓS-ALBUM REMIX",
+  "SOUNDTRACK",
+  "PROMOCIONAL",
+  "REMIX",
+  "PRÉ-ALBUM REMIX",
+  "LEAD SINGLE REMIX",
+];
+const TIPOS_MUSICA_FAIXA = ["SOLO", "PARCERIA", "DUETO", "CONJUNTO"];
 
 interface EditModalProps {
   isOpen: boolean;
@@ -70,6 +103,22 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [saving, setSaving] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Faixas do álbum em edição (só categoria "albuns") — reordenar e
+  // adicionar faixas novas.
+  const [albumFaixas, setAlbumFaixas] = useState<AlbumFaixa[]>([]);
+  const [loadingFaixas, setLoadingFaixas] = useState<boolean>(false);
+  const [savingOrdem, setSavingOrdem] = useState<boolean>(false);
+  const [musicasEmChart, setMusicasEmChart] = useState<MusicaEmChart[]>([]);
+
+  // Formulário de "adicionar faixa nova"
+  const [addingFaixa, setAddingFaixa] = useState<boolean>(false);
+  const [novaFaixaInedita, setNovaFaixaInedita] = useState<boolean>(true);
+  const [novaFaixaTitulo, setNovaFaixaTitulo] = useState<string>("");
+  const [novaFaixaBusca, setNovaFaixaBusca] = useState<string>("");
+  const [novaFaixaTipoSingle, setNovaFaixaTipoSingle] = useState<string>("TRACKLIST ALBUM");
+  const [novaFaixaTipoMusica, setNovaFaixaTipoMusica] = useState<string>("SOLO");
+  const [novaFaixaMediaUrl, setNovaFaixaMediaUrl] = useState<string>("");
 
   // Atualizar artista quando props mudam
   useEffect(() => {
@@ -115,6 +164,31 @@ export const EditModal: React.FC<EditModalProps> = ({
     };
   }, [isOpen, selectedArtist, category]);
 
+  // Buscar músicas em chart (aba Pontos) — usado na busca de faixa existente
+  // pra adicionar a um álbum.
+  useEffect(() => {
+    if (!isOpen || category !== "albuns") return;
+    fetch("/api/gestao/musicas-em-chart")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && Array.isArray(data.data)) setMusicasEmChart(data.data);
+      })
+      .catch(() => {});
+  }, [isOpen, category]);
+
+  const fetchAlbumFaixas = (topicId: string) => {
+    setLoadingFaixas(true);
+    fetch(`/api/gestao/album-faixas?topicId=${encodeURIComponent(topicId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && data.data) {
+          setAlbumFaixas(data.data.faixas || []);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingFaixas(false));
+  };
+
   if (!isOpen) return null;
 
   // Abrir formulário de edição para um item específico
@@ -126,6 +200,96 @@ export const EditModal: React.FC<EditModalProps> = ({
     setCapaPreview(item.capaUrl || null);
     setSuccessMsg(null);
     setErrorMsg(null);
+    setAlbumFaixas([]);
+    setAddingFaixa(false);
+    setNovaFaixaTitulo("");
+    setNovaFaixaBusca("");
+    setNovaFaixaMediaUrl("");
+    if (item.tipo === "albuns" && item.fields?.topicId) {
+      fetchAlbumFaixas(item.fields.topicId);
+    }
+  };
+
+  // Move uma faixa pra cima/baixo na lista, trocando a Ordem com a vizinha,
+  // e já salva as duas mudanças na planilha.
+  const handleMoveFaixa = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= albumFaixas.length) return;
+
+    const updated = [...albumFaixas];
+    [updated[index], updated[target]] = [updated[target], updated[index]];
+    // Reatribui a Ordem em sequência (1, 2, 3...) conforme a nova posição.
+    const reindexed = updated.map((f, i) => ({ ...f, ordem: i + 1 }));
+    setAlbumFaixas(reindexed);
+    setSavingOrdem(true);
+    try {
+      await fetch("/api/gestao/album-faixas/reordenar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ordens: reindexed.map((f) => ({ musicaRowIndex: f.musicaRowIndex, ordem: f.ordem })),
+        }),
+      });
+    } catch (err) {
+      console.error("Erro ao reordenar faixas:", err);
+    } finally {
+      setSavingOrdem(false);
+    }
+  };
+
+  const handleAddFaixa = async () => {
+    if (!editingItem?.fields?.topicId) return;
+    if (novaFaixaInedita && !novaFaixaTitulo.trim()) {
+      setErrorMsg("Informe o título da nova faixa.");
+      return;
+    }
+    if (novaFaixaInedita && !novaFaixaMediaUrl.trim()) {
+      setErrorMsg("Informe o link do áudio (Drive ou YouTube) da nova faixa.");
+      return;
+    }
+    if (!novaFaixaInedita && !novaFaixaTitulo.trim()) {
+      setErrorMsg("Selecione a música existente pra adicionar.");
+      return;
+    }
+
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/gestao/album/substituir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          albumTopicId: editingItem.fields.topicId,
+          novasFaixas: [
+            {
+              num: albumFaixas.length + 1,
+              inedita: novaFaixaInedita,
+              titulo: novaFaixaTitulo,
+              tipoSingle: novaFaixaTipoSingle,
+              tipoMusica: novaFaixaTipoMusica,
+              mediaUrl: novaFaixaMediaUrl,
+              abrirTopico: false,
+            },
+          ],
+          nomeJogador: selectedArtist || "Jogador",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Erro ao adicionar faixa.");
+      }
+      setSuccessMsg("Faixa adicionada com sucesso!");
+      setAddingFaixa(false);
+      setNovaFaixaTitulo("");
+      setNovaFaixaBusca("");
+      setNovaFaixaMediaUrl("");
+      fetchAlbumFaixas(editingItem.fields.topicId);
+      setTimeout(() => setSuccessMsg(null), 2000);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Erro ao adicionar faixa.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Converte imagem para base64
@@ -328,6 +492,195 @@ export const EditModal: React.FC<EditModalProps> = ({
                   required
                 />
               </div>
+
+              {/* FAIXAS DO ÁLBUM (reordenar + adicionar) — apenas Álbuns */}
+              {category === "albuns" && (
+                <div className="space-y-3">
+                  <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <ListMusic className="size-3.5 text-amber-400" />
+                    Faixas do Álbum
+                  </label>
+
+                  {loadingFaixas ? (
+                    <div className="flex items-center gap-2 text-xs text-neutral-400 py-4">
+                      <Loader2 className="size-4 animate-spin" /> Carregando faixas...
+                    </div>
+                  ) : albumFaixas.length === 0 ? (
+                    <p className="text-xs text-neutral-500 italic py-2">
+                      Nenhuma faixa vinculada a este álbum ainda.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {albumFaixas.map((faixa, idx) => (
+                        <div
+                          key={faixa.musicaRowIndex}
+                          className="flex items-center gap-2 p-2.5 bg-neutral-800/40 border border-white/10 rounded-xl"
+                        >
+                          <span className="w-5 text-center font-mono text-[11px] text-neutral-500">
+                            {faixa.ordem}
+                          </span>
+                          <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 truncate">
+                            {faixa.titulo}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={idx === 0 || savingOrdem}
+                            onClick={() => handleMoveFaixa(idx, -1)}
+                            className="size-7 rounded-lg bg-neutral-900 hover:bg-neutral-700 text-neutral-400 hover:text-white grid place-items-center transition disabled:opacity-30 disabled:pointer-events-none"
+                            title="Mover pra cima"
+                          >
+                            <ArrowUp className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === albumFaixas.length - 1 || savingOrdem}
+                            onClick={() => handleMoveFaixa(idx, 1)}
+                            className="size-7 rounded-lg bg-neutral-900 hover:bg-neutral-700 text-neutral-400 hover:text-white grid place-items-center transition disabled:opacity-30 disabled:pointer-events-none"
+                            title="Mover pra baixo"
+                          >
+                            <ArrowDown className="size-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {addingFaixa ? (
+                    <div className="p-3 bg-neutral-800/40 border border-white/10 rounded-2xl space-y-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setNovaFaixaInedita(!novaFaixaInedita)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase transition ${
+                          novaFaixaInedita
+                            ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                            : "bg-neutral-900 text-neutral-400"
+                        }`}
+                      >
+                        {novaFaixaInedita ? "Música Não Existente" : "Música Existente"}
+                      </button>
+
+                      {novaFaixaInedita ? (
+                        <>
+                          <input
+                            type="text"
+                            value={novaFaixaTitulo}
+                            onChange={(e) => setNovaFaixaTitulo(e.target.value)}
+                            placeholder="Título da faixa"
+                            className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <select
+                              value={novaFaixaTipoSingle}
+                              onChange={(e) => setNovaFaixaTipoSingle(e.target.value)}
+                              className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                            >
+                              {TIPOS_SINGLE_FAIXA.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={novaFaixaTipoMusica}
+                              onChange={(e) => setNovaFaixaTipoMusica(e.target.value)}
+                              className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                            >
+                              {TIPOS_MUSICA_FAIXA.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <input
+                            type="text"
+                            value={novaFaixaMediaUrl}
+                            onChange={(e) => setNovaFaixaMediaUrl(e.target.value)}
+                            placeholder="Link do Drive ou YouTube (áudio)"
+                            className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none"
+                          />
+                        </>
+                      ) : (
+                        <div className="relative">
+                          {novaFaixaTitulo ? (
+                            <div className="flex items-center justify-between gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+                              <span className="text-xs text-white font-bold truncate">
+                                {novaFaixaTitulo}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setNovaFaixaTitulo("")}
+                                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 shrink-0"
+                              >
+                                Trocar
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <input
+                                type="text"
+                                value={novaFaixaBusca}
+                                onChange={(e) => setNovaFaixaBusca(e.target.value)}
+                                placeholder="Busque a música já lançada nos charts..."
+                                className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none"
+                              />
+                              {novaFaixaBusca.trim().length > 0 && (
+                                <div className="mt-1 max-h-40 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl">
+                                  {musicasEmChart
+                                    .filter((m) =>
+                                      m.label.toLowerCase().includes(novaFaixaBusca.trim().toLowerCase()),
+                                    )
+                                    .slice(0, 20)
+                                    .map((m) => (
+                                      <button
+                                        key={m.label}
+                                        type="button"
+                                        onClick={() => {
+                                          setNovaFaixaTitulo(m.label);
+                                          setNovaFaixaBusca("");
+                                        }}
+                                        className="w-full text-left px-3 py-2 text-xs text-white hover:bg-amber-500/10 border-b border-white/5 last:border-b-0"
+                                      >
+                                        {m.label}
+                                      </button>
+                                    ))}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setAddingFaixa(false)}
+                          className="px-3 py-2 rounded-xl bg-neutral-900 text-neutral-400 text-[11px] font-bold uppercase"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddFaixa}
+                          disabled={saving}
+                          className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black uppercase disabled:opacity-50"
+                        >
+                          {saving ? "Adicionando..." : "Adicionar Faixa"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAddingFaixa(true)}
+                      className="inline-flex items-center gap-2 text-xs font-bold text-amber-400 hover:text-amber-300 transition"
+                    >
+                      <Plus className="size-4" />
+                      Adicionar Faixa
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* DESCRIÇÃO (apenas para Vídeos) */}
               {category === "videos" && (

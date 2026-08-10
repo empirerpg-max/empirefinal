@@ -608,6 +608,97 @@ export async function getMeusAlbunsController(): Promise<Response> {
   }
 }
 
+// Lista as faixas de um álbum específico, em ordem — usado na tela de
+// edição (Editar Lançamentos) pra permitir reordenar ou conferir o que já
+// está vinculado antes de adicionar novas faixas. Resolve o título completo
+// do álbum pelo ID do tópico (Albuns!B) e busca em Musicas por K igual.
+export async function getAlbumFaixasController(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const topicId = (url.searchParams.get("topicId") || "").trim();
+    if (!topicId) {
+      return new Response(JSON.stringify({ success: false, error: "Parâmetro 'topicId' é obrigatório." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const albumRows = await googleSheetsService.principal.readValues("Albuns");
+    const albumRow = albumRows.slice(1).find((r) => (r[1] || "").trim() === topicId);
+    if (!albumRow) {
+      return new Response(JSON.stringify({ success: false, error: "Álbum não encontrado." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const albumFullTitle = (albumRow[6] || "").trim();
+    const albumNorm = albumFullTitle.toLowerCase();
+
+    const musicasMatches = await googleSheetsService.principal.findRows(
+      "Musicas",
+      (row) => (row[10] || "").trim().toLowerCase() === albumNorm,
+    );
+
+    const faixas = musicasMatches
+      .map(({ rowIndex, row }) => ({
+        musicaRowIndex: rowIndex,
+        titulo: row[7] || "",
+        ordem: parseInt(row[20] || "999", 10) || 999,
+        audioUrl: row[2] || "",
+      }))
+      .sort((a, b) => a.ordem - b.ordem);
+
+    return new Response(
+      JSON.stringify({ success: true, data: { albumFullTitle, faixas } }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  } catch (error: any) {
+    console.error("[getAlbumFaixasController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao buscar faixas do álbum." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+export interface ReordenarFaixasPayload {
+  ordens: { musicaRowIndex: number; ordem: number }[];
+}
+
+// Atualiza a coluna Ordem (Musicas!U) de cada faixa informada — usado pra
+// reordenar a tracklist de um álbum na tela de edição.
+export async function reordenarAlbumFaixasController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as ReordenarFaixasPayload;
+    const ordens = body.ordens || [];
+
+    if (ordens.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Nenhuma faixa informada para reordenar." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    for (const { musicaRowIndex, ordem } of ordens) {
+      if (!musicaRowIndex || musicaRowIndex < 2) continue;
+      await googleSheetsService.principal.updateValues("Musicas", `U${musicaRowIndex}`, [
+        [String(ordem)],
+      ]);
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[reordenarAlbumFaixasController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao reordenar faixas." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
 export interface SubstituirAlbumPayload {
   albumTopicId: string;
   novaCapaUrl?: string;

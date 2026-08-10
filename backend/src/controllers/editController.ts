@@ -96,7 +96,8 @@ export async function getReleasesForEditController(request: Request): Promise<Re
         if (dashMatch) artist = dashMatch[1].trim();
       } else if (tipoParam === "albuns") {
         // Coluna G = index 6 (Nome), Coluna F = index 5 (Nome do criador),
-        // Coluna C = index 2 (Capa)
+        // Coluna C = index 2 (Capa), Coluna B = index 1 (ID do tópico —
+        // usado pra buscar/reordenar as faixas do álbum).
         title = row[6] || "";
         artist = row[5] || "";
         cover = row[2] || "";
@@ -126,7 +127,7 @@ export async function getReleasesForEditController(request: Request): Promise<Re
           artista: normalizeText(artist),
           descricao: normalizeText(description),
           capaUrl: normalizeText(cover),
-          fields: {},
+          fields: tipoParam === "albuns" ? { topicId: normalizeText(row[1]) } : {},
         });
       }
     }
