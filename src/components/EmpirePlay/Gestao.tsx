@@ -117,6 +117,9 @@ export const Gestao: React.FC = () => {
   const [tipoSingle, setTipoSingle] = useState<string>("LEAD SINGLE");
   const [tipoMusica, setTipoMusica] = useState<string>("SOLO");
   const [letraInput, setLetraInput] = useState<string>("");
+  // Música existente referenciada (obrigatório quando opcaoChart é "b" ou "c")
+  const [musicaReferenciaQuery, setMusicaReferenciaQuery] = useState<string>("");
+  const [musicaReferencia, setMusicaReferencia] = useState<ExistingTrack | null>(null);
 
   // Form Vídeo
   const [tituloVideo, setTituloVideo] = useState<string>("");
@@ -151,6 +154,9 @@ export const Gestao: React.FC = () => {
     setMusicaReferenteInput("");
     setEncartesFiles([]);
     setParticipantes([""]);
+    setMusicaReferenciaQuery("");
+    setMusicaReferencia(null);
+    setOpcaoChart(OPCOES_CHART[0].value);
     setSuccessMsg(null);
     setErrorMsg(null);
   };
@@ -332,6 +338,11 @@ export const Gestao: React.FC = () => {
       setErrorMsg("Informe o Título da Música.");
       return;
     }
+    const precisaReferencia = opcaoChart !== OPCOES_CHART[0].value;
+    if (precisaReferencia && !musicaReferencia) {
+      setErrorMsg("Selecione qual música existente essa opção se refere.");
+      return;
+    }
 
     setIsSubmitting(true);
     setUploadProgress("Fazendo upload da capa...");
@@ -372,6 +383,9 @@ export const Gestao: React.FC = () => {
         letra: letraInput.trim(),
         nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
         jogadorId: telegramUser?.id ? String(telegramUser.id) : "",
+        musicaReferencia: musicaReferencia
+          ? `${musicaReferencia.artist} - ${musicaReferencia.title}`
+          : "",
       };
 
       const res = await fetch("/api/gestao/musica", {
@@ -391,6 +405,9 @@ export const Gestao: React.FC = () => {
       setCapaPreview(null);
       setMediaFile(null);
       setParticipantes([""]);
+      setMusicaReferenciaQuery("");
+      setMusicaReferencia(null);
+      setOpcaoChart(OPCOES_CHART[0].value);
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro inesperado ao publicar música.");
@@ -846,6 +863,80 @@ export const Gestao: React.FC = () => {
               ))}
             </div>
           </div>
+
+          {/* SELEÇÃO DE MÚSICA EXISTENTE — obrigatório para (b) e (c) */}
+          {opcaoChart !== OPCOES_CHART[0].value && (
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                {opcaoChart === OPCOES_CHART[1].value
+                  ? "Qual música você quer substituir?"
+                  : "A qual música lançada os comentários devem valer?"}
+              </label>
+              {musicaReferencia ? (
+                <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+                  <span className="text-sm text-white font-bold truncate">
+                    {musicaReferencia.artist} - {musicaReferencia.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMusicaReferencia(null);
+                      setMusicaReferenciaQuery("");
+                    }}
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
+                  >
+                    Trocar
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={musicaReferenciaQuery}
+                    onChange={(e) => setMusicaReferenciaQuery(e.target.value)}
+                    placeholder="Busque pelo título ou artista..."
+                    className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                  />
+                  {musicaReferenciaQuery.trim().length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
+                      {catalogSongs
+                        .filter((s) => {
+                          const q = musicaReferenciaQuery.trim().toLowerCase();
+                          return (
+                            s.title?.toLowerCase().includes(q) ||
+                            s.artist?.toLowerCase().includes(q)
+                          );
+                        })
+                        .slice(0, 20)
+                        .map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              setMusicaReferencia(s);
+                              setMusicaReferenciaQuery("");
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
+                          >
+                            <span className="font-bold">{s.artist}</span> - {s.title}
+                          </button>
+                        ))}
+                      {catalogSongs.filter((s) => {
+                        const q = musicaReferenciaQuery.trim().toLowerCase();
+                        return (
+                          s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q)
+                        );
+                      }).length === 0 && (
+                        <p className="px-4 py-3 text-xs text-neutral-500 italic">
+                          Nenhuma música encontrada.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* PARTICIPANTES (FEAT) */}
           <div className="space-y-3">

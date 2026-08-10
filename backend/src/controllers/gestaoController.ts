@@ -15,6 +15,9 @@ export interface CreateSongPayload {
   nomeJogador: string;
   jogadorId?: string;
   pendente?: string; // "Sim" | "Não"
+  // "Artista - Título" da música existente referenciada, obrigatório quando
+  // opcaoChart é (b) substituir ou (c) vincular comentários.
+  musicaReferencia?: string;
 }
 
 export interface CreateVideoPayload {
@@ -80,6 +83,7 @@ export async function createSongController(request: Request): Promise<Response> 
       nomeJogador,
       jogadorId = "",
       pendente = "Não",
+      musicaReferencia = "",
     } = body;
 
     if (!tituloMusica || !artistaPrincipal || !nomeJogador) {
@@ -107,7 +111,8 @@ export async function createSongController(request: Request): Promise<Response> 
     // cabeçalho oficial (Data, ID do tópico, ID do arquivo, Capa, Letra,
     // Comentários para, ID do Criador, Nome, TIPO DE SINGLE, TIPO DE MÚSICA,
     // ALBUM, WEEKS, WEEKS VIDEO, ACT PRINCIPAL, ARTISTA 2-6, GÊNERO, Ordem,
-    // Metacritic por jogador, Média Metacritic, Pendente?).
+    // Metacritic por jogador, Média Metacritic, Pendente?, Referência
+    // (Substituição/Vínculo) — só preenchida quando opcaoChart é (b) ou (c)).
     try {
       await googleSheetsService.principal.appendRow("Musicas", [
         dataFormatada, // A - Data de lançamento
@@ -134,6 +139,7 @@ export async function createSongController(request: Request): Promise<Response> 
         "", // V - Metacritic por jogador
         "", // W - Média Metacritic
         pendente, // X - Pendente?
+        musicaReferencia || "", // Y - Referência (Substituição/Vínculo)
       ]);
     } catch (err) {
       console.warn("[createSongController] Erro ao gravar em Musicas (Principal):", err);
@@ -168,7 +174,7 @@ export async function createSongController(request: Request): Promise<Response> 
             fullTitle, // B - Título da música
             tipoSingle || "LEAD SINGLE", // C - Tipo de Single
             tipoMusica || "SOLO", // D - Tipo de Música
-            "", // E
+            musicaReferencia || "", // E - Música referenciada (substituição/vínculo)
             "", // F
             "", // G
             artistaPrincipal, // H - Nome do Artista Principal
@@ -194,6 +200,7 @@ export async function createSongController(request: Request): Promise<Response> 
         nomeJogador,
         fullTitle,
         "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+        musicaReferencia || "",
       ]);
     } catch (err) {
       console.warn("[createSongController] Erro ao gravar no Audit Log REGISTRO:", err);
