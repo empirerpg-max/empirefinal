@@ -5,8 +5,8 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch tabs
+      - name: Dump ARTISTAS
         run: |
-          echo "=== TABS ==="
-          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/tabs"
+          echo "=== ARTISTAS ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/dump?sheet=ARTISTAS"
           echo ""
