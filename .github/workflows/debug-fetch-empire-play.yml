@@ -1,0 +1,17 @@
+name: Debug Fetch Empire Play
+on:
+  workflow_dispatch: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch videos
+        run: |
+          echo "=== VIDEOS ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/videos"
+          echo ""
+      - name: Fetch musicas
+        run: |
+          echo "=== MUSICAS ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/musicas"
+          echo ""
