@@ -1,0 +1,12 @@
+name: Debug Identidade
+on:
+  workflow_dispatch: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump Identidade
+        run: |
+          echo "=== Identidade ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/identidade"
+          echo ""
