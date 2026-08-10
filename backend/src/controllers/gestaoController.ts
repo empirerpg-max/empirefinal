@@ -181,26 +181,29 @@ export async function createSongController(request: Request): Promise<Response> 
       // opção b), em vez de gravar "Não" explicitamente.
       const substituir = (opcaoChart || "").trim().startsWith("b)") ? "Sim" : "Não";
 
+      // Cabeçalho real confirmado (linha 1 da aba): "", Título, Tipo de
+      // Single, Tipo de Música, ÁLBUM, "", "", ACT PRINCIPAL, ARTISTA 2..6,
+      // SUBSTITUIR NOS CHARTS?, Por qual música?, ENVIAR.
       // B, C, D, E, F, G, H, I, J, K, L, M, N, O, P
       await googleSheetsService.registrosCharts.updateValues(
         "REGISTRO DE MÚSICA",
         `B${targetRow}:P${targetRow}`,
         [
           [
-            fullTitle, // B - Título da música
+            fullTitle, // B - Título
             tipoSingle || "LEAD SINGLE", // C - Tipo de Single
             tipoMusica || "SOLO", // D - Tipo de Música
-            musicaReferencia || "", // E - Música referenciada (substituição/vínculo)
+            "", // E - ÁLBUM (não coletado neste formulário)
             "", // F
             "", // G
-            artistaPrincipal, // H - Nome do Artista Principal
+            artistaPrincipal, // H - ACT PRINCIPAL
             participantesLimpos[0] || "", // I - Artista 2
             participantesLimpos[1] || "", // J - Artista 3
             participantesLimpos[2] || "", // K - Artista 4
             participantesLimpos[3] || "", // L - Artista 5
-            "", // M
+            participantesLimpos[4] || "", // M - Artista 6
             substituir, // N - SUBSTITUIR NOS CHARTS?
-            "", // O
+            musicaReferencia || "", // O - Por qual música?
             "OK", // P - ENVIAR
           ],
         ],
