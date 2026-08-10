@@ -615,6 +615,7 @@ export const Gestao: React.FC = () => {
         capaUrl,
         encartesUrls,
         nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
+        jogadorId: telegramUser?.id ? String(telegramUser.id) : "",
         faixas: faixasConfig,
       };
 

@@ -50,6 +50,7 @@ export interface CreateAlbumPayload {
   capaUrl: string;
   encartesUrls?: string[];
   nomeJogador: string;
+  jogadorId?: string;
   faixas: TrackItemPayload[];
 }
 
@@ -375,6 +376,7 @@ export async function createAlbumController(request: Request): Promise<Response>
       capaUrl,
       encartesUrls = [],
       nomeJogador,
+      jogadorId = "",
       faixas = [],
     } = body;
 
@@ -461,7 +463,7 @@ export async function createAlbumController(request: Request): Promise<Response>
         albumTopicId, // B - ID do tópico
         capaUrl || "", // C - Capa
         albumTopicId, // D - Comentários para
-        "", // E - ID do Criador
+        jogadorId || "", // E - ID do Criador
         nomeJogador, // F - Nome do criador
         albumFullTitle, // G - Nome
         "", // H - Metacritic por jogador
