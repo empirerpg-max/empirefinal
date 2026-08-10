@@ -486,15 +486,34 @@ function RootComponent() {
 // existia (setUserManually/tg_user_cache), então comentários, Gestão,
 // reações etc seguem funcionando sem precisar reescrever cada um deles.
 function AuthGate() {
-  const [authUser, setAuthUser] = useState<LoginResult | null>(() => getStoredLogin());
+  // Sincroniza o tg_user_cache (mecanismo de identidade usado por Gestão,
+  // comentários, reações etc.) já na inicialização, de forma síncrona —
+  // ANTES de RootInner montar e seu próprio useTelegramUser() ler o
+  // localStorage. Sem isso, um usuário que já estava logado antes
+  // (empire_login_user presente, mas tg_user_cache ausente/desatualizado —
+  // ex: cache limpo, outra aba, versão antiga do app) nunca tinha o cache
+  // recriado a tempo (um useEffect aqui rodaria DEPOIS do efeito interno de
+  // RootInner, tarde demais), e o resto do app caía no fallback
+  // "guest"/"Artista Independente" mesmo com o login correto.
+  const [authUser] = useState<LoginResult | null>(() => {
+    const stored = getStoredLogin();
+    if (stored) {
+      localStorage.setItem(
+        "tg_user_cache",
+        JSON.stringify({ id: stored.id, name: stored.nome || "Usuário Manual", isTest: true }),
+      );
+    }
+    return stored;
+  });
+  const [loggedInUser, setLoggedInUser] = useState<LoginResult | null>(authUser);
   const { setUserManually } = useTelegramUser();
 
-  if (!authUser) {
+  if (!loggedInUser) {
     return (
       <LoginScreen
         onSuccess={(user) => {
           setUserManually(user.id, user.nome);
-          setAuthUser(user);
+          setLoggedInUser(user);
         }}
       />
     );
