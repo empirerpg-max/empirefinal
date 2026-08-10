@@ -1,0 +1,27 @@
+name: Debug Comments 444 Check
+on:
+  workflow_dispatch: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan comment sheets for short/junk comments
+        env:
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          for ep in "musicas/musicas_1" "videos/videos_1" "albuns/albuns_1"; do
+            echo "=== $ep ==="
+            curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/forum/$ep" | python3 -c "
+import json,sys
+try:
+    d = json.load(sys.stdin)
+except Exception as e:
+    print('parse error', e); sys.exit(0)
+comments = d.get('data', {}).get('comments', [])
+print('total comments:', len(comments))
+for c in comments:
+    txt = (c.get('comentario') or '').strip()
+    if len(txt) <= 5:
+        print('JUNK?', json.dumps(c, ensure_ascii=False))
+"
+          done
