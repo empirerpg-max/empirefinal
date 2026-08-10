@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Disc,
   Music,
@@ -106,6 +106,19 @@ export const Gestao: React.FC = () => {
 
   // Músicas do catálogo para seleção
   const [catalogSongs, setCatalogSongs] = useState<ExistingTrack[]>([]);
+
+  // Nomes de artistas já conhecidos no catálogo — sugestões (datalist) pros
+  // campos de participante, que antes eram texto livre sem nenhuma lista.
+  const knownArtists = useMemo(() => {
+    const names = new Set<string>();
+    catalogSongs.forEach((s) => {
+      if (s.artist) names.add(s.artist);
+    });
+    if (profile?.associatedArtists) {
+      profile.associatedArtists.forEach((a) => names.add(a));
+    }
+    return Array.from(names).sort();
+  }, [catalogSongs, profile]);
 
   // States Comuns
   const [artistaResponsavel, setArtistaResponsavel] = useState<string>("");
@@ -658,6 +671,14 @@ export const Gestao: React.FC = () => {
 
   return (
     <div className="space-y-6 text-white max-w-5xl mx-auto">
+      {/* Sugestões de artistas já conhecidos pros campos de participante
+          (Feat) — antes era texto livre sem nenhuma lista. */}
+      <datalist id="participantes-conhecidos">
+        {knownArtists.map((nome) => (
+          <option key={nome} value={nome} />
+        ))}
+      </datalist>
+
       {/* HEADER DA GESTÃO */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-neutral-900/80 border border-white/10 p-6 rounded-3xl backdrop-blur-md">
         <div>
@@ -956,6 +977,7 @@ export const Gestao: React.FC = () => {
                   value={part}
                   onChange={(e) => handleParticipanteChange(idx, e.target.value)}
                   placeholder={`Artista participante #${idx + 2}`}
+                  list="participantes-conhecidos"
                   className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
                 />
                 {participantes.length > 1 && (
@@ -1182,6 +1204,7 @@ export const Gestao: React.FC = () => {
                   value={part}
                   onChange={(e) => handleParticipanteChange(idx, e.target.value)}
                   placeholder={`Participante #${idx + 2}`}
+                  list="participantes-conhecidos"
                   className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
                 />
                 {participantes.length > 1 && (
@@ -1373,6 +1396,7 @@ export const Gestao: React.FC = () => {
                   value={part}
                   onChange={(e) => handleParticipanteChange(idx, e.target.value)}
                   placeholder={`Participante #${idx + 2}`}
+                  list="participantes-conhecidos"
                   className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
                 />
                 {participantes.length > 1 && (
