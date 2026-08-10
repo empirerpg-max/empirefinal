@@ -225,6 +225,8 @@ export const Gestao: React.FC = () => {
       };
     }
 
+    setErrorMsg(null);
+
     fetch(`/api/user/me?telegram_id=${tgId}`, {
       headers: { "x-telegram-id": tgId },
     })
