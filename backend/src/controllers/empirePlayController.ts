@@ -360,6 +360,7 @@ function buildCleanItem(
     "ref_telegram_id",
     "telegram_topic_id",
     "id_do_topico",
+    "message_thread_id",
   ]);
   const releaseDate = getValue(record, [
     "data_de_lancamento",
@@ -813,7 +814,14 @@ export async function getEmpirePlayForumTopicController(
     let targetMediaIndex = mediaRecords.findIndex((rec, idx) => {
       const item = buildCleanItem(sheetMedia, rec, idx);
       const recTopicId =
-        getValue(rec, ["id_do_topico", "id_topico", "id", "topico_id", "topico"]) || "";
+        getValue(rec, [
+          "id_do_topico",
+          "id_topico",
+          "id",
+          "topico_id",
+          "topico",
+          "message_thread_id",
+        ]) || "";
       return (
         item.id === topicIdParam ||
         normalizeComparison(item.title) === normTopicSearch ||
@@ -832,7 +840,13 @@ export async function getEmpirePlayForumTopicController(
     // ID do tópico REAL da planilha (não o id sintético gerado pelo app) — é
     // esse valor que deve ser usado como chave nas abas Comentarios_*.
     const realTopicId = rawMedia
-      ? getValue(rawMedia, ["id_do_topico", "id_topico", "topico_id", "topico"]) || ""
+      ? getValue(rawMedia, [
+          "id_do_topico",
+          "id_topico",
+          "topico_id",
+          "topico",
+          "message_thread_id",
+        ]) || ""
       : "";
     const mediaTopicId = realTopicId || (mediaItem ? mediaItem.id : "");
     if (mediaItem && realTopicId) {
@@ -853,6 +867,7 @@ export async function getEmpirePlayForumTopicController(
             "id",
             "topico",
             "comentarios_para",
+            "message_thread_id",
           ]) || "";
         const titleVal = getValue(rec, ["titulo", "title", "titulo_media", "nome", "info"]) || "";
 
