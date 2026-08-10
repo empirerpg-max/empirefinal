@@ -34,7 +34,6 @@ import { reportVideoIssueController } from "../controllers/reportVideoController
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
 import { loginController } from "../controllers/authController";
 import { getMeusArtistasNomesController } from "../controllers/artistasController";
-import { debugDumpMusicVideosHeaderController } from "../controllers/debugTabsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -61,7 +60,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   const supportedPaths = new Set([
     "/api/auth/login",
     "/api/artistas/meus-nomes",
-    "/api/debug/music-videos-header",
     "/api/user/me",
     "/api/top-playlists",
     "/api/lancamentos",
@@ -249,9 +247,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         break;
       case "/api/gestao/meus-albuns":
         response = await getMeusAlbunsController();
-        break;
-      case "/api/debug/music-videos-header":
-        response = await debugDumpMusicVideosHeaderController();
         break;
       case "/api/top-playlists":
         response = await getTopPlaylistsController();

@@ -284,6 +284,7 @@ export async function createVideoController(request: Request): Promise<Response>
       tipoVideo,
       categoriaVideo,
       musicaVinculada = "",
+      capaUrl = "",
       mediaUrl = "",
       nomeJogador,
     } = body;
@@ -328,6 +329,10 @@ export async function createVideoController(request: Request): Promise<Response>
         "", // N - Likes por jogador
         "", // O - Média Likes
         musicaVinculada || fullTitle, // P - Nome original nos charts
+        "", // Q - ID da mensagem (reconvertido)
+        "", // R - Status da reconversão
+        "", // S - Reportado em
+        capaUrl || "", // T - Thumb (vira a capa/fundo do vídeo no catálogo)
       ]);
     } catch (err) {
       console.warn("[createVideoController] Erro ao gravar em Music Videos:", err);
