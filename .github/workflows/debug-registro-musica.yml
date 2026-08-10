@@ -1,0 +1,11 @@
+name: Debug Registro Musica
+on:
+  workflow_dispatch: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump REGISTRO DE MÚSICA
+        run: |
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/dump?sheet=REGISTRO%20DE%20M%C3%9ASICA"
+          echo ""
