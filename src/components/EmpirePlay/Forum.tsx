@@ -73,29 +73,6 @@ export interface ForumProps {
 import { VideoPlayer, PlayableVideo } from "./VideoPlayer";
 import { type PlayableTrack } from "./MusicPlayer";
 
-function getEmbedMediaUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  const trimmed = url.trim();
-  if (/youtube\.com|youtu\.be/i.test(trimmed)) {
-    let videoId = "";
-    if (trimmed.includes("youtu.be/")) {
-      videoId = trimmed.split("youtu.be/")[1]?.split("?")[0] || "";
-    } else if (trimmed.includes("v=")) {
-      videoId = trimmed.split("v=")[1]?.split("&")[0] || "";
-    } else if (trimmed.includes("embed/")) {
-      videoId = trimmed.split("embed/")[1]?.split("?")[0] || "";
-    } else if (trimmed.includes("shorts/")) {
-      videoId = trimmed.split("shorts/")[1]?.split("?")[0] || "";
-    }
-    return videoId ? `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0` : trimmed;
-  }
-  if (/drive\.google\.com|googleusercontent\.com/i.test(trimmed) || /^[-\w]{25,}$/.test(trimmed)) {
-    const match = trimmed.match(/[-\w]{25,}/);
-    return match ? `https://drive.google.com/file/d/${match[0]}/preview` : trimmed;
-  }
-  return trimmed;
-}
-
 export const Forum: React.FC<ForumProps> = ({
   onPlayTrack,
   onPlayVideo,
@@ -499,25 +476,39 @@ export const Forum: React.FC<ForumProps> = ({
               {/* CAPA OU PLAYER */}
               <div className="lg:col-span-5 space-y-3 sm:space-y-4">
                 {activeSubmenu === "videos" ? (
-                  /* PLAYER DE VÍDEO / MV */
-                  <div className="w-full max-w-md sm:max-w-none mx-auto bg-black rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 relative shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 group min-h-[250px] flex items-center justify-center">
-                  {selectedTopic.link ? (
-                    <iframe
-                      src={getEmbedMediaUrl(selectedTopic.link)}
-                      title={selectedTopic.title}
-                      className="w-full aspect-video border-0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-neutral-950">
-                      <Tv className="size-10 text-neutral-600 mb-2" />
-                      <p className="text-xs text-neutral-400 font-medium">
-                        Player indisponível no momento.
-                      </p>
-                    </div>
-                  )}
-                </div>
+                  /* CAPA DE VÍDEO — abre no mesmo player nativo do app usado
+                     no catálogo (nunca um iframe cru do Drive/YouTube aqui;
+                     o VideoPlayer já resolve Drive/Telegram via proxy do
+                     Worker e YouTube/Vimeo via embed oficial). */
+                  <button
+                    type="button"
+                    onClick={() => handleVideoPlay(selectedTopic)}
+                    disabled={!selectedTopic.link}
+                    className="w-full max-w-md sm:max-w-none mx-auto aspect-video bg-black rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 relative shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 group flex items-center justify-center disabled:cursor-not-allowed"
+                  >
+                    {selectedTopic.cover ? (
+                      <img
+                        src={driveImg(selectedTopic.cover, 800) || undefined}
+                        alt={selectedTopic.title}
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-950" />
+                    )}
+                    <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors" />
+                    {selectedTopic.link ? (
+                      <span className="relative size-16 sm:size-20 rounded-full bg-red-600 group-hover:bg-red-500 text-white flex items-center justify-center shadow-2xl shadow-red-600/30 scale-95 group-hover:scale-100 transition-all">
+                        <Play className="size-7 sm:size-9 ml-0.5 sm:ml-1 fill-white" />
+                      </span>
+                    ) : (
+                      <div className="relative flex flex-col items-center text-center p-6">
+                        <Tv className="size-10 text-neutral-400 mb-2" />
+                        <p className="text-xs text-neutral-300 font-medium">
+                          Player indisponível no momento.
+                        </p>
+                      </div>
+                    )}
+                  </button>
               ) : (
                 /* CAPA DE MÚSICA / ÁLBUM — em destaque, estilo capa de disco */
                 <div className="relative aspect-square w-full max-w-[280px] sm:max-w-[340px] md:max-w-[400px] mx-auto rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 bg-neutral-950 group">
