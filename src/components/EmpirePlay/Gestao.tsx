@@ -20,7 +20,7 @@ import {
 import { useTelegramUser } from "@/lib/telegram";
 import { EditModal } from "./EditModal";
 
-export type TabType = "musica" | "video" | "music-video" | "album";
+export type TabType = "musica" | "video" | "album";
 
 export interface UserProfile {
   artistName: string;
@@ -167,15 +167,15 @@ export const Gestao: React.FC = () => {
   const [musicaReferenciaQuery, setMusicaReferenciaQuery] = useState<string>("");
   const [musicaReferencia, setMusicaReferencia] = useState<ExistingTrack | null>(null);
 
-  // Form Vídeo
+  // Form Vídeo (unificado — Vídeos e Music Video são a mesma aba de
+  // cadastro, diferenciados pela Categoria/Tipo de Vídeo selecionada)
   const [tituloVideo, setTituloVideo] = useState<string>("");
   const [categoriaVideo, setCategoriaVideo] = useState<string>("Video");
-  const [musicaReferenteInput, setMusicaReferenteInput] = useState<string>("");
+  const [musicaVinculadaQuery, setMusicaVinculadaQuery] = useState<string>("");
+  const [musicaVinculadaSelecionada, setMusicaVinculadaSelecionada] = useState<ExistingTrack | null>(
+    null,
+  );
   const [descricaoInput, setDescricaoInput] = useState<string>("");
-
-  // Form Music Video
-  const [tituloMV, setTituloMV] = useState<string>("");
-  const [musicaVinculadaMV, setMusicaVinculadaMV] = useState<string>("");
 
   // Form Álbum
   const [tituloAlbum, setTituloAlbum] = useState<string>("");
@@ -197,7 +197,8 @@ export const Gestao: React.FC = () => {
     setMediaUrlInput("");
     setLetraInput("");
     setDescricaoInput("");
-    setMusicaReferenteInput("");
+    setMusicaVinculadaQuery("");
+    setMusicaVinculadaSelecionada(null);
     setEncartesFiles([]);
     setParticipantes([""]);
     setMusicaReferenciaQuery("");
@@ -485,6 +486,10 @@ export const Gestao: React.FC = () => {
       setErrorMsg("Informe o Título do Vídeo.");
       return;
     }
+    if (categoriaVideo === "Music Video" && !musicaVinculadaSelecionada) {
+      setErrorMsg("Selecione a Música Vinculada para um Music Video.");
+      return;
+    }
 
     setIsSubmitting(true);
     setUploadProgress("Fazendo upload da capa do vídeo...");
@@ -511,11 +516,15 @@ export const Gestao: React.FC = () => {
 
       setUploadProgress("Cadastrando vídeo...");
 
+      const musicaVinculada = musicaVinculadaSelecionada
+        ? `${musicaVinculadaSelecionada.artist} - ${musicaVinculadaSelecionada.title}`
+        : "";
+
       const payload = {
         tituloVideo,
         artistaResponsavel,
         categoriaVideo,
-        musicaVinculada: musicaReferenteInput.trim(),
+        musicaVinculada,
         descricao: descricaoInput.trim(),
         participantes: participantes.filter((p) => p.trim().length > 0),
         capaUrl,
@@ -534,8 +543,14 @@ export const Gestao: React.FC = () => {
         throw new Error(data.error || "Erro ao registrar vídeo.");
       }
 
-      setSuccessMsg("Vídeo publicado com sucesso!");
+      setSuccessMsg(
+        categoriaVideo === "Music Video"
+          ? "Music Video publicado com sucesso!"
+          : "Vídeo publicado com sucesso!",
+      );
       setTituloVideo("");
+      setMusicaVinculadaQuery("");
+      setMusicaVinculadaSelecionada(null);
       setCapaFile(null);
       setCapaPreview(null);
       setMediaFile(null);
@@ -543,84 +558,6 @@ export const Gestao: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro ao publicar vídeo.");
-    } finally {
-      setIsSubmitting(false);
-      setUploadProgress(null);
-    }
-  };
-
-  // Submeter Music Video (MV)
-  const handleSubmitMusicVideo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSuccessMsg(null);
-    setErrorMsg(null);
-
-    if (!artistaResponsavel.trim()) {
-      setErrorMsg("Selecione ou informe o Artista Responsável.");
-      return;
-    }
-    if (!tituloMV.trim()) {
-      setErrorMsg("Informe o Título do Music Video.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setUploadProgress("Fazendo upload da thumbnail/capa...");
-
-    try {
-      let capaUrl = "";
-      if (capaFile) {
-        capaUrl = await handleUploadToDrive(
-          capaFile,
-          "video",
-          `CAPA_MV_${artistaResponsavel}_${tituloMV}_${Date.now()}.jpg`,
-        );
-      }
-
-      let mediaUrl = mediaUrlInput.trim();
-      if (mediaFile) {
-        setUploadProgress("Fazendo upload do arquivo de vídeo...");
-        mediaUrl = await handleUploadToDrive(
-          mediaFile,
-          "video",
-          `MV_${artistaResponsavel}_${tituloMV}_${Date.now()}`,
-        );
-      }
-
-      setUploadProgress("Cadastrando Music Video...");
-
-      const payload = {
-        tituloMusicVideo: tituloMV,
-        artistaResponsavel,
-        musicaVinculada: musicaVinculadaMV || tituloMV,
-        descricao: descricaoInput.trim(),
-        participantes: participantes.filter((p) => p.trim().length > 0),
-        capaUrl,
-        mediaUrl,
-        nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
-      };
-
-      const res = await fetch("/api/gestao/music-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Erro ao registrar Music Video.");
-      }
-
-      setSuccessMsg("Music Video publicado com sucesso!");
-      setTituloMV("");
-      setMusicaVinculadaMV("");
-      setCapaFile(null);
-      setCapaPreview(null);
-      setMediaFile(null);
-      setParticipantes([""]);
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || "Erro ao publicar Music Video.");
     } finally {
       setIsSubmitting(false);
       setUploadProgress(null);
@@ -739,7 +676,7 @@ export const Gestao: React.FC = () => {
       </div>
 
       {/* TABS DE SELEÇÃO */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-neutral-900/90 p-2 rounded-2xl border border-white/10">
+      <div className="grid grid-cols-3 gap-2 bg-neutral-900/90 p-2 rounded-2xl border border-white/10">
         <button
           onClick={() => {
             setActiveTab("musica");
@@ -768,21 +705,6 @@ export const Gestao: React.FC = () => {
         >
           <Tv className="size-4" />
           <span>Vídeos</span>
-        </button>
-
-        <button
-          onClick={() => {
-            setActiveTab("music-video");
-            resetFormState();
-          }}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
-            activeTab === "music-video"
-              ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
-              : "text-neutral-400 hover:text-white hover:bg-white/5"
-          }`}
-        >
-          <Film className="size-4" />
-          <span>Music Videos</span>
         </button>
 
         <button
@@ -1218,15 +1140,76 @@ export const Gestao: React.FC = () => {
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
               <Music className="size-4 text-emerald-400" />
-              Música Vinculada / Referente (Opcional)
+              Música Vinculada / Referente {categoriaVideo === "Music Video" ? "" : "(Opcional)"}
             </label>
-            <input
-              type="text"
-              value={musicaReferenteInput}
-              onChange={(e) => setMusicaReferenteInput(e.target.value)}
-              placeholder="Ex: Nome da música do catálogo"
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-            />
+            {musicaVinculadaSelecionada ? (
+              <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+                <span className="text-sm text-white font-bold truncate">
+                  {musicaVinculadaSelecionada.artist} - {musicaVinculadaSelecionada.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMusicaVinculadaSelecionada(null);
+                    setMusicaVinculadaQuery("");
+                  }}
+                  className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
+                >
+                  Trocar
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={musicaVinculadaQuery}
+                  onChange={(e) => setMusicaVinculadaQuery(e.target.value)}
+                  placeholder="Busque pelo título ou artista da música lançada..."
+                  className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                />
+                {musicaVinculadaQuery.trim().length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
+                    {myCatalogSongs
+                      .filter((s) => {
+                        const q = musicaVinculadaQuery.trim().toLowerCase();
+                        return (
+                          s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q)
+                        );
+                      })
+                      .slice(0, 20)
+                      .map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setMusicaVinculadaSelecionada(s);
+                            setMusicaVinculadaQuery("");
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
+                        >
+                          <span className="font-bold">{s.artist}</span> - {s.title}
+                        </button>
+                      ))}
+                    {myCatalogSongs.filter((s) => {
+                      const q = musicaVinculadaQuery.trim().toLowerCase();
+                      return (
+                        s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q)
+                      );
+                    }).length === 0 && (
+                      <p className="px-4 py-3 text-xs text-neutral-500 italic">
+                        Nenhuma música encontrada.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {categoriaVideo === "Music Video" && (
+              <p className="text-[11px] text-neutral-400">
+                Ao publicar, a linha dessa música na aba de Pontos será marcada como videoclipe
+                lançado.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -1353,204 +1336,12 @@ export const Gestao: React.FC = () => {
           >
             <Sparkles className="size-5" />
             <span>
-              {isSubmitting ? uploadProgress || "Enviando..." : "Publicar Vídeo Especial"}
+              {isSubmitting
+                ? uploadProgress || "Enviando..."
+                : categoriaVideo === "Music Video"
+                  ? "Publicar Music Video"
+                  : "Publicar Vídeo"}
             </span>
-          </button>
-        </form>
-      )}
-
-      {/* FORMULÁRIO DE MUSIC VIDEO */}
-      {activeTab === "music-video" && (
-        <form
-          onSubmit={handleSubmitMusicVideo}
-          className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-md"
-        >
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <User className="size-4 text-emerald-400" />
-              Artista Responsável
-            </label>
-            {profile?.associatedArtists && profile.associatedArtists.length > 0 ? (
-              <select
-                value={artistaResponsavel}
-                onChange={(e) => setArtistaResponsavel(e.target.value)}
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
-              >
-                {profile.associatedArtists.map((art) => (
-                  <option key={art} value={art}>
-                    {art}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={artistaResponsavel}
-                onChange={(e) => setArtistaResponsavel(e.target.value)}
-                placeholder="Ex: Taylor Swift"
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-              />
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <Film className="size-4 text-emerald-400" />
-              Título do Music Video
-            </label>
-            <input
-              type="text"
-              value={tituloMV}
-              onChange={(e) => setTituloMV(e.target.value)}
-              placeholder="Ex: Anti-Hero (Official Music Video)"
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-            />
-            <p className="text-[11px] text-neutral-400 leading-relaxed">
-              Só o título — o artista já vem do campo acima e é adicionado automaticamente.
-              <br />
-              <span className="text-emerald-400 font-bold">Certo:</span> "Anti-Hero (Official Music Video)"
-              <span className="text-neutral-600"> → vira "Taylor Swift - Anti-Hero (Official Music Video)"</span>
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <Music className="size-4 text-emerald-400" />
-              Música Vinculada
-            </label>
-            <input
-              type="text"
-              value={musicaVinculadaMV}
-              onChange={(e) => setMusicaVinculadaMV(e.target.value)}
-              placeholder="Ex: Anti-Hero"
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <FileText className="size-4 text-emerald-400" />
-              Direção / Roteiro / Descrição do Clipe (Opcional)
-            </label>
-            <textarea
-              rows={3}
-              value={descricaoInput}
-              onChange={(e) => setDescricaoInput(e.target.value)}
-              placeholder="Descreva o conceito visual, diretor, atores e enredo do clipe..."
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl p-4 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-
-          {/* PARTICIPANTES */}
-          <div className="space-y-3">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-              Participantes (Artistas 2 a 6)
-            </label>
-            {participantes.map((part, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={part}
-                  onChange={(e) => handleParticipanteChange(idx, e.target.value)}
-                  placeholder={`Participante #${idx + 2}`}
-                  list="participantes-conhecidos"
-                  className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                />
-                {participantes.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveParticipante(idx)}
-                    className="p-2.5 text-red-400 hover:bg-red-500/10 rounded-xl border border-red-500/20 transition"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                )}
-              </div>
-            ))}
-            {participantes.length < 5 && (
-              <button
-                type="button"
-                onClick={handleAddParticipante}
-                className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition"
-              >
-                <Plus className="size-4" />
-                <span>Adicionar Participante</span>
-              </button>
-            )}
-          </div>
-
-          {/* UPLOAD DE ARQUIVOS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                Thumbnail / Capa do Music Video
-              </label>
-              <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
-                {capaPreview ? (
-                  <img
-                    src={capaPreview}
-                    alt="Capa Preview"
-                    className="size-16 object-cover rounded-xl border border-white/10"
-                  />
-                ) : (
-                  <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
-                    <ImageIcon className="size-6" />
-                  </div>
-                )}
-                <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
-                  <Upload className="size-4 text-emerald-400" />
-                  <span>Selecione a Capa</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && handleCapaSelect(e.target.files[0])}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                Arquivo de Vídeo ou Link (YouTube / Drive)
-              </label>
-              <input
-                type="text"
-                value={mediaUrlInput}
-                onChange={(e) => setMediaUrlInput(e.target.value)}
-                placeholder="Cole o Link (YouTube, Drive, MP4 URL) ou selecione abaixo"
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none mb-2"
-              />
-              <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
-                <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
-                  <FileVideo className="size-6" />
-                </div>
-                <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
-                  <Upload className="size-4 text-emerald-400" />
-                  <span>Upload de Arquivo</span>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              {mediaFile && (
-                <p className="text-[11px] text-emerald-400 truncate">
-                  Selecionado: {mediaFile.name}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <Sparkles className="size-5" />
-            <span>{isSubmitting ? uploadProgress || "Enviando..." : "Publicar Music Video"}</span>
           </button>
         </form>
       )}

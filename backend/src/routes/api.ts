@@ -11,7 +11,6 @@ import {
 } from "../controllers/forumController";
 import {
   createAlbumController,
-  createMusicVideoController,
   createSongController,
   createVideoController,
   uploadDriveController,
@@ -32,7 +31,6 @@ import { reportVideoIssueController } from "../controllers/reportVideoController
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
 import { loginController } from "../controllers/authController";
 import { getMeusArtistasNomesController } from "../controllers/artistasController";
-import { debugDumpPontosController } from "../controllers/debugTabsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -59,7 +57,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   const supportedPaths = new Set([
     "/api/auth/login",
     "/api/artistas/meus-nomes",
-    "/api/debug/pontos",
     "/api/user/me",
     "/api/top-playlists",
     "/api/lancamentos",
@@ -72,7 +69,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/forum/comment-reaction",
     "/api/gestao/musica",
     "/api/gestao/video",
-    "/api/gestao/music-video",
     "/api/gestao/album",
     "/api/gestao/upload",
     "/api/editar",
@@ -169,14 +165,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await createVideoController(request);
-  } else if (url.pathname === "/api/gestao/music-video") {
-    if (request.method !== "POST") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/gestao/music-video." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
-    response = await createMusicVideoController(request);
   } else if (url.pathname === "/api/gestao/album") {
     if (request.method !== "POST") {
       return new Response(
@@ -239,9 +227,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         break;
       case "/api/artistas/meus-nomes":
         response = await getMeusArtistasNomesController(request);
-        break;
-      case "/api/debug/pontos":
-        response = await debugDumpPontosController();
         break;
       case "/api/top-playlists":
         response = await getTopPlaylistsController();
