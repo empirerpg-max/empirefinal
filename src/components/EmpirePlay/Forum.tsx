@@ -10,7 +10,6 @@ import {
   Pause,
   ChevronLeft,
   Calendar,
-  User,
   ListMusic,
   FileText,
   Volume2,
@@ -60,6 +59,37 @@ interface ForumTopicItem {
 }
 
 const FORUM_SUBMENUS: ForumSubmenu[] = ["musicas", "videos", "albuns"];
+
+// Telegram atribui uma cor fixa por usuário (derivada do id) pro nome e pro
+// avatar em grupos/tópicos — replicamos a mesma ideia aqui com a paleta do
+// app (emerald como cor "própria" de destaque continua reservada ao score).
+const TELEGRAM_NAME_COLORS = [
+  "#FF6B6B",
+  "#4ECDC4",
+  "#C084FC",
+  "#F7B733",
+  "#5B9BFF",
+  "#FF8FB1",
+  "#6FCF97",
+];
+
+function nameColorFor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  return TELEGRAM_NAME_COLORS[Math.abs(hash) % TELEGRAM_NAME_COLORS.length];
+}
+
+function initialsFor(name: string): string {
+  const clean = (name || "?").trim();
+  if (!clean) return "?";
+  const parts = clean.split(/\s+/);
+  const first = parts[0]?.[0] || "?";
+  const second = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
+  return (first + second).toUpperCase();
+}
 
 export interface ForumProps {
   onPlayTrack?: (track: PlayableTrack, playlist: PlayableTrack[]) => void;
@@ -685,7 +715,9 @@ export const Forum: React.FC<ForumProps> = ({
               </button>
             </div>
 
-            {/* LISTA DE COMENTÁRIOS */}
+            {/* LISTA DE COMENTÁRIOS — feed estilo tópico do Telegram: avatar +
+                nome colorido por usuário, bolha de mensagem com "rabinho",
+                hora dentro da bolha, reações como pills logo abaixo. */}
             {loadingComments ? (
               <div className="p-6 text-center text-xs text-neutral-400 bg-neutral-800/30 rounded-2xl border border-white/5">
                 Carregando comentários...
@@ -695,44 +727,56 @@ export const Forum: React.FC<ForumProps> = ({
                 Nenhum comentário registrado ainda. Seja o primeiro a avaliar!
               </div>
             ) : (
-              <div className="space-y-2.5 sm:space-y-3">
-                {topicComments.map((c) => (
-                  <div
-                    key={c.id}
-                    className="p-3.5 sm:p-5 bg-neutral-800/50 border border-white/5 rounded-2xl space-y-1.5 sm:space-y-2"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-emerald-400 flex items-center gap-1.5">
-                        <User className="size-3.5" />
-                        {c.jogador}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] sm:text-[11px] text-neutral-500">
-                          {c.data}
-                        </span>
-                        {c.nota && (
-                          <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold text-[10px] sm:text-[11px] rounded-md border border-emerald-500/20">
-                            {activeSubmenu === "videos"
-                              ? `${c.nota} Likes`
-                              : `Nota: ${c.nota}`}
+              <div className="flex flex-col gap-3 sm:gap-4">
+                {topicComments.map((c) => {
+                  const color = nameColorFor(c.jogador || c.id);
+                  return (
+                    <div key={c.id} className="flex items-start gap-2 sm:gap-2.5">
+                      <div
+                        className="size-8 sm:size-9 rounded-full grid place-items-center flex-shrink-0 text-[11px] sm:text-xs font-black text-white mt-0.5"
+                        style={{ backgroundColor: color }}
+                      >
+                        {initialsFor(c.jogador)}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="rounded-2xl rounded-tl-sm bg-neutral-800/70 border border-white/5 px-3 py-2 sm:px-4 sm:py-2.5 inline-block max-w-full">
+                          <div className="flex items-baseline gap-2 mb-0.5">
+                            <span
+                              className="text-[12px] sm:text-[13px] font-bold truncate"
+                              style={{ color }}
+                            >
+                              {c.jogador}
+                            </span>
+                            {c.nota && (
+                              <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold text-[9px] sm:text-[10px] rounded border border-emerald-500/20 flex-shrink-0">
+                                {activeSubmenu === "videos" ? `${c.nota} likes` : `nota ${c.nota}`}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs sm:text-sm text-neutral-100 leading-relaxed whitespace-pre-wrap break-words">
+                            {c.comentario}
+                          </p>
+                          <span className="block text-right text-[10px] text-neutral-500 mt-1 select-none">
+                            {c.data}
                           </span>
+                        </div>
+
+                        {c.rowIndex && (
+                          <div className="mt-1 pl-1">
+                            <ReactionBar
+                              reactions={c.reactions}
+                              reactedBy={c.reactedBy}
+                              myId={myId}
+                              disabled={!myId}
+                              onToggle={(emoji) => handleToggleReaction(c, emoji)}
+                            />
+                          </div>
                         )}
                       </div>
                     </div>
-                    <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed">
-                      {c.comentario}
-                    </p>
-                    {c.rowIndex && (
-                      <ReactionBar
-                        reactions={c.reactions}
-                        reactedBy={c.reactedBy}
-                        myId={myId}
-                        disabled={!myId}
-                        onToggle={(emoji) => handleToggleReaction(c, emoji)}
-                      />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
