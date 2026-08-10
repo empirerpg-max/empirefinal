@@ -271,12 +271,24 @@ export const api = {
   call: <T = unknown>(params: Record<string, unknown>, opts: { cache?: boolean } = {}) =>
     call<T>(params, opts),
 
+  // Dono do artista agora vem da aba ARTISTAS da planilha "Usuários" (nosso
+  // Worker), não mais do Apps Script legado — que misturava donos errados
+  // (ex: artista de outro jogador aparecendo como "meu"). O Worker resolve
+  // o ID (telegram_id histórico, ou o próprio ID do login) pro nome do
+  // jogador e casa contra a aba ARTISTAS; aqui só cruzamos os nomes
+  // devolvidos com a lista completa de artistas (ainda vinda do Apps
+  // Script) pra ter os dados econômicos de cada um.
   async meusArtistas(telegramId: string): Promise<Artist[]> {
-    const data = await call<Record<string, unknown>[]>(
-      { acao: "meus_artistas", telegram_id: telegramId },
-      { cache: true },
-    );
-    return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
+    if (!telegramId || telegramId === "guest") return [];
+    const [nomesRes, todos] = await Promise.all([
+      fetch(`/api/artistas/meus-nomes?telegramId=${encodeURIComponent(telegramId)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+      api.listarTodos(),
+    ]);
+    const meusNomes: string[] = Array.isArray(nomesRes?.data) ? nomesRes.data : [];
+    const meusNomesNorm = new Set(meusNomes.map((n) => n.trim().toLowerCase()));
+    return todos.filter((a) => meusNomesNorm.has(a.nome.trim().toLowerCase()));
   },
   async listarTodos(): Promise<Artist[]> {
     const data = await call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true });
