@@ -155,10 +155,17 @@ function EmpirePlayInicio() {
         if (res && res.success) setMusicas((res.data || []).map(toPlayableTrack));
       })
       .catch(() => {});
-    fetch("/api/empire-play/music-videos")
+    // Vídeos e Music Videos foram consolidados num catálogo único
+    // ("Music Videos" na planilha, com tag por tipo) — filtra só a tag
+    // "Music Video" aqui, já que esse fallback é especificamente pro
+    // card "YouTube Hits".
+    fetch("/api/empire-play/videos")
       .then((r) => r.json())
       .then((res) => {
-        if (res && res.success) setMusicVideos((res.data || []).map(toPlayableVideo));
+        if (res && res.success) {
+          const all: PlayableVideo[] = (res.data || []).map(toPlayableVideo);
+          setMusicVideos(all.filter((v) => v.tipo_video === "Music Video"));
+        }
       })
       .catch(() => {});
   }, []);

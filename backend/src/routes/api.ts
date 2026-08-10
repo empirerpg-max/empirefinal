@@ -19,7 +19,6 @@ import {
 import {
   getEmpirePlayHomeController,
   getEmpirePlayMusicasController,
-  getEmpirePlayMusicVideosController,
   getEmpirePlayVideosController,
   getEmpirePlayAlbunsController,
   getEmpirePlayForumTopicController,
@@ -100,9 +99,13 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await getEmpirePlayUserController(request);
   } else if (url.pathname === "/api/empire-play/musicas") {
     response = await getEmpirePlayMusicasController(request);
-  } else if (url.pathname === "/api/empire-play/music-videos") {
-    response = await getEmpirePlayMusicVideosController(request);
-  } else if (url.pathname === "/api/empire-play/videos") {
+  } else if (
+    url.pathname === "/api/empire-play/videos" ||
+    url.pathname === "/api/empire-play/music-videos"
+  ) {
+    // Vídeos e Music Videos foram consolidados num catálogo único
+    // ("Music Videos" na planilha) — os dois paths respondem com os mesmos
+    // dados, filtráveis por tag ("Tipo de vídeo") no frontend.
     response = await getEmpirePlayVideosController(request);
   } else if (url.pathname === "/api/empire-play/albuns") {
     response = await getEmpirePlayAlbunsController();

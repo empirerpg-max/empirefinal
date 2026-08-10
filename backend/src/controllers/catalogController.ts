@@ -37,10 +37,12 @@ export interface TopPlaylistsResponse {
   youtube: CatalogItem[];
 }
 
+// "Videos" não existe mais como aba própria — Vídeos e Music Videos foram
+// consolidados em "Music Videos", diferenciados pela coluna "Tipo de vídeo".
 const CATALOG_SHEETS: Record<CatalogKind, string> = {
   musicas: "Musicas",
   "music-videos": "Music Videos",
-  videos: "Videos",
+  videos: "Music Videos",
   albuns: "Albuns",
 };
 

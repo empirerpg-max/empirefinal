@@ -2,10 +2,11 @@ import { sheetsService } from "../services/sheetsService";
 import { normalizeText } from "../services/googleSheetsService";
 import { readRuntimeEnv } from "../google/service-account";
 
+// "Videos" não existe mais como aba própria — consolidada em "Music Videos".
 const SHEET_LABELS: Record<string, string> = {
   musicas: "Musicas",
   music_videos: "Music Videos",
-  videos: "Videos",
+  videos: "Music Videos",
   albuns: "Albuns",
 };
 

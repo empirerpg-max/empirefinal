@@ -22,9 +22,10 @@ export interface ReleaseToEdit {
   fields: Record<string, string>;
 }
 
+// "Videos" não existe mais como aba própria — consolidada em "Music Videos".
 const SHEET_NAMES: Record<EditCategory, string> = {
   musicas: "Musicas",
-  videos: "Videos",
+  videos: "Music Videos",
   "music-videos": "Music Videos",
   albuns: "Albuns",
 };

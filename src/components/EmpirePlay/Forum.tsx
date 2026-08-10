@@ -20,7 +20,10 @@ import { driveImg } from "@/lib/api";
 import { CommentModal } from "./CommentModal";
 import { ScoreBadge } from "./ScoreBadge";
 
-export type ForumSubmenu = "musicas" | "music-videos" | "videos" | "albuns";
+// "music-videos" foi consolidado dentro de "videos" — Vídeos e Music Videos
+// vivem na mesma aba da planilha ("Music Videos"), diferenciados por tag
+// ("Tipo de vídeo"), não mais por aba/submenu separado.
+export type ForumSubmenu = "musicas" | "videos" | "albuns";
 
 interface CommentItem {
   id: string;
@@ -43,10 +46,12 @@ interface ForumTopicItem {
   videoSource?: string | null;
   releaseDate: string | null;
   telegramTopicId: string | null;
+  // Tag do vídeo (coluna "Tipo de vídeo") — null pra músicas/álbuns.
+  tipoVideo: string | null;
   fields: Record<string, string>;
 }
 
-const FORUM_SUBMENUS: ForumSubmenu[] = ["musicas", "music-videos", "videos", "albuns"];
+const FORUM_SUBMENUS: ForumSubmenu[] = ["musicas", "videos", "albuns"];
 
 export interface ForumProps {
   onPlayTrack?: (track: PlayableTrack, playlist: PlayableTrack[]) => void;
@@ -100,6 +105,8 @@ export const Forum: React.FC<ForumProps> = ({
   const [selectedTopic, setSelectedTopic] = useState<ForumTopicItem | null>(null);
   // Evita reabrir o deep link se o jogador voltar pra lista manualmente.
   const [pendingDeepLinkId, setPendingDeepLinkId] = useState<string | undefined>(initialItemId);
+  // Filtro de tag do submenu Vídeos (Music Video, Live, Video, etc).
+  const [activeVideoTag, setActiveVideoTag] = useState<string>("Todos");
 
   // State para comentários do tópico selecionado
   const [topicComments, setTopicComments] = useState<CommentItem[]>([]);
@@ -125,7 +132,7 @@ export const Forum: React.FC<ForumProps> = ({
       link: topic.link || topic.id,
       fonte: topic.videoSource || undefined,
       poster_url: topic.cover || undefined,
-      tipo_video: activeSubmenu === "music-videos" ? "Music Video" : "Vídeo",
+      tipo_video: topic.tipoVideo || "Vídeo",
     };
     setActiveVideo(videoObj);
     onPlayVideo?.(videoObj);
@@ -136,10 +143,10 @@ export const Forum: React.FC<ForumProps> = ({
     let isMounted = true;
     setLoading(true);
     setSelectedTopic(null);
+    setActiveVideoTag("Todos");
 
     const endpointMap: Record<ForumSubmenu, string> = {
       musicas: "/api/empire-play/musicas",
-      "music-videos": "/api/empire-play/music-videos",
       videos: "/api/empire-play/videos",
       albuns: "/api/empire-play/albuns",
     };
@@ -183,6 +190,7 @@ export const Forum: React.FC<ForumProps> = ({
           videoSource: item.videoSource || null,
           releaseDate: item.releaseDate || item.data_lancamento || item.data || null,
           telegramTopicId: item.telegramTopicId || null,
+          tipoVideo: item.category || item.tipo_video || null,
           lyrics: item.lyrics || item.letra || item.fields?.letra || null,
           fields: item.fields || {
             letra: item.lyrics || item.letra,
@@ -251,7 +259,6 @@ export const Forum: React.FC<ForumProps> = ({
       if (commentsFromApi.length === 0) {
         const tipoMediaMap: Record<ForumSubmenu, string> = {
           musicas: "musica",
-          "music-videos": "music-video",
           videos: "video",
           albuns: "album",
         };
@@ -289,17 +296,21 @@ export const Forum: React.FC<ForumProps> = ({
     }
   }, [selectedTopic]);
 
-  // Filtragem por busca
+  // Filtragem por busca + tag (Vídeos)
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
+    let list = items;
+    if (activeSubmenu === "videos" && activeVideoTag !== "Todos") {
+      list = list.filter((item) => item.tipoVideo === activeVideoTag);
+    }
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return items.filter(
+    return list.filter(
       (item) =>
         item.title?.toLowerCase().includes(q) ||
         item.artist?.toLowerCase().includes(q) ||
         item.album?.toLowerCase().includes(q),
     );
-  }, [items, searchQuery]);
+  }, [items, searchQuery, activeSubmenu, activeVideoTag]);
 
   // Extrai nota ou likes dos campos do item — sem dado real, retorna vazio
   // (nunca inventa um número; o ScoreBadge simplesmente não renderiza).
@@ -316,12 +327,22 @@ export const Forum: React.FC<ForumProps> = ({
   };
 
   // Helper de tipo de mídia para o modal
-  const getMediaTypeForModal = (): "musica" | "music-video" | "video" | "album" => {
+  const getMediaTypeForModal = (): "musica" | "video" | "album" => {
     if (activeSubmenu === "musicas") return "musica";
-    if (activeSubmenu === "music-videos") return "music-video";
     if (activeSubmenu === "videos") return "video";
     return "album";
   };
+
+  // Tags disponíveis pro filtro do submenu Vídeos (derivadas dos itens
+  // carregados, igual ao catálogo em /empire-play/videos).
+  const videoTags = useMemo(() => {
+    if (activeSubmenu !== "videos") return [];
+    const set = new Set<string>();
+    items.forEach((item) => {
+      if (item.tipoVideo) set.add(item.tipoVideo);
+    });
+    return ["Todos", ...Array.from(set).sort()];
+  }, [items, activeSubmenu]);
 
   return (
     <div className="space-y-6 text-white">
@@ -350,18 +371,6 @@ export const Forum: React.FC<ForumProps> = ({
           >
             <Music className="size-3.5" />
             Músicas
-          </button>
-
-          <button
-            onClick={() => setActiveSubmenu("music-videos")}
-            className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold uppercase tracking-wider transition shrink-0 ${
-              activeSubmenu === "music-videos"
-                ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                : "text-neutral-400 hover:text-white"
-            }`}
-          >
-            <Tv className="size-3.5" />
-            Music Videos
           </button>
 
           <button
@@ -407,7 +416,7 @@ export const Forum: React.FC<ForumProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
             {/* CAPA OU PLAYER */}
             <div className="lg:col-span-5 space-y-3 sm:space-y-4">
-              {activeSubmenu === "videos" || activeSubmenu === "music-videos" ? (
+              {activeSubmenu === "videos" ? (
                 /* PLAYER DE VÍDEO / MV */
                 <div className="w-full max-w-sm sm:max-w-md mx-auto bg-black rounded-2xl overflow-hidden border border-white/10 relative shadow-xl group min-h-[250px] flex items-center justify-center">
                   {selectedTopic.link ? (
@@ -465,7 +474,7 @@ export const Forum: React.FC<ForumProps> = ({
                 <div className="bg-neutral-800/60 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex items-center justify-between">
                   <div>
                     <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">
-                      {activeSubmenu === "videos" || activeSubmenu === "music-videos"
+                      {activeSubmenu === "videos"
                         ? "Total de Likes Accum"
                         : "Nota Oficial Metacritic"}
                     </span>
@@ -476,7 +485,7 @@ export const Forum: React.FC<ForumProps> = ({
                   <ScoreBadge
                     score={getItemScore(selectedTopic)}
                     variant={
-                      activeSubmenu === "videos" || activeSubmenu === "music-videos"
+                      activeSubmenu === "videos"
                         ? "likes"
                         : "metacritic"
                     }
@@ -608,7 +617,7 @@ export const Forum: React.FC<ForumProps> = ({
                         </span>
                         {c.nota && (
                           <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold text-[10px] sm:text-[11px] rounded-md border border-emerald-500/20">
-                            {activeSubmenu === "videos" || activeSubmenu === "music-videos"
+                            {activeSubmenu === "videos"
                               ? `${c.nota} Likes`
                               : `Nota: ${c.nota}`}
                           </span>
@@ -638,6 +647,26 @@ export const Forum: React.FC<ForumProps> = ({
               className="w-full pl-10 pr-4 py-2.5 sm:py-3.5 bg-neutral-900/80 border border-white/10 rounded-xl sm:rounded-2xl text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition shadow-lg"
             />
           </div>
+
+          {/* FILTRO DE TAG (só no submenu Vídeos) */}
+          {activeSubmenu === "videos" && videoTags.length > 1 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {videoTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setActiveVideoTag(tag)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all shrink-0 border ${
+                    activeVideoTag === tag
+                      ? "bg-emerald-500 text-black border-emerald-400"
+                      : "bg-white/5 text-neutral-400 border-white/10 hover:text-white hover:border-white/20"
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* GRID DE TÓPICOS COMPACTO E RESPONSIVO */}
           {loading ? (
@@ -670,7 +699,7 @@ export const Forum: React.FC<ForumProps> = ({
                       />
 
                       {/* Botão de Play de Vídeo Acessível e Moderno */}
-                      {(activeSubmenu === "videos" || activeSubmenu === "music-videos") && (
+                      {(activeSubmenu === "videos") && (
                         <button
                           type="button"
                           aria-label={`Reproduzir vídeo ${item.title}`}
@@ -688,7 +717,7 @@ export const Forum: React.FC<ForumProps> = ({
                         <ScoreBadge
                           score={getItemScore(item)}
                           variant={
-                            activeSubmenu === "videos" || activeSubmenu === "music-videos"
+                            activeSubmenu === "videos"
                               ? "likes"
                               : "metacritic"
                           }

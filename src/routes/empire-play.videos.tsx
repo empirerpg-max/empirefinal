@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { Tv, MessageSquare } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Tv, Play, MessageSquare } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -14,6 +14,7 @@ export const Route = createFileRoute("/empire-play/videos")({
 function EmpirePlayVideos() {
   const { playVideo } = useEmpirePlayer();
   const [videos, setVideos] = useState<PlayableVideo[]>([]);
+  const [activeTag, setActiveTag] = useState<string>("Todos");
 
   useEffect(() => {
     let cancelled = false;
@@ -28,11 +29,48 @@ function EmpirePlayVideos() {
     };
   }, []);
 
+  // Tags derivadas dos próprios dados (coluna "Tipo de vídeo") — Vídeos e
+  // Music Videos foram consolidados num catálogo único, filtrável por tag
+  // em vez de duas telas separadas.
+  const tags = useMemo(() => {
+    const set = new Set<string>();
+    videos.forEach((v) => {
+      if (v.tipo_video) set.add(v.tipo_video);
+    });
+    return ["Todos", ...Array.from(set).sort()];
+  }, [videos]);
+
+  const filtered = activeTag === "Todos" ? videos : videos.filter((v) => v.tipo_video === activeTag);
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-black text-white uppercase tracking-tight">Vídeos Gerais</h2>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="text-lg font-black text-white uppercase tracking-tight">
+          Vídeos ({filtered.length})
+        </h2>
+      </div>
+
+      {tags.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {tags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => setActiveTag(tag)}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all shrink-0 border ${
+                activeTag === tag
+                  ? "bg-red-500 text-black border-red-400"
+                  : "bg-white/5 text-neutral-400 border-white/10 hover:text-white hover:border-white/20"
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        {videos.map((v, idx) => (
+        {filtered.map((v, idx) => (
           <div
             key={v.id || idx}
             onClick={() => playVideo(v)}
@@ -49,6 +87,14 @@ function EmpirePlayVideos() {
                 <div className="size-full grid place-items-center text-neutral-600">
                   <Tv className="size-10" />
                 </div>
+              )}
+              <span className="absolute inset-0 bg-black/40 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Play className="size-8 text-white fill-white" />
+              </span>
+              {v.tipo_video && (
+                <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/80 text-[10px] font-black uppercase tracking-wider text-neutral-300 border border-white/10">
+                  {v.tipo_video}
+                </span>
               )}
               <div className="absolute top-2 right-2 pointer-events-none">
                 <ScoreBadge score={v.metacriticAvg} variant="likes" />

@@ -80,14 +80,20 @@ const TIPOS_SINGLE = [
 
 const TIPOS_MUSICA = ["SOLO", "PARCERIA", "DUETO", "CONJUNTO"];
 
+// Mesmas tags já usadas na coluna "Tipo de vídeo" da planilha (Vídeos e
+// Music Videos vivem juntos ali, diferenciados só por essa tag).
 const CATEGORIAS_VIDEO = [
-  "Vídeo Especial",
-  "Entrevista",
-  "VLOG",
-  "Teaser",
-  "Performance ao Vivo",
-  "Bastidores / Making Of",
-  "Documentário",
+  "Music Video",
+  "Live",
+  "Video",
+  "Dance Video",
+  "Lyric Video",
+  "Visualizer",
+  "Behind the Scenes",
+  "Performance",
+  "Alternative Video",
+  "Alternative Version",
+  "Trailer",
   "Outro",
 ];
 
@@ -123,7 +129,7 @@ export const Gestao: React.FC = () => {
 
   // Form Vídeo
   const [tituloVideo, setTituloVideo] = useState<string>("");
-  const [categoriaVideo, setCategoriaVideo] = useState<string>("Vídeo Especial");
+  const [categoriaVideo, setCategoriaVideo] = useState<string>("Video");
   const [musicaReferenteInput, setMusicaReferenteInput] = useState<string>("");
   const [descricaoInput, setDescricaoInput] = useState<string>("");
 

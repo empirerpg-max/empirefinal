@@ -4,7 +4,6 @@ import {
   Pencil,
   Music,
   Video,
-  Film,
   Disc,
   User,
   Upload,
@@ -16,7 +15,9 @@ import {
   Save,
 } from "lucide-react";
 
-export type EditCategory = "musicas" | "videos" | "music-videos" | "albuns";
+// "music-videos" foi consolidado dentro de "videos" — vivem na mesma aba
+// da planilha ("Music Videos"), diferenciados por tag, não mais categoria.
+export type EditCategory = "musicas" | "videos" | "albuns";
 
 export interface ReleaseItem {
   id: string;
@@ -37,8 +38,7 @@ interface EditModalProps {
 
 const CATEGORIES = [
   { id: "musicas", label: "Músicas", icon: Music, desc: "Singles e Faixas Solas" },
-  { id: "videos", label: "Vídeos", icon: Video, desc: "Vídeos do Catálogo" },
-  { id: "music-videos", label: "Music Videos", icon: Film, desc: "Clipes e Visuais" },
+  { id: "videos", label: "Vídeos", icon: Video, desc: "Clipes, lives, vídeos gerais..." },
   { id: "albuns", label: "Álbuns", icon: Disc, desc: "Álbuns e EPs" },
 ] as const;
 
@@ -328,8 +328,8 @@ export const EditModal: React.FC<EditModalProps> = ({
                 />
               </div>
 
-              {/* DESCRIÇÃO (apenas para Vídeos e Music Videos) */}
-              {(category === "videos" || category === "music-videos") && (
+              {/* DESCRIÇÃO (apenas para Vídeos) */}
+              {category === "videos" && (
                 <div>
                   <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
                     Nova Descrição
