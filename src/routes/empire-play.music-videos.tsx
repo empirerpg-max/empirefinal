@@ -5,6 +5,7 @@ import { driveImg } from "@/lib/api";
 import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableVideo } from "@/components/EmpirePlay/VideoPlayer";
+import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 
 export const Route = createFileRoute("/empire-play/music-videos")({
   component: EmpirePlayMusicVideos,
@@ -52,6 +53,9 @@ function EmpirePlayMusicVideos() {
               <span className="absolute inset-0 bg-black/40 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <Play className="size-8 text-white fill-white" />
               </span>
+              <div className="absolute top-2 right-2 pointer-events-none">
+                <ScoreBadge score={mv.metacriticAvg} variant="likes" />
+              </div>
             </div>
             <h4 className="font-bold text-xs text-white truncate group-hover:text-red-400">
               {mv.titulo}

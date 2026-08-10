@@ -5,6 +5,7 @@ import { driveImg } from "@/lib/api";
 import { toPlayableTrack } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
+import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 
 export const Route = createFileRoute("/empire-play/musicas")({
   component: EmpirePlayMusicas,
@@ -90,9 +91,16 @@ function EmpirePlayMusicas() {
                   <p className="font-bold text-xs sm:text-sm text-white break-words leading-snug group-hover:text-emerald-400">
                     {m.titulo}
                   </p>
-                  <p className="text-[11px] sm:text-xs text-neutral-400 break-words mt-0.5">
-                    {m.artista}
-                  </p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <p className="text-[11px] sm:text-xs text-neutral-400 break-words">
+                      {m.artista}
+                    </p>
+                    <ScoreBadge
+                      score={m.metacriticAvg}
+                      variant="metacritic"
+                      className="!px-1.5 !py-0 !text-[10px] shrink-0"
+                    />
+                  </div>
                 </div>
               </div>
               <button

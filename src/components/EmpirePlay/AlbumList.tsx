@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Disc3, Play, Search, Music, Clock, ChevronRight, FileText } from "lucide-react";
 import { driveImg, type AlbumPayload } from "@/lib/api";
 import { type PlayableTrack } from "./MusicPlayer";
+import { ScoreBadge } from "./ScoreBadge";
 
 export interface MappedTrack extends PlayableTrack {
   ordem?: number | string;
@@ -13,6 +14,7 @@ export interface DetailedAlbum extends Omit<AlbumPayload, "faixas"> {
   faixas?: MappedTrack[];
   data_lancamento?: string;
   telegramTopicId?: string;
+  metacriticAvg?: number | string | null;
 }
 
 interface AlbumListProps {
@@ -43,6 +45,7 @@ export function AlbumList({ onPlayTrack }: AlbumListProps) {
               item.coverUrl || item.cover || item.capa_url || item.capa_do_album || item.capa,
             data_lancamento: item.releaseDate || item.data_lancamento || "",
             telegramTopicId: item.telegramTopicId,
+            metacriticAvg: item.metacriticAvg ?? item.metacritic ?? item.nota,
             faixas: (item.tracks || []).map((t: any, idx: number) => ({
               id: t.id || `${item.title}-${idx}`,
               titulo: t.title || t.titulo || t.nome_da_musica || "Faixa sem título",
@@ -181,6 +184,10 @@ export function AlbumList({ onPlayTrack }: AlbumListProps) {
                       {albumTracks.length} faixas
                     </span>
                   )}
+
+                  <div className="absolute top-2 right-2 pointer-events-none">
+                    <ScoreBadge score={alb.metacriticAvg} variant="metacritic" />
+                  </div>
                 </div>
 
                 <h3 className="font-bold text-sm text-white truncate group-hover:text-emerald-400 transition-colors">
@@ -278,6 +285,19 @@ export function AlbumList({ onPlayTrack }: AlbumListProps) {
                       <span className="w-6 text-center font-mono text-xs text-neutral-500 group-hover:text-emerald-400">
                         {track.ordem || idx + 1}
                       </span>
+                      <div className="size-10 rounded-lg overflow-hidden bg-neutral-950 shrink-0 border border-white/10">
+                        {track.capa_url ? (
+                          <img
+                            src={driveImg(track.capa_url, 100)}
+                            alt={track.titulo}
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <div className="size-full grid place-items-center text-neutral-600">
+                            <Music className="size-4" />
+                          </div>
+                        )}
+                      </div>
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-white truncate group-hover:text-emerald-400 transition-colors">
                           {track.titulo}
