@@ -469,24 +469,38 @@ export const Forum: React.FC<ForumProps> = ({
 
       {/* DETALHE DO TÓPICO SELECIONADO OU LISTA DE TÓPICOS */}
       {selectedTopic ? (
-        /* VISÃO DE TÓPICO INDIVIDUAL */
-        <div className="bg-neutral-900/90 border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 space-y-6 sm:space-y-8 backdrop-blur-md animate-fade-in">
-          {/* Botão de Voltar */}
-          <button
-            onClick={() => setSelectedTopic(null)}
-            className="inline-flex items-center gap-2 text-xs font-bold text-neutral-400 hover:text-white transition uppercase tracking-wider"
-          >
-            <ChevronLeft className="size-4" />
-            Voltar para lista de {activeSubmenu}
-          </button>
+        /* VISÃO DE TÓPICO INDIVIDUAL — hero com fundo desfocado a partir da
+           própria capa, estilo Spotify/Apple Music. */
+        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-white/10 animate-fade-in">
+          {/* Fundo desfocado (capa ampliada + blur + degradê escuro por cima) */}
+          {selectedTopic.cover && (
+            <div className="absolute inset-0 -z-10">
+              <img
+                src={driveImg(selectedTopic.cover, 100) || undefined}
+                alt=""
+                aria-hidden="true"
+                className="w-full h-full object-cover scale-125 blur-3xl opacity-40 saturate-150"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/60 via-neutral-950/85 to-neutral-950" />
+            </div>
+          )}
+          <div className="bg-neutral-900/70 backdrop-blur-md p-4 sm:p-8 space-y-6 sm:space-y-8">
+            {/* Botão de Voltar */}
+            <button
+              onClick={() => setSelectedTopic(null)}
+              className="inline-flex items-center gap-2 text-xs font-bold text-neutral-400 hover:text-white transition uppercase tracking-wider"
+            >
+              <ChevronLeft className="size-4" />
+              Voltar para lista de {activeSubmenu}
+            </button>
 
-          {/* DADOS DO TÓPICO DEPENDENDO DA MÍDIA */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
-            {/* CAPA OU PLAYER */}
-            <div className="lg:col-span-5 space-y-3 sm:space-y-4">
-              {activeSubmenu === "videos" ? (
-                /* PLAYER DE VÍDEO / MV */
-                <div className="w-full max-w-sm sm:max-w-md mx-auto bg-black rounded-2xl overflow-hidden border border-white/10 relative shadow-xl group min-h-[250px] flex items-center justify-center">
+            {/* DADOS DO TÓPICO DEPENDENDO DA MÍDIA */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10 items-start">
+              {/* CAPA OU PLAYER */}
+              <div className="lg:col-span-5 space-y-3 sm:space-y-4">
+                {activeSubmenu === "videos" ? (
+                  /* PLAYER DE VÍDEO / MV */
+                  <div className="w-full max-w-md sm:max-w-none mx-auto bg-black rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 relative shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 group min-h-[250px] flex items-center justify-center">
                   {selectedTopic.link ? (
                     <iframe
                       src={getEmbedMediaUrl(selectedTopic.link)}
@@ -505,10 +519,10 @@ export const Forum: React.FC<ForumProps> = ({
                   )}
                 </div>
               ) : (
-                /* CAPA DE MÚSICA / ÁLBUM */
-                <div className="relative aspect-square w-full max-w-[130px] sm:max-w-[160px] md:max-w-[180px] mx-auto rounded-2xl sm:rounded-3xl overflow-hidden border border-white/10 shadow-xl bg-neutral-950 group">
+                /* CAPA DE MÚSICA / ÁLBUM — em destaque, estilo capa de disco */
+                <div className="relative aspect-square w-full max-w-[280px] sm:max-w-[340px] md:max-w-[400px] mx-auto rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 bg-neutral-950 group">
                   <img
-                    src={driveImg(selectedTopic.cover, 400) || "/placeholder.png"}
+                    src={driveImg(selectedTopic.cover, 800) || "/placeholder.png"}
                     alt={selectedTopic.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
                     onError={(e) => {
@@ -516,6 +530,7 @@ export const Forum: React.FC<ForumProps> = ({
                         "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80";
                     }}
                   />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   {selectedTopic.link && (
                     <button
                       onClick={() =>
@@ -529,9 +544,9 @@ export const Forum: React.FC<ForumProps> = ({
                           [],
                         )
                       }
-                      className="absolute inset-0 m-auto size-12 sm:size-16 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black flex items-center justify-center shadow-xl opacity-90 sm:opacity-0 group-hover:opacity-100 transition scale-90 group-hover:scale-100"
+                      className="absolute inset-0 m-auto size-16 sm:size-20 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black flex items-center justify-center shadow-2xl shadow-emerald-500/30 opacity-95 sm:opacity-0 group-hover:opacity-100 transition scale-90 group-hover:scale-100"
                     >
-                      <Play className="size-6 sm:size-8 ml-0.5 sm:ml-1 fill-black" />
+                      <Play className="size-7 sm:size-9 ml-0.5 sm:ml-1 fill-black" />
                     </button>
                   )}
                 </div>
@@ -565,12 +580,19 @@ export const Forum: React.FC<ForumProps> = ({
             {/* INFORMAÇÕES DO TÓPICO / LETRA / FAIXAS */}
             <div className="lg:col-span-7 space-y-4 sm:space-y-6">
               <div>
-                <h1 className="text-xl sm:text-4xl font-black text-white">{selectedTopic.title}</h1>
-                <p className="text-sm sm:text-lg font-bold text-emerald-400 mt-1">
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-emerald-400/80">
+                  {activeSubmenu === "musicas" && "Música"}
+                  {activeSubmenu === "videos" && (selectedTopic.tipoVideo || "Vídeo")}
+                  {activeSubmenu === "albuns" && "Álbum"}
+                </span>
+                <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-[1.05] mt-1">
+                  {selectedTopic.title}
+                </h1>
+                <p className="text-base sm:text-xl font-bold text-emerald-400 mt-2">
                   {selectedTopic.artist}
                 </p>
                 {selectedTopic.releaseDate && (
-                  <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400 mt-2">
+                  <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400 mt-3">
                     <Calendar className="size-3.5" />
                     <span>Lançamento: {selectedTopic.releaseDate}</span>
                   </div>
@@ -708,6 +730,7 @@ export const Forum: React.FC<ForumProps> = ({
                 ))}
               </div>
             )}
+          </div>
           </div>
         </div>
       ) : (
