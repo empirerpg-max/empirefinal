@@ -164,6 +164,20 @@ export function useTelegramUser(): {
       return;
     }
 
+    // Fora do Telegram (app rodando standalone, pós-login próprio) não faz
+    // sentido esperar ~2s de polling por um SDK que nunca vai aparecer —
+    // usa o cache (gravado pelo login) na hora.
+    if (!window.Telegram?.WebApp) {
+      const cached = localStorage.getItem("tg_user_cache");
+      if (cached) {
+        try {
+          setUser(JSON.parse(cached));
+          setReady(true);
+          return;
+        } catch {}
+      }
+    }
+
     let attempts = 0;
     const maxAttempts = 20;
 

@@ -38,6 +38,7 @@ import {
   Target,
   Music2,
   PlayCircle,
+  LogOut,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
@@ -46,6 +47,7 @@ import { useTelegramUser, haptic, useTelegramBackButton } from "@/lib/telegram";
 import { api, driveImg, type Artist } from "@/lib/api";
 import { registerServiceWorker } from "@/lib/pwa";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
 
 function GlobalLinkModal({ onClose }: { onClose: () => void }) {
   const { user } = useTelegramUser();
@@ -473,9 +475,32 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <RootInner />
+      <AuthGate />
     </QueryClientProvider>
   );
+}
+
+// Gate de login pra o app inteiro — o Empire Hub deixou de depender do
+// Telegram pra identificar o jogador. Login por usuário/senha (aba
+// "Usuários") continua alimentando o mesmo mecanismo de identidade que já
+// existia (setUserManually/tg_user_cache), então comentários, Gestão,
+// reações etc seguem funcionando sem precisar reescrever cada um deles.
+function AuthGate() {
+  const [authUser, setAuthUser] = useState<LoginResult | null>(() => getStoredLogin());
+  const { setUserManually } = useTelegramUser();
+
+  if (!authUser) {
+    return (
+      <LoginScreen
+        onSuccess={(user) => {
+          setUserManually(user.id, user.nome);
+          setAuthUser(user);
+        }}
+      />
+    );
+  }
+
+  return <RootInner />;
 }
 
 function RootInner() {
@@ -674,6 +699,17 @@ function RootInner() {
                     Guia de Sobrevivência
                   </span>
                 </Link>
+                <button
+                  onClick={() => {
+                    clearStoredLogin();
+                    localStorage.removeItem("tg_user_cache");
+                    window.location.reload();
+                  }}
+                  className="w-full flex items-center gap-4 p-4 rounded-3xl bg-white/[0.02] border border-white/5 text-muted-foreground hover:text-red-400 hover:border-red-500/20 transition-all"
+                >
+                  <LogOut className="size-5" />
+                  <span className="font-black uppercase tracking-widest text-[10px]">Sair</span>
+                </button>
                 <p className="text-center text-[9px] font-black uppercase tracking-[0.3em] text-muted-foreground/30 pt-4">
                   Empire Hub · v1.0.0
                 </p>
