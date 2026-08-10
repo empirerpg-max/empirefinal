@@ -58,6 +58,14 @@ export interface MusicaEmChart {
   title: string;
 }
 
+export interface MeuAlbum {
+  topicId: string;
+  label: string;
+  artist: string;
+  title: string;
+  capaUrl: string;
+}
+
 const TIPOS_ALBUM = ["EP", "Álbum", "Deluxe"];
 
 const OPCOES_CHART = [
@@ -119,6 +127,150 @@ const CATEGORIAS_VIDEO = [
 // automaticamente, isso duplicava o nome (ex: "Purple Sheeps - Purple
 // Sheeps - Teste 1"). Remove esse prefixo redundante antes de montar o
 // título final.
+// Editor de uma faixa de álbum — música existente (buscada nos charts) ou
+// inédita (formulário completo). Reutilizado tanto na criação de álbum
+// quanto na adição de novas faixas a um álbum já lançado (Substituir).
+const FaixaEditor: React.FC<{
+  faixa: TrackConfig;
+  onChange: (patch: Partial<TrackConfig>) => void;
+  myChartSongs: MusicaEmChart[];
+}> = ({ faixa, onChange, myChartSongs }) => {
+  const buscaResultados = (faixa.buscaQuery || "").trim()
+    ? myChartSongs.filter((m) =>
+        m.label.toLowerCase().includes((faixa.buscaQuery || "").trim().toLowerCase()),
+      )
+    : [];
+
+  return (
+    <div className="p-3 bg-neutral-900 border border-white/5 rounded-xl space-y-3">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-bold text-emerald-400">Faixa #{faixa.num}</span>
+        <button
+          type="button"
+          onClick={() => onChange({ inedita: !faixa.inedita, titulo: "", buscaQuery: "" })}
+          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase transition ${
+            faixa.inedita
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              : "bg-neutral-800 text-neutral-400"
+          }`}
+        >
+          {faixa.inedita ? "Música Não Existente" : "Música Existente"}
+        </button>
+      </div>
+
+      {faixa.inedita ? (
+        <>
+          <input
+            type="text"
+            value={faixa.titulo}
+            onChange={(e) => onChange({ titulo: e.target.value })}
+            placeholder={`Título da faixa #${faixa.num}`}
+            className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <select
+              value={faixa.tipoSingle || "TRACKLIST ALBUM"}
+              onChange={(e) => onChange({ tipoSingle: e.target.value })}
+              className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+            >
+              {TIPOS_SINGLE.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <select
+              value={faixa.tipoMusica || "SOLO"}
+              onChange={(e) => onChange({ tipoMusica: e.target.value })}
+              className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+            >
+              {TIPOS_MUSICA.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <input
+            type="text"
+            value={faixa.mediaUrl || ""}
+            onChange={(e) => onChange({ mediaUrl: e.target.value })}
+            placeholder="Link do Drive ou YouTube (áudio)"
+            className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+          />
+          <input
+            type="text"
+            value={(faixa.participantes || []).join(", ")}
+            onChange={(e) =>
+              onChange({
+                participantes: e.target.value
+                  .split(",")
+                  .map((p) => p.trim())
+                  .filter(Boolean),
+              })
+            }
+            placeholder="Artistas participantes, separados por vírgula (opcional)"
+            className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+          />
+          <label className="flex items-center gap-2 text-[11px] text-neutral-400">
+            <input
+              type="checkbox"
+              checked={!!faixa.abrirTopico}
+              onChange={(e) => onChange({ abrirTopico: e.target.checked })}
+              className="accent-emerald-500"
+            />
+            Abrir tópico próprio pra essa faixa no fórum (senão ela fica só dentro do álbum)
+          </label>
+        </>
+      ) : (
+        <div className="relative">
+          {faixa.titulo ? (
+            <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2.5">
+              <span className="text-xs text-white font-bold truncate">{faixa.titulo}</span>
+              <button
+                type="button"
+                onClick={() => onChange({ titulo: "", buscaQuery: "" })}
+                className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
+              >
+                Trocar
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                value={faixa.buscaQuery || ""}
+                onChange={(e) => onChange({ buscaQuery: e.target.value })}
+                placeholder="Busque a música já lançada nos charts..."
+                className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+              />
+              {(faixa.buscaQuery || "").trim().length > 0 && (
+                <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
+                  {buscaResultados.slice(0, 20).map((m) => (
+                    <button
+                      key={m.label}
+                      type="button"
+                      onClick={() => onChange({ titulo: m.label, buscaQuery: "" })}
+                      className="w-full text-left px-3 py-2 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                  {buscaResultados.length === 0 && (
+                    <p className="px-3 py-2.5 text-xs text-neutral-500 italic">
+                      Nenhuma música encontrada nos charts.
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 function stripArtistPrefix(nome: string, artista: string): string {
   const trimmedNome = nome.trim();
   const trimmedArtista = artista.trim();
@@ -141,6 +293,8 @@ export const Gestao: React.FC = () => {
   const [catalogSongs, setCatalogSongs] = useState<ExistingTrack[]>([]);
   // Músicas em chart (aba Pontos) — usadas na busca de faixa existente do álbum
   const [musicasEmChart, setMusicasEmChart] = useState<MusicaEmChart[]>([]);
+  // Álbuns já lançados — usados na busca de "qual álbum substituir"
+  const [meusAlbunsLancados, setMeusAlbunsLancados] = useState<MeuAlbum[]>([]);
 
   // Nomes de artistas já conhecidos no catálogo — sugestões (datalist) pros
   // campos de participante, que antes eram texto livre sem nenhuma lista.
@@ -171,6 +325,14 @@ export const Gestao: React.FC = () => {
     if (meus.size === 0) return [];
     return musicasEmChart.filter((m) => m.artist && meus.has(m.artist.toLowerCase()));
   }, [musicasEmChart, profile]);
+
+  // Álbuns já lançados só dos artistas que o jogador controla — usado na
+  // busca de "qual álbum substituir".
+  const myAlbuns = useMemo(() => {
+    const meus = new Set((profile?.associatedArtists || []).map((a) => a.toLowerCase()));
+    if (meus.size === 0) return [];
+    return meusAlbunsLancados.filter((a) => a.artist && meus.has(a.artist.toLowerCase()));
+  }, [meusAlbunsLancados, profile]);
 
   // States Comuns
   const [artistaResponsavel, setArtistaResponsavel] = useState<string>("");
@@ -209,6 +371,13 @@ export const Gestao: React.FC = () => {
   const [encartesFiles, setEncartesFiles] = useState<File[]>([]);
   const [totalFaixasCount, setTotalFaixasCount] = useState<number>(3);
   const [faixasConfig, setFaixasConfig] = useState<TrackConfig[]>([]);
+
+  // Form Álbum — Substituir (troca capa/encarte/adiciona faixas a um álbum
+  // já lançado, sem duplicar o registro nos charts)
+  const [albumSubstQuery, setAlbumSubstQuery] = useState<string>("");
+  const [albumSubstSelecionado, setAlbumSubstSelecionado] = useState<MeuAlbum | null>(null);
+  const [substNovasFaixasCount, setSubstNovasFaixasCount] = useState<number>(0);
+  const [substNovasFaixas, setSubstNovasFaixas] = useState<TrackConfig[]>([]);
 
   // Submissão
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -302,6 +471,17 @@ export const Gestao: React.FC = () => {
       })
       .catch((err) => console.error("Erro ao carregar músicas em chart:", err));
 
+    // Buscar álbuns já lançados — usado na busca de "qual álbum substituir"
+    fetch("/api/gestao/meus-albuns")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted) return;
+        if (data?.success && Array.isArray(data.data)) {
+          setMeusAlbunsLancados(data.data);
+        }
+      })
+      .catch((err) => console.error("Erro ao carregar álbuns:", err));
+
     return () => {
       isMounted = false;
     };
@@ -326,6 +506,26 @@ export const Gestao: React.FC = () => {
     }
     setFaixasConfig(updated);
   }, [totalFaixasCount]);
+
+  // Atualizar lista de novas faixas a adicionar num álbum (fluxo Substituir)
+  useEffect(() => {
+    const updated: TrackConfig[] = [];
+    for (let i = 1; i <= substNovasFaixasCount; i++) {
+      const existing = substNovasFaixas[i - 1];
+      updated.push({
+        num: i,
+        titulo: existing?.titulo || "",
+        inedita: existing ? existing.inedita : true,
+        tipoSingle: existing?.tipoSingle || "TRACKLIST ALBUM",
+        tipoMusica: existing?.tipoMusica || "SOLO",
+        participantes: existing?.participantes || [],
+        mediaUrl: existing?.mediaUrl || "",
+        abrirTopico: existing?.abrirTopico ?? false,
+        buscaQuery: existing?.buscaQuery || "",
+      });
+    }
+    setSubstNovasFaixas(updated);
+  }, [substNovasFaixasCount]);
 
   // File to Base64
   const fileToBase64 = (file: File): Promise<string> => {
@@ -713,6 +913,106 @@ export const Gestao: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro inesperado ao publicar álbum.");
+    } finally {
+      setIsSubmitting(false);
+      setUploadProgress(null);
+    }
+  };
+
+  // Submeter Substituição de Álbum (troca capa/encarte e/ou adiciona faixas
+  // a um álbum já lançado)
+  const handleSubstituirAlbum = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSuccessMsg(null);
+    setErrorMsg(null);
+
+    if (!albumSubstSelecionado) {
+      setErrorMsg("Selecione qual álbum você quer substituir.");
+      return;
+    }
+    for (const faixa of substNovasFaixas) {
+      if (!faixa.titulo.trim()) {
+        setErrorMsg(
+          faixa.inedita
+            ? `Informe o título da nova faixa #${faixa.num}.`
+            : `Selecione a música existente da nova faixa #${faixa.num}.`,
+        );
+        return;
+      }
+      if (faixa.inedita && !faixa.mediaUrl?.trim()) {
+        setErrorMsg(`Informe o link do áudio (Drive ou YouTube) da nova faixa #${faixa.num}.`);
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    setUploadProgress("Registrando alterações...");
+
+    try {
+      let novaCapaUrl = "";
+      if (capaFile) {
+        setUploadProgress("Fazendo upload da nova capa...");
+        novaCapaUrl = await handleUploadToDrive(
+          capaFile,
+          "musica",
+          `CAPA_ALBUM_${albumSubstSelecionado.artist}_${albumSubstSelecionado.title}_${Date.now()}.jpg`,
+        );
+      }
+
+      const novosEncartesUrls: string[] = [];
+      if (encartesFiles.length > 0) {
+        for (let i = 0; i < encartesFiles.length; i++) {
+          setUploadProgress(`Fazendo upload do encarte ${i + 1} de ${encartesFiles.length}...`);
+          const url = await handleUploadToDrive(
+            encartesFiles[i],
+            "album",
+            `ENCARTE_${i + 1}_${albumSubstSelecionado.artist}_${albumSubstSelecionado.title}_${Date.now()}.jpg`,
+          );
+          novosEncartesUrls.push(url);
+        }
+      }
+
+      setUploadProgress("Salvando alterações do álbum...");
+
+      const payload = {
+        albumTopicId: albumSubstSelecionado.topicId,
+        novaCapaUrl,
+        novosEncartesUrls,
+        novasFaixas: substNovasFaixas.map((f) => ({
+          num: f.num,
+          inedita: f.inedita,
+          titulo: f.titulo,
+          tipoSingle: f.tipoSingle,
+          tipoMusica: f.tipoMusica,
+          participantes: f.participantes,
+          mediaUrl: f.mediaUrl,
+          abrirTopico: f.abrirTopico,
+        })),
+        nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
+        jogadorId: telegramUser?.id ? String(telegramUser.id) : "",
+      };
+
+      const res = await fetch("/api/gestao/album/substituir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Erro ao substituir álbum.");
+      }
+
+      setSuccessMsg("Álbum atualizado com sucesso!");
+      setAlbumSubstSelecionado(null);
+      setAlbumSubstQuery("");
+      setSubstNovasFaixasCount(0);
+      setCapaFile(null);
+      setCapaPreview(null);
+      setEncartesFiles([]);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || "Erro inesperado ao substituir álbum.");
     } finally {
       setIsSubmitting(false);
       setUploadProgress(null);
@@ -1426,12 +1726,9 @@ export const Gestao: React.FC = () => {
 
       {/* FORMULÁRIO DE ÁLBUM */}
       {activeTab === "album" && (
-        <form
-          onSubmit={handleSubmitAlbum}
-          className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-md"
-        >
+        <div className="space-y-6">
           {/* OBJETIVO */}
-          <div className="space-y-2">
+          <div className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-2 backdrop-blur-md">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
               O que você quer fazer?
             </label>
@@ -1458,11 +1755,18 @@ export const Gestao: React.FC = () => {
                 }`}
               >
                 <span className="font-bold text-xs text-white mb-1">Substituir nos Charts</span>
-                <span className="text-[11px] text-neutral-400">Em breve.</span>
+                <span className="text-[11px] text-neutral-400">
+                  Troca capa, encarte e/ou adiciona faixas a um álbum já lançado.
+                </span>
               </div>
             </div>
           </div>
 
+          {albumObjetivo === "a" && (
+        <form
+          onSubmit={handleSubmitAlbum}
+          className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-md"
+        >
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
               <User className="size-4 text-emerald-400" />
@@ -1550,156 +1854,18 @@ export const Gestao: React.FC = () => {
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
               Lista de Faixas do Álbum
             </label>
-            {faixasConfig.map((faixa, idx) => {
-              const updateFaixa = (patch: Partial<TrackConfig>) => {
-                const updated = [...faixasConfig];
-                updated[idx] = { ...updated[idx], ...patch };
-                setFaixasConfig(updated);
-              };
-              const buscaResultados = (faixa.buscaQuery || "").trim()
-                ? myChartSongs.filter((m) =>
-                    m.label.toLowerCase().includes((faixa.buscaQuery || "").trim().toLowerCase()),
-                  )
-                : [];
-
-              return (
-                <div
-                  key={idx}
-                  className="p-3 bg-neutral-900 border border-white/5 rounded-xl space-y-3"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-emerald-400">Faixa #{faixa.num}</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateFaixa({ inedita: !faixa.inedita, titulo: "", buscaQuery: "" })
-                      }
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase transition ${
-                        faixa.inedita
-                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                          : "bg-neutral-800 text-neutral-400"
-                      }`}
-                    >
-                      {faixa.inedita ? "Música Não Existente" : "Música Existente"}
-                    </button>
-                  </div>
-
-                  {faixa.inedita ? (
-                    <>
-                      <input
-                        type="text"
-                        value={faixa.titulo}
-                        onChange={(e) => updateFaixa({ titulo: e.target.value })}
-                        placeholder={`Título da faixa #${faixa.num}`}
-                        className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                      />
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <select
-                          value={faixa.tipoSingle || "TRACKLIST ALBUM"}
-                          onChange={(e) => updateFaixa({ tipoSingle: e.target.value })}
-                          className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                        >
-                          {TIPOS_SINGLE.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={faixa.tipoMusica || "SOLO"}
-                          onChange={(e) => updateFaixa({ tipoMusica: e.target.value })}
-                          className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                        >
-                          {TIPOS_MUSICA.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <input
-                        type="text"
-                        value={faixa.mediaUrl || ""}
-                        onChange={(e) => updateFaixa({ mediaUrl: e.target.value })}
-                        placeholder="Link do Drive ou YouTube (áudio)"
-                        list="participantes-conhecidos"
-                        className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                      />
-                      <input
-                        type="text"
-                        value={(faixa.participantes || []).join(", ")}
-                        onChange={(e) =>
-                          updateFaixa({
-                            participantes: e.target.value
-                              .split(",")
-                              .map((p) => p.trim())
-                              .filter(Boolean),
-                          })
-                        }
-                        placeholder="Artistas participantes, separados por vírgula (opcional)"
-                        className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                      />
-                      <label className="flex items-center gap-2 text-[11px] text-neutral-400">
-                        <input
-                          type="checkbox"
-                          checked={!!faixa.abrirTopico}
-                          onChange={(e) => updateFaixa({ abrirTopico: e.target.checked })}
-                          className="accent-emerald-500"
-                        />
-                        Abrir tópico próprio pra essa faixa no fórum (senão ela fica só dentro do
-                        álbum)
-                      </label>
-                    </>
-                  ) : (
-                    <div className="relative">
-                      {faixa.titulo ? (
-                        <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2.5">
-                          <span className="text-xs text-white font-bold truncate">
-                            {faixa.titulo}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => updateFaixa({ titulo: "", buscaQuery: "" })}
-                            className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
-                          >
-                            Trocar
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <input
-                            type="text"
-                            value={faixa.buscaQuery || ""}
-                            onChange={(e) => updateFaixa({ buscaQuery: e.target.value })}
-                            placeholder="Busque a música já lançada nos charts..."
-                            className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                          />
-                          {(faixa.buscaQuery || "").trim().length > 0 && (
-                            <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
-                              {buscaResultados.slice(0, 20).map((m) => (
-                                <button
-                                  key={m.label}
-                                  type="button"
-                                  onClick={() => updateFaixa({ titulo: m.label, buscaQuery: "" })}
-                                  className="w-full text-left px-3 py-2 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
-                                >
-                                  {m.label}
-                                </button>
-                              ))}
-                              {buscaResultados.length === 0 && (
-                                <p className="px-3 py-2.5 text-xs text-neutral-500 italic">
-                                  Nenhuma música encontrada nos charts.
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {faixasConfig.map((faixa, idx) => (
+              <FaixaEditor
+                key={idx}
+                faixa={faixa}
+                myChartSongs={myChartSongs}
+                onChange={(patch) => {
+                  const updated = [...faixasConfig];
+                  updated[idx] = { ...updated[idx], ...patch };
+                  setFaixasConfig(updated);
+                }}
+              />
+            ))}
           </div>
 
           {/* UPLOAD DA CAPA E ENCARTES */}
@@ -1770,6 +1936,185 @@ export const Gestao: React.FC = () => {
             <span>{isSubmitting ? uploadProgress || "Enviando..." : "Publicar Lançamento"}</span>
           </button>
         </form>
+          )}
+
+          {albumObjetivo === "b" && (
+            <form
+              onSubmit={handleSubstituirAlbum}
+              className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-md"
+            >
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                  <Disc className="size-4 text-emerald-400" />
+                  Qual álbum você quer substituir?
+                </label>
+                {albumSubstSelecionado ? (
+                  <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+                    <span className="text-sm text-white font-bold truncate">
+                      {albumSubstSelecionado.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAlbumSubstSelecionado(null);
+                        setAlbumSubstQuery("");
+                      }}
+                      className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
+                    >
+                      Trocar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={albumSubstQuery}
+                      onChange={(e) => setAlbumSubstQuery(e.target.value)}
+                      placeholder="Busque pelo título do álbum já lançado..."
+                      className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                    />
+                    {albumSubstQuery.trim().length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
+                        {myAlbuns
+                          .filter((a) =>
+                            a.label.toLowerCase().includes(albumSubstQuery.trim().toLowerCase()),
+                          )
+                          .slice(0, 20)
+                          .map((a) => (
+                            <button
+                              key={a.topicId}
+                              type="button"
+                              onClick={() => {
+                                setAlbumSubstSelecionado(a);
+                                setAlbumSubstQuery("");
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
+                            >
+                              {a.label}
+                            </button>
+                          ))}
+                        {myAlbuns.filter((a) =>
+                          a.label.toLowerCase().includes(albumSubstQuery.trim().toLowerCase()),
+                        ).length === 0 && (
+                          <p className="px-4 py-3 text-xs text-neutral-500 italic">
+                            Nenhum álbum encontrado.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {albumSubstSelecionado && (
+                <>
+                  {/* NOVAS FAIXAS */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                      <ListMusic className="size-4 text-emerald-400" />
+                      Adicionar Faixas Novas (Opcional) ({substNovasFaixasCount})
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      value={substNovasFaixasCount}
+                      onChange={(e) =>
+                        setSubstNovasFaixasCount(Math.max(0, parseInt(e.target.value, 10) || 0))
+                      }
+                      className="w-32 bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {substNovasFaixasCount > 0 && (
+                    <div className="space-y-3 bg-neutral-950/60 p-4 rounded-2xl border border-white/5 max-h-[32rem] overflow-y-auto">
+                      {substNovasFaixas.map((faixa, idx) => (
+                        <FaixaEditor
+                          key={idx}
+                          faixa={faixa}
+                          myChartSongs={myChartSongs}
+                          onChange={(patch) => {
+                            const updated = [...substNovasFaixas];
+                            updated[idx] = { ...updated[idx], ...patch };
+                            setSubstNovasFaixas(updated);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* NOVA CAPA E ENCARTES */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                        Nova Capa (Opcional)
+                      </label>
+                      <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
+                        {capaPreview ? (
+                          <img
+                            src={capaPreview}
+                            alt="Capa Preview"
+                            className="size-16 object-cover rounded-xl border border-white/10"
+                          />
+                        ) : (
+                          <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
+                            <ImageIcon className="size-6" />
+                          </div>
+                        )}
+                        <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
+                          <Upload className="size-4 text-emerald-400" />
+                          <span>Selecione a Capa</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => e.target.files?.[0] && handleCapaSelect(e.target.files[0])}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                        Novos Encartes (Opcional — substitui os atuais)
+                      </label>
+                      <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
+                        <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
+                          <ImageIcon className="size-6" />
+                        </div>
+                        <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
+                          <Upload className="size-4 text-emerald-400" />
+                          <span>Selecione os Encartes (Fotos)</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => e.target.files && setEncartesFiles(Array.from(e.target.files))}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                      {encartesFiles.length > 0 && (
+                        <p className="text-[11px] text-emerald-400">
+                          {encartesFiles.length} encarte(s) selecionado(s)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <Sparkles className="size-5" />
+                    <span>{isSubmitting ? uploadProgress || "Enviando..." : "Salvar Alterações"}</span>
+                  </button>
+                </>
+              )}
+            </form>
+          )}
+        </div>
       )}
 
       {/* MODAL DE EDIÇÃO */}
