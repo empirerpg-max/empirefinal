@@ -481,18 +481,14 @@ export async function getEmpirePlayUserController(request: Request): Promise<Res
  */
 export async function getEmpirePlayHomeController(): Promise<Response> {
   try {
-    const [spotifyRecords, appleRecords, youtubeRecords, musicaRecords] = await Promise.all([
-      sheetsService.readSheetObjects("Top_50_Spotify").catch(() => []),
-      sheetsService.readSheetObjects("Top_Songs_Apple_Music").catch(() => []),
-      sheetsService.readSheetObjects("Top_Videos_YT").catch(() => []),
-      sheetsService.readSheetObjects("Musicas").catch(() => []),
-    ]);
-
-    const topSpotify = spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx));
-    const topAppleMusic = appleRecords.map((rec, idx) =>
-      buildCleanItem("Top_Songs_Apple_Music", rec, idx),
-    );
-    const topYoutube = youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx));
+    const [spotifyRecords, appleRecords, youtubeRecords, musicaRecords, videoRecords] =
+      await Promise.all([
+        sheetsService.readSheetObjects("Top_50_Spotify").catch(() => []),
+        sheetsService.readSheetObjects("Top_Songs_Apple_Music").catch(() => []),
+        sheetsService.readSheetObjects("Top_Videos_YT").catch(() => []),
+        sheetsService.readSheetObjects("Musicas").catch(() => []),
+        sheetsService.readSheetObjects("Music Videos").catch(() => []),
+      ]);
 
     const recentMusicas = musicaRecords
       .map((rec, idx) => buildCleanItem("Musicas", rec, idx))
@@ -503,6 +499,50 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
         return b.id.localeCompare(a.id);
       })
       .slice(0, 100);
+
+    // As abas de chart (Top_50_Spotify/Top_Songs_Apple_Music/Top_Videos_YT)
+    // só guardam posição/título — não têm coluna própria de nota Metacritic
+    // nem de likes, então esse dado nunca aparecia nos cards de destaque.
+    // Cruza cada entrada do chart com o catálogo real (Musicas/Music Videos)
+    // por artista+título pra herdar a nota/likes já calculados lá.
+    const musicaAllItems = musicaRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+    const videoAllItems = videoRecords.map((rec, idx) => buildCleanItem("Videos", rec, idx));
+
+    const buildScoreIndex = (items: EmpirePlayCleanItem[]) => {
+      const map = new Map<string, string>();
+      for (const it of items) {
+        if (!it.metacriticAvg) continue;
+        const key = `${normalizeComparison(it.artist)}::${normalizeComparison(it.title)}`;
+        if (!map.has(key)) map.set(key, String(it.metacriticAvg));
+      }
+      return map;
+    };
+    const musicaScoreIndex = buildScoreIndex(musicaAllItems);
+    const videoScoreIndex = buildScoreIndex(videoAllItems);
+
+    const enrichWithScore = (
+      chartItems: EmpirePlayCleanItem[],
+      scoreIndex: Map<string, string>,
+    ): EmpirePlayCleanItem[] =>
+      chartItems.map((item) => {
+        if (item.metacriticAvg) return item;
+        const key = `${normalizeComparison(item.artist)}::${normalizeComparison(item.title)}`;
+        const score = scoreIndex.get(key);
+        return score ? { ...item, metacriticAvg: score } : item;
+      });
+
+    const topSpotify = enrichWithScore(
+      spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx)),
+      musicaScoreIndex,
+    );
+    const topAppleMusic = enrichWithScore(
+      appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
+      musicaScoreIndex,
+    );
+    const topYoutube = enrichWithScore(
+      youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx)),
+      videoScoreIndex,
+    );
 
     return new Response(
       JSON.stringify({

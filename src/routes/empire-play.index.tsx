@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X } from "lucide-react";
 import { driveImg } from "@/lib/api";
+import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 import { toPlayableTrack, toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
@@ -351,11 +352,16 @@ function EmpirePlayInicio() {
                         )}
                       </div>
 
-                      {/* APENAS O TÍTULO (NENHUMA INFORMAÇÃO EXTRA) */}
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-extrabold text-sm text-white break-words leading-tight">
+                      {/* Título + selo de nota/likes quando o item tem avaliação real */}
+                      <div className="flex-1 min-w-0 flex items-center gap-2.5">
+                        <h4 className="font-extrabold text-sm text-white break-words leading-tight flex-1 min-w-0">
                           {item.titulo}
                         </h4>
+                        <ScoreBadge
+                          score={item.metacriticAvg}
+                          variant={activeSlidingPlaylist === "youtube" ? "likes" : "metacritic"}
+                          className="shrink-0 !text-[10px] !px-2 !py-1"
+                        />
                       </div>
 
                       {/* Botão de Ação */}
