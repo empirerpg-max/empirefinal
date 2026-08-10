@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { X, Tv, Sparkles, AlertCircle, Flag, Loader2, FileWarning } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import {
+  X,
+  Tv,
+  Sparkles,
+  AlertCircle,
+  Flag,
+  Loader2,
+  FileWarning,
+  MessageSquare,
+} from "lucide-react";
 import { toast } from "sonner";
 import { driveImg } from "@/lib/api";
 import { haptic } from "@/lib/telegram";
@@ -21,6 +31,8 @@ export interface PlayableVideo {
   telegramMessageId?: string | null;
   reportPending?: boolean;
   metacriticAvg?: number | string | null;
+  /** Aba do fórum onde este item aparece ("videos" ou "music-videos"). */
+  forumTab?: string;
 }
 
 interface VideoPlayerProps {
@@ -157,6 +169,17 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
         </div>
 
         <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+          {video.id && (
+            <Link
+              to="/empire-play/forum"
+              search={{ tab: video.forumTab || "videos", id: video.id }}
+              onClick={() => haptic.selection()}
+              title="Ver no Fórum"
+              className="size-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 grid place-items-center text-neutral-400 hover:text-white active:scale-90 transition-all"
+            >
+              <MessageSquare className="size-4" />
+            </Link>
+          )}
           {video.fonte === "telegram" && video.telegramMessageId && (
             <button
               onClick={handleReportIssue}

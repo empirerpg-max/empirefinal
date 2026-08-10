@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Tv } from "lucide-react";
+import { Tv, MessageSquare } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -54,10 +54,25 @@ function EmpirePlayVideos() {
                 <ScoreBadge score={v.metacriticAvg} variant="likes" />
               </div>
             </div>
-            <h4 className="font-bold text-xs text-white truncate group-hover:text-red-400">
-              {v.titulo}
-            </h4>
-            <p className="text-[11px] text-neutral-400 truncate">{v.artista}</p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h4 className="font-bold text-xs text-white truncate group-hover:text-red-400">
+                  {v.titulo}
+                </h4>
+                <p className="text-[11px] text-neutral-400 truncate">{v.artista}</p>
+              </div>
+              {v.id && (
+                <Link
+                  to="/empire-play/forum"
+                  search={{ tab: v.forumTab || "videos", id: v.id }}
+                  onClick={(e) => e.stopPropagation()}
+                  title="Ver no Fórum"
+                  className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition-all shrink-0"
+                >
+                  <MessageSquare className="size-3.5" />
+                </Link>
+              )}
+            </div>
           </div>
         ))}
       </div>

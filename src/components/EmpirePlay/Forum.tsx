@@ -47,9 +47,15 @@ interface ForumTopicItem {
   fields: Record<string, string>;
 }
 
+const FORUM_SUBMENUS: ForumSubmenu[] = ["musicas", "music-videos", "videos", "albuns"];
+
 export interface ForumProps {
   onPlayTrack?: (track: PlayableTrack, playlist: PlayableTrack[]) => void;
   onPlayVideo?: (video: PlayableVideo) => void;
+  /** Aba inicial (deep link a partir do player/catálogo), ex: "musicas". */
+  initialTab?: string;
+  /** ID do item a abrir automaticamente assim que a aba carregar. */
+  initialItemId?: string;
 }
 
 import { VideoPlayer, PlayableVideo } from "./VideoPlayer";
@@ -78,12 +84,23 @@ function getEmbedMediaUrl(url: string | null | undefined): string {
   return trimmed;
 }
 
-export const Forum: React.FC<ForumProps> = ({ onPlayTrack, onPlayVideo }) => {
-  const [activeSubmenu, setActiveSubmenu] = useState<ForumSubmenu>("musicas");
+export const Forum: React.FC<ForumProps> = ({
+  onPlayTrack,
+  onPlayVideo,
+  initialTab,
+  initialItemId,
+}) => {
+  const initialSubmenu: ForumSubmenu =
+    initialTab && (FORUM_SUBMENUS as string[]).includes(initialTab)
+      ? (initialTab as ForumSubmenu)
+      : "musicas";
+  const [activeSubmenu, setActiveSubmenu] = useState<ForumSubmenu>(initialSubmenu);
   const [items, setItems] = useState<ForumTopicItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedTopic, setSelectedTopic] = useState<ForumTopicItem | null>(null);
+  // Evita reabrir o deep link se o jogador voltar pra lista manualmente.
+  const [pendingDeepLinkId, setPendingDeepLinkId] = useState<string | undefined>(initialItemId);
 
   // State para comentários do tópico selecionado
   const [topicComments, setTopicComments] = useState<CommentItem[]>([]);
@@ -188,6 +205,17 @@ export const Forum: React.FC<ForumProps> = ({ onPlayTrack, onPlayVideo }) => {
       isMounted = false;
     };
   }, [activeSubmenu]);
+
+  // 1.1 Deep link (player/catálogo → fórum): assim que os itens da aba
+  // inicial carregam, abre direto o tópico pedido.
+  useEffect(() => {
+    if (!pendingDeepLinkId || loading) return;
+    const match = items.find((item) => item.id === pendingDeepLinkId);
+    if (match) {
+      setSelectedTopic(match);
+      setPendingDeepLinkId(undefined);
+    }
+  }, [pendingDeepLinkId, loading, items]);
 
   // 2. Carregar comentários quando um tópico é selecionado
   const fetchTopicComments = async (topicOrTitle: ForumTopicItem | string) => {

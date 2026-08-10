@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Music, Play } from "lucide-react";
+import { Music, Play, MessageSquare } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { toPlayableTrack } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -103,15 +103,28 @@ function EmpirePlayMusicas() {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  playSong(m, musicas);
-                }}
-                className="p-2.5 rounded-xl bg-white/5 hover:bg-emerald-500 hover:text-black text-white transition-all shrink-0"
-              >
-                <Play className="size-4 fill-current" />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {m.id && (
+                  <Link
+                    to="/empire-play/forum"
+                    search={{ tab: m.forumTab || "musicas", id: m.id }}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Ver no Fórum"
+                    className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition-all"
+                  >
+                    <MessageSquare className="size-4" />
+                  </Link>
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    playSong(m, musicas);
+                  }}
+                  className="p-2.5 rounded-xl bg-white/5 hover:bg-emerald-500 hover:text-black text-white transition-all"
+                >
+                  <Play className="size-4 fill-current" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
