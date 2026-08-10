@@ -1,8 +1,10 @@
-import { Star, ThumbsUp } from "lucide-react";
+import { ThumbsUp } from "lucide-react";
 
 /**
  * Badge de avaliação — mesma lógica visual usada no Fórum (renderMetacriticBadge):
- * verde ≥75, amarelo ≥50, vermelho <50, "tbd" sem nota ainda.
+ * verde ≥75, amarelo ≥50, vermelho <50. Sem nota real, não renderiza nada
+ * (nunca inventa um número — antes havia um fallback fixo "80" que fingia
+ * ser dado real).
  * `variant="likes"` troca o número colorido pelo selo de curtidas (vídeos),
  * `variant="metacritic"` é o selo numérico oficial (músicas/álbuns).
  */
@@ -15,17 +17,10 @@ export function ScoreBadge({
   variant: "metacritic" | "likes";
   className?: string;
 }) {
-  const num = parseInt(String(score ?? "0"), 10);
+  const num = parseInt(String(score ?? ""), 10);
 
   if (isNaN(num) || num <= 0) {
-    return (
-      <div
-        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-neutral-800 border border-white/10 text-neutral-400 font-black text-xs ${className}`}
-      >
-        <Star className="size-3.5" />
-        <span>tbd</span>
-      </div>
-    );
+    return null;
   }
 
   if (variant === "likes") {

@@ -290,7 +290,12 @@ export function MusicPlayer({
                 <Link
                   to="/empire-play/forum"
                   search={{ tab: currentTrack.forumTab || "musicas", id: currentTrack.id }}
-                  onClick={() => haptic.selection()}
+                  onClick={() => {
+                    haptic.selection();
+                    // Recolhe pro mini player (a música continua tocando)
+                    // pra revelar o Fórum por baixo do modal em tela cheia.
+                    setIsExpanded(false);
+                  }}
                   title="Ver no Fórum"
                   className="p-3 rounded-full bg-white/5 border border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
                 >
