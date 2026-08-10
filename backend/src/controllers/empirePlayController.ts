@@ -85,6 +85,9 @@ export interface EmpirePlayCleanAlbum {
   releaseDate?: string | null;
   releaseDateIso?: string | null;
   metacriticAvg?: number | string | null;
+  // Imagens do encarte (coluna "Encarte" da aba Albuns, URLs separadas por
+  // ", " no cadastro) — exibidas na página do álbum junto com as faixas.
+  encarte: string[];
   tracks: EmpirePlayCleanAlbumTrack[];
 }
 
@@ -733,6 +736,13 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         "media_metacritic",
         "nota_media",
       ]);
+      const encarteRaw = getValue(rec, ["encarte"]);
+      const encarte = encarteRaw
+        ? encarteRaw
+            .split(",")
+            .map((u) => u.trim())
+            .filter(Boolean)
+        : [];
 
       // Junção com a aba Musicas
       const matchingSongs = songs.filter((s) => {
@@ -768,6 +778,7 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         releaseDate,
         releaseDateIso,
         metacriticAvg,
+        encarte,
         tracks,
       };
     });
