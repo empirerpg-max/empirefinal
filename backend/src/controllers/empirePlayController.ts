@@ -765,10 +765,18 @@ export async function getEmpirePlayForumTopicController(
 
   let sheetMedia = "Musicas";
   let sheetComments = "Comentarios_Musicas";
+  // Rótulo usado só pra gerar o `id` do item via buildCleanItem — TEM que
+  // ser idêntico ao rótulo usado em getEmpirePlayVideosController
+  // ("Videos", não "Music Videos"), senão o id gerado aqui nunca bate com o
+  // id que veio do catálogo/link "Ver no Fórum", a busca abaixo nunca
+  // encontra o tópico certo e cai no fallback (primeira linha da planilha)
+  // — todo vídeo clicado abria com a mídia/comentários errados.
+  let sheetIdLabel = sheetMedia;
 
   if (tipoParam === "albuns" || tipoParam === "album") {
     sheetMedia = "Albuns";
     sheetComments = "Comentarios_Albuns";
+    sheetIdLabel = sheetMedia;
   } else if (
     tipoParam === "videos" ||
     tipoParam === "video" ||
@@ -780,6 +788,7 @@ export async function getEmpirePlayForumTopicController(
     // e Music Videos foram consolidados em "Music Videos"/"Comentarios_MV".
     sheetMedia = "Music Videos";
     sheetComments = "Comentarios_MV";
+    sheetIdLabel = "Videos";
   }
 
   try {
@@ -812,7 +821,7 @@ export async function getEmpirePlayForumTopicController(
     const normTopicSearch = normalizeComparison(topicIdParam);
 
     let targetMediaIndex = mediaRecords.findIndex((rec, idx) => {
-      const item = buildCleanItem(sheetMedia, rec, idx);
+      const item = buildCleanItem(sheetIdLabel, rec, idx);
       const recTopicId =
         getValue(rec, [
           "id_do_topico",
@@ -830,12 +839,19 @@ export async function getEmpirePlayForumTopicController(
       );
     });
 
-    if (targetMediaIndex === -1 && mediaRecords.length > 0) {
-      targetMediaIndex = 0;
+    // Nunca cair pra "primeira linha da planilha" quando o id não bate — já
+    // foi causa raiz de todo vídeo/tópico clicado abrir com a mídia e os
+    // comentários de OUTRO item. Sem match real, retorna 404 em vez de
+    // mostrar dado errado silenciosamente.
+    if (targetMediaIndex === -1) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Tópico não encontrado." }),
+        { status: 404, headers: { "Content-Type": "application/json; charset=utf-8" } },
+      );
     }
 
     const rawMedia = mediaRecords[targetMediaIndex];
-    const mediaItem = rawMedia ? buildCleanItem(sheetMedia, rawMedia, targetMediaIndex) : null;
+    const mediaItem = rawMedia ? buildCleanItem(sheetIdLabel, rawMedia, targetMediaIndex) : null;
 
     // ID do tópico REAL da planilha (não o id sintético gerado pelo app) — é
     // esse valor que deve ser usado como chave nas abas Comentarios_*.
