@@ -457,6 +457,288 @@ async function vincularFaixaExistenteAoAlbum(
   }
 }
 
+// Processa a lista de faixas de um álbum (criação ou substituição): faixa
+// existente vincula na aba Musicas/EDIÇÃO CHARTS; faixa inédita registra do
+// zero em Musicas + REGISTRO DE MÚSICA, pendente até virar tópico próprio.
+async function processarFaixasDoAlbum(
+  faixas: TrackItemPayload[],
+  albumFullTitle: string,
+  artistaAlbum: string,
+  capaUrl: string,
+  jogadorId: string,
+  dataFormatada: string,
+) {
+  for (const faixa of faixas) {
+    if (!faixa.inedita) {
+      // Faixa existente, selecionada na busca da aba Pontos.
+      try {
+        await vincularFaixaExistenteAoAlbum(faixa.titulo, albumFullTitle, faixa.num);
+      } catch (faixaErr) {
+        console.warn("[processarFaixasDoAlbum] Erro ao vincular faixa existente:", faixaErr);
+      }
+      continue;
+    }
+
+    // Faixa inédita.
+    const participantesLimpos = (faixa.participantes || []).filter(Boolean);
+    const songTitle = faixa.titulo.includes(" - ")
+      ? faixa.titulo
+      : `${artistaAlbum} - ${faixa.titulo}`;
+    const abrirTopico = !!faixa.abrirTopico;
+    const pendente = abrirTopico ? "Não" : "Sim";
+    const trackTopicId = abrirTopico
+      ? `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${faixa.num}`
+      : "";
+
+    try {
+      await googleSheetsService.principal.appendRow("Musicas", [
+        dataFormatada, // A - Data de lançamento
+        trackTopicId, // B - ID do tópico (só se abrir tópico próprio)
+        faixa.mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
+        capaUrl || "", // D - Capa da música
+        "", // E - Letra
+        trackTopicId, // F - Comentários para
+        jogadorId || "", // G - ID do Criador
+        songTitle, // H - Nome da música
+        faixa.tipoSingle || "TRACKLIST ALBUM", // I - TIPO DE SINGLE
+        faixa.tipoMusica || "SOLO", // J - TIPO DE MÚSICA
+        albumFullTitle, // K - ALBUM
+        "", // L - WEEKS
+        "", // M - WEEKS VIDEO
+        artistaAlbum, // N - ACT PRINCIPAL
+        participantesLimpos[0] || "", // O - ARTISTA 2
+        participantesLimpos[1] || "", // P - ARTISTA 3
+        participantesLimpos[2] || "", // Q - ARTISTA 4
+        participantesLimpos[3] || "", // R - ARTISTA 5
+        participantesLimpos[4] || "", // S - ARTISTA 6
+        "", // T - GÊNERO
+        String(faixa.num || ""), // U - Ordem
+        "", // V - Metacritic por jogador
+        "", // W - Média Metacritic
+        pendente, // X - Pendente?
+      ]);
+    } catch (faixaErr) {
+      console.warn("[processarFaixasDoAlbum] Erro ao registrar faixa inédita em Musicas:", faixaErr);
+    }
+
+    // REGISTRO DE MÚSICA — mesmo mapeamento B:P do createSongController,
+    // mas com E = nome do álbum (aqui nunca fica em branco, diferente do
+    // registro de música avulsa).
+    try {
+      const registroRows =
+        await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
+      let targetRow = (registroRows?.length || 0) + 1;
+      if (registroRows && registroRows.length > 1) {
+        for (let i = 1; i < registroRows.length; i++) {
+          if (!(registroRows[i][1] || "").trim()) {
+            targetRow = i + 1;
+            break;
+          }
+        }
+      } else if (!registroRows || registroRows.length === 0) {
+        targetRow = 2;
+      }
+
+      await googleSheetsService.registrosCharts.updateValues(
+        "REGISTRO DE MÚSICA",
+        `B${targetRow}:P${targetRow}`,
+        [
+          [
+            songTitle, // B - Título
+            faixa.tipoSingle || "TRACKLIST ALBUM", // C - Tipo de Single
+            faixa.tipoMusica || "SOLO", // D - Tipo de Música
+            albumFullTitle, // E - ÁLBUM
+            "", // F
+            "", // G
+            artistaAlbum, // H - ACT PRINCIPAL
+            participantesLimpos[0] || "", // I - Artista 2
+            participantesLimpos[1] || "", // J - Artista 3
+            participantesLimpos[2] || "", // K - Artista 4
+            participantesLimpos[3] || "", // L - Artista 5
+            participantesLimpos[4] || "", // M - Artista 6
+            "Não", // N - SUBSTITUIR NOS CHARTS?
+            "", // O - Por qual música?
+            "OK", // P - ENVIAR
+          ],
+        ],
+      );
+    } catch (err) {
+      console.warn("[processarFaixasDoAlbum] Erro ao gravar em REGISTRO DE MÚSICA:", err);
+    }
+  }
+}
+
+// Lista os álbuns já lançados na aba Albuns (planilha principal) — usado na
+// busca de "qual álbum substituir". Coluna G = "Artista - Título", B = ID do
+// tópico (chave), C = Capa, J = Encarte (URLs separadas por ", ").
+export async function getMeusAlbunsController(): Promise<Response> {
+  try {
+    const rows = await googleSheetsService.principal.readValues("Albuns");
+    const albuns: { topicId: string; label: string; artist: string; title: string; capaUrl: string }[] =
+      [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const label = (row[6] || "").trim(); // G
+      const topicId = (row[1] || "").trim(); // B
+      if (!label || !topicId) continue;
+      const sepIdx = label.indexOf(" - ");
+      albuns.push({
+        topicId,
+        label,
+        artist: sepIdx >= 0 ? label.slice(0, sepIdx).trim() : label,
+        title: sepIdx >= 0 ? label.slice(sepIdx + 3).trim() : "",
+        capaUrl: (row[2] || "").trim(), // C
+      });
+    }
+    return new Response(JSON.stringify({ success: true, data: albuns }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[getMeusAlbunsController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao buscar álbuns." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+export interface SubstituirAlbumPayload {
+  albumTopicId: string;
+  novaCapaUrl?: string;
+  novosEncartesUrls?: string[];
+  novasFaixas?: TrackItemPayload[];
+  nomeJogador: string;
+  jogadorId?: string;
+}
+
+// Controller para Substituir álbum já lançado: troca capa/encarte e/ou
+// adiciona faixas a um álbum existente, sem duplicar o registro em Albuns
+// nem em EDIÇÃO CHARTS ÁLBUMS (só atualiza a linha já existente).
+export async function substituirAlbumController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as SubstituirAlbumPayload;
+    const {
+      albumTopicId,
+      novaCapaUrl = "",
+      novosEncartesUrls = [],
+      novasFaixas = [],
+      nomeJogador,
+      jogadorId = "",
+    } = body;
+
+    if (!albumTopicId || !nomeJogador) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Campos obrigatórios ausentes: albumTopicId, nomeJogador.",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const rows = await googleSheetsService.principal.readValues("Albuns");
+    let rowIndex = -1;
+    let albumFullTitle = "";
+    for (let i = 1; i < rows.length; i++) {
+      if ((rows[i][1] || "").trim() === albumTopicId.trim()) {
+        rowIndex = i + 1;
+        albumFullTitle = (rows[i][6] || "").trim();
+        break;
+      }
+    }
+
+    if (rowIndex === -1 || !albumFullTitle) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Álbum não encontrado." }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const artistaAlbum = albumFullTitle.includes(" - ")
+      ? albumFullTitle.slice(0, albumFullTitle.indexOf(" - ")).trim()
+      : albumFullTitle;
+    const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+    if (novaCapaUrl) {
+      try {
+        await googleSheetsService.principal.updateValues("Albuns", `C${rowIndex}`, [[novaCapaUrl]]);
+      } catch (err) {
+        console.warn("[substituirAlbumController] Erro ao atualizar capa:", err);
+      }
+    }
+
+    if (novosEncartesUrls.length > 0) {
+      try {
+        await googleSheetsService.principal.updateValues("Albuns", `J${rowIndex}`, [
+          [novosEncartesUrls.join(", ")],
+        ]);
+      } catch (err) {
+        console.warn("[substituirAlbumController] Erro ao atualizar encarte:", err);
+      }
+    }
+
+    if (novasFaixas.length > 0) {
+      await processarFaixasDoAlbum(
+        novasFaixas,
+        albumFullTitle,
+        artistaAlbum,
+        novaCapaUrl,
+        jogadorId,
+        dataFormatada,
+      );
+
+      // Soma a quantidade de faixas novas ao total já registrado em
+      // "EDIÇÃO CHARTS ÁLBUMS" (coluna E), em vez de sobrescrever.
+      try {
+        const edicaoMatches = await googleSheetsService.edicaoCharts.findRows(
+          "EDIÇÃO CHARTS ÁLBUMS",
+          (row) => (row[3] || "").trim().toLowerCase() === albumFullTitle.toLowerCase(),
+        );
+        for (const { rowIndex: edicaoRowIndex, row } of edicaoMatches) {
+          const totalAtual = parseInt((row[4] || "0").replace(/\D/g, ""), 10) || 0;
+          await googleSheetsService.edicaoCharts.updateValues(
+            "EDIÇÃO CHARTS ÁLBUMS",
+            `E${edicaoRowIndex}`,
+            [[String(totalAtual + novasFaixas.length)]],
+          );
+        }
+      } catch (err) {
+        console.warn("[substituirAlbumController] Erro ao atualizar EDIÇÃO CHARTS ÁLBUMS:", err);
+      }
+    }
+
+    try {
+      await googleSheetsService.registrosCharts.appendRow("REGISTRO", [
+        nowStr,
+        nomeJogador,
+        `(ALBUM) — ${albumFullTitle}`,
+        "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)",
+      ]);
+    } catch (err) {
+      console.warn("[substituirAlbumController] Erro ao gravar Audit Log:", err);
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: { titulo: albumFullTitle, mensagem: "Álbum atualizado com sucesso!" },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  } catch (error: any) {
+    console.error("[substituirAlbumController] Erro:", error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao substituir álbum.",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
 // Controller para Criar / Registrar Álbum
 export async function createAlbumController(request: Request): Promise<Response> {
   try {
@@ -495,106 +777,8 @@ export async function createAlbumController(request: Request): Promise<Response>
     const encartesStr = encartesUrls.join(", ");
     const albumTopicId = `album_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // 1. Processar cada faixa: existente (vincula na aba Musicas/EDIÇÃO
-    // CHARTS) ou inédita (registra do zero, pendente até virar tópico).
-    for (const faixa of faixas) {
-      if (!faixa.inedita) {
-        // Faixa existente, selecionada na busca da aba Pontos.
-        try {
-          await vincularFaixaExistenteAoAlbum(faixa.titulo, albumFullTitle, faixa.num);
-        } catch (faixaErr) {
-          console.warn("[createAlbumController] Erro ao vincular faixa existente:", faixaErr);
-        }
-        continue;
-      }
-
-      // Faixa inédita.
-      const participantesLimpos = (faixa.participantes || []).filter(Boolean);
-      const songTitle = faixa.titulo.includes(" - ")
-        ? faixa.titulo
-        : `${artistaAlbum} - ${faixa.titulo}`;
-      const abrirTopico = !!faixa.abrirTopico;
-      const pendente = abrirTopico ? "Não" : "Sim";
-      const trackTopicId = abrirTopico
-        ? `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${faixa.num}`
-        : "";
-
-      try {
-        await googleSheetsService.principal.appendRow("Musicas", [
-          dataFormatada, // A - Data de lançamento
-          trackTopicId, // B - ID do tópico (só se abrir tópico próprio)
-          faixa.mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
-          capaUrl || "", // D - Capa da música
-          "", // E - Letra
-          trackTopicId, // F - Comentários para
-          jogadorId || "", // G - ID do Criador
-          songTitle, // H - Nome da música
-          faixa.tipoSingle || "TRACKLIST ALBUM", // I - TIPO DE SINGLE
-          faixa.tipoMusica || "SOLO", // J - TIPO DE MÚSICA
-          albumFullTitle, // K - ALBUM
-          "", // L - WEEKS
-          "", // M - WEEKS VIDEO
-          artistaAlbum, // N - ACT PRINCIPAL
-          participantesLimpos[0] || "", // O - ARTISTA 2
-          participantesLimpos[1] || "", // P - ARTISTA 3
-          participantesLimpos[2] || "", // Q - ARTISTA 4
-          participantesLimpos[3] || "", // R - ARTISTA 5
-          participantesLimpos[4] || "", // S - ARTISTA 6
-          "", // T - GÊNERO
-          String(faixa.num || ""), // U - Ordem
-          "", // V - Metacritic por jogador
-          "", // W - Média Metacritic
-          pendente, // X - Pendente?
-        ]);
-      } catch (faixaErr) {
-        console.warn("[createAlbumController] Erro ao registrar faixa inédita em Musicas:", faixaErr);
-      }
-
-      // REGISTRO DE MÚSICA — mesmo mapeamento B:P do createSongController,
-      // mas com E = nome do álbum (aqui nunca fica em branco, diferente do
-      // registro de música avulsa).
-      try {
-        const registroRows =
-          await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
-        let targetRow = (registroRows?.length || 0) + 1;
-        if (registroRows && registroRows.length > 1) {
-          for (let i = 1; i < registroRows.length; i++) {
-            if (!(registroRows[i][1] || "").trim()) {
-              targetRow = i + 1;
-              break;
-            }
-          }
-        } else if (!registroRows || registroRows.length === 0) {
-          targetRow = 2;
-        }
-
-        await googleSheetsService.registrosCharts.updateValues(
-          "REGISTRO DE MÚSICA",
-          `B${targetRow}:P${targetRow}`,
-          [
-            [
-              songTitle, // B - Título
-              faixa.tipoSingle || "TRACKLIST ALBUM", // C - Tipo de Single
-              faixa.tipoMusica || "SOLO", // D - Tipo de Música
-              albumFullTitle, // E - ÁLBUM
-              "", // F
-              "", // G
-              artistaAlbum, // H - ACT PRINCIPAL
-              participantesLimpos[0] || "", // I - Artista 2
-              participantesLimpos[1] || "", // J - Artista 3
-              participantesLimpos[2] || "", // K - Artista 4
-              participantesLimpos[3] || "", // L - Artista 5
-              participantesLimpos[4] || "", // M - Artista 6
-              "Não", // N - SUBSTITUIR NOS CHARTS?
-              "", // O - Por qual música?
-              "OK", // P - ENVIAR
-            ],
-          ],
-        );
-      } catch (err) {
-        console.warn("[createAlbumController] Erro ao gravar em REGISTRO DE MÚSICA:", err);
-      }
-    }
+    // 1. Processar cada faixa (existente ou inédita).
+    await processarFaixasDoAlbum(faixas, albumFullTitle, artistaAlbum, capaUrl, jogadorId, dataFormatada);
 
     // 2. Gravar Álbum na planilha principal.
     try {
