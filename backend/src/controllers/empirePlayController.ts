@@ -3,9 +3,37 @@ import {
   normalizeComparison,
   normalizeHeader,
   normalizeText,
+  dedupeHeaders,
   SheetRecord,
 } from "../services/googleSheetsService";
 import { getUserProfile } from "./userController";
+
+/**
+ * Igual a sheetsService.readSheetObjects, mas preserva o número real da
+ * linha na planilha (1-based) em cada registro — necessário pra depois
+ * conseguir escrever de volta na célula certa (ex: reações de comentário),
+ * já que readSheetObjects descarta essa informação.
+ */
+async function readSheetObjectsWithRowIndex(
+  sheetName: string,
+): Promise<{ rec: SheetRecord; rowIndex: number }[]> {
+  const rawRows = await sheetsService.readValues(sheetName).catch(() => []);
+  if (!rawRows || rawRows.length < 2) return [];
+  const headers = dedupeHeaders(
+    sheetName,
+    rawRows[0].map((h, i) => normalizeHeader(h) || `coluna_${i + 1}`),
+  );
+  const out: { rec: SheetRecord; rowIndex: number }[] = [];
+  rawRows.slice(1).forEach((row, i) => {
+    if (!row.some((cell) => normalizeText(cell))) return;
+    const rec: SheetRecord = {};
+    headers.forEach((h, hi) => {
+      rec[h] = normalizeText(row[hi]);
+    });
+    out.push({ rec, rowIndex: i + 2 });
+  });
+  return out;
+}
 
 export interface EmpirePlayCleanItem {
   id: string;
@@ -749,14 +777,24 @@ export async function getEmpirePlayForumTopicController(
   }
 
   try {
-    const [mediaRecords, commentRecords, genericComments, empireComments, topicCommentsSheet] =
+    const [mediaRecords, commentRecordsWithRow, genericComments, empireComments, topicCommentsSheet] =
       await Promise.all([
         sheetsService.readSheetObjects(sheetMedia).catch(() => []),
-        sheetsService.readSheetObjects(sheetComments).catch(() => []),
+        readSheetObjectsWithRowIndex(sheetComments),
         sheetsService.readSheetObjects("Comentarios").catch(() => []),
         sheetsService.readSheetObjects("Comentarios_EmpirePlay").catch(() => []),
         sheetsService.readSheetObjects("Topicos_EmpirePlay").catch(() => []),
       ]);
+
+    // Marca cada registro da aba de comentários principal com sua linha real
+    // na planilha (__rowIndex) — é isso que permite reagir com emoji direto
+    // na célula certa depois. Comentários vindos das abas de fallback
+    // (Comentarios/Comentarios_EmpirePlay/Topicos_EmpirePlay) não suportam
+    // reação, já que praticamente não têm uso real.
+    const commentRecords = commentRecordsWithRow.map(({ rec, rowIndex }) => ({
+      ...rec,
+      __rowIndex: String(rowIndex),
+    }));
 
     const allCommentRecords = [
       ...commentRecords,
@@ -870,6 +908,27 @@ export async function getEmpirePlayForumTopicController(
           ]) || "";
         const ratingVal = getValue(rec, ["nota_likes", "nota", "rating", "likes"]) || "";
 
+        // Reações (emoji → lista de jogadorIds que reagiram), gravadas como
+        // JSON numa coluna própria da aba de comentários. Só existe pra
+        // comentários vindos da aba principal (que carregam __rowIndex).
+        const rowIndexVal = (rec as SheetRecord).__rowIndex
+          ? parseInt((rec as SheetRecord).__rowIndex, 10)
+          : null;
+        const reactionsRaw = getValue(rec, ["reacoes", "reactions"]) || "";
+        let reactionsMap: Record<string, string[]> = {};
+        if (reactionsRaw) {
+          try {
+            const parsed = JSON.parse(reactionsRaw);
+            if (parsed && typeof parsed === "object") reactionsMap = parsed;
+          } catch {
+            // ignora JSON inválido/legado
+          }
+        }
+        const reactions: Record<string, number> = {};
+        Object.entries(reactionsMap).forEach(([emoji, jogadorIds]) => {
+          if (Array.isArray(jogadorIds) && jogadorIds.length > 0) reactions[emoji] = jogadorIds.length;
+        });
+
         return {
           id: `comment_${idx + 1}`,
           data: dataVal,
@@ -882,6 +941,10 @@ export async function getEmpirePlayForumTopicController(
           comment: commentVal,
           nota: ratingVal,
           rating: ratingVal,
+          rowIndex: rowIndexVal,
+          sheetComments: rowIndexVal ? sheetComments : null,
+          reactions,
+          reactedBy: rowIndexVal ? reactionsMap : {},
         };
       });
 
@@ -906,6 +969,10 @@ export async function getEmpirePlayForumTopicController(
           comment: embeddedCommentsText,
           nota: "",
           rating: "",
+          rowIndex: null,
+          sheetComments: null,
+          reactions: {},
+          reactedBy: {},
         });
       }
 
@@ -932,6 +999,10 @@ export async function getEmpirePlayForumTopicController(
               comment: `Avaliação do Tópico: ${jScore.trim()} pts.`,
               nota: jScore.trim(),
               rating: jScore.trim(),
+              rowIndex: null,
+              sheetComments: null,
+              reactions: {},
+              reactedBy: {},
             });
           }
         });

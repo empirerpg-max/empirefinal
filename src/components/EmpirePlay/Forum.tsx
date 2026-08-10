@@ -17,8 +17,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import { driveImg } from "@/lib/api";
+import { useTelegramUser, haptic } from "@/lib/telegram";
 import { CommentModal } from "./CommentModal";
 import { ScoreBadge } from "./ScoreBadge";
+import { ReactionBar } from "./ReactionBar";
 
 // "music-videos" foi consolidado dentro de "videos" — Vídeos e Music Videos
 // vivem na mesma aba da planilha ("Music Videos"), diferenciados por tag
@@ -33,6 +35,12 @@ interface CommentItem {
   jogador: string;
   comentario: string;
   nota: string;
+  // Linha real na planilha + aba de comentários — null quando o comentário
+  // veio de uma fonte de fallback que não suporta reação.
+  rowIndex: number | null;
+  sheetComments: string | null;
+  reactions: Record<string, number>;
+  reactedBy: Record<string, string[]>;
 }
 
 interface ForumTopicItem {
@@ -94,6 +102,9 @@ export const Forum: React.FC<ForumProps> = ({
   initialTab,
   initialItemId,
 }) => {
+  const { user: telegramUser } = useTelegramUser();
+  const myId = telegramUser?.id ? String(telegramUser.id) : "";
+
   const initialSubmenu: ForumSubmenu =
     initialTab && (FORUM_SUBMENUS as string[]).includes(initialTab)
       ? (initialTab as ForumSubmenu)
@@ -252,6 +263,10 @@ export const Forum: React.FC<ForumProps> = ({
           jogador: c.jogador || c.player || c.nome_jogador || "Anônimo",
           comentario: c.comentario || c.comment || c.texto || "",
           nota: c.nota || c.rating || c.likes || "",
+          rowIndex: c.rowIndex ?? null,
+          sheetComments: c.sheetComments ?? null,
+          reactions: c.reactions || {},
+          reactedBy: c.reactedBy || {},
         }));
       }
 
@@ -275,6 +290,10 @@ export const Forum: React.FC<ForumProps> = ({
             jogador: c.jogador || c.player || "Anônimo",
             comentario: c.comentario || c.comment || "",
             nota: c.nota || c.rating || "",
+            rowIndex: null,
+            sheetComments: null,
+            reactions: {},
+            reactedBy: {},
           }));
         }
       }
@@ -295,6 +314,55 @@ export const Forum: React.FC<ForumProps> = ({
       setTopicComments([]);
     }
   }, [selectedTopic]);
+
+  // Alterna reação de emoji num comentário — atualiza local (otimista) e
+  // reconcilia com a resposta real do servidor.
+  const handleToggleReaction = async (comment: CommentItem, emoji: string) => {
+    if (!comment.rowIndex || !comment.sheetComments || !myId) return;
+    haptic.selection();
+
+    const mineNow = (comment.reactedBy[emoji] || []).includes(myId);
+    const optimisticReactedBy = { ...comment.reactedBy };
+    optimisticReactedBy[emoji] = mineNow
+      ? (optimisticReactedBy[emoji] || []).filter((id) => id !== myId)
+      : [...(optimisticReactedBy[emoji] || []), myId];
+    if (optimisticReactedBy[emoji].length === 0) delete optimisticReactedBy[emoji];
+    const optimisticReactions: Record<string, number> = {};
+    Object.entries(optimisticReactedBy).forEach(([e, ids]) => (optimisticReactions[e] = ids.length));
+
+    setTopicComments((prev) =>
+      prev.map((c) =>
+        c.id === comment.id
+          ? { ...c, reactions: optimisticReactions, reactedBy: optimisticReactedBy }
+          : c,
+      ),
+    );
+
+    try {
+      const res = await fetch("/api/forum/comment-reaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sheetComments: comment.sheetComments,
+          rowIndex: comment.rowIndex,
+          emoji,
+          jogadorId: myId,
+        }),
+      });
+      const json = await res.json();
+      if (json?.success && json.data) {
+        setTopicComments((prev) =>
+          prev.map((c) =>
+            c.id === comment.id
+              ? { ...c, reactions: json.data.reactions || {}, reactedBy: json.data.reactedBy || {} }
+              : c,
+          ),
+        );
+      }
+    } catch (err) {
+      console.error("Erro ao reagir ao comentário:", err);
+    }
+  };
 
   // Filtragem por busca + tag (Vídeos)
   const filteredItems = useMemo(() => {
@@ -627,6 +695,15 @@ export const Forum: React.FC<ForumProps> = ({
                     <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed">
                       {c.comentario}
                     </p>
+                    {c.rowIndex && (
+                      <ReactionBar
+                        reactions={c.reactions}
+                        reactedBy={c.reactedBy}
+                        myId={myId}
+                        disabled={!myId}
+                        onToggle={(emoji) => handleToggleReaction(c, emoji)}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

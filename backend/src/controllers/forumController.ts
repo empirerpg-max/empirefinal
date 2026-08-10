@@ -281,3 +281,94 @@ export async function getCommentsController(request: Request): Promise<Response>
     );
   }
 }
+
+export interface ToggleReactionBody {
+  // Nome exato da aba de comentários e a linha real nela — ambos vêm do
+  // próprio comentário retornado por getEmpirePlayForumTopicController
+  // (campos rowIndex/sheetComments), nunca inventados pelo cliente.
+  sheetComments: string;
+  rowIndex: number;
+  emoji: string;
+  jogadorId: string;
+}
+
+// Colunas de reação por aba — logo após as colunas já mapeadas de cada uma
+// (Comentarios_Musicas tem A-D; Comentarios_MV e Comentarios_Albuns têm A-E).
+const REACTION_COLUMN: Record<string, string> = {
+  Comentarios_Musicas: "E",
+  Comentarios_MV: "F",
+  Comentarios_Albuns: "F",
+};
+
+/**
+ * POST /api/forum/comment-reaction
+ * Alterna (adiciona/remove) a reação de um emoji num comentário. Guarda um
+ * JSON { emoji: [jogadorId, ...] } na coluna de reação da aba de
+ * comentários, criando o cabeçalho "Reações" na primeira vez que a coluna é
+ * usada (nenhuma aba de comentários tinha essa coluna originalmente).
+ */
+export async function toggleCommentReactionController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as ToggleReactionBody;
+    const { sheetComments, rowIndex, emoji, jogadorId } = body;
+
+    const col = REACTION_COLUMN[sheetComments];
+    if (!col || !rowIndex || rowIndex < 2 || !emoji || !jogadorId) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Parâmetros inválidos pra reagir a este comentário." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    // Garante o cabeçalho da coluna de reação (self-healing — a coluna não
+    // existia antes desta feature).
+    const headerRow = await googleSheetsService.principal.readValues(sheetComments, "1:1");
+    const currentHeader = (headerRow?.[0]?.[col.charCodeAt(0) - 65] || "").trim();
+    if (normalizeComparison(currentHeader) !== "reacoes") {
+      await googleSheetsService.principal.updateValues(sheetComments, `${col}1`, [["Reações"]]);
+    }
+
+    const cellRows = await googleSheetsService.principal.readValues(
+      sheetComments,
+      `${col}${rowIndex}:${col}${rowIndex}`,
+    );
+    const currentRaw = cellRows?.[0]?.[0] || "";
+
+    let reactionsMap: Record<string, string[]> = {};
+    if (currentRaw) {
+      try {
+        const parsed = JSON.parse(currentRaw);
+        if (parsed && typeof parsed === "object") reactionsMap = parsed;
+      } catch {
+        // JSON inválido/legado — trata como se não houvesse reações ainda.
+      }
+    }
+
+    const current = reactionsMap[emoji] || [];
+    const alreadyReacted = current.includes(jogadorId);
+    reactionsMap[emoji] = alreadyReacted
+      ? current.filter((id) => id !== jogadorId)
+      : [...current, jogadorId];
+    if (reactionsMap[emoji].length === 0) delete reactionsMap[emoji];
+
+    await googleSheetsService.principal.updateValues(sheetComments, `${col}${rowIndex}`, [
+      [JSON.stringify(reactionsMap)],
+    ]);
+
+    const reactions: Record<string, number> = {};
+    Object.entries(reactionsMap).forEach(([e, ids]) => {
+      reactions[e] = ids.length;
+    });
+
+    return new Response(
+      JSON.stringify({ success: true, data: { reactions, reactedBy: reactionsMap } }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  } catch (error: any) {
+    console.error("[toggleCommentReactionController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao reagir ao comentário." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
