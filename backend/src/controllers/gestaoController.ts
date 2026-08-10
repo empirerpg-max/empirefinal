@@ -464,7 +464,13 @@ export async function createAlbumController(request: Request): Promise<Response>
 
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const albumFullTitle = `${artistaAlbum} - ${tituloAlbum}`;
+    // Mesma rede de segurança contra "Artista - Artista - Título" das
+    // demais categorias — aqui não havia nenhuma checagem antes.
+    const albumArtistPrefix = `${artistaAlbum} - `;
+    const tituloAlbumLimpo = tituloAlbum.toLowerCase().startsWith(albumArtistPrefix.toLowerCase())
+      ? tituloAlbum.slice(albumArtistPrefix.length).trim()
+      : tituloAlbum;
+    const albumFullTitle = `${artistaAlbum} - ${tituloAlbumLimpo}`;
     const encartesStr = encartesUrls.join(", ");
     const albumTopicId = `album_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 

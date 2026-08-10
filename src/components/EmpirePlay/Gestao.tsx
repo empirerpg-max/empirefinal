@@ -846,6 +846,16 @@ export const Gestao: React.FC = () => {
               placeholder="Ex: Anti-Hero"
               className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
             />
+            <p className="text-[11px] text-neutral-400 leading-relaxed">
+              Só o nome da música — o artista já vem do campo acima e é
+              adicionado automaticamente.
+              <br />
+              <span className="text-emerald-400 font-bold">Certo:</span> "Anti-Hero"
+              <span className="text-neutral-600"> → vira "Taylor Swift - Anti-Hero"</span>
+              <br />
+              <span className="text-red-400 font-bold">Errado:</span> "Taylor Swift - Anti-Hero"
+              <span className="text-neutral-600"> → duplica o nome do artista</span>
+            </p>
           </div>
 
           {/* TIPO DE SINGLE E TIPO DE MÚSICA */}
@@ -1162,6 +1172,12 @@ export const Gestao: React.FC = () => {
               placeholder="Ex: Entrevista Exclusiva no Empire Hub"
               className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
             />
+            <p className="text-[11px] text-neutral-400 leading-relaxed">
+              Só o título — o artista já vem do campo acima e é adicionado automaticamente.
+              <br />
+              <span className="text-emerald-400 font-bold">Certo:</span> "Entrevista Exclusiva"
+              <span className="text-neutral-600"> → vira "Taylor Swift - Entrevista Exclusiva"</span>
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -1371,6 +1387,12 @@ export const Gestao: React.FC = () => {
               placeholder="Ex: Anti-Hero (Official Music Video)"
               className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
             />
+            <p className="text-[11px] text-neutral-400 leading-relaxed">
+              Só o título — o artista já vem do campo acima e é adicionado automaticamente.
+              <br />
+              <span className="text-emerald-400 font-bold">Certo:</span> "Anti-Hero (Official Music Video)"
+              <span className="text-neutral-600"> → vira "Taylor Swift - Anti-Hero (Official Music Video)"</span>
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -1561,6 +1583,12 @@ export const Gestao: React.FC = () => {
               placeholder="Ex: Midnights"
               className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
             />
+            <p className="text-[11px] text-neutral-400 leading-relaxed">
+              Só o título — o artista já vem do campo acima e é adicionado automaticamente.
+              <br />
+              <span className="text-emerald-400 font-bold">Certo:</span> "Midnights"
+              <span className="text-neutral-600"> → vira "Taylor Swift - Midnights"</span>
+            </p>
           </div>
 
           {/* QUANTIDADE DE FAIXAS */}
