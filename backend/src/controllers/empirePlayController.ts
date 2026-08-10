@@ -307,10 +307,13 @@ function buildCleanItem(
     "id_do_criador",
   ]);
 
-  // A aba "Music Videos" não tem colunas dedicadas de título/artista — o
-  // jogador nomeia o tópico do Telegram como "Artista - Nome do vídeo" e é
-  // esse texto (coluna "Título do tópico") que carrega os dois dados.
-  if ((!title || !artist) && sheetName === "Music Videos") {
+  // A aba "Music Videos" (Vídeos + Music Videos consolidados) não tem
+  // colunas dedicadas de título/artista — o jogador nomeia o tópico do
+  // Telegram como "Artista - Nome do vídeo" e é esse texto (coluna "Título
+  // do tópico") que carrega os dois dados. Checa a presença da própria
+  // coluna em vez do nome do sheetName (que agora também pode ser "Videos",
+  // já que os dois catálogos foram unificados na mesma aba real).
+  if (!title || !artist) {
     const topicTitle = getValue(record, ["titulo_do_topico"]);
     const dashMatch = topicTitle?.match(/^(.+?)\s[-–—]\s(.+)$/);
     if (dashMatch) {
@@ -377,6 +380,8 @@ function buildCleanItem(
     "media_metacritic",
     "media_critica",
     "nota_media",
+    "media_likes",
+    "media_like",
   ]);
   const lyrics = getValue(record, ["letra", "lyrics", "letra_da_musica"]);
   const description = getValue(record, ["descricao", "descrição", "description"]);
