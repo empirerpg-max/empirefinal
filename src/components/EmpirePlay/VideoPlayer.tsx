@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Tv, Sparkles, AlertCircle, Flag, Loader2 } from "lucide-react";
+import { X, Tv, Sparkles, AlertCircle, Flag, Loader2, FileWarning } from "lucide-react";
 import { toast } from "sonner";
 import { driveImg } from "@/lib/api";
 import { haptic } from "@/lib/telegram";
@@ -32,6 +32,8 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
   // Otimista: assim que o report é aceito, já reflete no botão sem esperar
   // o próximo carregamento da lista (que traria reportPending do servidor).
   const [justReported, setJustReported] = useState(false);
+  const [reportingWrong, setReportingWrong] = useState(false);
+  const [wrongReported, setWrongReported] = useState(false);
 
   if (!video) return null;
 
@@ -64,6 +66,32 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
     }
   }
 
+  async function handleReportWrongContent() {
+    if (!video?.id || reportingWrong || wrongReported) return;
+    haptic.selection();
+    setReportingWrong(true);
+    try {
+      const res = await fetch("/api/empire-play/report-wrong-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: video.id, title: video.titulo, artist: video.artista }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setWrongReported(true);
+        toast.success("Reportado!", {
+          description: "Avisamos a equipe que esse conteúdo pode estar incorreto.",
+        });
+      } else {
+        toast.error(json.error || "Não foi possível reportar.");
+      }
+    } catch {
+      toast.error("Erro de conexão ao reportar.");
+    } finally {
+      setReportingWrong(false);
+    }
+  }
+
   const rawLink =
     video.url_final_player || video.link || (video as any).videoUrl || video.youtube_url || "";
 
@@ -87,10 +115,23 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
     return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : url;
   };
 
+  // Vimeo, assim como YouTube, é a plataforma oficial embutida via iframe —
+  // não tem como evitar mostrar o player dela.
+  const isVimeoUrl = (url?: string) => {
+    if (!url) return false;
+    return /vimeo\.com/i.test(url);
+  };
+
+  const getVimeoEmbedUrl = (url: string) => {
+    const match = url.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+    return match ? `https://player.vimeo.com/video/${match[1]}?autoplay=1` : url;
+  };
+
   // Drive e Telegram tocam via <video> nativo apontando pro proxy do próprio
   // Worker (/api/media/video, /api/telegram-video) — o jogador nunca vê a
   // interface do Drive, só o player do app, como o resto da mídia.
   const isYt = video.metodo_exibicao === "iframe_youtube" || isYouTubeUrl(rawLink);
+  const isVimeo = !isYt && (video.fonte === "vimeo" || isVimeoUrl(rawLink));
 
   const poster =
     video.poster_url || video.capa_url
@@ -132,6 +173,24 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
               )}
             </button>
           )}
+          {video.id && (
+            <button
+              onClick={handleReportWrongContent}
+              disabled={reportingWrong || wrongReported}
+              title={
+                wrongReported
+                  ? "Já reportado, obrigado!"
+                  : "Esse não é o vídeo correto (arquivo errado/fora de posição)"
+              }
+              className="size-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 grid place-items-center text-neutral-400 hover:text-white active:scale-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+            >
+              {reportingWrong ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <FileWarning className="size-4" />
+              )}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="size-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 grid place-items-center text-white active:scale-90 transition-all flex-shrink-0"
@@ -150,6 +209,14 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
               title={video.titulo}
               className="w-full aspect-video border-0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          ) : isVimeo ? (
+            <iframe
+              src={getVimeoEmbedUrl(rawLink)}
+              title={video.titulo}
+              className="w-full aspect-video border-0"
+              allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media"
               allowFullScreen
             />
           ) : (
@@ -203,7 +270,7 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
             <div className="flex items-center gap-2">
               <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-neutral-300 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="size-3.5 text-red-500" />
-                {isYt ? "YouTube HD" : "Empire Play HD"}
+                {isYt ? "YouTube HD" : isVimeo ? "Vimeo HD" : "Empire Play HD"}
               </span>
             </div>
           </div>

@@ -8,9 +8,13 @@ import {
   Maximize2,
   Minimize2,
   FileText,
+  FileWarning,
+  Loader2,
   Disc,
 } from "lucide-react";
+import { toast } from "sonner";
 import { driveImg } from "@/lib/api";
+import { haptic } from "@/lib/telegram";
 
 export interface PlayableTrack {
   id?: string;
@@ -79,6 +83,38 @@ export function MusicPlayer({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
   const [audioError, setAudioError] = useState(false);
+  const [reportingWrong, setReportingWrong] = useState(false);
+  const [wrongReported, setWrongReported] = useState(false);
+
+  async function handleReportWrongContent() {
+    if (!currentTrack?.id || reportingWrong || wrongReported) return;
+    haptic.selection();
+    setReportingWrong(true);
+    try {
+      const res = await fetch("/api/empire-play/report-wrong-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: currentTrack.id,
+          title: currentTrack.titulo,
+          artist: currentTrack.artista,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setWrongReported(true);
+        toast.success("Reportado!", {
+          description: "Avisamos a equipe que esse conteúdo pode estar incorreto.",
+        });
+      } else {
+        toast.error(json.error || "Não foi possível reportar.");
+      }
+    } catch {
+      toast.error("Erro de conexão ao reportar.");
+    } finally {
+      setReportingWrong(false);
+    }
+  }
 
   // Estado de carregamento do áudio (Drive serve via proxy do backend,
   // que evita bloqueio de CORS do fetch direto ao drive.google.com)
@@ -243,12 +279,32 @@ export function MusicPlayer({
                 {currentTrack.album || "Empire Play Studio"}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="p-3 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10"
-            >
-              <X className="size-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {currentTrack.id && (
+                <button
+                  onClick={handleReportWrongContent}
+                  disabled={reportingWrong || wrongReported}
+                  title={
+                    wrongReported
+                      ? "Já reportado, obrigado!"
+                      : "Essa não é a música correta (arquivo errado)"
+                  }
+                  className="p-3 rounded-full bg-white/5 border border-white/10 text-neutral-400 hover:text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {reportingWrong ? (
+                    <Loader2 className="size-5 animate-spin" />
+                  ) : (
+                    <FileWarning className="size-5" />
+                  )}
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="p-3 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
           </div>
 
           {/* Arte de Capa, Vídeo ou Letra */}

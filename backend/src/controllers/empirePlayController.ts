@@ -16,7 +16,7 @@ export interface EmpirePlayCleanItem {
   coverUrl?: string | null;
   audioUrl?: string | null;
   videoUrl?: string | null;
-  videoSource?: "youtube" | "drive" | "telegram" | null;
+  videoSource?: "youtube" | "vimeo" | "drive" | "telegram" | null;
   // ID da mensagem no grupo de arquivo do Telegram (já resolvido com a
   // prioridade certa por resolveVideoUrlAndSource — inclui a versão
   // reconvertida quando existir). Usado pelo botão "Reportar problema".
@@ -102,14 +102,16 @@ function getValueWithAlias(
 function resolveVideoSource(
   value: string,
   matchedAlias: string,
-): "youtube" | "drive" | "telegram" | null {
+): "youtube" | "vimeo" | "drive" | "telegram" | null {
   if (/youtube\.com|youtu\.be/i.test(value)) return "youtube";
+  if (/vimeo\.com/i.test(value)) return "vimeo";
   if (/drive\.google\.com/i.test(value)) return "drive";
   if (/^(https?:\/\/)?t\.me\//i.test(value)) return "telegram";
 
   const alias = matchedAlias.toLowerCase();
   if (alias.includes("telegram")) return "telegram";
   if (alias.includes("drive")) return "drive";
+  if (alias.includes("vimeo")) return "vimeo";
   if (alias.includes("youtube")) return "youtube";
 
   return null;
@@ -126,11 +128,16 @@ function resolveVideoSource(
  */
 function resolveVideoUrlAndSource(record: SheetRecord): {
   videoUrl: string | null;
-  videoSource: "youtube" | "drive" | "telegram" | null;
+  videoSource: "youtube" | "vimeo" | "drive" | "telegram" | null;
 } {
   const explicitFonte = normalizeComparison(getValue(record, ["arquivo_fonte", "fonte"]) || "");
 
-  if (explicitFonte === "telegram" || explicitFonte === "drive" || explicitFonte === "youtube") {
+  if (
+    explicitFonte === "telegram" ||
+    explicitFonte === "drive" ||
+    explicitFonte === "youtube" ||
+    explicitFonte === "vimeo"
+  ) {
     const specificAliases: Record<string, string[]> = {
       // "ID da mensagem (reconvertido)" é preenchida pelo script de
       // reconversão (telegram-media/scripts/retranscode-videos.ts): aponta
@@ -160,11 +167,12 @@ function resolveVideoUrlAndSource(record: SheetRecord): {
       // não há uma coluna "drive_url" dedicada nessa aba.
       drive: ["drive_url", "link_do_video", "id_do_arquivo"],
       youtube: ["youtube_url", "link_do_video", "id_do_arquivo"],
+      vimeo: ["vimeo_url", "link_do_video", "id_do_arquivo"],
     };
     const value = getValue(record, specificAliases[explicitFonte]);
     return {
       videoUrl: value,
-      videoSource: value ? (explicitFonte as "youtube" | "drive" | "telegram") : null,
+      videoSource: value ? (explicitFonte as "youtube" | "vimeo" | "drive" | "telegram") : null,
     };
   }
 
@@ -187,7 +195,7 @@ function resolveVideoUrlAndSource(record: SheetRecord): {
 function parseDateToIso(value: string | null): string | null {
   if (!value) return null;
 
-  const ddmmyyyy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const ddmmyyyy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (ddmmyyyy) {
     const [, day, month, year] = ddmmyyyy;
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
@@ -327,6 +335,7 @@ function buildCleanItem(
     "data_lancamento",
     "data",
     "data_de_publicacao",
+    "data_do_envio",
   ]);
   const releaseDateIso = parseDateToIso(releaseDate);
 
@@ -559,6 +568,9 @@ export async function getEmpirePlayMusicVideosController(request: Request): Prom
   const filterQuery = normalizeComparison(
     url.searchParams.get("q") || url.searchParams.get("search") || "",
   );
+  const filterCategory = normalizeComparison(
+    url.searchParams.get("category") || url.searchParams.get("tipo_video") || "",
+  );
 
   try {
     const records = await sheetsService.readSheetObjects("Music Videos");
@@ -566,6 +578,9 @@ export async function getEmpirePlayMusicVideosController(request: Request): Prom
 
     if (filterArtist) {
       items = items.filter((item) => normalizeComparison(item.artist).includes(filterArtist));
+    }
+    if (filterCategory) {
+      items = items.filter((item) => normalizeComparison(item.category || "") === filterCategory);
     }
     if (filterQuery) {
       items = items.filter((item) => {
@@ -575,6 +590,15 @@ export async function getEmpirePlayMusicVideosController(request: Request): Prom
         return haystack.includes(filterQuery);
       });
     }
+
+    // Mais recente primeiro (Data do envio) — itens sem data ficam por
+    // último, na ordem em que já vieram da planilha.
+    items.sort((a, b) => {
+      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
+      if (a.releaseDateIso) return -1;
+      if (b.releaseDateIso) return 1;
+      return 0;
+    });
 
     return new Response(JSON.stringify({ success: true, data: items }), {
       status: 200,
@@ -600,6 +624,9 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
   const filterQuery = normalizeComparison(
     url.searchParams.get("q") || url.searchParams.get("search") || "",
   );
+  const filterCategory = normalizeComparison(
+    url.searchParams.get("category") || url.searchParams.get("tipo_video") || "",
+  );
 
   try {
     const records = await sheetsService.readSheetObjects("Videos");
@@ -607,6 +634,9 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
 
     if (filterArtist) {
       items = items.filter((item) => normalizeComparison(item.artist).includes(filterArtist));
+    }
+    if (filterCategory) {
+      items = items.filter((item) => normalizeComparison(item.category || "") === filterCategory);
     }
     if (filterQuery) {
       items = items.filter((item) => {
@@ -616,6 +646,13 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
         return haystack.includes(filterQuery);
       });
     }
+
+    items.sort((a, b) => {
+      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
+      if (a.releaseDateIso) return -1;
+      if (b.releaseDateIso) return 1;
+      return 0;
+    });
 
     return new Response(JSON.stringify({ success: true, data: items }), {
       status: 200,

@@ -65,3 +65,12 @@ jobs:
           if [ -n "$DRIVE_OAUTH_REFRESH_TOKEN" ]; then
             echo "$DRIVE_OAUTH_REFRESH_TOKEN" | bunx wrangler secret put DRIVE_OAUTH_REFRESH_TOKEN -c dist/tanstack_start_app/wrangler.json
           fi
+
+      - name: Set Resend API key (e-mail de "conteúdo incorreto")
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          if [ -n "$RESEND_API_KEY" ]; then
+            echo "$RESEND_API_KEY" | bunx wrangler secret put RESEND_API_KEY -c dist/tanstack_start_app/wrangler.json
+          fi
