@@ -973,15 +973,15 @@ export async function getEmpirePlayForumTopicController(
           ]) || "";
         if (!playerVal) playerVal = "Anônimo";
 
+        // "comentarios_para" NUNCA deve virar texto do comentário — é a
+        // coluna de referência ao ID do tópico (usada só pra achar o
+        // registro certo, no topicoVal acima). Um bug antigo aqui a
+        // reaproveitava como fallback de texto quando o registro vinha de
+        // uma aba legada sem coluna de comentário de verdade, fazendo o
+        // próprio ID do tópico (ex: "46", "815") aparecer como se fosse o
+        // comentário de um jogador "Anônimo".
         const commentVal =
-          getValue(rec, [
-            "comentario",
-            "comment",
-            "texto",
-            "mensagem",
-            "conteudo",
-            "comentarios_para",
-          ]) || "";
+          getValue(rec, ["comentario", "comment", "texto", "mensagem", "conteudo"]) || "";
         const ratingVal = getValue(rec, ["nota_likes", "nota", "rating", "likes"]) || "";
 
         // Reações (emoji → lista de jogadorIds que reagiram), gravadas como
@@ -1024,10 +1024,14 @@ export async function getEmpirePlayForumTopicController(
         };
       });
 
-    // Se o registro da mídia contiver o campo `comentarios_para` ou notas registradas por jogadores (ex: Hugo: 95)
+    // Se o registro da mídia contiver notas registradas por jogadores (ex: Hugo: 95)
     if (rawMedia) {
+      // "comentarios_para" NÃO entra aqui — na aba de mídia (Musicas/Albuns)
+      // essa coluna guarda o próprio ID do tópico (igual à coluna B), nunca
+      // texto de comentário. Usá-la aqui fazia o ID do tópico (ex: "46",
+      // "815") aparecer como se fosse um comentário real de "Comunidade
+      // Empire Play".
       const embeddedCommentsText = getValue(rawMedia, [
-        "comentarios_para",
         "comentarios",
         "comentario_para",
         "forum_comentarios",
@@ -1085,12 +1089,17 @@ export async function getEmpirePlayForumTopicController(
       }
     }
 
+    // Nunca devolver "comentário" vazio — registros que só bateram pelo id
+    // do tópico (rule 1/3 acima) mas não têm texto de comentário de verdade
+    // não devem virar bolha vazia no Fórum.
+    const commentsWithText = comments.filter((c) => c.comentario && c.comentario.trim());
+
     return new Response(
       JSON.stringify({
         success: true,
         data: {
           media: mediaItem,
-          comments,
+          comments: commentsWithText,
         },
       }),
       { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
