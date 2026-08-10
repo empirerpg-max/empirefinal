@@ -3,6 +3,7 @@ import { X, Tv, Sparkles, AlertCircle, Flag, Loader2, FileWarning } from "lucide
 import { toast } from "sonner";
 import { driveImg } from "@/lib/api";
 import { haptic } from "@/lib/telegram";
+import { ScoreBadge } from "./ScoreBadge";
 
 export interface PlayableVideo {
   id?: string;
@@ -19,6 +20,7 @@ export interface PlayableVideo {
   url_final_player?: string;
   telegramMessageId?: string | null;
   reportPending?: boolean;
+  metacriticAvg?: number | string | null;
 }
 
 interface VideoPlayerProps {
@@ -264,7 +266,10 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
               <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight">
                 {video.titulo}
               </h1>
-              <p className="text-sm font-bold text-red-400 mt-0.5">{video.artista}</p>
+              <div className="flex items-center gap-2 mt-1.5">
+                <p className="text-sm font-bold text-red-400">{video.artista}</p>
+                <ScoreBadge score={video.metacriticAvg} variant="likes" />
+              </div>
             </div>
 
             <div className="flex items-center gap-2">

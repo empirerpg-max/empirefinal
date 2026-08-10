@@ -8,7 +8,6 @@ import {
   Search,
   Play,
   Pause,
-  Star,
   ThumbsUp,
   ChevronLeft,
   Calendar,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { CommentModal } from "./CommentModal";
+import { ScoreBadge } from "./ScoreBadge";
 
 export type ForumSubmenu = "musicas" | "music-videos" | "videos" | "albuns";
 
@@ -274,31 +274,6 @@ export const Forum: React.FC<ForumProps> = ({ onPlayTrack, onPlayVideo }) => {
     );
   }, [items, searchQuery]);
 
-  // Helper de badge Metacritic
-  const renderMetacriticBadge = (scoreStr?: string | number) => {
-    const num = parseInt(String(scoreStr ?? "0"), 10);
-    if (isNaN(num) || num <= 0) {
-      return (
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-neutral-800 border border-white/10 text-neutral-400 font-black text-xs">
-          <Star className="size-3.5" />
-          <span>tbd</span>
-        </div>
-      );
-    }
-
-    let bgColor = "bg-emerald-500 text-black";
-    if (num < 50) bgColor = "bg-red-500 text-white";
-    else if (num < 75) bgColor = "bg-amber-400 text-black";
-
-    return (
-      <div
-        className={`inline-flex items-center justify-center font-black text-sm sm:text-base px-3 py-1.5 rounded-xl shadow-md uppercase tracking-wider ${bgColor}`}
-      >
-        <span>{num}</span>
-      </div>
-    );
-  };
-
   // Extrair nota ou likes dos campos do item
   const getItemScore = (item: ForumTopicItem) => {
     const fields = item.fields || {};
@@ -469,14 +444,14 @@ export const Forum: React.FC<ForumProps> = ({ onPlayTrack, onPlayVideo }) => {
                     Média da comunidade do Empire Hub
                   </span>
                 </div>
-                {activeSubmenu === "videos" || activeSubmenu === "music-videos" ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 font-black text-xs sm:text-sm border border-emerald-500/30">
-                    <ThumbsUp className="size-3.5 fill-emerald-400" />
-                    <span>{getItemScore(selectedTopic)} Likes</span>
-                  </div>
-                ) : (
-                  renderMetacriticBadge(getItemScore(selectedTopic))
-                )}
+                <ScoreBadge
+                  score={getItemScore(selectedTopic)}
+                  variant={
+                    activeSubmenu === "videos" || activeSubmenu === "music-videos"
+                      ? "likes"
+                      : "metacritic"
+                  }
+                />
               </div>
             </div>
 
@@ -686,7 +661,7 @@ export const Forum: React.FC<ForumProps> = ({ onPlayTrack, onPlayVideo }) => {
                             <span>{getItemScore(item)}</span>
                           </div>
                         ) : (
-                          renderMetacriticBadge(getItemScore(item))
+                          <ScoreBadge score={getItemScore(item)} variant="metacritic" />
                         )}
                       </div>
                     </div>
