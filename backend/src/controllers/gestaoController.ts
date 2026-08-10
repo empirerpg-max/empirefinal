@@ -23,10 +23,16 @@ export interface CreateSongPayload {
 export interface CreateVideoPayload {
   tituloVideo: string;
   artistaResponsavel: string;
+  // Tag do vídeo (coluna "Tipo de vídeo" da aba Music Videos) — Live, Video,
+  // Dance Video, Behind the Scenes, Lyric Video, Visualizer, Performance,
+  // Trailer etc. "categoriaVideo" é o nome antigo do mesmo campo, mantido
+  // por compatibilidade com o formulário existente.
+  tipoVideo?: string;
   categoriaVideo?: string;
   participantes?: string[];
   capaUrl: string;
   mediaUrl?: string;
+  musicaVinculada?: string;
   nomeJogador: string;
 }
 
@@ -237,9 +243,9 @@ export async function createVideoController(request: Request): Promise<Response>
     const {
       tituloVideo,
       artistaResponsavel,
-      categoriaVideo = "Vídeo Especial",
-      participantes = [],
-      capaUrl,
+      tipoVideo,
+      categoriaVideo,
+      musicaVinculada = "",
       mediaUrl = "",
       nomeJogador,
     } = body;
@@ -255,25 +261,36 @@ export async function createVideoController(request: Request): Promise<Response>
     }
 
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const featsStr = participantes.filter(Boolean).join(", ");
+    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const fullTitle = tituloVideo.includes(" - ")
       ? tituloVideo
       : `${artistaResponsavel} - ${tituloVideo}`;
 
-    // 1. Gravar na aba Videos da planilha principal
+    // 1. Gravar em Music Videos na planilha principal — "Videos" não existe
+    // mais como aba própria (consolidada aqui). Mesmo mapeamento de colunas
+    // de createMusicVideoController, mas com a tag ("Tipo de vídeo") vinda
+    // do formulário em vez de fixa em "Music Video".
     try {
-      await googleSheetsService.principal.appendRow("Videos", [
-        nowStr,
-        fullTitle,
-        artistaResponsavel,
-        featsStr,
-        categoriaVideo,
-        mediaUrl || "",
-        capaUrl || "",
-        "Não",
+      await googleSheetsService.principal.appendRow("Music Videos", [
+        "", // A - ID do usuário
+        fullTitle, // B - Título do tópico
+        "", // C - ID da mensagem (grupo original)
+        "", // D - chat_id
+        "", // E - chat_id_interno
+        "", // F - message_thread_id
+        "", // G - Link direto (t.me)
+        tipoVideo || categoriaVideo || "Video", // H - Tipo de vídeo
+        "", // I - Descrição
+        dataFormatada, // J - Data do envio
+        "drive", // K - fonte
+        "", // L - ID da mensagem (grupo de arquivo — não aplicável a upload via Drive)
+        mediaUrl || "", // M - Link do vídeo
+        "", // N - Likes por jogador
+        "", // O - Média Likes
+        musicaVinculada || fullTitle, // P - Nome original nos charts
       ]);
     } catch (err) {
-      console.warn("[createVideoController] Erro ao gravar em Videos:", err);
+      console.warn("[createVideoController] Erro ao gravar em Music Videos:", err);
     }
 
     // 2. Audit Log em REGISTRO

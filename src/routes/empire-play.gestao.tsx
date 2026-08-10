@@ -188,10 +188,17 @@ function EmpirePlayGestao() {
                 className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-emerald-500/50"
               >
                 <option value="Music Video">Music Video</option>
+                <option value="Live">Live</option>
+                <option value="Video">Video</option>
+                <option value="Dance Video">Dance Video</option>
+                <option value="Lyric Video">Lyric Video</option>
                 <option value="Visualizer">Visualizer</option>
-                <option value="Behind The Scenes">Behind The Scenes</option>
-                <option value="Live Performance">Live Performance</option>
-                <option value="Outros">Outros</option>
+                <option value="Behind the Scenes">Behind the Scenes</option>
+                <option value="Performance">Performance</option>
+                <option value="Alternative Video">Alternative Video</option>
+                <option value="Alternative Version">Alternative Version</option>
+                <option value="Trailer">Trailer</option>
+                <option value="Outro">Outro</option>
               </select>
             </div>
 

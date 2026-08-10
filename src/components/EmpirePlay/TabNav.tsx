@@ -1,12 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { Flame, Music, Film, Tv, Disc3, MessageSquare, Upload } from "lucide-react";
+import { Flame, Music, Tv, Disc3, MessageSquare, Upload } from "lucide-react";
 import { haptic } from "@/lib/telegram";
 
 const TABS = [
   { to: "/empire-play", label: "Início", icon: Flame, exact: true },
   { to: "/empire-play/musicas", label: "Músicas", icon: Music },
-  { to: "/empire-play/music-videos", label: "Music Videos", icon: Film },
-  { to: "/empire-play/videos", label: "Videos", icon: Tv },
+  { to: "/empire-play/videos", label: "Vídeos", icon: Tv },
   { to: "/empire-play/albuns", label: "Álbuns", icon: Disc3 },
   { to: "/empire-play/forum", label: "Fórum", icon: MessageSquare },
   { to: "/empire-play/gestao", label: "Gestão", icon: Upload },

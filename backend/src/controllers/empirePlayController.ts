@@ -352,7 +352,13 @@ function buildCleanItem(
   ]);
   const lyrics = getValue(record, ["letra", "lyrics", "letra_da_musica"]);
   const description = getValue(record, ["descricao", "descrição", "description"]);
-  const category = getValue(record, ["categoria", "tipo_video", "categoria_video", "tipo"]);
+  const category = getValue(record, [
+    "tipo_de_video",
+    "categoria",
+    "tipo_video",
+    "categoria_video",
+    "tipo",
+  ]);
 
   const trackOrderValue = getValue(record, [
     "ordem",
@@ -557,10 +563,16 @@ export async function getEmpirePlayMusicasController(request: Request): Promise<
 }
 
 /**
- * GET /api/empire-play/music-videos
- * Lê a aba Music Videos.
+ * GET /api/empire-play/videos
+ * Lê a aba "Music Videos" — que, apesar do nome, hoje guarda TODOS os tipos
+ * de vídeo (Music Video, Live, Video, Dance Video, Behind the Scenes,
+ * Lyric Video, Visualizer, Trailer etc), diferenciados pela coluna "Tipo de
+ * vídeo". As abas "Videos" e "Comentarios_Videos" que a spec original
+ * previa não existem mais na planilha — foram todas consolidadas aqui. O
+ * app trata isso como um catálogo único "Vídeos", filtrável por tag no
+ * frontend (ou via ?category= aqui no backend).
  */
-export async function getEmpirePlayMusicVideosController(request: Request): Promise<Response> {
+export async function getEmpirePlayVideosController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const filterArtist = normalizeComparison(
     url.searchParams.get("artist") || url.searchParams.get("artista") || "",
@@ -574,7 +586,7 @@ export async function getEmpirePlayMusicVideosController(request: Request): Prom
 
   try {
     const records = await sheetsService.readSheetObjects("Music Videos");
-    let items = records.map((rec, idx) => buildCleanItem("Music Videos", rec, idx));
+    let items = records.map((rec, idx) => buildCleanItem("Videos", rec, idx));
 
     if (filterArtist) {
       items = items.filter((item) => normalizeComparison(item.artist).includes(filterArtist));
@@ -593,60 +605,6 @@ export async function getEmpirePlayMusicVideosController(request: Request): Prom
 
     // Mais recente primeiro (Data do envio) — itens sem data ficam por
     // último, na ordem em que já vieram da planilha.
-    items.sort((a, b) => {
-      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
-      if (a.releaseDateIso) return -1;
-      if (b.releaseDateIso) return 1;
-      return 0;
-    });
-
-    return new Response(JSON.stringify({ success: true, data: items }), {
-      status: 200,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
-  } catch (error: any) {
-    return new Response(
-      JSON.stringify({ success: false, error: error.message || "Erro ao buscar music videos." }),
-      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
-    );
-  }
-}
-
-/**
- * GET /api/empire-play/videos
- * Lê a aba Videos.
- */
-export async function getEmpirePlayVideosController(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const filterArtist = normalizeComparison(
-    url.searchParams.get("artist") || url.searchParams.get("artista") || "",
-  );
-  const filterQuery = normalizeComparison(
-    url.searchParams.get("q") || url.searchParams.get("search") || "",
-  );
-  const filterCategory = normalizeComparison(
-    url.searchParams.get("category") || url.searchParams.get("tipo_video") || "",
-  );
-
-  try {
-    const records = await sheetsService.readSheetObjects("Videos");
-    let items = records.map((rec, idx) => buildCleanItem("Videos", rec, idx));
-
-    if (filterArtist) {
-      items = items.filter((item) => normalizeComparison(item.artist).includes(filterArtist));
-    }
-    if (filterCategory) {
-      items = items.filter((item) => normalizeComparison(item.category || "") === filterCategory);
-    }
-    if (filterQuery) {
-      items = items.filter((item) => {
-        const haystack = normalizeComparison(
-          [item.title, item.artist, item.description].filter(Boolean).join(" "),
-        );
-        return haystack.includes(filterQuery);
-      });
-    }
-
     items.sort((a, b) => {
       if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
       if (a.releaseDateIso) return -1;
@@ -777,12 +735,17 @@ export async function getEmpirePlayForumTopicController(
   if (tipoParam === "albuns" || tipoParam === "album") {
     sheetMedia = "Albuns";
     sheetComments = "Comentarios_Albuns";
-  } else if (tipoParam === "music-videos" || tipoParam === "music-video" || tipoParam === "mv") {
+  } else if (
+    tipoParam === "videos" ||
+    tipoParam === "video" ||
+    tipoParam === "music-videos" ||
+    tipoParam === "music-video" ||
+    tipoParam === "mv"
+  ) {
+    // "Videos" e "Comentarios_Videos" não existem mais na planilha — Vídeos
+    // e Music Videos foram consolidados em "Music Videos"/"Comentarios_MV".
     sheetMedia = "Music Videos";
     sheetComments = "Comentarios_MV";
-  } else if (tipoParam === "videos" || tipoParam === "video") {
-    sheetMedia = "Videos";
-    sheetComments = "Comentarios_Videos";
   }
 
   try {

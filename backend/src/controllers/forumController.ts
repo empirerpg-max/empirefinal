@@ -23,15 +23,13 @@ function buildCommentRow(
 ): string[] {
   const { topicId, jogadorId, playerClean, comentario, nowStr } = params;
 
-  if (tipoMedia === "video") {
-    // Comentarios_Videos: telegram_topic_id, telegram_message_id, texto, autor, id_usuario, data, reacoes
-    return [topicId, "", comentario, playerClean, jogadorId, nowStr, ""];
-  }
   if (tipoMedia === "musica") {
     // Comentarios_Musicas: ID do tópico, ID do jogador, Nome do jogador, Comentário
     return [topicId, jogadorId, playerClean, comentario];
   }
-  // Comentarios_MV / Comentarios_Albuns: ID do tópico, ID do jogador, Nome do jogador, Comentário, Data
+  // Comentarios_MV (vídeos — a antiga Comentarios_Videos não existe mais,
+  // Vídeos e Music Videos foram consolidados) / Comentarios_Albuns:
+  // ID do tópico, ID do jogador, Nome do jogador, Comentário, Data
   return [topicId, jogadorId, playerClean, comentario, nowStr];
 }
 
@@ -97,16 +95,14 @@ export async function createCommentController(request: Request): Promise<Respons
       commentSheet = "Comentarios_Albuns";
       colRatingsIndex = 7; // Coluna H
       colAvgIndex = 8; // Coluna I
-    } else if (tipoMedia === "music-video") {
+    } else if (tipoMedia === "video" || tipoMedia === "music-video") {
+      // "Videos"/"Comentarios_Videos" não existem mais — Vídeos e Music
+      // Videos foram consolidados em "Music Videos"/"Comentarios_MV".
+      // Colunas reais da aba: N = Likes por jogador (13), O = Média Likes (14).
       targetSheet = "Music Videos";
       commentSheet = "Comentarios_MV";
-      colRatingsIndex = 18; // Coluna S (0-based 18)
-      colAvgIndex = 19; // Coluna T (0-based 19)
-    } else if (tipoMedia === "video") {
-      targetSheet = "Videos";
-      commentSheet = "Comentarios_Videos";
-      colRatingsIndex = 10; // Coluna K (0-based 10)
-      colAvgIndex = 11; // Coluna L (0-based 11)
+      colRatingsIndex = 13; // Coluna N (0-based 13)
+      colAvgIndex = 14; // Coluna O (0-based 14)
     }
 
     // 1. Atualizar nota/likes e média na planilha principal
@@ -234,10 +230,11 @@ export async function getCommentsController(request: Request): Promise<Response>
   const topicIdParam = url.searchParams.get("topicId") || "";
 
   try {
-    const [musicaComments, mvComments, videoComments, albumComments] = await Promise.all([
+    // "Comentarios_Videos" não existe mais — Vídeos e Music Videos foram
+    // consolidados em "Comentarios_MV".
+    const [musicaComments, mvComments, albumComments] = await Promise.all([
       googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
       googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
-      googleSheetsService.principal.readValues("Comentarios_Videos").catch(() => []),
       googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
     ]);
 
@@ -256,24 +253,9 @@ export async function getCommentsController(request: Request): Promise<Response>
       }));
     };
 
-    const formatVideoComments = (rows: string[][]) => {
-      if (!rows || rows.length <= 1) return [];
-      // Comentarios_Videos: telegram_topic_id, telegram_message_id, texto, autor, id_usuario, data, reacoes
-      return rows.slice(1).map((r, idx) => ({
-        id: `video_${idx + 1}`,
-        tipo: "video",
-        topicId: r[0] || "",
-        jogadorId: r[4] || "",
-        jogador: r[3] || "",
-        comentario: r[2] || "",
-        data: r[5] || "",
-      }));
-    };
-
     let allComments = [
       ...formatMusicaOrAlbumStyle(musicaComments, "musica", false),
-      ...formatMusicaOrAlbumStyle(mvComments, "music-video", true),
-      ...formatVideoComments(videoComments),
+      ...formatMusicaOrAlbumStyle(mvComments, "video", true),
       ...formatMusicaOrAlbumStyle(albumComments, "album", true),
     ];
 
