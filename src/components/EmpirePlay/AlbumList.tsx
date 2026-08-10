@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Disc3, Play, Search, Music, Clock, ChevronRight, FileText } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Disc3, Play, Search, Music, Clock, ChevronRight, FileText, MessageSquare } from "lucide-react";
 import { driveImg, type AlbumPayload } from "@/lib/api";
 import { type PlayableTrack } from "./MusicPlayer";
 import { ScoreBadge } from "./ScoreBadge";
@@ -242,18 +243,29 @@ export function AlbumList({ onPlayTrack }: AlbumListProps) {
                   </p>
                 )}
 
-                {selectedAlbum.faixas && selectedAlbum.faixas.length > 0 && (
-                  <button
-                    onClick={() => {
-                      if (selectedAlbum.faixas && selectedAlbum.faixas.length > 0) {
-                        onPlayTrack?.(selectedAlbum.faixas[0], selectedAlbum.faixas);
-                      }
-                    }}
-                    className="mt-4 px-5 py-2.5 rounded-full bg-emerald-500 text-black font-black text-xs uppercase tracking-wider flex items-center gap-2 mx-auto sm:mx-0 active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
-                  >
-                    <Play className="size-4" /> Tocar Álbum
-                  </button>
-                )}
+                <div className="flex items-center gap-2 mt-4 justify-center sm:justify-start">
+                  {selectedAlbum.faixas && selectedAlbum.faixas.length > 0 && (
+                    <button
+                      onClick={() => {
+                        if (selectedAlbum.faixas && selectedAlbum.faixas.length > 0) {
+                          onPlayTrack?.(selectedAlbum.faixas[0], selectedAlbum.faixas);
+                        }
+                      }}
+                      className="px-5 py-2.5 rounded-full bg-emerald-500 text-black font-black text-xs uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
+                    >
+                      <Play className="size-4" /> Tocar Álbum
+                    </button>
+                  )}
+                  {selectedAlbum.id && (
+                    <Link
+                      to="/empire-play/forum"
+                      search={{ tab: "albuns", id: selectedAlbum.id }}
+                      className="px-4 py-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-300 hover:text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all"
+                    >
+                      <MessageSquare className="size-4" /> Fórum
+                    </Link>
+                  )}
+                </div>
               </div>
 
               <button
@@ -309,6 +321,17 @@ export function AlbumList({ onPlayTrack }: AlbumListProps) {
                     <div className="flex items-center gap-3">
                       {track.letra && (
                         <FileText className="size-4 text-neutral-500" aria-label="Possui Letra" />
+                      )}
+                      {track.id && (
+                        <Link
+                          to="/empire-play/forum"
+                          search={{ tab: "musicas", id: track.id }}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Ver no Fórum"
+                          className="size-8 rounded-full bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white grid place-items-center transition-all"
+                        >
+                          <MessageSquare className="size-3.5" />
+                        </Link>
                       )}
                       <span className="size-8 rounded-full bg-white/5 group-hover:bg-emerald-500 group-hover:text-black text-neutral-400 grid place-items-center transition-all">
                         <Play className="size-3.5 ml-0.5" />

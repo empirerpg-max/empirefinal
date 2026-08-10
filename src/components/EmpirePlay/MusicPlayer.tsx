@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   Play,
   Pause,
@@ -11,6 +12,7 @@ import {
   FileWarning,
   Loader2,
   Disc,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { driveImg } from "@/lib/api";
@@ -31,6 +33,8 @@ export interface PlayableTrack {
   url?: string;
   link?: string;
   metacriticAvg?: number | string | null;
+  /** Aba do fórum onde este item aparece ("musicas", por padrão). */
+  forumTab?: string;
 }
 
 interface MusicPlayerProps {
@@ -282,6 +286,17 @@ export function MusicPlayer({
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {currentTrack.id && (
+                <Link
+                  to="/empire-play/forum"
+                  search={{ tab: currentTrack.forumTab || "musicas", id: currentTrack.id }}
+                  onClick={() => haptic.selection()}
+                  title="Ver no Fórum"
+                  className="p-3 rounded-full bg-white/5 border border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
+                >
+                  <MessageSquare className="size-5" />
+                </Link>
+              )}
               {currentTrack.id && (
                 <button
                   onClick={handleReportWrongContent}

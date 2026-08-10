@@ -40,6 +40,7 @@ export function toPlayableTrack(item: any): PlayableTrack {
     letra: item.lyrics || item.letra,
     album: item.album || item.nome_do_album || "Single",
     metacriticAvg: item.metacriticAvg ?? item.metacritic ?? item.nota,
+    forumTab: item.type || "musicas",
   };
 }
 
@@ -90,5 +91,6 @@ export function toPlayableVideo(item: any): PlayableVideo {
     telegramMessageId: item.telegramMessageId || null,
     reportPending: !!item.reportPending,
     metacriticAvg: item.metacriticAvg ?? item.likes ?? item.nota,
+    forumTab: item.type || "videos",
   };
 }
