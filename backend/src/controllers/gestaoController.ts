@@ -589,7 +589,7 @@ export async function uploadDriveController(request: Request): Promise<Response>
     let fileName = "";
     let mimeType = "image/jpeg";
     let base64Data = "";
-    let folderType: "musica" | "album" | "video" | "musicVideo" = "musica";
+    let folderType: "musica" | "musicaAudio" | "album" | "video" | "musicVideo" = "musica";
 
     const contentType = request.headers.get("content-type") || "";
 
@@ -629,7 +629,9 @@ export async function uploadDriveController(request: Request): Promise<Response>
           ? DRIVE_FOLDERS.musicVideos
           : folderType === "video"
             ? DRIVE_FOLDERS.videos
-            : DRIVE_FOLDERS.musicas;
+            : folderType === "musicaAudio"
+              ? DRIVE_FOLDERS.musicasAudio
+              : DRIVE_FOLDERS.musicas;
 
     const fileUrl = base64Data
       ? await uploadFileToDrive(fileName, folderId, mimeType, base64Data)

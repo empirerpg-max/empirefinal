@@ -282,15 +282,17 @@ export const Gestao: React.FC = () => {
   // Upload no Drive (com suporte a FormData e fallback resiliente)
   const handleUploadToDrive = async (
     file: File,
-    folderType: "musica" | "album" | "video",
+    folderType: "musica" | "musicaAudio" | "album" | "video",
     customName?: string,
   ): Promise<string> => {
+    const resolvedFolderType = folderType === "video" ? "musica" : folderType;
+
     // 1. Tentar via FormData primeiro (evita estouro de memória Base64 no cliente)
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("fileName", customName || file.name);
-      formData.append("folderType", folderType === "video" ? "musica" : folderType);
+      formData.append("folderType", resolvedFolderType);
 
       const res = await fetch("/api/gestao/upload", {
         method: "POST",
@@ -317,7 +319,7 @@ export const Gestao: React.FC = () => {
           fileName,
           mimeType: file.type || "image/jpeg",
           base64Data: base64,
-          folderType: folderType === "video" ? "musica" : folderType,
+          folderType: resolvedFolderType,
         }),
       });
 
@@ -397,7 +399,7 @@ export const Gestao: React.FC = () => {
         setUploadProgress("Fazendo upload do áudio...");
         mediaUrl = await handleUploadToDrive(
           mediaFile,
-          "musica",
+          "musicaAudio",
           `AUDIO_${artistaResponsavel}_${nomeMusica}_${Date.now()}`,
         );
       }
