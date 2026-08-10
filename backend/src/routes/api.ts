@@ -30,6 +30,7 @@ import {
 } from "../controllers/empirePlayController";
 import { reportVideoIssueController } from "../controllers/reportVideoController";
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
+import { loginController } from "../controllers/authController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -54,6 +55,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   const isEmpirePlayPath = url.pathname.startsWith("/api/empire-play/");
 
   const supportedPaths = new Set([
+    "/api/auth/login",
     "/api/user/me",
     "/api/top-playlists",
     "/api/lancamentos",
@@ -187,6 +189,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await uploadDriveController(request);
+  } else if (url.pathname === "/api/auth/login") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/auth/login." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await loginController(request);
   } else if (url.pathname === "/api/forum/comment") {
     if (request.method !== "POST") {
       return new Response(

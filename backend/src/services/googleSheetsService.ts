@@ -9,6 +9,7 @@ export const SPREADSHEETS = {
   principal: "1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo",
   registrosCharts: "1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg",
   edicaoCharts: "1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8",
+  usuarios: "1lFw9l76tYZYCDXhZsoiftIEzCvKcjCrI_oBpvUdwAlo",
 } as const;
 
 export type SpreadsheetKey = keyof typeof SPREADSHEETS;
@@ -355,5 +356,19 @@ export const googleSheetsService = {
       updateValues("edicaoCharts", sheetName, range, values),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("edicaoCharts", sheetName, values, range),
+  },
+  usuarios: {
+    readValues: (sheetName: string, range?: string) => readValues("usuarios", sheetName, range),
+    readSheetObjects: (sheetName: string, range?: string) =>
+      readSheetObjects("usuarios", sheetName, range),
+    findRows: (
+      sheetName: string,
+      predicate: (row: string[], index: number) => boolean,
+      range?: string,
+    ) => findRows("usuarios", sheetName, predicate, range),
+    updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
+      updateValues("usuarios", sheetName, range, values),
+    appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
+      appendRow("usuarios", sheetName, values, range),
   },
 };
