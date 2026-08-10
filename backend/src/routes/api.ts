@@ -11,7 +11,6 @@ import {
 } from "../controllers/forumController";
 import {
   createAlbumController,
-  createMusicVideoController,
   createSongController,
   createVideoController,
   uploadDriveController,
@@ -72,7 +71,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/forum/comment-reaction",
     "/api/gestao/musica",
     "/api/gestao/video",
-    "/api/gestao/music-video",
     "/api/gestao/album",
     "/api/gestao/upload",
     "/api/editar",
@@ -169,14 +167,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await createVideoController(request);
-  } else if (url.pathname === "/api/gestao/music-video") {
-    if (request.method !== "POST") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/gestao/music-video." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
-    response = await createMusicVideoController(request);
   } else if (url.pathname === "/api/gestao/album") {
     if (request.method !== "POST") {
       return new Response(

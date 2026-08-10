@@ -36,16 +36,6 @@ export interface CreateVideoPayload {
   nomeJogador: string;
 }
 
-export interface CreateMusicVideoPayload {
-  tituloMusicVideo: string;
-  artistaResponsavel: string;
-  musicaVinculada?: string;
-  participantes?: string[];
-  capaUrl: string;
-  mediaUrl?: string;
-  nomeJogador: string;
-}
-
 export interface TrackItemPayload {
   num: number;
   titulo: string;
@@ -250,6 +240,31 @@ export async function createSongController(request: Request): Promise<Response> 
 }
 
 // Controller para Criar / Registrar Vídeo
+// Marca o lançamento de um Music Video na aba "Pontos" da planilha de
+// registrosCharts (colunas confirmadas via dump ao vivo: D = "MÚSICA" no
+// formato "Artista - Título", N = checkbox "VIDEOCLIPE", O = "DATA DE
+// LANÇAMENTO" no formato DD/MM/AAAA). Busca a linha por igualdade exata em D.
+async function marcarVideoclipeNaPontos(musicaVinculada: string, dataFormatada: string) {
+  if (!musicaVinculada.trim()) return;
+  try {
+    const matches = await googleSheetsService.registrosCharts.findRows(
+      "Pontos",
+      (row) => (row[3] || "").trim().toLowerCase() === musicaVinculada.trim().toLowerCase(),
+    );
+    if (matches.length === 0) {
+      console.warn(`[marcarVideoclipeNaPontos] Música não encontrada na aba Pontos: ${musicaVinculada}`);
+      return;
+    }
+    for (const { rowIndex } of matches) {
+      await googleSheetsService.registrosCharts.updateValues("Pontos", `N${rowIndex}:O${rowIndex}`, [
+        ["TRUE", dataFormatada],
+      ]);
+    }
+  } catch (err) {
+    console.warn("[marcarVideoclipeNaPontos] Erro ao atualizar aba Pontos:", err);
+  }
+}
+
 export async function createVideoController(request: Request): Promise<Response> {
   try {
     const body = (await request.json()) as CreateVideoPayload;
@@ -279,11 +294,12 @@ export async function createVideoController(request: Request): Promise<Response>
       ? tituloVideo
       : `${artistaResponsavel} - ${tituloVideo}`;
     const topicId = `video_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const tipo = tipoVideo || categoriaVideo || "Video";
 
-    // 1. Gravar em Music Videos na planilha principal — "Videos" não existe
-    // mais como aba própria (consolidada aqui). Mesmo mapeamento de colunas
-    // de createMusicVideoController, mas com a tag ("Tipo de vídeo") vinda
-    // do formulário em vez de fixa em "Music Video".
+    // 1. Gravar em Music Videos na planilha principal — "Videos" e "Music
+    // Video" foram unificados numa única aba/formulário de Gestão; a tag
+    // ("Tipo de vídeo") vinda do formulário define a categoria exibida no
+    // catálogo (incluindo "Music Video" como uma das opções).
     try {
       await googleSheetsService.principal.appendRow("Music Videos", [
         "", // A - ID do usuário
@@ -293,7 +309,7 @@ export async function createVideoController(request: Request): Promise<Response>
         "", // E - chat_id_interno
         topicId, // F - message_thread_id
         "", // G - Link direto (t.me)
-        tipoVideo || categoriaVideo || "Video", // H - Tipo de vídeo
+        tipo, // H - Tipo de vídeo
         "", // I - Descrição
         dataFormatada, // J - Data do envio
         "drive", // K - fonte
@@ -319,6 +335,12 @@ export async function createVideoController(request: Request): Promise<Response>
       console.warn("[createVideoController] Erro no audit log:", err);
     }
 
+    // 3. Quando o tipo selecionado for "Music Video", marcar o lançamento
+    // do videoclipe na aba "Pontos" (coluna N) com a data de envio (coluna O).
+    if (tipo.trim().toLowerCase() === "music video" && musicaVinculada) {
+      await marcarVideoclipeNaPontos(musicaVinculada, dataFormatada);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -336,105 +358,6 @@ export async function createVideoController(request: Request): Promise<Response>
       JSON.stringify({
         success: false,
         error: error.message || "Erro ao registrar vídeo.",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
-  }
-}
-
-// Controller para Criar / Registrar Music Video (MV)
-export async function createMusicVideoController(request: Request): Promise<Response> {
-  try {
-    const body = (await request.json()) as CreateMusicVideoPayload;
-    const {
-      tituloMusicVideo,
-      artistaResponsavel,
-      musicaVinculada = "",
-      participantes = [],
-      capaUrl,
-      mediaUrl = "",
-      nomeJogador,
-    } = body;
-
-    if (!tituloMusicVideo || !artistaResponsavel || !nomeJogador) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Campos obrigatórios ausentes: tituloMusicVideo, artistaResponsavel, nomeJogador.",
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
-    }
-
-    const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const fullTitle = tituloMusicVideo.includes(" - ")
-      ? tituloMusicVideo
-      : `${artistaResponsavel} - ${tituloMusicVideo}`;
-    const topicId = `mv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-    // 1. Gravar em Music Videos na planilha principal — mapeamento exato do
-    // cabeçalho real da aba (ID do usuário, Título do tópico, ID da mensagem
-    // [grupo ORIGINAL do Telegram], chat_id, chat_id_interno,
-    // message_thread_id, Link direto (t.me), Tipo de vídeo, Descrição, Data
-    // do envio, fonte, ID da mensagem [grupo de ARQUIVO — é esta que o app
-    // usa pra tocar o vídeo], Link do vídeo, Likes por jogador, Média
-    // Likes, Nome original nos charts). C-G são específicas de tópicos
-    // importados do Telegram e não se aplicam a um vídeo enviado direto
-    // pelo app; L também fica vazia aqui porque não existe mensagem no
-    // grupo de arquivo para um upload feito direto no Drive.
-    try {
-      await googleSheetsService.principal.appendRow("Music Videos", [
-        "", // A - ID do usuário
-        fullTitle, // B - Título do tópico
-        "", // C - ID da mensagem (grupo original)
-        "", // D - chat_id
-        "", // E - chat_id_interno
-        topicId, // F - message_thread_id
-        "", // G - Link direto (t.me)
-        "Music Video", // H - Tipo de vídeo
-        "", // I - Descrição
-        dataFormatada, // J - Data do envio
-        "drive", // K - fonte
-        "", // L - ID da mensagem (grupo de arquivo — não aplicável a upload via Drive)
-        mediaUrl || "", // M - Link do vídeo
-        "", // N - Likes por jogador
-        "", // O - Média Likes
-        musicaVinculada || fullTitle, // P - Nome original nos charts
-      ]);
-    } catch (err) {
-      console.warn("[createMusicVideoController] Erro em Music Videos:", err);
-    }
-
-    // 2. Audit Log em REGISTRO
-    try {
-      await googleSheetsService.registrosCharts.appendRow("REGISTRO", [
-        nowStr,
-        nomeJogador,
-        fullTitle,
-        "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-      ]);
-    } catch (err) {
-      console.warn("[createMusicVideoController] Erro em audit log:", err);
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        data: {
-          titulo: fullTitle,
-          artistaResponsavel,
-          mensagem: "Music Video cadastrado com sucesso!",
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
-  } catch (error: any) {
-    console.error("[createMusicVideoController] Erro:", error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message || "Erro ao registrar Music Video.",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
