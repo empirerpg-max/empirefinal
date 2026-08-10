@@ -33,6 +33,8 @@ export interface ExistingTrack {
   id: string;
   title: string;
   artist: string;
+  capaUrl?: string;
+  audioUrl?: string;
 }
 
 export interface TrackConfig {
@@ -136,6 +138,15 @@ export const Gestao: React.FC = () => {
     return Array.from(names).sort();
   }, [catalogSongs, profile]);
 
+  // Músicas só dos artistas que o jogador controla — usado na busca de
+  // "qual música substituir/vincular", pra não deixar editar/referenciar
+  // lançamento de outro jogador.
+  const myCatalogSongs = useMemo(() => {
+    const meus = new Set((profile?.associatedArtists || []).map((a) => a.toLowerCase()));
+    if (meus.size === 0) return [];
+    return catalogSongs.filter((s) => s.artist && meus.has(s.artist.toLowerCase()));
+  }, [catalogSongs, profile]);
+
   // States Comuns
   const [artistaResponsavel, setArtistaResponsavel] = useState<string>("");
   const [participantes, setParticipantes] = useState<string[]>([""]);
@@ -234,7 +245,7 @@ export const Gestao: React.FC = () => {
       });
 
     // Buscar músicas do catálogo
-    fetch("/api/musicas")
+    fetch("/api/empire-play/musicas")
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (!isMounted) return;
@@ -243,6 +254,8 @@ export const Gestao: React.FC = () => {
           id: item.id || `m_${idx}`,
           title: item.title || item.titulo,
           artist: item.artist || item.artista,
+          capaUrl: item.coverUrl || item.capa_da_musica || "",
+          audioUrl: item.audioUrl || item.id_do_arquivo || "",
         }));
         setCatalogSongs(formatted);
       })
@@ -385,7 +398,10 @@ export const Gestao: React.FC = () => {
     setUploadProgress("Fazendo upload da capa...");
 
     try {
-      let capaUrl = "";
+      // Em "Substituir no chart"/"Vincular a música lançada", se o jogador
+      // não enviar capa/áudio novos, mantém os mesmos da música referenciada
+      // em vez de gravar em branco.
+      let capaUrl = musicaReferencia?.capaUrl || "";
       if (capaFile) {
         capaUrl = await handleUploadToDrive(
           capaFile,
@@ -394,7 +410,7 @@ export const Gestao: React.FC = () => {
         );
       }
 
-      let mediaUrl = mediaUrlInput.trim();
+      let mediaUrl = mediaUrlInput.trim() || musicaReferencia?.audioUrl || "";
       if (mediaFile) {
         setUploadProgress("Fazendo upload do áudio...");
         mediaUrl = await handleUploadToDrive(
@@ -955,7 +971,7 @@ export const Gestao: React.FC = () => {
                   />
                   {musicaReferenciaQuery.trim().length > 0 && (
                     <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
-                      {catalogSongs
+                      {myCatalogSongs
                         .filter((s) => {
                           const q = musicaReferenciaQuery.trim().toLowerCase();
                           return (
@@ -977,7 +993,7 @@ export const Gestao: React.FC = () => {
                             <span className="font-bold">{s.artist}</span> - {s.title}
                           </button>
                         ))}
-                      {catalogSongs.filter((s) => {
+                      {myCatalogSongs.filter((s) => {
                         const q = musicaReferenciaQuery.trim().toLowerCase();
                         return (
                           s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q)
