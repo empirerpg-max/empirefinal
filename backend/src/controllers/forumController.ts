@@ -172,8 +172,12 @@ export async function createCommentController(request: Request): Promise<Respons
 
     // 2. Salvar comentário na aba de comentários correspondente
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    // Linha real onde o comentário caiu — permite reagir com emoji
+    // imediatamente após publicar, direto no fluxo do comentário, sem
+    // precisar reler a aba pra descobrir a linha depois.
+    let newRowIndex: number | null = null;
     try {
-      await googleSheetsService.principal.appendRow(
+      newRowIndex = await googleSheetsService.principal.appendRow(
         commentSheet,
         buildCommentRow(tipoMedia, {
           topicId: topicIdClean,
@@ -213,6 +217,8 @@ export async function createCommentController(request: Request): Promise<Respons
           tituloMedia: titleClean,
           nomeJogador: playerClean,
           notaCalculada: score,
+          rowIndex: newRowIndex,
+          sheetComments: newRowIndex ? commentSheet : null,
           mensagem: "Comentário e avaliação processados com sucesso!",
         },
       }),

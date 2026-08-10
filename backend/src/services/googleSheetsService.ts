@@ -262,16 +262,28 @@ export async function updateValues(
   }
 }
 
+interface GoogleSheetsAppendResponse {
+  updates?: {
+    updatedRange?: string;
+  };
+}
+
+/**
+ * Anexa uma linha e devolve o número da linha real onde ela caiu (1-based,
+ * igual A1) — usado pra permitir reagir com emoji imediatamente após postar
+ * um comentário, sem precisar reler a aba inteira pra achar a linha.
+ * `null` quando a gravação falha (comportamento silencioso já existente).
+ */
 export async function appendRow(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   values: GoogleSheetRow,
   range = "A:ZZ",
-): Promise<void> {
+): Promise<number | null> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
   try {
     const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
-    await sheetsRequest(
+    const result = await sheetsRequest<GoogleSheetsAppendResponse>(
       `/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       {
         method: "POST",
@@ -282,10 +294,15 @@ export async function appendRow(
       },
       [SHEETS_READWRITE_SCOPE],
     );
+    const updatedRange = result.updates?.updatedRange || "";
+    // updatedRange vem tipo "'Comentarios_Musicas'!A123:D123" — extrai o 123.
+    const match = updatedRange.match(/![A-Z]+(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
   } catch (err) {
     console.warn(
       `[googleSheetsService] Não foi possível anexar linha na planilha (${(err as Error).message})`,
     );
+    return null;
   }
 }
 

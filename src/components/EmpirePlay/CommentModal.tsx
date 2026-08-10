@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { X, Send, Sparkles, Star, ThumbsUp, User } from "lucide-react";
+import { X, Send, Sparkles, Star, ThumbsUp, User, SmilePlus } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
+import { EmojiPicker } from "./EmojiPicker";
+
+// Mesma paleta de destaque do EmojiPicker — atalho rápido pra reagir sem
+// precisar abrir o seletor completo.
+const QUICK_EMOJIS = ["❤️", "🔥", "👍", "😂", "😮", "🎉"];
 
 export interface CommentModalProps {
   isOpen: boolean;
@@ -27,6 +32,8 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   const [intervalo, setIntervalo] = useState<string>("76 - 90");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   useEffect(() => {
     if (isOpen && !nomeJogador && telegramUser?.id) {
@@ -91,12 +98,34 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         throw new Error(json.error || "Erro ao publicar comentário.");
       }
 
+      // Se o jogador escolheu uma reação junto do comentário, aplica ela
+      // direto na linha que acabou de ser criada — sem esse dado do
+      // createCommentController (rowIndex/sheetComments) não teria como
+      // reagir sem antes reler a aba inteira.
+      if (selectedEmoji && telegramUser?.id && json.data?.rowIndex && json.data?.sheetComments) {
+        try {
+          await fetch("/api/forum/comment-reaction", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sheetComments: json.data.sheetComments,
+              rowIndex: json.data.rowIndex,
+              emoji: selectedEmoji,
+              jogadorId: String(telegramUser.id),
+            }),
+          }).catch(() => {});
+        } catch {
+          // reação é um extra opcional — falha aqui não deve bloquear o fluxo
+        }
+      }
+
       if (onCommentSubmitted) {
         onCommentSubmitted(json.data);
       }
 
       // Reset fields
       setComentario("");
+      setSelectedEmoji(null);
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || "Erro de conexão ao enviar comentário.");
@@ -193,6 +222,64 @@ export const CommentModal: React.FC<CommentModalProps> = ({
               className="w-full px-4 py-3 bg-neutral-800/80 border border-white/10 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition resize-none"
               required
             />
+          </div>
+
+          {/* Reação embutida — junto do comentário, não como ação separada depois */}
+          <div>
+            <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
+              Reagir com emoji (opcional)
+            </label>
+            <div className="flex flex-wrap items-center gap-2 relative">
+              {QUICK_EMOJIS.map((emoji) => {
+                const active = selectedEmoji === emoji;
+                return (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => setSelectedEmoji(active ? null : emoji)}
+                    className={`size-10 rounded-2xl text-lg grid place-items-center border transition ${
+                      active
+                        ? "bg-emerald-500/20 border-emerald-400 scale-110"
+                        : "bg-neutral-800/60 border-white/10 hover:bg-neutral-700/60"
+                    }`}
+                  >
+                    {emoji}
+                  </button>
+                );
+              })}
+
+              {/* Emoji escolhido fora do atalho rápido (via seletor completo) */}
+              {selectedEmoji && !QUICK_EMOJIS.includes(selectedEmoji) && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedEmoji(null)}
+                  className="size-10 rounded-2xl text-lg grid place-items-center border bg-emerald-500/20 border-emerald-400 scale-110"
+                >
+                  {selectedEmoji}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker((v) => !v)}
+                className="size-10 rounded-2xl grid place-items-center border border-white/10 bg-neutral-800/60 hover:bg-neutral-700/60 text-neutral-300 hover:text-white transition"
+                title="Mais emojis"
+              >
+                <SmilePlus className="size-4.5" />
+              </button>
+
+              {showEmojiPicker && (
+                <div className="absolute top-full left-0 mt-2 z-10">
+                  <EmojiPicker
+                    onSelect={(emoji) => {
+                      setSelectedEmoji(emoji);
+                      setShowEmojiPicker(false);
+                    }}
+                    onClose={() => setShowEmojiPicker(false)}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {errorMsg && (
