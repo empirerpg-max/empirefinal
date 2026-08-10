@@ -1,0 +1,15 @@
+name: Debug Meus Artistas
+on:
+  workflow_dispatch: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch meus-nomes for hugo
+        run: |
+          echo "=== meus-nomes telegramId=1625310906 ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/artistas/meus-nomes?telegramId=1625310906"
+          echo ""
+          echo "=== meus-nomes usuario=Hugo ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/artistas/meus-nomes?usuario=Hugo"
+          echo ""
