@@ -2,11 +2,13 @@ import { googleSheetsService } from "../services/googleSheetsService";
 
 /**
  * Endpoint TEMPORÁRIO de importação única — comentários reais do histórico
- * do Telegram (exports "EMPIRE: Músicas" e "EMPIRE: Vídeos") que nunca
- * foram gravados em Comentarios_Musicas/Comentarios_MV. Calculado e
- * validado fora do app (tópico confirmado existente na planilha, sem
- * duplicidade com o que já estava lá). Roda uma vez e este arquivo é
- * removido depois — não é uma rota permanente da API.
+ * do Telegram ("EMPIRE: Músicas" e "EMPIRE: Vídeos") que nunca foram
+ * gravados em Comentarios_Musicas/Comentarios_MV, mais 2 músicas que
+ * tinham tópico e comentários no Telegram mas nunca foram cadastradas na
+ * aba Musicas (dados completos recuperados da própria confirmação do bot
+ * "Empire Registros" no histórico). Calculado e validado fora do app.
+ * Roda uma vez e este arquivo é removido depois — não é uma rota
+ * permanente da API.
  */
 
 interface LegacyCommentRow {
@@ -15,6 +17,18 @@ interface LegacyCommentRow {
   jogador: string;
   comentario: string;
   data: string;
+}
+
+interface MissingSongRow {
+  topicId: string;
+  data: string;
+  titulo: string;
+  tipoSingle: string;
+  tipoMusica: string;
+  actPrincipal: string;
+  artista2: string;
+  letra: string;
+  criadorId: string;
 }
 
 const MUSICAS_ROWS: LegacyCommentRow[] = [
@@ -51,6 +65,21 @@ const MV_ROWS: LegacyCommentRow[] = [
   { topicId: "1685", jogadorId: "1854891008", jogador: "Drico Branco", comentario: "Mds que canetada! Cowboy Fresh chegou mesmo trazendo uma freshness latina que eu amei. Esse instrumental casou muito com essa letra melancólica e cheia de sentimento. Me conectei com muitos trechos e adorei a forma crua como você compartilhou sua vulnerabilidade tão de cara assim. Arrasou e ansioso pelo que mais você vai trazer pra gente.", data: "09/08/2026" },
 ];
 
+// Músicas com tópico e comentários reais no Telegram, mas nunca
+// cadastradas na aba Musicas — registradas usando o ID real do tópico do
+// Telegram (mesmo padrão de outros registros históricos, ex: tópico "20").
+const MISSING_SONGS: MissingSongRow[] = [
+  { topicId: "2158", data: "22/07/2026", titulo: "Mark & Anne Gray - Sailing (from The Odyssey Soundtrack)", tipoSingle: "AVULSO", tipoMusica: "DUETO", actPrincipal: "Mark", artista2: "Anne Gray", letra: "[Verso 1 - Mark] \nParti quando a maré Ainda lembrava meu nome\nHoje, nem mesmo o sal \nReconhece minha pele\n\nAs velas rasgam devagar, \nComo cartas nunca abertas\nOs remos perderam a madeira, \nMal conhecem o caminho\n\n[Refrão - Mark & Anne]\nNavegando... \nSem volta pra casa\n\n[Verso 2 - Anne]\nAinda deixo a luz \nAcesa antes do poente\nRezando quando o vento\nBalança o velho portão\n\nO chá esfria na mesa\nA fumaça sobe sozinha\nToda maré me devolve o silêncio\nMinha espera vira angustia\n\n[Refrão - Mark & Anne]\nNavegando... \nSem volta pra casa \n\nAguardando... \nQue o mar devolva você...\n\n[Ponte - Mark & Anne]\nLutando contra a maré (Lute contra a maré) \nTentando guardar seu nome (Guarde o meu nome) \nMe diga onde você está (Esperando por você)  \nCarregando sua foto (Como a última luz do cais)\nComo um tipo de certeza (Como se ainda estivesse aqui) \nNem que eu arrisque minha vida (Mesmo que eu perca o rumo) \nMesmo que esse barco se afunde (Mesmo que o vendaval te derrube) \nEu vou cumprir a promessa (Faça isso por nós)\nEu navegarei até o fim do mundo (Até o último minuto)\n\n[Refrão]\nNavegando... \nSem volta para casa.", criadorId: "7528860755" },
+  { topicId: "2215", data: "05/08/2026", titulo: "Emma - BABYLON", tipoSingle: "PRÉ-ALBUM", tipoMusica: "SOLO", actPrincipal: "Emma", artista2: "", letra: "[Intro]\nEu amo esta cidade\nComo um narcisista ama o próprio reflexo\nCoberta de glitter dourado falso\nE fumaça subindo ao céu\n\n[Verso 1]\nAs avenidas brilham intensamente\nComo o caminho largo advertido nas Escrituras\nAquele que leva as almas à condenação\nMas todo mundo continua dançando através da tentação\nMas todo mundo continua dançando através da tentação\nMas todo mundo continua dançando através da tentação\nMas todo mundo continua dançando através da tentação\nMas todo mundo continua dançando através da tentação\nMas todo mundo continua dançando através da tentação\nMas todo mundo continua dançando através da tentação\nMas todo mundo continua dançando através da tentação\nMas todo mundo continua dançando através da tentação\nMas todo mundo continua dançando através da tentação\n\n[Refrão]\nDeus observa tudo do topo das torres\nComo um diretor cansado perdendo todos os seus poderes\nAssistindo ao fim do mundo se desenrolar\nNós amamos a Babilônia\nNós amamos a Babilônia\nNós amamos a Babilônia\nNós amamos a Babilônia\n\n[Verso 2]\nAs boates parecem catedrais esta noite\nCom vitrais de LED brilhando em neon\nE linhas de baixo batendo com tanta força\nQue fazem os mortos quererem se levantar da escuridão\n\nHá profetas nas esquinas vestidos de couro preto\nPregando o apocalipse em meio ao mau tempo\nEntre táxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\nTáxis amarelos e copos de vodca barata\n\n[Ponte]\nSe o céu existe\nProvavelmente cheira a cigarros e perfume.\nE se Deus ainda está nos observando\nEle definitivamente está dançando também.\n\n[Refrão]\nDeus observa tudo do topo das torres\nComo um diretor cansado perdendo todos os seus poderes\nAssistindo ao fim do mundo se desenrolar\nNós amamos a Babilônia\nNós amamos a Babilônia\nNós amamos a Babilônia\nNós amamos a Babilônia\n\n[Final]\nNós amamos a Babilônia (Nós amamos a Babilônia)\nNós amamos a Babilônia (Nós amamos a Babilônia)\nNós amamos a Babilônia (Nós amamos a Babilônia)\nNós amamos Babilônia\nNós amamos Babilônia\nNós amamos a Babilônia (Nós amamos a Babilônia)\nNós amamos a Babilônia (Nós amamos a Babilônia)\nNós amamos a Babilônia (Nós amamos a Babilônia)\nNós amamos a Babilônia\nNós amamos a Babilônia\nNós amamos a Babilônia\nNós amamos a Babilônia \nNós amamos a Babilônia", criadorId: "8549524816" },
+];
+
+const PENDING_COMMENTS_FOR_MISSING_SONGS: LegacyCommentRow[] = [
+  { topicId: "2158", jogadorId: "1065444507", jogador: "Weuller Collins", comentario: "Gente que tudo esse dueto. Eu achei que sonoramente combina muito com o que o Nolan gosta nas trilhas dele, traz a energia da história (ainda não assisti, mas conheço o clássico). Acho que foi uma boa escolha. Sucesso", data: "26/07/2026" },
+  { topicId: "2158", jogadorId: "5610611492", jogador: "Chris Aurieme", comentario: "que musica lindissima. excelente para a trilha sonora desse filme. Eu senti uma conexão mto forte com o filme e a melodia e a letra é tão poetica, intensa porém leve. eu adorei. espero que hit tanto quanto o filme.", data: "26/07/2026" },
+  { topicId: "2158", jogadorId: "1854891008", jogador: "Drico Branco", comentario: "Monas vocês acertaram MUITO nessa parceria. Achei a cara do filme e o instrumental complementa a poesia que vocês fizeram na letra. Amei a participação da Anne nessa faixa, deixou ainda mais rica e também é uma forma de vê-la explorando outras coisas. Arrasaram demais!", data: "29/07/2026" },
+  { topicId: "2215", jogadorId: "1854891008", jogador: "Drico Branco", comentario: "MDS QUE HINO, EMMA! A gatinha trouxe o rock pra pista de dança e nós amamos a Babilônia! Achei a musica super bem escrita e foi muito inteligente deixar esses trechos fortes serem repetidos varias vezes. O refrão é, sem dúvidas, o ponto alto da canção e os vocais estão angelicais. Ansioso pra ver o que mais vem por ai! Já é #1 aqui em casa!!!", data: "09/08/2026" },
+];
+
 export async function importLegacyCommentsController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const token = url.searchParams.get("token");
@@ -61,7 +90,43 @@ export async function importLegacyCommentsController(request: Request): Promise<
     });
   }
 
-  const results = { musicas: 0, mv: 0, errors: [] as string[] };
+  const results = { musicas: 0, mv: 0, missingSongs: 0, pendingComments: 0, errors: [] as string[] };
+
+  // 0. Registra as músicas que faltavam, ANTES dos comentários (senão os
+  // comentários ficariam apontando pra um tópico inexistente).
+  for (const song of MISSING_SONGS) {
+    try {
+      await googleSheetsService.principal.appendRow("Musicas", [
+        song.data, // A - Data de lançamento
+        song.topicId, // B - ID do tópico
+        "", // C - ID do arquivo (sem áudio disponível no histórico exportado)
+        "", // D - Capa
+        song.letra, // E - Letra
+        song.topicId, // F - Comentários para
+        song.criadorId, // G - ID do Criador
+        song.titulo, // H - Nome da música
+        song.tipoSingle, // I - TIPO DE SINGLE
+        song.tipoMusica, // J - TIPO DE MÚSICA
+        "", // K - ALBUM
+        "", // L - WEEKS
+        "", // M - WEEKS VIDEO
+        song.actPrincipal, // N - ACT PRINCIPAL
+        song.artista2, // O - ARTISTA 2
+        "", // P - ARTISTA 3
+        "", // Q - ARTISTA 4
+        "", // R - ARTISTA 5
+        "", // S - ARTISTA 6
+        "", // T - GÊNERO
+        "", // U - Ordem
+        "", // V - Metacritic por jogador
+        "", // W - Média Metacritic
+        "Sim", // X - Pendente? (sem áudio/capa, precisa completar o cadastro)
+      ]);
+      results.missingSongs++;
+    } catch (err: any) {
+      results.errors.push(`Musica nova ${song.topicId}: ${err.message}`);
+    }
+  }
 
   for (const row of MUSICAS_ROWS) {
     try {
@@ -74,6 +139,20 @@ export async function importLegacyCommentsController(request: Request): Promise<
       results.musicas++;
     } catch (err: any) {
       results.errors.push(`Musicas ${row.topicId}/${row.jogador}: ${err.message}`);
+    }
+  }
+
+  for (const row of PENDING_COMMENTS_FOR_MISSING_SONGS) {
+    try {
+      await googleSheetsService.principal.appendRow("Comentarios_Musicas", [
+        row.topicId,
+        row.jogadorId,
+        row.jogador,
+        row.comentario,
+      ]);
+      results.pendingComments++;
+    } catch (err: any) {
+      results.errors.push(`Pendente ${row.topicId}/${row.jogador}: ${err.message}`);
     }
   }
 

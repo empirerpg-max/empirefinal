@@ -1,0 +1,15 @@
+name: Run Admin Import (one-off)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chama o endpoint de importação de comentários legados
+        run: |
+          curl -sS -X POST "https://tanstack-start-app.empirerpg-forum.workers.dev/api/admin/import-legacy-comments?token=empireplay-legacy-import-2026" \
+            -H "Content-Type: application/json" | tee response.json
+      - name: Mostra o resultado formatado
+        run: cat response.json | python3 -m json.tool
