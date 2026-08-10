@@ -79,16 +79,19 @@ export async function getReleasesForEditController(request: Request): Promise<Re
         artist = row[13] || "";
         cover = row[3] || "";
       } else if (tipoParam === "videos" || tipoParam === "music-videos") {
-        // Aba real é "Music Videos" (dezesseis colunas: A=ID do usuário,
+        // Aba real é "Music Videos" (vinte colunas: A=ID do usuário,
         // B=Título do tópico, C=ID da mensagem original, D=chat_id,
         // E=chat_id_interno, F=message_thread_id, G=Link direto (t.me),
         // H=Tipo de vídeo, I=Descrição, J=Data do envio, K=fonte, L=ID da
         // mensagem duplicada, M=Link do vídeo, N=Likes, O=Média Likes,
-        // P=Nome original). Título = Coluna B (index 1), Descrição =
-        // Coluna I (index 8). Não há coluna de capa nem de artista própria
-        // aqui — o artista fica embutido no título ("Artista - Música").
+        // P=Nome original, Q=ID da mensagem reconvertido, R=Status da
+        // reconversão, S=Reportado em, T=Thumb). Título = Coluna B (index
+        // 1), Descrição = Coluna I (index 8), Capa/Thumb = Coluna T (index
+        // 19) — vira a capa/fundo do vídeo no catálogo. O artista fica
+        // embutido no título ("Artista - Música").
         title = row[1] || row[0] || "";
         description = row[8] || "";
+        cover = row[19] || "";
         const dashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
         if (dashMatch) artist = dashMatch[1].trim();
       } else if (tipoParam === "albuns") {
@@ -182,7 +185,9 @@ export async function updateReleaseController(request: Request): Promise<Respons
 
       let folderId: string = DRIVE_FOLDERS.musicas;
       if (tipoClean === "albuns") folderId = DRIVE_FOLDERS.albuns;
-      if (tipoClean === "music-videos") folderId = DRIVE_FOLDERS.musicVideos;
+      if (tipoClean === "videos" || tipoClean === "music-videos") {
+        folderId = DRIVE_FOLDERS.musicVideos;
+      }
 
       const fileName = `${artista || "Artista"} - ${titulo.trim()} (EDITADO)`;
       finalCapaUrl = await uploadFileToDrive(
@@ -236,16 +241,19 @@ export async function updateReleaseController(request: Request): Promise<Respons
       // chat_id_interno, message_thread_id, Link direto (t.me), Tipo de
       // vídeo, Descrição, Data do envio, fonte, ID da mensagem [duplicada],
       // Link do vídeo, Likes por jogador, Média Likes, Nome original nos
-      // charts. Alterar só Título (Coluna B) e Descrição (Coluna I). Não há
-      // coluna de thumbnail/capa nesta aba, então uma capa nova não é
-      // gravada (o upload em si ainda é enviado ao Drive, só não há onde
-      // referenciar o link na planilha).
+      // charts, ID da mensagem reconvertido, Status da reconversão,
+      // Reportado em, Thumb (Coluna T — vira a capa/fundo do vídeo).
       await googleSheetsService.principal.updateValues(sheetName, `B${rowIndex}`, [
         [titulo.trim()],
       ]);
       if (descricao !== undefined) {
         await googleSheetsService.principal.updateValues(sheetName, `I${rowIndex}`, [
           [descricao.trim()],
+        ]);
+      }
+      if (finalCapaUrl && finalCapaUrl !== oldCapaUrl) {
+        await googleSheetsService.principal.updateValues(sheetName, `T${rowIndex}`, [
+          [finalCapaUrl],
         ]);
       }
     } else if (tipoClean === "albuns") {
