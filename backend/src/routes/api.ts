@@ -4,7 +4,11 @@ import {
   getTopPlaylistsController,
 } from "../controllers/catalogController";
 import { getUserMeController } from "../controllers/userController";
-import { createCommentController, getCommentsController } from "../controllers/forumController";
+import {
+  createCommentController,
+  getCommentsController,
+  toggleCommentReactionController,
+} from "../controllers/forumController";
 import {
   createAlbumController,
   createMusicVideoController,
@@ -59,6 +63,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/albuns",
     "/api/forum/comment",
     "/api/forum/comments",
+    "/api/forum/comment-reaction",
     "/api/gestao/musica",
     "/api/gestao/video",
     "/api/gestao/music-video",
@@ -198,6 +203,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await getCommentsController(request);
+  } else if (url.pathname === "/api/forum/comment-reaction") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/forum/comment-reaction." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await toggleCommentReactionController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(
