@@ -39,11 +39,26 @@ export interface ExistingTrack {
 
 export interface TrackConfig {
   num: number;
+  // Faixa existente: "Artista - Título" selecionado na busca de charts.
+  // Faixa inédita: título digitado pelo jogador.
   titulo: string;
   inedita: boolean;
   tipoSingle?: string;
   tipoMusica?: string;
+  participantes?: string[];
+  mediaUrl?: string;
+  abrirTopico?: boolean;
+  // Estado só de UI — texto digitado na busca antes de selecionar a faixa.
+  buscaQuery?: string;
 }
+
+export interface MusicaEmChart {
+  label: string;
+  artist: string;
+  title: string;
+}
+
+const TIPOS_ALBUM = ["EP", "Álbum", "Deluxe"];
 
 const OPCOES_CHART = [
   {
@@ -124,6 +139,8 @@ export const Gestao: React.FC = () => {
 
   // Músicas do catálogo para seleção
   const [catalogSongs, setCatalogSongs] = useState<ExistingTrack[]>([]);
+  // Músicas em chart (aba Pontos) — usadas na busca de faixa existente do álbum
+  const [musicasEmChart, setMusicasEmChart] = useState<MusicaEmChart[]>([]);
 
   // Nomes de artistas já conhecidos no catálogo — sugestões (datalist) pros
   // campos de participante, que antes eram texto livre sem nenhuma lista.
@@ -146,6 +163,14 @@ export const Gestao: React.FC = () => {
     if (meus.size === 0) return [];
     return catalogSongs.filter((s) => s.artist && meus.has(s.artist.toLowerCase()));
   }, [catalogSongs, profile]);
+
+  // Músicas em chart (aba Pontos) só dos artistas que o jogador controla —
+  // usado na busca de faixa existente pra compor um álbum.
+  const myChartSongs = useMemo(() => {
+    const meus = new Set((profile?.associatedArtists || []).map((a) => a.toLowerCase()));
+    if (meus.size === 0) return [];
+    return musicasEmChart.filter((m) => m.artist && meus.has(m.artist.toLowerCase()));
+  }, [musicasEmChart, profile]);
 
   // States Comuns
   const [artistaResponsavel, setArtistaResponsavel] = useState<string>("");
@@ -178,7 +203,9 @@ export const Gestao: React.FC = () => {
   const [descricaoInput, setDescricaoInput] = useState<string>("");
 
   // Form Álbum
+  const [albumObjetivo, setAlbumObjetivo] = useState<"a" | "b">("a");
   const [tituloAlbum, setTituloAlbum] = useState<string>("");
+  const [tipoAlbum, setTipoAlbum] = useState<string>("Álbum");
   const [encartesFiles, setEncartesFiles] = useState<File[]>([]);
   const [totalFaixasCount, setTotalFaixasCount] = useState<number>(3);
   const [faixasConfig, setFaixasConfig] = useState<TrackConfig[]>([]);
@@ -264,6 +291,17 @@ export const Gestao: React.FC = () => {
       })
       .catch((err) => console.error("Erro ao carregar catálogo:", err));
 
+    // Buscar músicas em chart (aba Pontos) — usado na busca de faixas do álbum
+    fetch("/api/gestao/musicas-em-chart")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted) return;
+        if (data?.success && Array.isArray(data.data)) {
+          setMusicasEmChart(data.data);
+        }
+      })
+      .catch((err) => console.error("Erro ao carregar músicas em chart:", err));
+
     return () => {
       isMounted = false;
     };
@@ -280,6 +318,10 @@ export const Gestao: React.FC = () => {
         inedita: existing ? existing.inedita : true,
         tipoSingle: existing?.tipoSingle || "TRACKLIST ALBUM",
         tipoMusica: existing?.tipoMusica || "SOLO",
+        participantes: existing?.participantes || [],
+        mediaUrl: existing?.mediaUrl || "",
+        abrirTopico: existing?.abrirTopico ?? false,
+        buscaQuery: existing?.buscaQuery || "",
       });
     }
     setFaixasConfig(updated);
@@ -572,6 +614,12 @@ export const Gestao: React.FC = () => {
     setSuccessMsg(null);
     setErrorMsg(null);
 
+    if (albumObjetivo === "b") {
+      setErrorMsg(
+        "Substituir álbum nos charts ainda não está disponível — use \"Registrar\" por enquanto.",
+      );
+      return;
+    }
     if (!artistaResponsavel.trim()) {
       setErrorMsg("Selecione ou informe o Artista do Álbum.");
       return;
@@ -580,6 +628,20 @@ export const Gestao: React.FC = () => {
       setErrorMsg("Informe o Título do Álbum.");
       return;
     }
+    for (const faixa of faixasConfig) {
+      if (!faixa.titulo.trim()) {
+        setErrorMsg(
+          faixa.inedita
+            ? `Informe o título da Faixa #${faixa.num}.`
+            : `Selecione a música existente da Faixa #${faixa.num}.`,
+        );
+        return;
+      }
+      if (faixa.inedita && !faixa.mediaUrl?.trim()) {
+        setErrorMsg(`Informe o link do áudio (Drive ou YouTube) da Faixa #${faixa.num}.`);
+        return;
+      }
+    }
 
     setIsSubmitting(true);
     setUploadProgress("Fazendo upload da capa do álbum...");
@@ -587,9 +649,12 @@ export const Gestao: React.FC = () => {
     try {
       let capaUrl = "";
       if (capaFile) {
+        // A capa do álbum usa a mesma pasta das capas de música — só o
+        // encarte (abaixo) tem pasta própria. Antes os dois iam pra pasta
+        // de encarte, o que estava errado.
         capaUrl = await handleUploadToDrive(
           capaFile,
-          "album",
+          "musica",
           `CAPA_ALBUM_${artistaResponsavel}_${tituloAlbum}_${Date.now()}.jpg`,
         );
       }
@@ -612,11 +677,21 @@ export const Gestao: React.FC = () => {
       const payload = {
         tituloAlbum,
         artistaAlbum: artistaResponsavel,
+        tipoAlbum,
         capaUrl,
         encartesUrls,
         nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
         jogadorId: telegramUser?.id ? String(telegramUser.id) : "",
-        faixas: faixasConfig,
+        faixas: faixasConfig.map((f) => ({
+          num: f.num,
+          inedita: f.inedita,
+          titulo: f.titulo,
+          tipoSingle: f.tipoSingle,
+          tipoMusica: f.tipoMusica,
+          participantes: f.participantes,
+          mediaUrl: f.mediaUrl,
+          abrirTopico: f.abrirTopico,
+        })),
       };
 
       const res = await fetch("/api/gestao/album", {
@@ -1355,6 +1430,39 @@ export const Gestao: React.FC = () => {
           onSubmit={handleSubmitAlbum}
           className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-md"
         >
+          {/* OBJETIVO */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+              O que você quer fazer?
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div
+                onClick={() => setAlbumObjetivo("a")}
+                className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                  albumObjetivo === "a"
+                    ? "bg-emerald-500/10 border-emerald-500 text-white"
+                    : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
+                }`}
+              >
+                <span className="font-bold text-xs text-white mb-1">Registrar</span>
+                <span className="text-[11px] text-neutral-400">
+                  Cadastra um álbum novo com suas faixas.
+                </span>
+              </div>
+              <div
+                onClick={() => setAlbumObjetivo("b")}
+                className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                  albumObjetivo === "b"
+                    ? "bg-emerald-500/10 border-emerald-500 text-white"
+                    : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
+                }`}
+              >
+                <span className="font-bold text-xs text-white mb-1">Substituir nos Charts</span>
+                <span className="text-[11px] text-neutral-400">Em breve.</span>
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
               <User className="size-4 text-emerald-400" />
@@ -1403,6 +1511,24 @@ export const Gestao: React.FC = () => {
             </p>
           </div>
 
+          {/* TIPO DO ÁLBUM */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+              Tipo
+            </label>
+            <select
+              value={tipoAlbum}
+              onChange={(e) => setTipoAlbum(e.target.value)}
+              className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+            >
+              {TIPOS_ALBUM.map((tipo) => (
+                <option key={tipo} value={tipo}>
+                  {tipo}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* QUANTIDADE DE FAIXAS */}
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
@@ -1420,49 +1546,160 @@ export const Gestao: React.FC = () => {
           </div>
 
           {/* TRACKLIST CONFIG */}
-          <div className="space-y-3 bg-neutral-950/60 p-4 rounded-2xl border border-white/5 max-h-80 overflow-y-auto">
+          <div className="space-y-3 bg-neutral-950/60 p-4 rounded-2xl border border-white/5 max-h-[32rem] overflow-y-auto">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
               Lista de Faixas do Álbum
             </label>
-            {faixasConfig.map((faixa, idx) => (
-              <div
-                key={idx}
-                className="p-3 bg-neutral-900 border border-white/5 rounded-xl space-y-2"
-              >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-emerald-400">Faixa #{faixa.num}</span>
-                  <div className="flex items-center gap-2">
+            {faixasConfig.map((faixa, idx) => {
+              const updateFaixa = (patch: Partial<TrackConfig>) => {
+                const updated = [...faixasConfig];
+                updated[idx] = { ...updated[idx], ...patch };
+                setFaixasConfig(updated);
+              };
+              const buscaResultados = (faixa.buscaQuery || "").trim()
+                ? myChartSongs.filter((m) =>
+                    m.label.toLowerCase().includes((faixa.buscaQuery || "").trim().toLowerCase()),
+                  )
+                : [];
+
+              return (
+                <div
+                  key={idx}
+                  className="p-3 bg-neutral-900 border border-white/5 rounded-xl space-y-3"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-emerald-400">Faixa #{faixa.num}</span>
                     <button
                       type="button"
-                      onClick={() => {
-                        const updated = [...faixasConfig];
-                        updated[idx].inedita = !updated[idx].inedita;
-                        setFaixasConfig(updated);
-                      }}
+                      onClick={() =>
+                        updateFaixa({ inedita: !faixa.inedita, titulo: "", buscaQuery: "" })
+                      }
                       className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase transition ${
                         faixa.inedita
                           ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                           : "bg-neutral-800 text-neutral-400"
                       }`}
                     >
-                      {faixa.inedita ? "Inédita (Registrar)" : "Do Catálogo"}
+                      {faixa.inedita ? "Música Não Existente" : "Música Existente"}
                     </button>
                   </div>
-                </div>
 
-                <input
-                  type="text"
-                  value={faixa.titulo}
-                  onChange={(e) => {
-                    const updated = [...faixasConfig];
-                    updated[idx].titulo = e.target.value;
-                    setFaixasConfig(updated);
-                  }}
-                  placeholder={`Título da faixa #${faixa.num}`}
-                  className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-            ))}
+                  {faixa.inedita ? (
+                    <>
+                      <input
+                        type="text"
+                        value={faixa.titulo}
+                        onChange={(e) => updateFaixa({ titulo: e.target.value })}
+                        placeholder={`Título da faixa #${faixa.num}`}
+                        className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <select
+                          value={faixa.tipoSingle || "TRACKLIST ALBUM"}
+                          onChange={(e) => updateFaixa({ tipoSingle: e.target.value })}
+                          className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        >
+                          {TIPOS_SINGLE.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={faixa.tipoMusica || "SOLO"}
+                          onChange={(e) => updateFaixa({ tipoMusica: e.target.value })}
+                          className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        >
+                          {TIPOS_MUSICA.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <input
+                        type="text"
+                        value={faixa.mediaUrl || ""}
+                        onChange={(e) => updateFaixa({ mediaUrl: e.target.value })}
+                        placeholder="Link do Drive ou YouTube (áudio)"
+                        list="participantes-conhecidos"
+                        className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={(faixa.participantes || []).join(", ")}
+                        onChange={(e) =>
+                          updateFaixa({
+                            participantes: e.target.value
+                              .split(",")
+                              .map((p) => p.trim())
+                              .filter(Boolean),
+                          })
+                        }
+                        placeholder="Artistas participantes, separados por vírgula (opcional)"
+                        className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                      />
+                      <label className="flex items-center gap-2 text-[11px] text-neutral-400">
+                        <input
+                          type="checkbox"
+                          checked={!!faixa.abrirTopico}
+                          onChange={(e) => updateFaixa({ abrirTopico: e.target.checked })}
+                          className="accent-emerald-500"
+                        />
+                        Abrir tópico próprio pra essa faixa no fórum (senão ela fica só dentro do
+                        álbum)
+                      </label>
+                    </>
+                  ) : (
+                    <div className="relative">
+                      {faixa.titulo ? (
+                        <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2.5">
+                          <span className="text-xs text-white font-bold truncate">
+                            {faixa.titulo}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateFaixa({ titulo: "", buscaQuery: "" })}
+                            className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
+                          >
+                            Trocar
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={faixa.buscaQuery || ""}
+                            onChange={(e) => updateFaixa({ buscaQuery: e.target.value })}
+                            placeholder="Busque a música já lançada nos charts..."
+                            className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                          />
+                          {(faixa.buscaQuery || "").trim().length > 0 && (
+                            <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
+                              {buscaResultados.slice(0, 20).map((m) => (
+                                <button
+                                  key={m.label}
+                                  type="button"
+                                  onClick={() => updateFaixa({ titulo: m.label, buscaQuery: "" })}
+                                  className="w-full text-left px-3 py-2 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
+                                >
+                                  {m.label}
+                                </button>
+                              ))}
+                              {buscaResultados.length === 0 && (
+                                <p className="px-3 py-2.5 text-xs text-neutral-500 italic">
+                                  Nenhuma música encontrada nos charts.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* UPLOAD DA CAPA E ENCARTES */}
