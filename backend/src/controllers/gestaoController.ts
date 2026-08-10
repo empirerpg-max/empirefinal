@@ -265,6 +265,7 @@ export async function createVideoController(request: Request): Promise<Response>
     const fullTitle = tituloVideo.includes(" - ")
       ? tituloVideo
       : `${artistaResponsavel} - ${tituloVideo}`;
+    const topicId = `video_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     // 1. Gravar em Music Videos na planilha principal — "Videos" não existe
     // mais como aba própria (consolidada aqui). Mesmo mapeamento de colunas
@@ -277,7 +278,7 @@ export async function createVideoController(request: Request): Promise<Response>
         "", // C - ID da mensagem (grupo original)
         "", // D - chat_id
         "", // E - chat_id_interno
-        "", // F - message_thread_id
+        topicId, // F - message_thread_id
         "", // G - Link direto (t.me)
         tipoVideo || categoriaVideo || "Video", // H - Tipo de vídeo
         "", // I - Descrição
@@ -357,6 +358,7 @@ export async function createMusicVideoController(request: Request): Promise<Resp
     const fullTitle = tituloMusicVideo.includes(" - ")
       ? tituloMusicVideo
       : `${artistaResponsavel} - ${tituloMusicVideo}`;
+    const topicId = `mv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     // 1. Gravar em Music Videos na planilha principal — mapeamento exato do
     // cabeçalho real da aba (ID do usuário, Título do tópico, ID da mensagem
@@ -375,7 +377,7 @@ export async function createMusicVideoController(request: Request): Promise<Resp
         "", // C - ID da mensagem (grupo original)
         "", // D - chat_id
         "", // E - chat_id_interno
-        "", // F - message_thread_id
+        topicId, // F - message_thread_id
         "", // G - Link direto (t.me)
         "Music Video", // H - Tipo de vídeo
         "", // I - Descrição

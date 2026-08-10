@@ -113,12 +113,26 @@ export const Forum: React.FC<ForumProps> = ({
   const [playingTrackUrl, setPlayingTrackUrl] = useState<string | null>(null);
 
   const handleVideoPlay = (topic: ForumTopicItem) => {
+    // Drive e Telegram nunca são tocáveis pelo link/id cru — precisam passar
+    // pelo proxy do próprio Worker (mesma conversão de mappers.ts/toPlayableVideo),
+    // senão o <video> tenta carregar um link do Drive/ID do Telegram direto e falha.
+    const raw = topic.link || topic.id;
+    const source = topic.videoSource || undefined;
+    let resolvedLink = raw || "";
+    if (source === "telegram" && raw) {
+      resolvedLink = `/api/telegram-video/${encodeURIComponent(raw)}`;
+    } else if (source === "drive" && raw) {
+      const match = raw.match(/[-\w]{25,}/);
+      const fileId = match ? match[0] : raw;
+      resolvedLink = `/api/media/video?id=${fileId}`;
+    }
+
     const videoObj: PlayableVideo = {
       id: topic.id,
       titulo: topic.title,
       artista: topic.artist,
-      link: topic.link || topic.id,
-      fonte: topic.videoSource || undefined,
+      link: resolvedLink,
+      fonte: source,
       poster_url: topic.cover || undefined,
       tipo_video: topic.tipoVideo || "Vídeo",
     };

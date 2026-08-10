@@ -87,20 +87,25 @@ export async function createCommentController(request: Request): Promise<Respons
     // Configuração de abas e colunas conforme tipo da mídia
     let targetSheet = "Musicas";
     let commentSheet = "Comentarios_Musicas";
+    let colTopicIdIndex = 1; // Coluna B — "ID do tópico"
     let colRatingsIndex = 21; // Coluna V (0-based 21)
     let colAvgIndex = 22; // Coluna W (0-based 22)
 
     if (tipoMedia === "album") {
       targetSheet = "Albuns";
       commentSheet = "Comentarios_Albuns";
+      colTopicIdIndex = 1; // Coluna B — "ID do tópico"
       colRatingsIndex = 7; // Coluna H
       colAvgIndex = 8; // Coluna I
     } else if (tipoMedia === "video" || tipoMedia === "music-video") {
       // "Videos"/"Comentarios_Videos" não existem mais — Vídeos e Music
-      // Videos foram consolidados em "Music Videos"/"Comentarios_MV".
-      // Colunas reais da aba: N = Likes por jogador (13), O = Média Likes (14).
+      // Videos foram consolidados em "Music Videos"/"Comentarios_MV". A
+      // coluna B dessa aba é o TÍTULO do tópico, não o ID — o ID único de
+      // verdade é a coluna F ("message_thread_id"). Colunas de nota: N =
+      // Likes por jogador (13), O = Média Likes (14).
       targetSheet = "Music Videos";
       commentSheet = "Comentarios_MV";
+      colTopicIdIndex = 5; // Coluna F — "message_thread_id"
       colRatingsIndex = 13; // Coluna N (0-based 13)
       colAvgIndex = 14; // Coluna O (0-based 14)
     }
@@ -109,15 +114,16 @@ export async function createCommentController(request: Request): Promise<Respons
     const rows = await googleSheetsService.principal.readValues(targetSheet);
 
     if (rows && rows.length > 0) {
-      // Busca pela Coluna B (índice 1) = "ID do tópico" / "telegram_topic_id"
-      // — mesma posição em Musicas/Videos/Music Videos/Albuns. Só cai para
-      // busca por título (substring, menos confiável) se o topicId não vier.
+      // Busca pela coluna de ID do tópico certa pra essa aba (ver acima —
+      // Music Videos usa uma posição diferente de Musicas/Albuns). Só cai
+      // pra busca por título (substring, menos confiável) se o topicId não
+      // vier.
       let foundRowIndex = -1;
 
       if (topicIdClean) {
         const topicNorm = normalizeComparison(topicIdClean);
         for (let i = 1; i < rows.length; i++) {
-          if (normalizeComparison(rows[i][1] || "") === topicNorm) {
+          if (normalizeComparison(rows[i][colTopicIdIndex] || "") === topicNorm) {
             foundRowIndex = i + 1; // A1 row number (1-based)
             break;
           }
