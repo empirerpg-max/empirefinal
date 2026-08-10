@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { driveImg } from "@/lib/api";
 import {
   X,
   Pencil,
@@ -355,7 +356,11 @@ export const EditModal: React.FC<EditModalProps> = ({
                   <div className="flex items-center gap-4 p-4 bg-neutral-800/40 border border-white/10 rounded-2xl">
                     <div className="size-20 rounded-2xl overflow-hidden bg-black border border-white/10 shrink-0 flex items-center justify-center">
                       {capaPreview ? (
-                        <img src={capaPreview} alt="Thumb" className="w-full h-full object-cover" />
+                        <img
+                          src={capaPreview.startsWith("blob:") ? capaPreview : driveImg(capaPreview)}
+                          alt="Thumb"
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <ImageIcon className="size-8 text-neutral-600" />
                       )}
@@ -472,7 +477,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                         <div className="flex items-center gap-3.5 min-w-0">
                           {rel.capaUrl ? (
                             <img
-                              src={rel.capaUrl}
+                              src={driveImg(rel.capaUrl)}
                               alt={rel.titulo}
                               className="size-12 rounded-xl object-cover shrink-0 border border-white/10"
                             />

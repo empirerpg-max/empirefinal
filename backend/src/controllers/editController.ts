@@ -78,17 +78,19 @@ export async function getReleasesForEditController(request: Request): Promise<Re
         title = row[7] || row[1] || "";
         artist = row[13] || "";
         cover = row[3] || "";
-      } else if (tipoParam === "videos") {
-        // Coluna G = index 6 (Título), Coluna M = index 12 (Descrição)
-        title = row[6] || row[0] || "";
-        artist = row[1] || row[2] || "";
-        description = row[12] || "";
-      } else if (tipoParam === "music-videos") {
-        // Coluna B = index 1 (Título do tópico), Coluna I = index 8
-        // (Descrição). Não há coluna de artista nem de capa nesta aba — o
-        // artista fica embutido no título ("Artista - Música").
+      } else if (tipoParam === "videos" || tipoParam === "music-videos") {
+        // Aba real é "Music Videos" (dezesseis colunas: A=ID do usuário,
+        // B=Título do tópico, C=ID da mensagem original, D=chat_id,
+        // E=chat_id_interno, F=message_thread_id, G=Link direto (t.me),
+        // H=Tipo de vídeo, I=Descrição, J=Data do envio, K=fonte, L=ID da
+        // mensagem duplicada, M=Link do vídeo, N=Likes, O=Média Likes,
+        // P=Nome original). Título = Coluna B (index 1), Descrição =
+        // Coluna I (index 8). Não há coluna de capa nem de artista própria
+        // aqui — o artista fica embutido no título ("Artista - Música").
         title = row[1] || row[0] || "";
         description = row[8] || "";
+        const dashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
+        if (dashMatch) artist = dashMatch[1].trim();
       } else if (tipoParam === "albuns") {
         // Coluna G = index 6 (Nome), Coluna F = index 5 (Nome do criador),
         // Coluna C = index 2 (Capa)
@@ -227,28 +229,17 @@ export async function updateReleaseController(request: Request): Promise<Respons
       } catch (errChart) {
         console.warn("[updateReleaseController] Aviso ao atualizar EDIÇÃO CHARTS:", errChart);
       }
-    } else if (tipoClean === "videos") {
-      // Vídeos:
-      // Alterar Título (Coluna G = Col 7) e Descrição (Coluna M = Col 13)
-      await googleSheetsService.principal.updateValues(sheetName, `G${rowIndex}`, [
-        [titulo.trim()],
-      ]);
-      if (descricao !== undefined) {
-        await googleSheetsService.principal.updateValues(sheetName, `M${rowIndex}`, [
-          [descricao.trim()],
-        ]);
-      }
-    } else if (tipoClean === "music-videos") {
-      // Music Videos — cabeçalho real confirmado: ID do usuário, Título do
-      // tópico, ID da mensagem, chat_id, chat_id_interno, message_thread_id,
-      // Link direto (t.me), Tipo de vídeo, Descrição, Data do envio, fonte,
-      // ID da mensagem [duplicada], Link do vídeo, Likes por jogador, Média
-      // Likes, Nome original nos charts.
-      // Alterar Título (Coluna B) e Descrição (Coluna I). A coluna C é o
-      // ID da mensagem do Telegram — a chave de streaming do vídeo — e NUNCA
-      // deve ser sobrescrita aqui. Não há coluna de thumbnail/capa nesta
-      // aba, então uma capa nova não é gravada (o upload em si ainda é
-      // enviado ao Drive, só não há onde referenciar o link na planilha).
+    } else if (tipoClean === "videos" || tipoClean === "music-videos") {
+      // Aba real é "Music Videos" — cabeçalho confirmado: ID do usuário,
+      // Título do tópico, ID da mensagem [ORIGINAL do Telegram — nunca
+      // sobrescrever, é a chave de streaming do vídeo], chat_id,
+      // chat_id_interno, message_thread_id, Link direto (t.me), Tipo de
+      // vídeo, Descrição, Data do envio, fonte, ID da mensagem [duplicada],
+      // Link do vídeo, Likes por jogador, Média Likes, Nome original nos
+      // charts. Alterar só Título (Coluna B) e Descrição (Coluna I). Não há
+      // coluna de thumbnail/capa nesta aba, então uma capa nova não é
+      // gravada (o upload em si ainda é enviado ao Drive, só não há onde
+      // referenciar o link na planilha).
       await googleSheetsService.principal.updateValues(sheetName, `B${rowIndex}`, [
         [titulo.trim()],
       ]);
