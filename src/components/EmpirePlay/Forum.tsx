@@ -8,7 +8,6 @@ import {
   Search,
   Play,
   Pause,
-  ThumbsUp,
   ChevronLeft,
   Calendar,
   User,
@@ -302,7 +301,8 @@ export const Forum: React.FC<ForumProps> = ({
     );
   }, [items, searchQuery]);
 
-  // Extrair nota ou likes dos campos do item
+  // Extrai nota ou likes dos campos do item — sem dado real, retorna vazio
+  // (nunca inventa um número; o ScoreBadge simplesmente não renderiza).
   const getItemScore = (item: ForumTopicItem) => {
     const fields = item.fields || {};
     return (
@@ -311,7 +311,7 @@ export const Forum: React.FC<ForumProps> = ({
       fields.likes_medio ||
       fields.likes ||
       fields.nota ||
-      "80"
+      ""
     );
   };
 
@@ -460,27 +460,29 @@ export const Forum: React.FC<ForumProps> = ({
                 </div>
               )}
 
-              {/* CARD DE AVALIAÇÃO OFICIAL */}
-              <div className="bg-neutral-800/60 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">
-                    {activeSubmenu === "videos" || activeSubmenu === "music-videos"
-                      ? "Total de Likes Accum"
-                      : "Nota Oficial Metacritic"}
-                  </span>
-                  <span className="text-[11px] sm:text-xs text-neutral-300 font-medium">
-                    Média da comunidade do Empire Hub
-                  </span>
+              {/* CARD DE AVALIAÇÃO OFICIAL — só aparece com nota/likes real */}
+              {getItemScore(selectedTopic) && (
+                <div className="bg-neutral-800/60 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">
+                      {activeSubmenu === "videos" || activeSubmenu === "music-videos"
+                        ? "Total de Likes Accum"
+                        : "Nota Oficial Metacritic"}
+                    </span>
+                    <span className="text-[11px] sm:text-xs text-neutral-300 font-medium">
+                      Média da comunidade do Empire Hub
+                    </span>
+                  </div>
+                  <ScoreBadge
+                    score={getItemScore(selectedTopic)}
+                    variant={
+                      activeSubmenu === "videos" || activeSubmenu === "music-videos"
+                        ? "likes"
+                        : "metacritic"
+                    }
+                  />
                 </div>
-                <ScoreBadge
-                  score={getItemScore(selectedTopic)}
-                  variant={
-                    activeSubmenu === "videos" || activeSubmenu === "music-videos"
-                      ? "likes"
-                      : "metacritic"
-                  }
-                />
-              </div>
+              )}
             </div>
 
             {/* INFORMAÇÕES DO TÓPICO / LETRA / FAIXAS */}
@@ -683,14 +685,15 @@ export const Forum: React.FC<ForumProps> = ({
                       )}
 
                       <div className="absolute top-2 right-2 sm:top-3 sm:right-3 pointer-events-none">
-                        {activeSubmenu === "videos" || activeSubmenu === "music-videos" ? (
-                          <div className="flex items-center gap-1 px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl bg-black/80 backdrop-blur-md border border-white/10 text-emerald-400 text-[10px] sm:text-xs font-black">
-                            <ThumbsUp className="size-2.5 sm:size-3 fill-emerald-400" />
-                            <span>{getItemScore(item)}</span>
-                          </div>
-                        ) : (
-                          <ScoreBadge score={getItemScore(item)} variant="metacritic" />
-                        )}
+                        <ScoreBadge
+                          score={getItemScore(item)}
+                          variant={
+                            activeSubmenu === "videos" || activeSubmenu === "music-videos"
+                              ? "likes"
+                              : "metacritic"
+                          }
+                          className="!px-2 !py-0.5 sm:!px-3 sm:!py-1 !text-[10px] sm:!text-xs"
+                        />
                       </div>
                     </div>
 

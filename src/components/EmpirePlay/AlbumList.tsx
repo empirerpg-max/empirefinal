@@ -260,6 +260,7 @@ export function AlbumList({ onPlayTrack }: AlbumListProps) {
                     <Link
                       to="/empire-play/forum"
                       search={{ tab: "albuns", id: selectedAlbum.id }}
+                      onClick={() => setSelectedAlbum(null)}
                       className="px-4 py-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-300 hover:text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all"
                     >
                       <MessageSquare className="size-4" /> Fórum
@@ -326,7 +327,10 @@ export function AlbumList({ onPlayTrack }: AlbumListProps) {
                         <Link
                           to="/empire-play/forum"
                           search={{ tab: "musicas", id: track.id }}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedAlbum(null);
+                          }}
                           title="Ver no Fórum"
                           className="size-8 rounded-full bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white grid place-items-center transition-all"
                         >

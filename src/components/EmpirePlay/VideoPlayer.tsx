@@ -173,7 +173,13 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
             <Link
               to="/empire-play/forum"
               search={{ tab: video.forumTab || "videos", id: video.id }}
-              onClick={() => haptic.selection()}
+              onClick={() => {
+                haptic.selection();
+                // Fecha o player (overlay fixo em tela cheia) pra revelar o
+                // Fórum por baixo — sem isso a navegação acontece mas fica
+                // escondida atrás do player ainda aberto.
+                onClose();
+              }}
               title="Ver no Fórum"
               className="size-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 grid place-items-center text-neutral-400 hover:text-white active:scale-90 transition-all"
             >
