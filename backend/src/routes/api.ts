@@ -1,4 +1,3 @@
-import { debugPontoController } from "../controllers/debugPontoController";
 import {
   getCatalogKindController,
   getLancamentosController,
@@ -39,6 +38,7 @@ import { reportVideoIssueController } from "../controllers/reportVideoController
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
 import { loginController, updateProfileController } from "../controllers/authController";
 import { getMeusArtistasNomesController } from "../controllers/artistasController";
+import { getPontosController, salvarPontoCelulaController } from "../controllers/pontoController";
 import {
   getSocialPostsController,
   createSocialPostController,
@@ -134,7 +134,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/comentarios",
     "/api/social/comentar",
     "/api/social/comentario/editar",
-    "/api/debug/ponto",
+    "/api/ponto",
+    "/api/ponto/salvar",
     "/api/social/posts/editar",
     "/api/social/perfis",
     "/api/social/news",
@@ -389,8 +390,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
                 { status: 405, headers: { "Content-Type": "application/json" } },
               );
     }
-  } else if (url.pathname === "/api/debug/ponto") {
-    response = await debugPontoController();
   } else if (isAlbunsAntigosPath) {
     if (request.method !== "GET") {
       return new Response(
@@ -404,6 +403,22 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       const id = decodeURIComponent(url.pathname.replace("/api/albuns-antigos/", ""));
       response = await getAlbumAntigoByIdController(id);
     }
+  } else if (url.pathname === "/api/ponto") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/ponto." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getPontosController(request);
+  } else if (url.pathname === "/api/ponto/salvar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/ponto/salvar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await salvarPontoCelulaController(request);
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"
