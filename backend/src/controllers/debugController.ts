@@ -4,8 +4,9 @@ import { googleSheetsService, listSheetTabs } from "../services/googleSheetsServ
 // usuário passou) pro nome real da aba na planilha registrosCharts, e lê a
 // estrutura ao vivo (cabeçalhos + linhas de exemplo). Será removido depois
 // do mapeamento.
-const GIDS_ALVO: Record<string, number> = {
-  ECOIN_OU_INVESTIMENTO: 1214241511,
+const GIDS_ALVO: Record<string, { gid: number; range: string }> = {
+  ECOIN_OU_INVESTIMENTO: { gid: 1214241511, range: "A1:BZ12" },
+  TABELA_PRECOS: { gid: 1676926764, range: "AK1:AL60" },
 };
 
 export async function debugEcoinInvestimentoController(): Promise<Response> {
@@ -14,16 +15,16 @@ export async function debugEcoinInvestimentoController(): Promise<Response> {
   const tabs = await listSheetTabs("registrosCharts");
   out._abas = tabs;
 
-  for (const [label, gid] of Object.entries(GIDS_ALVO)) {
+  for (const [label, { gid, range }] of Object.entries(GIDS_ALVO)) {
     const tab = tabs.find((t) => t.sheetId === gid);
     if (!tab) {
       out[label] = { erro: `Nenhuma aba com gid ${gid} encontrada.` };
       continue;
     }
     try {
-      out[tab.title] = await googleSheetsService.registrosCharts.readValues(tab.title, "A1:BZ12");
+      out[`${label} (${tab.title})`] = await googleSheetsService.registrosCharts.readValues(tab.title, range);
     } catch (err: any) {
-      out[tab.title] = { erro: err?.message || String(err) };
+      out[`${label} (${tab.title})`] = { erro: err?.message || String(err) };
     }
   }
 
