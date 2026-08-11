@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { useTelegramUser, haptic, openExternal } from "@/lib/telegram";
 import { api, driveImg, fmtEC, type Artist, invalidateCache, type ChartData } from "@/lib/api";
 import { useHomeConfig } from "@/lib/homeFlags";
+import { getStoredLogin } from "@/components/LoginScreen";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -48,6 +49,9 @@ function Index() {
   const [syncing, setSyncing] = useState(false);
   const { user, ready } = useTelegramUser();
   const config = useHomeConfig();
+  const login = getStoredLogin();
+  const fotoUsuario = login?.fotoPerfil || user?.photo_url || "";
+  const nomeUsuario = login?.nome || user?.name || "Visitante";
 
   const fetchData = async (silent = false) => {
     if (!silent) setSyncing(true);
@@ -317,11 +321,11 @@ function Index() {
       <header className="flex items-center justify-between mb-6 animate-in fade-in duration-500">
         <div className="flex items-center gap-3 min-w-0">
           <div className="size-12 shrink-0 rounded-full bg-primary/20 border border-primary/30 grid place-items-center overflow-hidden">
-            {user?.photo_url ? (
+            {fotoUsuario ? (
               <img
-                src={user.photo_url}
+                src={driveImg(fotoUsuario, 100)}
                 className="size-12 rounded-full object-cover"
-                alt={user?.name ? `Foto de ${user.name}` : "Foto do usuário"}
+                alt={`Foto de ${nomeUsuario}`}
                 loading="lazy"
                 decoding="async"
               />
@@ -331,7 +335,7 @@ function Index() {
           </div>
           <div className="min-w-0">
             <p className="text-base font-black leading-none truncate">
-              Olá, {user?.name || "Visitante"}
+              Olá, {nomeUsuario}
             </p>
             <p className="text-[11px] uppercase font-bold text-muted-foreground tracking-[0.15em] mt-1">
               Empire <span className="text-primary">Hub</span>
