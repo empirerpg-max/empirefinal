@@ -94,18 +94,24 @@ export async function getPontosController(request: Request): Promise<Response> {
   const artistNames = await getArtistNamesForOwner(telegramId);
   if (artistNames.length === 0) return jsonResponse({ artistas: [], grupos: [] });
 
-  const normArtistNames = new Set(artistNames.map(normalizeComparison));
   const rows = await googleSheetsService.registrosCharts.readValues(SHEET);
 
-  const grupos = new Map<string, PontoMusica[]>();
+  // Mapa normalizado → nome canônico (o da aba ARTISTAS), pra agrupar
+  // corretamente mesmo se o texto na aba PONTOS variar de maiúscula/acento.
+  const canonicalByNorm = new Map(artistNames.map((nome) => [normalizeComparison(nome), nome]));
+
+  // Começa com TODOS os artistas do jogador (mesmo sem nenhuma música ainda
+  // na aba PONTOS), pra sempre aparecerem na lista/carrossel do app.
+  const grupos = new Map<string, PontoMusica[]>(artistNames.map((nome) => [nome, []]));
+
   for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || !row.some((cell) => normalizeText(cell))) continue;
     const artista = normalizeText(row[2]);
-    if (!artista || !normArtistNames.has(normalizeComparison(artista))) continue;
+    const canonico = artista && canonicalByNorm.get(normalizeComparison(artista));
+    if (!canonico) continue;
     const musica = rowToMusica(row, i + 1);
-    if (!grupos.has(artista)) grupos.set(artista, []);
-    grupos.get(artista)!.push(musica);
+    grupos.get(canonico)!.push(musica);
   }
 
   return jsonResponse({
