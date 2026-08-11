@@ -5,23 +5,30 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: Dump SOCIAL_PERFIS
+      - name: GET /api/social/posts
         run: |
-          echo "=== SOCIAL_PERFIS ==="
-          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/dump?spreadsheet=usuarios&sheet=SOCIAL_PERFIS"
+          echo "=== /api/social/posts ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/social/posts"
           echo ""
-      - name: Dump SOCIAL_POSTS
+      - name: GET /api/social/perfis
         run: |
-          echo "=== SOCIAL_POSTS ==="
-          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/dump?spreadsheet=usuarios&sheet=SOCIAL_POSTS"
+          echo "=== /api/social/perfis ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/social/perfis"
           echo ""
-      - name: Dump SOCIAL_COMMENTS
+      - name: GET /api/social/news
         run: |
-          echo "=== SOCIAL_COMMENTS ==="
-          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/dump?spreadsheet=usuarios&sheet=SOCIAL_COMMENTS"
+          echo "=== /api/social/news ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/social/news"
           echo ""
-      - name: Dump SOCIAL_NEWS
+      - name: POST /api/social/posts (teste)
         run: |
-          echo "=== SOCIAL_NEWS ==="
-          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/dump?spreadsheet=usuarios&sheet=SOCIAL_NEWS"
+          echo "=== POST /api/social/posts ==="
+          curl -s -X POST "https://tanstack-start-app.empirerpg-forum.workers.dev/api/social/posts" \
+            -H "Content-Type: application/json" \
+            -d '{"payload":"{\"tipo\":\"Instagram\",\"subtipo\":\"Feed\",\"autor\":\"Matthew\",\"texto\":\"teste-worker-migration\"}","tgId":"1625310906"}'
+          echo ""
+      - name: GET /api/social/comentarios (postId inexistente, só checar formato)
+        run: |
+          echo "=== /api/social/comentarios ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/social/comentarios?postId=POST-da4ce495"
           echo ""
