@@ -129,7 +129,10 @@ export async function loginController(request: Request): Promise<Response> {
         success: true,
         data: {
           id: match.rec["id"] || "",
-          nome: match.rec["nome"] || usuario,
+          // Nome exibido no app vem da coluna "Usuário" (C), não da coluna
+          // "Nome" (A) — decisão explícita: a coluna C é a fonte única de
+          // verdade tanto pro login quanto pro nome mostrado.
+          nome: match.rec["usuario"] || usuario,
           usuario: match.rec["usuario"] || usuario,
           tipoPerfil: match.rec["tipo_de_perfil"] || "Usuário",
           fotoPerfil: match.rec["foto_do_perfil"] || "",
@@ -182,13 +185,18 @@ export async function updateProfileController(request: Request): Promise<Respons
     }
 
     const columnKeys = Object.keys(match.rec);
+    const novoNome = body.nome?.trim();
 
-    if (body.nome?.trim()) {
-      const nomeColIndex = columnKeys.indexOf("nome");
-      if (nomeColIndex !== -1) {
-        const colLetter = colIndexToA1Letter(nomeColIndex);
+    // O nome exibido no app é a coluna "Usuário" (C) — a mesma usada pro
+    // login. Editar o "nome" aqui, portanto, renomeia o próprio usuário de
+    // login (efeito esperado: a partir daqui, é esse novo valor que deve
+    // ser digitado pra entrar).
+    if (novoNome) {
+      const usuarioColIndex = columnKeys.indexOf("usuario");
+      if (usuarioColIndex !== -1) {
+        const colLetter = colIndexToA1Letter(usuarioColIndex);
         await googleSheetsService.usuarios.updateValues(USUARIOS_SHEET, `${colLetter}${match.rowIndex}`, [
-          [body.nome.trim()],
+          [novoNome],
         ]);
       }
     }
@@ -203,13 +211,15 @@ export async function updateProfileController(request: Request): Promise<Respons
       }
     }
 
+    const nomeAtualizado = novoNome || match.rec["usuario"] || usuario;
+
     return new Response(
       JSON.stringify({
         success: true,
         data: {
           id: match.rec["id"] || "",
-          nome: body.nome?.trim() || match.rec["nome"] || usuario,
-          usuario: match.rec["usuario"] || usuario,
+          nome: nomeAtualizado,
+          usuario: nomeAtualizado,
           tipoPerfil: match.rec["tipo_de_perfil"] || "Usuário",
           fotoPerfil: body.fotoPerfil !== undefined ? body.fotoPerfil : match.rec["foto_do_perfil"] || "",
           prestigio: match.rec["prestigio"] || "",

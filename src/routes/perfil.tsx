@@ -100,7 +100,12 @@ function Perfil() {
             <div className="relative mb-4">
               <div className="size-24 rounded-full bg-primary/20 border-2 border-primary/30 grid place-items-center overflow-hidden">
                 {editFoto ? (
-                  <img src={driveImg(editFoto, 200)} className="size-24 rounded-full object-cover" alt="" />
+                  <img
+                    src={driveImg(editFoto, 200)}
+                    className="size-24 rounded-full object-cover"
+                    alt=""
+                    referrerPolicy="no-referrer"
+                  />
                 ) : (
                   <User className="size-10 text-primary" />
                 )}
@@ -128,8 +133,11 @@ function Perfil() {
               value={editNome}
               onChange={(e) => setEditNome(e.target.value)}
               placeholder="Seu nome"
-              className="w-full max-w-[16rem] px-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm text-center font-black uppercase outline-none focus:border-primary/50 transition mb-3"
+              className="w-full max-w-[16rem] px-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm text-center font-black uppercase outline-none focus:border-primary/50 transition"
             />
+            <p className="text-[10px] text-muted-foreground/70 mb-3 max-w-[16rem]">
+              Esse é também o usuário usado pra entrar no app — mudar aqui muda seu login.
+            </p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsEditing(false)}
@@ -155,6 +163,7 @@ function Perfil() {
                   src={driveImg(login?.fotoPerfil || user?.photo_url || "", 200)}
                   className="size-24 rounded-full object-cover"
                   alt={login?.nome || user?.name || "Foto do jogador"}
+                  referrerPolicy="no-referrer"
                 />
               ) : (
                 <User className="size-10 text-primary" />
@@ -213,6 +222,7 @@ function Perfil() {
                     className="w-full h-full object-cover"
                     alt={a.nome}
                     loading="lazy"
+                    referrerPolicy="no-referrer"
                   />
                 </div>
                 <div className="flex-1 min-w-0">

@@ -183,6 +183,7 @@ function Index() {
                       alt={p.autor}
                       loading="lazy"
                       decoding="async"
+                      referrerPolicy="no-referrer"
                     />
                   </div>
                   <div className="p-2.5">
@@ -240,6 +241,7 @@ function Index() {
                 alt={data.musica ? `Capa: ${data.musica}` : "Billboard Hot 100"}
                 loading="lazy"
                 decoding="async"
+                referrerPolicy="no-referrer"
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4 opacity-20">
@@ -306,6 +308,7 @@ function Index() {
                       alt={`${meta.label} #1`}
                       loading="lazy"
                       decoding="async"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <div className="w-full h-full bg-secondary flex flex-col items-center justify-center p-4">
@@ -409,6 +412,7 @@ function Index() {
                       alt={l.titulo}
                       loading="lazy"
                       decoding="async"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <div className="w-full h-full grid place-items-center opacity-20">
