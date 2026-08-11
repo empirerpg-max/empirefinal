@@ -28,6 +28,7 @@ import {
   Users,
   Settings2,
   Loader2,
+  Edit,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -113,6 +114,9 @@ function SocialPage() {
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<any[]>([]);
+  const [editingCommentRow, setEditingCommentRow] = useState<number | null>(null);
+  const [editCommentText, setEditCommentText] = useState("");
+  const [savingCommentEdit, setSavingCommentEdit] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [profileFollowers, setProfileFollowers] = useState("0");
   const [profileFollowing, setProfileFollowing] = useState("0");
@@ -202,6 +206,31 @@ function SocialPage() {
   async function loadComments(postId: string) {
     const data = await (api as any).listarComentariosSocial(postId);
     setComments(data);
+  }
+
+  function startEditComment(c: any) {
+    haptic.selection();
+    setEditingCommentRow(c.rowIndex);
+    setEditCommentText(c.texto);
+  }
+
+  function cancelEditComment() {
+    setEditingCommentRow(null);
+    setEditCommentText("");
+  }
+
+  async function saveEditComment() {
+    if (!editingCommentRow || !editCommentText.trim() || !selectedPost) return;
+    setSavingCommentEdit(true);
+    const tgId = user?.id || "";
+    const res = await (api as any).editarComentarioSocial(editingCommentRow, editCommentText.trim(), tgId);
+    setSavingCommentEdit(false);
+    if (res?.ok) {
+      haptic.success();
+      setEditingCommentRow(null);
+      setEditCommentText("");
+      loadComments(selectedPost.id);
+    }
   }
 
   async function handleLike(postId: string) {
@@ -1749,7 +1778,45 @@ function SocialPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[10px] font-black leading-none truncate">{c.autor}</p>
-                        <p className="text-xs font-medium text-muted-foreground mt-1.5">{c.texto}</p>
+                        {editingCommentRow === c.rowIndex ? (
+                          <div className="mt-1.5">
+                            <textarea
+                              value={editCommentText}
+                              onChange={(e) => setEditCommentText(e.target.value)}
+                              rows={2}
+                              autoFocus
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs outline-none resize-none"
+                            />
+                            <div className="flex justify-end gap-1.5 mt-1">
+                              <button
+                                onClick={cancelEditComment}
+                                disabled={savingCommentEdit}
+                                className="px-2.5 py-1 rounded-full bg-white/5 text-muted-foreground text-[10px] font-bold"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={saveEditComment}
+                                disabled={savingCommentEdit || !editCommentText.trim()}
+                                className="px-2.5 py-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold disabled:opacity-50"
+                              >
+                                Salvar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-xs font-medium text-muted-foreground mt-1.5">{c.texto}</p>
+                            {c.rowIndex && c.telegram_id && String(c.telegram_id) === String(user?.id || "") && (
+                              <button
+                                onClick={() => startEditComment(c)}
+                                className="text-[10px] text-muted-foreground hover:text-foreground mt-1 inline-flex items-center gap-1"
+                              >
+                                <Edit className="size-2.5" /> Editar
+                              </button>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}

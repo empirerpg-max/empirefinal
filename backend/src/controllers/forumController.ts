@@ -294,6 +294,68 @@ export async function getCommentsController(request: Request): Promise<Response>
   }
 }
 
+export interface EditCommentBody {
+  sheetComments: string;
+  rowIndex: number;
+  jogadorId: string;
+  novoTexto: string;
+}
+
+// Coluna do texto do comentário — igual nas três abas (ver buildCommentRow
+// acima: A-D pra Comentarios_Musicas, A-E pras outras, mas o comentário
+// sempre cai na D).
+const COMMENT_TEXT_COLUMN: Record<string, string> = {
+  Comentarios_Musicas: "D",
+  Comentarios_MV: "D",
+  Comentarios_Albuns: "D",
+};
+
+/**
+ * POST /api/forum/comment-edit
+ * Só quem escreveu o comentário (coluna B — ID do jogador) pode editá-lo.
+ */
+export async function editCommentController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as EditCommentBody;
+    const { sheetComments, rowIndex, jogadorId, novoTexto } = body;
+
+    const col = COMMENT_TEXT_COLUMN[sheetComments];
+    if (!col || !rowIndex || rowIndex < 2 || !jogadorId || !novoTexto?.trim()) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Parâmetros inválidos pra editar este comentário." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const ownerRows = await googleSheetsService.principal.readValues(
+      sheetComments,
+      `B${rowIndex}:B${rowIndex}`,
+    );
+    const ownerId = (ownerRows?.[0]?.[0] || "").trim();
+    if (!ownerId || ownerId !== jogadorId.trim()) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Você só pode editar seus próprios comentários." }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    await googleSheetsService.principal.updateValues(sheetComments, `${col}${rowIndex}`, [
+      [novoTexto.trim()],
+    ]);
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[editCommentController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao editar comentário." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
 export interface ToggleReactionBody {
   // Nome exato da aba de comentários e a linha real nela — ambos vêm do
   // próprio comentário retornado por getEmpirePlayForumTopicController
