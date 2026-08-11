@@ -365,7 +365,7 @@ function PontoPlaylistsPlanilha() {
         </div>
 
         {artistasDisp.length > 0 && (
-          <div className="flex overflow-x-auto gap-1.5 hide-scrollbar -mx-1 px-1">
+          <div className="flex overflow-x-auto gap-1.5 scrollbar-hide -mx-1 px-1">
             {artistasDisp.map((a) => (
               <button
                 key={a}
