@@ -271,12 +271,24 @@ export const api = {
   call: <T = unknown>(params: Record<string, unknown>, opts: { cache?: boolean } = {}) =>
     call<T>(params, opts),
 
+  // Dono do artista agora vem da aba ARTISTAS da planilha "Usuários" (nosso
+  // Worker), não mais do Apps Script legado — que misturava donos errados
+  // (ex: artista de outro jogador aparecendo como "meu"). O Worker resolve
+  // o ID (telegram_id histórico, ou o próprio ID do login) pro nome do
+  // jogador e casa contra a aba ARTISTAS; aqui só cruzamos os nomes
+  // devolvidos com a lista completa de artistas (ainda vinda do Apps
+  // Script) pra ter os dados econômicos de cada um.
   async meusArtistas(telegramId: string): Promise<Artist[]> {
-    const data = await call<Record<string, unknown>[]>(
-      { acao: "meus_artistas", telegram_id: telegramId },
-      { cache: true },
-    );
-    return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
+    if (!telegramId || telegramId === "guest") return [];
+    const [nomesRes, todos] = await Promise.all([
+      fetch(`/api/artistas/meus-nomes?telegramId=${encodeURIComponent(telegramId)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+      api.listarTodos(),
+    ]);
+    const meusNomes: string[] = Array.isArray(nomesRes?.data) ? nomesRes.data : [];
+    const meusNomesNorm = new Set(meusNomes.map((n) => n.trim().toLowerCase()));
+    return todos.filter((a) => meusNomesNorm.has(a.nome.trim().toLowerCase()));
   },
   async listarTodos(): Promise<Artist[]> {
     const data = await call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true });
@@ -550,34 +562,162 @@ export const api = {
     return call<CommonResponse>({ acao: "excluir_album", id, telegram_id: telegramId || "" });
   },
 
-  // ---- Playlists ----
-  async listarPlaylists(telegramId?: string): Promise<PlaylistPayload[]> {
-    const r = await call<PlaylistPayload[]>(
-      { acao: "listar_playlists", telegram_id: telegramId || "" },
-      { cache: true },
-    );
-    return Array.isArray(r) ? r : [];
+  // ---- Playlists (migrado do Apps Script pro Worker) ----
+  async listarPlaylists(): Promise<PlaylistPayload[]> {
+    const res = await fetch("/api/playlists");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
   async getPlaylist(id: string): Promise<PlaylistPayload | null> {
-    const r = await call<PlaylistPayload & { error?: string }>({ acao: "get_playlist", id }, { cache: true });
-    if (!r || r.error) return null;
-    return r;
+    const res = await fetch(`/api/playlists/${encodeURIComponent(id)}`);
+    const data = await res.json().catch(() => null);
+    if (!data || (data as { error?: string }).error) return null;
+    return data as PlaylistPayload;
   },
   async salvarPlaylist(payload: PlaylistPayload, telegramId?: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({
-      acao: "salvar_playlist",
-      payload: JSON.stringify(payload),
-      telegram_id: telegramId || payload.telegram_id || "",
+    const res = await fetch("/api/playlists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId: telegramId || payload.telegram_id || "" }),
     });
+    return res.json();
   },
   async listarFaixasCatalogo(): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listar_faixas_catalogo" }, { cache: true });
-    return Array.isArray(r) ? r : [];
+    const res = await fetch("/api/playlists/catalogo");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
   async excluirPlaylist(id: string, telegramId?: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "excluir_playlist", id, telegram_id: telegramId || "" });
+    const res = await fetch("/api/playlists/excluir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, tgId: telegramId || "" }),
+    });
+    return res.json();
+  },
+
+  // ---- Salvos (faixas curtidas) ----
+  async listarSalvos(tgId: string): Promise<PlaylistTrack[]> {
+    if (!tgId) return [];
+    const res = await fetch(`/api/salvos?tgId=${encodeURIComponent(tgId)}`);
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
+  },
+  async salvarFaixa(tgId: string, track: PlaylistTrack): Promise<CommonResponse & { already?: boolean }> {
+    const res = await fetch("/api/salvos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tgId, track }),
+    });
+    return res.json();
+  },
+  async removerSalvo(tgId: string, driveUrl: string): Promise<CommonResponse> {
+    const res = await fetch("/api/salvos/remover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tgId, drive_url: driveUrl }),
+    });
+    return res.json();
+  },
+
+  async criarAlbumAntigo(payload: {
+    artista: string;
+    titulo: string;
+    genero?: string;
+    data?: string;
+    descricao?: string;
+    capa_url?: string;
+    contracapa_url?: string;
+    telegram_id?: string;
+    faixas: {
+      numero: number;
+      titulo: string;
+      artistas: string;
+      duracao?: string;
+      drive_url: string;
+      letra?: string;
+    }[];
+  }): Promise<CommonResponse> {
+    const res = await fetch("/api/playlists/albuns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async listarAlbunsAntigos(): Promise<
+    {
+      id: string;
+      artista: string;
+      titulo: string;
+      genero?: string;
+      data?: string;
+      descricao?: string;
+      capa_url?: string;
+      totalFaixas: number;
+    }[]
+  > {
+    const res = await fetch("/api/albuns-antigos");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
+  },
+  async getAlbumAntigo(id: string): Promise<{
+    id: string;
+    artista: string;
+    titulo: string;
+    genero?: string;
+    data?: string;
+    descricao?: string;
+    capa_url?: string;
+    faixas: {
+      numero: number;
+      titulo: string;
+      artistas: string;
+      duracao?: string;
+      drive_url: string;
+      letra?: string;
+    }[];
+  } | null> {
+    const res = await fetch(`/api/albuns-antigos/${encodeURIComponent(id)}`);
+    const data = await res.json().catch(() => null);
+    if (!data || data.error) return null;
+    return data;
+  },
+
+  // ---- Ponto ----
+  async listarPontos(telegramId: string): Promise<{
+    artistas: string[];
+    grupos: {
+      artista: string;
+      musicas: {
+        linha: number;
+        artista: string;
+        musica: string;
+        weeks: string;
+        pontosDisponiveis: string;
+        pontosUtilizados: string;
+        categorias: Record<string, string>;
+        dataLancamento: string;
+      }[];
+    }[];
+  }> {
+    const res = await fetch(`/api/ponto?telegramId=${encodeURIComponent(telegramId)}`);
+    const data = await res.json().catch(() => null);
+    return data && Array.isArray(data.grupos) ? data : { artistas: [], grupos: [] };
+  },
+  async salvarPontoCelula(
+    telegramId: string,
+    linha: number,
+    coluna: string,
+    valor: string,
+  ): Promise<CommonResponse> {
+    const res = await fetch("/api/ponto/salvar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramId, linha, coluna, valor }),
+    });
+    return res.json();
   },
 
   // ---- Bet ----
@@ -616,10 +756,6 @@ export const api = {
     invalidateCache();
     return call<CommonResponse>({ acao: "vincular_imagem_tour", nome, url });
   },
-  async searchSongs(query: string): Promise<any[]> {
-    const r = await call<any[]>({ acao: "buscar_musicas", q: query }, { cache: true });
-    return Array.isArray(r) ? r : [];
-  },
   async getArtistasSemId(): Promise<Artist[]> {
     const data = await call<Record<string, unknown>[]>({ acao: "artistas_sem_id" }, { cache: true });
     return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
@@ -648,39 +784,82 @@ export const api = {
     return data || {};
   },
 
-  // ---- Social ----
+  // ---- Social (migrado do Apps Script pro Worker — muito mais rápido) ----
   async listarPostsSocial(): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listarPostsSocial" }, { cache: false });
-    return Array.isArray(r) ? r : [];
+    const res = await fetch("/api/social/posts");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
   async salvarPostSocial(payload: any, tgId: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "salvarPostSocial", payload: JSON.stringify(payload), tgId });
+    const res = await fetch("/api/social/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId }),
+    });
+    return res.json();
   },
-  async listarPerfisSocial(tgId?: string): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listarPerfisSocial", tgId }, { cache: false });
-    return Array.isArray(r) ? r : [];
+  async editarPostSocial(postId: string, texto: string, mediaUrl: string, tgId: string): Promise<CommonResponse> {
+    const res = await fetch("/api/social/posts/editar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, texto, media_url: mediaUrl, tgId }),
+    });
+    return res.json();
+  },
+  async listarPerfisSocial(): Promise<any[]> {
+    const res = await fetch("/api/social/perfis");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
   async salvarPerfilSocial(payload: any, tgId: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "salvarPerfilSocial", payload: JSON.stringify(payload), tgId });
+    const res = await fetch("/api/social/perfis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId }),
+    });
+    return res.json();
   },
   async curtirPostSocial(postId: string, tgId: string): Promise<any> {
-    return call<any>({ acao: "curtirPostSocial", postId, tgId });
+    const res = await fetch("/api/social/curtir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, tgId }),
+    });
+    return res.json();
   },
   async comentarPostSocial(payload: any, tgId: string): Promise<any> {
-    return call<any>({ acao: "comentarPostSocial", payload: JSON.stringify(payload), tgId });
+    const res = await fetch("/api/social/comentar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId }),
+    });
+    return res.json();
   },
   async listarComentariosSocial(postId: string): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listarComentariosSocial", postId }, { cache: false });
-    return Array.isArray(r) ? r : [];
+    const res = await fetch(`/api/social/comentarios?postId=${encodeURIComponent(postId)}`);
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
+  },
+  async editarComentarioSocial(rowIndex: number, texto: string, tgId: string): Promise<CommonResponse> {
+    const res = await fetch("/api/social/comentario/editar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rowIndex, texto, tgId }),
+    });
+    return res.json();
   },
   async salvarNewsSocial(payload: any, tgId: string): Promise<any> {
-    return call<any>({ acao: "salvarNewsSocial", payload: JSON.stringify(payload), tgId });
+    const res = await fetch("/api/social/news", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId }),
+    });
+    return res.json();
   },
   async listarNewsSocial(): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listarNewsSocial" }, { cache: false });
-    return Array.isArray(r) ? r : [];
+    const res = await fetch("/api/social/news");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
 
   // ---- Games & Economy ----
@@ -822,6 +1001,7 @@ export interface PlaylistTrack {
   drive_url: string;
   capa_url?: string;
   duracao?: string;
+  letra?: string;
 }
 
 export interface PlaylistPayload {
@@ -859,6 +1039,17 @@ export function driveAudioSrc(url: string | undefined | null): string | undefine
   const m = String(url).match(/[-\w]{25,}/);
   if (!m) return undefined;
   return `https://drive.google.com/file/d/${m[0]}/preview`;
+}
+
+export function isYoutubeUrl(url: string | undefined | null): boolean {
+  return /(?:youtube\.com|youtu\.be)/i.test(String(url || ""));
+}
+
+export function youtubeEmbedSrc(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  const m = String(url).match(/(?:v=|youtu\.be\/|embed\/)([-\w]{11})/);
+  if (!m) return undefined;
+  return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
 }
 
 export function driveDirectAudio(url: string | undefined | null): string | undefined {

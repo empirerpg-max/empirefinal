@@ -139,12 +139,12 @@ export function useTelegramUser(): {
 
     const params = new URLSearchParams(window.location.search);
     const urlId =
-      params.get("id") ||
       params.get("tg_id") ||
-      params.get("user_id") ||
-      params.get("uid") ||
       params.get("telegram_id") ||
-      params.get("tgid");
+      params.get("tgid") ||
+      params.get("uid") ||
+      params.get("user_id") ||
+      params.get("id");
 
     const nameFromUrl =
       params.get("name") ||
@@ -152,7 +152,15 @@ export function useTelegramUser(): {
       params.get("first_name") ||
       params.get("user_name");
 
-    if (urlId) {
+    // A identidade via query string só deve valer como "deep-link do
+    // Telegram" quando ainda não existe usuário conhecido (nem login
+    // próprio salvo, nem cache anterior) — caso contrário qualquer link
+    // interno do app que use "?id=..." pra outra finalidade (ex.: Fórum,
+    // "?id=musicas_184") sobrescreveria e invalidaria o usuário logado.
+    const hasExistingIdentity =
+      !!localStorage.getItem("empire_login_user") || !!localStorage.getItem("tg_user_cache");
+
+    if (urlId && !hasExistingIdentity) {
       const newUser = {
         id: urlId,
         name: nameFromUrl || "Usuário #" + urlId.slice(-4),
@@ -162,6 +170,20 @@ export function useTelegramUser(): {
       localStorage.setItem("tg_user_cache", JSON.stringify(newUser));
       setReady(true);
       return;
+    }
+
+    // Fora do Telegram (app rodando standalone, pós-login próprio) não faz
+    // sentido esperar ~2s de polling por um SDK que nunca vai aparecer —
+    // usa o cache (gravado pelo login) na hora.
+    if (!window.Telegram?.WebApp) {
+      const cached = localStorage.getItem("tg_user_cache");
+      if (cached) {
+        try {
+          setUser(JSON.parse(cached));
+          setReady(true);
+          return;
+        } catch {}
+      }
     }
 
     let attempts = 0;

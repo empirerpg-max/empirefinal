@@ -172,8 +172,12 @@ export async function createCommentController(request: Request): Promise<Respons
 
     // 2. Salvar comentário na aba de comentários correspondente
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    // Linha real onde o comentário caiu — permite reagir com emoji
+    // imediatamente após publicar, direto no fluxo do comentário, sem
+    // precisar reler a aba pra descobrir a linha depois.
+    let newRowIndex: number | null = null;
     try {
-      await googleSheetsService.principal.appendRow(
+      newRowIndex = await googleSheetsService.principal.appendRow(
         commentSheet,
         buildCommentRow(tipoMedia, {
           topicId: topicIdClean,
@@ -213,6 +217,8 @@ export async function createCommentController(request: Request): Promise<Respons
           tituloMedia: titleClean,
           nomeJogador: playerClean,
           notaCalculada: score,
+          rowIndex: newRowIndex,
+          sheetComments: newRowIndex ? commentSheet : null,
           mensagem: "Comentário e avaliação processados com sucesso!",
         },
       }),
@@ -283,6 +289,68 @@ export async function getCommentsController(request: Request): Promise<Response>
   } catch (err: any) {
     return new Response(
       JSON.stringify({ success: false, error: err.message || "Erro ao buscar comentários." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+export interface EditCommentBody {
+  sheetComments: string;
+  rowIndex: number;
+  jogadorId: string;
+  novoTexto: string;
+}
+
+// Coluna do texto do comentário — igual nas três abas (ver buildCommentRow
+// acima: A-D pra Comentarios_Musicas, A-E pras outras, mas o comentário
+// sempre cai na D).
+const COMMENT_TEXT_COLUMN: Record<string, string> = {
+  Comentarios_Musicas: "D",
+  Comentarios_MV: "D",
+  Comentarios_Albuns: "D",
+};
+
+/**
+ * POST /api/forum/comment-edit
+ * Só quem escreveu o comentário (coluna B — ID do jogador) pode editá-lo.
+ */
+export async function editCommentController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as EditCommentBody;
+    const { sheetComments, rowIndex, jogadorId, novoTexto } = body;
+
+    const col = COMMENT_TEXT_COLUMN[sheetComments];
+    if (!col || !rowIndex || rowIndex < 2 || !jogadorId || !novoTexto?.trim()) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Parâmetros inválidos pra editar este comentário." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const ownerRows = await googleSheetsService.principal.readValues(
+      sheetComments,
+      `B${rowIndex}:B${rowIndex}`,
+    );
+    const ownerId = (ownerRows?.[0]?.[0] || "").trim();
+    if (!ownerId || ownerId !== jogadorId.trim()) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Você só pode editar seus próprios comentários." }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    await googleSheetsService.principal.updateValues(sheetComments, `${col}${rowIndex}`, [
+      [novoTexto.trim()],
+    ]);
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[editCommentController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao editar comentário." }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }

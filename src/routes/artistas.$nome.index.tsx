@@ -14,7 +14,6 @@ import {
   HandHeart,
   X,
   Loader2,
-  ShoppingBag,
   Building2,
   Gavel,
   Radio,
@@ -140,6 +139,7 @@ function ArtistDashboard() {
         <img
           loading="lazy"
           decoding="async"
+          referrerPolicy="no-referrer"
           src={driveImg(artist.foto, 1200) || artist.foto}
           onError={(e) => {
             const img = e.currentTarget;
@@ -172,6 +172,7 @@ function ArtistDashboard() {
               <img
                 loading="lazy"
                 decoding="async"
+                referrerPolicy="no-referrer"
                 src={driveImg(artist.foto, 400) || artist.foto}
                 onError={(e) => {
                   const img = e.currentTarget;
@@ -276,7 +277,6 @@ function ArtistDashboard() {
                   <MiniAction label="Payola" icon={<Radio />} onClick={() => setModal("payola")} color="text-primary" />
                   <MiniAction label="Filantropia" icon={<HandHeart />} onClick={() => setModal("filantropia")} color="text-emerald-500" />
                   <MiniAction label="Leilão" icon={<Gavel />} onClick={() => setModal("leilao")} color="text-amber-500" />
-                  <MiniAction label="Market" icon={<ShoppingBag />} to="/market" color="text-indigo-500" />
                   <MiniAction label="Vender Comp." icon={<Disc3 />} onClick={() => setModal("composicao")} color="text-purple-500" />
                   <div className="col-span-2 mt-4 space-y-3">
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 px-1">Administrativo</h4>
@@ -340,7 +340,7 @@ function ArtistDashboard() {
                 <Link key={a.id} to="/album/$id" params={{ id: a.id! }} className="group">
                   <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5">
                     {a.capa_url && (
-                      <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 grayscale group-hover:grayscale-0" loading="lazy" decoding="async" />
+                      <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 grayscale group-hover:grayscale-0" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
                     )}
                   </div>
                   <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.titulo}</p>

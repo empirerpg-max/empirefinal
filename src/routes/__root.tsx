@@ -13,22 +13,13 @@ import {
   Home,
   Crown,
   Library,
-  Radio,
   Disc3,
   ListMusic,
-  ShoppingBag,
-  Star,
-  Mic2,
   Menu,
   X,
   User,
   Building2,
-  Dice5,
-  Gamepad2,
   ChevronDown,
-  Gavel,
-  Swords,
-  HandHeart,
   TrendingUp,
   Search,
   HelpCircle,
@@ -36,8 +27,9 @@ import {
   Tv,
   Send,
   Target,
-  Music2,
   PlayCircle,
+  Plus,
+  LogOut,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
@@ -46,6 +38,10 @@ import { useTelegramUser, haptic, useTelegramBackButton } from "@/lib/telegram";
 import { api, driveImg, type Artist } from "@/lib/api";
 import { registerServiceWorker } from "@/lib/pwa";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
+import { EmpirePlayerProvider, useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
+import { MusicPlayer } from "@/components/EmpirePlay/MusicPlayer";
+import { VideoPlayer } from "@/components/EmpirePlay/VideoPlayer";
 
 function GlobalLinkModal({ onClose }: { onClose: () => void }) {
   const { user } = useTelegramUser();
@@ -415,15 +411,20 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Menu fixo do app — os 9 itens definidos na reorganização: Início,
+// Catálogo (ex-Empire Play), Tour, Empire TV, Charts, Ponto, Social, Perfil
+// e o botão de Criar (acesso rápido à Gestão de lançamentos).
 function BottomNav() {
   const { pathname } = useLocation();
   const items = [
-    { to: "/", label: "Hub", icon: Home },
-    { to: "/artistas", search: { filter: "all" }, label: "Artistas", icon: Library },
+    { to: "/", label: "Início", icon: Home },
+    { to: "/empire-play", label: "Catálogo", icon: PlayCircle },
+    { to: "/tours", label: "Tour", icon: Building2 },
+    { to: "/tv", label: "Empire TV", icon: Tv },
     { to: "/charts", label: "Charts", icon: TrendingUp },
     { to: "/ponto", label: "Ponto", icon: Target },
     { to: "/social", label: "Social", icon: Share2 },
-    { to: "/ranking", label: "Rank", icon: Star },
+    { to: "/perfil", label: "Perfil", icon: User },
   ];
   return (
     <nav
@@ -432,9 +433,9 @@ function BottomNav() {
       role="navigation"
       aria-label="Navegação principal"
     >
-      <div className="mx-auto w-fit max-w-[calc(100%-1rem)] pointer-events-auto">
+      <div className="mx-auto w-full max-w-full px-2 pointer-events-auto">
         <div
-          className="relative flex items-stretch gap-0.5 rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-1 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]"
+          className="relative flex items-stretch gap-0.5 rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-1 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] overflow-x-auto scrollbar-hide max-w-full w-fit mx-auto"
           style={{ backdropFilter: "blur(28px) saturate(180%)" }}
         >
           <span className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.06] to-transparent" />
@@ -445,12 +446,11 @@ function BottomNav() {
               <Link
                 key={it.to}
                 to={it.to}
-                search={it.search}
                 preload="intent"
                 onClick={() => haptic.selection()}
                 aria-label={it.label}
                 aria-current={active ? "page" : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 h-12 w-14 rounded-full transition-all ${
+                className={`relative flex flex-col items-center justify-center gap-0.5 h-12 w-14 shrink-0 rounded-full transition-all ${
                   active
                     ? "text-primary-foreground bg-primary shadow-[0_8px_24px_-6px_rgba(var(--primary-rgb),0.7)]"
                     : "text-muted-foreground hover:text-foreground hover:bg-white/5"
@@ -463,6 +463,16 @@ function BottomNav() {
               </Link>
             );
           })}
+          <Link
+            to="/empire-play/gestao"
+            preload="intent"
+            onClick={() => haptic.selection()}
+            aria-label="Criar"
+            className="relative flex flex-col items-center justify-center gap-0.5 h-12 w-14 shrink-0 rounded-full bg-primary/15 text-primary hover:bg-primary/25 transition-all"
+          >
+            <Plus className="size-[18px]" strokeWidth={2.5} aria-hidden="true" />
+            <span className="text-[9px] font-bold uppercase tracking-tight leading-none">Criar</span>
+          </Link>
         </div>
       </div>
     </nav>
@@ -473,8 +483,75 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <RootInner />
+      <AuthGate />
     </QueryClientProvider>
+  );
+}
+
+// Gate de login pra o app inteiro — o Empire Hub deixou de depender do
+// Telegram pra identificar o jogador. Login por usuário/senha (aba
+// "Usuários") continua alimentando o mesmo mecanismo de identidade que já
+// existia (setUserManually/tg_user_cache), então comentários, Gestão,
+// reações etc seguem funcionando sem precisar reescrever cada um deles.
+function AuthGate() {
+  // Sincroniza o tg_user_cache (mecanismo de identidade usado por Gestão,
+  // comentários, reações etc.) já na inicialização, de forma síncrona —
+  // ANTES de RootInner montar e seu próprio useTelegramUser() ler o
+  // localStorage. Sem isso, um usuário que já estava logado antes
+  // (empire_login_user presente, mas tg_user_cache ausente/desatualizado —
+  // ex: cache limpo, outra aba, versão antiga do app) nunca tinha o cache
+  // recriado a tempo (um useEffect aqui rodaria DEPOIS do efeito interno de
+  // RootInner, tarde demais), e o resto do app caía no fallback
+  // "guest"/"Artista Independente" mesmo com o login correto.
+  const [authUser] = useState<LoginResult | null>(() => {
+    const stored = getStoredLogin();
+    if (stored) {
+      localStorage.setItem(
+        "tg_user_cache",
+        JSON.stringify({ id: stored.id, name: stored.nome || "Usuário Manual", isTest: true }),
+      );
+    }
+    return stored;
+  });
+  const [loggedInUser, setLoggedInUser] = useState<LoginResult | null>(authUser);
+  const { setUserManually } = useTelegramUser();
+
+  if (!loggedInUser) {
+    return (
+      <LoginScreen
+        onSuccess={(user) => {
+          setUserManually(user.id, user.nome);
+          setLoggedInUser(user);
+        }}
+      />
+    );
+  }
+
+  return (
+    <EmpirePlayerProvider>
+      <RootInner />
+    </EmpirePlayerProvider>
+  );
+}
+
+// Players montados na raiz do app (fora de qualquer rota-filha) — trocar de
+// menu (Início, Catálogo, Charts etc.) nunca desmonta o player, então a
+// reprodução de áudio/vídeo continua em qualquer tela, não só dentro do
+// Catálogo.
+function GlobalPersistentPlayers() {
+  const { currentTrack, activePlaylist, currentVideo, closeTrack, closeVideo, setCurrentTrack } =
+    useEmpirePlayer();
+
+  return (
+    <>
+      <MusicPlayer
+        currentTrack={currentTrack}
+        playlist={activePlaylist}
+        onClose={closeTrack}
+        onTrackChange={setCurrentTrack}
+      />
+      <VideoPlayer video={currentVideo} onClose={closeVideo} />
+    </>
   );
 }
 
@@ -621,44 +698,9 @@ function RootInner() {
                     label: "Empire Artists",
                     icon: Library,
                   },
-
                   { to: "/albuns", label: "Discografia", icon: Disc3 },
-                  { to: "/playlists", label: "Playlists", icon: ListMusic },
-                  { to: "/empire-play", label: "Empire Play", icon: PlayCircle },
-                ]}
-                onClose={() => setIsOpen(false)}
-              />
-
-              <MenuCategory
-                title="Empire Market"
-                icon={ShoppingBag}
-                items={[
-                  { to: "/market", label: "Mercado Principal", icon: ShoppingBag },
-                  { to: "/leiloes", label: "Leilões", icon: Gavel },
-                  { to: "/bet", label: "Empire Bet", icon: Dice5 },
-                ]}
-                onClose={() => setIsOpen(false)}
-              />
-
-              <MenuCategory
-                title="Empire Coliseum"
-                icon={Swords}
-                items={[
-                  { to: "/duelo", label: "Duelos", icon: Swords },
-                  { to: "/hall", label: "Hall of Fame", icon: Crown },
-                ]}
-                onClose={() => setIsOpen(false)}
-              />
-
-              <MenuCategory
-                title="Empire Extras"
-                icon={Radio}
-                items={[
-                  { to: "/bolsa", label: "Bolsa de Valores", icon: TrendingUp },
-                  { to: "/radar", label: "Radar Feed", icon: Radio },
-                  { to: "/filantropia", label: "Filantropia", icon: HandHeart },
-                  { to: "/games", label: "Jogos", icon: Gamepad2 },
-                  { to: "/tv", label: "Empire TV", icon: Tv },
+                  { to: "/empire-play/playlists", label: "Playlists", icon: ListMusic },
+                  { to: "/empire-play", label: "Catálogo", icon: PlayCircle },
                 ]}
                 onClose={() => setIsOpen(false)}
               />
@@ -674,6 +716,17 @@ function RootInner() {
                     Guia de Sobrevivência
                   </span>
                 </Link>
+                <button
+                  onClick={() => {
+                    clearStoredLogin();
+                    localStorage.removeItem("tg_user_cache");
+                    window.location.reload();
+                  }}
+                  className="w-full flex items-center gap-4 p-4 rounded-3xl bg-white/[0.02] border border-white/5 text-muted-foreground hover:text-red-400 hover:border-red-500/20 transition-all"
+                >
+                  <LogOut className="size-5" />
+                  <span className="font-black uppercase tracking-widest text-[10px]">Sair</span>
+                </button>
                 <p className="text-center text-[9px] font-black uppercase tracking-[0.3em] text-muted-foreground/30 pt-4">
                   Empire Hub · v1.0.0
                 </p>
@@ -752,6 +805,7 @@ function RootInner() {
       <RouteTransitionOverlay />
       <Outlet />
 
+      <GlobalPersistentPlayers />
       <BottomNav />
       <InstallPrompt />
       <Toaster position="top-center" richColors closeButton offset={80} />

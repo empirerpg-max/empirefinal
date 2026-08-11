@@ -12,20 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AcessoRapidoRouteImport } from './routes/acesso-rapido'
 import { Route as AlbunsRouteImport } from './routes/albuns'
-import { Route as BetRouteImport } from './routes/bet'
-import { Route as BolsaRouteImport } from './routes/bolsa'
 import { Route as ChartsRouteImport } from './routes/charts'
-import { Route as DueloRouteImport } from './routes/duelo'
 import { Route as EmpirePlayRouteImport } from './routes/empire-play'
-import { Route as FilantropiaRouteImport } from './routes/filantropia'
-import { Route as GravadorasRouteImport } from './routes/gravadoras'
-import { Route as HallRouteImport } from './routes/hall'
-import { Route as LeiloesRouteImport } from './routes/leiloes'
-import { Route as MarketRouteImport } from './routes/market'
-import { Route as PayolaRouteImport } from './routes/payola'
-import { Route as RadarRouteImport } from './routes/radar'
-import { Route as RankingRouteImport } from './routes/ranking'
-import { Route as RescisaoRouteImport } from './routes/rescisao'
+import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as SocialRouteImport } from './routes/social'
 import { Route as TutorialRouteImport } from './routes/tutorial'
 import { Route as TvRouteImport } from './routes/tv'
@@ -34,22 +23,13 @@ import { Route as AcoesCinemaRouteImport } from './routes/acoes.cinema'
 import { Route as AcoesTourRouteImport } from './routes/acoes.tour'
 import { Route as AlbumIdRouteImport } from './routes/album.$id'
 import { Route as ArtistasIndexRouteImport } from './routes/artistas.index'
-import { Route as CatalogoIndexRouteImport } from './routes/catalogo.index'
-import { Route as CatalogoIdRouteImport } from './routes/catalogo.$id'
 import { Route as EmpirePlayIndexRouteImport } from './routes/empire-play.index'
 import { Route as EmpirePlayAlbunsRouteImport } from './routes/empire-play.albuns'
+import { Route as EmpirePlayAlbunsAntigosRouteImport } from './routes/empire-play.albuns-antigos'
 import { Route as EmpirePlayForumRouteImport } from './routes/empire-play.forum'
 import { Route as EmpirePlayGestaoRouteImport } from './routes/empire-play.gestao'
 import { Route as EmpirePlayMusicasRouteImport } from './routes/empire-play.musicas'
 import { Route as EmpirePlayVideosRouteImport } from './routes/empire-play.videos'
-import { Route as GamesIndexRouteImport } from './routes/games.index'
-import { Route as GamesHitsProducerRouteImport } from './routes/games.hits-producer'
-import { Route as GamesMemoriaFamaRouteImport } from './routes/games.memoria-fama'
-import { Route as GamesPaparazziEscapeRouteImport } from './routes/games.paparazzi-escape'
-import { Route as GamesQueridometroRouteImport } from './routes/games.queridometro'
-import { Route as PlaylistsIndexRouteImport } from './routes/playlists.index'
-import { Route as PlaylistsIdRouteImport } from './routes/playlists.$id'
-import { Route as PlaylistsNovaRouteImport } from './routes/playlists.nova'
 import { Route as PontoIndexRouteImport } from './routes/ponto.index'
 import { Route as PontoDistribuirRouteImport } from './routes/ponto.distribuir'
 import { Route as PontoPlaylistsRouteImport } from './routes/ponto.playlists'
@@ -59,9 +39,16 @@ import { Route as AlbumIdEditarRouteImport } from './routes/album.$id.editar'
 import { Route as ArtistasNomeIndexRouteImport } from './routes/artistas.$nome.index'
 import { Route as ArtistasNomeBensRouteImport } from './routes/artistas.$nome.bens'
 import { Route as ArtistasNomeProjetosRouteImport } from './routes/artistas.$nome.projetos'
-import { Route as PlaylistsIdEditarRouteImport } from './routes/playlists.$id.editar'
+import { Route as EmpirePlayAlbunsAntigosIndexRouteImport } from './routes/empire-play.albuns-antigos.index'
+import { Route as EmpirePlayAlbunsAntigosIdRouteImport } from './routes/empire-play.albuns-antigos.$id'
+import { Route as EmpirePlayGestaoIndexRouteImport } from './routes/empire-play.gestao.index'
+import { Route as EmpirePlayGestaoAlbumAntigoRouteImport } from './routes/empire-play.gestao.album-antigo'
+import { Route as EmpirePlayPlaylistsIndexRouteImport } from './routes/empire-play.playlists.index'
+import { Route as EmpirePlayPlaylistsIdRouteImport } from './routes/empire-play.playlists.$id'
+import { Route as EmpirePlayPlaylistsNovaRouteImport } from './routes/empire-play.playlists.nova'
 import { Route as PontoDistribuirPlanilhaRouteImport } from './routes/ponto.distribuir.planilha'
 import { Route as PontoPlaylistsPlanilhaRouteImport } from './routes/ponto.playlists.planilha'
+import { Route as EmpirePlayPlaylistsIdEditarRouteImport } from './routes/empire-play.playlists.$id.editar'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -78,24 +65,9 @@ const AlbunsRoute = AlbunsRouteImport.update({
   path: '/albuns',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BetRoute = BetRouteImport.update({
-  id: '/bet',
-  path: '/bet',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BolsaRoute = BolsaRouteImport.update({
-  id: '/bolsa',
-  path: '/bolsa',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ChartsRoute = ChartsRouteImport.update({
   id: '/charts',
   path: '/charts',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DueloRoute = DueloRouteImport.update({
-  id: '/duelo',
-  path: '/duelo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EmpirePlayRoute = EmpirePlayRouteImport.update({
@@ -103,49 +75,9 @@ const EmpirePlayRoute = EmpirePlayRouteImport.update({
   path: '/empire-play',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FilantropiaRoute = FilantropiaRouteImport.update({
-  id: '/filantropia',
-  path: '/filantropia',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GravadorasRoute = GravadorasRouteImport.update({
-  id: '/gravadoras',
-  path: '/gravadoras',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HallRoute = HallRouteImport.update({
-  id: '/hall',
-  path: '/hall',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LeiloesRoute = LeiloesRouteImport.update({
-  id: '/leiloes',
-  path: '/leiloes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MarketRoute = MarketRouteImport.update({
-  id: '/market',
-  path: '/market',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PayolaRoute = PayolaRouteImport.update({
-  id: '/payola',
-  path: '/payola',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RadarRoute = RadarRouteImport.update({
-  id: '/radar',
-  path: '/radar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RankingRoute = RankingRouteImport.update({
-  id: '/ranking',
-  path: '/ranking',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RescisaoRoute = RescisaoRouteImport.update({
-  id: '/rescisao',
-  path: '/rescisao',
+const PerfilRoute = PerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SocialRoute = SocialRouteImport.update({
@@ -188,16 +120,6 @@ const ArtistasIndexRoute = ArtistasIndexRouteImport.update({
   path: '/artistas/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CatalogoIndexRoute = CatalogoIndexRouteImport.update({
-  id: '/catalogo/',
-  path: '/catalogo/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CatalogoIdRoute = CatalogoIdRouteImport.update({
-  id: '/catalogo/$id',
-  path: '/catalogo/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const EmpirePlayIndexRoute = EmpirePlayIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -206,6 +128,11 @@ const EmpirePlayIndexRoute = EmpirePlayIndexRouteImport.update({
 const EmpirePlayAlbunsRoute = EmpirePlayAlbunsRouteImport.update({
   id: '/albuns',
   path: '/albuns',
+  getParentRoute: () => EmpirePlayRoute,
+} as any)
+const EmpirePlayAlbunsAntigosRoute = EmpirePlayAlbunsAntigosRouteImport.update({
+  id: '/albuns-antigos',
+  path: '/albuns-antigos',
   getParentRoute: () => EmpirePlayRoute,
 } as any)
 const EmpirePlayForumRoute = EmpirePlayForumRouteImport.update({
@@ -227,46 +154,6 @@ const EmpirePlayVideosRoute = EmpirePlayVideosRouteImport.update({
   id: '/videos',
   path: '/videos',
   getParentRoute: () => EmpirePlayRoute,
-} as any)
-const GamesIndexRoute = GamesIndexRouteImport.update({
-  id: '/games/',
-  path: '/games/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GamesHitsProducerRoute = GamesHitsProducerRouteImport.update({
-  id: '/games/hits-producer',
-  path: '/games/hits-producer',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GamesMemoriaFamaRoute = GamesMemoriaFamaRouteImport.update({
-  id: '/games/memoria-fama',
-  path: '/games/memoria-fama',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GamesPaparazziEscapeRoute = GamesPaparazziEscapeRouteImport.update({
-  id: '/games/paparazzi-escape',
-  path: '/games/paparazzi-escape',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GamesQueridometroRoute = GamesQueridometroRouteImport.update({
-  id: '/games/queridometro',
-  path: '/games/queridometro',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlaylistsIndexRoute = PlaylistsIndexRouteImport.update({
-  id: '/playlists/',
-  path: '/playlists/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlaylistsIdRoute = PlaylistsIdRouteImport.update({
-  id: '/playlists/$id',
-  path: '/playlists/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlaylistsNovaRoute = PlaylistsNovaRouteImport.update({
-  id: '/playlists/nova',
-  path: '/playlists/nova',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const PontoIndexRoute = PontoIndexRouteImport.update({
   id: '/ponto/',
@@ -313,10 +200,44 @@ const ArtistasNomeProjetosRoute = ArtistasNomeProjetosRouteImport.update({
   path: '/artistas/$nome/projetos',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PlaylistsIdEditarRoute = PlaylistsIdEditarRouteImport.update({
-  id: '/editar',
-  path: '/editar',
-  getParentRoute: () => PlaylistsIdRoute,
+const EmpirePlayAlbunsAntigosIndexRoute =
+  EmpirePlayAlbunsAntigosIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => EmpirePlayAlbunsAntigosRoute,
+  } as any)
+const EmpirePlayAlbunsAntigosIdRoute =
+  EmpirePlayAlbunsAntigosIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => EmpirePlayAlbunsAntigosRoute,
+  } as any)
+const EmpirePlayGestaoIndexRoute = EmpirePlayGestaoIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EmpirePlayGestaoRoute,
+} as any)
+const EmpirePlayGestaoAlbumAntigoRoute =
+  EmpirePlayGestaoAlbumAntigoRouteImport.update({
+    id: '/album-antigo',
+    path: '/album-antigo',
+    getParentRoute: () => EmpirePlayGestaoRoute,
+  } as any)
+const EmpirePlayPlaylistsIndexRoute =
+  EmpirePlayPlaylistsIndexRouteImport.update({
+    id: '/playlists/',
+    path: '/playlists/',
+    getParentRoute: () => EmpirePlayRoute,
+  } as any)
+const EmpirePlayPlaylistsIdRoute = EmpirePlayPlaylistsIdRouteImport.update({
+  id: '/playlists/$id',
+  path: '/playlists/$id',
+  getParentRoute: () => EmpirePlayRoute,
+} as any)
+const EmpirePlayPlaylistsNovaRoute = EmpirePlayPlaylistsNovaRouteImport.update({
+  id: '/playlists/nova',
+  path: '/playlists/nova',
+  getParentRoute: () => EmpirePlayRoute,
 } as any)
 const PontoDistribuirPlanilhaRoute = PontoDistribuirPlanilhaRouteImport.update({
   id: '/planilha',
@@ -328,25 +249,20 @@ const PontoPlaylistsPlanilhaRoute = PontoPlaylistsPlanilhaRouteImport.update({
   path: '/planilha',
   getParentRoute: () => PontoPlaylistsRoute,
 } as any)
+const EmpirePlayPlaylistsIdEditarRoute =
+  EmpirePlayPlaylistsIdEditarRouteImport.update({
+    id: '/editar',
+    path: '/editar',
+    getParentRoute: () => EmpirePlayPlaylistsIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
-  '/bet': typeof BetRoute
-  '/bolsa': typeof BolsaRoute
   '/charts': typeof ChartsRoute
-  '/duelo': typeof DueloRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
-  '/filantropia': typeof FilantropiaRoute
-  '/gravadoras': typeof GravadorasRoute
-  '/hall': typeof HallRoute
-  '/leiloes': typeof LeiloesRoute
-  '/market': typeof MarketRoute
-  '/payola': typeof PayolaRoute
-  '/radar': typeof RadarRoute
-  '/ranking': typeof RankingRoute
-  '/rescisao': typeof RescisaoRoute
+  '/perfil': typeof PerfilRoute
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
@@ -354,53 +270,40 @@ export interface FileRoutesByFullPath {
   '/acoes/cinema': typeof AcoesCinemaRoute
   '/acoes/tour': typeof AcoesTourRoute
   '/album/$id': typeof AlbumIdRouteWithChildren
-  '/catalogo/$id': typeof CatalogoIdRoute
   '/empire-play/albuns': typeof EmpirePlayAlbunsRoute
+  '/empire-play/albuns-antigos': typeof EmpirePlayAlbunsAntigosRouteWithChildren
   '/empire-play/forum': typeof EmpirePlayForumRoute
-  '/empire-play/gestao': typeof EmpirePlayGestaoRoute
+  '/empire-play/gestao': typeof EmpirePlayGestaoRouteWithChildren
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
-  '/games/hits-producer': typeof GamesHitsProducerRoute
-  '/games/memoria-fama': typeof GamesMemoriaFamaRoute
-  '/games/paparazzi-escape': typeof GamesPaparazziEscapeRoute
-  '/games/queridometro': typeof GamesQueridometroRoute
-  '/playlists/$id': typeof PlaylistsIdRouteWithChildren
-  '/playlists/nova': typeof PlaylistsNovaRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas/': typeof ArtistasIndexRoute
-  '/catalogo/': typeof CatalogoIndexRoute
   '/empire-play/': typeof EmpirePlayIndexRoute
-  '/games/': typeof GamesIndexRoute
-  '/playlists/': typeof PlaylistsIndexRoute
   '/ponto/': typeof PontoIndexRoute
   '/tours/': typeof ToursIndexRoute
   '/album/$id/editar': typeof AlbumIdEditarRoute
   '/artistas/$nome/bens': typeof ArtistasNomeBensRoute
   '/artistas/$nome/projetos': typeof ArtistasNomeProjetosRoute
-  '/playlists/$id/editar': typeof PlaylistsIdEditarRoute
+  '/empire-play/albuns-antigos/$id': typeof EmpirePlayAlbunsAntigosIdRoute
+  '/empire-play/gestao/album-antigo': typeof EmpirePlayGestaoAlbumAntigoRoute
+  '/empire-play/playlists/$id': typeof EmpirePlayPlaylistsIdRouteWithChildren
+  '/empire-play/playlists/nova': typeof EmpirePlayPlaylistsNovaRoute
   '/ponto/distribuir/planilha': typeof PontoDistribuirPlanilhaRoute
   '/ponto/playlists/planilha': typeof PontoPlaylistsPlanilhaRoute
   '/artistas/$nome/': typeof ArtistasNomeIndexRoute
+  '/empire-play/albuns-antigos/': typeof EmpirePlayAlbunsAntigosIndexRoute
+  '/empire-play/gestao/': typeof EmpirePlayGestaoIndexRoute
+  '/empire-play/playlists/': typeof EmpirePlayPlaylistsIndexRoute
+  '/empire-play/playlists/$id/editar': typeof EmpirePlayPlaylistsIdEditarRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
-  '/bet': typeof BetRoute
-  '/bolsa': typeof BolsaRoute
   '/charts': typeof ChartsRoute
-  '/duelo': typeof DueloRoute
-  '/filantropia': typeof FilantropiaRoute
-  '/gravadoras': typeof GravadorasRoute
-  '/hall': typeof HallRoute
-  '/leiloes': typeof LeiloesRoute
-  '/market': typeof MarketRoute
-  '/payola': typeof PayolaRoute
-  '/radar': typeof RadarRoute
-  '/ranking': typeof RankingRoute
-  '/rescisao': typeof RescisaoRoute
+  '/perfil': typeof PerfilRoute
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
@@ -408,55 +311,40 @@ export interface FileRoutesByTo {
   '/acoes/cinema': typeof AcoesCinemaRoute
   '/acoes/tour': typeof AcoesTourRoute
   '/album/$id': typeof AlbumIdRouteWithChildren
-  '/catalogo/$id': typeof CatalogoIdRoute
   '/empire-play/albuns': typeof EmpirePlayAlbunsRoute
   '/empire-play/forum': typeof EmpirePlayForumRoute
-  '/empire-play/gestao': typeof EmpirePlayGestaoRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
-  '/games/hits-producer': typeof GamesHitsProducerRoute
-  '/games/memoria-fama': typeof GamesMemoriaFamaRoute
-  '/games/paparazzi-escape': typeof GamesPaparazziEscapeRoute
-  '/games/queridometro': typeof GamesQueridometroRoute
-  '/playlists/$id': typeof PlaylistsIdRouteWithChildren
-  '/playlists/nova': typeof PlaylistsNovaRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas': typeof ArtistasIndexRoute
-  '/catalogo': typeof CatalogoIndexRoute
   '/empire-play': typeof EmpirePlayIndexRoute
-  '/games': typeof GamesIndexRoute
-  '/playlists': typeof PlaylistsIndexRoute
   '/ponto': typeof PontoIndexRoute
   '/tours': typeof ToursIndexRoute
   '/album/$id/editar': typeof AlbumIdEditarRoute
   '/artistas/$nome/bens': typeof ArtistasNomeBensRoute
   '/artistas/$nome/projetos': typeof ArtistasNomeProjetosRoute
-  '/playlists/$id/editar': typeof PlaylistsIdEditarRoute
+  '/empire-play/albuns-antigos/$id': typeof EmpirePlayAlbunsAntigosIdRoute
+  '/empire-play/gestao/album-antigo': typeof EmpirePlayGestaoAlbumAntigoRoute
+  '/empire-play/playlists/$id': typeof EmpirePlayPlaylistsIdRouteWithChildren
+  '/empire-play/playlists/nova': typeof EmpirePlayPlaylistsNovaRoute
   '/ponto/distribuir/planilha': typeof PontoDistribuirPlanilhaRoute
   '/ponto/playlists/planilha': typeof PontoPlaylistsPlanilhaRoute
   '/artistas/$nome': typeof ArtistasNomeIndexRoute
+  '/empire-play/albuns-antigos': typeof EmpirePlayAlbunsAntigosIndexRoute
+  '/empire-play/gestao': typeof EmpirePlayGestaoIndexRoute
+  '/empire-play/playlists': typeof EmpirePlayPlaylistsIndexRoute
+  '/empire-play/playlists/$id/editar': typeof EmpirePlayPlaylistsIdEditarRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
-  '/bet': typeof BetRoute
-  '/bolsa': typeof BolsaRoute
   '/charts': typeof ChartsRoute
-  '/duelo': typeof DueloRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
-  '/filantropia': typeof FilantropiaRoute
-  '/gravadoras': typeof GravadorasRoute
-  '/hall': typeof HallRoute
-  '/leiloes': typeof LeiloesRoute
-  '/market': typeof MarketRoute
-  '/payola': typeof PayolaRoute
-  '/radar': typeof RadarRoute
-  '/ranking': typeof RankingRoute
-  '/rescisao': typeof RescisaoRoute
+  '/perfil': typeof PerfilRoute
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
@@ -464,35 +352,33 @@ export interface FileRoutesById {
   '/acoes/cinema': typeof AcoesCinemaRoute
   '/acoes/tour': typeof AcoesTourRoute
   '/album/$id': typeof AlbumIdRouteWithChildren
-  '/catalogo/$id': typeof CatalogoIdRoute
   '/empire-play/albuns': typeof EmpirePlayAlbunsRoute
+  '/empire-play/albuns-antigos': typeof EmpirePlayAlbunsAntigosRouteWithChildren
   '/empire-play/forum': typeof EmpirePlayForumRoute
-  '/empire-play/gestao': typeof EmpirePlayGestaoRoute
+  '/empire-play/gestao': typeof EmpirePlayGestaoRouteWithChildren
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
-  '/games/hits-producer': typeof GamesHitsProducerRoute
-  '/games/memoria-fama': typeof GamesMemoriaFamaRoute
-  '/games/paparazzi-escape': typeof GamesPaparazziEscapeRoute
-  '/games/queridometro': typeof GamesQueridometroRoute
-  '/playlists/$id': typeof PlaylistsIdRouteWithChildren
-  '/playlists/nova': typeof PlaylistsNovaRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas/': typeof ArtistasIndexRoute
-  '/catalogo/': typeof CatalogoIndexRoute
   '/empire-play/': typeof EmpirePlayIndexRoute
-  '/games/': typeof GamesIndexRoute
-  '/playlists/': typeof PlaylistsIndexRoute
   '/ponto/': typeof PontoIndexRoute
   '/tours/': typeof ToursIndexRoute
   '/album/$id/editar': typeof AlbumIdEditarRoute
   '/artistas/$nome/bens': typeof ArtistasNomeBensRoute
   '/artistas/$nome/projetos': typeof ArtistasNomeProjetosRoute
-  '/playlists/$id/editar': typeof PlaylistsIdEditarRoute
+  '/empire-play/albuns-antigos/$id': typeof EmpirePlayAlbunsAntigosIdRoute
+  '/empire-play/gestao/album-antigo': typeof EmpirePlayGestaoAlbumAntigoRoute
+  '/empire-play/playlists/$id': typeof EmpirePlayPlaylistsIdRouteWithChildren
+  '/empire-play/playlists/nova': typeof EmpirePlayPlaylistsNovaRoute
   '/ponto/distribuir/planilha': typeof PontoDistribuirPlanilhaRoute
   '/ponto/playlists/planilha': typeof PontoPlaylistsPlanilhaRoute
   '/artistas/$nome/': typeof ArtistasNomeIndexRoute
+  '/empire-play/albuns-antigos/': typeof EmpirePlayAlbunsAntigosIndexRoute
+  '/empire-play/gestao/': typeof EmpirePlayGestaoIndexRoute
+  '/empire-play/playlists/': typeof EmpirePlayPlaylistsIndexRoute
+  '/empire-play/playlists/$id/editar': typeof EmpirePlayPlaylistsIdEditarRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -500,20 +386,9 @@ export interface FileRouteTypes {
     | '/'
     | '/acesso-rapido'
     | '/albuns'
-    | '/bet'
-    | '/bolsa'
     | '/charts'
-    | '/duelo'
     | '/empire-play'
-    | '/filantropia'
-    | '/gravadoras'
-    | '/hall'
-    | '/leiloes'
-    | '/market'
-    | '/payola'
-    | '/radar'
-    | '/ranking'
-    | '/rescisao'
+    | '/perfil'
     | '/social'
     | '/tutorial'
     | '/tv'
@@ -521,53 +396,40 @@ export interface FileRouteTypes {
     | '/acoes/cinema'
     | '/acoes/tour'
     | '/album/$id'
-    | '/catalogo/$id'
     | '/empire-play/albuns'
+    | '/empire-play/albuns-antigos'
     | '/empire-play/forum'
     | '/empire-play/gestao'
     | '/empire-play/musicas'
     | '/empire-play/videos'
-    | '/games/hits-producer'
-    | '/games/memoria-fama'
-    | '/games/paparazzi-escape'
-    | '/games/queridometro'
-    | '/playlists/$id'
-    | '/playlists/nova'
     | '/ponto/distribuir'
     | '/ponto/playlists'
     | '/tours/$nome'
     | '/artistas/'
-    | '/catalogo/'
     | '/empire-play/'
-    | '/games/'
-    | '/playlists/'
     | '/ponto/'
     | '/tours/'
     | '/album/$id/editar'
     | '/artistas/$nome/bens'
     | '/artistas/$nome/projetos'
-    | '/playlists/$id/editar'
+    | '/empire-play/albuns-antigos/$id'
+    | '/empire-play/gestao/album-antigo'
+    | '/empire-play/playlists/$id'
+    | '/empire-play/playlists/nova'
     | '/ponto/distribuir/planilha'
     | '/ponto/playlists/planilha'
     | '/artistas/$nome/'
+    | '/empire-play/albuns-antigos/'
+    | '/empire-play/gestao/'
+    | '/empire-play/playlists/'
+    | '/empire-play/playlists/$id/editar'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/acesso-rapido'
     | '/albuns'
-    | '/bet'
-    | '/bolsa'
     | '/charts'
-    | '/duelo'
-    | '/filantropia'
-    | '/gravadoras'
-    | '/hall'
-    | '/leiloes'
-    | '/market'
-    | '/payola'
-    | '/radar'
-    | '/ranking'
-    | '/rescisao'
+    | '/perfil'
     | '/social'
     | '/tutorial'
     | '/tv'
@@ -575,54 +437,39 @@ export interface FileRouteTypes {
     | '/acoes/cinema'
     | '/acoes/tour'
     | '/album/$id'
-    | '/catalogo/$id'
     | '/empire-play/albuns'
     | '/empire-play/forum'
-    | '/empire-play/gestao'
     | '/empire-play/musicas'
     | '/empire-play/videos'
-    | '/games/hits-producer'
-    | '/games/memoria-fama'
-    | '/games/paparazzi-escape'
-    | '/games/queridometro'
-    | '/playlists/$id'
-    | '/playlists/nova'
     | '/ponto/distribuir'
     | '/ponto/playlists'
     | '/tours/$nome'
     | '/artistas'
-    | '/catalogo'
     | '/empire-play'
-    | '/games'
-    | '/playlists'
     | '/ponto'
     | '/tours'
     | '/album/$id/editar'
     | '/artistas/$nome/bens'
     | '/artistas/$nome/projetos'
-    | '/playlists/$id/editar'
+    | '/empire-play/albuns-antigos/$id'
+    | '/empire-play/gestao/album-antigo'
+    | '/empire-play/playlists/$id'
+    | '/empire-play/playlists/nova'
     | '/ponto/distribuir/planilha'
     | '/ponto/playlists/planilha'
     | '/artistas/$nome'
+    | '/empire-play/albuns-antigos'
+    | '/empire-play/gestao'
+    | '/empire-play/playlists'
+    | '/empire-play/playlists/$id/editar'
   id:
     | '__root__'
     | '/'
     | '/acesso-rapido'
     | '/albuns'
-    | '/bet'
-    | '/bolsa'
     | '/charts'
-    | '/duelo'
     | '/empire-play'
-    | '/filantropia'
-    | '/gravadoras'
-    | '/hall'
-    | '/leiloes'
-    | '/market'
-    | '/payola'
-    | '/radar'
-    | '/ranking'
-    | '/rescisao'
+    | '/perfil'
     | '/social'
     | '/tutorial'
     | '/tv'
@@ -630,55 +477,42 @@ export interface FileRouteTypes {
     | '/acoes/cinema'
     | '/acoes/tour'
     | '/album/$id'
-    | '/catalogo/$id'
     | '/empire-play/albuns'
+    | '/empire-play/albuns-antigos'
     | '/empire-play/forum'
     | '/empire-play/gestao'
     | '/empire-play/musicas'
     | '/empire-play/videos'
-    | '/games/hits-producer'
-    | '/games/memoria-fama'
-    | '/games/paparazzi-escape'
-    | '/games/queridometro'
-    | '/playlists/$id'
-    | '/playlists/nova'
     | '/ponto/distribuir'
     | '/ponto/playlists'
     | '/tours/$nome'
     | '/artistas/'
-    | '/catalogo/'
     | '/empire-play/'
-    | '/games/'
-    | '/playlists/'
     | '/ponto/'
     | '/tours/'
     | '/album/$id/editar'
     | '/artistas/$nome/bens'
     | '/artistas/$nome/projetos'
-    | '/playlists/$id/editar'
+    | '/empire-play/albuns-antigos/$id'
+    | '/empire-play/gestao/album-antigo'
+    | '/empire-play/playlists/$id'
+    | '/empire-play/playlists/nova'
     | '/ponto/distribuir/planilha'
     | '/ponto/playlists/planilha'
     | '/artistas/$nome/'
+    | '/empire-play/albuns-antigos/'
+    | '/empire-play/gestao/'
+    | '/empire-play/playlists/'
+    | '/empire-play/playlists/$id/editar'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AcessoRapidoRoute: typeof AcessoRapidoRoute
   AlbunsRoute: typeof AlbunsRoute
-  BetRoute: typeof BetRoute
-  BolsaRoute: typeof BolsaRoute
   ChartsRoute: typeof ChartsRoute
-  DueloRoute: typeof DueloRoute
   EmpirePlayRoute: typeof EmpirePlayRouteWithChildren
-  FilantropiaRoute: typeof FilantropiaRoute
-  GravadorasRoute: typeof GravadorasRoute
-  HallRoute: typeof HallRoute
-  LeiloesRoute: typeof LeiloesRoute
-  MarketRoute: typeof MarketRoute
-  PayolaRoute: typeof PayolaRoute
-  RadarRoute: typeof RadarRoute
-  RankingRoute: typeof RankingRoute
-  RescisaoRoute: typeof RescisaoRoute
+  PerfilRoute: typeof PerfilRoute
   SocialRoute: typeof SocialRoute
   TutorialRoute: typeof TutorialRoute
   TvRoute: typeof TvRoute
@@ -686,20 +520,10 @@ export interface RootRouteChildren {
   AcoesCinemaRoute: typeof AcoesCinemaRoute
   AcoesTourRoute: typeof AcoesTourRoute
   AlbumIdRoute: typeof AlbumIdRouteWithChildren
-  CatalogoIdRoute: typeof CatalogoIdRoute
-  GamesHitsProducerRoute: typeof GamesHitsProducerRoute
-  GamesMemoriaFamaRoute: typeof GamesMemoriaFamaRoute
-  GamesPaparazziEscapeRoute: typeof GamesPaparazziEscapeRoute
-  GamesQueridometroRoute: typeof GamesQueridometroRoute
-  PlaylistsIdRoute: typeof PlaylistsIdRouteWithChildren
-  PlaylistsNovaRoute: typeof PlaylistsNovaRoute
   PontoDistribuirRoute: typeof PontoDistribuirRouteWithChildren
   PontoPlaylistsRoute: typeof PontoPlaylistsRouteWithChildren
   ToursNomeRoute: typeof ToursNomeRoute
   ArtistasIndexRoute: typeof ArtistasIndexRoute
-  CatalogoIndexRoute: typeof CatalogoIndexRoute
-  GamesIndexRoute: typeof GamesIndexRoute
-  PlaylistsIndexRoute: typeof PlaylistsIndexRoute
   PontoIndexRoute: typeof PontoIndexRoute
   ToursIndexRoute: typeof ToursIndexRoute
   ArtistasNomeBensRoute: typeof ArtistasNomeBensRoute
@@ -730,32 +554,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AlbunsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/bet': {
-      id: '/bet'
-      path: '/bet'
-      fullPath: '/bet'
-      preLoaderRoute: typeof BetRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/bolsa': {
-      id: '/bolsa'
-      path: '/bolsa'
-      fullPath: '/bolsa'
-      preLoaderRoute: typeof BolsaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/charts': {
       id: '/charts'
       path: '/charts'
       fullPath: '/charts'
       preLoaderRoute: typeof ChartsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/duelo': {
-      id: '/duelo'
-      path: '/duelo'
-      fullPath: '/duelo'
-      preLoaderRoute: typeof DueloRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/empire-play': {
@@ -765,67 +568,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EmpirePlayRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/filantropia': {
-      id: '/filantropia'
-      path: '/filantropia'
-      fullPath: '/filantropia'
-      preLoaderRoute: typeof FilantropiaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/gravadoras': {
-      id: '/gravadoras'
-      path: '/gravadoras'
-      fullPath: '/gravadoras'
-      preLoaderRoute: typeof GravadorasRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/hall': {
-      id: '/hall'
-      path: '/hall'
-      fullPath: '/hall'
-      preLoaderRoute: typeof HallRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/leiloes': {
-      id: '/leiloes'
-      path: '/leiloes'
-      fullPath: '/leiloes'
-      preLoaderRoute: typeof LeiloesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/market': {
-      id: '/market'
-      path: '/market'
-      fullPath: '/market'
-      preLoaderRoute: typeof MarketRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/payola': {
-      id: '/payola'
-      path: '/payola'
-      fullPath: '/payola'
-      preLoaderRoute: typeof PayolaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/radar': {
-      id: '/radar'
-      path: '/radar'
-      fullPath: '/radar'
-      preLoaderRoute: typeof RadarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/ranking': {
-      id: '/ranking'
-      path: '/ranking'
-      fullPath: '/ranking'
-      preLoaderRoute: typeof RankingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/rescisao': {
-      id: '/rescisao'
-      path: '/rescisao'
-      fullPath: '/rescisao'
-      preLoaderRoute: typeof RescisaoRouteImport
+    '/perfil': {
+      id: '/perfil'
+      path: '/perfil'
+      fullPath: '/perfil'
+      preLoaderRoute: typeof PerfilRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/social': {
@@ -884,20 +631,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ArtistasIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/catalogo/': {
-      id: '/catalogo/'
-      path: '/catalogo'
-      fullPath: '/catalogo/'
-      preLoaderRoute: typeof CatalogoIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/catalogo/$id': {
-      id: '/catalogo/$id'
-      path: '/catalogo/$id'
-      fullPath: '/catalogo/$id'
-      preLoaderRoute: typeof CatalogoIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/empire-play/': {
       id: '/empire-play/'
       path: '/'
@@ -910,6 +643,13 @@ declare module '@tanstack/react-router' {
       path: '/albuns'
       fullPath: '/empire-play/albuns'
       preLoaderRoute: typeof EmpirePlayAlbunsRouteImport
+      parentRoute: typeof EmpirePlayRoute
+    }
+    '/empire-play/albuns-antigos': {
+      id: '/empire-play/albuns-antigos'
+      path: '/albuns-antigos'
+      fullPath: '/empire-play/albuns-antigos'
+      preLoaderRoute: typeof EmpirePlayAlbunsAntigosRouteImport
       parentRoute: typeof EmpirePlayRoute
     }
     '/empire-play/forum': {
@@ -939,62 +679,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/empire-play/videos'
       preLoaderRoute: typeof EmpirePlayVideosRouteImport
       parentRoute: typeof EmpirePlayRoute
-    }
-    '/games/': {
-      id: '/games/'
-      path: '/games'
-      fullPath: '/games/'
-      preLoaderRoute: typeof GamesIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/games/hits-producer': {
-      id: '/games/hits-producer'
-      path: '/games/hits-producer'
-      fullPath: '/games/hits-producer'
-      preLoaderRoute: typeof GamesHitsProducerRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/games/memoria-fama': {
-      id: '/games/memoria-fama'
-      path: '/games/memoria-fama'
-      fullPath: '/games/memoria-fama'
-      preLoaderRoute: typeof GamesMemoriaFamaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/games/paparazzi-escape': {
-      id: '/games/paparazzi-escape'
-      path: '/games/paparazzi-escape'
-      fullPath: '/games/paparazzi-escape'
-      preLoaderRoute: typeof GamesPaparazziEscapeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/games/queridometro': {
-      id: '/games/queridometro'
-      path: '/games/queridometro'
-      fullPath: '/games/queridometro'
-      preLoaderRoute: typeof GamesQueridometroRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/playlists/': {
-      id: '/playlists/'
-      path: '/playlists'
-      fullPath: '/playlists/'
-      preLoaderRoute: typeof PlaylistsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/playlists/$id': {
-      id: '/playlists/$id'
-      path: '/playlists/$id'
-      fullPath: '/playlists/$id'
-      preLoaderRoute: typeof PlaylistsIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/playlists/nova': {
-      id: '/playlists/nova'
-      path: '/playlists/nova'
-      fullPath: '/playlists/nova'
-      preLoaderRoute: typeof PlaylistsNovaRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/ponto/': {
       id: '/ponto/'
@@ -1059,12 +743,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ArtistasNomeProjetosRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/playlists/$id/editar': {
-      id: '/playlists/$id/editar'
-      path: '/editar'
-      fullPath: '/playlists/$id/editar'
-      preLoaderRoute: typeof PlaylistsIdEditarRouteImport
-      parentRoute: typeof PlaylistsIdRoute
+    '/empire-play/albuns-antigos/': {
+      id: '/empire-play/albuns-antigos/'
+      path: '/'
+      fullPath: '/empire-play/albuns-antigos/'
+      preLoaderRoute: typeof EmpirePlayAlbunsAntigosIndexRouteImport
+      parentRoute: typeof EmpirePlayAlbunsAntigosRoute
+    }
+    '/empire-play/albuns-antigos/$id': {
+      id: '/empire-play/albuns-antigos/$id'
+      path: '/$id'
+      fullPath: '/empire-play/albuns-antigos/$id'
+      preLoaderRoute: typeof EmpirePlayAlbunsAntigosIdRouteImport
+      parentRoute: typeof EmpirePlayAlbunsAntigosRoute
+    }
+    '/empire-play/gestao/': {
+      id: '/empire-play/gestao/'
+      path: '/'
+      fullPath: '/empire-play/gestao/'
+      preLoaderRoute: typeof EmpirePlayGestaoIndexRouteImport
+      parentRoute: typeof EmpirePlayGestaoRoute
+    }
+    '/empire-play/gestao/album-antigo': {
+      id: '/empire-play/gestao/album-antigo'
+      path: '/album-antigo'
+      fullPath: '/empire-play/gestao/album-antigo'
+      preLoaderRoute: typeof EmpirePlayGestaoAlbumAntigoRouteImport
+      parentRoute: typeof EmpirePlayGestaoRoute
+    }
+    '/empire-play/playlists/': {
+      id: '/empire-play/playlists/'
+      path: '/playlists'
+      fullPath: '/empire-play/playlists/'
+      preLoaderRoute: typeof EmpirePlayPlaylistsIndexRouteImport
+      parentRoute: typeof EmpirePlayRoute
+    }
+    '/empire-play/playlists/$id': {
+      id: '/empire-play/playlists/$id'
+      path: '/playlists/$id'
+      fullPath: '/empire-play/playlists/$id'
+      preLoaderRoute: typeof EmpirePlayPlaylistsIdRouteImport
+      parentRoute: typeof EmpirePlayRoute
+    }
+    '/empire-play/playlists/nova': {
+      id: '/empire-play/playlists/nova'
+      path: '/playlists/nova'
+      fullPath: '/empire-play/playlists/nova'
+      preLoaderRoute: typeof EmpirePlayPlaylistsNovaRouteImport
+      parentRoute: typeof EmpirePlayRoute
     }
     '/ponto/distribuir/planilha': {
       id: '/ponto/distribuir/planilha'
@@ -1080,25 +806,82 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PontoPlaylistsPlanilhaRouteImport
       parentRoute: typeof PontoPlaylistsRoute
     }
+    '/empire-play/playlists/$id/editar': {
+      id: '/empire-play/playlists/$id/editar'
+      path: '/editar'
+      fullPath: '/empire-play/playlists/$id/editar'
+      preLoaderRoute: typeof EmpirePlayPlaylistsIdEditarRouteImport
+      parentRoute: typeof EmpirePlayPlaylistsIdRoute
+    }
   }
 }
 
+interface EmpirePlayAlbunsAntigosRouteChildren {
+  EmpirePlayAlbunsAntigosIdRoute: typeof EmpirePlayAlbunsAntigosIdRoute
+  EmpirePlayAlbunsAntigosIndexRoute: typeof EmpirePlayAlbunsAntigosIndexRoute
+}
+
+const EmpirePlayAlbunsAntigosRouteChildren: EmpirePlayAlbunsAntigosRouteChildren =
+  {
+    EmpirePlayAlbunsAntigosIdRoute: EmpirePlayAlbunsAntigosIdRoute,
+    EmpirePlayAlbunsAntigosIndexRoute: EmpirePlayAlbunsAntigosIndexRoute,
+  }
+
+const EmpirePlayAlbunsAntigosRouteWithChildren =
+  EmpirePlayAlbunsAntigosRoute._addFileChildren(
+    EmpirePlayAlbunsAntigosRouteChildren,
+  )
+
+interface EmpirePlayGestaoRouteChildren {
+  EmpirePlayGestaoAlbumAntigoRoute: typeof EmpirePlayGestaoAlbumAntigoRoute
+  EmpirePlayGestaoIndexRoute: typeof EmpirePlayGestaoIndexRoute
+}
+
+const EmpirePlayGestaoRouteChildren: EmpirePlayGestaoRouteChildren = {
+  EmpirePlayGestaoAlbumAntigoRoute: EmpirePlayGestaoAlbumAntigoRoute,
+  EmpirePlayGestaoIndexRoute: EmpirePlayGestaoIndexRoute,
+}
+
+const EmpirePlayGestaoRouteWithChildren =
+  EmpirePlayGestaoRoute._addFileChildren(EmpirePlayGestaoRouteChildren)
+
+interface EmpirePlayPlaylistsIdRouteChildren {
+  EmpirePlayPlaylistsIdEditarRoute: typeof EmpirePlayPlaylistsIdEditarRoute
+}
+
+const EmpirePlayPlaylistsIdRouteChildren: EmpirePlayPlaylistsIdRouteChildren = {
+  EmpirePlayPlaylistsIdEditarRoute: EmpirePlayPlaylistsIdEditarRoute,
+}
+
+const EmpirePlayPlaylistsIdRouteWithChildren =
+  EmpirePlayPlaylistsIdRoute._addFileChildren(
+    EmpirePlayPlaylistsIdRouteChildren,
+  )
+
 interface EmpirePlayRouteChildren {
   EmpirePlayAlbunsRoute: typeof EmpirePlayAlbunsRoute
+  EmpirePlayAlbunsAntigosRoute: typeof EmpirePlayAlbunsAntigosRouteWithChildren
   EmpirePlayForumRoute: typeof EmpirePlayForumRoute
-  EmpirePlayGestaoRoute: typeof EmpirePlayGestaoRoute
+  EmpirePlayGestaoRoute: typeof EmpirePlayGestaoRouteWithChildren
   EmpirePlayMusicasRoute: typeof EmpirePlayMusicasRoute
   EmpirePlayVideosRoute: typeof EmpirePlayVideosRoute
   EmpirePlayIndexRoute: typeof EmpirePlayIndexRoute
+  EmpirePlayPlaylistsIdRoute: typeof EmpirePlayPlaylistsIdRouteWithChildren
+  EmpirePlayPlaylistsNovaRoute: typeof EmpirePlayPlaylistsNovaRoute
+  EmpirePlayPlaylistsIndexRoute: typeof EmpirePlayPlaylistsIndexRoute
 }
 
 const EmpirePlayRouteChildren: EmpirePlayRouteChildren = {
   EmpirePlayAlbunsRoute: EmpirePlayAlbunsRoute,
+  EmpirePlayAlbunsAntigosRoute: EmpirePlayAlbunsAntigosRouteWithChildren,
   EmpirePlayForumRoute: EmpirePlayForumRoute,
-  EmpirePlayGestaoRoute: EmpirePlayGestaoRoute,
+  EmpirePlayGestaoRoute: EmpirePlayGestaoRouteWithChildren,
   EmpirePlayMusicasRoute: EmpirePlayMusicasRoute,
   EmpirePlayVideosRoute: EmpirePlayVideosRoute,
   EmpirePlayIndexRoute: EmpirePlayIndexRoute,
+  EmpirePlayPlaylistsIdRoute: EmpirePlayPlaylistsIdRouteWithChildren,
+  EmpirePlayPlaylistsNovaRoute: EmpirePlayPlaylistsNovaRoute,
+  EmpirePlayPlaylistsIndexRoute: EmpirePlayPlaylistsIndexRoute,
 }
 
 const EmpirePlayRouteWithChildren = EmpirePlayRoute._addFileChildren(
@@ -1115,18 +898,6 @@ const AlbumIdRouteChildren: AlbumIdRouteChildren = {
 
 const AlbumIdRouteWithChildren =
   AlbumIdRoute._addFileChildren(AlbumIdRouteChildren)
-
-interface PlaylistsIdRouteChildren {
-  PlaylistsIdEditarRoute: typeof PlaylistsIdEditarRoute
-}
-
-const PlaylistsIdRouteChildren: PlaylistsIdRouteChildren = {
-  PlaylistsIdEditarRoute: PlaylistsIdEditarRoute,
-}
-
-const PlaylistsIdRouteWithChildren = PlaylistsIdRoute._addFileChildren(
-  PlaylistsIdRouteChildren,
-)
 
 interface PontoDistribuirRouteChildren {
   PontoDistribuirPlanilhaRoute: typeof PontoDistribuirPlanilhaRoute
@@ -1156,20 +927,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AcessoRapidoRoute: AcessoRapidoRoute,
   AlbunsRoute: AlbunsRoute,
-  BetRoute: BetRoute,
-  BolsaRoute: BolsaRoute,
   ChartsRoute: ChartsRoute,
-  DueloRoute: DueloRoute,
   EmpirePlayRoute: EmpirePlayRouteWithChildren,
-  FilantropiaRoute: FilantropiaRoute,
-  GravadorasRoute: GravadorasRoute,
-  HallRoute: HallRoute,
-  LeiloesRoute: LeiloesRoute,
-  MarketRoute: MarketRoute,
-  PayolaRoute: PayolaRoute,
-  RadarRoute: RadarRoute,
-  RankingRoute: RankingRoute,
-  RescisaoRoute: RescisaoRoute,
+  PerfilRoute: PerfilRoute,
   SocialRoute: SocialRoute,
   TutorialRoute: TutorialRoute,
   TvRoute: TvRoute,
@@ -1177,20 +937,10 @@ const rootRouteChildren: RootRouteChildren = {
   AcoesCinemaRoute: AcoesCinemaRoute,
   AcoesTourRoute: AcoesTourRoute,
   AlbumIdRoute: AlbumIdRouteWithChildren,
-  CatalogoIdRoute: CatalogoIdRoute,
-  GamesHitsProducerRoute: GamesHitsProducerRoute,
-  GamesMemoriaFamaRoute: GamesMemoriaFamaRoute,
-  GamesPaparazziEscapeRoute: GamesPaparazziEscapeRoute,
-  GamesQueridometroRoute: GamesQueridometroRoute,
-  PlaylistsIdRoute: PlaylistsIdRouteWithChildren,
-  PlaylistsNovaRoute: PlaylistsNovaRoute,
   PontoDistribuirRoute: PontoDistribuirRouteWithChildren,
   PontoPlaylistsRoute: PontoPlaylistsRouteWithChildren,
   ToursNomeRoute: ToursNomeRoute,
   ArtistasIndexRoute: ArtistasIndexRoute,
-  CatalogoIndexRoute: CatalogoIndexRoute,
-  GamesIndexRoute: GamesIndexRoute,
-  PlaylistsIndexRoute: PlaylistsIndexRoute,
   PontoIndexRoute: PontoIndexRoute,
   ToursIndexRoute: ToursIndexRoute,
   ArtistasNomeBensRoute: ArtistasNomeBensRoute,

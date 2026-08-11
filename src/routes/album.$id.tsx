@@ -10,8 +10,10 @@ import {
   Image as ImageIcon,
   Disc3,
   Edit,
+  MoreVertical,
 } from "lucide-react";
-import { api, driveImg, driveAudioSrc, type AlbumPayload } from "@/lib/api";
+import { api, driveImg, driveAudioSrc, type AlbumPayload, type PlaylistTrack } from "@/lib/api";
+import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 
 export const Route = createFileRoute("/album/$id")({
   component: AlbumPage,
@@ -31,6 +33,7 @@ function AlbumPage() {
   const [showEncarte, setShowEncarte] = useState<string | null>(null);
   const [showLyrics, setShowLyrics] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
 
   useEffect(() => {
     api.getAlbum(id).then((a) => setAlbum(a));
@@ -150,7 +153,7 @@ function AlbumPage() {
             return (
               <li
                 key={i}
-                className={`group grid grid-cols-[2rem_1fr_auto_2.5rem] items-center gap-3 px-2 py-2 rounded-lg ${active ? "bg-primary/10" : "hover:bg-card"}`}
+                className={`group grid grid-cols-[2rem_1fr_auto_2.5rem_2.5rem] items-center gap-3 px-2 py-2 rounded-lg ${active ? "bg-primary/10" : "hover:bg-card"}`}
               >
                 <button
                   onClick={() => setPlayingIdx(active ? null : i)}
@@ -189,6 +192,23 @@ function AlbumPage() {
                 >
                   <Music className="size-4" />
                 </a>
+                <button
+                  onClick={() =>
+                    setMenuTrack({
+                      album_id: album.id || "",
+                      faixa_numero: f.numero,
+                      titulo: f.titulo,
+                      artistas: f.artistas,
+                      drive_url: f.drive_url,
+                      capa_url: album.capa_url || "",
+                      letra: f.letra || "",
+                    })
+                  }
+                  className="text-muted-foreground hover:text-foreground justify-self-end"
+                  title="Mais opções"
+                >
+                  <MoreVertical className="size-4" />
+                </button>
               </li>
             );
           })}
@@ -301,6 +321,8 @@ function AlbumPage() {
       <footer className="text-center text-[10px] text-muted-foreground/60 py-8 inline-flex items-center justify-center gap-1 w-full">
         <Disc3 className="size-3" /> Empire Hub • Music Industry Game
       </footer>
+
+      <AddToPlaylistSheet track={menuTrack} onClose={() => setMenuTrack(null)} />
     </main>
   );
 }

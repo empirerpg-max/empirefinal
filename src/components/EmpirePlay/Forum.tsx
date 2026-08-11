@@ -10,11 +10,13 @@ import {
   Pause,
   ChevronLeft,
   Calendar,
-  User,
   ListMusic,
   FileText,
   Volume2,
   Sparkles,
+  Pencil,
+  X,
+  Check,
 } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -33,6 +35,7 @@ interface CommentItem {
   data: string;
   titulo: string;
   jogador: string;
+  jogadorId: string;
   comentario: string;
   nota: string;
   // Linha real na planilha + aba de comentários — null quando o comentário
@@ -41,6 +44,16 @@ interface CommentItem {
   sheetComments: string | null;
   reactions: Record<string, number>;
   reactedBy: Record<string, string[]>;
+}
+
+interface ForumAlbumTrack {
+  id: string;
+  title: string;
+  artist: string;
+  trackOrder: number;
+  coverUrl?: string | null;
+  audioUrl?: string | null;
+  lyrics?: string | null;
 }
 
 interface ForumTopicItem {
@@ -57,9 +70,43 @@ interface ForumTopicItem {
   // Tag do vídeo (coluna "Tipo de vídeo") — null pra músicas/álbuns.
   tipoVideo: string | null;
   fields: Record<string, string>;
+  // Só pra álbuns: faixas de verdade (com áudio próprio) e encarte.
+  tracks?: ForumAlbumTrack[];
+  encarte?: string[];
 }
 
 const FORUM_SUBMENUS: ForumSubmenu[] = ["musicas", "videos", "albuns"];
+
+// Telegram atribui uma cor fixa por usuário (derivada do id) pro nome e pro
+// avatar em grupos/tópicos — replicamos a mesma ideia aqui com a paleta do
+// app (emerald como cor "própria" de destaque continua reservada ao score).
+const TELEGRAM_NAME_COLORS = [
+  "#FF6B6B",
+  "#4ECDC4",
+  "#C084FC",
+  "#F7B733",
+  "#5B9BFF",
+  "#FF8FB1",
+  "#6FCF97",
+];
+
+function nameColorFor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  return TELEGRAM_NAME_COLORS[Math.abs(hash) % TELEGRAM_NAME_COLORS.length];
+}
+
+function initialsFor(name: string): string {
+  const clean = (name || "?").trim();
+  if (!clean) return "?";
+  const parts = clean.split(/\s+/);
+  const first = parts[0]?.[0] || "?";
+  const second = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
+  return (first + second).toUpperCase();
+}
 
 export interface ForumProps {
   onPlayTrack?: (track: PlayableTrack, playlist: PlayableTrack[]) => void;
@@ -99,6 +146,9 @@ export const Forum: React.FC<ForumProps> = ({
   // State para comentários do tópico selecionado
   const [topicComments, setTopicComments] = useState<CommentItem[]>([]);
   const [loadingComments, setLoadingComments] = useState<boolean>(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   // ID do tópico REAL da planilha (coluna "ID do tópico"), usado como chave
   // ao gravar comentários — nunca o id sintético gerado pelo app.
   const [resolvedTopicId, setResolvedTopicId] = useState<string>("");
@@ -188,6 +238,9 @@ export const Forum: React.FC<ForumProps> = ({
             item.drive_url ||
             item.youtube_url ||
             item.id_do_arquivo ||
+            // Álbum não tem link próprio — usa o áudio da primeira faixa,
+            // igual "Tocar Álbum" no catálogo.
+            (Array.isArray(item.tracks) && item.tracks[0]?.audioUrl) ||
             null,
           videoSource: item.videoSource || null,
           releaseDate: item.releaseDate || item.data_lancamento || item.data || null,
@@ -199,6 +252,18 @@ export const Forum: React.FC<ForumProps> = ({
             metacritic: item.metacriticAvg || item.metacritic || item.nota,
             descricao: item.description || item.descricao,
           },
+          tracks: Array.isArray(item.tracks)
+            ? item.tracks.map((t: any) => ({
+                id: t.id,
+                title: t.title,
+                artist: t.artist,
+                trackOrder: t.trackOrder,
+                coverUrl: t.coverUrl,
+                audioUrl: t.audioUrl,
+                lyrics: t.lyrics,
+              }))
+            : undefined,
+          encarte: Array.isArray(item.encarte) ? item.encarte : undefined,
         }));
         setItems(normalized);
       })
@@ -252,6 +317,7 @@ export const Forum: React.FC<ForumProps> = ({
           data: c.data || c.timestamp || c.data_hora || "",
           titulo: c.titulo || c.title || topic.title,
           jogador: c.jogador || c.player || c.nome_jogador || "Anônimo",
+          jogadorId: c.jogadorId || "",
           comentario: c.comentario || c.comment || c.texto || "",
           nota: c.nota || c.rating || c.likes || "",
           rowIndex: c.rowIndex ?? null,
@@ -279,6 +345,7 @@ export const Forum: React.FC<ForumProps> = ({
             data: c.data || c.timestamp || "",
             titulo: c.titulo || c.title || topic.title,
             jogador: c.jogador || c.player || "Anônimo",
+            jogadorId: "",
             comentario: c.comentario || c.comment || "",
             nota: c.nota || c.rating || "",
             rowIndex: null,
@@ -354,6 +421,46 @@ export const Forum: React.FC<ForumProps> = ({
       console.error("Erro ao reagir ao comentário:", err);
     }
   };
+
+  function startEditComment(comment: CommentItem) {
+    haptic.selection();
+    setEditingCommentId(comment.id);
+    setEditText(comment.comentario);
+  }
+
+  function cancelEditComment() {
+    setEditingCommentId(null);
+    setEditText("");
+  }
+
+  async function saveEditComment(comment: CommentItem) {
+    if (!comment.rowIndex || !comment.sheetComments || !myId || !editText.trim()) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch("/api/forum/comment-edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sheetComments: comment.sheetComments,
+          rowIndex: comment.rowIndex,
+          jogadorId: myId,
+          novoTexto: editText.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (json?.success) {
+        setTopicComments((prev) =>
+          prev.map((c) => (c.id === comment.id ? { ...c, comentario: editText.trim() } : c)),
+        );
+        setEditingCommentId(null);
+        setEditText("");
+      }
+    } catch (err) {
+      console.error("Erro ao editar comentário:", err);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   // Filtragem por busca + tag (Vídeos)
   const filteredItems = useMemo(() => {
@@ -604,46 +711,90 @@ export const Forum: React.FC<ForumProps> = ({
                 )}
               </div>
 
-              {/* CASO ÁLBUM: EXIBIR LISTA DE FAIXAS */}
+              {/* CASO ÁLBUM: EXIBIR LISTA DE FAIXAS DE VERDADE (com áudio
+                  próprio por faixa, ordenadas — igual uma playlist) */}
               {activeSubmenu === "albuns" && (
                 <div className="bg-neutral-800/40 border border-white/10 rounded-2xl p-4 sm:p-5 space-y-3">
                   <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
                     <ListMusic className="size-4" />
                     Faixas do Álbum
                   </h3>
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {selectedTopic.fields?.faixas ? (
-                      selectedTopic.fields.faixas.split("\n").map((faixa, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between p-2.5 sm:p-3 bg-neutral-900/60 rounded-xl border border-white/5 text-xs text-neutral-200"
+                  <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
+                    {selectedTopic.tracks && selectedTopic.tracks.length > 0 ? (
+                      selectedTopic.tracks.map((faixa, i) => (
+                        <button
+                          key={faixa.id || i}
+                          type="button"
+                          disabled={!faixa.audioUrl}
+                          onClick={() =>
+                            onPlayTrack?.(
+                              {
+                                titulo: faixa.title,
+                                artista: faixa.artist || selectedTopic.artist,
+                                capa_url: faixa.coverUrl || selectedTopic.cover || undefined,
+                                url: faixa.audioUrl || undefined,
+                              },
+                              selectedTopic.tracks!.map((t) => ({
+                                titulo: t.title,
+                                artista: t.artist || selectedTopic.artist,
+                                capa_url: t.coverUrl || selectedTopic.cover || undefined,
+                                url: t.audioUrl || undefined,
+                              })),
+                            )
+                          }
+                          className="w-full flex items-center gap-3 p-2.5 sm:p-3 bg-neutral-900/60 hover:bg-neutral-900 rounded-xl border border-white/5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 group"
                         >
-                          <span className="font-semibold line-clamp-1">{faixa}</span>
-                          <button
-                            onClick={() =>
-                              onPlayTrack?.(
-                                {
-                                  titulo: faixa,
-                                  artista: selectedTopic.artist,
-                                  capa_url: selectedTopic.cover || undefined,
-                                },
-                                [],
-                              )
-                            }
-                            className="p-1.5 rounded-lg bg-white/5 hover:bg-emerald-500 hover:text-black transition text-neutral-400"
-                          >
-                            <Play className="size-3.5" />
-                          </button>
-                        </div>
+                          <span className="w-5 shrink-0 text-center font-mono text-[11px] text-neutral-500 group-hover:hidden">
+                            {faixa.trackOrder || i + 1}
+                          </span>
+                          <Play className="size-3.5 shrink-0 hidden group-hover:block text-emerald-400" />
+                          <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 truncate">
+                            {faixa.title}
+                          </span>
+                          {!faixa.audioUrl && (
+                            <span className="text-[10px] text-neutral-500 italic shrink-0">
+                              sem áudio
+                            </span>
+                          )}
+                        </button>
                       ))
                     ) : (
                       <p className="text-xs text-neutral-500 italic">
-                        Faixas em reprodução direta no catálogo do Empire Play.
+                        Nenhuma faixa vinculada a este álbum ainda.
                       </p>
                     )}
                   </div>
                 </div>
               )}
+
+              {/* CASO ÁLBUM: ENCARTE */}
+              {activeSubmenu === "albuns" &&
+                selectedTopic.encarte &&
+                selectedTopic.encarte.length > 0 && (
+                  <div className="bg-neutral-800/40 border border-white/10 rounded-2xl p-4 sm:p-5 space-y-3">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                      <FileText className="size-4" />
+                      Encarte
+                    </h3>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {selectedTopic.encarte.map((url, i) => (
+                        <a
+                          key={i}
+                          href={driveImg(url, 1200) || url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="aspect-square rounded-lg overflow-hidden bg-neutral-900 border border-white/5"
+                        >
+                          <img
+                            src={driveImg(url, 300) || undefined}
+                            alt={`Encarte ${i + 1}`}
+                            className="w-full h-full object-cover hover:scale-105 transition"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
               {/* CASO MÚSICA: EXIBIR LETRA COMPLETA */}
               {activeSubmenu === "musicas" && (
@@ -685,7 +836,9 @@ export const Forum: React.FC<ForumProps> = ({
               </button>
             </div>
 
-            {/* LISTA DE COMENTÁRIOS */}
+            {/* LISTA DE COMENTÁRIOS — feed estilo tópico do Telegram: avatar +
+                nome colorido por usuário, bolha de mensagem com "rabinho",
+                hora dentro da bolha, reações como pills logo abaixo. */}
             {loadingComments ? (
               <div className="p-6 text-center text-xs text-neutral-400 bg-neutral-800/30 rounded-2xl border border-white/5">
                 Carregando comentários...
@@ -695,44 +848,94 @@ export const Forum: React.FC<ForumProps> = ({
                 Nenhum comentário registrado ainda. Seja o primeiro a avaliar!
               </div>
             ) : (
-              <div className="space-y-2.5 sm:space-y-3">
-                {topicComments.map((c) => (
-                  <div
-                    key={c.id}
-                    className="p-3.5 sm:p-5 bg-neutral-800/50 border border-white/5 rounded-2xl space-y-1.5 sm:space-y-2"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-emerald-400 flex items-center gap-1.5">
-                        <User className="size-3.5" />
-                        {c.jogador}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] sm:text-[11px] text-neutral-500">
-                          {c.data}
-                        </span>
-                        {c.nota && (
-                          <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold text-[10px] sm:text-[11px] rounded-md border border-emerald-500/20">
-                            {activeSubmenu === "videos"
-                              ? `${c.nota} Likes`
-                              : `Nota: ${c.nota}`}
-                          </span>
+              <div className="flex flex-col gap-3 sm:gap-4">
+                {topicComments.map((c) => {
+                  const color = nameColorFor(c.jogador || c.id);
+                  return (
+                    <div key={c.id} className="flex items-start gap-2 sm:gap-2.5">
+                      <div
+                        className="size-8 sm:size-9 rounded-full grid place-items-center flex-shrink-0 text-[11px] sm:text-xs font-black text-white mt-0.5"
+                        style={{ backgroundColor: color }}
+                      >
+                        {initialsFor(c.jogador)}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        {editingCommentId === c.id ? (
+                          <div className="rounded-2xl rounded-tl-sm bg-neutral-800/70 border border-emerald-500/30 px-3 py-2 sm:px-4 sm:py-2.5">
+                            <textarea
+                              value={editText}
+                              onChange={(e) => setEditText(e.target.value)}
+                              rows={2}
+                              autoFocus
+                              className="w-full bg-transparent text-xs sm:text-sm text-neutral-100 outline-none resize-none placeholder-neutral-500"
+                            />
+                            <div className="flex justify-end gap-1.5 mt-1.5">
+                              <button
+                                onClick={cancelEditComment}
+                                disabled={savingEdit}
+                                className="p-1.5 rounded-full bg-white/5 text-neutral-400 hover:bg-white/10"
+                              >
+                                <X className="size-3.5" />
+                              </button>
+                              <button
+                                onClick={() => saveEditComment(c)}
+                                disabled={savingEdit || !editText.trim()}
+                                className="p-1.5 rounded-full bg-emerald-500 text-black disabled:opacity-50"
+                              >
+                                <Check className="size-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl rounded-tl-sm bg-neutral-800/70 border border-white/5 px-3 py-2 sm:px-4 sm:py-2.5 inline-block max-w-full">
+                            <div className="flex items-baseline gap-2 mb-0.5">
+                              <span
+                                className="text-[12px] sm:text-[13px] font-bold truncate"
+                                style={{ color }}
+                              >
+                                {c.jogador}
+                              </span>
+                              {c.nota && (
+                                <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold text-[9px] sm:text-[10px] rounded border border-emerald-500/20 flex-shrink-0">
+                                  {activeSubmenu === "videos" ? `${c.nota} likes` : `nota ${c.nota}`}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs sm:text-sm text-neutral-100 leading-relaxed whitespace-pre-wrap break-words">
+                              {c.comentario}
+                            </p>
+                            <span className="block text-right text-[10px] text-neutral-500 mt-1 select-none">
+                              {c.data}
+                            </span>
+                          </div>
+                        )}
+
+                        {editingCommentId !== c.id && (c.rowIndex || (c.jogadorId && c.jogadorId === myId)) && (
+                          <div className="mt-1 pl-1 flex items-center gap-2">
+                            {c.rowIndex && (
+                              <ReactionBar
+                                reactions={c.reactions}
+                                reactedBy={c.reactedBy}
+                                myId={myId}
+                                disabled={!myId}
+                                onToggle={(emoji) => handleToggleReaction(c, emoji)}
+                              />
+                            )}
+                            {c.rowIndex && c.jogadorId && c.jogadorId === myId && (
+                              <button
+                                onClick={() => startEditComment(c)}
+                                className="text-[10px] text-neutral-500 hover:text-neutral-300 inline-flex items-center gap-1"
+                              >
+                                <Pencil className="size-3" /> Editar
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
-                    <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed">
-                      {c.comentario}
-                    </p>
-                    {c.rowIndex && (
-                      <ReactionBar
-                        reactions={c.reactions}
-                        reactedBy={c.reactedBy}
-                        myId={myId}
-                        disabled={!myId}
-                        onToggle={(emoji) => handleToggleReaction(c, emoji)}
-                      />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

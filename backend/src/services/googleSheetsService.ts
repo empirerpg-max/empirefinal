@@ -9,6 +9,7 @@ export const SPREADSHEETS = {
   principal: "1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo",
   registrosCharts: "1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg",
   edicaoCharts: "1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8",
+  usuarios: "1lFw9l76tYZYCDXhZsoiftIEzCvKcjCrI_oBpvUdwAlo",
 } as const;
 
 export type SpreadsheetKey = keyof typeof SPREADSHEETS;
@@ -262,16 +263,28 @@ export async function updateValues(
   }
 }
 
+interface GoogleSheetsAppendResponse {
+  updates?: {
+    updatedRange?: string;
+  };
+}
+
+/**
+ * Anexa uma linha e devolve o número da linha real onde ela caiu (1-based,
+ * igual A1) — usado pra permitir reagir com emoji imediatamente após postar
+ * um comentário, sem precisar reler a aba inteira pra achar a linha.
+ * `null` quando a gravação falha (comportamento silencioso já existente).
+ */
 export async function appendRow(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   values: GoogleSheetRow,
   range = "A:ZZ",
-): Promise<void> {
+): Promise<number | null> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
   try {
     const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
-    await sheetsRequest(
+    const result = await sheetsRequest<GoogleSheetsAppendResponse>(
       `/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       {
         method: "POST",
@@ -282,10 +295,15 @@ export async function appendRow(
       },
       [SHEETS_READWRITE_SCOPE],
     );
+    const updatedRange = result.updates?.updatedRange || "";
+    // updatedRange vem tipo "'Comentarios_Musicas'!A123:D123" — extrai o 123.
+    const match = updatedRange.match(/![A-Z]+(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
   } catch (err) {
     console.warn(
       `[googleSheetsService] Não foi possível anexar linha na planilha (${(err as Error).message})`,
     );
+    return null;
   }
 }
 
@@ -338,5 +356,19 @@ export const googleSheetsService = {
       updateValues("edicaoCharts", sheetName, range, values),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("edicaoCharts", sheetName, values, range),
+  },
+  usuarios: {
+    readValues: (sheetName: string, range?: string) => readValues("usuarios", sheetName, range),
+    readSheetObjects: (sheetName: string, range?: string) =>
+      readSheetObjects("usuarios", sheetName, range),
+    findRows: (
+      sheetName: string,
+      predicate: (row: string[], index: number) => boolean,
+      range?: string,
+    ) => findRows("usuarios", sheetName, predicate, range),
+    updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
+      updateValues("usuarios", sheetName, range, values),
+    appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
+      appendRow("usuarios", sheetName, values, range),
   },
 };

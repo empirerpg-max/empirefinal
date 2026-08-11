@@ -8,12 +8,17 @@ import {
   createCommentController,
   getCommentsController,
   toggleCommentReactionController,
+  editCommentController,
 } from "../controllers/forumController";
 import {
   createAlbumController,
-  createMusicVideoController,
   createSongController,
   createVideoController,
+  getAlbumFaixasController,
+  getMeusAlbunsController,
+  getMusicasEmChartController,
+  reordenarAlbumFaixasController,
+  substituirAlbumController,
   uploadDriveController,
 } from "../controllers/gestaoController";
 import {
@@ -27,9 +32,39 @@ import {
   getEmpirePlayAlbunsController,
   getEmpirePlayForumTopicController,
   getEmpirePlayUserController,
+  getEmpirePlayLancamentosRecentesController,
 } from "../controllers/empirePlayController";
 import { reportVideoIssueController } from "../controllers/reportVideoController";
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
+import { loginController, updateProfileController } from "../controllers/authController";
+import { getMeusArtistasNomesController } from "../controllers/artistasController";
+import { getPontosController, salvarPontoCelulaController } from "../controllers/pontoController";
+import {
+  getSocialPostsController,
+  createSocialPostController,
+  curtirSocialPostController,
+  getSocialComentariosController,
+  comentarSocialPostController,
+  editSocialCommentController,
+  editSocialPostController,
+  getSocialPerfisController,
+  saveSocialPerfilController,
+  getSocialNewsController,
+  saveSocialNewsController,
+} from "../controllers/socialController";
+import {
+  getPlaylistsController,
+  getPlaylistByIdController,
+  savePlaylistController,
+  deletePlaylistController,
+  getPlaylistsCatalogoController,
+  getSalvosController,
+  saveSalvoController,
+  removeSalvoController,
+  criarAlbumAntigoController,
+  getAlbunsAntigosController,
+  getAlbumAntigoByIdController,
+} from "../controllers/playlistsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -52,8 +87,18 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   const isEmpirePlayForumPath = url.pathname.startsWith("/api/empire-play/forum");
   // Match qualquer /api/empire-play/*
   const isEmpirePlayPath = url.pathname.startsWith("/api/empire-play/");
+  // Match /api/playlists ou /api/playlists/:id
+  const isPlaylistsPath = url.pathname === "/api/playlists" || url.pathname.startsWith("/api/playlists/");
+  // Match /api/salvos ou /api/salvos/:acao
+  const isSalvosPath = url.pathname === "/api/salvos" || url.pathname.startsWith("/api/salvos/");
+  // Match /api/albuns-antigos ou /api/albuns-antigos/:id
+  const isAlbunsAntigosPath =
+    url.pathname === "/api/albuns-antigos" || url.pathname.startsWith("/api/albuns-antigos/");
 
   const supportedPaths = new Set([
+    "/api/auth/login",
+    "/api/auth/perfil",
+    "/api/artistas/meus-nomes",
     "/api/user/me",
     "/api/top-playlists",
     "/api/lancamentos",
@@ -64,10 +109,15 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/forum/comment",
     "/api/forum/comments",
     "/api/forum/comment-reaction",
+    "/api/forum/comment-edit",
     "/api/gestao/musica",
     "/api/gestao/video",
-    "/api/gestao/music-video",
     "/api/gestao/album",
+    "/api/gestao/album/substituir",
+    "/api/gestao/album-faixas",
+    "/api/gestao/album-faixas/reordenar",
+    "/api/gestao/musicas-em-chart",
+    "/api/gestao/meus-albuns",
     "/api/gestao/upload",
     "/api/editar",
     "/api/empire-play/home",
@@ -76,11 +126,29 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/empire-play/music-videos",
     "/api/empire-play/videos",
     "/api/empire-play/albuns",
+    "/api/empire-play/lancamentos-recentes",
     "/api/empire-play/report-video-issue",
     "/api/empire-play/report-wrong-content",
+    "/api/social/posts",
+    "/api/social/curtir",
+    "/api/social/comentarios",
+    "/api/social/comentar",
+    "/api/social/comentario/editar",
+    "/api/ponto",
+    "/api/ponto/salvar",
+    "/api/social/posts/editar",
+    "/api/social/perfis",
+    "/api/social/news",
   ]);
 
-  if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath) {
+  if (
+    !supportedPaths.has(url.pathname) &&
+    !isEditarPath &&
+    !isEmpirePlayPath &&
+    !isPlaylistsPath &&
+    !isSalvosPath &&
+    !isAlbunsAntigosPath
+  ) {
     return null;
   }
 
@@ -114,6 +182,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await getEmpirePlayVideosController(request);
   } else if (url.pathname === "/api/empire-play/albuns") {
     response = await getEmpirePlayAlbunsController();
+  } else if (url.pathname === "/api/empire-play/lancamentos-recentes") {
+    response = await getEmpirePlayLancamentosRecentesController();
   } else if (url.pathname === "/api/empire-play/report-video-issue") {
     if (request.method !== "POST") {
       return new Response(
@@ -163,14 +233,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await createVideoController(request);
-  } else if (url.pathname === "/api/gestao/music-video") {
-    if (request.method !== "POST") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/gestao/music-video." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
-    response = await createMusicVideoController(request);
   } else if (url.pathname === "/api/gestao/album") {
     if (request.method !== "POST") {
       return new Response(
@@ -179,6 +241,22 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await createAlbumController(request);
+  } else if (url.pathname === "/api/gestao/album/substituir") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/gestao/album/substituir." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await substituirAlbumController(request);
+  } else if (url.pathname === "/api/gestao/album-faixas/reordenar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/gestao/album-faixas/reordenar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await reordenarAlbumFaixasController(request);
   } else if (url.pathname === "/api/gestao/upload") {
     if (request.method !== "POST") {
       return new Response(
@@ -187,6 +265,186 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await uploadDriveController(request);
+  } else if (url.pathname === "/api/social/posts") {
+    response =
+      request.method === "GET"
+        ? await getSocialPostsController()
+        : request.method === "POST"
+          ? await createSocialPostController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/posts." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
+  } else if (url.pathname === "/api/social/posts/editar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/posts/editar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await editSocialPostController(request);
+  } else if (url.pathname === "/api/social/curtir") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/curtir." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await curtirSocialPostController(request);
+  } else if (url.pathname === "/api/social/comentarios") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/social/comentarios." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getSocialComentariosController(request);
+  } else if (url.pathname === "/api/social/comentar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/comentar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await comentarSocialPostController(request);
+  } else if (url.pathname === "/api/social/comentario/editar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/comentario/editar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await editSocialCommentController(request);
+  } else if (url.pathname === "/api/social/perfis") {
+    response =
+      request.method === "GET"
+        ? await getSocialPerfisController()
+        : request.method === "POST"
+          ? await saveSocialPerfilController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/perfis." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
+  } else if (isPlaylistsPath) {
+    if (url.pathname === "/api/playlists/excluir") {
+      if (request.method !== "POST") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use POST para /api/playlists/excluir." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await deletePlaylistController(request);
+    } else if (url.pathname === "/api/playlists/catalogo") {
+      if (request.method !== "GET") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use GET para /api/playlists/catalogo." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await getPlaylistsCatalogoController();
+    } else if (url.pathname === "/api/playlists/albuns") {
+      if (request.method !== "POST") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use POST para /api/playlists/albuns." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await criarAlbumAntigoController(request);
+    } else if (url.pathname === "/api/playlists") {
+      response =
+        request.method === "GET"
+          ? await getPlaylistsController()
+          : request.method === "POST"
+            ? await savePlaylistController(request)
+            : new Response(
+                JSON.stringify({ success: false, error: "Use GET ou POST para /api/playlists." }),
+                { status: 405, headers: { "Content-Type": "application/json" } },
+              );
+    } else {
+      if (request.method !== "GET") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use GET para /api/playlists/:id." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      const id = decodeURIComponent(url.pathname.replace("/api/playlists/", ""));
+      response = await getPlaylistByIdController(id);
+    }
+  } else if (isSalvosPath) {
+    if (url.pathname === "/api/salvos/remover") {
+      if (request.method !== "POST") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use POST para /api/salvos/remover." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await removeSalvoController(request);
+    } else {
+      response =
+        request.method === "GET"
+          ? await getSalvosController(request)
+          : request.method === "POST"
+            ? await saveSalvoController(request)
+            : new Response(
+                JSON.stringify({ success: false, error: "Use GET ou POST para /api/salvos." }),
+                { status: 405, headers: { "Content-Type": "application/json" } },
+              );
+    }
+  } else if (isAlbunsAntigosPath) {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/albuns-antigos." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    if (url.pathname === "/api/albuns-antigos") {
+      response = await getAlbunsAntigosController();
+    } else {
+      const id = decodeURIComponent(url.pathname.replace("/api/albuns-antigos/", ""));
+      response = await getAlbumAntigoByIdController(id);
+    }
+  } else if (url.pathname === "/api/ponto") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/ponto." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getPontosController(request);
+  } else if (url.pathname === "/api/ponto/salvar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/ponto/salvar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await salvarPontoCelulaController(request);
+  } else if (url.pathname === "/api/social/news") {
+    response =
+      request.method === "GET"
+        ? await getSocialNewsController()
+        : request.method === "POST"
+          ? await saveSocialNewsController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/news." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
+  } else if (url.pathname === "/api/auth/login") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/auth/login." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await loginController(request);
+  } else if (url.pathname === "/api/auth/perfil") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/auth/perfil." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await updateProfileController(request);
   } else if (url.pathname === "/api/forum/comment") {
     if (request.method !== "POST") {
       return new Response(
@@ -211,6 +469,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await toggleCommentReactionController(request);
+  } else if (url.pathname === "/api/forum/comment-edit") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/forum/comment-edit." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await editCommentController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(
@@ -222,6 +488,18 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     switch (url.pathname) {
       case "/api/user/me":
         response = await getUserMeController(request);
+        break;
+      case "/api/artistas/meus-nomes":
+        response = await getMeusArtistasNomesController(request);
+        break;
+      case "/api/gestao/musicas-em-chart":
+        response = await getMusicasEmChartController();
+        break;
+      case "/api/gestao/meus-albuns":
+        response = await getMeusAlbunsController();
+        break;
+      case "/api/gestao/album-faixas":
+        response = await getAlbumFaixasController(request);
         break;
       case "/api/top-playlists":
         response = await getTopPlaylistsController();

@@ -1,5 +1,6 @@
 import { sheetsService } from "../services/sheetsService";
 import {
+  googleSheetsService,
   normalizeComparison,
   normalizeHeader,
   normalizeText,
@@ -85,6 +86,9 @@ export interface EmpirePlayCleanAlbum {
   releaseDate?: string | null;
   releaseDateIso?: string | null;
   metacriticAvg?: number | string | null;
+  // Imagens do encarte (coluna "Encarte" da aba Albuns, URLs separadas por
+  // ", " no cadastro) — exibidas na página do álbum junto com as faixas.
+  encarte: string[];
   tracks: EmpirePlayCleanAlbumTrack[];
 }
 
@@ -481,18 +485,14 @@ export async function getEmpirePlayUserController(request: Request): Promise<Res
  */
 export async function getEmpirePlayHomeController(): Promise<Response> {
   try {
-    const [spotifyRecords, appleRecords, youtubeRecords, musicaRecords] = await Promise.all([
-      sheetsService.readSheetObjects("Top_50_Spotify").catch(() => []),
-      sheetsService.readSheetObjects("Top_Songs_Apple_Music").catch(() => []),
-      sheetsService.readSheetObjects("Top_Videos_YT").catch(() => []),
-      sheetsService.readSheetObjects("Musicas").catch(() => []),
-    ]);
-
-    const topSpotify = spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx));
-    const topAppleMusic = appleRecords.map((rec, idx) =>
-      buildCleanItem("Top_Songs_Apple_Music", rec, idx),
-    );
-    const topYoutube = youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx));
+    const [spotifyRecords, appleRecords, youtubeRecords, musicaRecords, videoRecords] =
+      await Promise.all([
+        sheetsService.readSheetObjects("Top_50_Spotify").catch(() => []),
+        sheetsService.readSheetObjects("Top_Songs_Apple_Music").catch(() => []),
+        sheetsService.readSheetObjects("Top_Videos_YT").catch(() => []),
+        sheetsService.readSheetObjects("Musicas").catch(() => []),
+        sheetsService.readSheetObjects("Music Videos").catch(() => []),
+      ]);
 
     const recentMusicas = musicaRecords
       .map((rec, idx) => buildCleanItem("Musicas", rec, idx))
@@ -503,6 +503,50 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
         return b.id.localeCompare(a.id);
       })
       .slice(0, 100);
+
+    // As abas de chart (Top_50_Spotify/Top_Songs_Apple_Music/Top_Videos_YT)
+    // só guardam posição/título — não têm coluna própria de nota Metacritic
+    // nem de likes, então esse dado nunca aparecia nos cards de destaque.
+    // Cruza cada entrada do chart com o catálogo real (Musicas/Music Videos)
+    // por artista+título pra herdar a nota/likes já calculados lá.
+    const musicaAllItems = musicaRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+    const videoAllItems = videoRecords.map((rec, idx) => buildCleanItem("Videos", rec, idx));
+
+    const buildScoreIndex = (items: EmpirePlayCleanItem[]) => {
+      const map = new Map<string, string>();
+      for (const it of items) {
+        if (!it.metacriticAvg) continue;
+        const key = `${normalizeComparison(it.artist)}::${normalizeComparison(it.title)}`;
+        if (!map.has(key)) map.set(key, String(it.metacriticAvg));
+      }
+      return map;
+    };
+    const musicaScoreIndex = buildScoreIndex(musicaAllItems);
+    const videoScoreIndex = buildScoreIndex(videoAllItems);
+
+    const enrichWithScore = (
+      chartItems: EmpirePlayCleanItem[],
+      scoreIndex: Map<string, string>,
+    ): EmpirePlayCleanItem[] =>
+      chartItems.map((item) => {
+        if (item.metacriticAvg) return item;
+        const key = `${normalizeComparison(item.artist)}::${normalizeComparison(item.title)}`;
+        const score = scoreIndex.get(key);
+        return score ? { ...item, metacriticAvg: score } : item;
+      });
+
+    const topSpotify = enrichWithScore(
+      spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx)),
+      musicaScoreIndex,
+    );
+    const topAppleMusic = enrichWithScore(
+      appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
+      musicaScoreIndex,
+    );
+    const topYoutube = enrichWithScore(
+      youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx)),
+      videoScoreIndex,
+    );
 
     return new Response(
       JSON.stringify({
@@ -570,11 +614,15 @@ export async function getEmpirePlayMusicasController(request: Request): Promise<
       });
     }
 
-    // Ordenar por data de lançamento (mais recente primeiro)
+    // Ordenar por data de lançamento (mais recente primeiro) — itens sem
+    // data ficam por último, na ordem em que já vieram da planilha, em vez
+    // de espalhados aleatoriamente entre os datados (bug antigo: retornar 0
+    // pra qualquer par onde um dos dois não tinha data deixava o array
+    // praticamente na ordem crua da planilha).
     items.sort((a, b) => {
-      if (a.releaseDateIso && b.releaseDateIso) {
-        return b.releaseDateIso.localeCompare(a.releaseDateIso);
-      }
+      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
+      if (a.releaseDateIso) return -1;
+      if (b.releaseDateIso) return 1;
       return 0;
     });
 
@@ -659,6 +707,72 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
 }
 
 /**
+ * GET /api/empire-play/lancamentos-recentes
+ * Usado no widget "Lançamentos Recentes" do Início: lê a aba "EDIÇÃO
+ * CHARTS" da planilha edicaoCharts (coluna A = data, coluna B = título
+ * "Artista - Título"), acha as datas mais recentes e cruza cada título com
+ * a aba Musicas (coluna H) da planilha principal pra pegar a capa e o link
+ * de fórum pra comentar/ouvir.
+ */
+export async function getEmpirePlayLancamentosRecentesController(): Promise<Response> {
+  try {
+    const edicaoRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:B5000");
+
+    const candidatos = edicaoRows
+      .map((row) => ({
+        dataIso: parseDateToIso(row[0] || null),
+        titulo: (row[1] || "").trim(),
+      }))
+      .filter((c) => c.dataIso && c.titulo) as { dataIso: string; titulo: string }[];
+
+    // Mais recente primeiro, sem repetir o mesmo título (mantém só a
+    // ocorrência mais recente de cada música nos charts).
+    candidatos.sort((a, b) => b.dataIso.localeCompare(a.dataIso));
+    const titulosVistos = new Set<string>();
+    const top3: { dataIso: string; titulo: string }[] = [];
+    for (const c of candidatos) {
+      const norm = normalizeComparison(c.titulo);
+      if (titulosVistos.has(norm)) continue;
+      titulosVistos.add(norm);
+      top3.push(c);
+      if (top3.length === 3) break;
+    }
+
+    const musicaRecords = await sheetsService.readSheetObjects("Musicas");
+    const musicaItems = musicaRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+
+    const lancamentos = top3
+      .map(({ dataIso, titulo }) => {
+        const match = musicaItems.find(
+          (m) => normalizeComparison(m.title) === normalizeComparison(titulo),
+        );
+        if (!match) return null;
+        return {
+          id: match.id,
+          titulo: match.title,
+          artista: match.artist,
+          coverUrl: match.coverUrl || null,
+          dataIso,
+        };
+      })
+      .filter(Boolean);
+
+    return new Response(JSON.stringify({ success: true, data: lancamentos }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (error: any) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao buscar lançamentos recentes.",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
+  }
+}
+
+/**
  * GET /api/empire-play/albuns
  * Lê a aba Albuns e faz a junção com a aba Musicas onde a coluna ALBUM
  * for igual ao título do álbum, ordenando pela coluna Ordem.
@@ -689,6 +803,13 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         "media_metacritic",
         "nota_media",
       ]);
+      const encarteRaw = getValue(rec, ["encarte"]);
+      const encarte = encarteRaw
+        ? encarteRaw
+            .split(",")
+            .map((u) => u.trim())
+            .filter(Boolean)
+        : [];
 
       // Junção com a aba Musicas
       const matchingSongs = songs.filter((s) => {
@@ -724,8 +845,18 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         releaseDate,
         releaseDateIso,
         metacriticAvg,
+        encarte,
         tracks,
       };
+    });
+
+    // Álbuns não tinham NENHUMA ordenação — voltavam na ordem crua da
+    // planilha. Mais recente primeiro, igual Músicas/Vídeos.
+    albuns.sort((a, b) => {
+      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
+      if (a.releaseDateIso) return -1;
+      if (b.releaseDateIso) return 1;
+      return 0;
     });
 
     return new Response(JSON.stringify({ success: true, data: albuns }), {
@@ -765,10 +896,18 @@ export async function getEmpirePlayForumTopicController(
 
   let sheetMedia = "Musicas";
   let sheetComments = "Comentarios_Musicas";
+  // Rótulo usado só pra gerar o `id` do item via buildCleanItem — TEM que
+  // ser idêntico ao rótulo usado em getEmpirePlayVideosController
+  // ("Videos", não "Music Videos"), senão o id gerado aqui nunca bate com o
+  // id que veio do catálogo/link "Ver no Fórum", a busca abaixo nunca
+  // encontra o tópico certo e cai no fallback (primeira linha da planilha)
+  // — todo vídeo clicado abria com a mídia/comentários errados.
+  let sheetIdLabel = sheetMedia;
 
   if (tipoParam === "albuns" || tipoParam === "album") {
     sheetMedia = "Albuns";
     sheetComments = "Comentarios_Albuns";
+    sheetIdLabel = sheetMedia;
   } else if (
     tipoParam === "videos" ||
     tipoParam === "video" ||
@@ -780,6 +919,7 @@ export async function getEmpirePlayForumTopicController(
     // e Music Videos foram consolidados em "Music Videos"/"Comentarios_MV".
     sheetMedia = "Music Videos";
     sheetComments = "Comentarios_MV";
+    sheetIdLabel = "Videos";
   }
 
   try {
@@ -812,7 +952,7 @@ export async function getEmpirePlayForumTopicController(
     const normTopicSearch = normalizeComparison(topicIdParam);
 
     let targetMediaIndex = mediaRecords.findIndex((rec, idx) => {
-      const item = buildCleanItem(sheetMedia, rec, idx);
+      const item = buildCleanItem(sheetIdLabel, rec, idx);
       const recTopicId =
         getValue(rec, [
           "id_do_topico",
@@ -830,12 +970,19 @@ export async function getEmpirePlayForumTopicController(
       );
     });
 
-    if (targetMediaIndex === -1 && mediaRecords.length > 0) {
-      targetMediaIndex = 0;
+    // Nunca cair pra "primeira linha da planilha" quando o id não bate — já
+    // foi causa raiz de todo vídeo/tópico clicado abrir com a mídia e os
+    // comentários de OUTRO item. Sem match real, retorna 404 em vez de
+    // mostrar dado errado silenciosamente.
+    if (targetMediaIndex === -1) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Tópico não encontrado." }),
+        { status: 404, headers: { "Content-Type": "application/json; charset=utf-8" } },
+      );
     }
 
     const rawMedia = mediaRecords[targetMediaIndex];
-    const mediaItem = rawMedia ? buildCleanItem(sheetMedia, rawMedia, targetMediaIndex) : null;
+    const mediaItem = rawMedia ? buildCleanItem(sheetIdLabel, rawMedia, targetMediaIndex) : null;
 
     // ID do tópico REAL da planilha (não o id sintético gerado pelo app) — é
     // esse valor que deve ser usado como chave nas abas Comentarios_*.
@@ -917,15 +1064,20 @@ export async function getEmpirePlayForumTopicController(
           ]) || "";
         if (!playerVal) playerVal = "Anônimo";
 
+        // ID do jogador que comentou (coluna B nas abas Comentarios_*) — usado
+        // pra saber se o usuário logado pode editar esse comentário.
+        const jogadorIdVal =
+          getValue(rec, ["id_do_jogador", "id_jogador", "jogador_id", "jogadorid", "telegram_id"]) || "";
+
+        // "comentarios_para" NUNCA deve virar texto do comentário — é a
+        // coluna de referência ao ID do tópico (usada só pra achar o
+        // registro certo, no topicoVal acima). Um bug antigo aqui a
+        // reaproveitava como fallback de texto quando o registro vinha de
+        // uma aba legada sem coluna de comentário de verdade, fazendo o
+        // próprio ID do tópico (ex: "46", "815") aparecer como se fosse o
+        // comentário de um jogador "Anônimo".
         const commentVal =
-          getValue(rec, [
-            "comentario",
-            "comment",
-            "texto",
-            "mensagem",
-            "conteudo",
-            "comentarios_para",
-          ]) || "";
+          getValue(rec, ["comentario", "comment", "texto", "mensagem", "conteudo"]) || "";
         const ratingVal = getValue(rec, ["nota_likes", "nota", "rating", "likes"]) || "";
 
         // Reações (emoji → lista de jogadorIds que reagiram), gravadas como
@@ -957,6 +1109,7 @@ export async function getEmpirePlayForumTopicController(
           title: titleVal,
           jogador: playerVal,
           player: playerVal,
+          jogadorId: jogadorIdVal,
           comentario: commentVal,
           comment: commentVal,
           nota: ratingVal,
@@ -968,10 +1121,14 @@ export async function getEmpirePlayForumTopicController(
         };
       });
 
-    // Se o registro da mídia contiver o campo `comentarios_para` ou notas registradas por jogadores (ex: Hugo: 95)
+    // Se o registro da mídia contiver notas registradas por jogadores (ex: Hugo: 95)
     if (rawMedia) {
+      // "comentarios_para" NÃO entra aqui — na aba de mídia (Musicas/Albuns)
+      // essa coluna guarda o próprio ID do tópico (igual à coluna B), nunca
+      // texto de comentário. Usá-la aqui fazia o ID do tópico (ex: "46",
+      // "815") aparecer como se fosse um comentário real de "Comunidade
+      // Empire Play".
       const embeddedCommentsText = getValue(rawMedia, [
-        "comentarios_para",
         "comentarios",
         "comentario_para",
         "forum_comentarios",
@@ -985,6 +1142,7 @@ export async function getEmpirePlayForumTopicController(
           title: mediaItem ? mediaItem.title : "",
           jogador: getValue(rawMedia, ["artista", "autor"]) || "Comunidade Empire Play",
           player: getValue(rawMedia, ["artista", "autor"]) || "Comunidade Empire Play",
+          jogadorId: "",
           comentario: embeddedCommentsText,
           comment: embeddedCommentsText,
           nota: "",
@@ -1015,6 +1173,7 @@ export async function getEmpirePlayForumTopicController(
               title: mediaItem ? mediaItem.title : "",
               jogador: jName.trim(),
               player: jName.trim(),
+              jogadorId: "",
               comentario: `Avaliação do Tópico: ${jScore.trim()} pts.`,
               comment: `Avaliação do Tópico: ${jScore.trim()} pts.`,
               nota: jScore.trim(),
@@ -1029,12 +1188,17 @@ export async function getEmpirePlayForumTopicController(
       }
     }
 
+    // Nunca devolver "comentário" vazio — registros que só bateram pelo id
+    // do tópico (rule 1/3 acima) mas não têm texto de comentário de verdade
+    // não devem virar bolha vazia no Fórum.
+    const commentsWithText = comments.filter((c) => c.comentario && c.comentario.trim());
+
     return new Response(
       JSON.stringify({
         success: true,
         data: {
           media: mediaItem,
-          comments,
+          comments: commentsWithText,
         },
       }),
       { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },

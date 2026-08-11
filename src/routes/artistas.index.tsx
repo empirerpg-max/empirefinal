@@ -113,6 +113,7 @@ function ArtistasList() {
                             src={driveImg(a.foto)}
                             alt={a.nome}
                             loading="lazy"
+                            referrerPolicy="no-referrer"
                             className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-110"
                             onError={(e) => {
                               (e.target as HTMLImageElement).src =

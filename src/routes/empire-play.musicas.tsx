@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Music, Play, MessageSquare } from "lucide-react";
-import { driveImg } from "@/lib/api";
+import { Music, Play, MessageSquare, MoreVertical } from "lucide-react";
+import { driveImg, type PlaylistTrack } from "@/lib/api";
 import { toPlayableTrack } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
+import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 
 export const Route = createFileRoute("/empire-play/musicas")({
   component: EmpirePlayMusicas,
@@ -15,6 +16,18 @@ function EmpirePlayMusicas() {
   const { playSong } = useEmpirePlayer();
   const [musicas, setMusicas] = useState<PlayableTrack[]>([]);
   const [loading, setLoading] = useState(true);
+  const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
+
+  function toPlaylistTrack(m: PlayableTrack): PlaylistTrack {
+    return {
+      album_id: "",
+      faixa_numero: 0,
+      titulo: m.titulo,
+      artistas: m.artista,
+      drive_url: m.drive_url || m.stream_url || m.audio_url || m.url || m.link || "",
+      capa_url: m.capa_url || "",
+    };
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -124,11 +137,21 @@ function EmpirePlayMusicas() {
                 >
                   <Play className="size-4 fill-current" />
                 </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuTrack(toPlaylistTrack(m));
+                  }}
+                  className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition-all"
+                >
+                  <MoreVertical className="size-4" />
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
+      <AddToPlaylistSheet track={menuTrack} onClose={() => setMenuTrack(null)} />
     </div>
   );
 }

@@ -1,4 +1,36 @@
-import { googleSheetsService, normalizeText } from "../services/googleSheetsService";
+import {
+  googleSheetsService,
+  normalizeText,
+  normalizeHeader,
+  normalizeComparison,
+  dedupeHeaders,
+} from "../services/googleSheetsService";
+
+/**
+ * Lê os artistas do jogador direto da aba ARTISTAS da planilha "Usuários"
+ * (fonte de verdade nova — coluna "ID Usuário" = telegram_id). Substitui a
+ * coluna M "Lista de Artistas" da aba Jogadores, que tinha dados
+ * desatualizados/errados (ex: artista de outro jogador aparecendo como
+ * "meu").
+ */
+async function getArtistsFromArtistasSheet(telegramId: string): Promise<string[]> {
+  const rawRows = await googleSheetsService.usuarios.readValues("ARTISTAS").catch(() => []);
+  if (!rawRows || rawRows.length < 2) return [];
+  const headers = dedupeHeaders(
+    "ARTISTAS",
+    rawRows[0].map((h, i) => normalizeHeader(h) || `coluna_${i + 1}`),
+  );
+  const artCol = headers.indexOf("nome");
+  const ownerCol = headers.indexOf("id_usuario");
+  if (artCol === -1 || ownerCol === -1) return [];
+  const normId = normalizeComparison(telegramId);
+  const nomes = rawRows
+    .slice(1)
+    .filter((r) => normalizeComparison(r[ownerCol]) === normId)
+    .map((r) => normalizeText(r[artCol]))
+    .filter(Boolean);
+  return Array.from(new Set(nomes));
+}
 
 export class ApiError extends Error {
   status: number;
@@ -36,6 +68,11 @@ export async function getUserProfile(telegramId: string): Promise<UserProfile> {
   const normalizedTelegramId = normalizeText(telegramId);
 
   if (normalizedTelegramId) {
+    // Fonte de verdade nova (aba ARTISTAS da planilha "Usuários") — se tiver
+    // qualquer artista lá pra esse ID, usa ela, ignorando a coluna "Lista de
+    // Artistas" desatualizada da aba Jogadores.
+    const artistasNovos = await getArtistsFromArtistasSheet(normalizedTelegramId).catch(() => []);
+
     try {
       const rows = await googleSheetsService.principal.readValues("Jogadores", "A:M");
 
@@ -47,7 +84,8 @@ export async function getUserProfile(telegramId: string): Promise<UserProfile> {
         const associatedArtistsCell = normalizeText(row[12]); // Coluna M: Lista de Artistas
 
         if (rowTelegramId && rowTelegramId === normalizedTelegramId) {
-          const extraArtists = parseArtistList(associatedArtistsCell);
+          const extraArtists =
+            artistasNovos.length > 0 ? artistasNovos : parseArtistList(associatedArtistsCell);
           const associatedArtists = Array.from(
             new Set([artistName, ...extraArtists].filter(Boolean)),
           );
@@ -67,6 +105,17 @@ export async function getUserProfile(telegramId: string): Promise<UserProfile> {
       }
     } catch (err) {
       console.warn("[getUserProfile] Erro ao ler Jogadores:", err);
+    }
+
+    if (artistasNovos.length > 0) {
+      return {
+        artistName: artistasNovos[0],
+        telegramId: normalizedTelegramId,
+        playerName: "Jogador",
+        associatedArtists: artistasNovos,
+        sourceSheet: "ARTISTAS",
+        rowNumber: 0,
+      };
     }
   }
 

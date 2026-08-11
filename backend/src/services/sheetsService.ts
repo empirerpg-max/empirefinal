@@ -47,7 +47,7 @@ export async function appendRow(
   sheetName: string,
   values: GoogleSheetRow,
   range = "A:ZZ",
-): Promise<void> {
+): Promise<number | null> {
   return appendRowFor(PRINCIPAL_SPREADSHEET_ID, sheetName, values, range);
 }
 

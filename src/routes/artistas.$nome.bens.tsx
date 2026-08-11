@@ -113,15 +113,8 @@ function EmptyBens({ nome: _nome }: { nome: string }) {
       </div>
       <p className="font-extrabold mb-1">Nenhum bem ainda</p>
       <p className="text-xs text-muted-foreground mb-4">
-        Quando você comprar imóveis, mansões ou itens duráveis no Empire Market, eles aparecem aqui
-        como patrimônio.
+        Quando você comprar imóveis, mansões ou itens duráveis, eles aparecem aqui como patrimônio.
       </p>
-      <Link
-        to="/market"
-        className="inline-block px-4 py-2 rounded-full bg-primary text-primary-foreground text-xs font-extrabold uppercase tracking-wider"
-      >
-        Ir ao Empire Market
-      </Link>
     </div>
   );
 }

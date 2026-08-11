@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X } from "lucide-react";
 import { driveImg } from "@/lib/api";
+import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 import { toPlayableTrack, toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
@@ -15,7 +16,9 @@ export const Route = createFileRoute("/empire-play/")({
 function EmpirePlayInicio() {
   const { currentTrack, currentVideo, playSong, playVideo } = useEmpirePlayer();
 
-  // Estado da Tela Deslizante de Playlist (Estilo Spotify)
+  // Estado da Tela Deslizante de Playlist (Estilo Spotify) — é a ÚNICA forma
+  // de ver a lista completa: a Início mostra só os cards de destaque, a
+  // lista só abre depois do clique (igual Spotify/Apple Music).
   const [activeSlidingPlaylist, setActiveSlidingPlaylist] = useState<
     "spotify" | "apple" | "youtube" | "lancamentos" | null
   >(null);
@@ -31,53 +34,6 @@ function EmpirePlayInicio() {
   const [lancamentos, setLancamentos] = useState<PlayableTrack[]>([]);
   const [musicas, setMusicas] = useState<PlayableTrack[]>([]);
   const [musicVideos, setMusicVideos] = useState<PlayableVideo[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  // Filtros da Playlist Estilo Spotify (Top 100)
-  const [selectedPlaylistCategory, setSelectedPlaylistCategory] = useState<
-    "spotify" | "apple" | "youtube" | "lancamentos"
-  >("spotify");
-  const [homeSearchQuery, setHomeSearchQuery] = useState("");
-
-  const getPlaylistSource = (): PlayableTrack[] => {
-    if (selectedPlaylistCategory === "spotify") {
-      return topPlaylists.spotify && topPlaylists.spotify.length > 0
-        ? topPlaylists.spotify
-        : lancamentos;
-    }
-    if (selectedPlaylistCategory === "apple") {
-      return topPlaylists.apple && topPlaylists.apple.length > 0 ? topPlaylists.apple : lancamentos;
-    }
-    return lancamentos.length > 0 ? lancamentos.slice(0, 30) : musicas;
-  };
-
-  const getFilteredPlaylist = (): PlayableTrack[] => {
-    let list = getPlaylistSource();
-    if (homeSearchQuery.trim()) {
-      const q = homeSearchQuery.toLowerCase().trim();
-      list = list.filter(
-        (item) =>
-          (item.titulo || "").toLowerCase().includes(q) ||
-          (item.artista || "").toLowerCase().includes(q) ||
-          (item.album || "").toLowerCase().includes(q),
-      );
-    }
-    return selectedPlaylistCategory === "lancamentos" ? list.slice(0, 30) : list.slice(0, 100);
-  };
-
-  const getFilteredVideos = (): PlayableVideo[] => {
-    let list =
-      topPlaylists.youtube && topPlaylists.youtube.length > 0 ? topPlaylists.youtube : musicVideos;
-    if (homeSearchQuery.trim()) {
-      const q = homeSearchQuery.toLowerCase().trim();
-      list = list.filter(
-        (item) =>
-          (item.titulo || "").toLowerCase().includes(q) ||
-          (item.artista || "").toLowerCase().includes(q),
-      );
-    }
-    return list.slice(0, 100);
-  };
 
   // Helper para buscar itens da Tela Deslizante
   const getSlidingPlaylistItems = (): any[] => {
@@ -110,7 +66,6 @@ function EmpirePlayInicio() {
   // Busca dados de Início (Top Playlists + Lançamentos) via /api/empire-play/home
   useEffect(() => {
     async function loadInicioData() {
-      setLoading(true);
       try {
         const resHome = await fetch("/api/empire-play/home")
           .then((r) => r.json())
@@ -141,8 +96,6 @@ function EmpirePlayInicio() {
         }
       } catch (err) {
         console.warn("[EmpirePlayInicio] Erro ao carregar início:", err);
-      } finally {
-        setLoading(false);
       }
     }
     loadInicioData();
@@ -178,14 +131,9 @@ function EmpirePlayInicio() {
         <div
           onClick={() => {
             haptic.selection();
-            setSelectedPlaylistCategory("spotify");
             setActiveSlidingPlaylist("spotify");
           }}
-          className={`relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group ${
-            selectedPlaylistCategory === "spotify"
-              ? "bg-emerald-950/60 border-emerald-400 shadow-xl shadow-emerald-500/20 scale-[1.02]"
-              : "bg-white/5 border-white/10 hover:border-emerald-500/40 hover:bg-white/10"
-          }`}
+          className="relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group bg-white/5 border-white/10 hover:border-emerald-500/40 hover:bg-white/10 active:scale-[0.98]"
         >
           <div className="absolute top-0 right-0 -mr-6 -mt-6 size-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
           <div className="flex items-center justify-between mb-3">
@@ -208,14 +156,9 @@ function EmpirePlayInicio() {
         <div
           onClick={() => {
             haptic.selection();
-            setSelectedPlaylistCategory("apple");
             setActiveSlidingPlaylist("apple");
           }}
-          className={`relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group ${
-            selectedPlaylistCategory === "apple"
-              ? "bg-rose-950/60 border-rose-400 shadow-xl shadow-rose-500/20 scale-[1.02]"
-              : "bg-white/5 border-white/10 hover:border-rose-500/40 hover:bg-white/10"
-          }`}
+          className="relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group bg-white/5 border-white/10 hover:border-rose-500/40 hover:bg-white/10 active:scale-[0.98]"
         >
           <div className="absolute top-0 right-0 -mr-6 -mt-6 size-24 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-all" />
           <div className="flex items-center justify-between mb-3">
@@ -238,14 +181,9 @@ function EmpirePlayInicio() {
         <div
           onClick={() => {
             haptic.selection();
-            setSelectedPlaylistCategory("youtube");
             setActiveSlidingPlaylist("youtube");
           }}
-          className={`relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group ${
-            selectedPlaylistCategory === "youtube"
-              ? "bg-red-950/60 border-red-500 shadow-xl shadow-red-600/20 scale-[1.02]"
-              : "bg-white/5 border-white/10 hover:border-red-600/40 hover:bg-white/10"
-          }`}
+          className="relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group bg-white/5 border-white/10 hover:border-red-600/40 hover:bg-white/10 active:scale-[0.98]"
         >
           <div className="absolute top-0 right-0 -mr-6 -mt-6 size-24 bg-red-600/10 rounded-full blur-2xl group-hover:bg-red-600/20 transition-all" />
           <div className="flex items-center justify-between mb-3">
@@ -268,14 +206,9 @@ function EmpirePlayInicio() {
         <div
           onClick={() => {
             haptic.selection();
-            setSelectedPlaylistCategory("lancamentos");
             setActiveSlidingPlaylist("lancamentos");
           }}
-          className={`relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group ${
-            selectedPlaylistCategory === "lancamentos"
-              ? "bg-purple-950/60 border-purple-400 shadow-xl shadow-purple-500/20 scale-[1.02]"
-              : "bg-white/5 border-white/10 hover:border-purple-500/40 hover:bg-white/10"
-          }`}
+          className="relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group bg-white/5 border-white/10 hover:border-purple-500/40 hover:bg-white/10 active:scale-[0.98]"
         >
           <div className="absolute top-0 right-0 -mr-6 -mt-6 size-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all" />
           <div className="flex items-center justify-between mb-3">
@@ -294,200 +227,6 @@ function EmpirePlayInicio() {
           </p>
         </div>
       </div>
-
-      {/* Bar de Ações & Busca */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-neutral-900/60 p-3.5 rounded-2xl border border-white/10">
-        {selectedPlaylistCategory !== "youtube" ? (
-          <button
-            onClick={() => {
-              const items = getFilteredPlaylist();
-              if (items.length > 0) playSong(items[0], items);
-            }}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 shrink-0"
-          >
-            <Play className="size-4 fill-black" /> Tocar Tudo
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 text-xs font-bold text-red-400 uppercase tracking-wider px-2">
-            <Film className="size-4" /> Clipe de Vídeos em Alta
-          </div>
-        )}
-
-        <div className="relative flex-1 sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-neutral-500" />
-          <input
-            type="text"
-            placeholder="Filtrar por nome ou artista..."
-            value={homeSearchQuery}
-            onChange={(e) => setHomeSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-neutral-950 border border-white/10 rounded-xl text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition-all"
-          />
-        </div>
-      </div>
-
-      {/* VISUALIZAÇÃO SE FOR SELECIONADO TOP YOUTUBE */}
-      {selectedPlaylistCategory === "youtube" ? (
-        loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-48 bg-neutral-900/60 rounded-2xl animate-pulse border border-white/5"
-              />
-            ))}
-          </div>
-        ) : getFilteredVideos().length === 0 ? (
-          <div className="text-center py-16 bg-neutral-900/30 rounded-3xl border border-white/5">
-            <Film className="size-10 text-neutral-600 mx-auto mb-3" />
-            <p className="text-xs font-bold text-neutral-400">
-              Nenhum vídeo do YouTube encontrado nesta categoria.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {getFilteredVideos().map((v, idx) => (
-              <div
-                key={v.id || idx}
-                onClick={() => playVideo(v)}
-                className="flex flex-col bg-neutral-900/60 border border-white/10 hover:border-red-500/40 rounded-2xl p-3 cursor-pointer transition-all group hover:scale-[1.01]"
-              >
-                <div className="relative aspect-video rounded-xl overflow-hidden bg-neutral-950 mb-3">
-                  {v.capa_url || v.poster_url ? (
-                    <img
-                      src={driveImg(v.capa_url || v.poster_url, 400)}
-                      alt={v.titulo}
-                      className="size-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                  ) : (
-                    <div className="size-full grid place-items-center bg-neutral-800 text-neutral-600">
-                      <Film className="size-10" />
-                    </div>
-                  )}
-                  <span className="absolute top-2 left-2 bg-black/80 text-red-400 font-mono font-black text-xs px-2 py-0.5 rounded-md border border-white/10">
-                    #{idx + 1}
-                  </span>
-                  <div className="absolute inset-0 bg-black/40 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="size-12 rounded-full bg-red-600 grid place-items-center shadow-lg">
-                      <Play className="size-6 text-white fill-white ml-0.5" />
-                    </div>
-                  </div>
-                </div>
-                <h4 className="font-bold text-xs sm:text-sm text-white break-words leading-snug group-hover:text-red-400">
-                  {v.titulo}
-                </h4>
-                <p className="text-[11px] sm:text-xs text-neutral-400 mt-1 break-words">
-                  {v.artista}
-                </p>
-              </div>
-            ))}
-          </div>
-        )
-      ) : /* VISUALIZAÇÃO SE FOR MÚSICAS (SPOTIFY / APPLE / LANÇAMENTOS) */
-      loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-16 bg-neutral-900/60 rounded-2xl animate-pulse border border-white/5"
-            />
-          ))}
-        </div>
-      ) : getFilteredPlaylist().length === 0 ? (
-        <div className="text-center py-16 bg-neutral-900/30 rounded-3xl border border-white/5">
-          <Music className="size-10 text-neutral-600 mx-auto mb-3" />
-          <p className="text-xs font-bold text-neutral-400">
-            Nenhuma música encontrada nesta categoria.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {/* Header da Tabela */}
-          <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[10px] font-mono font-bold text-neutral-500 uppercase border-b border-white/5">
-            <div className="col-span-1 text-center">#</div>
-            <div className="col-span-8 sm:col-span-7">Música / Artista</div>
-            <div className="hidden sm:block sm:col-span-3">Álbum</div>
-            <div className="col-span-3 sm:col-span-1 text-right">Tocar</div>
-          </div>
-
-          {/* Faixas da Playlist (Exibe até 100 itens sem cortar título) */}
-          {getFilteredPlaylist().map((track, idx) => {
-            const isPlayingThis = currentTrack?.id === track.id;
-            return (
-              <div
-                key={track.id || idx}
-                onClick={() => playSong(track, getFilteredPlaylist())}
-                className={`grid grid-cols-12 gap-2 items-center px-3 sm:px-4 py-3 rounded-2xl transition-all cursor-pointer border ${
-                  isPlayingThis
-                    ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
-                    : "bg-neutral-900/50 hover:bg-neutral-800/80 border-white/5 hover:border-white/20 text-white"
-                }`}
-              >
-                {/* Rank Number */}
-                <div className="col-span-1 text-center font-mono font-black text-xs text-neutral-400">
-                  {isPlayingThis ? (
-                    <span className="size-2 rounded-full bg-emerald-500 inline-block animate-ping" />
-                  ) : (
-                    idx + 1
-                  )}
-                </div>
-
-                {/* Artwork + Full Song Title (Sem '...' e sem ID do criador) + Artist */}
-                <div className="col-span-8 sm:col-span-7 flex items-center gap-3 min-w-0">
-                  <div className="size-12 rounded-xl bg-neutral-950 border border-white/10 overflow-hidden shrink-0 relative group">
-                    {track.capa_url ? (
-                      <img
-                        src={driveImg(track.capa_url, 200)}
-                        alt={track.titulo}
-                        className="size-full object-cover"
-                      />
-                    ) : (
-                      <div className="size-full grid place-items-center text-neutral-600">
-                        <Music className="size-5" />
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-black/40 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Play className="size-4 text-emerald-400 fill-emerald-400" />
-                    </div>
-                  </div>
-
-                  <div className="min-w-0 flex-1 pr-2">
-                    <h4 className="font-extrabold text-xs sm:text-sm text-white leading-snug break-words">
-                      {track.titulo}
-                    </h4>
-                    {/* Exibe artista apenas se NÃO for Top 100 (Spotify ou Apple) */}
-                    {selectedPlaylistCategory !== "spotify" &&
-                      selectedPlaylistCategory !== "apple" && (
-                        <p className="text-[11px] sm:text-xs text-neutral-400 leading-normal break-words mt-0.5">
-                          {track.artista}
-                        </p>
-                      )}
-                  </div>
-                </div>
-
-                {/* Album / Single (Oculto se for Top 100) */}
-                <div className="hidden sm:block sm:col-span-3 text-xs text-neutral-400 font-mono break-words">
-                  {selectedPlaylistCategory !== "spotify" && selectedPlaylistCategory !== "apple"
-                    ? track.album || "Single"
-                    : ""}
-                </div>
-
-                {/* Action */}
-                <div className="col-span-3 sm:col-span-1 flex items-center justify-end">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      playSong(track, getFilteredPlaylist());
-                    }}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-emerald-500 hover:text-black text-white transition-all"
-                  >
-                    <Play className="size-4 fill-current" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {/* TELA DESLIZANTE DE PLAYLIST (ESTILO SPOTIFY) */}
       {activeSlidingPlaylist && (
@@ -613,11 +352,16 @@ function EmpirePlayInicio() {
                         )}
                       </div>
 
-                      {/* APENAS O TÍTULO (NENHUMA INFORMAÇÃO EXTRA) */}
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-extrabold text-sm text-white break-words leading-tight">
+                      {/* Título + selo de nota/likes quando o item tem avaliação real */}
+                      <div className="flex-1 min-w-0 flex items-center gap-2.5">
+                        <h4 className="font-extrabold text-sm text-white break-words leading-tight flex-1 min-w-0">
                           {item.titulo}
                         </h4>
+                        <ScoreBadge
+                          score={item.metacriticAvg}
+                          variant={activeSlidingPlaylist === "youtube" ? "likes" : "metacritic"}
+                          className="shrink-0 !text-[10px] !px-2 !py-1"
+                        />
                       </div>
 
                       {/* Botão de Ação */}

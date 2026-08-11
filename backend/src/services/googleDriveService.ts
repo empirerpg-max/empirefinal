@@ -2,12 +2,21 @@ import { getDriveOAuthAccessToken } from "../google/service-account";
 
 export const DRIVE_FOLDERS = {
   musicas: "1hd_ZJwbVsESwtGniorw0bxQmkhsKcslT",
+  // Pasta própria só pro ARQUIVO DE ÁUDIO da música (a capa continua indo
+  // pra "musicas" acima) — antes os dois caíam na mesma pasta.
+  musicasAudio: "11ZX-zJZbalG7GWjXPfAhksg1k-NrJ4e6",
   albuns: "1Teo9x2yBAJSmdUV23e6cO6EkyCdddZBS",
   musicVideos: "1Jk9Jk-Zd6QAoZnW3nAqFhBiJCNAnw3wR",
   // Nenhuma pasta dedicada foi definida ainda para "Videos" (não Music
   // Video) — reaproveita a pasta de Music Videos até que uma pasta própria
   // seja criada e informada.
   videos: "1Jk9Jk-Zd6QAoZnW3nAqFhBiJCNAnw3wR",
+  socialPosts: "1F4SzmnJI6j0ircv2pefXsECJzrR1l5ip",
+  socialStories: "18PZtlg0NwSsc9wCGkUa-F-qgsyxx5DTc",
+  socialAvatars: "1uuemSEv0mtvtFZtxJdFNjedb55tUUpDm",
+  socialNews: "1ERLIAEZM_KiJBhtUOuVNyXEmsGb0pxcZ",
+  playerAvatars: "14yMzU_4i2ZbySfSVP0Ug9tyxu99dgJI5",
+  playlistTracks: "1l7sRj7-ibDpXLQ9lc7147PLwF5qjAdZY",
 } as const;
 
 export async function deleteFileFromDrive(fileUrl: string): Promise<boolean> {
@@ -94,11 +103,12 @@ export async function uploadFileToDrive(
       console.warn("[uploadFileToDrive] Permissão de visualização:", permErr);
     }
 
-    return (
-      `https://lh3.google.com/u/0/d/${json.id}` ||
-      json.webViewLink ||
-      `https://drive.google.com/file/d/${json.id}/view`
-    );
+    // Link oficial do Drive — antes isso caía sempre num `lh3.google.com/
+    // u/0/d/...` fixo, porque o `||` depois de uma template string nunca
+    // executa (string não vazia é sempre truthy). "lh3.google.com" é o
+    // domínio de thumbnail de imagem do Google, não um link de arquivo de
+    // verdade — não funciona pra áudio/vídeo.
+    return `https://drive.google.com/file/d/${json.id}/view?usp=drivesdk`;
   } catch (err) {
     console.error("[uploadFileToDrive] Fallback por erro de upload:", err);
     return `https://drive.google.com/drive/folders/${folderId}`;
