@@ -3,7 +3,12 @@ import { googleSheetsService, normalizeText } from "../services/googleSheetsServ
 // Playlists vivem na planilha "usuarios" (a mesma de Usuários/Social), na
 // aba "Playlists" — layout confirmado ao vivo:
 //
-// Playlists: A id | B titulo | C descricao | D capa_url | E owner | F telegram_id | G data | H tracks_json
+// Playlists: A id | B titulo | C descricao | D capa_url | E owner | F telegram_id | G tracks_json | H data
+//
+// Atenção: o cabeçalho da linha 1 da planilha tem "data" e "tracks_json"
+// escritos na ordem trocada (G diz "data", H diz "tracks_json"), mas os
+// dados reais em toda a aba estão na ordem acima (JSON na G, data na H) —
+// por isso indexamos por posição real, não pelo texto do cabeçalho.
 //
 // As faixas ficam embutidas na própria linha como um array JSON (tracks_json),
 // não em aba separada. "Playlists_Faixas" e "Playlists_Albuns" — apesar do
@@ -68,8 +73,8 @@ function rowToPlaylist(row: string[]): PlaylistRecord {
     capa_url: normalizeText(row[3]) || undefined,
     owner: normalizeText(row[4]),
     telegram_id: normalizeText(row[5]) || undefined,
-    data: normalizeText(row[6]) || undefined,
-    tracks: parseTracks(row[7]),
+    tracks: parseTracks(row[6]),
+    data: normalizeText(row[7]) || undefined,
   };
 }
 
@@ -131,7 +136,7 @@ export async function savePlaylistController(request: Request): Promise<Response
 
   if (isEdit) {
     await googleSheetsService.usuarios.updateValues(SHEET, `B${rowIndex + 1}:H${rowIndex + 1}`, [
-      [payload.titulo, payload.descricao || "", payload.capa_url || "", payload.owner || "", tgId, data, tracksJson],
+      [payload.titulo, payload.descricao || "", payload.capa_url || "", payload.owner || "", tgId, tracksJson, data],
     ]);
   } else {
     await googleSheetsService.usuarios.appendRow(SHEET, [
@@ -141,8 +146,8 @@ export async function savePlaylistController(request: Request): Promise<Response
       payload.capa_url || "",
       payload.owner || "",
       tgId,
-      data,
       tracksJson,
+      data,
     ]);
   }
 
