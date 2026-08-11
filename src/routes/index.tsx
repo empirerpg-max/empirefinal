@@ -23,6 +23,14 @@ export const Route = createFileRoute("/")({
 
 type LoadState<T> = { status: "loading" } | { status: "error"; error: string } | { status: "ok"; data: T };
 
+interface LancamentoRecente {
+  id: string;
+  titulo: string;
+  artista: string;
+  coverUrl: string | null;
+  dataIso: string;
+}
+
 const PLATFORM_META: Record<string, { label: string; icon: typeof Music2; color: string }> = {
   spotify: { label: "Spotify", icon: Music2, color: "text-[#1DB954]" },
   apple_music: { label: "Apple Music", icon: Music, color: "text-[#FC3C44]" },
@@ -34,6 +42,9 @@ const PLATFORM_META: Record<string, { label: string; icon: typeof Music2; color:
 function Index() {
   const [myArtists, setMyArtists] = useState<LoadState<Artist[]>>({ status: "loading" });
   const [topCharts, setTopCharts] = useState<Record<string, ChartData>>({});
+  const [lancamentosRecentes, setLancamentosRecentes] = useState<LoadState<LancamentoRecente[]>>({
+    status: "loading",
+  });
   const [syncing, setSyncing] = useState(false);
   const { user, ready } = useTelegramUser();
   const config = useHomeConfig();
@@ -56,6 +67,19 @@ function Index() {
     }
 
     tasks.push(api.topCharts().then(setTopCharts).catch(() => {}));
+
+    tasks.push(
+      fetch("/api/empire-play/lancamentos-recentes")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json) => {
+          if (json?.success && Array.isArray(json.data)) {
+            setLancamentosRecentes({ status: "ok", data: json.data });
+          } else {
+            setLancamentosRecentes({ status: "error", error: "Falha ao carregar" });
+          }
+        })
+        .catch((e) => setLancamentosRecentes({ status: "error", error: String(e?.message || e) })),
+    );
 
     await Promise.allSettled(tasks);
     if (!silent) setSyncing(false);
@@ -324,6 +348,63 @@ function Index() {
           </div>
         </div>
       </header>
+
+      <section className="mb-10" aria-labelledby="lancamentos-recentes-h">
+        <h2
+          id="lancamentos-recentes-h"
+          className="text-xs font-black uppercase tracking-[0.2em] mb-4"
+        >
+          Lançamentos Recentes
+        </h2>
+
+        {lancamentosRecentes.status === "loading" ? (
+          <div className="flex gap-3 overflow-x-hidden">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="min-w-[140px] h-[10.5rem] rounded-[1.5rem] bg-white/5 animate-pulse" />
+            ))}
+          </div>
+        ) : lancamentosRecentes.status === "ok" && lancamentosRecentes.data.length > 0 ? (
+          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 snap-x">
+            {lancamentosRecentes.data.map((l) => (
+              <Link
+                key={l.id}
+                to="/empire-play/forum"
+                search={{ tab: "musicas", id: l.id }}
+                onClick={() => haptic.selection()}
+                className="min-w-[140px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all"
+              >
+                <div className="aspect-square bg-secondary overflow-hidden">
+                  {l.coverUrl ? (
+                    <img
+                      src={driveImg(l.coverUrl, 300)}
+                      className="w-full h-full object-cover"
+                      alt={l.titulo}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <div className="w-full h-full grid place-items-center opacity-20">
+                      <Music className="size-8" aria-hidden="true" />
+                    </div>
+                  )}
+                </div>
+                <div className="p-2.5">
+                  <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">
+                    {l.titulo}
+                  </h3>
+                  <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">
+                    {l.artista}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground/60 font-medium">
+            Nenhum lançamento recente encontrado nos charts.
+          </p>
+        )}
+      </section>
 
       {config.order.map((key) =>
         isEnabled(key) && sections[key] ? <div key={key}>{sections[key]()}</div> : null
