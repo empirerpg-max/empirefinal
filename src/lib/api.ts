@@ -927,6 +927,7 @@ export interface PlaylistTrack {
   drive_url: string;
   capa_url?: string;
   duracao?: string;
+  letra?: string;
 }
 
 export interface PlaylistPayload {

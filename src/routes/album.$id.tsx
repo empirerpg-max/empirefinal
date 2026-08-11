@@ -201,6 +201,7 @@ function AlbumPage() {
                       artistas: f.artistas,
                       drive_url: f.drive_url,
                       capa_url: album.capa_url || "",
+                      letra: f.letra || "",
                     })
                   }
                   className="text-muted-foreground hover:text-foreground justify-self-end"

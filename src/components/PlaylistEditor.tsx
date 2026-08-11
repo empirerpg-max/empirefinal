@@ -88,7 +88,8 @@ export function PlaylistEditor({ existing }: { existing?: PlaylistPayload }) {
       titulo: t.titulo,
       artistas: t.artistas,
       drive_url: t.drive_url,
-      capa_url: t.capa_url || ""
+      capa_url: t.capa_url || "",
+      letra: t.letra || "",
     }]);
   }
   function addManual(track: { titulo: string; artistas: string; drive_url: string; capa_url?: string }) {

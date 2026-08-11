@@ -1,6 +1,16 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { ChevronLeft, Disc3, Trash2, Upload, Link2, Loader2, Plus, ImageIcon } from "lucide-react";
+import {
+  ChevronLeft,
+  Disc3,
+  Trash2,
+  Upload,
+  Loader2,
+  ImageIcon,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { api, driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { notify } from "@/lib/notify";
@@ -14,7 +24,12 @@ type FaixaAntiga = {
   artistas: string;
   duracao: string;
   drive_url: string;
+  letra: string;
 };
+
+function faixaVazia(artistaPadrao: string): FaixaAntiga {
+  return { titulo: "", artistas: artistaPadrao, duracao: "", drive_url: "", letra: "" };
+}
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -71,38 +86,34 @@ function AlbumAntigoPage() {
   const [uploadingCapa, setUploadingCapa] = useState(false);
 
   const [faixas, setFaixas] = useState<FaixaAntiga[]>([]);
-  const [trackTab, setTrackTab] = useState<"upload" | "link">("upload");
-  const [trackTitulo, setTrackTitulo] = useState("");
-  const [trackArtistas, setTrackArtistas] = useState("");
-  const [trackLink, setTrackLink] = useState("");
-  const [uploadingTrack, setUploadingTrack] = useState(false);
+  const [qtdFaixas, setQtdFaixas] = useState("");
+  const [uploadingTrack, setUploadingTrack] = useState<number | null>(null);
+  const [letraAberta, setLetraAberta] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  function addFaixa(drive_url: string) {
-    setFaixas((prev) => [
-      ...prev,
-      { titulo: trackTitulo.trim(), artistas: trackArtistas.trim() || artista.trim(), duracao: "", drive_url },
-    ]);
-    setTrackTitulo("");
-    setTrackArtistas("");
-    setTrackLink("");
+  function aplicarQuantidade() {
+    const n = Math.max(0, Math.min(200, parseInt(qtdFaixas, 10) || 0));
+    if (n === 0) return;
+    haptic.selection();
+    setFaixas((prev) => {
+      if (n === prev.length) return prev;
+      if (n < prev.length) return prev.slice(0, n);
+      return [...prev, ...Array.from({ length: n - prev.length }, () => faixaVazia(artista.trim()))];
+    });
   }
 
-  async function handleTrackFileUpload(file: File) {
-    if (!trackTitulo.trim()) return;
-    setUploadingTrack(true);
-    const url = await uploadToDrive(file, "playlistTracks");
-    setUploadingTrack(false);
-    if (url) addFaixa(url);
+  function updateFaixa(i: number, patch: Partial<FaixaAntiga>) {
+    setFaixas((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
   }
 
-  function handleAddLinkTrack() {
-    if (!trackTitulo.trim() || !trackLink.trim()) return;
-    addFaixa(trackLink.trim());
+  function addFaixaVazia() {
+    haptic.selection();
+    setFaixas((prev) => [...prev, faixaVazia(artista.trim())]);
   }
 
   function removeFaixa(i: number) {
     setFaixas((prev) => prev.filter((_, idx) => idx !== i));
+    setLetraAberta((cur) => (cur === i ? null : cur));
   }
 
   function moveFaixa(i: number, dir: -1 | 1) {
@@ -115,6 +126,13 @@ function AlbumAntigoPage() {
     });
   }
 
+  async function handleTrackFileUpload(i: number, file: File) {
+    setUploadingTrack(i);
+    const url = await uploadToDrive(file, "playlistTracks");
+    setUploadingTrack(null);
+    if (url) updateFaixa(i, { drive_url: url });
+  }
+
   async function handleCapaUpload(file: File) {
     setUploadingCapa(true);
     const url = await uploadToDrive(file, "album");
@@ -123,7 +141,8 @@ function AlbumAntigoPage() {
   }
 
   async function salvar() {
-    if (!artista.trim() || !titulo.trim() || faixas.length === 0 || submitting) return;
+    const faixasValidas = faixas.filter((f) => f.titulo.trim() && f.drive_url.trim());
+    if (!artista.trim() || !titulo.trim() || faixasValidas.length === 0 || submitting) return;
     setSubmitting(true);
     const res = await api.criarAlbumAntigo({
       artista: artista.trim(),
@@ -133,12 +152,13 @@ function AlbumAntigoPage() {
       descricao: descricao.trim(),
       capa_url: capaUrl,
       telegram_id: tgId,
-      faixas: faixas.map((f, i) => ({
+      faixas: faixasValidas.map((f, i) => ({
         numero: i + 1,
-        titulo: f.titulo,
-        artistas: f.artistas,
-        duracao: f.duracao,
-        drive_url: f.drive_url,
+        titulo: f.titulo.trim(),
+        artistas: f.artistas.trim() || artista.trim(),
+        duracao: f.duracao.trim(),
+        drive_url: f.drive_url.trim(),
+        letra: f.letra.trim() || undefined,
       })),
     });
     setSubmitting(false);
@@ -148,6 +168,7 @@ function AlbumAntigoPage() {
 
   const inputCls =
     "w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-neutral-500 outline-none focus:border-emerald-500/50";
+  const faixasProntas = faixas.filter((f) => f.titulo.trim() && f.drive_url.trim()).length;
 
   return (
     <div className="pb-24 max-w-lg mx-auto">
@@ -206,103 +227,120 @@ function AlbumAntigoPage() {
 
       <section className="mb-6">
         <h2 className="text-xs uppercase tracking-widest font-black text-neutral-500 mb-2">
-          Faixas ({faixas.length})
+          Faixas ({faixasProntas}/{faixas.length})
         </h2>
+
+        <div className="flex gap-2 mb-3">
+          <input
+            type="number"
+            min={1}
+            max={200}
+            value={qtdFaixas}
+            onChange={(e) => setQtdFaixas(e.target.value)}
+            placeholder="Quantidade de faixas do álbum"
+            className={inputCls}
+          />
+          <button
+            type="button"
+            onClick={aplicarQuantidade}
+            className="px-4 rounded-xl bg-emerald-500/15 text-emerald-400 text-xs font-black uppercase shrink-0"
+          >
+            Gerar
+          </button>
+        </div>
+
         {faixas.length > 0 && (
-          <ul className="space-y-1 mb-3">
+          <ul className="space-y-2 mb-3">
             {faixas.map((f, i) => (
-              <li key={i} className="flex items-center gap-2 p-2 rounded-lg bg-neutral-900 border border-white/5">
-                <span className="text-xs text-neutral-500 w-5 text-center shrink-0">{i + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-white truncate">{f.titulo}</p>
-                  <p className="text-[10px] text-neutral-500 truncate">{f.artistas}</p>
+              <li key={i} className="rounded-2xl bg-neutral-900 border border-white/5 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-neutral-500 w-5 text-center shrink-0">{i + 1}</span>
+                  <input
+                    value={f.titulo}
+                    onChange={(e) => updateFaixa(i, { titulo: e.target.value })}
+                    placeholder="Título da faixa"
+                    className={inputCls}
+                  />
+                  <button type="button" onClick={() => moveFaixa(i, -1)} className="text-neutral-500 text-xs px-1 shrink-0">
+                    ▲
+                  </button>
+                  <button type="button" onClick={() => moveFaixa(i, 1)} className="text-neutral-500 text-xs px-1 shrink-0">
+                    ▼
+                  </button>
+                  <button type="button" onClick={() => removeFaixa(i)} className="text-red-400 px-1 shrink-0">
+                    <Trash2 className="size-3.5" />
+                  </button>
                 </div>
-                <button type="button" onClick={() => moveFaixa(i, -1)} className="text-neutral-500 text-xs px-1">
-                  ▲
-                </button>
-                <button type="button" onClick={() => moveFaixa(i, 1)} className="text-neutral-500 text-xs px-1">
-                  ▼
-                </button>
-                <button type="button" onClick={() => removeFaixa(i)} className="text-red-400 px-1">
-                  <Trash2 className="size-3.5" />
-                </button>
+
+                <div className="pl-7 space-y-2">
+                  <input
+                    value={f.artistas}
+                    onChange={(e) => updateFaixa(i, { artistas: e.target.value })}
+                    placeholder={`Artista (padrão: ${artista || "o mesmo do álbum"})`}
+                    className={inputCls}
+                  />
+
+                  <div className="flex gap-2">
+                    <input
+                      value={f.drive_url}
+                      onChange={(e) => updateFaixa(i, { drive_url: e.target.value })}
+                      placeholder="Link do YouTube ou Google Drive"
+                      className={inputCls}
+                    />
+                    <label
+                      className={`px-3 rounded-xl border border-dashed border-white/15 text-neutral-400 flex items-center justify-center cursor-pointer shrink-0 ${uploadingTrack === i ? "opacity-60 pointer-events-none" : "hover:border-white/30"}`}
+                      title="Enviar arquivo de áudio"
+                    >
+                      {uploadingTrack === i ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Upload className="size-4" />
+                      )}
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        disabled={uploadingTrack === i}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleTrackFileUpload(i, file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setLetraAberta((cur) => (cur === i ? null : i))}
+                    className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-neutral-400 hover:text-white"
+                  >
+                    <FileText className="size-3.5" />
+                    Letra {f.letra.trim() ? "(preenchida)" : "(opcional)"}
+                    {letraAberta === i ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                  </button>
+                  {letraAberta === i && (
+                    <textarea
+                      value={f.letra}
+                      onChange={(e) => updateFaixa(i, { letra: e.target.value })}
+                      placeholder="Cole a letra da faixa aqui, pra dar pra acompanhar tocando."
+                      rows={5}
+                      className={inputCls + " resize-none font-mono text-xs"}
+                    />
+                  )}
+                </div>
               </li>
             ))}
           </ul>
         )}
 
-        <div className="grid grid-cols-2 gap-1.5 p-1 bg-neutral-900 border border-white/10 rounded-xl mb-3">
-          <button
-            type="button"
-            onClick={() => setTrackTab("upload")}
-            className={`py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center justify-center gap-1 ${trackTab === "upload" ? "bg-emerald-500 text-black" : "text-neutral-400"}`}
-          >
-            <Upload className="size-3.5" /> Upload
-          </button>
-          <button
-            type="button"
-            onClick={() => setTrackTab("link")}
-            className={`py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center justify-center gap-1 ${trackTab === "link" ? "bg-emerald-500 text-black" : "text-neutral-400"}`}
-          >
-            <Link2 className="size-3.5" /> Link
-          </button>
-        </div>
-
-        <div className="space-y-2 bg-neutral-900/50 rounded-2xl border border-dashed border-white/10 p-4">
-          <input
-            value={trackTitulo}
-            onChange={(e) => setTrackTitulo(e.target.value)}
-            placeholder="Título da faixa"
-            className={inputCls}
-          />
-          <input
-            value={trackArtistas}
-            onChange={(e) => setTrackArtistas(e.target.value)}
-            placeholder={`Artista (padrão: ${artista || "o mesmo do álbum"})`}
-            className={inputCls}
-          />
-
-          {trackTab === "upload" ? (
-            <label
-              className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wide cursor-pointer transition-colors ${
-                !trackTitulo.trim() || uploadingTrack
-                  ? "bg-white/5 text-neutral-500 cursor-not-allowed"
-                  : "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
-              }`}
-            >
-              {uploadingTrack ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-              {uploadingTrack ? "Enviando…" : "Escolher arquivo de áudio"}
-              <input
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                disabled={!trackTitulo.trim() || uploadingTrack}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleTrackFileUpload(file);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          ) : (
-            <>
-              <input
-                value={trackLink}
-                onChange={(e) => setTrackLink(e.target.value)}
-                placeholder="Link do YouTube ou Google Drive"
-                className={inputCls}
-              />
-              <button
-                type="button"
-                onClick={handleAddLinkTrack}
-                disabled={!trackTitulo.trim() || !trackLink.trim()}
-                className="w-full py-3 rounded-xl bg-emerald-500/15 text-emerald-400 text-xs font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
-              >
-                <Plus className="size-4" /> Adicionar faixa
-              </button>
-            </>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={addFaixaVazia}
+          className="w-full py-2.5 rounded-xl border border-dashed border-white/15 text-xs font-bold uppercase text-neutral-400 hover:border-white/30 hover:text-white transition-colors"
+        >
+          + Adicionar faixa
+        </button>
       </section>
 
       <button
@@ -310,7 +348,7 @@ function AlbumAntigoPage() {
           haptic.selection();
           salvar();
         }}
-        disabled={submitting || !artista.trim() || !titulo.trim() || faixas.length === 0}
+        disabled={submitting || !artista.trim() || !titulo.trim() || faixasProntas === 0}
         className="w-full py-3.5 rounded-full bg-emerald-500 text-black font-black uppercase tracking-wider text-sm disabled:opacity-40 inline-flex items-center justify-center gap-2"
       >
         {submitting && <Loader2 className="size-4 animate-spin" />}

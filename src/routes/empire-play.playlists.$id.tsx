@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Play, ListMusic, Edit, Trash2 } from "lucide-react";
+import { ChevronLeft, Play, ListMusic, Edit, Trash2, FileText, X } from "lucide-react";
 import { api, driveImg, type PlaylistPayload, type PlaylistTrack } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
 import { notify } from "@/lib/notify";
@@ -25,6 +25,7 @@ function PlaylistView() {
   const navigate = useNavigate();
   const { playSong, currentTrack } = useEmpirePlayer();
   const [pl, setPl] = useState<PlaylistPayload | null | undefined>(undefined);
+  const [showLyrics, setShowLyrics] = useState<number | null>(null);
 
   useEffect(() => {
     api.getPlaylist(id).then(setPl);
@@ -116,7 +117,7 @@ function PlaylistView() {
             <li
               key={i}
               onClick={() => playSong(toPlayableTrack(t), pl.tracks.map(toPlayableTrack))}
-              className={`grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 px-2 py-2 rounded-xl cursor-pointer ${active ? "bg-emerald-500/10" : "hover:bg-white/5"}`}
+              className={`grid grid-cols-[2.5rem_1fr_auto_auto] items-center gap-3 px-2 py-2 rounded-xl cursor-pointer ${active ? "bg-emerald-500/10" : "hover:bg-white/5"}`}
             >
               <div className="size-10 grid place-items-center">
                 {t.capa_url ? (
@@ -138,6 +139,18 @@ function PlaylistView() {
                 </p>
                 <p className="text-xs text-neutral-500 truncate">{t.artistas}</p>
               </div>
+              {t.letra && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowLyrics(i);
+                  }}
+                  className="text-neutral-500 hover:text-white"
+                  title="Ver letra"
+                >
+                  <FileText className="size-4" />
+                </button>
+              )}
               <div className={active ? "text-emerald-500" : "text-neutral-400"}>
                 <Play className="size-4" fill="currentColor" />
               </div>
@@ -145,6 +158,32 @@ function PlaylistView() {
           );
         })}
       </ul>
+
+      {showLyrics !== null && pl.tracks[showLyrics] && (
+        <div
+          onClick={() => setShowLyrics(null)}
+          className="fixed inset-0 z-50 bg-black/90 grid place-items-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-neutral-900 border border-white/10 rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6"
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="text-[10px] uppercase font-black tracking-widest text-emerald-500">Letra</p>
+                <h3 className="text-lg font-black text-white">{pl.tracks[showLyrics].titulo}</h3>
+                <p className="text-xs text-neutral-500">{pl.tracks[showLyrics].artistas}</p>
+              </div>
+              <button onClick={() => setShowLyrics(null)} className="text-neutral-400 shrink-0">
+                <X className="size-5" />
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap text-sm font-sans text-neutral-200">
+              {pl.tracks[showLyrics].letra}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
