@@ -583,8 +583,9 @@ export const api = {
     return res.json();
   },
   async listarFaixasCatalogo(): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listar_faixas_catalogo" }, { cache: true });
-    return Array.isArray(r) ? r : [];
+    const res = await fetch("/api/playlists/catalogo");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
   async excluirPlaylist(id: string, telegramId?: string): Promise<CommonResponse> {
     const res = await fetch("/api/playlists/excluir", {
@@ -630,10 +631,6 @@ export const api = {
   async vincularImagemTour(nome: string, url: string): Promise<CommonResponse> {
     invalidateCache();
     return call<CommonResponse>({ acao: "vincular_imagem_tour", nome, url });
-  },
-  async searchSongs(query: string): Promise<any[]> {
-    const r = await call<any[]>({ acao: "buscar_musicas", q: query }, { cache: true });
-    return Array.isArray(r) ? r : [];
   },
   async getArtistasSemId(): Promise<Artist[]> {
     const data = await call<Record<string, unknown>[]>({ acao: "artistas_sem_id" }, { cache: true });
@@ -901,6 +898,17 @@ export function driveAudioSrc(url: string | undefined | null): string | undefine
   const m = String(url).match(/[-\w]{25,}/);
   if (!m) return undefined;
   return `https://drive.google.com/file/d/${m[0]}/preview`;
+}
+
+export function isYoutubeUrl(url: string | undefined | null): boolean {
+  return /(?:youtube\.com|youtu\.be)/i.test(String(url || ""));
+}
+
+export function youtubeEmbedSrc(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  const m = String(url).match(/(?:v=|youtu\.be\/|embed\/)([-\w]{11})/);
+  if (!m) return undefined;
+  return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
 }
 
 export function driveDirectAudio(url: string | undefined | null): string | undefined {

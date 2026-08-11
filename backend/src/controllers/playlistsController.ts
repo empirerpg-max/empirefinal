@@ -11,14 +11,20 @@ import { googleSheetsService, normalizeText } from "../services/googleSheetsServ
 // por isso indexamos por posição real, não pelo texto do cabeçalho.
 //
 // As faixas ficam embutidas na própria linha como um array JSON (tracks_json),
-// não em aba separada. "Playlists_Faixas" e "Playlists_Albuns" — apesar do
-// nome — são o catálogo de álbuns/faixas do jogo, não dados de playlist;
-// não devem ser lidas nem escritas por este controller.
+// não em aba separada.
+//
+// "Playlists_Albuns" e "Playlists_Faixas" são o catálogo usado pra montar
+// playlists (não playlists em si) — o picker de faixas do editor lê daqui:
+//
+// Playlists_Albuns:  A id | B artista | C titulo | D genero | E data | F descricao | G capa_url | H contracapa_url | I encarte_json | J telegram_id | K created_at
+// Playlists_Faixas:  A album_id | B numero | C titulo | D artistas | E duracao | F drive_url | G letra
 //
 // Substitui a dependência antiga do Apps Script (acao=listar_playlists/
-// salvar_playlist/...).
+// salvar_playlist/get_playlist/excluir_playlist/listar_faixas_catalogo).
 
 const SHEET = "Playlists";
+const SHEET_ALBUNS = "Playlists_Albuns";
+const SHEET_FAIXAS = "Playlists_Faixas";
 
 function genId(): string {
   return `PL-${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
@@ -152,6 +158,46 @@ export async function savePlaylistController(request: Request): Promise<Response
   }
 
   return jsonResponse({ ok: true, id });
+}
+
+// -------------------- CATÁLOGO (pra montar playlists) --------------------
+
+export async function getPlaylistsCatalogoController(): Promise<Response> {
+  const [albunsRows, faixasRows] = await Promise.all([
+    (async () => {
+      const rows = await googleSheetsService.usuarios.readValues(SHEET_ALBUNS);
+      return rows.slice(1).filter((row) => row.some((cell) => normalizeText(cell)));
+    })(),
+    (async () => {
+      const rows = await googleSheetsService.usuarios.readValues(SHEET_FAIXAS);
+      return rows.slice(1).filter((row) => row.some((cell) => normalizeText(cell)));
+    })(),
+  ]);
+
+  const albunsById = new Map(
+    albunsRows.map((row) => [
+      normalizeText(row[0]),
+      { artista: normalizeText(row[1]), titulo: normalizeText(row[2]), capa_url: normalizeText(row[6]) },
+    ]),
+  );
+
+  const faixas = faixasRows
+    .map((row) => {
+      const album_id = normalizeText(row[0]);
+      const album = albunsById.get(album_id);
+      return {
+        album_id,
+        numero: Number(row[1]) || 0,
+        titulo: normalizeText(row[2]),
+        artistas: normalizeText(row[3]) || album?.artista || "",
+        duracao: normalizeText(row[4]) || undefined,
+        drive_url: normalizeText(row[5]),
+        capa_url: album?.capa_url || undefined,
+      };
+    })
+    .filter((f) => f.titulo && f.drive_url);
+
+  return jsonResponse(faixas);
 }
 
 // -------------------- EXCLUIR --------------------

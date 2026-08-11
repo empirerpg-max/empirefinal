@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Play, Pause, ListMusic, Edit, Trash2 } from "lucide-react";
-import { api, driveImg, driveAudioSrc, type PlaylistPayload } from "@/lib/api";
+import { api, driveImg, driveAudioSrc, isYoutubeUrl, youtubeEmbedSrc, type PlaylistPayload } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
 import { notify } from "@/lib/notify";
 
@@ -151,8 +151,12 @@ function PlaylistView() {
             </button>
           </div>
           <iframe
-            src={driveAudioSrc(pl.tracks[playing].drive_url)}
-            className="w-full h-16 border-0"
+            src={
+              isYoutubeUrl(pl.tracks[playing].drive_url)
+                ? youtubeEmbedSrc(pl.tracks[playing].drive_url)
+                : driveAudioSrc(pl.tracks[playing].drive_url)
+            }
+            className={`w-full border-0 ${isYoutubeUrl(pl.tracks[playing].drive_url) ? "h-48" : "h-16"}`}
             allow="autoplay"
             title="player"
           />
