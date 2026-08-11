@@ -146,11 +146,24 @@ export async function salvarPontoCelulaController(request: Request): Promise<Res
     return jsonResponse({ ok: false, error: "Nenhum artista vinculado a esse jogador." }, 403);
   }
 
-  const rowCells = await googleSheetsService.registrosCharts.readValues(SHEET, `A${linha}:D${linha}`);
-  const artistaDaLinha = normalizeText(rowCells?.[0]?.[2]);
+  const rowCells = await googleSheetsService.registrosCharts.readValues(SHEET, `A${linha}:M${linha}`);
+  const row = rowCells?.[0] || [];
+  const artistaDaLinha = normalizeText(row[2]);
   const normArtistNames = new Set(artistNames.map(normalizeComparison));
   if (!artistaDaLinha || !normArtistNames.has(normalizeComparison(artistaDaLinha))) {
     return jsonResponse({ ok: false, error: "Essa música não pertence a um artista seu." }, 403);
+  }
+
+  let somaOutras = 0;
+  for (const [nome, col] of Object.entries(CATEGORY_COLUMNS)) {
+    if (nome === coluna) continue;
+    somaOutras += parsePercent(normalizeText(row[col]));
+  }
+  if (somaOutras + parsePercent(valor) > 100.001) {
+    return jsonResponse(
+      { ok: false, error: "Essa escolha faria a soma da linha passar de 100%." },
+      400,
+    );
   }
 
   const colLetter = colIndexToA1Letter(colIndex);
