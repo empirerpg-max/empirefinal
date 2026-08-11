@@ -1,9 +1,21 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Play, Pause, ListMusic, Edit, Trash2 } from "lucide-react";
-import { api, driveImg, driveAudioSrc, isYoutubeUrl, youtubeEmbedSrc, type PlaylistPayload } from "@/lib/api";
+import { ChevronLeft, Play, ListMusic, Edit, Trash2 } from "lucide-react";
+import { api, driveImg, type PlaylistPayload, type PlaylistTrack } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
 import { notify } from "@/lib/notify";
+import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
+import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
+
+function toPlayableTrack(t: PlaylistTrack): PlayableTrack {
+  return {
+    titulo: t.titulo,
+    artista: t.artistas,
+    capa_url: t.capa_url,
+    drive_url: t.drive_url,
+    duracao: t.duracao,
+  };
+}
 
 export const Route = createFileRoute("/empire-play/playlists/$id")({ component: PlaylistView });
 
@@ -11,8 +23,8 @@ function PlaylistView() {
   const { id } = Route.useParams();
   const { user } = useTelegramUser();
   const navigate = useNavigate();
+  const { playSong, currentTrack } = useEmpirePlayer();
   const [pl, setPl] = useState<PlaylistPayload | null | undefined>(undefined);
-  const [playing, setPlaying] = useState<number | null>(null);
 
   useEffect(() => {
     api.getPlaylist(id).then(setPl);
@@ -99,16 +111,14 @@ function PlaylistView() {
       </div>
       <ul className="px-4">
         {pl.tracks.map((t, i) => {
-          const active = playing === i;
+          const active = currentTrack?.drive_url && currentTrack.drive_url === t.drive_url;
           return (
             <li
               key={i}
-              className={`grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 px-2 py-2 rounded-xl ${active ? "bg-emerald-500/10" : "hover:bg-white/5"}`}
+              onClick={() => playSong(toPlayableTrack(t), pl.tracks.map(toPlayableTrack))}
+              className={`grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 px-2 py-2 rounded-xl cursor-pointer ${active ? "bg-emerald-500/10" : "hover:bg-white/5"}`}
             >
-              <button
-                onClick={() => setPlaying(active ? null : i)}
-                className="size-10 grid place-items-center"
-              >
+              <div className="size-10 grid place-items-center">
                 {t.capa_url ? (
                   <img
                     src={driveImg(t.capa_url, 80)}
@@ -121,47 +131,20 @@ function PlaylistView() {
                 ) : (
                   <span className="text-neutral-500">{i + 1}</span>
                 )}
-              </button>
+              </div>
               <div className="min-w-0">
                 <p className={`font-semibold truncate text-sm ${active ? "text-emerald-500" : "text-white"}`}>
                   {t.titulo}
                 </p>
                 <p className="text-xs text-neutral-500 truncate">{t.artistas}</p>
               </div>
-              <button onClick={() => setPlaying(active ? null : i)} className="text-neutral-400">
-                {active ? (
-                  <Pause className="size-4" fill="currentColor" />
-                ) : (
-                  <Play className="size-4" fill="currentColor" />
-                )}
-              </button>
+              <div className={active ? "text-emerald-500" : "text-neutral-400"}>
+                <Play className="size-4" fill="currentColor" />
+              </div>
             </li>
           );
         })}
       </ul>
-      {playing !== null && pl.tracks[playing]?.drive_url && (
-        <div className="fixed bottom-20 inset-x-0 z-30 bg-neutral-900 border-t border-white/10">
-          <div className="mx-auto max-w-2xl px-4 py-2 flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-white truncate">{pl.tracks[playing].titulo}</p>
-              <p className="text-[10px] text-neutral-500 truncate">{pl.tracks[playing].artistas}</p>
-            </div>
-            <button onClick={() => setPlaying(null)} className="text-xs text-neutral-400">
-              Fechar
-            </button>
-          </div>
-          <iframe
-            src={
-              isYoutubeUrl(pl.tracks[playing].drive_url)
-                ? youtubeEmbedSrc(pl.tracks[playing].drive_url)
-                : driveAudioSrc(pl.tracks[playing].drive_url)
-            }
-            className={`w-full border-0 ${isYoutubeUrl(pl.tracks[playing].drive_url) ? "h-48" : "h-16"}`}
-            allow="autoplay"
-            title="player"
-          />
-        </div>
-      )}
     </div>
   );
 }
