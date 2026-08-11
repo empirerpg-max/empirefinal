@@ -146,3 +146,82 @@ export async function loginController(request: Request): Promise<Response> {
     );
   }
 }
+
+export interface UpdateProfileBody {
+  usuario: string;
+  nome?: string;
+  fotoPerfil?: string;
+}
+
+/**
+ * POST /api/auth/perfil
+ * Atualiza nome e/ou foto de perfil do jogador logado, casando pela coluna
+ * "Usuário" (a mesma chave usada no login) — nunca a senha.
+ */
+export async function updateProfileController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as UpdateProfileBody;
+    const usuario = (body.usuario || "").trim();
+
+    if (!usuario) {
+      return new Response(JSON.stringify({ success: false, error: "Usuário não informado." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const rows = await readUsuariosWithRowIndex();
+    const normUsuario = normalizeComparison(usuario);
+    const match = rows.find((r) => normalizeComparison(r.rec["usuario"] || "") === normUsuario);
+
+    if (!match) {
+      return new Response(JSON.stringify({ success: false, error: "Usuário não encontrado." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const columnKeys = Object.keys(match.rec);
+
+    if (body.nome?.trim()) {
+      const nomeColIndex = columnKeys.indexOf("nome");
+      if (nomeColIndex !== -1) {
+        const colLetter = colIndexToA1Letter(nomeColIndex);
+        await googleSheetsService.usuarios.updateValues(USUARIOS_SHEET, `${colLetter}${match.rowIndex}`, [
+          [body.nome.trim()],
+        ]);
+      }
+    }
+
+    if (body.fotoPerfil !== undefined) {
+      const fotoColIndex = columnKeys.indexOf("foto_do_perfil");
+      if (fotoColIndex !== -1) {
+        const colLetter = colIndexToA1Letter(fotoColIndex);
+        await googleSheetsService.usuarios.updateValues(USUARIOS_SHEET, `${colLetter}${match.rowIndex}`, [
+          [body.fotoPerfil],
+        ]);
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          id: match.rec["id"] || "",
+          nome: body.nome?.trim() || match.rec["nome"] || usuario,
+          usuario: match.rec["usuario"] || usuario,
+          tipoPerfil: match.rec["tipo_de_perfil"] || "Usuário",
+          fotoPerfil: body.fotoPerfil !== undefined ? body.fotoPerfil : match.rec["foto_do_perfil"] || "",
+          prestigio: match.rec["prestigio"] || "",
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  } catch (error: any) {
+    console.error("[updateProfileController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao atualizar perfil." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
