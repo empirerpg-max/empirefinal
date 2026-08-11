@@ -10,6 +10,10 @@ import {
   PlayCircle,
   Disc,
   BarChart3,
+  Instagram,
+  Twitter,
+  Video,
+  Quote,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTelegramUser, haptic, openExternal } from "@/lib/telegram";
@@ -162,16 +166,17 @@ function Index() {
           </div>
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x">
-            {ultimasPostagens.data.map((p) => (
-              <Link
-                key={p.id}
-                to="/social"
-                search={{ postId: p.id }}
-                onClick={() => haptic.selection()}
-                className="min-w-[150px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all flex flex-col"
-              >
-                <div className="aspect-square bg-secondary overflow-hidden">
-                  {p.media_url ? (
+            {ultimasPostagens.data.map((p) => {
+              const PlatformIcon = p.tipo === "Instagram" ? Instagram : p.tipo === "TikTok" ? Video : Twitter;
+              return p.media_url ? (
+                <Link
+                  key={p.id}
+                  to="/social"
+                  search={{ postId: p.id }}
+                  onClick={() => haptic.selection()}
+                  className="min-w-[150px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all flex flex-col"
+                >
+                  <div className="aspect-square bg-secondary overflow-hidden">
                     <img
                       src={driveImg(p.media_url, 300)}
                       className="w-full h-full object-cover"
@@ -179,18 +184,31 @@ function Index() {
                       loading="lazy"
                       decoding="async"
                     />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center p-3 bg-secondary">
-                      <p className="text-[10px] font-bold text-center opacity-70 line-clamp-4">{p.texto}</p>
-                    </div>
-                  )}
-                </div>
-                <div className="p-2.5">
-                  <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">{p.autor}</h3>
-                  <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">{p.tipo}</p>
-                </div>
-              </Link>
-            ))}
+                  </div>
+                  <div className="p-2.5">
+                    <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">{p.autor}</h3>
+                    <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">{p.tipo}</p>
+                  </div>
+                </Link>
+              ) : (
+                <Link
+                  key={p.id}
+                  to="/social"
+                  search={{ postId: p.id }}
+                  onClick={() => haptic.selection()}
+                  className="min-w-[220px] max-w-[220px] snap-center rounded-[1.5rem] bg-white/5 border border-white/10 active:scale-95 transition-all flex flex-col p-3.5"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">{p.autor}</h3>
+                    <PlatformIcon className="size-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+                  </div>
+                  <div className="flex-1 flex items-start gap-1.5">
+                    <Quote className="size-3 text-primary/50 shrink-0 mt-0.5" aria-hidden="true" />
+                    <p className="text-[12px] font-medium leading-snug line-clamp-4">{p.texto}</p>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>
