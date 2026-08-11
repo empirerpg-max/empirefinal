@@ -1,3 +1,4 @@
+import { debugPontoController } from "../controllers/debugPontoController";
 import {
   getCatalogKindController,
   getLancamentosController,
@@ -133,6 +134,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/comentarios",
     "/api/social/comentar",
     "/api/social/comentario/editar",
+    "/api/debug/ponto",
     "/api/social/posts/editar",
     "/api/social/perfis",
     "/api/social/news",
@@ -387,6 +389,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
                 { status: 405, headers: { "Content-Type": "application/json" } },
               );
     }
+  } else if (url.pathname === "/api/debug/ponto") {
+    response = await debugPontoController();
   } else if (isAlbunsAntigosPath) {
     if (request.method !== "GET") {
       return new Response(
