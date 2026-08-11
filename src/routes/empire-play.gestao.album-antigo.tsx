@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   Disc3,
@@ -10,8 +10,9 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  Search,
 } from "lucide-react";
-import { api, driveImg } from "@/lib/api";
+import { api, driveImg, type Artist } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { notify } from "@/lib/notify";
 
@@ -78,6 +79,20 @@ function AlbumAntigoPage() {
   const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
 
   const [artista, setArtista] = useState("");
+  const [artistas, setArtistas] = useState<Artist[] | null>(null);
+  const [artistaQuery, setArtistaQuery] = useState("");
+  const [artistaAberto, setArtistaAberto] = useState(false);
+
+  useEffect(() => {
+    api.listarTodos().then(setArtistas).catch(() => setArtistas([]));
+  }, []);
+
+  const artistasFiltrados = useMemo(() => {
+    if (!artistas) return [];
+    const q = artistaQuery.trim().toLowerCase();
+    const lista = q ? artistas.filter((a) => a.nome.toLowerCase().includes(q)) : artistas;
+    return lista.slice(0, 30);
+  }, [artistas, artistaQuery]);
   const [titulo, setTitulo] = useState("");
   const [genero, setGenero] = useState("");
   const [data, setData] = useState("");
@@ -210,7 +225,65 @@ function AlbumAntigoPage() {
             />
           </label>
         </div>
-        <input value={artista} onChange={(e) => setArtista(e.target.value)} placeholder="Artista" className={inputCls} />
+        <div className="relative">
+          {artista ? (
+            <div className={inputCls + " flex items-center justify-between"}>
+              <span className="text-white font-bold">{artista}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setArtista("");
+                  setArtistaQuery("");
+                }}
+                className="text-neutral-500 hover:text-white text-[11px] font-black uppercase"
+              >
+                Trocar
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-neutral-500" />
+                <input
+                  value={artistaQuery}
+                  onChange={(e) => setArtistaQuery(e.target.value)}
+                  onFocus={() => setArtistaAberto(true)}
+                  onBlur={() => setTimeout(() => setArtistaAberto(false), 150)}
+                  placeholder="Buscar artista existente..."
+                  className={inputCls + " pl-9"}
+                />
+              </div>
+              {artistaAberto && (
+                <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-xl bg-neutral-900 border border-white/10 shadow-2xl">
+                  {artistas === null ? (
+                    <div className="p-3 text-xs text-neutral-500">Carregando artistas...</div>
+                  ) : artistasFiltrados.length === 0 ? (
+                    <div className="p-3 text-xs text-neutral-500">Nenhum artista encontrado.</div>
+                  ) : (
+                    artistasFiltrados.map((a) => (
+                      <button
+                        key={a.nome}
+                        type="button"
+                        onMouseDown={() => {
+                          setArtista(a.nome);
+                          setArtistaQuery("");
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 text-left"
+                      >
+                        <div className="size-6 rounded-full bg-neutral-800 overflow-hidden shrink-0">
+                          {a.foto && (
+                            <img src={driveImg(a.foto, 50)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          )}
+                        </div>
+                        <span className="text-sm text-white truncate">{a.nome}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
         <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título do álbum" className={inputCls} />
         <div className="grid grid-cols-2 gap-2">
           <input value={genero} onChange={(e) => setGenero(e.target.value)} placeholder="Gênero" className={inputCls} />
