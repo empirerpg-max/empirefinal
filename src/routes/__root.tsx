@@ -699,7 +699,7 @@ function RootInner() {
                     icon: Library,
                   },
                   { to: "/albuns", label: "Discografia", icon: Disc3 },
-                  { to: "/playlists", label: "Playlists", icon: ListMusic },
+                  { to: "/empire-play/playlists", label: "Playlists", icon: ListMusic },
                   { to: "/empire-play", label: "Catálogo", icon: PlayCircle },
                 ]}
                 onClose={() => setIsOpen(false)}

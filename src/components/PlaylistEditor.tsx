@@ -103,14 +103,14 @@ export function PlaylistEditor({ existing }: { existing?: PlaylistPayload }) {
     });
     if (ok) {
       const id = ((r as Record<string, unknown>)?.id as string | undefined) || existing?.id;
-      if (id) navigate({ to: "/playlists/$id", params: { id } });
-      else navigate({ to: "/playlists" });
+      if (id) navigate({ to: "/empire-play/playlists/$id", params: { id } });
+      else navigate({ to: "/empire-play/playlists" });
     }
   }
 
   return (
-    <main className="flex-1 mx-auto w-full max-w-2xl px-4 pt-6 pb-32">
-      <Link to="/playlists" className="inline-flex items-center gap-1 text-muted-foreground mb-4">
+    <div className="pb-32">
+      <Link to="/empire-play/playlists" className="inline-flex items-center gap-1 text-neutral-400 mb-4">
         <ChevronLeft className="size-4" /> Voltar
       </Link>
       <header className="mb-5 flex items-center gap-3">
@@ -180,7 +180,7 @@ export function PlaylistEditor({ existing }: { existing?: PlaylistPayload }) {
                   src={driveImg(t.capa_url, 80)}
                   alt=""
                   className="size-8 rounded object-cover"
-                 loading="lazy" decoding="async"/>
+                  loading="lazy" decoding="async" referrerPolicy="no-referrer"/>
               )}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold truncate">{t.titulo}</p>
@@ -263,6 +263,6 @@ export function PlaylistEditor({ existing }: { existing?: PlaylistPayload }) {
         {submitting && <Loader2 className="size-4 animate-spin" />}{" "}
         {existing ? "Salvar alterações" : "Criar playlist"}
       </button>
-    </main>
+    </div>
   );
 }
