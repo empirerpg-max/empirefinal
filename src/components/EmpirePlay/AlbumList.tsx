@@ -112,7 +112,7 @@ export function AlbumList() {
         to="/empire-play/albuns-antigos"
         className="flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/10 text-neutral-300 hover:bg-white/10 hover:text-white transition-colors"
       >
-        <span className="text-xs font-bold">Álbuns antigos cadastrados via Playlists</span>
+        <span className="text-xs font-bold">Álbuns legados (lançamentos antes de 06/12/2021)</span>
         <span className="text-[11px] font-black uppercase text-emerald-400 shrink-0">Ver →</span>
       </Link>
 

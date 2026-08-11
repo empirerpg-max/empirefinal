@@ -39,6 +39,7 @@ import { Route as AlbumIdEditarRouteImport } from './routes/album.$id.editar'
 import { Route as ArtistasNomeIndexRouteImport } from './routes/artistas.$nome.index'
 import { Route as ArtistasNomeBensRouteImport } from './routes/artistas.$nome.bens'
 import { Route as ArtistasNomeProjetosRouteImport } from './routes/artistas.$nome.projetos'
+import { Route as EmpirePlayAlbunsAntigosIndexRouteImport } from './routes/empire-play.albuns-antigos.index'
 import { Route as EmpirePlayAlbunsAntigosIdRouteImport } from './routes/empire-play.albuns-antigos.$id'
 import { Route as EmpirePlayGestaoIndexRouteImport } from './routes/empire-play.gestao.index'
 import { Route as EmpirePlayGestaoAlbumAntigoRouteImport } from './routes/empire-play.gestao.album-antigo'
@@ -199,6 +200,12 @@ const ArtistasNomeProjetosRoute = ArtistasNomeProjetosRouteImport.update({
   path: '/artistas/$nome/projetos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EmpirePlayAlbunsAntigosIndexRoute =
+  EmpirePlayAlbunsAntigosIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => EmpirePlayAlbunsAntigosRoute,
+  } as any)
 const EmpirePlayAlbunsAntigosIdRoute =
   EmpirePlayAlbunsAntigosIdRouteImport.update({
     id: '/$id',
@@ -286,6 +293,7 @@ export interface FileRoutesByFullPath {
   '/ponto/distribuir/planilha': typeof PontoDistribuirPlanilhaRoute
   '/ponto/playlists/planilha': typeof PontoPlaylistsPlanilhaRoute
   '/artistas/$nome/': typeof ArtistasNomeIndexRoute
+  '/empire-play/albuns-antigos/': typeof EmpirePlayAlbunsAntigosIndexRoute
   '/empire-play/gestao/': typeof EmpirePlayGestaoIndexRoute
   '/empire-play/playlists/': typeof EmpirePlayPlaylistsIndexRoute
   '/empire-play/playlists/$id/editar': typeof EmpirePlayPlaylistsIdEditarRoute
@@ -304,7 +312,6 @@ export interface FileRoutesByTo {
   '/acoes/tour': typeof AcoesTourRoute
   '/album/$id': typeof AlbumIdRouteWithChildren
   '/empire-play/albuns': typeof EmpirePlayAlbunsRoute
-  '/empire-play/albuns-antigos': typeof EmpirePlayAlbunsAntigosRouteWithChildren
   '/empire-play/forum': typeof EmpirePlayForumRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
@@ -325,6 +332,7 @@ export interface FileRoutesByTo {
   '/ponto/distribuir/planilha': typeof PontoDistribuirPlanilhaRoute
   '/ponto/playlists/planilha': typeof PontoPlaylistsPlanilhaRoute
   '/artistas/$nome': typeof ArtistasNomeIndexRoute
+  '/empire-play/albuns-antigos': typeof EmpirePlayAlbunsAntigosIndexRoute
   '/empire-play/gestao': typeof EmpirePlayGestaoIndexRoute
   '/empire-play/playlists': typeof EmpirePlayPlaylistsIndexRoute
   '/empire-play/playlists/$id/editar': typeof EmpirePlayPlaylistsIdEditarRoute
@@ -367,6 +375,7 @@ export interface FileRoutesById {
   '/ponto/distribuir/planilha': typeof PontoDistribuirPlanilhaRoute
   '/ponto/playlists/planilha': typeof PontoPlaylistsPlanilhaRoute
   '/artistas/$nome/': typeof ArtistasNomeIndexRoute
+  '/empire-play/albuns-antigos/': typeof EmpirePlayAlbunsAntigosIndexRoute
   '/empire-play/gestao/': typeof EmpirePlayGestaoIndexRoute
   '/empire-play/playlists/': typeof EmpirePlayPlaylistsIndexRoute
   '/empire-play/playlists/$id/editar': typeof EmpirePlayPlaylistsIdEditarRoute
@@ -410,6 +419,7 @@ export interface FileRouteTypes {
     | '/ponto/distribuir/planilha'
     | '/ponto/playlists/planilha'
     | '/artistas/$nome/'
+    | '/empire-play/albuns-antigos/'
     | '/empire-play/gestao/'
     | '/empire-play/playlists/'
     | '/empire-play/playlists/$id/editar'
@@ -428,7 +438,6 @@ export interface FileRouteTypes {
     | '/acoes/tour'
     | '/album/$id'
     | '/empire-play/albuns'
-    | '/empire-play/albuns-antigos'
     | '/empire-play/forum'
     | '/empire-play/musicas'
     | '/empire-play/videos'
@@ -449,6 +458,7 @@ export interface FileRouteTypes {
     | '/ponto/distribuir/planilha'
     | '/ponto/playlists/planilha'
     | '/artistas/$nome'
+    | '/empire-play/albuns-antigos'
     | '/empire-play/gestao'
     | '/empire-play/playlists'
     | '/empire-play/playlists/$id/editar'
@@ -490,6 +500,7 @@ export interface FileRouteTypes {
     | '/ponto/distribuir/planilha'
     | '/ponto/playlists/planilha'
     | '/artistas/$nome/'
+    | '/empire-play/albuns-antigos/'
     | '/empire-play/gestao/'
     | '/empire-play/playlists/'
     | '/empire-play/playlists/$id/editar'
@@ -732,6 +743,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ArtistasNomeProjetosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/empire-play/albuns-antigos/': {
+      id: '/empire-play/albuns-antigos/'
+      path: '/'
+      fullPath: '/empire-play/albuns-antigos/'
+      preLoaderRoute: typeof EmpirePlayAlbunsAntigosIndexRouteImport
+      parentRoute: typeof EmpirePlayAlbunsAntigosRoute
+    }
     '/empire-play/albuns-antigos/$id': {
       id: '/empire-play/albuns-antigos/$id'
       path: '/$id'
@@ -800,11 +818,13 @@ declare module '@tanstack/react-router' {
 
 interface EmpirePlayAlbunsAntigosRouteChildren {
   EmpirePlayAlbunsAntigosIdRoute: typeof EmpirePlayAlbunsAntigosIdRoute
+  EmpirePlayAlbunsAntigosIndexRoute: typeof EmpirePlayAlbunsAntigosIndexRoute
 }
 
 const EmpirePlayAlbunsAntigosRouteChildren: EmpirePlayAlbunsAntigosRouteChildren =
   {
     EmpirePlayAlbunsAntigosIdRoute: EmpirePlayAlbunsAntigosIdRoute,
+    EmpirePlayAlbunsAntigosIndexRoute: EmpirePlayAlbunsAntigosIndexRoute,
   }
 
 const EmpirePlayAlbunsAntigosRouteWithChildren =
