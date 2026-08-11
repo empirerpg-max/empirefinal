@@ -140,6 +140,23 @@ interface GoogleSheetsValuesResponse {
   values?: string[][];
 }
 
+interface GoogleSheetsMetadataResponse {
+  sheets?: { properties?: { sheetId?: number; title?: string } }[];
+}
+
+export async function listSheetTitles(spreadsheetKeyOrId: SpreadsheetKey | string): Promise<{ id: number; title: string }[]> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const response = await sheetsRequest<GoogleSheetsMetadataResponse>(
+    `/${spreadsheetId}?fields=sheets.properties(sheetId,title)`,
+    { method: "GET" },
+    [SHEETS_READONLY_SCOPE],
+  );
+  return (response.sheets || []).map((s) => ({
+    id: s.properties?.sheetId ?? -1,
+    title: s.properties?.title ?? "",
+  }));
+}
+
 export async function readValues(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
@@ -314,6 +331,7 @@ export const googleSheetsService = {
   findRows,
   updateValues,
   appendRow,
+  listSheetTitles,
   principal: {
     readValues: (sheetName: string, range?: string) => readValues("principal", sheetName, range),
     readSheetObjects: (sheetName: string, range?: string) =>
