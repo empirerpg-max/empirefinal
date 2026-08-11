@@ -15,9 +15,7 @@ export const DRIVE_FOLDERS = {
   socialStories: "18PZtlg0NwSsc9wCGkUa-F-qgsyxx5DTc",
   socialAvatars: "1uuemSEv0mtvtFZtxJdFNjedb55tUUpDm",
   socialNews: "1ERLIAEZM_KiJBhtUOuVNyXEmsGb0pxcZ",
-  // TODO: aguardando o ID real da pasta "Fotos de Perfil dos Jogadores" —
-  // até lá, cai na mesma pasta de socialAvatars como fallback seguro.
-  playerAvatars: "1uuemSEv0mtvtFZtxJdFNjedb55tUUpDm",
+  playerAvatars: "14yMzU_4i2ZbySfSVP0Ug9tyxu99dgJI5",
 } as const;
 
 export async function deleteFileFromDrive(fileUrl: string): Promise<boolean> {
