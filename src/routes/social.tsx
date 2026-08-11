@@ -58,6 +58,7 @@ type Post = {
   media_url?: string;
   analytics: { likes: number; comments: number; shares: number };
   data: string;
+  telegram_id?: string;
 };
 
 type SocialProfile = {
@@ -91,6 +92,7 @@ function SocialPage() {
   const [igMode, setIgMode] = useState<"Feed" | "Story">("Feed");
   const [postText, setPostText] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [editingPost, setEditingPost] = useState<any | null>(null);
   const [myArtists, setMyArtists] = useState<any[]>([]);
   const [selectedArtist, setSelectedArtist] = useState("");
   const [viewMode, setViewMode] = useState<"Feed" | "Settings" | "News" | "Industry">("Feed");
@@ -303,6 +305,24 @@ function SocialPage() {
     }
   }
 
+  function openEditPost(post: any) {
+    haptic.selection();
+    setEditingPost(post);
+    setSelectedType(post.tipo);
+    setIgMode(post.subtipo === "Story" ? "Story" : "Feed");
+    setPostText(post.texto);
+    setImageUrl(post.media_url || "");
+    setIsModalOpen(true);
+  }
+
+  function closePostModal() {
+    setIsModalOpen(false);
+    setSelectedType(null);
+    setPostText("");
+    setImageUrl("");
+    setEditingPost(null);
+  }
+
   async function handlePost() {
     if (!selectedType || !postText.trim() || !activeArtist || submitting) return;
 
@@ -310,6 +330,16 @@ function SocialPage() {
     const tgId = user?.id || "";
 
     try {
+      if (editingPost) {
+        const res = await (api as any).editarPostSocial(editingPost.id, postText, imageUrl, tgId);
+        if (res.ok) {
+          haptic.success();
+          closePostModal();
+          loadPosts();
+        }
+        return;
+      }
+
       const payload = {
         tipo: selectedType,
         subtipo: selectedType === "Instagram" ? igMode : undefined,
@@ -322,10 +352,7 @@ function SocialPage() {
       const res = await (api as any).salvarPostSocial(payload, tgId);
       if (res.ok) {
         haptic.success();
-        setIsModalOpen(false);
-        setSelectedType(null);
-        setPostText("");
-        setImageUrl("");
+        closePostModal();
         loadPosts();
       }
     } catch (err) {
@@ -634,9 +661,17 @@ function SocialPage() {
                         >
                           <MessageCircle className="size-4" /> {post.analytics.comments}
                         </button>
-                        <button className="flex items-center gap-1.5 font-black text-xs text-muted-foreground ml-auto min-h-9 active:scale-90 transition-transform">
+                        <button className="flex items-center gap-1.5 font-black text-xs text-muted-foreground min-h-9 active:scale-90 transition-transform">
                           <Share2 className="size-4" />
                         </button>
+                        {post.telegram_id && String(post.telegram_id) === String(user?.id || "") && (
+                          <button
+                            onClick={() => openEditPost(post)}
+                            className="flex items-center gap-1.5 font-black text-xs text-muted-foreground ml-auto min-h-9 active:scale-90 transition-transform"
+                          >
+                            <Edit className="size-4" /> Editar
+                          </button>
+                        )}
                       </div>
                     </motion.div>
                   );
@@ -1301,14 +1336,9 @@ function SocialPage() {
               className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black uppercase">Lançar Hype</h2>
+                <h2 className="text-xl font-black uppercase">{editingPost ? "Editar post" : "Lançar Hype"}</h2>
                 <button
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setSelectedType(null);
-                    setPostText("");
-                    setImageUrl("");
-                  }}
+                  onClick={closePostModal}
                   className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
                 >
                   <X className="size-4" />
@@ -1433,7 +1463,14 @@ function SocialPage() {
                     disabled={submitting || !postText.trim() || !activeArtist}
                     className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
                   >
-                    {submitting ? "Lançando..." : "Lançar Agora"} <Send className="size-4" />
+                    {submitting
+                      ? editingPost
+                        ? "Salvando..."
+                        : "Lançando..."
+                      : editingPost
+                        ? "Salvar alterações"
+                        : "Lançar Agora"}{" "}
+                    <Send className="size-4" />
                   </button>
                 </div>
               )}
