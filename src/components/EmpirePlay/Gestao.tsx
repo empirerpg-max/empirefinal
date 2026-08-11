@@ -1733,8 +1733,7 @@ export const Gestao: React.FC = () => {
             className="flex items-center justify-between p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-white hover:bg-emerald-500/20 transition-colors"
           >
             <span className="text-xs font-bold">
-              Cadastrando um álbum <span className="text-emerald-400">mais antigo</span>? Use a ferramenta dedicada,
-              com upload direto, YouTube ou Drive por faixa.
+              Quer cadastrar um álbum <span className="text-emerald-400">antigo</span>? Utilize nossa ferramenta
             </span>
             <span className="text-[11px] font-black uppercase text-emerald-400 shrink-0 ml-3">Abrir →</span>
           </Link>

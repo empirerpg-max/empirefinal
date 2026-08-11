@@ -1,10 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Gestao } from "@/components/EmpirePlay/Gestao";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/empire-play/gestao")({
-  component: EmpirePlayGestao,
+  component: () => <Outlet />,
 });
-
-function EmpirePlayGestao() {
-  return <Gestao />;
-}
