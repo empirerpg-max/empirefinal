@@ -55,6 +55,7 @@ interface PlaylistTrackRow {
   artistas: string;
   drive_url: string;
   capa_url?: string;
+  letra?: string;
 }
 
 interface PlaylistRecord {
@@ -199,6 +200,7 @@ export async function getPlaylistsCatalogoController(): Promise<Response> {
         duracao: normalizeText(row[4]) || undefined,
         drive_url: normalizeText(row[5]),
         capa_url: album?.capa_url || undefined,
+        letra: normalizeText(row[6]) || undefined,
       };
     })
     .filter((f) => f.titulo && f.drive_url);
