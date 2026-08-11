@@ -48,6 +48,12 @@ import {
   getSocialNewsController,
   saveSocialNewsController,
 } from "../controllers/socialController";
+import {
+  getPlaylistsController,
+  getPlaylistByIdController,
+  savePlaylistController,
+  deletePlaylistController,
+} from "../controllers/playlistsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -70,6 +76,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   const isEmpirePlayForumPath = url.pathname.startsWith("/api/empire-play/forum");
   // Match qualquer /api/empire-play/*
   const isEmpirePlayPath = url.pathname.startsWith("/api/empire-play/");
+  // Match /api/playlists ou /api/playlists/:id
+  const isPlaylistsPath = url.pathname === "/api/playlists" || url.pathname.startsWith("/api/playlists/");
 
   const supportedPaths = new Set([
     "/api/auth/login",
@@ -112,7 +120,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/news",
   ]);
 
-  if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath) {
+  if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath && !isPlaylistsPath) {
     return null;
   }
 
@@ -273,6 +281,35 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
               JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/perfis." }),
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
+  } else if (isPlaylistsPath) {
+    if (url.pathname === "/api/playlists/excluir") {
+      if (request.method !== "POST") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use POST para /api/playlists/excluir." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await deletePlaylistController(request);
+    } else if (url.pathname === "/api/playlists") {
+      response =
+        request.method === "GET"
+          ? await getPlaylistsController()
+          : request.method === "POST"
+            ? await savePlaylistController(request)
+            : new Response(
+                JSON.stringify({ success: false, error: "Use GET ou POST para /api/playlists." }),
+                { status: 405, headers: { "Content-Type": "application/json" } },
+              );
+    } else {
+      if (request.method !== "GET") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use GET para /api/playlists/:id." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      const id = decodeURIComponent(url.pathname.replace("/api/playlists/", ""));
+      response = await getPlaylistByIdController(id);
+    }
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"

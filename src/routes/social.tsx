@@ -697,7 +697,7 @@ function SocialPage() {
             {!selectedIndustryArtist ? (
               <>
                 <h2 className="text-xl font-black uppercase tracking-tight text-center">
-                  Império <span className="text-primary">Perfis</span>
+                  <span className="text-primary">Perfis</span>
                 </h2>
                 <div className="grid gap-3">
                   {allArtists.map((art) => (

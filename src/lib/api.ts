@@ -562,34 +562,37 @@ export const api = {
     return call<CommonResponse>({ acao: "excluir_album", id, telegram_id: telegramId || "" });
   },
 
-  // ---- Playlists ----
-  async listarPlaylists(telegramId?: string): Promise<PlaylistPayload[]> {
-    const r = await call<PlaylistPayload[]>(
-      { acao: "listar_playlists", telegram_id: telegramId || "" },
-      { cache: true },
-    );
-    return Array.isArray(r) ? r : [];
+  // ---- Playlists (migrado do Apps Script pro Worker) ----
+  async listarPlaylists(): Promise<PlaylistPayload[]> {
+    const res = await fetch("/api/playlists");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
   async getPlaylist(id: string): Promise<PlaylistPayload | null> {
-    const r = await call<PlaylistPayload & { error?: string }>({ acao: "get_playlist", id }, { cache: true });
-    if (!r || r.error) return null;
-    return r;
+    const res = await fetch(`/api/playlists/${encodeURIComponent(id)}`);
+    const data = await res.json().catch(() => null);
+    if (!data || (data as { error?: string }).error) return null;
+    return data as PlaylistPayload;
   },
   async salvarPlaylist(payload: PlaylistPayload, telegramId?: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({
-      acao: "salvar_playlist",
-      payload: JSON.stringify(payload),
-      telegram_id: telegramId || payload.telegram_id || "",
+    const res = await fetch("/api/playlists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId: telegramId || payload.telegram_id || "" }),
     });
+    return res.json();
   },
   async listarFaixasCatalogo(): Promise<any[]> {
     const r = await call<any[]>({ acao: "listar_faixas_catalogo" }, { cache: true });
     return Array.isArray(r) ? r : [];
   },
   async excluirPlaylist(id: string, telegramId?: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "excluir_playlist", id, telegram_id: telegramId || "" });
+    const res = await fetch("/api/playlists/excluir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, tgId: telegramId || "" }),
+    });
+    return res.json();
   },
 
   // ---- Bet ----
