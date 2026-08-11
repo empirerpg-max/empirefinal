@@ -38,7 +38,11 @@ import { reportVideoIssueController } from "../controllers/reportVideoController
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
 import { loginController, updateProfileController } from "../controllers/authController";
 import { getMeusArtistasNomesController } from "../controllers/artistasController";
-import { getPontosController, salvarPontoCelulaController } from "../controllers/pontoController";
+import {
+  getPontosController,
+  salvarPontoCelulaController,
+  distribuirPontosAleatorioController,
+} from "../controllers/pontoController";
 import {
   getSocialPostsController,
   createSocialPostController,
@@ -136,6 +140,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/comentario/editar",
     "/api/ponto",
     "/api/ponto/salvar",
+    "/api/ponto/distribuir-aleatorio",
     "/api/social/posts/editar",
     "/api/social/perfis",
     "/api/social/news",
@@ -419,6 +424,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await salvarPontoCelulaController(request);
+  } else if (url.pathname === "/api/ponto/distribuir-aleatorio") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/ponto/distribuir-aleatorio." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await distribuirPontosAleatorioController(request);
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Target, Loader2, Sparkles, ListMusic } from "lucide-react";
+import { Target, Loader2, Sparkles, ListMusic, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
 
@@ -28,7 +28,7 @@ function PontoHome() {
   if (!ready || loading) {
     return (
       <main className="flex-1 grid place-items-center min-h-[60vh]">
-        <Loader2 className="size-8 animate-spin text-primary" />
+        <Loader2 className="size-8 animate-spin text-emerald-500" />
       </main>
     );
   }
@@ -36,9 +36,9 @@ function PontoHome() {
   if (!user?.id) {
     return (
       <main className="flex-1 mx-auto w-full max-w-md px-6 pt-12 text-center">
-        <Target className="size-12 text-muted-foreground/30 mx-auto mb-4" />
-        <h1 className="text-xl font-black uppercase">Identifique-se</h1>
-        <p className="text-sm text-muted-foreground mt-2">
+        <Target className="size-12 text-neutral-700 mx-auto mb-4" />
+        <h1 className="text-xl font-black uppercase text-white">Identifique-se</h1>
+        <p className="text-sm text-neutral-500 mt-2">
           Abra o app pelo Telegram para acessar o Ponto.
         </p>
       </main>
@@ -48,9 +48,9 @@ function PontoHome() {
   if (data?.erro || !data?.nomeOff) {
     return (
       <main className="flex-1 mx-auto w-full max-w-md px-6 pt-12 text-center">
-        <Target className="size-12 text-muted-foreground/30 mx-auto mb-4" />
-        <h1 className="text-xl font-black uppercase">Jogador não encontrado</h1>
-        <p className="text-sm text-muted-foreground mt-2">
+        <Target className="size-12 text-neutral-700 mx-auto mb-4" />
+        <h1 className="text-xl font-black uppercase text-white">Jogador não encontrado</h1>
+        <p className="text-sm text-neutral-500 mt-2">
           {data?.erro || "Seu Telegram ID não está cadastrado na aba Jogadores."}
         </p>
       </main>
@@ -60,48 +60,46 @@ function PontoHome() {
   return (
     <main className="flex-1 mx-auto w-full max-w-md px-6 pt-10 pb-24">
       <header className="mb-8">
-        <div className="size-14 rounded-2xl bg-primary/15 text-primary grid place-items-center mb-4">
+        <div className="size-14 rounded-2xl bg-emerald-500/15 text-emerald-500 grid place-items-center mb-4">
           <Target className="size-7" />
         </div>
-        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ponto</p>
-        <h1 className="text-3xl font-black italic tracking-tighter mt-1">Oi, {data.nomeOff}.</h1>
-        <p className="text-sm text-muted-foreground mt-1">O que você quer fazer?</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Ponto</p>
+        <h1 className="text-3xl font-black italic tracking-tighter mt-1 text-white">Oi, {data.nomeOff}.</h1>
+        <p className="text-sm text-neutral-500 mt-1">O que você quer fazer?</p>
         {data.artistas && data.artistas.length > 0 && (
-          <p className="text-[11px] text-muted-foreground/60 mt-3">
+          <p className="text-[11px] text-neutral-600 mt-3">
             Artistas: {data.artistas.join(" · ")}
           </p>
         )}
       </header>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         <Link
           to="/ponto/distribuir"
-          className="block p-5 rounded-3xl bg-card border border-white/5 hover:border-primary/40 transition-colors group"
+          className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-900 border border-white/10 hover:border-emerald-500/40 hover:bg-neutral-800 transition-colors group"
         >
-          <div className="flex items-center gap-4">
-            <div className="size-12 rounded-2xl bg-primary/10 text-primary grid place-items-center group-hover:scale-110 transition-transform">
-              <Sparkles className="size-6" />
-            </div>
-            <div>
-              <h2 className="font-black uppercase tracking-tight">Distribuir pontos</h2>
-              <p className="text-xs text-muted-foreground">Aleatório ou manual</p>
-            </div>
+          <div className="size-12 rounded-2xl bg-emerald-500/15 text-emerald-500 grid place-items-center shrink-0 group-hover:scale-105 transition-transform">
+            <Sparkles className="size-6" />
           </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-black uppercase tracking-tight text-white text-sm">Distribuir pontos</h2>
+            <p className="text-xs text-neutral-500">Aleatório ou manual</p>
+          </div>
+          <ChevronRight className="size-4 text-neutral-600 group-hover:text-emerald-500 transition-colors shrink-0" />
         </Link>
 
         <Link
           to="/ponto/playlists"
-          className="block p-5 rounded-3xl bg-card border border-white/5 hover:border-primary/40 transition-colors group"
+          className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-900 border border-white/10 hover:border-emerald-500/40 hover:bg-neutral-800 transition-colors group"
         >
-          <div className="flex items-center gap-4">
-            <div className="size-12 rounded-2xl bg-primary/10 text-primary grid place-items-center group-hover:scale-110 transition-transform">
-              <ListMusic className="size-6" />
-            </div>
-            <div>
-              <h2 className="font-black uppercase tracking-tight">Aplicar playlists</h2>
-              <p className="text-xs text-muted-foreground">Conforme saldo ou manual</p>
-            </div>
+          <div className="size-12 rounded-2xl bg-emerald-500/15 text-emerald-500 grid place-items-center shrink-0 group-hover:scale-105 transition-transform">
+            <ListMusic className="size-6" />
           </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-black uppercase tracking-tight text-white text-sm">Aplicar playlists</h2>
+            <p className="text-xs text-neutral-500">Conforme saldo ou manual</p>
+          </div>
+          <ChevronRight className="size-4 text-neutral-600 group-hover:text-emerald-500 transition-colors shrink-0" />
         </Link>
       </div>
     </main>

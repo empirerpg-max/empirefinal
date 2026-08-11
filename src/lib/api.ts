@@ -719,6 +719,14 @@ export const api = {
     });
     return res.json();
   },
+  async distribuirPontosAleatorioNovo(telegramId: string): Promise<CommonResponse & { distribuidas?: number }> {
+    const res = await fetch("/api/ponto/distribuir-aleatorio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramId }),
+    });
+    return res.json();
+  },
 
   // ---- Bet ----
   async getMusicasBet(): Promise<{ semana: string; musicas: unknown[] } | null> {
