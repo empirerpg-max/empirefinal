@@ -596,6 +596,30 @@ export const api = {
     return res.json();
   },
 
+  // ---- Salvos (faixas curtidas) ----
+  async listarSalvos(tgId: string): Promise<PlaylistTrack[]> {
+    if (!tgId) return [];
+    const res = await fetch(`/api/salvos?tgId=${encodeURIComponent(tgId)}`);
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
+  },
+  async salvarFaixa(tgId: string, track: PlaylistTrack): Promise<CommonResponse & { already?: boolean }> {
+    const res = await fetch("/api/salvos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tgId, track }),
+    });
+    return res.json();
+  },
+  async removerSalvo(tgId: string, driveUrl: string): Promise<CommonResponse> {
+    const res = await fetch("/api/salvos/remover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tgId, drive_url: driveUrl }),
+    });
+    return res.json();
+  },
+
   // ---- Bet ----
   async getMusicasBet(): Promise<{ semana: string; musicas: unknown[] } | null> {
     const acoes = ["musicas_bet", "get_musicas_bet", "musicas_charts", "get_musicas_charts"];

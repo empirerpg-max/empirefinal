@@ -21,10 +21,16 @@ import { googleSheetsService, normalizeText } from "../services/googleSheetsServ
 //
 // Substitui a dependência antiga do Apps Script (acao=listar_playlists/
 // salvar_playlist/get_playlist/excluir_playlist/listar_faixas_catalogo).
+//
+// "Salvos" (faixas curtidas por jogador, tipo "Músicas Curtidas" do
+// Spotify) vive na mesma planilha, aba própria:
+//
+// Salvos: A telegram_id | B album_id | C faixa_numero | D titulo | E artistas | F drive_url | G capa_url | H data
 
 const SHEET = "Playlists";
 const SHEET_ALBUNS = "Playlists_Albuns";
 const SHEET_FAIXAS = "Playlists_Faixas";
+const SHEET_SALVOS = "Salvos";
 
 function genId(): string {
   return `PL-${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
@@ -198,6 +204,81 @@ export async function getPlaylistsCatalogoController(): Promise<Response> {
     .filter((f) => f.titulo && f.drive_url);
 
   return jsonResponse(faixas);
+}
+
+// -------------------- SALVOS (faixas curtidas) --------------------
+
+export async function getSalvosController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const tgId = url.searchParams.get("tgId") || "";
+  if (!tgId) return jsonResponse([]);
+
+  const rows = await googleSheetsService.usuarios.readValues(SHEET_SALVOS);
+  const salvos = rows
+    .slice(1)
+    .filter((row) => row.some((cell) => normalizeText(cell)) && normalizeText(row[0]) === tgId)
+    .map((row) => ({
+      album_id: normalizeText(row[1]),
+      faixa_numero: Number(row[2]) || 0,
+      titulo: normalizeText(row[3]),
+      artistas: normalizeText(row[4]),
+      drive_url: normalizeText(row[5]),
+      capa_url: normalizeText(row[6]) || undefined,
+      data: normalizeText(row[7]) || undefined,
+    }))
+    .filter((t) => t.titulo && t.drive_url);
+
+  salvos.sort((a, b) => new Date(b.data || 0).getTime() - new Date(a.data || 0).getTime());
+
+  return jsonResponse(salvos);
+}
+
+export async function saveSalvoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    tgId?: string;
+    track?: PlaylistTrackRow;
+  };
+  const { tgId, track } = body;
+  if (!tgId || !track?.titulo || !track?.drive_url) {
+    return jsonResponse({ ok: false, error: "Dados incompletos pra salvar a faixa." }, 400);
+  }
+
+  const rows = await googleSheetsService.usuarios.readValues(SHEET_SALVOS);
+  const alreadySaved = rows
+    .slice(1)
+    .some((row) => normalizeText(row[0]) === tgId && normalizeText(row[5]) === track.drive_url);
+  if (alreadySaved) return jsonResponse({ ok: true, already: true });
+
+  await googleSheetsService.usuarios.appendRow(SHEET_SALVOS, [
+    tgId,
+    track.album_id || "",
+    String(track.faixa_numero || ""),
+    track.titulo,
+    track.artistas || "",
+    track.drive_url,
+    track.capa_url || "",
+    new Date().toISOString(),
+  ]);
+
+  return jsonResponse({ ok: true });
+}
+
+export async function removeSalvoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { tgId?: string; drive_url?: string };
+  const { tgId, drive_url } = body;
+  if (!tgId || !drive_url) {
+    return jsonResponse({ ok: false, error: "Dados incompletos pra remover a faixa." }, 400);
+  }
+
+  const allRows = await googleSheetsService.usuarios.readValues(SHEET_SALVOS);
+  const rowIndex = allRows.findIndex(
+    (row, i) => i > 0 && normalizeText(row[0]) === tgId && normalizeText(row[5]) === drive_url,
+  );
+  if (rowIndex === -1) return jsonResponse({ ok: false, error: "Faixa não encontrada nos salvos." }, 404);
+
+  await googleSheetsService.usuarios.updateValues(SHEET_SALVOS, `A${rowIndex + 1}`, [[""]]);
+
+  return jsonResponse({ ok: true });
 }
 
 // -------------------- EXCLUIR --------------------
