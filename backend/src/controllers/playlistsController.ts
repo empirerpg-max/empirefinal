@@ -170,16 +170,7 @@ export async function savePlaylistController(request: Request): Promise<Response
 // -------------------- CATÁLOGO (pra montar playlists) --------------------
 
 export async function getPlaylistsCatalogoController(): Promise<Response> {
-  const [albunsRows, faixasRows] = await Promise.all([
-    (async () => {
-      const rows = await googleSheetsService.usuarios.readValues(SHEET_ALBUNS);
-      return rows.slice(1).filter((row) => row.some((cell) => normalizeText(cell)));
-    })(),
-    (async () => {
-      const rows = await googleSheetsService.usuarios.readValues(SHEET_FAIXAS);
-      return rows.slice(1).filter((row) => row.some((cell) => normalizeText(cell)));
-    })(),
-  ]);
+  const [albunsRows, faixasRows] = await Promise.all([readAlbunsAntigosRows(), readFaixasAntigasRows()]);
 
   const albunsById = new Map(
     albunsRows.map((row) => [
@@ -206,6 +197,81 @@ export async function getPlaylistsCatalogoController(): Promise<Response> {
     .filter((f) => f.titulo && f.drive_url);
 
   return jsonResponse(faixas);
+}
+
+async function readAlbunsAntigosRows(): Promise<string[][]> {
+  const rows = await googleSheetsService.usuarios.readValues(SHEET_ALBUNS);
+  return rows.slice(1).filter((row) => row.some((cell) => normalizeText(cell)));
+}
+
+async function readFaixasAntigasRows(): Promise<string[][]> {
+  const rows = await googleSheetsService.usuarios.readValues(SHEET_FAIXAS);
+  return rows.slice(1).filter((row) => row.some((cell) => normalizeText(cell)));
+}
+
+function faixaAntigaFromRow(row: string[]) {
+  return {
+    numero: Number(row[1]) || 0,
+    titulo: normalizeText(row[2]),
+    artistas: normalizeText(row[3]),
+    duracao: normalizeText(row[4]) || undefined,
+    drive_url: normalizeText(row[5]),
+    letra: normalizeText(row[6]) || undefined,
+  };
+}
+
+// -------------------- ÁLBUNS ANTIGOS (galeria, listagem/detalhe) --------------------
+
+export async function getAlbunsAntigosController(): Promise<Response> {
+  const [albunsRows, faixasRows] = await Promise.all([readAlbunsAntigosRows(), readFaixasAntigasRows()]);
+
+  const faixasCountByAlbum = new Map<string, number>();
+  for (const row of faixasRows) {
+    const albumId = normalizeText(row[0]);
+    faixasCountByAlbum.set(albumId, (faixasCountByAlbum.get(albumId) || 0) + 1);
+  }
+
+  const albuns = albunsRows
+    .map((row) => {
+      const id = normalizeText(row[0]);
+      return {
+        id,
+        artista: normalizeText(row[1]),
+        titulo: normalizeText(row[2]),
+        genero: normalizeText(row[3]) || undefined,
+        data: normalizeText(row[4]) || undefined,
+        descricao: normalizeText(row[5]) || undefined,
+        capa_url: normalizeText(row[6]) || undefined,
+        totalFaixas: faixasCountByAlbum.get(id) || 0,
+      };
+    })
+    .filter((a) => a.id && a.titulo);
+
+  albuns.sort((a, b) => new Date(b.data || 0).getTime() - new Date(a.data || 0).getTime());
+
+  return jsonResponse(albuns);
+}
+
+export async function getAlbumAntigoByIdController(id: string): Promise<Response> {
+  const [albunsRows, faixasRows] = await Promise.all([readAlbunsAntigosRows(), readFaixasAntigasRows()]);
+  const row = albunsRows.find((r) => normalizeText(r[0]) === id);
+  if (!row) return jsonResponse({ error: "Álbum não encontrado." }, 404);
+
+  const faixas = faixasRows
+    .filter((r) => normalizeText(r[0]) === id)
+    .map(faixaAntigaFromRow)
+    .sort((a, b) => a.numero - b.numero);
+
+  return jsonResponse({
+    id,
+    artista: normalizeText(row[1]),
+    titulo: normalizeText(row[2]),
+    genero: normalizeText(row[3]) || undefined,
+    data: normalizeText(row[4]) || undefined,
+    descricao: normalizeText(row[5]) || undefined,
+    capa_url: normalizeText(row[6]) || undefined,
+    faixas,
+  });
 }
 
 // -------------------- ÁLBUM ANTIGO (cadastro manual em Playlists_Albuns) --------------------
