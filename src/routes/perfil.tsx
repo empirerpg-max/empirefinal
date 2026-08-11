@@ -1,8 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { User, LogOut, ChevronRight, Library, Crown, Pencil, X, Check, ImageIcon, Loader2 } from "lucide-react";
+import {
+  User,
+  LogOut,
+  ChevronRight,
+  Library,
+  Crown,
+  Pencil,
+  X,
+  Check,
+  ImageIcon,
+  Loader2,
+  Heart,
+  ListMusic,
+} from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { api, driveImg, fmtEC, type Artist } from "@/lib/api";
+import { api, driveImg, fmtEC, type Artist, type PlaylistPayload, type PlaylistTrack } from "@/lib/api";
 import { getStoredLogin, setStoredLogin, clearStoredLogin } from "@/components/LoginScreen";
 import { toast } from "sonner";
 
@@ -21,6 +34,11 @@ function Perfil() {
   const [editFoto, setEditFoto] = useState("");
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [savingPerfil, setSavingPerfil] = useState(false);
+  const [libTab, setLibTab] = useState<"salvos" | "playlists">("salvos");
+  const [salvos, setSalvos] = useState<LoadState<PlaylistTrack[]>>({ status: "loading" });
+  const [minhasPlaylists, setMinhasPlaylists] = useState<LoadState<PlaylistPayload[]>>({ status: "loading" });
+
+  const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
 
   useEffect(() => {
     if (!user || user.id === "guest") {
@@ -32,6 +50,20 @@ function Perfil() {
       .then((d) => setMyArtists({ status: "ok", data: d }))
       .catch(() => setMyArtists({ status: "error" }));
   }, [user]);
+
+  useEffect(() => {
+    if (!tgId) return;
+    api
+      .listarSalvos(tgId)
+      .then((d) => setSalvos({ status: "ok", data: d }))
+      .catch(() => setSalvos({ status: "error" }));
+    api
+      .listarPlaylists()
+      .then((all) =>
+        setMinhasPlaylists({ status: "ok", data: all.filter((p) => String(p.telegram_id) === String(tgId)) }),
+      )
+      .catch(() => setMinhasPlaylists({ status: "error" }));
+  }, [tgId]);
 
   const openLinkModal = () => {
     haptic.light();
@@ -241,6 +273,120 @@ function Perfil() {
             <Library className="size-8 text-primary mb-2" />
             <p className="text-sm font-black uppercase">Vincule seu primeiro artista</p>
           </button>
+        )}
+      </section>
+
+      <section className="mb-8">
+        <div className="grid grid-cols-2 gap-2 p-1 bg-white/5 border border-white/10 rounded-2xl mb-3">
+          <button
+            onClick={() => {
+              haptic.selection();
+              setLibTab("salvos");
+            }}
+            className={`py-2 rounded-xl text-[11px] font-black uppercase tracking-widest inline-flex items-center justify-center gap-1.5 transition-all ${libTab === "salvos" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+          >
+            <Heart className="size-3.5" /> Salvos
+          </button>
+          <button
+            onClick={() => {
+              haptic.selection();
+              setLibTab("playlists");
+            }}
+            className={`py-2 rounded-xl text-[11px] font-black uppercase tracking-widest inline-flex items-center justify-center gap-1.5 transition-all ${libTab === "playlists" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+          >
+            <ListMusic className="size-3.5" /> Minhas Playlists
+          </button>
+        </div>
+
+        {libTab === "salvos" ? (
+          salvos.status === "loading" ? (
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="h-14 rounded-2xl bg-white/5 animate-pulse" />
+              ))}
+            </div>
+          ) : salvos.status === "ok" && salvos.data.length > 0 ? (
+            <div className="space-y-2">
+              {salvos.data.map((t, i) => (
+                <div
+                  key={`${t.drive_url}-${i}`}
+                  className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10"
+                >
+                  <div className="size-11 rounded-xl bg-secondary overflow-hidden flex-shrink-0 border border-white/10 grid place-items-center">
+                    {t.capa_url ? (
+                      <img
+                        src={driveImg(t.capa_url, 100)}
+                        className="w-full h-full object-cover"
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <Heart className="size-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold truncate">{t.titulo}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{t.artistas}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="w-full p-6 rounded-2xl bg-card/50 border-2 border-dashed border-primary/20 flex flex-col items-center text-center">
+              <Heart className="size-8 text-primary mb-2" />
+              <p className="text-sm font-black uppercase">Nenhuma faixa salva ainda</p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Toque no ⋮ de uma faixa e escolha "Salvar em Suas Curtidas".
+              </p>
+            </div>
+          )
+        ) : minhasPlaylists.status === "loading" ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-14 rounded-2xl bg-white/5 animate-pulse" />
+            ))}
+          </div>
+        ) : minhasPlaylists.status === "ok" && minhasPlaylists.data.length > 0 ? (
+          <div className="space-y-2">
+            {minhasPlaylists.data.map((p) => (
+              <Link
+                key={p.id}
+                to="/empire-play/playlists/$id"
+                params={{ id: p.id! }}
+                onClick={() => haptic.selection()}
+                className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/[0.08] transition-all"
+              >
+                <div className="size-11 rounded-xl bg-secondary overflow-hidden flex-shrink-0 border border-white/10 grid place-items-center">
+                  {p.capa_url ? (
+                    <img
+                      src={driveImg(p.capa_url, 100)}
+                      className="w-full h-full object-cover"
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <ListMusic className="size-4 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold truncate">{p.titulo}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{p.tracks?.length || 0} faixas</p>
+                </div>
+                <ChevronRight className="size-4 text-muted-foreground" />
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <Link
+            to="/empire-play/playlists/nova"
+            onClick={() => haptic.selection()}
+            className="w-full p-6 rounded-2xl bg-card/50 border-2 border-dashed border-primary/20 flex flex-col items-center text-center hover:bg-primary/5 transition-all"
+          >
+            <ListMusic className="size-8 text-primary mb-2" />
+            <p className="text-sm font-black uppercase">Crie sua primeira playlist</p>
+          </Link>
         )}
       </section>
 

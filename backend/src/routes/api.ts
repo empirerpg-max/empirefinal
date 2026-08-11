@@ -57,6 +57,9 @@ import {
   savePlaylistController,
   deletePlaylistController,
   getPlaylistsCatalogoController,
+  getSalvosController,
+  saveSalvoController,
+  removeSalvoController,
 } from "../controllers/playlistsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
@@ -82,6 +85,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   const isEmpirePlayPath = url.pathname.startsWith("/api/empire-play/");
   // Match /api/playlists ou /api/playlists/:id
   const isPlaylistsPath = url.pathname === "/api/playlists" || url.pathname.startsWith("/api/playlists/");
+  // Match /api/salvos ou /api/salvos/:acao
+  const isSalvosPath = url.pathname === "/api/salvos" || url.pathname.startsWith("/api/salvos/");
 
   const supportedPaths = new Set([
     "/api/auth/login",
@@ -127,7 +132,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/news",
   ]);
 
-  if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath && !isPlaylistsPath) {
+  if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath && !isPlaylistsPath && !isSalvosPath) {
     return null;
   }
 
@@ -340,6 +345,26 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       }
       const id = decodeURIComponent(url.pathname.replace("/api/playlists/", ""));
       response = await getPlaylistByIdController(id);
+    }
+  } else if (isSalvosPath) {
+    if (url.pathname === "/api/salvos/remover") {
+      if (request.method !== "POST") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use POST para /api/salvos/remover." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await removeSalvoController(request);
+    } else {
+      response =
+        request.method === "GET"
+          ? await getSalvosController(request)
+          : request.method === "POST"
+            ? await saveSalvoController(request)
+            : new Response(
+                JSON.stringify({ success: false, error: "Use GET ou POST para /api/salvos." }),
+                { status: 405, headers: { "Content-Type": "application/json" } },
+              );
     }
   } else if (url.pathname === "/api/social/news") {
     response =
