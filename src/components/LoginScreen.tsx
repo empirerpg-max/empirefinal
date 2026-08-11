@@ -27,6 +27,10 @@ export function clearStoredLogin() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
+export function setStoredLogin(user: LoginResult) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+}
+
 export function LoginScreen({ onSuccess }: { onSuccess: (user: LoginResult) => void }) {
   const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");

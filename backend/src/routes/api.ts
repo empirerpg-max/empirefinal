@@ -35,7 +35,7 @@ import {
 } from "../controllers/empirePlayController";
 import { reportVideoIssueController } from "../controllers/reportVideoController";
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
-import { loginController } from "../controllers/authController";
+import { loginController, updateProfileController } from "../controllers/authController";
 import { getMeusArtistasNomesController } from "../controllers/artistasController";
 import {
   getSocialPostsController,
@@ -73,6 +73,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
 
   const supportedPaths = new Set([
     "/api/auth/login",
+    "/api/auth/perfil",
     "/api/artistas/meus-nomes",
     "/api/user/me",
     "/api/top-playlists",
@@ -290,6 +291,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await loginController(request);
+  } else if (url.pathname === "/api/auth/perfil") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/auth/perfil." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await updateProfileController(request);
   } else if (url.pathname === "/api/forum/comment") {
     if (request.method !== "POST") {
       return new Response(

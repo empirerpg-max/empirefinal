@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { User, LogOut, ChevronRight, Library, Crown } from "lucide-react";
+import { User, LogOut, ChevronRight, Library, Crown, Pencil, X, Check, ImageIcon, Loader2 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api, driveImg, fmtEC, type Artist } from "@/lib/api";
-import { getStoredLogin, clearStoredLogin } from "@/components/LoginScreen";
+import { getStoredLogin, setStoredLogin, clearStoredLogin } from "@/components/LoginScreen";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/perfil")({
   component: Perfil,
@@ -13,8 +14,13 @@ type LoadState<T> = { status: "loading" } | { status: "error" } | { status: "ok"
 
 function Perfil() {
   const { user } = useTelegramUser();
-  const login = getStoredLogin();
+  const [login, setLogin] = useState(getStoredLogin());
   const [myArtists, setMyArtists] = useState<LoadState<Artist[]>>({ status: "loading" });
+  const [isEditing, setIsEditing] = useState(false);
+  const [editNome, setEditNome] = useState("");
+  const [editFoto, setEditFoto] = useState("");
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [savingPerfil, setSavingPerfil] = useState(false);
 
   useEffect(() => {
     if (!user || user.id === "guest") {
@@ -32,27 +38,145 @@ function Perfil() {
     (window as any).setShowLinkModal?.(true);
   };
 
+  const startEditing = () => {
+    haptic.light();
+    setEditNome(login?.nome || "");
+    setEditFoto(login?.fotoPerfil || "");
+    setIsEditing(true);
+  };
+
+  const handleUploadFoto = async (file: File) => {
+    setUploadingFoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      formData.append("folderType", "playerAvatars");
+      const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.data?.fileUrl) {
+        setEditFoto(data.data.fileUrl);
+      } else {
+        toast.error("Não foi possível enviar a foto.");
+      }
+    } catch {
+      toast.error("Não foi possível enviar a foto.");
+    } finally {
+      setUploadingFoto(false);
+    }
+  };
+
+  const handleSavePerfil = async () => {
+    if (!login?.usuario || savingPerfil) return;
+    setSavingPerfil(true);
+    try {
+      const res = await fetch("/api/auth/perfil", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario: login.usuario, nome: editNome, fotoPerfil: editFoto }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success && json.data) {
+        setStoredLogin(json.data);
+        setLogin(json.data);
+        setIsEditing(false);
+        haptic.success();
+        toast.success("Perfil atualizado.");
+      } else {
+        toast.error(json?.error || "Não foi possível salvar o perfil.");
+      }
+    } catch {
+      toast.error("Erro de conexão ao salvar o perfil.");
+    } finally {
+      setSavingPerfil(false);
+    }
+  };
+
   return (
     <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen">
       <header className="flex flex-col items-center text-center mb-8">
-        <div className="size-24 rounded-full bg-primary/20 border-2 border-primary/30 grid place-items-center overflow-hidden mb-4">
-          {login?.fotoPerfil || user?.photo_url ? (
-            <img
-              src={driveImg(login?.fotoPerfil || user?.photo_url || "", 200)}
-              className="size-24 rounded-full object-cover"
-              alt={login?.nome || user?.name || "Foto do jogador"}
+        {isEditing ? (
+          <>
+            <div className="relative mb-4">
+              <div className="size-24 rounded-full bg-primary/20 border-2 border-primary/30 grid place-items-center overflow-hidden">
+                {editFoto ? (
+                  <img src={driveImg(editFoto, 200)} className="size-24 rounded-full object-cover" alt="" />
+                ) : (
+                  <User className="size-10 text-primary" />
+                )}
+              </div>
+              <label className="absolute -bottom-1 -right-1 size-9 rounded-full bg-primary text-primary-foreground grid place-items-center border-2 border-background cursor-pointer active:scale-90 transition-transform">
+                {uploadingFoto ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ImageIcon className="size-4" />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingFoto}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleUploadFoto(file);
+                  }}
+                />
+              </label>
+            </div>
+            <input
+              type="text"
+              value={editNome}
+              onChange={(e) => setEditNome(e.target.value)}
+              placeholder="Seu nome"
+              className="w-full max-w-[16rem] px-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm text-center font-black uppercase outline-none focus:border-primary/50 transition mb-3"
             />
-          ) : (
-            <User className="size-10 text-primary" />
-          )}
-        </div>
-        <h1 className="text-xl font-black uppercase tracking-tight">
-          {login?.nome || user?.name || "Jogador"}
-        </h1>
-        {login?.tipoPerfil && (
-          <span className="mt-1 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-wider">
-            {login.tipoPerfil}
-          </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsEditing(false)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-black uppercase tracking-wider"
+              >
+                <X className="size-3.5" /> Cancelar
+              </button>
+              <button
+                onClick={handleSavePerfil}
+                disabled={savingPerfil || !editNome.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-xs font-black uppercase tracking-wider disabled:opacity-50"
+              >
+                {savingPerfil ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                Salvar
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="size-24 rounded-full bg-primary/20 border-2 border-primary/30 grid place-items-center overflow-hidden mb-4">
+              {login?.fotoPerfil || user?.photo_url ? (
+                <img
+                  src={driveImg(login?.fotoPerfil || user?.photo_url || "", 200)}
+                  className="size-24 rounded-full object-cover"
+                  alt={login?.nome || user?.name || "Foto do jogador"}
+                />
+              ) : (
+                <User className="size-10 text-primary" />
+              )}
+            </div>
+            <h1 className="text-xl font-black uppercase tracking-tight">
+              {login?.nome || user?.name || "Jogador"}
+            </h1>
+            {login?.tipoPerfil && (
+              <span className="mt-1 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-wider">
+                {login.tipoPerfil}
+              </span>
+            )}
+            {login?.usuario && (
+              <button
+                onClick={startEditing}
+                className="mt-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
+              >
+                <Pencil className="size-3" /> Editar Perfil
+              </button>
+            )}
+          </>
         )}
       </header>
 
