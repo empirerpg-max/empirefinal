@@ -113,7 +113,27 @@ function SocialPage() {
   const [columns, setColumns] = useState(1);
   const [selectedNews, setSelectedNews] = useState<News | null>(null);
   const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingNews, setUploadingNews] = useState(false);
   const { user, ready } = useTelegramUser();
+
+  type SocialFolderType = "socialPosts" | "socialStories" | "socialAvatars" | "socialNews";
+
+  async function uploadToDrive(file: File, folderType: SocialFolderType): Promise<string | null> {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      formData.append("folderType", folderType);
+      const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.data?.fileUrl) return data.data.fileUrl as string;
+    } catch (err) {
+      console.error("Erro no upload:", err);
+    }
+    return null;
+  }
 
   useEffect(() => {
     loadPosts();
@@ -1296,16 +1316,37 @@ function SocialPage() {
                 />
 
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">
-                    URL da Mídia (IMG ou GIF):
-                  </p>
-                  <input
-                    type="text"
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    placeholder="https://..."
-                    className={neoInput}
-                  />
+                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Mídia (imagem):</p>
+                  {imageUrl && (
+                    <div className="w-full aspect-video rounded-xl border-2 border-black overflow-hidden bg-zinc-100">
+                      <img src={driveImg(imageUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                  )}
+                  <label
+                    className={
+                      neoInput +
+                      " flex items-center justify-center gap-2 cursor-pointer text-center " +
+                      (uploadingImage ? "opacity-60 pointer-events-none" : "")
+                    }
+                  >
+                    <ImageIcon className="size-4" />
+                    {uploadingImage ? "Enviando..." : imageUrl ? "Trocar imagem" : "Selecionar do dispositivo"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setUploadingImage(true);
+                        const folderType: SocialFolderType =
+                          selectedType === "Instagram" && igMode === "Story" ? "socialStories" : "socialPosts";
+                        const url = await uploadToDrive(file, folderType);
+                        if (url) setImageUrl(url);
+                        setUploadingImage(false);
+                      }}
+                    />
+                  </label>
                 </div>
 
                 <button
@@ -1363,14 +1404,35 @@ function SocialPage() {
               </div>
 
               <div className="space-y-1">
-                <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Imagem de Capa (URL):</p>
-                <input
-                  type="text"
-                  value={newsImage}
-                  onChange={(e) => setNewsImage(e.target.value)}
-                  placeholder="https://..."
-                  className={neoInput}
-                />
+                <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Imagem de Capa:</p>
+                {newsImage && (
+                  <div className="w-full aspect-video rounded-xl border-2 border-black overflow-hidden bg-zinc-100">
+                    <img src={driveImg(newsImage)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  </div>
+                )}
+                <label
+                  className={
+                    neoInput +
+                    " flex items-center justify-center gap-2 cursor-pointer text-center " +
+                    (uploadingNews ? "opacity-60 pointer-events-none" : "")
+                  }
+                >
+                  <ImageIcon className="size-4" />
+                  {uploadingNews ? "Enviando..." : newsImage ? "Trocar imagem" : "Selecionar do dispositivo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setUploadingNews(true);
+                      const url = await uploadToDrive(file, "socialNews");
+                      if (url) setNewsImage(url);
+                      setUploadingNews(false);
+                    }}
+                  />
+                </label>
               </div>
 
               <div className="p-3 bg-zinc-50 border-2 border-black border-dashed rounded-xl flex items-center gap-2">
@@ -1467,10 +1529,10 @@ function SocialPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Foto de Perfil (URL):</p>
-                  <div className="flex gap-2">
-                    {profileAvatar && (
-                      <div className="size-12 rounded-xl border-2 border-black overflow-hidden flex-shrink-0 bg-zinc-100">
+                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Foto de Perfil:</p>
+                  <div className="flex gap-2 items-center">
+                    <div className="size-12 rounded-xl border-2 border-black overflow-hidden flex-shrink-0 bg-zinc-100">
+                      {profileAvatar ? (
                         <img
                           src={driveImg(profileAvatar)}
                           className="w-full h-full object-cover"
@@ -1478,15 +1540,33 @@ function SocialPage() {
                           loading="lazy"
                           decoding="async"
                         />
-                      </div>
-                    )}
-                    <input
-                      type="text"
-                      value={profileAvatar}
-                      onChange={(e) => setProfileAvatar(e.target.value)}
-                      placeholder="https://..."
-                      className={neoInput}
-                    />
+                      ) : (
+                        <UserCircle className="size-full opacity-20" />
+                      )}
+                    </div>
+                    <label
+                      className={
+                        neoInput +
+                        " flex-1 flex items-center justify-center gap-2 cursor-pointer text-center " +
+                        (uploadingAvatar ? "opacity-60 pointer-events-none" : "")
+                      }
+                    >
+                      <ImageIcon className="size-4" />
+                      {uploadingAvatar ? "Enviando..." : profileAvatar ? "Trocar foto" : "Selecionar do dispositivo"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploadingAvatar(true);
+                          const url = await uploadToDrive(file, "socialAvatars");
+                          if (url) setProfileAvatar(url);
+                          setUploadingAvatar(false);
+                        }}
+                      />
+                    </label>
                   </div>
                 </div>
 
