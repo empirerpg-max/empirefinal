@@ -708,6 +708,14 @@ export const api = {
     const data = await res.json().catch(() => null);
     return Array.isArray(data) ? data : [];
   },
+  async editarComentarioSocial(rowIndex: number, texto: string, tgId: string): Promise<CommonResponse> {
+    const res = await fetch("/api/social/comentario/editar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rowIndex, texto, tgId }),
+    });
+    return res.json();
+  },
   async salvarNewsSocial(payload: any, tgId: string): Promise<any> {
     const res = await fetch("/api/social/news", {
       method: "POST",

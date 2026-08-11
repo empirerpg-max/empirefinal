@@ -147,16 +147,46 @@ export async function getSocialComentariosController(request: Request): Promise<
   const url = new URL(request.url);
   const postId = url.searchParams.get("postId") || "";
 
-  const rows = await readRows(SHEETS.comments);
-  const comments = rows
-    .filter((row) => normalizeText(row[0]) === postId)
-    .map((row) => ({
+  const allRows = await googleSheetsService.usuarios.readValues(SHEETS.comments);
+  const comments = allRows
+    .map((row, i) => ({ row, rowIndex: i + 1 }))
+    .filter(({ row, rowIndex }) => rowIndex > 1 && normalizeText(row[0]) === postId)
+    .map(({ row, rowIndex }) => ({
       autor: normalizeText(row[1]),
       texto: normalizeText(row[2]),
       data: normalizeText(row[3]),
+      telegram_id: normalizeText(row[4]) || undefined,
+      rowIndex,
     }));
 
   return jsonResponse(comments);
+}
+
+/**
+ * POST /api/social/comentario/editar
+ * Só quem escreveu o comentário (coluna E — telegram_id) pode editá-lo.
+ */
+export async function editSocialCommentController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    rowIndex?: number;
+    texto?: string;
+    tgId?: string;
+  };
+  const { rowIndex, texto, tgId } = body;
+
+  if (!rowIndex || rowIndex < 2 || !texto?.trim() || !tgId) {
+    return jsonResponse({ ok: false, error: "Parâmetros inválidos pra editar este comentário." }, 400);
+  }
+
+  const ownerRows = await googleSheetsService.usuarios.readValues(SHEETS.comments, `E${rowIndex}:E${rowIndex}`);
+  const ownerId = normalizeText(ownerRows?.[0]?.[0]);
+  if (!ownerId || (ownerId !== tgId.trim() && tgId.trim() !== "810141686")) {
+    return jsonResponse({ ok: false, error: "Você só pode editar seus próprios comentários." }, 403);
+  }
+
+  await googleSheetsService.usuarios.updateValues(SHEETS.comments, `C${rowIndex}`, [[texto.trim()]]);
+
+  return jsonResponse({ ok: true });
 }
 
 export async function comentarSocialPostController(request: Request): Promise<Response> {

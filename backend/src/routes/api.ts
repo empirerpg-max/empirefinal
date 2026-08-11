@@ -8,6 +8,7 @@ import {
   createCommentController,
   getCommentsController,
   toggleCommentReactionController,
+  editCommentController,
 } from "../controllers/forumController";
 import {
   createAlbumController,
@@ -43,6 +44,7 @@ import {
   curtirSocialPostController,
   getSocialComentariosController,
   comentarSocialPostController,
+  editSocialCommentController,
   getSocialPerfisController,
   saveSocialPerfilController,
   getSocialNewsController,
@@ -94,6 +96,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/forum/comment",
     "/api/forum/comments",
     "/api/forum/comment-reaction",
+    "/api/forum/comment-edit",
     "/api/gestao/musica",
     "/api/gestao/video",
     "/api/gestao/album",
@@ -117,6 +120,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/curtir",
     "/api/social/comentarios",
     "/api/social/comentar",
+    "/api/social/comentario/editar",
     "/api/social/perfis",
     "/api/social/news",
   ]);
@@ -272,6 +276,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await comentarSocialPostController(request);
+  } else if (url.pathname === "/api/social/comentario/editar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/comentario/editar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await editSocialCommentController(request);
   } else if (url.pathname === "/api/social/perfis") {
     response =
       request.method === "GET"
@@ -369,6 +381,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await toggleCommentReactionController(request);
+  } else if (url.pathname === "/api/forum/comment-edit") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/forum/comment-edit." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await editCommentController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(

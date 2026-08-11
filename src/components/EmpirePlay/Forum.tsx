@@ -14,6 +14,9 @@ import {
   FileText,
   Volume2,
   Sparkles,
+  Pencil,
+  X,
+  Check,
 } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -32,6 +35,7 @@ interface CommentItem {
   data: string;
   titulo: string;
   jogador: string;
+  jogadorId: string;
   comentario: string;
   nota: string;
   // Linha real na planilha + aba de comentários — null quando o comentário
@@ -142,6 +146,9 @@ export const Forum: React.FC<ForumProps> = ({
   // State para comentários do tópico selecionado
   const [topicComments, setTopicComments] = useState<CommentItem[]>([]);
   const [loadingComments, setLoadingComments] = useState<boolean>(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   // ID do tópico REAL da planilha (coluna "ID do tópico"), usado como chave
   // ao gravar comentários — nunca o id sintético gerado pelo app.
   const [resolvedTopicId, setResolvedTopicId] = useState<string>("");
@@ -310,6 +317,7 @@ export const Forum: React.FC<ForumProps> = ({
           data: c.data || c.timestamp || c.data_hora || "",
           titulo: c.titulo || c.title || topic.title,
           jogador: c.jogador || c.player || c.nome_jogador || "Anônimo",
+          jogadorId: c.jogadorId || "",
           comentario: c.comentario || c.comment || c.texto || "",
           nota: c.nota || c.rating || c.likes || "",
           rowIndex: c.rowIndex ?? null,
@@ -337,6 +345,7 @@ export const Forum: React.FC<ForumProps> = ({
             data: c.data || c.timestamp || "",
             titulo: c.titulo || c.title || topic.title,
             jogador: c.jogador || c.player || "Anônimo",
+            jogadorId: "",
             comentario: c.comentario || c.comment || "",
             nota: c.nota || c.rating || "",
             rowIndex: null,
@@ -412,6 +421,46 @@ export const Forum: React.FC<ForumProps> = ({
       console.error("Erro ao reagir ao comentário:", err);
     }
   };
+
+  function startEditComment(comment: CommentItem) {
+    haptic.selection();
+    setEditingCommentId(comment.id);
+    setEditText(comment.comentario);
+  }
+
+  function cancelEditComment() {
+    setEditingCommentId(null);
+    setEditText("");
+  }
+
+  async function saveEditComment(comment: CommentItem) {
+    if (!comment.rowIndex || !comment.sheetComments || !myId || !editText.trim()) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch("/api/forum/comment-edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sheetComments: comment.sheetComments,
+          rowIndex: comment.rowIndex,
+          jogadorId: myId,
+          novoTexto: editText.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (json?.success) {
+        setTopicComments((prev) =>
+          prev.map((c) => (c.id === comment.id ? { ...c, comentario: editText.trim() } : c)),
+        );
+        setEditingCommentId(null);
+        setEditText("");
+      }
+    } catch (err) {
+      console.error("Erro ao editar comentário:", err);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   // Filtragem por busca + tag (Vídeos)
   const filteredItems = useMemo(() => {
@@ -812,37 +861,75 @@ export const Forum: React.FC<ForumProps> = ({
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <div className="rounded-2xl rounded-tl-sm bg-neutral-800/70 border border-white/5 px-3 py-2 sm:px-4 sm:py-2.5 inline-block max-w-full">
-                          <div className="flex items-baseline gap-2 mb-0.5">
-                            <span
-                              className="text-[12px] sm:text-[13px] font-bold truncate"
-                              style={{ color }}
-                            >
-                              {c.jogador}
-                            </span>
-                            {c.nota && (
-                              <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold text-[9px] sm:text-[10px] rounded border border-emerald-500/20 flex-shrink-0">
-                                {activeSubmenu === "videos" ? `${c.nota} likes` : `nota ${c.nota}`}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs sm:text-sm text-neutral-100 leading-relaxed whitespace-pre-wrap break-words">
-                            {c.comentario}
-                          </p>
-                          <span className="block text-right text-[10px] text-neutral-500 mt-1 select-none">
-                            {c.data}
-                          </span>
-                        </div>
-
-                        {c.rowIndex && (
-                          <div className="mt-1 pl-1">
-                            <ReactionBar
-                              reactions={c.reactions}
-                              reactedBy={c.reactedBy}
-                              myId={myId}
-                              disabled={!myId}
-                              onToggle={(emoji) => handleToggleReaction(c, emoji)}
+                        {editingCommentId === c.id ? (
+                          <div className="rounded-2xl rounded-tl-sm bg-neutral-800/70 border border-emerald-500/30 px-3 py-2 sm:px-4 sm:py-2.5">
+                            <textarea
+                              value={editText}
+                              onChange={(e) => setEditText(e.target.value)}
+                              rows={2}
+                              autoFocus
+                              className="w-full bg-transparent text-xs sm:text-sm text-neutral-100 outline-none resize-none placeholder-neutral-500"
                             />
+                            <div className="flex justify-end gap-1.5 mt-1.5">
+                              <button
+                                onClick={cancelEditComment}
+                                disabled={savingEdit}
+                                className="p-1.5 rounded-full bg-white/5 text-neutral-400 hover:bg-white/10"
+                              >
+                                <X className="size-3.5" />
+                              </button>
+                              <button
+                                onClick={() => saveEditComment(c)}
+                                disabled={savingEdit || !editText.trim()}
+                                className="p-1.5 rounded-full bg-emerald-500 text-black disabled:opacity-50"
+                              >
+                                <Check className="size-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl rounded-tl-sm bg-neutral-800/70 border border-white/5 px-3 py-2 sm:px-4 sm:py-2.5 inline-block max-w-full">
+                            <div className="flex items-baseline gap-2 mb-0.5">
+                              <span
+                                className="text-[12px] sm:text-[13px] font-bold truncate"
+                                style={{ color }}
+                              >
+                                {c.jogador}
+                              </span>
+                              {c.nota && (
+                                <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold text-[9px] sm:text-[10px] rounded border border-emerald-500/20 flex-shrink-0">
+                                  {activeSubmenu === "videos" ? `${c.nota} likes` : `nota ${c.nota}`}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs sm:text-sm text-neutral-100 leading-relaxed whitespace-pre-wrap break-words">
+                              {c.comentario}
+                            </p>
+                            <span className="block text-right text-[10px] text-neutral-500 mt-1 select-none">
+                              {c.data}
+                            </span>
+                          </div>
+                        )}
+
+                        {editingCommentId !== c.id && (c.rowIndex || (c.jogadorId && c.jogadorId === myId)) && (
+                          <div className="mt-1 pl-1 flex items-center gap-2">
+                            {c.rowIndex && (
+                              <ReactionBar
+                                reactions={c.reactions}
+                                reactedBy={c.reactedBy}
+                                myId={myId}
+                                disabled={!myId}
+                                onToggle={(emoji) => handleToggleReaction(c, emoji)}
+                              />
+                            )}
+                            {c.rowIndex && c.jogadorId && c.jogadorId === myId && (
+                              <button
+                                onClick={() => startEditComment(c)}
+                                className="text-[10px] text-neutral-500 hover:text-neutral-300 inline-flex items-center gap-1"
+                              >
+                                <Pencil className="size-3" /> Editar
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>

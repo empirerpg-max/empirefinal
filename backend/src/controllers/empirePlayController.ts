@@ -1064,6 +1064,11 @@ export async function getEmpirePlayForumTopicController(
           ]) || "";
         if (!playerVal) playerVal = "Anônimo";
 
+        // ID do jogador que comentou (coluna B nas abas Comentarios_*) — usado
+        // pra saber se o usuário logado pode editar esse comentário.
+        const jogadorIdVal =
+          getValue(rec, ["id_do_jogador", "id_jogador", "jogador_id", "jogadorid", "telegram_id"]) || "";
+
         // "comentarios_para" NUNCA deve virar texto do comentário — é a
         // coluna de referência ao ID do tópico (usada só pra achar o
         // registro certo, no topicoVal acima). Um bug antigo aqui a
@@ -1104,6 +1109,7 @@ export async function getEmpirePlayForumTopicController(
           title: titleVal,
           jogador: playerVal,
           player: playerVal,
+          jogadorId: jogadorIdVal,
           comentario: commentVal,
           comment: commentVal,
           nota: ratingVal,
@@ -1136,6 +1142,7 @@ export async function getEmpirePlayForumTopicController(
           title: mediaItem ? mediaItem.title : "",
           jogador: getValue(rawMedia, ["artista", "autor"]) || "Comunidade Empire Play",
           player: getValue(rawMedia, ["artista", "autor"]) || "Comunidade Empire Play",
+          jogadorId: "",
           comentario: embeddedCommentsText,
           comment: embeddedCommentsText,
           nota: "",
@@ -1166,6 +1173,7 @@ export async function getEmpirePlayForumTopicController(
               title: mediaItem ? mediaItem.title : "",
               jogador: jName.trim(),
               player: jName.trim(),
+              jogadorId: "",
               comentario: `Avaliação do Tópico: ${jScore.trim()} pts.`,
               comment: `Avaliação do Tópico: ${jScore.trim()} pts.`,
               nota: jScore.trim(),
