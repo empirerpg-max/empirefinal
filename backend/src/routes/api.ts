@@ -53,6 +53,7 @@ import {
   getPlaylistByIdController,
   savePlaylistController,
   deletePlaylistController,
+  getPlaylistsCatalogoController,
 } from "../controllers/playlistsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
@@ -290,6 +291,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         );
       }
       response = await deletePlaylistController(request);
+    } else if (url.pathname === "/api/playlists/catalogo") {
+      if (request.method !== "GET") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use GET para /api/playlists/catalogo." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await getPlaylistsCatalogoController();
     } else if (url.pathname === "/api/playlists") {
       response =
         request.method === "GET"
