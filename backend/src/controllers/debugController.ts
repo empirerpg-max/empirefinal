@@ -1,17 +1,32 @@
-import { googleSheetsService } from "../services/googleSheetsService";
+import { googleSheetsService, listSheetTabs } from "../services/googleSheetsService";
 
-// TEMPORÁRIO — inspeciona ao vivo as abas ECOIN e INVESTIMENTO pra mapear a
-// estrutura real antes de migrar a tela "Aplicar playlists". Será removido
-// depois do mapeamento.
+// TEMPORÁRIO — resolve os gids das abas ECOIN/INVESTIMENTO (das URLs que o
+// usuário passou) pro nome real da aba na planilha registrosCharts, e lê a
+// estrutura ao vivo (cabeçalhos + linhas de exemplo). Será removido depois
+// do mapeamento.
+const GIDS_ALVO: Record<string, number> = {
+  ECOIN_OU_INVESTIMENTO: 1214241511,
+};
+
 export async function debugEcoinInvestimentoController(): Promise<Response> {
   const out: Record<string, unknown> = {};
-  for (const nome of ["ECOIN", "INVESTIMENTO"]) {
+
+  const tabs = await listSheetTabs("registrosCharts");
+  out._abas = tabs;
+
+  for (const [label, gid] of Object.entries(GIDS_ALVO)) {
+    const tab = tabs.find((t) => t.sheetId === gid);
+    if (!tab) {
+      out[label] = { erro: `Nenhuma aba com gid ${gid} encontrada.` };
+      continue;
+    }
     try {
-      out[nome] = await googleSheetsService.registrosCharts.readValues(nome, "A1:BZ12");
+      out[tab.title] = await googleSheetsService.registrosCharts.readValues(tab.title, "A1:BZ12");
     } catch (err: any) {
-      out[nome] = { erro: err?.message || String(err) };
+      out[tab.title] = { erro: err?.message || String(err) };
     }
   }
+
   return new Response(JSON.stringify(out), {
     status: 200,
     headers: { "Content-Type": "application/json" },

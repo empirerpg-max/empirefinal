@@ -140,6 +140,26 @@ interface GoogleSheetsValuesResponse {
   values?: string[][];
 }
 
+export interface SheetTabInfo {
+  title: string;
+  sheetId: number;
+}
+
+// Lista as abas (nome + gid) de uma planilha — usado pra resolver um gid de
+// URL (ex: .../edit?gid=1234#gid=1234) pro nome real da aba, sem chutar.
+export async function listSheetTabs(spreadsheetKeyOrId: SpreadsheetKey | string): Promise<SheetTabInfo[]> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const response = await sheetsRequest<{ sheets?: Array<{ properties?: { title?: string; sheetId?: number } }> }>(
+    `/${spreadsheetId}?fields=sheets.properties.title,sheets.properties.sheetId`,
+    { method: "GET" },
+    [SHEETS_READONLY_SCOPE],
+  );
+  return (response.sheets || []).map((s) => ({
+    title: s.properties?.title || "",
+    sheetId: s.properties?.sheetId ?? -1,
+  }));
+}
+
 export async function readValues(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
