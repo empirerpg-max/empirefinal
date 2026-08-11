@@ -660,39 +660,66 @@ export const api = {
     return data || {};
   },
 
-  // ---- Social ----
+  // ---- Social (migrado do Apps Script pro Worker — muito mais rápido) ----
   async listarPostsSocial(): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listarPostsSocial" }, { cache: false });
-    return Array.isArray(r) ? r : [];
+    const res = await fetch("/api/social/posts");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
   async salvarPostSocial(payload: any, tgId: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "salvarPostSocial", payload: JSON.stringify(payload), tgId });
+    const res = await fetch("/api/social/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId }),
+    });
+    return res.json();
   },
-  async listarPerfisSocial(tgId?: string): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listarPerfisSocial", tgId }, { cache: false });
-    return Array.isArray(r) ? r : [];
+  async listarPerfisSocial(): Promise<any[]> {
+    const res = await fetch("/api/social/perfis");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
   async salvarPerfilSocial(payload: any, tgId: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "salvarPerfilSocial", payload: JSON.stringify(payload), tgId });
+    const res = await fetch("/api/social/perfis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId }),
+    });
+    return res.json();
   },
   async curtirPostSocial(postId: string, tgId: string): Promise<any> {
-    return call<any>({ acao: "curtirPostSocial", postId, tgId });
+    const res = await fetch("/api/social/curtir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, tgId }),
+    });
+    return res.json();
   },
   async comentarPostSocial(payload: any, tgId: string): Promise<any> {
-    return call<any>({ acao: "comentarPostSocial", payload: JSON.stringify(payload), tgId });
+    const res = await fetch("/api/social/comentar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId }),
+    });
+    return res.json();
   },
   async listarComentariosSocial(postId: string): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listarComentariosSocial", postId }, { cache: false });
-    return Array.isArray(r) ? r : [];
+    const res = await fetch(`/api/social/comentarios?postId=${encodeURIComponent(postId)}`);
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
   async salvarNewsSocial(payload: any, tgId: string): Promise<any> {
-    return call<any>({ acao: "salvarNewsSocial", payload: JSON.stringify(payload), tgId });
+    const res = await fetch("/api/social/news", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: JSON.stringify(payload), tgId }),
+    });
+    return res.json();
   },
   async listarNewsSocial(): Promise<any[]> {
-    const r = await call<any[]>({ acao: "listarNewsSocial" }, { cache: false });
-    return Array.isArray(r) ? r : [];
+    const res = await fetch("/api/social/news");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
   },
 
   // ---- Games & Economy ----

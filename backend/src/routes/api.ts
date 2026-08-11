@@ -37,6 +37,17 @@ import { reportVideoIssueController } from "../controllers/reportVideoController
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
 import { loginController } from "../controllers/authController";
 import { getMeusArtistasNomesController } from "../controllers/artistasController";
+import {
+  getSocialPostsController,
+  createSocialPostController,
+  curtirSocialPostController,
+  getSocialComentariosController,
+  comentarSocialPostController,
+  getSocialPerfisController,
+  saveSocialPerfilController,
+  getSocialNewsController,
+  saveSocialNewsController,
+} from "../controllers/socialController";
 import { handleMediaRoutes } from "./mediaRoutes";
 import { debugDumpController } from "../controllers/debugTabsController";
 
@@ -93,6 +104,12 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/empire-play/lancamentos-recentes",
     "/api/empire-play/report-video-issue",
     "/api/empire-play/report-wrong-content",
+    "/api/social/posts",
+    "/api/social/curtir",
+    "/api/social/comentarios",
+    "/api/social/comentar",
+    "/api/social/perfis",
+    "/api/social/news",
     "/api/debug/dump",
   ]);
 
@@ -224,6 +241,60 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await uploadDriveController(request);
+  } else if (url.pathname === "/api/social/posts") {
+    response =
+      request.method === "GET"
+        ? await getSocialPostsController()
+        : request.method === "POST"
+          ? await createSocialPostController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/posts." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
+  } else if (url.pathname === "/api/social/curtir") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/curtir." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await curtirSocialPostController(request);
+  } else if (url.pathname === "/api/social/comentarios") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/social/comentarios." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getSocialComentariosController(request);
+  } else if (url.pathname === "/api/social/comentar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/comentar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await comentarSocialPostController(request);
+  } else if (url.pathname === "/api/social/perfis") {
+    response =
+      request.method === "GET"
+        ? await getSocialPerfisController()
+        : request.method === "POST"
+          ? await saveSocialPerfilController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/perfis." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
+  } else if (url.pathname === "/api/social/news") {
+    response =
+      request.method === "GET"
+        ? await getSocialNewsController()
+        : request.method === "POST"
+          ? await saveSocialNewsController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/news." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
   } else if (url.pathname === "/api/auth/login") {
     if (request.method !== "POST") {
       return new Response(
