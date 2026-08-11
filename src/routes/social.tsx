@@ -112,6 +112,7 @@ function SocialPage() {
   const [profileFollowing, setProfileFollowing] = useState("0");
   const [columns, setColumns] = useState(1);
   const [selectedNews, setSelectedNews] = useState<News | null>(null);
+  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
   const { user, ready } = useTelegramUser();
 
   useEffect(() => {
@@ -296,7 +297,7 @@ function SocialPage() {
     if (url.includes("lh3.googleusercontent.com")) return url;
     const m = String(url).match(/[-\w]{25,}/);
     if (!m) return url;
-    return `https://lh3.googleusercontent.com/d/$${m[0]}=w600`;
+    return `https://lh3.googleusercontent.com/d/${m[0]}=w600`;
   };
 
   const getPostStyles = (tipo: string) => {
@@ -737,6 +738,17 @@ function SocialPage() {
                 const following = perfil?.seguindo || 0;
                 const totalLikes = artistPosts.reduce((s, p) => s + (p.analytics?.likes || 0), 0);
 
+                const followKey = `${selectedIndustryArtist.nome}|${industryViewTab}`;
+                const isFollowing = followingSet.has(followKey);
+                const toggleFollow = () => {
+                  setFollowingSet((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(followKey)) next.delete(followKey);
+                    else next.add(followKey);
+                    return next;
+                  });
+                };
+
                 const profileAvatarStr = perfil?.avatar_url || perfil?.avatar || perfil?.foto;
                 const avatarSrc = profileAvatarStr ? driveImg(profileAvatarStr) : undefined;
 
@@ -818,8 +830,15 @@ function SocialPage() {
                           {bio && <p className="text-[13px] mt-1.5 leading-snug whitespace-pre-line">{bio}</p>}
                         </div>
                         <div className="grid grid-cols-2 gap-2 mt-4">
-                          <button className="py-1.5 rounded-lg text-[13px] font-bold text-white bg-gradient-to-r from-[#fa7e1e] via-[#d62976] to-[#4f5bd5]">
-                            Seguir
+                          <button
+                            onClick={toggleFollow}
+                            className={
+                              isFollowing
+                                ? "py-1.5 rounded-lg text-[13px] font-bold text-black bg-zinc-100 border border-zinc-200"
+                                : "py-1.5 rounded-lg text-[13px] font-bold text-white bg-gradient-to-r from-[#fa7e1e] via-[#d62976] to-[#4f5bd5]"
+                            }
+                          >
+                            {isFollowing ? "Seguindo" : "Seguir"}
                           </button>
                           <button className="py-1.5 rounded-lg text-[13px] font-bold bg-zinc-100 border border-zinc-200">
                             Mensagem
@@ -894,8 +913,15 @@ function SocialPage() {
                           <div className="p-1 bg-black rounded-full">
                             {renderAvatar("size-24 rounded-full overflow-hidden bg-zinc-800")}
                           </div>
-                          <button className="mt-12 px-4 py-1.5 rounded-full bg-white text-black font-black text-sm">
-                            Seguir
+                          <button
+                            onClick={toggleFollow}
+                            className={
+                              isFollowing
+                                ? "mt-12 px-4 py-1.5 rounded-full bg-transparent border border-zinc-600 text-white font-black text-sm"
+                                : "mt-12 px-4 py-1.5 rounded-full bg-white text-black font-black text-sm"
+                            }
+                          >
+                            {isFollowing ? "Seguindo" : "Seguir"}
                           </button>
                         </div>
                         <div className="mt-3">
@@ -1024,7 +1050,16 @@ function SocialPage() {
                       </p>
                       <p className="text-[13px] text-zinc-400">{selectedIndustryArtist.nome}</p>
                       <div className="flex gap-2 mt-3">
-                        <button className="px-6 py-1.5 rounded-md bg-[#FE2C55] font-bold text-sm">Seguir</button>
+                        <button
+                          onClick={toggleFollow}
+                          className={
+                            isFollowing
+                              ? "px-6 py-1.5 rounded-md bg-zinc-800 border border-zinc-600 font-bold text-sm"
+                              : "px-6 py-1.5 rounded-md bg-[#FE2C55] font-bold text-sm"
+                          }
+                        >
+                          {isFollowing ? "Seguindo" : "Seguir"}
+                        </button>
                         <button className="px-3 py-1.5 rounded-md bg-zinc-800 font-bold text-sm">Mensagem</button>
                         <button className="px-3 py-1.5 rounded-md bg-zinc-800 font-bold text-sm">
                           <UserCircle className="size-4" />
@@ -1083,7 +1118,7 @@ function SocialPage() {
                             )}
                             <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent flex items-center gap-1 text-white text-[11px] font-bold">
                               <Play className="size-3 fill-current" />
-                              {formatCount(p.analytics.likes * 17 + 234)}
+                              {formatCount(p.analytics.likes)}
                             </div>
                           </button>
                         ))}
@@ -1222,8 +1257,9 @@ function SocialPage() {
                     <div className="size-5 rounded-full bg-black/10 flex items-center justify-center font-black text-[11px] overflow-hidden">
                       {activeArtist?.foto ? (
                         <img
-                          src={activeArtist.foto}
+                          src={driveImg(activeArtist.foto)}
                           className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
                           loading="lazy"
                           decoding="async"
                         />
@@ -1341,8 +1377,9 @@ function SocialPage() {
                 <div className="size-6 rounded-full bg-black/10 overflow-hidden">
                   {activeArtist?.foto ? (
                     <img
-                      src={activeArtist.foto}
+                      src={driveImg(activeArtist.foto)}
                       className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
                       loading="lazy"
                       decoding="async"
                     />
@@ -1549,7 +1586,7 @@ function SocialPage() {
               className="bg-white border-[4px] border-black rounded-[30px] p-6 max-w-md w-full shadow-[10px_10px_0px_#000] max-h-[90vh] flex flex-col"
             >
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black italic uppercase text-black">COMENS</h2>
+                <h2 className="text-xl font-black italic uppercase text-black">COMENTÁRIOS</h2>
                 <button
                   onClick={() => setIsCommentModalOpen(false)}
                   className="p-2 border-2 border-black rounded-full hover:bg-red-500 text-black transition-colors"
