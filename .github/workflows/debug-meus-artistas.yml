@@ -5,8 +5,8 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: Dump ARTISTAS
+      - name: Dump Usuários (Hugo)
         run: |
-          echo "=== ARTISTAS ==="
-          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/dump?sheet=ARTISTAS"
+          echo "=== Usuários (nome contém 'hugo') ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/dump?sheet=Usu%C3%A1rios&filterCol=nome&filterVal=hugo"
           echo ""
