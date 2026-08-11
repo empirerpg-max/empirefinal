@@ -9,13 +9,11 @@ import {
   Heart,
   MessageCircle,
   Share2,
-  BarChart3,
   X,
   Image as ImageIcon,
   Send,
   MoreVertical,
   Newspaper,
-  ImageOff,
   UserCircle,
   ChevronRight,
   ChevronLeft,
@@ -26,7 +24,13 @@ import {
   Repeat2,
   Film,
   Tag,
+  Rss,
+  Users,
+  Settings2,
+  Loader2,
 } from "lucide-react";
+import { api } from "@/lib/api";
+import { useTelegramUser, haptic } from "@/lib/telegram";
 
 function formatCount(n: number | undefined): string {
   const v = Number(n || 0);
@@ -34,8 +38,6 @@ function formatCount(n: number | undefined): string {
   if (v >= 1_000) return (v / 1_000).toFixed(v >= 10_000 ? 0 : 1).replace(/\.0$/, "") + "K";
   return String(v);
 }
-import { api } from "@/lib/api";
-import { useTelegramUser } from "@/lib/telegram";
 
 export const Route = createFileRoute("/social")({
   validateSearch: (s: Record<string, unknown>): { postId?: string } => ({
@@ -114,9 +116,9 @@ function SocialPage() {
   const [newComment, setNewComment] = useState("");
   const [profileFollowers, setProfileFollowers] = useState("0");
   const [profileFollowing, setProfileFollowing] = useState("0");
-  const [columns, setColumns] = useState(1);
   const [selectedNews, setSelectedNews] = useState<News | null>(null);
   const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
+  const [likedPulse, setLikedPulse] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingNews, setUploadingNews] = useState(false);
@@ -203,6 +205,9 @@ function SocialPage() {
   }
 
   async function handleLike(postId: string) {
+    haptic.light();
+    setLikedPulse(postId);
+    window.setTimeout(() => setLikedPulse((cur) => (cur === postId ? null : cur)), 350);
     const tgId = user?.id || "";
     const res = await (api as any).curtirPostSocial(postId, tgId);
     if (res.ok) {
@@ -224,6 +229,7 @@ function SocialPage() {
       const tgId = user?.id || "";
       const res = await (api as any).comentarPostSocial(payload, tgId);
       if (res.ok) {
+        haptic.success();
         setNewComment("");
         loadComments(selectedPost.id);
         setPosts((prev) =>
@@ -241,7 +247,6 @@ function SocialPage() {
     if (!editingProfileInfo || submitting) return;
     setSubmitting(true);
     try {
-      // 💡 Convertendo explicitamente para número puro
       const safeSeguindo = parseInt(String(profileFollowing).replace(/\D/g, ""), 10) || 0;
 
       const p: any = {
@@ -255,11 +260,10 @@ function SocialPage() {
         seguindo: safeSeguindo,
       };
 
-      console.log("Enviando dados para o Google Script:", p); // Debug para você ver o que está indo
-
       const tgId = user?.id || "";
       const res = await (api as any).salvarPerfilSocial(p, tgId);
       if (res.ok) {
+        haptic.success();
         setIsProfileModalOpen(false);
         loadContext();
       }
@@ -288,6 +292,7 @@ function SocialPage() {
 
       const res = await (api as any).salvarPostSocial(payload, tgId);
       if (res.ok) {
+        haptic.success();
         setIsModalOpen(false);
         setSelectedType(null);
         setPostText("");
@@ -314,6 +319,7 @@ function SocialPage() {
       const tgId = user?.id || "";
       const res = await (api as any).salvarNewsSocial(payload, tgId);
       if (res.ok) {
+        haptic.success();
         setIsNewsModalOpen(false);
         setNewsTitle("");
         setNewsContent("");
@@ -335,69 +341,62 @@ function SocialPage() {
     return `https://lh3.googleusercontent.com/d/${m[0]}=w600`;
   };
 
-  const getPostStyles = (tipo: string) => {
-    if (tipo === "Twitter")
-      return "bg-white text-black border-[#3D8BFF] shadow-[6px_6px_0px_#B9E2FF] active:shadow-[2px_2px_0px_#B9E2FF]";
-    if (tipo === "Instagram")
-      return "bg-white text-black border-[#FF4757] shadow-[6px_6px_0px_#FFE0E0] active:shadow-[2px_2px_0px_#FFE0E0]";
-    if (tipo === "TikTok")
-      return "bg-white text-black border-black shadow-[6px_6px_0px_#000] active:shadow-[2px_2px_0px_#000]";
-    return "bg-white text-black border-black shadow-[7px_7px_0px_#000] active:shadow-[2px_2px_0px_#000]";
+  const networkAccent = (tipo: string) => {
+    if (tipo === "Twitter") return { icon: Twitter, color: "text-[#1d9bf0]", ring: "border-[#1d9bf0]/30" };
+    if (tipo === "TikTok") return { icon: Video, color: "text-[#25F4EE]", ring: "border-[#25F4EE]/30" };
+    return { icon: Instagram, color: "text-[#f472b6]", ring: "border-[#f472b6]/30" };
   };
 
-  const neoCard =
-    "border-[3.5px] rounded-[24px] p-4 sm:p-5 mb-5 transition-all active:translate-x-[1px] active:translate-y-[1px]";
-  const neoBadge =
-    "px-2.5 py-0.5 rounded-full border-2 border-black text-[11px] font-black uppercase tracking-tight text-white text-center";
-  const neoInput =
-    "w-full border-[3px] border-black rounded-[16px] p-3.5 font-bold text-sm focus:outline-none focus:ring-4 focus:ring-[#3D8BFF]/20 text-black bg-white placeholder:text-black/30 transition-all";
+  const card = "rounded-[1.75rem] bg-white/5 border border-white/10 transition-all";
+  const inputCls =
+    "w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-sm font-medium focus:outline-none focus:border-primary/50 transition-colors placeholder:text-muted-foreground/60";
 
   return (
-    <div className="flex-1 bg-[#F4F4F5] min-h-screen pb-32">
+    <div className="flex-1 bg-background min-h-screen pb-32">
       {/* Header */}
-      <div className="pt-4 px-4 sticky top-0 bg-[#F4F4F5]/90 backdrop-blur-md z-[60] border-b-2 border-black/5">
-        <div className="flex flex-col gap-4 mb-4">
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter text-black flex items-center gap-2">
-            Empire <span className="text-[#3D8BFF]">Social</span>
+      <div className="pt-6 px-4 sticky top-0 bg-background/90 backdrop-blur-md z-[60] border-b border-white/5">
+        <div className="flex flex-col gap-4 mb-4 max-w-md mx-auto">
+          <h1 className="text-2xl font-black uppercase tracking-tight flex items-center gap-2">
+            Empire <span className="text-primary">Social</span>
           </h1>
 
-          <div className="grid grid-cols-4 bg-white border-[3px] border-black rounded-2xl p-1 shadow-[4px_4px_0px_#000] w-full overflow-hidden">
-            <button
-              onClick={() => setViewMode("Feed")}
-              className={`py-3 font-black text-[11px] uppercase rounded-xl transition-all flex items-center justify-center gap-1 ${viewMode === "Feed" ? "bg-black text-white shadow-inner" : "bg-white text-black hover:bg-zinc-50"}`}
-            >
-              Feed
-            </button>
-            <button
-              onClick={() => {
-                setViewMode("Industry");
-                setSelectedIndustryArtist(null);
-              }}
-              className={`py-3 font-black text-[11px] uppercase rounded-xl transition-all flex items-center justify-center gap-1 ${viewMode === "Industry" ? "bg-black text-white shadow-inner" : "bg-white text-black hover:bg-zinc-50"}`}
-            >
-              Perfis
-            </button>
-            <button
-              onClick={() => setViewMode("News")}
-              className={`py-3 font-black text-[11px] uppercase rounded-xl transition-all flex items-center justify-center gap-1 ${viewMode === "News" ? "bg-black text-white shadow-inner" : "bg-white text-black hover:bg-zinc-50"}`}
-            >
-              News
-            </button>
-            <button
-              onClick={() => setViewMode("Settings")}
-              className={`py-3 font-black text-[11px] uppercase rounded-xl transition-all flex items-center justify-center gap-1 ${viewMode === "Settings" ? "bg-black text-white shadow-inner" : "bg-white text-black hover:bg-zinc-50"}`}
-            >
-              Configurações
-            </button>
+          <div className="grid grid-cols-4 gap-1 bg-white/5 border border-white/10 rounded-2xl p-1 w-full">
+            {(
+              [
+                { id: "Feed", label: "Feed", icon: Rss },
+                { id: "Industry", label: "Perfis", icon: Users },
+                { id: "News", label: "News", icon: Newspaper },
+                { id: "Settings", label: "Config", icon: Settings2 },
+              ] as const
+            ).map((tab) => {
+              const Icon = tab.icon;
+              const active = viewMode === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    haptic.selection();
+                    setViewMode(tab.id);
+                    if (tab.id === "Industry") setSelectedIndustryArtist(null);
+                  }}
+                  className={`py-2.5 min-h-11 font-black text-[10px] uppercase rounded-xl transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
+                    active ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="size-3.5" />
+                  <span className="truncate">{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {myArtists.length > 0 && (
-          <div className="mb-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-3 px-1 italic">
-              Interagir como:
+          <div className="mb-4 max-w-md mx-auto">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3 px-1">
+              Interagir como
             </p>
-            <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar px-1 items-center">
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide px-1 items-center">
               {myArtists.map((art) => {
                 const isActive = activeArtist?.nome === art.nome;
                 const imgUrl = driveImg(art.foto);
@@ -405,19 +404,20 @@ function SocialPage() {
                   <button
                     key={art.nome}
                     onClick={() => {
+                      haptic.selection();
                       setActiveArtist(art);
                       setSelectedArtist(art.nome);
                     }}
-                    className={`flex flex-col items-center gap-2 transition-all shrink-0 group relative`}
+                    className="flex flex-col items-center gap-2 transition-all shrink-0 group relative active:scale-95"
                   >
                     <div
-                      className={`size-14 rounded-full border-[3px] overflow-hidden transition-all relative p-0.5 ${
+                      className={`size-14 rounded-full overflow-hidden transition-all relative p-0.5 border-2 ${
                         isActive
-                          ? "border-[#3D8BFF] shadow-[0_0_15px_rgba(61,139,255,0.4)] scale-110 z-10 bg-white"
-                          : "border-black bg-white grayscale hover:grayscale-0"
+                          ? "border-primary shadow-[0_0_15px_rgba(var(--primary-rgb,124,58,237),0.35)] scale-110 z-10"
+                          : "border-white/10 opacity-70 hover:opacity-100"
                       }`}
                     >
-                      <div className="w-full h-full rounded-full overflow-hidden bg-zinc-100 border-[1px] border-transparent">
+                      <div className="w-full h-full rounded-full overflow-hidden bg-secondary">
                         {imgUrl ? (
                           <img
                             loading="lazy"
@@ -429,11 +429,11 @@ function SocialPage() {
                             onError={(e) => {
                               const target = e.target as HTMLImageElement;
                               target.onerror = null;
-                              target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(art.nome)}&background=3D8BFF&color=fff&size=128&bold=true`;
+                              target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(art.nome)}&background=111&color=fff&size=128&bold=true`;
                             }}
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center font-black text-lg bg-[#3D8BFF] text-white italic">
+                          <div className="w-full h-full flex items-center justify-center font-black text-lg bg-primary/20 text-primary">
                             {art.nome[0]}
                           </div>
                         )}
@@ -442,13 +442,13 @@ function SocialPage() {
                     {isActive && (
                       <motion.div
                         layoutId="activeIndicator"
-                        className="absolute bottom-6 right-0 size-4 bg-[#D0FF43] border-2 border-black rounded-full flex items-center justify-center z-20"
-                      >
-                        <div className="size-1 bg-black rounded-full animate-pulse" />
-                      </motion.div>
+                        className="absolute bottom-6 right-0 size-3.5 bg-primary border-2 border-background rounded-full z-20"
+                      />
                     )}
                     <span
-                      className={`text-[11px] font-black uppercase italic tracking-tighter transition-all ${isActive ? "text-[#3D8BFF] scale-105" : "text-black/60"}`}
+                      className={`text-[11px] font-black uppercase tracking-tight max-w-[4.5rem] truncate transition-all ${
+                        isActive ? "text-primary" : "text-muted-foreground"
+                      }`}
                     >
                       {art.nome.split(" ")[0]}
                     </span>
@@ -460,151 +460,178 @@ function SocialPage() {
         )}
       </div>
 
-      <div className="px-4 max-w-xl mx-auto mt-4">
+      <div className="px-4 max-w-md mx-auto mt-4">
         {viewMode === "Feed" ? (
           <>
             {loading ? (
               <div className="flex flex-col items-center justify-center p-20 gap-4">
-                <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
-                <p className="font-black italic uppercase text-black">Carregando Hype...</p>
+                <Loader2 className="size-8 text-primary animate-spin" />
+                <p className="font-black uppercase text-xs tracking-widest text-muted-foreground">Carregando feed...</p>
+              </div>
+            ) : posts.length === 0 ? (
+              <div className="w-full p-8 rounded-[1.75rem] bg-card/50 border-2 border-dashed border-primary/20 flex flex-col items-center text-center min-h-40 gap-2 mt-6">
+                <Rss className="size-8 text-primary/60" />
+                <p className="text-sm font-black uppercase tracking-tight">Nenhum post ainda</p>
+                <p className="text-[11px] font-medium text-muted-foreground leading-snug max-w-[16rem]">
+                  Toque no botão + para lançar o primeiro hype de um dos seus artistas.
+                </p>
               </div>
             ) : (
-              posts.map((post) => (
-                <motion.div
-                  key={post.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`${neoCard} ${getPostStyles(post.tipo)}`}
-                >
-                  <div
-                    className="cursor-pointer"
-                    onClick={() => {
-                      setSelectedPost(post);
-                      loadComments(post.id);
-                      setIsCommentModalOpen(true);
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full border-2 border-black overflow-hidden flex-shrink-0 bg-[#FFD166] flex items-center justify-center font-black text-black">
-                          {post.avatar ? (
-                            <img
-                              loading="lazy"
-                              decoding="async"
-                              src={driveImg(post.avatar)}
-                              className="w-full h-full object-cover"
-                              referrerPolicy="no-referrer"
-                              crossOrigin="anonymous"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = "none";
-                                if (target.parentElement) {
-                                  target.parentElement.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-zinc-200 text-black text-[10px] font-black uppercase">${post.autor[0]}</div>`;
-                                }
-                              }}
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-zinc-200 text-black text-[10px] font-black uppercase">
-                              {post.autor[0]}
+              <div className="flex flex-col gap-4 pb-4">
+                {posts.map((post) => {
+                  const isMine = activeArtist && post.autor === activeArtist.nome;
+                  const { icon: NetIcon, color: netColor } = networkAccent(post.tipo);
+                  return (
+                    <motion.div
+                      key={post.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`${card} p-4 sm:p-5 ${isMine ? "border-primary/30 bg-primary/[0.04]" : ""}`}
+                    >
+                      <div
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setSelectedPost(post);
+                          loadComments(post.id);
+                          setIsCommentModalOpen(true);
+                        }}
+                      >
+                        <div className="flex items-center justify-between mb-3.5 gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="size-10 rounded-full overflow-hidden flex-shrink-0 bg-secondary border border-white/10 flex items-center justify-center font-black">
+                              {post.avatar ? (
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={driveImg(post.avatar)}
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                  crossOrigin="anonymous"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = "none";
+                                    if (target.parentElement) {
+                                      target.parentElement.innerHTML = `<div class="w-full h-full flex items-center justify-center text-[10px] font-black uppercase">${post.autor[0]}</div>`;
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[10px] font-black uppercase">
+                                  {post.autor[0]}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-black text-sm text-black leading-none">{post.autor}</p>
-                          <p className="text-[10px] text-black font-black opacity-80 uppercase">{post.handle}</p>
-                        </div>
-                      </div>
-                      <div className="flex-shrink-0">
-                        {post.tipo === "Instagram" && <Instagram className="size-5 text-black" />}
-                        {post.tipo === "Twitter" && <Twitter className="size-5 text-black" />}
-                        {post.tipo === "TikTok" && <Video className="size-5 text-black" />}
-                      </div>
-                    </div>
-
-                    {post.tipo === "Instagram" && post.subtipo === "Story" ? (
-                      <div className="relative aspect-[9/16] bg-black border-2 border-black rounded-[15px] overflow-hidden mb-4 shadow-[4px_4px_0px_#000]">
-                        {post.media_url ? (
-                          <img
-                            loading="lazy"
-                            decoding="async"
-                            src={driveImg(post.media_url)}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = "https://placehold.co/600x1067?text=Story";
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-white font-black italic">
-                            STORY
+                            <div className="min-w-0">
+                              <p className="font-black text-sm leading-none truncate">{post.autor}</p>
+                              <p className="text-[10px] text-muted-foreground font-bold mt-1 truncate">{post.handle}</p>
+                            </div>
+                            {isMine && (
+                              <span className="text-[9px] font-black uppercase text-primary bg-primary/10 px-1.5 py-0.5 rounded-md shrink-0">
+                                Você
+                              </span>
+                            )}
                           </div>
+                          <NetIcon className={`size-4.5 shrink-0 ${netColor}`} />
+                        </div>
+
+                        {post.tipo === "Instagram" && post.subtipo === "Story" ? (
+                          <div className="relative aspect-[9/16] max-h-[26rem] bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10">
+                            {post.media_url ? (
+                              <img
+                                loading="lazy"
+                                decoding="async"
+                                src={driveImg(post.media_url)}
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = "https://placehold.co/600x1067?text=Story";
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-muted-foreground font-black uppercase text-xs">
+                                Story
+                              </div>
+                            )}
+                            <div className="absolute top-3 left-3 flex gap-2">
+                              <span className="px-2.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-black uppercase">
+                                Story
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          post.media_url && (
+                            <div className="aspect-square bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10">
+                              <img
+                                loading="lazy"
+                                decoding="async"
+                                src={driveImg(post.media_url)}
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = "https://placehold.co/600x600?text=Post";
+                                }}
+                              />
+                            </div>
+                          )
                         )}
-                        <div className="absolute top-4 left-4 flex gap-2">
-                          <span className={neoBadge + " bg-[#D0FF43] text-black font-black"}>Story</span>
-                        </div>
+
+                        <p className="font-medium text-sm leading-snug mb-3.5 text-pretty">{post.texto}</p>
                       </div>
-                    ) : (
-                      post.media_url && (
-                        <div className="aspect-square bg-muted border-2 border-black rounded-[15px] overflow-hidden mb-4 shadow-[4px_4px_0px_#000]">
-                          <img
-                            loading="lazy"
-                            decoding="async"
-                            src={driveImg(post.media_url)}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = "https://placehold.co/600x600?text=Post";
-                            }}
-                          />
-                        </div>
-                      )
-                    )}
 
-                    <p className="font-bold text-sm leading-snug mb-4 text-black text-pretty">{post.texto}</p>
-                  </div>
-
-                  <div className="flex items-center gap-4 pt-3 border-t-2 border-current/10">
-                    <button
-                      onClick={() => handleLike(post.id)}
-                      className="flex items-center gap-1 font-black text-xs hover:opacity-70 transition-colors text-black"
-                    >
-                      <Heart
-                        className={`size-4 ${post.analytics.likes > 0 ? "fill-[#3D8BFF] text-[#3D8BFF]" : "text-black"}`}
-                      />{" "}
-                      {post.analytics.likes}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedPost(post);
-                        loadComments(post.id);
-                        setIsCommentModalOpen(true);
-                      }}
-                      className="flex items-center gap-1 font-black text-xs hover:opacity-70 transition-colors text-black"
-                    >
-                      <MessageCircle className="size-4 text-black" /> {post.analytics.comments}
-                    </button>
-                    <button className="flex items-center gap-1 font-black text-xs ml-auto text-black">
-                      <Share2 className="size-4 text-black" />
-                    </button>
-                  </div>
-                </motion.div>
-              ))
+                      <div className="flex items-center gap-5 pt-3 border-t border-white/5">
+                        <button
+                          onClick={() => handleLike(post.id)}
+                          className="flex items-center gap-1.5 font-black text-xs min-h-9 active:scale-90 transition-transform"
+                        >
+                          <motion.span
+                            animate={likedPulse === post.id ? { scale: [1, 1.4, 1] } : { scale: 1 }}
+                            transition={{ duration: 0.35 }}
+                          >
+                            <Heart
+                              className={`size-4 ${post.analytics.likes > 0 ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                            />
+                          </motion.span>
+                          <span className={post.analytics.likes > 0 ? "text-primary" : "text-muted-foreground"}>
+                            {post.analytics.likes}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedPost(post);
+                            loadComments(post.id);
+                            setIsCommentModalOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 font-black text-xs text-muted-foreground min-h-9 active:scale-90 transition-transform"
+                        >
+                          <MessageCircle className="size-4" /> {post.analytics.comments}
+                        </button>
+                        <button className="flex items-center gap-1.5 font-black text-xs text-muted-foreground ml-auto min-h-9 active:scale-90 transition-transform">
+                          <Share2 className="size-4" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
             )}
           </>
         ) : viewMode === "News" ? (
           <div className="grid gap-6 pb-20">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-black italic uppercase text-black tracking-tighter">
-                Empire <span className="text-[#3D8BFF]">NEWS</span>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-xl font-black uppercase tracking-tight">
+                Empire <span className="text-primary">News</span>
               </h2>
               <button
-                onClick={() => setIsNewsModalOpen(true)}
-                className="p-2 bg-black text-[#D0FF43] rounded-full border-2 border-black shadow-[3px_3px_0px_#D0FF43]"
+                onClick={() => {
+                  haptic.light();
+                  setIsNewsModalOpen(true);
+                }}
+                className="size-10 shrink-0 rounded-full bg-primary text-primary-foreground grid place-items-center active:scale-90 transition-transform"
               >
-                <Plus className="size-5 text-[#D0FF43]" />
+                <Plus className="size-5" />
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-8">
+            <div className="grid grid-cols-1 gap-5">
               {news.map((item) => (
                 <motion.div
                   key={item.id}
@@ -612,44 +639,45 @@ function SocialPage() {
                   onClick={() => setSelectedNews(item)}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-white text-black border-[3.5px] border-black rounded-[35px] overflow-hidden shadow-[8px_8px_0px_#000] cursor-pointer group active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex flex-col"
+                  className={`${card} overflow-hidden cursor-pointer group active:scale-[0.98] flex flex-col`}
                 >
-                  <div className="aspect-[16/9] bg-zinc-100 relative border-b-[3.5px] border-black overflow-hidden">
+                  <div className="aspect-[16/9] bg-secondary relative overflow-hidden">
                     {item.imagem ? (
                       <img
                         src={driveImg(item.imagem)}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                         referrerPolicy="no-referrer"
                         loading="lazy"
                         decoding="async"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-[#D0FF43]/10">
-                        <Newspaper className="size-12 text-black/5" />
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Newspaper className="size-12 text-muted-foreground/20" />
                       </div>
                     )}
-                    <div className="absolute top-4 left-4">
-                      <span className="bg-black text-[#D0FF43] text-[11px] font-black uppercase px-3 py-1 rounded-full border-2 border-white/20 shadow-lg">
-                        EXCLUSIVO
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-transparent" />
+                    <div className="absolute top-3 left-3">
+                      <span className="bg-primary text-primary-foreground text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow-lg">
+                        Exclusivo
                       </span>
                     </div>
                   </div>
-                  <div className="p-5 sm:p-6 bg-white shrink-0">
-                    <div className="flex items-center gap-3 text-[10px] font-black uppercase text-black/70 mb-3 italic tracking-widest">
-                      <span className="text-[#3D8BFF] tracking-tighter">{item.autor}</span>
-                      <span className="size-1 rounded-full bg-black/30" />
-                      <span className="opacity-80">{new Date(item.data).toLocaleDateString("pt-BR")}</span>
+                  <div className="p-4 sm:p-5">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground mb-2 tracking-widest">
+                      <span className="text-primary">{item.autor}</span>
+                      <span className="size-1 rounded-full bg-white/20" />
+                      <span>{new Date(item.data).toLocaleDateString("pt-BR")}</span>
                     </div>
-                    <h3 className="text-xl font-black uppercase italic leading-[1.1] mb-3 line-clamp-2 group-hover:text-[#3D8BFF] transition-colors tracking-tight text-black">
+                    <h3 className="text-lg font-black uppercase leading-tight mb-2 line-clamp-2 group-hover:text-primary transition-colors">
                       {item.titulo}
                     </h3>
-                    <p className="text-[13.5px] font-bold text-[#1A1A1B] leading-snug line-clamp-3 mb-5">
+                    <p className="text-[13px] font-medium text-muted-foreground leading-snug line-clamp-3 mb-3">
                       {item.conteudo}
                     </p>
-                    <div className="flex justify-between items-center pt-3 border-t-2 border-dashed border-black/20">
-                      <span className="text-[10px] font-black uppercase opacity-50 italic">Leitura 2 min</span>
-                      <span className="text-xs font-black uppercase italic text-[#3D8BFF] flex items-center gap-1 group-hover:gap-2 transition-all">
-                        Ver Matéria Completa <ChevronRight className="size-3 stroke-[3]" />
+                    <div className="flex justify-between items-center pt-3 border-t border-white/5">
+                      <span className="text-[10px] font-bold uppercase text-muted-foreground/60">Leitura 2 min</span>
+                      <span className="text-xs font-black uppercase text-primary flex items-center gap-1 group-hover:gap-1.5 transition-all">
+                        Ler matéria <ChevronRight className="size-3.5" />
                       </span>
                     </div>
                   </div>
@@ -658,9 +686,9 @@ function SocialPage() {
             </div>
 
             {news.length === 0 && (
-              <div className="py-20 text-center flex flex-col items-center gap-4">
-                <Newspaper className="size-12 opacity-10" />
-                <p className="font-black uppercase italic opacity-20">Sem manchetes no momento</p>
+              <div className="py-16 text-center flex flex-col items-center gap-3">
+                <Newspaper className="size-10 text-muted-foreground/20" />
+                <p className="font-black uppercase text-xs text-muted-foreground">Sem manchetes no momento</p>
               </div>
             )}
           </div>
@@ -668,90 +696,85 @@ function SocialPage() {
           <div className="grid gap-6 pb-20">
             {!selectedIndustryArtist ? (
               <>
-                <h2 className="text-2xl font-black italic uppercase text-black tracking-tighter text-center">
-                  Império <span className="text-[#3D8BFF]">Perfis</span>
+                <h2 className="text-xl font-black uppercase tracking-tight text-center">
+                  Império <span className="text-primary">Perfis</span>
                 </h2>
-                <div className="grid gap-4">
+                <div className="grid gap-3">
                   {allArtists.map((art) => (
                     <motion.button
                       key={art.nome}
-                      whileHover={{ x: 5 }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => {
+                        haptic.selection();
                         setSelectedIndustryArtist(art);
                         setIndustryViewTab(null);
                       }}
-                      className="flex items-center gap-4 p-4 bg-white border-[3px] border-black rounded-[20px] shadow-[4px_4px_0px_#000] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all group"
+                      className={`${card} flex items-center gap-4 p-4 group active:scale-[0.98]`}
                     >
-                      <div className="size-14 rounded-full border-2 border-black overflow-hidden flex-shrink-0 bg-stone-100 flex items-center justify-center">
-                        <UserCircle className="size-8 text-black/20" />
+                      <div className="size-12 rounded-full overflow-hidden flex-shrink-0 bg-secondary border border-white/10 flex items-center justify-center">
+                        <UserCircle className="size-7 text-muted-foreground/40" />
                       </div>
-                      <div className="flex flex-col items-start text-left">
-                        <span className="font-black text-lg uppercase italic text-black">{art.nome}</span>
-                        <span className="text-[10px] font-bold uppercase opacity-40">
+                      <div className="flex flex-col items-start text-left min-w-0">
+                        <span className="font-black text-sm uppercase truncate">{art.nome}</span>
+                        <span className="text-[10px] font-bold uppercase text-muted-foreground truncate">
                           {art.gravadora || "Independent"}
                         </span>
                       </div>
-                      <ChevronRight className="ml-auto size-6 text-[#3D8BFF] opacity-0 group-hover:opacity-100 transition-all" />
+                      <ChevronRight className="ml-auto size-5 text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0" />
                     </motion.button>
                   ))}
                 </div>
               </>
             ) : !industryViewTab ? (
               <div className="space-y-6">
-                {/* Selection of Networks Screen */}
                 <div className="flex flex-col items-center text-center gap-2">
                   <button
                     onClick={() => setSelectedIndustryArtist(null)}
-                    className="self-start text-[10px] font-black uppercase italic text-[#3D8BFF] mb-2 flex items-center gap-1"
+                    className="self-start text-[10px] font-black uppercase text-primary mb-2 flex items-center gap-1 min-h-9"
                   >
-                    <ChevronRight className="size-3 rotate-180" /> Voltar para Artistas
+                    <ChevronLeft className="size-3.5" /> Voltar para Artistas
                   </button>
-                  <h2 className="text-3xl font-black uppercase italic tracking-tighter text-black">
-                    {selectedIndustryArtist.nome}
-                  </h2>
-                  <p className="text-xs font-black uppercase opacity-60 text-black px-4">
-                    {selectedIndustryArtist.descricao}
-                  </p>
+                  <h2 className="text-2xl font-black uppercase tracking-tight">{selectedIndustryArtist.nome}</h2>
+                  <p className="text-xs font-medium text-muted-foreground px-4">{selectedIndustryArtist.descricao}</p>
                 </div>
 
-                <div className="grid gap-4 mt-6">
+                <div className="grid gap-3 mt-4">
                   {["Instagram", "Twitter", "TikTok"].map((rede) => {
                     const perfil = profiles.find((p) => p.artista === selectedIndustryArtist.nome && p.rede === rede);
                     return (
                       <motion.button
                         key={rede}
-                        whileHover={{ scale: 1.02 }}
-                        onClick={() => setIndustryViewTab(rede as any)}
-                        className="p-5 bg-white border-[3px] border-black rounded-[25px] shadow-[6px_6px_0px_#000] flex items-center justify-between group"
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          haptic.selection();
+                          setIndustryViewTab(rede as any);
+                        }}
+                        className={`${card} p-4 flex items-center justify-between group`}
                       >
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3.5 min-w-0">
                           <div
-                            className={`size-12 rounded-2xl flex items-center justify-center border-2 border-black ${
-                              rede === "Instagram"
-                                ? "bg-[#FF4757]/10"
-                                : rede === "Twitter"
-                                  ? "bg-[#3D8BFF]/10"
-                                  : "bg-black/10"
+                            className={`size-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                              rede === "Instagram" ? "bg-[#f472b6]/10" : rede === "Twitter" ? "bg-[#1d9bf0]/10" : "bg-[#25F4EE]/10"
                             }`}
                           >
-                            {rede === "Instagram" && <Instagram className="size-6 text-[#FF4757]" />}
-                            {rede === "Twitter" && <Twitter className="size-6 text-[#3D8BFF]" />}
-                            {rede === "TikTok" && <Video className="size-6 text-black" />}
+                            {rede === "Instagram" && <Instagram className="size-5 text-[#f472b6]" />}
+                            {rede === "Twitter" && <Twitter className="size-5 text-[#1d9bf0]" />}
+                            {rede === "TikTok" && <Video className="size-5 text-[#25F4EE]" />}
                           </div>
-                          <div className="text-left">
-                            <h4 className="font-black text-sm uppercase italic text-black">{rede}</h4>
-                            <p className="text-[10px] font-bold uppercase opacity-50">
-                              {perfil ? perfil.handle : "Sem Perfil"}
+                          <div className="text-left min-w-0">
+                            <h4 className="font-black text-sm uppercase truncate">{rede}</h4>
+                            <p className="text-[10px] font-bold text-muted-foreground truncate">
+                              {perfil ? perfil.handle : "Sem perfil"}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           {perfil && (
-                            <span className="text-[11px] font-black uppercase bg-black text-white px-2 py-0.5 rounded-md italic">
-                              {perfil.seguidores?.toLocaleString() || 0} SEGS
+                            <span className="text-[10px] font-black uppercase bg-white/10 px-2 py-0.5 rounded-md">
+                              {perfil.seguidores?.toLocaleString() || 0} segs
                             </span>
                           )}
-                          <ChevronRight className="size-5 text-black group-hover:translate-x-1 transition-transform" />
+                          <ChevronRight className="size-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
                         </div>
                       </motion.button>
                     );
@@ -776,6 +799,7 @@ function SocialPage() {
                 const followKey = `${selectedIndustryArtist.nome}|${industryViewTab}`;
                 const isFollowing = followingSet.has(followKey);
                 const toggleFollow = () => {
+                  haptic.selection();
                   setFollowingSet((prev) => {
                     const next = new Set(prev);
                     if (next.has(followKey)) next.delete(followKey);
@@ -788,7 +812,7 @@ function SocialPage() {
                 const avatarSrc = profileAvatarStr ? driveImg(profileAvatarStr) : undefined;
 
                 const avatarFallback = (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-700 to-zinc-900 text-white font-black text-2xl italic">
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-700 to-zinc-900 text-white font-black text-2xl">
                     {selectedIndustryArtist.nome[0]}
                   </div>
                 );
@@ -813,30 +837,30 @@ function SocialPage() {
 
                 const BackBar = ({ bg, fg, accent }: { bg: string; fg: string; accent: string }) => (
                   <div
-                    className={`flex items-center justify-between px-4 py-3 ${bg} ${fg} sticky top-[152px] z-30 border-b border-current/10`}
+                    className={`flex items-center justify-between px-4 py-3 min-h-[3.25rem] ${bg} ${fg} sticky top-0 z-30 border-b border-current/10`}
                   >
                     <button
                       onClick={() => setIndustryViewTab(null)}
-                      className="flex items-center gap-1 text-sm font-bold"
+                      className="flex items-center gap-1 text-sm font-bold min-h-9"
                     >
                       <ChevronLeft className="size-5" /> Voltar
                     </button>
-                    <p className="font-bold text-sm flex items-center gap-1">
+                    <p className="font-bold text-sm flex items-center gap-1 min-w-0 truncate">
                       {cleanHandle}
-                      <BadgeCheck className={`size-4 ${accent}`} fill="currentColor" />
+                      <BadgeCheck className={`size-4 shrink-0 ${accent}`} fill="currentColor" />
                     </p>
-                    <MoreVertical className="size-5 opacity-70" />
+                    <MoreVertical className="size-5 opacity-70 shrink-0" />
                   </div>
                 );
 
                 // ============ INSTAGRAM ============
                 if (industryViewTab === "Instagram") {
                   return (
-                    <div className="-mx-4 bg-white text-black rounded-[24px] overflow-hidden border-[3px] border-black shadow-[6px_6px_0px_#000]">
-                      <BackBar bg="bg-white" fg="text-black" accent="text-[#3D8BFF]" />
+                    <div className="rounded-[1.75rem] overflow-hidden border border-white/10 bg-white text-black">
+                      <BackBar bg="bg-white" fg="text-black" accent="text-[#1d9bf0]" />
                       <div className="px-5 pt-5">
                         <div className="flex items-start gap-6">
-                          <div className="p-[3px] rounded-full bg-gradient-to-tr from-[#feda75] via-[#fa7e1e] via-[#d62976] via-[#962fbf] to-[#4f5bd5]">
+                          <div className="p-[3px] rounded-full bg-gradient-to-tr from-[#feda75] via-[#fa7e1e] via-[#d62976] via-[#962fbf] to-[#4f5bd5] shrink-0">
                             <div className="p-[2px] bg-white rounded-full">
                               {renderAvatar("size-20 rounded-full overflow-hidden bg-zinc-100")}
                             </div>
@@ -859,7 +883,7 @@ function SocialPage() {
                         <div className="mt-4">
                           <p className="font-black text-sm flex items-center gap-1">
                             {selectedIndustryArtist.nome}{" "}
-                            <BadgeCheck className="size-4 text-[#3D8BFF]" fill="currentColor" />
+                            <BadgeCheck className="size-4 text-[#1d9bf0]" fill="currentColor" />
                           </p>
                           <p className="text-[11px] uppercase text-black/50 font-bold tracking-wide">Artista</p>
                           {bio && <p className="text-[13px] mt-1.5 leading-snug whitespace-pre-line">{bio}</p>}
@@ -869,13 +893,13 @@ function SocialPage() {
                             onClick={toggleFollow}
                             className={
                               isFollowing
-                                ? "py-1.5 rounded-lg text-[13px] font-bold text-black bg-zinc-100 border border-zinc-200"
-                                : "py-1.5 rounded-lg text-[13px] font-bold text-white bg-gradient-to-r from-[#fa7e1e] via-[#d62976] to-[#4f5bd5]"
+                                ? "py-2 min-h-9 rounded-lg text-[13px] font-bold text-black bg-zinc-100 border border-zinc-200 active:scale-95 transition-transform"
+                                : "py-2 min-h-9 rounded-lg text-[13px] font-bold text-white bg-gradient-to-r from-[#fa7e1e] via-[#d62976] to-[#4f5bd5] active:scale-95 transition-transform"
                             }
                           >
                             {isFollowing ? "Seguindo" : "Seguir"}
                           </button>
-                          <button className="py-1.5 rounded-lg text-[13px] font-bold bg-zinc-100 border border-zinc-200">
+                          <button className="py-2 min-h-9 rounded-lg text-[13px] font-bold bg-zinc-100 border border-zinc-200 active:scale-95 transition-transform">
                             Mensagem
                           </button>
                         </div>
@@ -939,32 +963,32 @@ function SocialPage() {
                 // ============ TWITTER / X ============
                 if (industryViewTab === "Twitter") {
                   return (
-                    <div className="-mx-4 bg-black text-white rounded-[24px] overflow-hidden border-[3px] border-black shadow-[6px_6px_0px_#1d9bf0]">
+                    <div className="rounded-[1.75rem] overflow-hidden border border-white/10 bg-black text-white">
                       <BackBar bg="bg-black/95 backdrop-blur" fg="text-white" accent="text-[#1d9bf0]" />
                       {/* Banner */}
-                      <div className="h-28 bg-gradient-to-br from-[#1d9bf0] via-[#0a7bbf] to-[#15202b] relative" />
+                      <div className="h-24 sm:h-28 bg-gradient-to-br from-[#1d9bf0] via-[#0a7bbf] to-[#15202b] relative" />
                       <div className="px-4 pb-4 -mt-12">
                         <div className="flex items-end justify-between">
                           <div className="p-1 bg-black rounded-full">
-                            {renderAvatar("size-24 rounded-full overflow-hidden bg-zinc-800")}
+                            {renderAvatar("size-20 sm:size-24 rounded-full overflow-hidden bg-zinc-800")}
                           </div>
                           <button
                             onClick={toggleFollow}
                             className={
                               isFollowing
-                                ? "mt-12 px-4 py-1.5 rounded-full bg-transparent border border-zinc-600 text-white font-black text-sm"
-                                : "mt-12 px-4 py-1.5 rounded-full bg-white text-black font-black text-sm"
+                                ? "mt-12 px-4 py-1.5 min-h-9 rounded-full bg-transparent border border-zinc-600 text-white font-black text-sm active:scale-95 transition-transform"
+                                : "mt-12 px-4 py-1.5 min-h-9 rounded-full bg-white text-black font-black text-sm active:scale-95 transition-transform"
                             }
                           >
                             {isFollowing ? "Seguindo" : "Seguir"}
                           </button>
                         </div>
-                        <div className="mt-3">
-                          <p className="font-black text-xl flex items-center gap-1.5">
+                        <div className="mt-3 min-w-0">
+                          <p className="font-black text-lg sm:text-xl flex items-center gap-1.5 truncate">
                             {selectedIndustryArtist.nome}{" "}
-                            <BadgeCheck className="size-5 text-[#1d9bf0]" fill="currentColor" />
+                            <BadgeCheck className="size-5 text-[#1d9bf0] shrink-0" fill="currentColor" />
                           </p>
-                          <p className="text-sm text-zinc-500">{handle}</p>
+                          <p className="text-sm text-zinc-500 truncate">{handle}</p>
                           {bio && <p className="text-[14px] mt-2 leading-snug whitespace-pre-line">{bio}</p>}
                           <div className="flex gap-4 mt-3 text-sm">
                             <span>
@@ -983,7 +1007,7 @@ function SocialPage() {
                         {["Posts", "Respostas", "Mídia", "Curtidas"].map((t, i) => (
                           <button
                             key={t}
-                            className={`py-3.5 text-[13px] font-bold relative ${i === 0 ? "text-white" : "text-zinc-500"}`}
+                            className={`py-3.5 text-[12px] sm:text-[13px] font-bold relative truncate px-1 ${i === 0 ? "text-white" : "text-zinc-500"}`}
                           >
                             {t}
                             {i === 0 && (
@@ -1019,12 +1043,12 @@ function SocialPage() {
                                 )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1 text-[14px]">
+                                <div className="flex items-center gap-1 text-[14px] min-w-0">
                                   <span className="font-black truncate">{selectedIndustryArtist.nome}</span>
                                   <BadgeCheck className="size-4 text-[#1d9bf0] shrink-0" fill="currentColor" />
                                   <span className="text-zinc-500 truncate">{handle}</span>
-                                  <span className="text-zinc-500">·</span>
-                                  <span className="text-zinc-500">
+                                  <span className="text-zinc-500 shrink-0">·</span>
+                                  <span className="text-zinc-500 shrink-0">
                                     {new Date(p.data).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                                   </span>
                                 </div>
@@ -1052,7 +1076,7 @@ function SocialPage() {
                                       e.stopPropagation();
                                       handleLike(p.id);
                                     }}
-                                    className="flex items-center gap-1.5 hover:text-[#f91880]"
+                                    className="flex items-center gap-1.5 hover:text-[#f91880] active:scale-90 transition-transform"
                                   >
                                     <Heart className="size-4" /> {p.analytics.likes}
                                   </button>
@@ -1076,7 +1100,7 @@ function SocialPage() {
 
                 // ============ TIKTOK ============
                 return (
-                  <div className="-mx-4 bg-black text-white rounded-[24px] overflow-hidden border-[3px] border-black shadow-[6px_6px_0px_#FE2C55]">
+                  <div className="rounded-[1.75rem] overflow-hidden border border-white/10 bg-black text-white">
                     <BackBar bg="bg-black" fg="text-white" accent="text-[#25F4EE]" />
                     <div className="px-5 pt-6 pb-5 flex flex-col items-center text-center">
                       {renderAvatar("size-24 rounded-full overflow-hidden border-2 border-zinc-800 bg-zinc-900")}
@@ -1089,14 +1113,16 @@ function SocialPage() {
                           onClick={toggleFollow}
                           className={
                             isFollowing
-                              ? "px-6 py-1.5 rounded-md bg-zinc-800 border border-zinc-600 font-bold text-sm"
-                              : "px-6 py-1.5 rounded-md bg-[#FE2C55] font-bold text-sm"
+                              ? "px-6 py-1.5 min-h-9 rounded-md bg-zinc-800 border border-zinc-600 font-bold text-sm active:scale-95 transition-transform"
+                              : "px-6 py-1.5 min-h-9 rounded-md bg-[#FE2C55] font-bold text-sm active:scale-95 transition-transform"
                           }
                         >
                           {isFollowing ? "Seguindo" : "Seguir"}
                         </button>
-                        <button className="px-3 py-1.5 rounded-md bg-zinc-800 font-bold text-sm">Mensagem</button>
-                        <button className="px-3 py-1.5 rounded-md bg-zinc-800 font-bold text-sm">
+                        <button className="px-3 py-1.5 min-h-9 rounded-md bg-zinc-800 font-bold text-sm active:scale-95 transition-transform">
+                          Mensagem
+                        </button>
+                        <button className="px-3 py-1.5 min-h-9 rounded-md bg-zinc-800 font-bold text-sm active:scale-95 transition-transform">
                           <UserCircle className="size-4" />
                         </button>
                       </div>
@@ -1170,37 +1196,33 @@ function SocialPage() {
             )}
           </div>
         ) : (
-          <div className="grid gap-6 text-black pb-20">
-            <h2 className="text-2xl font-black tracking-tighter uppercase italic text-center text-black">
-              Redes <span className="text-[#3D8BFF]">Sociais</span>
+          <div className="grid gap-6 pb-20">
+            <h2 className="text-xl font-black uppercase tracking-tight text-center">
+              Redes <span className="text-primary">Sociais</span>
             </h2>
             {myArtists.map((art) => (
-              <div key={art.nome} className={neoCard}>
-                <div className="flex items-center gap-3 mb-4 text-black">
-                  <h3 className="font-black text-lg uppercase italic text-black">{art.nome}</h3>
-                </div>
+              <div key={art.nome} className={`${card} p-4 sm:p-5`}>
+                <h3 className="font-black text-base uppercase mb-4 truncate">{art.nome}</h3>
 
                 <div className="grid gap-3">
                   {["Instagram", "Twitter", "TikTok"].map((rede) => {
                     const perfil = profiles.find((p) => p.artista === art.nome && p.rede === rede);
                     return (
-                      <div
-                        key={rede}
-                        className="flex flex-col gap-2 p-4 bg-white border-[3px] border-black rounded-xl text-black shadow-[4px_4px_0px_#000]"
-                      >
-                        <div className="flex items-center justify-between text-black mb-1">
-                          <div className="flex items-center gap-2">
-                            {rede === "Instagram" && <Instagram className="size-4 text-black" />}
-                            {rede === "Twitter" && <Twitter className="size-4 text-black" />}
-                            {rede === "TikTok" && <Video className="size-4 text-black" />}
-                            <span className="text-[11px] font-black uppercase italic">{rede}</span>
+                      <div key={rede} className="flex flex-col gap-2.5 p-3.5 bg-white/[0.03] border border-white/10 rounded-2xl">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {rede === "Instagram" && <Instagram className="size-4 shrink-0 text-[#f472b6]" />}
+                            {rede === "Twitter" && <Twitter className="size-4 shrink-0 text-[#1d9bf0]" />}
+                            {rede === "TikTok" && <Video className="size-4 shrink-0 text-[#25F4EE]" />}
+                            <span className="text-[11px] font-black uppercase">{rede}</span>
                           </div>
-                          <span className="text-[10px] font-black bg-black/5 px-2 py-0.5 rounded-md opacity-60 uppercase">
-                            {perfil ? perfil.handle : "Sem Perfil"}
+                          <span className="text-[10px] font-black bg-white/5 px-2 py-0.5 rounded-md text-muted-foreground truncate max-w-[9rem]">
+                            {perfil ? perfil.handle : "Sem perfil"}
                           </span>
                         </div>
                         <button
                           onClick={() => {
+                            haptic.light();
                             setEditingProfileInfo({ artista: art.nome, rede });
                             setProfileHandle(perfil?.handle || "@");
                             setProfileAvatar(perfil?.avatar_url || perfil?.avatar || perfil?.foto || "");
@@ -1209,7 +1231,7 @@ function SocialPage() {
                             setProfileFollowing(String(perfil?.seguindo || "0"));
                             setIsProfileModalOpen(true);
                           }}
-                          className="w-full py-2.5 bg-[#D0FF43] border-[2.5px] border-black rounded-xl text-[10px] font-black text-black uppercase shadow-[3px_3px_0px_#000] active:translate-y-[1px] active:shadow-none transition-all"
+                          className="w-full py-2.5 min-h-11 bg-primary/10 border border-primary/20 rounded-xl text-[11px] font-black text-primary uppercase active:scale-95 transition-transform"
                         >
                           Configurar {rede}
                         </button>
@@ -1220,7 +1242,7 @@ function SocialPage() {
               </div>
             ))}
             {myArtists.length === 0 && (
-              <p className="text-center font-bold text-black opacity-50 py-10">
+              <p className="text-center font-medium text-muted-foreground py-10 text-sm">
                 Você não possui artistas para gerenciar.
               </p>
             )}
@@ -1230,122 +1252,225 @@ function SocialPage() {
 
       {/* Floating Plus Button */}
       <button
-        onClick={() => setIsModalOpen(true)}
-        className="fixed bottom-24 right-6 w-16 h-16 bg-[#D0FF43] border-[3px] border-black rounded-full shadow-[4px_4px_0px_#000] flex items-center justify-center transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[6px_6px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_#000] z-50 text-black"
+        onClick={() => {
+          haptic.medium();
+          setIsModalOpen(true);
+        }}
+        className="fixed bottom-24 right-6 size-14 bg-primary text-primary-foreground rounded-full shadow-2xl grid place-items-center active:scale-90 transition-transform z-50"
       >
-        <Plus className="size-8 stroke-[3] text-black" />
+        <Plus className="size-7 stroke-[2.5]" />
       </button>
 
       {/* Post Creation Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-6 bg-black/70 backdrop-blur-sm">
-          <motion.div
-            initial={{ y: 200 }}
-            animate={{ y: 0 }}
-            exit={{ y: 200 }}
-            className="bg-white border-[4px] border-black rounded-[30px] p-6 max-w-sm w-full shadow-[10px_10px_0px_#000] max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black italic uppercase text-black">LANÇAR HYPE</h2>
-              <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setSelectedType(null);
-                  setPostText("");
-                  setImageUrl("");
-                }}
-                className="p-2 border-2 border-black rounded-full hover:bg-red-500 text-black transition-colors"
-              >
-                <X className="size-4 stroke-[3]" />
-              </button>
-            </div>
-
-            {!selectedType ? (
-              <div className="grid gap-4">
-                <p className="text-[10px] font-black uppercase text-black opacity-60 italic">
-                  Selecione onde o hype vai rolar:
-                </p>
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ y: 200 }}
+              animate={{ y: 0 }}
+              exit={{ y: 200 }}
+              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-black uppercase">Lançar Hype</h2>
                 <button
-                  onClick={() => setSelectedType("Instagram")}
-                  className="flex items-center gap-4 p-4 border-[3px] border-black rounded-[15px] bg-[#FFD166] font-black uppercase text-sm shadow-[4px_4px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_#000] text-black"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setSelectedType(null);
+                    setPostText("");
+                    setImageUrl("");
+                  }}
+                  className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
                 >
-                  <Instagram className="text-black" /> Instagram
-                </button>
-                <button
-                  onClick={() => setSelectedType("Twitter")}
-                  className="flex items-center gap-4 p-4 border-[3px] border-black rounded-[15px] bg-[#3D8BFF] text-black font-black uppercase text-sm shadow-[4px_4px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_#000]"
-                >
-                  <Twitter className="text-black" /> Twitter (X)
-                </button>
-                <button
-                  onClick={() => setSelectedType("TikTok")}
-                  className="flex items-center gap-4 p-4 border-[3px] border-black rounded-[15px] bg-[#D0FF43] font-black uppercase text-sm shadow-[4px_4px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_#000] text-black"
-                >
-                  <Video className="text-black" /> TikTok
+                  <X className="size-4" />
                 </button>
               </div>
-            ) : (
-              <div className="grid gap-4">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Postar como:</p>
-                  <div className={neoInput + " flex items-center gap-2 opacity-50 italic bg-zinc-50"}>
-                    <div className="size-5 rounded-full bg-black/10 flex items-center justify-center font-black text-[11px] overflow-hidden">
-                      {activeArtist?.foto ? (
-                        <img
-                          src={driveImg(activeArtist.foto)}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        activeArtist?.nome[0]
-                      )}
+
+              {!selectedType ? (
+                <div className="grid gap-3">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground">
+                    Selecione onde o hype vai rolar:
+                  </p>
+                  <button
+                    onClick={() => {
+                      haptic.selection();
+                      setSelectedType("Instagram");
+                    }}
+                    className="flex items-center gap-4 p-4 min-h-14 rounded-2xl bg-white/5 border border-white/10 font-black uppercase text-sm active:scale-95 transition-transform"
+                  >
+                    <Instagram className="text-[#f472b6]" /> Instagram
+                  </button>
+                  <button
+                    onClick={() => {
+                      haptic.selection();
+                      setSelectedType("Twitter");
+                    }}
+                    className="flex items-center gap-4 p-4 min-h-14 rounded-2xl bg-white/5 border border-white/10 font-black uppercase text-sm active:scale-95 transition-transform"
+                  >
+                    <Twitter className="text-[#1d9bf0]" /> Twitter (X)
+                  </button>
+                  <button
+                    onClick={() => {
+                      haptic.selection();
+                      setSelectedType("TikTok");
+                    }}
+                    className="flex items-center gap-4 p-4 min-h-14 rounded-2xl bg-white/5 border border-white/10 font-black uppercase text-sm active:scale-95 transition-transform"
+                  >
+                    <Video className="text-[#25F4EE]" /> TikTok
+                  </button>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground">Postar como:</p>
+                    <div className={inputCls + " flex items-center gap-2 text-muted-foreground"}>
+                      <div className="size-5 rounded-full bg-white/10 flex items-center justify-center font-black text-[11px] overflow-hidden shrink-0">
+                        {activeArtist?.foto ? (
+                          <img
+                            src={driveImg(activeArtist.foto)}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          activeArtist?.nome[0]
+                        )}
+                      </div>
+                      <span className="truncate">{activeArtist?.nome || "Magnata"}</span>
                     </div>
-                    {activeArtist?.nome || "Magnata"}
                   </div>
+
+                  {selectedType === "Instagram" && (
+                    <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1">
+                      <button
+                        onClick={() => setIgMode("Feed")}
+                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${igMode === "Feed" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                      >
+                        Feed
+                      </button>
+                      <button
+                        onClick={() => setIgMode("Story")}
+                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${igMode === "Story" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                      >
+                        Story
+                      </button>
+                    </div>
+                  )}
+
+                  <textarea
+                    value={postText}
+                    onChange={(e) => setPostText(e.target.value)}
+                    placeholder="Escreva algo f*** aqui..."
+                    className={inputCls + " h-24 resize-none"}
+                  />
+
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground">Mídia (imagem):</p>
+                    {imageUrl && (
+                      <div className="w-full aspect-video rounded-xl overflow-hidden bg-secondary border border-white/10">
+                        <img src={driveImg(imageUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      </div>
+                    )}
+                    <label
+                      className={
+                        inputCls +
+                        " flex items-center justify-center gap-2 cursor-pointer text-center " +
+                        (uploadingImage ? "opacity-60 pointer-events-none" : "")
+                      }
+                    >
+                      <ImageIcon className="size-4" />
+                      {uploadingImage ? "Enviando..." : imageUrl ? "Trocar imagem" : "Selecionar do dispositivo"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploadingImage(true);
+                          const folderType: SocialFolderType =
+                            selectedType === "Instagram" && igMode === "Story" ? "socialStories" : "socialPosts";
+                          const url = await uploadToDrive(file, folderType);
+                          if (url) setImageUrl(url);
+                          setUploadingImage(false);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={handlePost}
+                    disabled={submitting || !postText.trim() || !activeArtist}
+                    className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
+                  >
+                    {submitting ? "Lançando..." : "Lançar Agora"} <Send className="size-4" />
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* News Creation Modal */}
+      <AnimatePresence>
+        {isNewsModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ y: 200 }}
+              animate={{ y: 0 }}
+              exit={{ y: 200 }}
+              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-black uppercase">Nova Matéria</h2>
+                <button
+                  onClick={() => setIsNewsModalOpen(false)}
+                  className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <div className="grid gap-4">
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground">Título da matéria:</p>
+                  <input
+                    type="text"
+                    value={newsTitle}
+                    onChange={(e) => setNewsTitle(e.target.value)}
+                    placeholder="Manchete impactante..."
+                    className={inputCls + " text-base"}
+                  />
                 </div>
 
-                {selectedType === "Instagram" && (
-                  <div className="flex border-2 border-black rounded-lg overflow-hidden bg-white">
-                    <button
-                      onClick={() => setIgMode("Feed")}
-                      className={`flex-1 py-1.5 font-black text-[10px] uppercase ${igMode === "Feed" ? "bg-black text-white" : "bg-white text-black"}`}
-                    >
-                      Feed
-                    </button>
-                    <button
-                      onClick={() => setIgMode("Story")}
-                      className={`flex-1 py-1.5 font-black text-[10px] uppercase ${igMode === "Story" ? "bg-black text-white" : "bg-white text-black"}`}
-                    >
-                      Story
-                    </button>
-                  </div>
-                )}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground">Conteúdo:</p>
+                  <textarea
+                    value={newsContent}
+                    onChange={(e) => setNewsContent(e.target.value)}
+                    placeholder="O que está acontecendo?"
+                    className={inputCls + " h-32 resize-none"}
+                  />
+                </div>
 
-                <textarea
-                  value={postText}
-                  onChange={(e) => setPostText(e.target.value)}
-                  placeholder="Escreva algo f*** aqui..."
-                  className={neoInput + " h-24 italic"}
-                />
-
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Mídia (imagem):</p>
-                  {imageUrl && (
-                    <div className="w-full aspect-video rounded-xl border-2 border-black overflow-hidden bg-zinc-100">
-                      <img src={driveImg(imageUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground">Imagem de capa:</p>
+                  {newsImage && (
+                    <div className="w-full aspect-video rounded-xl overflow-hidden bg-secondary border border-white/10">
+                      <img src={driveImg(newsImage)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     </div>
                   )}
                   <label
                     className={
-                      neoInput +
+                      inputCls +
                       " flex items-center justify-center gap-2 cursor-pointer text-center " +
-                      (uploadingImage ? "opacity-60 pointer-events-none" : "")
+                      (uploadingNews ? "opacity-60 pointer-events-none" : "")
                     }
                   >
                     <ImageIcon className="size-4" />
-                    {uploadingImage ? "Enviando..." : imageUrl ? "Trocar imagem" : "Selecionar do dispositivo"}
+                    {uploadingNews ? "Enviando..." : newsImage ? "Trocar imagem" : "Selecionar do dispositivo"}
                     <input
                       type="file"
                       accept="image/*"
@@ -1353,178 +1478,87 @@ function SocialPage() {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        setUploadingImage(true);
-                        const folderType: SocialFolderType =
-                          selectedType === "Instagram" && igMode === "Story" ? "socialStories" : "socialPosts";
-                        const url = await uploadToDrive(file, folderType);
-                        if (url) setImageUrl(url);
-                        setUploadingImage(false);
+                        setUploadingNews(true);
+                        const url = await uploadToDrive(file, "socialNews");
+                        if (url) setNewsImage(url);
+                        setUploadingNews(false);
                       }}
                     />
                   </label>
                 </div>
 
+                <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl flex items-center gap-2.5">
+                  <div className="size-7 rounded-full bg-white/10 overflow-hidden shrink-0">
+                    {activeArtist?.foto ? (
+                      <img
+                        src={driveImg(activeArtist.foto)}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <UserCircle className="size-full text-muted-foreground/40" />
+                    )}
+                  </div>
+                  <p className="text-[10px] font-black uppercase text-muted-foreground truncate">
+                    Publicar como <span className="text-foreground">{activeArtist?.nome}</span>
+                  </p>
+                </div>
+
                 <button
-                  onClick={handlePost}
-                  disabled={submitting || !postText.trim() || !activeArtist}
-                  className="mt-2 p-4 bg-black text-white rounded-[20px] font-black uppercase italic tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50 shadow-[4px_4px_0px_#D0FF43]"
+                  onClick={handleSaveNews}
+                  disabled={submitting || !newsTitle.trim() || !activeArtist}
+                  className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
                 >
-                  {submitting ? "LANÇANDO..." : "LANÇAR AGORA"} <Send className="size-4" />
+                  {submitting ? "Publicando..." : "Publicar News"} <Send className="size-4" />
                 </button>
               </div>
-            )}
-          </motion.div>
-        </div>
-      )}
-
-      {/* News Creation Modal */}
-      {isNewsModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-6 bg-black/70 backdrop-blur-sm">
-          <motion.div
-            initial={{ y: 200 }}
-            animate={{ y: 0 }}
-            exit={{ y: 200 }}
-            className="bg-white border-[4px] border-black rounded-[30px] p-6 max-w-sm w-full shadow-[10px_10px_0px_#000] max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black italic uppercase text-black">NOVA MATÉRIA</h2>
-              <button
-                onClick={() => setIsNewsModalOpen(false)}
-                className="p-2 border-2 border-black rounded-full hover:bg-red-500 text-black transition-colors"
-              >
-                <X className="size-4 stroke-[3]" />
-              </button>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Título da Matéria:</p>
-                <input
-                  type="text"
-                  value={newsTitle}
-                  onChange={(e) => setNewsTitle(e.target.value)}
-                  placeholder="Manchete impactante..."
-                  className={neoInput + " text-lg italic"}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Conteúdo:</p>
-                <textarea
-                  value={newsContent}
-                  onChange={(e) => setNewsContent(e.target.value)}
-                  placeholder="O que está acontecendo?"
-                  className={neoInput + " h-32 italic"}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Imagem de Capa:</p>
-                {newsImage && (
-                  <div className="w-full aspect-video rounded-xl border-2 border-black overflow-hidden bg-zinc-100">
-                    <img src={driveImg(newsImage)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </div>
-                )}
-                <label
-                  className={
-                    neoInput +
-                    " flex items-center justify-center gap-2 cursor-pointer text-center " +
-                    (uploadingNews ? "opacity-60 pointer-events-none" : "")
-                  }
-                >
-                  <ImageIcon className="size-4" />
-                  {uploadingNews ? "Enviando..." : newsImage ? "Trocar imagem" : "Selecionar do dispositivo"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setUploadingNews(true);
-                      const url = await uploadToDrive(file, "socialNews");
-                      if (url) setNewsImage(url);
-                      setUploadingNews(false);
-                    }}
-                  />
-                </label>
-              </div>
-
-              <div className="p-3 bg-zinc-50 border-2 border-black border-dashed rounded-xl flex items-center gap-2">
-                <div className="size-6 rounded-full bg-black/10 overflow-hidden">
-                  {activeArtist?.foto ? (
-                    <img
-                      src={driveImg(activeArtist.foto)}
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  ) : (
-                    <UserCircle className="size-full opacity-20" />
-                  )}
-                </div>
-                <p className="text-[10px] font-black uppercase opacity-60 italic">
-                  Publicar como <span className="text-black">{activeArtist?.nome}</span>
-                </p>
-              </div>
-
-              <button
-                onClick={handleSaveNews}
-                disabled={submitting || !newsTitle.trim() || !activeArtist}
-                className="mt-4 p-4 bg-black text-[#D0FF43] rounded-[20px] font-black uppercase italic tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50 shadow-[4px_4px_0px_#D0FF43]"
-              >
-                {submitting ? "PUBLICANDO..." : "PUBLICAR NEWS"} <Send className="size-4" />
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
-        {/* 💡 MODAL DE CONFIGURAÇÃO DE PERFIL - Ajustado para items-center para evitar que o teclado esconda o input */}
         {isProfileModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-sm">
             <motion.div
               initial={{ y: 100, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
-              className="bg-white border-[4px] border-black rounded-[30px] p-6 max-w-sm w-full shadow-[10px_10px_0px_#000] max-h-[90vh] overflow-y-auto"
+              className="bg-card border border-white/10 rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-6">
-                <div className="flex flex-col">
-                  <h2 className="text-xl font-black italic uppercase text-black leading-none">
-                    {editingProfileInfo?.rede}
-                  </h2>
-                  <p className="text-[10px] font-bold text-black opacity-60 uppercase italic">
+                <div className="flex flex-col min-w-0">
+                  <h2 className="text-lg font-black uppercase leading-none truncate">{editingProfileInfo?.rede}</h2>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase mt-1 truncate">
                     {editingProfileInfo?.artista}
                   </p>
                 </div>
                 <button
                   onClick={() => setIsProfileModalOpen(false)}
-                  className="p-2 border-2 border-black rounded-full hover:bg-red-500 text-black transition-colors"
+                  className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
                 >
-                  <X className="size-4 stroke-[3]" />
+                  <X className="size-4" />
                 </button>
               </div>
 
               <div className="grid gap-4">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Handle (Usuário):</p>
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground">Handle (usuário):</p>
                   <input
                     type="text"
                     value={profileHandle}
                     onChange={(e) => setProfileHandle(e.target.value)}
                     placeholder="@nome"
-                    className={neoInput}
+                    className={inputCls}
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground">
                     Seguindo (qtd. de pessoas que segue):
                   </p>
-                  {/* 💡 Correção: type="text" com inputMode previne bugs do React/Navegador mobile */}
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1532,21 +1566,21 @@ function SocialPage() {
                     value={profileFollowing}
                     onChange={(e) => setProfileFollowing(e.target.value.replace(/\D/g, ""))}
                     placeholder="0"
-                    className={neoInput}
+                    className={inputCls}
                   />
                 </div>
 
-                <div className="p-3 bg-zinc-50 border-2 border-dashed border-black/20 rounded-xl text-[10px] font-bold text-black/60 italic leading-snug">
-                  <span className="font-black uppercase text-black/80">Seguidores:</span> calculados automaticamente
+                <div className="p-3 bg-white/[0.03] border border-dashed border-white/10 rounded-xl text-[10px] font-medium text-muted-foreground leading-snug">
+                  <span className="font-black uppercase text-foreground/80">Seguidores:</span> calculados automaticamente
                   pela coluna <span className="font-black">G</span> da aba{" "}
                   <span className="font-black">SOCIAL_PERFIS</span>. Atual:{" "}
-                  <span className="font-black text-black">{Number(profileFollowers).toLocaleString("pt-BR")}</span>.
+                  <span className="font-black text-foreground">{Number(profileFollowers).toLocaleString("pt-BR")}</span>.
                 </div>
 
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Foto de Perfil:</p>
-                  <div className="flex gap-2 items-center">
-                    <div className="size-12 rounded-xl border-2 border-black overflow-hidden flex-shrink-0 bg-zinc-100">
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground">Foto de perfil:</p>
+                  <div className="flex gap-2.5 items-center">
+                    <div className="size-12 rounded-xl overflow-hidden flex-shrink-0 bg-secondary border border-white/10">
                       {profileAvatar ? (
                         <img
                           src={driveImg(profileAvatar)}
@@ -1556,12 +1590,12 @@ function SocialPage() {
                           decoding="async"
                         />
                       ) : (
-                        <UserCircle className="size-full opacity-20" />
+                        <UserCircle className="size-full text-muted-foreground/40" />
                       )}
                     </div>
                     <label
                       className={
-                        neoInput +
+                        inputCls +
                         " flex-1 flex items-center justify-center gap-2 cursor-pointer text-center " +
                         (uploadingAvatar ? "opacity-60 pointer-events-none" : "")
                       }
@@ -1585,22 +1619,22 @@ function SocialPage() {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-black opacity-60 italic">Bio / Descrição:</p>
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground">Bio / descrição:</p>
                   <textarea
                     value={profileBio}
                     onChange={(e) => setProfileBio(e.target.value)}
                     placeholder="Fale um pouco sobre o artista..."
-                    className={neoInput + " h-20 italic"}
+                    className={inputCls + " h-20 resize-none"}
                   />
                 </div>
 
                 <button
                   onClick={handleSaveProfile}
                   disabled={submitting}
-                  className="mt-2 p-4 bg-[#D0FF43] text-black rounded-[20px] font-black uppercase italic tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50 border-2 border-black shadow-[4px_4px_0px_#000]"
+                  className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
                 >
-                  {submitting ? "SALVANDO..." : "SALVAR PERFIL"}
+                  {submitting ? "Salvando..." : "Salvar Perfil"}
                 </button>
               </div>
             </motion.div>
@@ -1610,60 +1644,61 @@ function SocialPage() {
 
       <AnimatePresence>
         {selectedNews && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-0 sm:p-4 bg-black/95 backdrop-blur-md">
             <motion.div
               layoutId={selectedNews.id}
-              className="bg-white text-black border-[4px] border-black rounded-[35px] max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col shadow-[20px_20px_0px_rgba(0,0,0,0.5)]"
+              className="bg-card border border-white/10 sm:rounded-[1.75rem] max-w-lg w-full h-full sm:h-auto sm:max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
             >
-              <div className="relative h-64 flex-shrink-0">
+              <div className="relative h-56 sm:h-64 flex-shrink-0">
                 {selectedNews.imagem ? (
                   <img
-                    src={selectedNews.imagem}
+                    src={driveImg(selectedNews.imagem)}
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                     loading="lazy"
                     decoding="async"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-[#3D8BFF]/20">
-                    <Newspaper className="size-20 text-black/10" />
+                  <div className="w-full h-full flex items-center justify-center bg-primary/10">
+                    <Newspaper className="size-16 text-muted-foreground/20" />
                   </div>
                 )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                 <div className="absolute top-4 right-4">
                   <button
                     onClick={() => setSelectedNews(null)}
-                    className="size-10 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center border border-white/20 hover:bg-black transition-colors"
+                    className="size-9 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center border border-white/20 active:scale-90 transition-transform"
                   >
-                    <X className="size-5" />
+                    <X className="size-4" />
                   </button>
                 </div>
-                <div className="absolute bottom-6 left-6 right-6">
-                  <span className="bg-[#D0FF43] text-black px-3 py-1 font-black italic text-[10px] uppercase rounded-lg border-2 border-black shadow-[3px_3px_0px_#000] mb-2 inline-block">
+                <div className="absolute bottom-5 left-5 right-5">
+                  <span className="bg-primary text-primary-foreground px-3 py-1 font-black text-[10px] uppercase rounded-lg shadow-lg inline-block">
                     Flash News
                   </span>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 pt-8 bg-zinc-50">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-black/40 mb-4 italic tracking-widest">
-                  <span className="text-black/60">Por {selectedNews.autor}</span>
-                  <span className="size-1 rounded-full bg-black/20" />
-                  <span className="text-black/60">{new Date(selectedNews.data).toLocaleDateString("pt-BR")}</span>
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground mb-3 tracking-widest">
+                  <span className="text-primary">Por {selectedNews.autor}</span>
+                  <span className="size-1 rounded-full bg-white/20" />
+                  <span>{new Date(selectedNews.data).toLocaleDateString("pt-BR")}</span>
                 </div>
-                <h2 className="text-3xl font-black uppercase italic leading-[0.9] text-black tracking-tight mb-8 drop-shadow-sm">
+                <h2 className="text-2xl sm:text-3xl font-black uppercase leading-tight tracking-tight mb-6">
                   {selectedNews.titulo}
                 </h2>
-                <div className="prose prose-sm font-bold text-zinc-800 leading-relaxed whitespace-pre-wrap text-[13px] border-l-4 border-[#3D8BFF]/20 pl-4">
+                <div className="text-sm font-medium text-muted-foreground leading-relaxed whitespace-pre-wrap border-l-2 border-primary/30 pl-4">
                   {selectedNews.conteudo}
                 </div>
               </div>
 
-              <div className="p-6 bg-zinc-50 border-t-2 border-black/5 flex justify-center">
+              <div className="p-5 border-t border-white/5 flex justify-center shrink-0">
                 <button
                   onClick={() => setSelectedNews(null)}
-                  className="px-8 py-3 bg-black text-white rounded-full font-black uppercase italic text-sm tracking-widest active:scale-95 transition-transform"
+                  className="px-8 py-3 min-h-11 bg-primary text-primary-foreground rounded-full font-black uppercase text-sm tracking-wide active:scale-95 transition-transform"
                 >
-                  Fechar Gazette
+                  Fechar
                 </button>
               </div>
             </motion.div>
@@ -1673,33 +1708,33 @@ function SocialPage() {
 
       <AnimatePresence>
         {isCommentModalOpen && selectedPost && (
-          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-6 bg-black/70 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm">
             <motion.div
               initial={{ y: 100, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
-              className="bg-white border-[4px] border-black rounded-[30px] p-6 max-w-md w-full shadow-[10px_10px_0px_#000] max-h-[90vh] flex flex-col"
+              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-md w-full shadow-2xl max-h-[90vh] flex flex-col"
             >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black italic uppercase text-black">COMENTÁRIOS</h2>
+              <div className="flex justify-between items-center mb-5">
+                <h2 className="text-lg font-black uppercase">Comentários</h2>
                 <button
                   onClick={() => setIsCommentModalOpen(false)}
-                  className="p-2 border-2 border-black rounded-full hover:bg-red-500 text-black transition-colors"
+                  className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
                 >
-                  <X className="size-4 stroke-[3]" />
+                  <X className="size-4" />
                 </button>
               </div>
 
               <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-1">
-                <div className="p-3 bg-[#F4F4F5] rounded-xl border-2 border-black/10">
-                  <p className="text-[10px] font-black uppercase opacity-50 mb-1">{selectedPost.autor}</p>
-                  <p className="text-sm font-bold text-black">{selectedPost.texto}</p>
+                <div className="p-3 bg-white/[0.03] rounded-xl border border-white/10">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground mb-1 truncate">{selectedPost.autor}</p>
+                  <p className="text-sm font-medium">{selectedPost.texto}</p>
                 </div>
 
                 <div className="space-y-4">
                   {comments.map((c, idx) => (
                     <div key={idx} className="flex gap-3">
-                      <div className="size-8 rounded-full bg-[#FFD166] border-2 border-black flex items-center justify-center font-black text-[10px] flex-shrink-0 overflow-hidden">
+                      <div className="size-8 rounded-full bg-white/10 border border-white/10 flex items-center justify-center font-black text-[10px] flex-shrink-0 overflow-hidden">
                         {c.avatar ? (
                           <img
                             src={driveImg(c.avatar)}
@@ -1712,36 +1747,36 @@ function SocialPage() {
                           c.autor[0]
                         )}
                       </div>
-                      <div className="flex-1">
-                        <p className="text-[10px] font-black text-black leading-none">{c.autor}</p>
-                        <p className="text-xs font-bold text-black opacity-80 mt-1">{c.texto}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-black leading-none truncate">{c.autor}</p>
+                        <p className="text-xs font-medium text-muted-foreground mt-1.5">{c.texto}</p>
                       </div>
                     </div>
                   ))}
                   {comments.length === 0 && (
-                    <p className="text-center font-bold text-black opacity-40 py-10">
+                    <p className="text-center font-medium text-muted-foreground py-10 text-sm">
                       Nenhum comentário por aqui ainda.
                     </p>
                   )}
                 </div>
               </div>
 
-              <div className="pt-4 border-t-4 border-black">
+              <div className="pt-4 border-t border-white/5">
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder={activeArtist ? `Comentar como ${activeArtist.nome}...` : "Selecione um artista..."}
-                    className={neoInput + " flex-1"}
+                    className={inputCls + " flex-1"}
                     onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
                   />
                   <button
                     onClick={handleAddComment}
                     disabled={submitting || !newComment.trim() || !activeArtist}
-                    className="p-3 bg-black text-white rounded-xl border-2 border-black active:scale-90 transition-transform shadow-[2px_2px_0px_#D0FF43]"
+                    className="size-11 shrink-0 bg-primary text-primary-foreground rounded-xl grid place-items-center active:scale-90 transition-transform disabled:opacity-50"
                   >
-                    <Send className="size-5" />
+                    <Send className="size-4.5" />
                   </button>
                 </div>
               </div>
