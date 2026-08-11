@@ -1,5 +1,6 @@
 import { sheetsService } from "../services/sheetsService";
 import {
+  googleSheetsService,
   normalizeComparison,
   normalizeHeader,
   normalizeText,
@@ -700,6 +701,72 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
   } catch (error: any) {
     return new Response(
       JSON.stringify({ success: false, error: error.message || "Erro ao buscar vídeos." }),
+      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
+  }
+}
+
+/**
+ * GET /api/empire-play/lancamentos-recentes
+ * Usado no widget "Lançamentos Recentes" do Início: lê a aba "EDIÇÃO
+ * CHARTS" da planilha edicaoCharts (coluna A = data, coluna B = título
+ * "Artista - Título"), acha as datas mais recentes e cruza cada título com
+ * a aba Musicas (coluna H) da planilha principal pra pegar a capa e o link
+ * de fórum pra comentar/ouvir.
+ */
+export async function getEmpirePlayLancamentosRecentesController(): Promise<Response> {
+  try {
+    const edicaoRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:B5000");
+
+    const candidatos = edicaoRows
+      .map((row) => ({
+        dataIso: parseDateToIso(row[0] || null),
+        titulo: (row[1] || "").trim(),
+      }))
+      .filter((c) => c.dataIso && c.titulo) as { dataIso: string; titulo: string }[];
+
+    // Mais recente primeiro, sem repetir o mesmo título (mantém só a
+    // ocorrência mais recente de cada música nos charts).
+    candidatos.sort((a, b) => b.dataIso.localeCompare(a.dataIso));
+    const titulosVistos = new Set<string>();
+    const top3: { dataIso: string; titulo: string }[] = [];
+    for (const c of candidatos) {
+      const norm = normalizeComparison(c.titulo);
+      if (titulosVistos.has(norm)) continue;
+      titulosVistos.add(norm);
+      top3.push(c);
+      if (top3.length === 3) break;
+    }
+
+    const musicaRecords = await sheetsService.readSheetObjects("Musicas");
+    const musicaItems = musicaRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+
+    const lancamentos = top3
+      .map(({ dataIso, titulo }) => {
+        const match = musicaItems.find(
+          (m) => normalizeComparison(m.title) === normalizeComparison(titulo),
+        );
+        if (!match) return null;
+        return {
+          id: match.id,
+          titulo: match.title,
+          artista: match.artist,
+          coverUrl: match.coverUrl || null,
+          dataIso,
+        };
+      })
+      .filter(Boolean);
+
+    return new Response(JSON.stringify({ success: true, data: lancamentos }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (error: any) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao buscar lançamentos recentes.",
+      }),
       { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );
   }

@@ -31,6 +31,7 @@ import {
   getEmpirePlayAlbunsController,
   getEmpirePlayForumTopicController,
   getEmpirePlayUserController,
+  getEmpirePlayLancamentosRecentesController,
 } from "../controllers/empirePlayController";
 import { reportVideoIssueController } from "../controllers/reportVideoController";
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
@@ -88,6 +89,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/empire-play/music-videos",
     "/api/empire-play/videos",
     "/api/empire-play/albuns",
+    "/api/empire-play/lancamentos-recentes",
     "/api/empire-play/report-video-issue",
     "/api/empire-play/report-wrong-content",
   ]);
@@ -126,6 +128,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await getEmpirePlayVideosController(request);
   } else if (url.pathname === "/api/empire-play/albuns") {
     response = await getEmpirePlayAlbunsController();
+  } else if (url.pathname === "/api/empire-play/lancamentos-recentes") {
+    response = await getEmpirePlayLancamentosRecentesController();
   } else if (url.pathname === "/api/empire-play/report-video-issue") {
     if (request.method !== "POST") {
       return new Response(

@@ -39,6 +39,9 @@ import { api, driveImg, type Artist } from "@/lib/api";
 import { registerServiceWorker } from "@/lib/pwa";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
+import { EmpirePlayerProvider, useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
+import { MusicPlayer } from "@/components/EmpirePlay/MusicPlayer";
+import { VideoPlayer } from "@/components/EmpirePlay/VideoPlayer";
 
 function GlobalLinkModal({ onClose }: { onClose: () => void }) {
   const { user } = useTelegramUser();
@@ -524,7 +527,32 @@ function AuthGate() {
     );
   }
 
-  return <RootInner />;
+  return (
+    <EmpirePlayerProvider>
+      <RootInner />
+    </EmpirePlayerProvider>
+  );
+}
+
+// Players montados na raiz do app (fora de qualquer rota-filha) — trocar de
+// menu (Início, Catálogo, Charts etc.) nunca desmonta o player, então a
+// reprodução de áudio/vídeo continua em qualquer tela, não só dentro do
+// Catálogo.
+function GlobalPersistentPlayers() {
+  const { currentTrack, activePlaylist, currentVideo, closeTrack, closeVideo, setCurrentTrack } =
+    useEmpirePlayer();
+
+  return (
+    <>
+      <MusicPlayer
+        currentTrack={currentTrack}
+        playlist={activePlaylist}
+        onClose={closeTrack}
+        onTrackChange={setCurrentTrack}
+      />
+      <VideoPlayer video={currentVideo} onClose={closeVideo} />
+    </>
+  );
 }
 
 function RootInner() {
@@ -777,6 +805,7 @@ function RootInner() {
       <RouteTransitionOverlay />
       <Outlet />
 
+      <GlobalPersistentPlayers />
       <BottomNav />
       <InstallPrompt />
       <Toaster position="top-center" richColors closeButton offset={80} />
