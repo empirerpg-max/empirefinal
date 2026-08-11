@@ -5,7 +5,6 @@ import {
   RefreshCw,
   TrendingUp,
   User,
-  Plus,
   Music2,
   Music,
   PlayCircle,
@@ -14,8 +13,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTelegramUser, haptic, openExternal } from "@/lib/telegram";
-import { api, driveImg, fmtEC, type Artist, invalidateCache, type ChartData } from "@/lib/api";
+import { api, driveImg, invalidateCache, type ChartData } from "@/lib/api";
 import { useHomeConfig } from "@/lib/homeFlags";
+import { getStoredLogin } from "@/components/LoginScreen";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -31,6 +31,17 @@ interface LancamentoRecente {
   dataIso: string;
 }
 
+interface SocialPostResumo {
+  id: string;
+  tipo: string;
+  autor: string;
+  handle?: string;
+  avatar?: string;
+  texto: string;
+  media_url?: string;
+  data: string;
+}
+
 const PLATFORM_META: Record<string, { label: string; icon: typeof Music2; color: string }> = {
   spotify: { label: "Spotify", icon: Music2, color: "text-[#1DB954]" },
   apple_music: { label: "Apple Music", icon: Music, color: "text-[#FC3C44]" },
@@ -40,31 +51,24 @@ const PLATFORM_META: Record<string, { label: string; icon: typeof Music2; color:
 };
 
 function Index() {
-  const [myArtists, setMyArtists] = useState<LoadState<Artist[]>>({ status: "loading" });
   const [topCharts, setTopCharts] = useState<Record<string, ChartData>>({});
   const [lancamentosRecentes, setLancamentosRecentes] = useState<LoadState<LancamentoRecente[]>>({
+    status: "loading",
+  });
+  const [ultimasPostagens, setUltimasPostagens] = useState<LoadState<SocialPostResumo[]>>({
     status: "loading",
   });
   const [syncing, setSyncing] = useState(false);
   const { user, ready } = useTelegramUser();
   const config = useHomeConfig();
+  const login = getStoredLogin();
+  const fotoUsuario = login?.fotoPerfil || user?.photo_url || "";
+  const nomeUsuario = login?.nome || user?.name || "Visitante";
 
   const fetchData = async (silent = false) => {
     if (!silent) setSyncing(true);
 
     const tasks: Promise<unknown>[] = [];
-
-    if (user && user.id !== "guest") {
-      setMyArtists({ status: "loading" });
-      tasks.push(
-        api
-          .meusArtistas(user.id)
-          .then((d) => setMyArtists({ status: "ok", data: d }))
-          .catch((e) => setMyArtists({ status: "error", error: String(e?.message || e) }))
-      );
-    } else {
-      setMyArtists({ status: "ok", data: [] });
-    }
 
     tasks.push(api.topCharts().then(setTopCharts).catch(() => {}));
 
@@ -79,6 +83,19 @@ function Index() {
           }
         })
         .catch((e) => setLancamentosRecentes({ status: "error", error: String(e?.message || e) })),
+    );
+
+    tasks.push(
+      (api as any)
+        .listarPostsSocial()
+        .then((data: SocialPostResumo[]) => {
+          if (!Array.isArray(data)) throw new Error("Formato inválido");
+          const ordenado = [...data].sort(
+            (a, b) => new Date(b.data).getTime() - new Date(a.data).getTime(),
+          );
+          setUltimasPostagens({ status: "ok", data: ordenado.slice(0, 6) });
+        })
+        .catch((e: any) => setUltimasPostagens({ status: "error", error: String(e?.message || e) })),
     );
 
     await Promise.allSettled(tasks);
@@ -100,22 +117,19 @@ function Index() {
     toast.success("Empire Sincronizado", { description: "Dados imperiais atualizados." });
   };
 
-  const openLinkModal = () => {
-    haptic.light();
-    (window as any).setShowLinkModal?.(true);
-  };
-
   const sections: Record<string, () => ReactNode> = {
     meusArtistas: () => (
-      <section className="mb-10" aria-labelledby="meus-artistas-h">
+      <section className="mb-10" aria-labelledby="ultimas-postagens-h">
         <div className="flex items-center justify-between mb-4">
-          <h2 id="meus-artistas-h" className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
+          <h2
+            id="ultimas-postagens-h"
+            className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2"
+          >
             <span className="size-2 rounded-full bg-primary animate-pulse" aria-hidden="true" />
-            Meus Artistas
+            Últimas Publicações
           </h2>
           <Link
-            to="/artistas"
-            search={{ filter: "mine" }}
+            to="/social"
             onClick={() => haptic.selection()}
             className="text-[11px] font-bold uppercase text-primary tracking-wider hover:underline min-h-11 grid place-items-center"
           >
@@ -123,15 +137,15 @@ function Index() {
           </Link>
         </div>
 
-        {myArtists.status === "loading" ? (
+        {ultimasPostagens.status === "loading" ? (
           <div className="flex gap-3 overflow-x-hidden">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="min-w-[110px] h-[7.5rem] rounded-[1.5rem] bg-white/5 animate-pulse" />
+              <div key={i} className="min-w-[150px] h-[10rem] rounded-[1.5rem] bg-white/5 animate-pulse" />
             ))}
           </div>
-        ) : myArtists.status === "error" ? (
+        ) : ultimasPostagens.status === "error" ? (
           <div className="p-5 rounded-[1.5rem] bg-destructive/10 border border-destructive/20 text-center">
-            <p className="text-xs font-bold text-destructive mb-2">Não conseguimos carregar seus artistas</p>
+            <p className="text-xs font-bold text-destructive mb-2">Não conseguimos carregar as publicações</p>
             <button
               onClick={() => fetchData(false)}
               className="text-[11px] font-black uppercase tracking-wider text-primary underline min-h-11"
@@ -139,46 +153,41 @@ function Index() {
               Tentar novamente
             </button>
           </div>
-        ) : myArtists.data.length === 0 ? (
-          <button
-            type="button"
-            onClick={openLinkModal}
-            className="w-full p-6 rounded-[1.75rem] bg-card/50 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center text-center hover:bg-primary/5 transition-all group min-h-32"
-          >
-            <div className="size-12 rounded-2xl bg-primary/10 grid place-items-center mb-3 group-hover:scale-110 transition-transform">
-              <Plus className="size-6 text-primary" aria-hidden="true" />
-            </div>
-            <p className="text-sm font-black uppercase tracking-tight mb-1">Vincule seu primeiro artista</p>
+        ) : ultimasPostagens.data.length === 0 ? (
+          <div className="w-full p-6 rounded-[1.75rem] bg-card/50 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center text-center min-h-32">
+            <p className="text-sm font-black uppercase tracking-tight mb-1">Nenhuma publicação ainda</p>
             <p className="text-[11px] font-medium text-muted-foreground leading-snug max-w-[18rem]">
-              Conecte uma lenda livre ao seu império para acompanhar saldo, projetos e charts.
+              Poste como um dos seus artistas no Social pra aparecer aqui.
             </p>
-          </button>
+          </div>
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x">
-            {myArtists.data.map((a) => (
+            {ultimasPostagens.data.map((p) => (
               <Link
-                key={a.nome}
-                to="/artistas/$nome"
-                params={{ nome: a.nome }}
+                key={p.id}
+                to="/social"
+                search={{ postId: p.id }}
                 onClick={() => haptic.selection()}
-                className="min-w-[120px] snap-center p-2.5 rounded-[1.5rem] bg-white/5 backdrop-blur-md border border-white/10 flex flex-col items-center gap-2 active:scale-95 transition-all group"
+                className="min-w-[150px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all flex flex-col"
               >
-                <div className="size-16 rounded-2xl bg-secondary overflow-hidden flex-shrink-0 border border-white/10 shadow-lg group-hover:scale-105 transition-transform">
-                  <img
-                    src={driveImg(a.foto, 150)}
-                    className="w-full h-full object-cover"
-                    alt={`Foto de ${a.nome}`}
-                    loading="lazy"
-                    decoding="async"
-                  />
+                <div className="aspect-square bg-secondary overflow-hidden">
+                  {p.media_url ? (
+                    <img
+                      src={driveImg(p.media_url, 300)}
+                      className="w-full h-full object-cover"
+                      alt={p.autor}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center p-3 bg-secondary">
+                      <p className="text-[10px] font-bold text-center opacity-70 line-clamp-4">{p.texto}</p>
+                    </div>
+                  )}
                 </div>
-                <div className="text-center w-full px-1 overflow-hidden">
-                  <h3 className="text-[12px] font-black uppercase truncate leading-tight group-hover:text-primary transition-colors">
-                    {a.nome}
-                  </h3>
-                  <p className="text-[11px] font-bold text-primary/80 mt-0.5 whitespace-nowrap overflow-hidden">
-                    {fmtEC(a.saldo)}
-                  </p>
+                <div className="p-2.5">
+                  <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">{p.autor}</h3>
+                  <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">{p.tipo}</p>
                 </div>
               </Link>
             ))}
@@ -317,11 +326,12 @@ function Index() {
       <header className="flex items-center justify-between mb-6 animate-in fade-in duration-500">
         <div className="flex items-center gap-3 min-w-0">
           <div className="size-12 shrink-0 rounded-full bg-primary/20 border border-primary/30 grid place-items-center overflow-hidden">
-            {user?.photo_url ? (
+            {fotoUsuario ? (
               <img
-                src={user.photo_url}
+                src={driveImg(fotoUsuario, 100)}
                 className="size-12 rounded-full object-cover"
-                alt={user?.name ? `Foto de ${user.name}` : "Foto do usuário"}
+                alt={`Foto de ${nomeUsuario}`}
+                referrerPolicy="no-referrer"
                 loading="lazy"
                 decoding="async"
               />
@@ -331,7 +341,7 @@ function Index() {
           </div>
           <div className="min-w-0">
             <p className="text-base font-black leading-none truncate">
-              Olá, {user?.name || "Visitante"}
+              Olá, {nomeUsuario}
             </p>
             <p className="text-[11px] uppercase font-bold text-muted-foreground tracking-[0.15em] mt-1">
               Empire <span className="text-primary">Hub</span>
