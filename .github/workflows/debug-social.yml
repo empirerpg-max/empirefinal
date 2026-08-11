@@ -1,0 +1,12 @@
+name: Debug Social Tabs
+on:
+  workflow_dispatch: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List sheets in usuarios spreadsheet
+        run: |
+          echo "=== Abas da planilha 'usuarios' ==="
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/dump?spreadsheet=usuarios"
+          echo ""
