@@ -315,29 +315,12 @@ function Index() {
     <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen">
       {/* Header */}
       <header className="flex items-center justify-between mb-6 animate-in fade-in duration-500">
-        <div>
-          <h1 className="text-2xl font-black italic tracking-tighter uppercase leading-none mb-1">
-            Empire <span className="text-primary">Hub</span>
-          </h1>
-          <p className="text-[11px] uppercase font-bold text-muted-foreground tracking-[0.15em]">
-            Plataforma de Gestão Imperial
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            aria-label={syncing ? "Sincronizando" : "Sincronizar dados"}
-            aria-busy={syncing}
-            className="size-11 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform hover:bg-primary/10 hover:text-primary disabled:opacity-60"
-          >
-            <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
-          </button>
-          <div className="size-11 rounded-full bg-primary/20 border border-primary/30 grid place-items-center overflow-hidden">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="size-12 shrink-0 rounded-full bg-primary/20 border border-primary/30 grid place-items-center overflow-hidden">
             {user?.photo_url ? (
               <img
                 src={user.photo_url}
-                className="size-11 rounded-full object-cover"
+                className="size-12 rounded-full object-cover"
                 alt={user?.name ? `Foto de ${user.name}` : "Foto do usuário"}
                 loading="lazy"
                 decoding="async"
@@ -346,7 +329,24 @@ function Index() {
               <User className="size-5 text-primary" aria-hidden="true" />
             )}
           </div>
+          <div className="min-w-0">
+            <p className="text-base font-black leading-none truncate">
+              Olá, {user?.name || "Visitante"}
+            </p>
+            <p className="text-[11px] uppercase font-bold text-muted-foreground tracking-[0.15em] mt-1">
+              Empire <span className="text-primary">Hub</span>
+            </p>
+          </div>
         </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          aria-label={syncing ? "Sincronizando" : "Sincronizar dados"}
+          aria-busy={syncing}
+          className="size-11 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform hover:bg-primary/10 hover:text-primary disabled:opacity-60"
+        >
+          <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
+        </button>
       </header>
 
       <section className="mb-10" aria-labelledby="lancamentos-recentes-h">
