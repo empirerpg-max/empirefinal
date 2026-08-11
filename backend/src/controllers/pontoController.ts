@@ -158,3 +158,97 @@ export async function salvarPontoCelulaController(request: Request): Promise<Res
 
   return jsonResponse({ ok: true });
 }
+
+function parsePercent(v: string): number {
+  return parseFloat(v.replace("%", "").replace(",", ".")) || 0;
+}
+
+/**
+ * Sorteia uma combinação válida (uma opção de cada categoria) cuja soma dê
+ * exatamente 100%. Spotify e Apple Music (múltiplos de 10, 30-70) resolvem a
+ * sobra depois de sortear as outras 4 categorias — dá muito mais chance de
+ * achar uma combinação válida rápido do que sortear as 6 de uma vez.
+ */
+function sortearCombinacao100(): Record<string, string> | null {
+  const spotifyOpts = CATEGORY_OPTIONS.SPOTIFY;
+  const appleOpts = CATEGORY_OPTIONS["APPLE MUSIC"];
+
+  for (let tentativa = 0; tentativa < 500; tentativa++) {
+    const bb100 = CATEGORY_OPTIONS["BILLBOARD HOT 100"][
+      Math.floor(Math.random() * CATEGORY_OPTIONS["BILLBOARD HOT 100"].length)
+    ];
+    const youtube = CATEGORY_OPTIONS.YOUTUBE[Math.floor(Math.random() * CATEGORY_OPTIONS.YOUTUBE.length)];
+    const digital = CATEGORY_OPTIONS["DIGITAL SALES"][
+      Math.floor(Math.random() * CATEGORY_OPTIONS["DIGITAL SALES"].length)
+    ];
+    const bb200 = CATEGORY_OPTIONS["BILLBOARD 200"][
+      Math.floor(Math.random() * CATEGORY_OPTIONS["BILLBOARD 200"].length)
+    ];
+
+    const restante = 100 - (parsePercent(bb100) + parsePercent(youtube) + parsePercent(digital) + parsePercent(bb200));
+
+    const candidatos: [string, string][] = [];
+    for (const sp of spotifyOpts) {
+      for (const am of appleOpts) {
+        if (Math.abs(parsePercent(sp) + parsePercent(am) - restante) < 0.001) {
+          candidatos.push([sp, am]);
+        }
+      }
+    }
+    if (candidatos.length === 0) continue;
+
+    const [spotify, apple] = candidatos[Math.floor(Math.random() * candidatos.length)];
+    return {
+      "BILLBOARD HOT 100": bb100,
+      SPOTIFY: spotify,
+      "APPLE MUSIC": apple,
+      YOUTUBE: youtube,
+      "DIGITAL SALES": digital,
+      "BILLBOARD 200": bb200,
+    };
+  }
+  return null;
+}
+
+/**
+ * POST /api/ponto/distribuir-aleatorio
+ * Pra cada música dos artistas do jogador que ainda não tem NENHUMA
+ * categoria preenchida (nunca sobrescreve uma escolha manual já feita),
+ * sorteia uma combinação de % por categoria que soma exatamente 100%.
+ */
+export async function distribuirPontosAleatorioController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { telegramId?: string };
+  const telegramId = normalizeText(body.telegramId);
+  if (!telegramId) return jsonResponse({ ok: false, error: "telegramId obrigatório." }, 400);
+
+  const artistNames = await getArtistNamesForOwner(telegramId);
+  if (artistNames.length === 0) {
+    return jsonResponse({ ok: false, error: "Nenhum artista vinculado a esse jogador." }, 403);
+  }
+  const normArtistNames = new Set(artistNames.map(normalizeComparison));
+
+  const rows = await googleSheetsService.registrosCharts.readValues(SHEET);
+  let distribuidas = 0;
+
+  for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || !row.some((cell) => normalizeText(cell))) continue;
+    const artista = normalizeText(row[2]);
+    if (!artista || !normArtistNames.has(normalizeComparison(artista))) continue;
+
+    const jaDistribuida = Object.values(CATEGORY_COLUMNS).some((col) => normalizeText(row[col]));
+    if (jaDistribuida) continue;
+
+    const combo = sortearCombinacao100();
+    if (!combo) continue;
+
+    const linha = i + 1;
+    for (const [categoria, valor] of Object.entries(combo)) {
+      const colLetter = colIndexToA1Letter(CATEGORY_COLUMNS[categoria]);
+      await googleSheetsService.registrosCharts.updateValues(SHEET, `${colLetter}${linha}`, [[valor]]);
+    }
+    distribuidas++;
+  }
+
+  return jsonResponse({ ok: true, distribuidas });
+}
