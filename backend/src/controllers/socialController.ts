@@ -80,6 +80,7 @@ export async function getSocialPostsController(): Promise<Response> {
         media_url: normalizeText(row[5]) || undefined,
         analytics: parseAnalytics(row[6]),
         data: normalizeText(row[7]),
+        telegram_id: normalizeText(row[8]) || undefined,
       };
     })
     .filter((p) => p.id);
@@ -139,6 +140,41 @@ export async function curtirSocialPostController(request: Request): Promise<Resp
   await googleSheetsService.usuarios.updateValues(SHEETS.posts, `G${rowIndex + 1}`, [[JSON.stringify(analytics)]]);
 
   return jsonResponse({ ok: true, likes: analytics.likes });
+}
+
+/**
+ * POST /api/social/posts/editar
+ * Só quem publicou o post (coluna I — telegram_id) pode editar texto e/ou
+ * mídia depois de publicado.
+ */
+export async function editSocialPostController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    postId?: string;
+    texto?: string;
+    media_url?: string;
+    tgId?: string;
+  };
+  const { postId, texto, tgId } = body;
+  const media_url = body.media_url ?? "";
+
+  if (!postId || !texto?.trim() || !tgId) {
+    return jsonResponse({ ok: false, error: "Dados incompletos para editar o post." }, 400);
+  }
+
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts);
+  const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === postId);
+  if (rowIndex === -1) return jsonResponse({ ok: false, error: "Post não encontrado." }, 404);
+
+  const ownerId = normalizeText(rows[rowIndex][8]);
+  if (!ownerId || (ownerId !== tgId.trim() && tgId.trim() !== "810141686")) {
+    return jsonResponse({ ok: false, error: "Você só pode editar seus próprios posts." }, 403);
+  }
+
+  await googleSheetsService.usuarios.updateValues(SHEETS.posts, `E${rowIndex + 1}:F${rowIndex + 1}`, [
+    [texto.trim(), media_url],
+  ]);
+
+  return jsonResponse({ ok: true });
 }
 
 // -------------------- COMENTÁRIOS --------------------

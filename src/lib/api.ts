@@ -674,6 +674,14 @@ export const api = {
     });
     return res.json();
   },
+  async editarPostSocial(postId: string, texto: string, mediaUrl: string, tgId: string): Promise<CommonResponse> {
+    const res = await fetch("/api/social/posts/editar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, texto, media_url: mediaUrl, tgId }),
+    });
+    return res.json();
+  },
   async listarPerfisSocial(): Promise<any[]> {
     const res = await fetch("/api/social/perfis");
     const data = await res.json().catch(() => null);

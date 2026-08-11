@@ -45,6 +45,7 @@ import {
   getSocialComentariosController,
   comentarSocialPostController,
   editSocialCommentController,
+  editSocialPostController,
   getSocialPerfisController,
   saveSocialPerfilController,
   getSocialNewsController,
@@ -121,6 +122,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/comentarios",
     "/api/social/comentar",
     "/api/social/comentario/editar",
+    "/api/social/posts/editar",
     "/api/social/perfis",
     "/api/social/news",
   ]);
@@ -252,6 +254,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
               JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/posts." }),
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
+  } else if (url.pathname === "/api/social/posts/editar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/posts/editar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await editSocialPostController(request);
   } else if (url.pathname === "/api/social/curtir") {
     if (request.method !== "POST") {
       return new Response(
