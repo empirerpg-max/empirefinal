@@ -646,6 +646,45 @@ export const api = {
     return res.json();
   },
 
+  async listarAlbunsAntigos(): Promise<
+    {
+      id: string;
+      artista: string;
+      titulo: string;
+      genero?: string;
+      data?: string;
+      descricao?: string;
+      capa_url?: string;
+      totalFaixas: number;
+    }[]
+  > {
+    const res = await fetch("/api/albuns-antigos");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
+  },
+  async getAlbumAntigo(id: string): Promise<{
+    id: string;
+    artista: string;
+    titulo: string;
+    genero?: string;
+    data?: string;
+    descricao?: string;
+    capa_url?: string;
+    faixas: {
+      numero: number;
+      titulo: string;
+      artistas: string;
+      duracao?: string;
+      drive_url: string;
+      letra?: string;
+    }[];
+  } | null> {
+    const res = await fetch(`/api/albuns-antigos/${encodeURIComponent(id)}`);
+    const data = await res.json().catch(() => null);
+    if (!data || data.error) return null;
+    return data;
+  },
+
   // ---- Bet ----
   async getMusicasBet(): Promise<{ semana: string; musicas: unknown[] } | null> {
     const acoes = ["musicas_bet", "get_musicas_bet", "musicas_charts", "get_musicas_charts"];

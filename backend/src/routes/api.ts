@@ -61,6 +61,8 @@ import {
   saveSalvoController,
   removeSalvoController,
   criarAlbumAntigoController,
+  getAlbunsAntigosController,
+  getAlbumAntigoByIdController,
 } from "../controllers/playlistsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
@@ -88,6 +90,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   const isPlaylistsPath = url.pathname === "/api/playlists" || url.pathname.startsWith("/api/playlists/");
   // Match /api/salvos ou /api/salvos/:acao
   const isSalvosPath = url.pathname === "/api/salvos" || url.pathname.startsWith("/api/salvos/");
+  // Match /api/albuns-antigos ou /api/albuns-antigos/:id
+  const isAlbunsAntigosPath =
+    url.pathname === "/api/albuns-antigos" || url.pathname.startsWith("/api/albuns-antigos/");
 
   const supportedPaths = new Set([
     "/api/auth/login",
@@ -133,7 +138,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/news",
   ]);
 
-  if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath && !isPlaylistsPath && !isSalvosPath) {
+  if (
+    !supportedPaths.has(url.pathname) &&
+    !isEditarPath &&
+    !isEmpirePlayPath &&
+    !isPlaylistsPath &&
+    !isSalvosPath &&
+    !isAlbunsAntigosPath
+  ) {
     return null;
   }
 
@@ -374,6 +386,19 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
                 JSON.stringify({ success: false, error: "Use GET ou POST para /api/salvos." }),
                 { status: 405, headers: { "Content-Type": "application/json" } },
               );
+    }
+  } else if (isAlbunsAntigosPath) {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/albuns-antigos." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    if (url.pathname === "/api/albuns-antigos") {
+      response = await getAlbunsAntigosController();
+    } else {
+      const id = decodeURIComponent(url.pathname.replace("/api/albuns-antigos/", ""));
+      response = await getAlbumAntigoByIdController(id);
     }
   } else if (url.pathname === "/api/social/news") {
     response =
