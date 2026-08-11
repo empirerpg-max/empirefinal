@@ -43,6 +43,7 @@ import {
   salvarPontoCelulaController,
   distribuirPontosAleatorioController,
 } from "../controllers/pontoController";
+import { debugEcoinInvestimentoController } from "../controllers/debugController";
 import {
   getSocialPostsController,
   createSocialPostController,
@@ -144,6 +145,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/posts/editar",
     "/api/social/perfis",
     "/api/social/news",
+    "/api/debug/ecoin-investimento",
   ]);
 
   if (
@@ -432,6 +434,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await distribuirPontosAleatorioController(request);
+  } else if (url.pathname === "/api/debug/ecoin-investimento") {
+    response = await debugEcoinInvestimentoController();
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"
