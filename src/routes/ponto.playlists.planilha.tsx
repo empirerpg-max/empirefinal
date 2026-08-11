@@ -2,13 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
+  ChevronDown,
   Loader2,
   Coins,
   AlertTriangle,
   AlertCircle,
   Music2,
   Plus,
-  CheckCircle2,
 } from "lucide-react";
 import { api, driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -78,6 +78,10 @@ function fmtMoeda(n: number): string {
   return `R$ ${n.toLocaleString("pt-BR")}`;
 }
 
+function parseMoeda(v: string): number {
+  return parseFloat(String(v || "").replace(/[^\d,-]/g, "").replace(",", ".")) || 0;
+}
+
 function PontoPlaylistsPlanilha() {
   const { user, ready } = useTelegramUser();
   const tgId = user?.id ? String(user.id) : (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || "";
@@ -88,7 +92,7 @@ function PontoPlaylistsPlanilha() {
   const [fotos, setFotos] = useState<Record<string, string>>({});
   const [artistaAtivo, setArtistaAtivo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [linhaSelecionada, setLinhaSelecionada] = useState<LinhaInvestimento | null>(null);
+  const [linhaAberta, setLinhaAberta] = useState<number | null>(null);
   const [escolhendoMusica, setEscolhendoMusica] = useState(false);
   const [iniciando, setIniciando] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
@@ -146,6 +150,7 @@ function PontoPlaylistsPlanilha() {
     if ((r as any)?.ok) {
       haptic.success();
       setEscolhendoMusica(false);
+      if ((r as any).linha) setLinhaAberta((r as any).linha);
       carregar();
     } else {
       haptic.error();
@@ -170,20 +175,19 @@ function PontoPlaylistsPlanilha() {
                 ...g,
                 linhas: g.linhas.map((l) => (l.linha === linha.linha ? atualizada : l)),
                 saldoRestante:
-                  g.saldoFixo - g.linhas.reduce((acc, l) => acc + (l.linha === linha.linha ? parseMoeda(atualizada.total) : parseMoeda(l.total)), 0),
+                  g.saldoFixo -
+                  g.linhas.reduce(
+                    (acc, l) => acc + (l.linha === linha.linha ? parseMoeda(atualizada.total) : parseMoeda(l.total)),
+                    0,
+                  ),
               },
         ),
       );
-      setLinhaSelecionada(atualizada);
-      setMsg({ key, text: "Investido com sucesso!", ok: true });
+      setMsg({ key, text: "Investido!", ok: true });
     } else {
       haptic.error();
       setMsg({ key, text: (r as any)?.error || "Erro ao investir", ok: false });
     }
-  }
-
-  function parseMoeda(v: string): number {
-    return parseFloat(String(v || "").replace(/[^\d,-]/g, "").replace(",", ".")) || 0;
   }
 
   if (!ready || loading)
@@ -236,118 +240,7 @@ function PontoPlaylistsPlanilha() {
     );
   }
 
-  // === VIEW DE DETALHE DO INVESTIMENTO ===
-  if (linhaSelecionada) {
-    const saldoRestante = grupoAtivo?.saldoRestante ?? 0;
-    const saldoNegativo = saldoRestante < 0;
-
-    return (
-      <main className="flex-1 mx-auto w-full max-w-md px-5 pt-6 pb-24 flex flex-col gap-4">
-        <button
-          onClick={() => {
-            setLinhaSelecionada(null);
-            setMsg(null);
-          }}
-          className="flex items-center gap-1 text-sm text-neutral-500 mb-2 hover:text-emerald-500 transition-colors w-fit"
-        >
-          <ChevronLeft className="w-4 h-4" /> Voltar
-        </button>
-
-        <div className="rounded-2xl border border-white/10 bg-neutral-900 p-4 flex items-start gap-3">
-          <div className="size-11 rounded-xl bg-emerald-500/15 grid place-items-center shrink-0 overflow-hidden">
-            {artistaAtivo && fotos[artistaAtivo] ? (
-              <img src={driveImg(fotos[artistaAtivo])} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-            ) : (
-              <Music2 className="size-5 text-emerald-500" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] text-emerald-500 font-black uppercase tracking-widest truncate mb-1">
-              {artistaAtivo}
-            </p>
-            <h2 className="font-black text-lg leading-tight truncate text-white">{linhaSelecionada.musica}</h2>
-          </div>
-        </div>
-
-        <div
-          className={`p-4 rounded-2xl border flex items-center justify-between ${
-            saldoNegativo ? "bg-red-950/40 border-red-500/50" : "bg-neutral-900 border-white/10"
-          }`}
-        >
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-neutral-500 mb-1 font-bold">$ Bank Account</p>
-            <div className="flex items-center gap-2">
-              <Coins className={`w-5 h-5 ${saldoNegativo ? "text-red-400" : "text-amber-400"}`} />
-              <p className={`text-2xl font-black ${saldoNegativo ? "text-red-400" : "text-amber-400"}`}>
-                {fmtMoeda(saldoRestante)}
-              </p>
-            </div>
-            {saldoNegativo && (
-              <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" /> Orçamento estourado!
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 mt-1">
-          {(
-            [
-              ["SPOTIFY", linhaSelecionada.spotify, linhaSelecionada.spotifyValor],
-              ["APPLE MUSIC", linhaSelecionada.apple, linhaSelecionada.appleValor],
-              ["YOUTUBE", linhaSelecionada.youtube, linhaSelecionada.youtubeValor],
-            ] as const
-          ).map(([plat, atual, valorAtual]) => {
-            const key = `${linhaSelecionada.linha}-${plat}`;
-            const isSaving = saving === key;
-            return (
-              <div key={plat} className="bg-neutral-900 rounded-2xl border border-white/10 overflow-hidden">
-                <div className="px-4 py-3 bg-white/5 border-b border-white/5 flex justify-between items-center">
-                  <p className="text-xs font-black text-neutral-200 tracking-wide">{plat}</p>
-                  {atual && (
-                    <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-2 py-1 rounded-full font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> {valorAtual || fmtMoeda(0)}
-                    </span>
-                  )}
-                </div>
-                <div className="p-2 flex flex-col gap-1">
-                  {PLAYLISTS[plat].map((pl) => {
-                    const selecionada = atual === pl;
-                    return (
-                      <button
-                        key={pl}
-                        disabled={isSaving}
-                        onClick={() => investir(linhaSelecionada, plat, pl)}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium transition-all flex items-center justify-between gap-2 ${
-                          selecionada
-                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/40"
-                            : "hover:bg-white/5 text-neutral-300 border border-transparent"
-                        } ${isSaving ? "opacity-50 cursor-wait" : ""}`}
-                      >
-                        <span className="truncate">{pl}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {isSaving && (
-                  <div className="px-4 pb-3 flex items-center gap-2 text-xs text-emerald-400">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Investindo...
-                  </div>
-                )}
-                {msg?.key === key && (
-                  <p className={`px-4 pb-3 text-xs font-semibold ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>
-                    {msg.text}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </main>
-    );
-  }
-
-  // === VIEW DE LISTA (por artista) ===
+  // === VIEW DE LISTA (por artista, com cards expansíveis) ===
   return (
     <main className="flex-1 mx-auto w-full max-w-md px-5 pt-6 pb-24 flex flex-col gap-4">
       <Link to="/ponto/playlists" className="flex items-center gap-1 text-sm text-neutral-500 hover:text-emerald-500 mb-2 w-fit transition-colors">
@@ -356,7 +249,7 @@ function PontoPlaylistsPlanilha() {
 
       <div className="mb-2">
         <h2 className="text-2xl font-black italic tracking-tighter text-white">Playlists · Manual</h2>
-        <p className="text-sm text-neutral-500 mt-1">Escolha o artista e invista em playlists por música.</p>
+        <p className="text-sm text-neutral-500 mt-1">Toque numa música pra abrir e escolher as playlists.</p>
       </div>
 
       {msg?.key === "global" && (
@@ -388,6 +281,7 @@ function PontoPlaylistsPlanilha() {
                       onClick={() => {
                         haptic.selection();
                         setArtistaAtivo(a);
+                        setLinhaAberta(null);
                       }}
                       className="flex flex-col items-center gap-1.5 shrink-0 w-16"
                     >
@@ -451,27 +345,94 @@ function PontoPlaylistsPlanilha() {
               </div>
             ) : (
               grupoAtivo!.linhas.map((l) => {
+                const aberta = linhaAberta === l.linha;
                 const plataformasPreenchidas = [l.spotify, l.apple, l.youtube].filter(Boolean).length;
+
                 return (
-                  <button
-                    key={l.linha}
-                    onClick={() => {
-                      haptic.selection();
-                      setLinhaSelecionada(l);
-                      setMsg(null);
-                    }}
-                    className="rounded-2xl border border-white/10 bg-neutral-900 hover:border-emerald-500/40 hover:bg-neutral-800 transition-colors text-left px-4 py-3 flex items-center gap-3"
-                  >
-                    <div className="size-9 rounded-xl bg-emerald-500/15 grid place-items-center shrink-0">
-                      <Music2 className="size-4 text-emerald-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-sm leading-tight truncate text-white">{l.musica}</h3>
-                      <p className="text-[10px] text-neutral-500 mt-0.5">
-                        {plataformasPreenchidas}/3 plataformas · {l.total || fmtMoeda(0)} gasto
-                      </p>
-                    </div>
-                  </button>
+                  <div key={l.linha} className="rounded-2xl border border-white/10 bg-neutral-900 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        haptic.selection();
+                        setLinhaAberta(aberta ? null : l.linha);
+                        setMsg(null);
+                      }}
+                      className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-neutral-800 transition-colors"
+                    >
+                      <div className="size-9 rounded-xl bg-emerald-500/15 grid place-items-center shrink-0">
+                        <Music2 className="size-4 text-emerald-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-sm leading-tight truncate text-white">{l.musica}</h3>
+                        <p className="text-[10px] text-neutral-500 mt-0.5">
+                          {plataformasPreenchidas}/3 plataformas · {l.total || fmtMoeda(0)} gasto
+                        </p>
+                      </div>
+                      <ChevronDown
+                        className={`size-4 text-neutral-500 shrink-0 transition-transform ${aberta ? "rotate-180" : ""}`}
+                      />
+                    </button>
+
+                    {aberta && (
+                      <div className="px-4 pb-4 pt-1 flex flex-col gap-2.5 border-t border-white/5">
+                        {(
+                          [
+                            ["SPOTIFY", l.spotify, l.spotifyValor],
+                            ["APPLE MUSIC", l.apple, l.appleValor],
+                            ["YOUTUBE", l.youtube, l.youtubeValor],
+                          ] as const
+                        ).map(([plat, atual, valorAtual]) => {
+                          const key = `${l.linha}-${plat}`;
+                          const isSaving = saving === key;
+                          return (
+                            <div key={plat}>
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{plat}</p>
+                                {atual && (
+                                  <span className="text-[10px] text-emerald-400 font-bold">{valorAtual || fmtMoeda(0)}</span>
+                                )}
+                              </div>
+                              <div className="relative">
+                                <select
+                                  disabled={isSaving}
+                                  value={atual || ""}
+                                  onChange={(e) => e.target.value && investir(l, plat, e.target.value)}
+                                  className={`w-full appearance-none px-3 py-2.5 rounded-xl text-xs font-bold border outline-none transition-colors ${
+                                    atual
+                                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/40"
+                                      : "bg-black/30 text-neutral-300 border-white/10"
+                                  } ${isSaving ? "opacity-50" : ""}`}
+                                >
+                                  <option value="" disabled>
+                                    Escolher playlist...
+                                  </option>
+                                  {PLAYLISTS[plat].map((pl) => (
+                                    <option key={pl} value={pl}>
+                                      {pl}
+                                    </option>
+                                  ))}
+                                </select>
+                                {isSaving ? (
+                                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-3.5 animate-spin text-emerald-400 pointer-events-none" />
+                                ) : (
+                                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 size-3.5 text-neutral-500 pointer-events-none" />
+                                )}
+                              </div>
+                              {msg?.key === key && (
+                                <p className={`mt-1 text-[10px] font-semibold ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>
+                                  {msg.text}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {(grupoAtivo?.saldoRestante ?? 0) < 0 && (
+                          <p className="text-[10px] text-red-400 flex items-center gap-1 mt-1">
+                            <AlertTriangle className="w-3 h-3" /> Saldo estourado — pode continuar, mas fica no vermelho.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })
             )}
