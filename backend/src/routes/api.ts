@@ -49,7 +49,6 @@ import {
   saveSocialNewsController,
 } from "../controllers/socialController";
 import { handleMediaRoutes } from "./mediaRoutes";
-import { debugDumpController } from "../controllers/debugTabsController";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -110,19 +109,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/comentar",
     "/api/social/perfis",
     "/api/social/news",
-    "/api/debug/dump",
   ]);
-
-  if (url.pathname === "/api/debug/dump") {
-    try {
-      return await debugDumpController(request);
-    } catch (e: any) {
-      return new Response(JSON.stringify({ success: false, error: String(e?.message || e) }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-  }
 
   if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath) {
     return null;
