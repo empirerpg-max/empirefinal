@@ -8,6 +8,7 @@ import {
   Music2,
   TrendingUp,
   Wallet,
+  Search,
 } from "lucide-react";
 import { api, driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -55,6 +56,7 @@ function PontoPlanilha() {
   const [musicaSelecionada, setMusicaSelecionada] = useState<PontoMusica | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ key: string; text: string; ok: boolean } | null>(null);
+  const [busca, setBusca] = useState("");
 
   useEffect(() => {
     if (!tgId) return;
@@ -83,6 +85,13 @@ function PontoPlanilha() {
     () => grupos.find((g) => g.artista === artistaAtivo) || null,
     [grupos, artistaAtivo],
   );
+
+  const musicasFiltradas = useMemo(() => {
+    const musicas = grupoAtivo?.musicas || [];
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return musicas;
+    return musicas.filter((m) => m.musica.toLowerCase().includes(termo));
+  }, [grupoAtivo, busca]);
 
   async function salvarPonto(row: PontoMusica, coluna: string, valor: string) {
     const key = `${row.linha}-${coluna}`;
@@ -283,6 +292,7 @@ function PontoPlanilha() {
                     onClick={() => {
                       haptic.selection();
                       setArtistaAtivo(g.artista);
+                      setBusca("");
                     }}
                     className="flex flex-col items-center gap-1.5 shrink-0 w-16"
                   >
@@ -320,13 +330,29 @@ function PontoPlanilha() {
             </div>
           )}
 
+          {(grupoAtivo?.musicas.length || 0) > 3 && (
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-neutral-600" />
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar música..."
+                className="w-full h-10 bg-neutral-900 border border-white/10 rounded-xl pl-10 pr-4 text-sm font-bold text-white placeholder:text-neutral-600 outline-none focus:border-emerald-500/40 transition-colors"
+              />
+            </div>
+          )}
+
           <div className="flex flex-col gap-3">
             {(grupoAtivo?.musicas || []).length === 0 ? (
               <div className="p-6 text-center bg-neutral-900 rounded-2xl border border-white/10">
                 <p className="text-sm text-neutral-500">Nenhuma música de {artistaAtivo} na aba PONTOS.</p>
               </div>
+            ) : musicasFiltradas.length === 0 ? (
+              <div className="p-6 text-center bg-neutral-900 rounded-2xl border border-white/10">
+                <p className="text-sm text-neutral-500">Nenhuma música encontrada para "{busca}".</p>
+              </div>
             ) : (
-              grupoAtivo!.musicas.map((row) => {
+              musicasFiltradas.map((row) => {
                 const disponivelNum = parseFloat(String(row.pontosDisponiveis).replace("%", "").replace(",", ".")) || 0;
                 const utilizadoNum = parseFloat(String(row.pontosUtilizados).replace("%", "").replace(",", ".")) || 0;
 
