@@ -139,6 +139,7 @@ function ArtistDashboard() {
         <img
           loading="lazy"
           decoding="async"
+          referrerPolicy="no-referrer"
           src={driveImg(artist.foto, 1200) || artist.foto}
           onError={(e) => {
             const img = e.currentTarget;
@@ -171,6 +172,7 @@ function ArtistDashboard() {
               <img
                 loading="lazy"
                 decoding="async"
+                referrerPolicy="no-referrer"
                 src={driveImg(artist.foto, 400) || artist.foto}
                 onError={(e) => {
                   const img = e.currentTarget;
@@ -338,7 +340,7 @@ function ArtistDashboard() {
                 <Link key={a.id} to="/album/$id" params={{ id: a.id! }} className="group">
                   <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5">
                     {a.capa_url && (
-                      <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 grayscale group-hover:grayscale-0" loading="lazy" decoding="async" />
+                      <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 grayscale group-hover:grayscale-0" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
                     )}
                   </div>
                   <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.titulo}</p>
