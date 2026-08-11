@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { api, driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+import { useDragScroll } from "@/lib/useDragScroll";
 
 export const Route = createFileRoute("/ponto/distribuir/planilha")({
   component: PontoPlanilha,
@@ -45,6 +46,7 @@ type PontoGrupo = { artista: string; musicas: PontoMusica[] };
 function PontoPlanilha() {
   const { user, ready } = useTelegramUser();
   const tgId = user?.id ? String(user.id) : (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || "";
+  const artistScroll = useDragScroll<HTMLDivElement>();
 
   const [grupos, setGrupos] = useState<PontoGrupo[]>([]);
   const [fotos, setFotos] = useState<Record<string, string>>({});
@@ -266,7 +268,13 @@ function PontoPlanilha() {
       ) : (
         <>
           {grupos.length > 1 && (
-            <div className="flex overflow-x-auto gap-3 scrollbar-hide -mx-1 px-1 pb-1">
+            <div className="relative -mx-5">
+              <div
+                ref={artistScroll.ref}
+                {...artistScroll.dragProps}
+                className="flex overflow-x-auto gap-3 scrollbar-hide px-5 pb-1 cursor-grab active:cursor-grabbing select-none"
+                style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}
+              >
               {grupos.map((g) => {
                 const ativo = artistaAtivo === g.artista;
                 return (
@@ -306,6 +314,9 @@ function PontoPlanilha() {
                   </button>
                 );
               })}
+              </div>
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-5 bg-gradient-to-r from-background to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-5 bg-gradient-to-l from-background to-transparent" />
             </div>
           )}
 
