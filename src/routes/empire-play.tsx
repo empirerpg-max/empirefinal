@@ -8,8 +8,8 @@ import { VideoPlayer } from "@/components/EmpirePlay/VideoPlayer";
 export const Route = createFileRoute("/empire-play")({
   head: () => ({
     meta: [
-      { title: "Empire Play — Empire Hub" },
-      { name: "description", content: "Músicas, vídeos, álbuns e o fórum do Empire Play." },
+      { title: "Catálogo — Empire Hub" },
+      { name: "description", content: "Músicas, vídeos, álbuns e o fórum do Catálogo." },
     ],
   }),
   component: EmpirePlayLayout,

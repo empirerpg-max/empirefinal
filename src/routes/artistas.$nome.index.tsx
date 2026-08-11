@@ -14,7 +14,6 @@ import {
   HandHeart,
   X,
   Loader2,
-  ShoppingBag,
   Building2,
   Gavel,
   Radio,
@@ -276,7 +275,6 @@ function ArtistDashboard() {
                   <MiniAction label="Payola" icon={<Radio />} onClick={() => setModal("payola")} color="text-primary" />
                   <MiniAction label="Filantropia" icon={<HandHeart />} onClick={() => setModal("filantropia")} color="text-emerald-500" />
                   <MiniAction label="Leilão" icon={<Gavel />} onClick={() => setModal("leilao")} color="text-amber-500" />
-                  <MiniAction label="Market" icon={<ShoppingBag />} to="/market" color="text-indigo-500" />
                   <MiniAction label="Vender Comp." icon={<Disc3 />} onClick={() => setModal("composicao")} color="text-purple-500" />
                   <div className="col-span-2 mt-4 space-y-3">
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 px-1">Administrativo</h4>
