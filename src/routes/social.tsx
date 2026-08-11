@@ -38,6 +38,9 @@ import { api } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
 
 export const Route = createFileRoute("/social")({
+  validateSearch: (s: Record<string, unknown>): { postId?: string } => ({
+    postId: s.postId ? String(s.postId) : undefined,
+  }),
   component: SocialPage,
 });
 
@@ -76,6 +79,7 @@ type News = {
 };
 
 function SocialPage() {
+  const { postId } = Route.useSearch();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -143,6 +147,17 @@ function SocialPage() {
   useEffect(() => {
     if (ready) loadContext();
   }, [ready, user]);
+
+  useEffect(() => {
+    if (!postId || loading) return;
+    const found = posts.find((p) => p.id === postId);
+    if (found) {
+      setSelectedPost(found);
+      loadComments(found.id);
+      setIsCommentModalOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postId, loading]);
 
   async function loadContext() {
     const tgId = user?.id || "";

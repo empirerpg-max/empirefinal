@@ -38,7 +38,6 @@ import { reportWrongContentController } from "../controllers/reportWrongContentC
 import { loginController } from "../controllers/authController";
 import { getMeusArtistasNomesController } from "../controllers/artistasController";
 import { handleMediaRoutes } from "./mediaRoutes";
-import { debugDumpController } from "../controllers/debugTabsController";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -93,22 +92,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/empire-play/lancamentos-recentes",
     "/api/empire-play/report-video-issue",
     "/api/empire-play/report-wrong-content",
-    "/api/debug/dump",
   ]);
 
   if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath) {
     return null;
-  }
-
-  if (url.pathname === "/api/debug/dump") {
-    try {
-      return await debugDumpController(request);
-    } catch (e: any) {
-      return new Response(JSON.stringify({ success: false, error: String(e?.message || e) }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
   }
 
   if (request.method === "OPTIONS") {
