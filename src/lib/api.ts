@@ -620,6 +620,32 @@ export const api = {
     return res.json();
   },
 
+  async criarAlbumAntigo(payload: {
+    artista: string;
+    titulo: string;
+    genero?: string;
+    data?: string;
+    descricao?: string;
+    capa_url?: string;
+    contracapa_url?: string;
+    telegram_id?: string;
+    faixas: {
+      numero: number;
+      titulo: string;
+      artistas: string;
+      duracao?: string;
+      drive_url: string;
+      letra?: string;
+    }[];
+  }): Promise<CommonResponse> {
+    const res = await fetch("/api/playlists/albuns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
   // ---- Bet ----
   async getMusicasBet(): Promise<{ semana: string; musicas: unknown[] } | null> {
     const acoes = ["musicas_bet", "get_musicas_bet", "musicas_charts", "get_musicas_charts"];

@@ -206,6 +206,69 @@ export async function getPlaylistsCatalogoController(): Promise<Response> {
   return jsonResponse(faixas);
 }
 
+// -------------------- ÁLBUM ANTIGO (cadastro manual em Playlists_Albuns) --------------------
+
+interface FaixaAntigaInput {
+  numero: number;
+  titulo: string;
+  artistas: string;
+  duracao?: string;
+  drive_url: string;
+  letra?: string;
+}
+
+export async function criarAlbumAntigoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    artista?: string;
+    titulo?: string;
+    genero?: string;
+    data?: string;
+    descricao?: string;
+    capa_url?: string;
+    contracapa_url?: string;
+    telegram_id?: string;
+    faixas?: FaixaAntigaInput[];
+  };
+
+  if (!body.artista?.trim() || !body.titulo?.trim() || !body.faixas?.length) {
+    return jsonResponse({ ok: false, error: "Artista, título e ao menos uma faixa são obrigatórios." }, 400);
+  }
+  if (body.faixas.some((f) => !f.titulo?.trim() || !f.drive_url?.trim())) {
+    return jsonResponse({ ok: false, error: "Toda faixa precisa de título e link/arquivo." }, 400);
+  }
+
+  const albumId = `ALB-${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+  const dataLancamento = body.data || new Date().toISOString().slice(0, 10);
+
+  await googleSheetsService.usuarios.appendRow(SHEET_ALBUNS, [
+    albumId,
+    body.artista.trim(),
+    body.titulo.trim(),
+    body.genero?.trim() || "",
+    dataLancamento,
+    body.descricao?.trim() || "",
+    body.capa_url || "",
+    body.contracapa_url || "",
+    "[]",
+    body.telegram_id || "",
+    new Date().toISOString(),
+  ]);
+
+  for (const f of body.faixas) {
+    await googleSheetsService.usuarios.appendRow(SHEET_FAIXAS, [
+      albumId,
+      String(f.numero || ""),
+      f.titulo.trim(),
+      f.artistas?.trim() || body.artista.trim(),
+      f.duracao || "",
+      f.drive_url.trim(),
+      f.letra || "",
+    ]);
+  }
+
+  return jsonResponse({ ok: true, id: albumId });
+}
+
 // -------------------- SALVOS (faixas curtidas) --------------------
 
 export async function getSalvosController(request: Request): Promise<Response> {

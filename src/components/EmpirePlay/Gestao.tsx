@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   Disc,
   Music,
@@ -1727,6 +1728,17 @@ export const Gestao: React.FC = () => {
       {/* FORMULÁRIO DE ÁLBUM */}
       {activeTab === "album" && (
         <div className="space-y-6">
+          <Link
+            to="/empire-play/gestao/album-antigo"
+            className="flex items-center justify-between p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-white hover:bg-emerald-500/20 transition-colors"
+          >
+            <span className="text-xs font-bold">
+              Cadastrando um álbum <span className="text-emerald-400">mais antigo</span>? Use a ferramenta dedicada,
+              com upload direto, YouTube ou Drive por faixa.
+            </span>
+            <span className="text-[11px] font-black uppercase text-emerald-400 shrink-0 ml-3">Abrir →</span>
+          </Link>
+
           {/* OBJETIVO */}
           <div className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-2 backdrop-blur-md">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">

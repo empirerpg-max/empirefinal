@@ -60,6 +60,7 @@ import {
   getSalvosController,
   saveSalvoController,
   removeSalvoController,
+  criarAlbumAntigoController,
 } from "../controllers/playlistsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
@@ -326,6 +327,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         );
       }
       response = await getPlaylistsCatalogoController();
+    } else if (url.pathname === "/api/playlists/albuns") {
+      if (request.method !== "POST") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use POST para /api/playlists/albuns." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await criarAlbumAntigoController(request);
     } else if (url.pathname === "/api/playlists") {
       response =
         request.method === "GET"
