@@ -685,6 +685,41 @@ export const api = {
     return data;
   },
 
+  // ---- Ponto ----
+  async listarPontos(telegramId: string): Promise<{
+    artistas: string[];
+    grupos: {
+      artista: string;
+      musicas: {
+        linha: number;
+        artista: string;
+        musica: string;
+        weeks: string;
+        pontosDisponiveis: string;
+        pontosUtilizados: string;
+        categorias: Record<string, string>;
+        dataLancamento: string;
+      }[];
+    }[];
+  }> {
+    const res = await fetch(`/api/ponto?telegramId=${encodeURIComponent(telegramId)}`);
+    const data = await res.json().catch(() => null);
+    return data && Array.isArray(data.grupos) ? data : { artistas: [], grupos: [] };
+  },
+  async salvarPontoCelula(
+    telegramId: string,
+    linha: number,
+    coluna: string,
+    valor: string,
+  ): Promise<CommonResponse> {
+    const res = await fetch("/api/ponto/salvar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramId, linha, coluna, valor }),
+    });
+    return res.json();
+  },
+
   // ---- Bet ----
   async getMusicasBet(): Promise<{ semana: string; musicas: unknown[] } | null> {
     const acoes = ["musicas_bet", "get_musicas_bet", "musicas_charts", "get_musicas_charts"];

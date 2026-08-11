@@ -71,6 +71,20 @@ async function readArtistOwnerPairs(): Promise<[string, string][]> {
  * frontend cruza os dois. `usuario`, quando vier sem `telegramId`, é
  * resolvido pro ID via a aba Usuários antes de casar com ARTISTAS.
  */
+/**
+ * Nomes dos artistas de um dono, direto da aba ARTISTAS (fonte de verdade).
+ * Reaproveitada por qualquer feature que precise saber "quais artistas são
+ * meus" a partir de um telegram_id (ex.: Ponto).
+ */
+export async function getArtistNamesForOwner(telegramId: string): Promise<string[]> {
+  if (!telegramId) return [];
+  const normId = normalizeComparison(telegramId);
+  const pairs = await readArtistOwnerPairs();
+  return Array.from(
+    new Set(pairs.filter(([, dono]) => normalizeComparison(dono) === normId).map(([artista]) => artista)),
+  );
+}
+
 export async function getMeusArtistasNomesController(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);
@@ -88,13 +102,7 @@ export async function getMeusArtistasNomesController(request: Request): Promise<
       });
     }
 
-    const normId = normalizeComparison(telegramId);
-    const pairs = await readArtistOwnerPairs();
-    const nomes = Array.from(
-      new Set(
-        pairs.filter(([, dono]) => normalizeComparison(dono) === normId).map(([artista]) => artista),
-      ),
-    );
+    const nomes = await getArtistNamesForOwner(telegramId);
 
     return new Response(JSON.stringify({ success: true, data: nomes }), {
       status: 200,

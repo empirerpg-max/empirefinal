@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   Loader2,
@@ -8,9 +8,10 @@ import {
   Music2,
   TrendingUp,
   Wallet,
+  Users,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { useTelegramUser } from "@/lib/telegram";
+import { useTelegramUser, haptic } from "@/lib/telegram";
 
 export const Route = createFileRoute("/ponto/distribuir/planilha")({
   component: PontoPlanilha,
@@ -20,93 +21,43 @@ const OPCOES_PONTOS: Record<string, string[]> = {
   "BILLBOARD HOT 100": ["1,00%", "2,00%", "3,00%", "4,00%", "5,00%", "6,00%", "7,00%", "8,00%", "9,00%", "10,00%"],
   SPOTIFY: ["30,00%", "40,00%", "50,00%", "60,00%", "70,00%"],
   "APPLE MUSIC": ["30,00%", "40,00%", "50,00%", "60,00%", "70,00%"],
-  YOUTUBE: [
-    "10,00%",
-    "15,00%",
-    "20,00%",
-    "25,00%",
-    "30,00%",
-    "35,00%",
-    "40,00%",
-    "45,00%",
-    "50,00%",
-    "55,00%",
-    "60,00%",
-    "65,00%",
-    "70,00%",
-  ],
-  "DIGITAL SALES": [
-    "10,00%",
-    "15,00%",
-    "20,00%",
-    "25,00%",
-    "30,00%",
-    "35,00%",
-    "40,00%",
-    "45,00%",
-    "50,00%",
-    "55,00%",
-    "60,00%",
-    "65,00%",
-    "70,00%",
-  ],
-  "BILLBOARD 200": [
-    "10,00%",
-    "15,00%",
-    "20,00%",
-    "25,00%",
-    "30,00%",
-    "35,00%",
-    "40,00%",
-    "45,00%",
-    "50,00%",
-    "55,00%",
-    "60,00%",
-    "65,00%",
-    "70,00%",
-  ],
+  YOUTUBE: ["10,00%", "15,00%", "20,00%", "25,00%", "30,00%", "35,00%", "40,00%", "45,00%", "50,00%", "55,00%", "60,00%", "65,00%", "70,00%"],
+  "DIGITAL SALES": ["10,00%", "15,00%", "20,00%", "25,00%", "30,00%", "35,00%", "40,00%", "45,00%", "50,00%", "55,00%", "60,00%", "65,00%", "70,00%"],
+  "BILLBOARD 200": ["10,00%", "15,00%", "20,00%", "25,00%", "30,00%", "35,00%", "40,00%", "45,00%", "50,00%", "55,00%", "60,00%", "65,00%", "70,00%"],
 };
 
-type PontoRow = {
+type PontoMusica = {
   linha: number;
   artista: string;
   musica: string;
-  valores: Record<string, string>;
+  weeks: string;
   pontosDisponiveis: string;
   pontosUtilizados: string;
+  categorias: Record<string, string>;
+  dataLancamento: string;
 };
+
+type PontoGrupo = { artista: string; musicas: PontoMusica[] };
 
 function PontoPlanilha() {
   const { user, ready } = useTelegramUser();
-  const tgId = user?.id ? String(user.id) : localStorage.getItem("empire_tg_id") || "";
+  const tgId = user?.id ? String(user.id) : (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || "";
 
-  const [rows, setRows] = useState<PontoRow[]>([]);
+  const [grupos, setGrupos] = useState<PontoGrupo[]>([]);
+  const [artistaAtivo, setArtistaAtivo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [musicaSelecionada, setMusicaSelecionada] = useState<PontoRow | null>(null);
+  const [musicaSelecionada, setMusicaSelecionada] = useState<PontoMusica | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
-  const [salvo, setSalvo] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ key: string; text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     if (!tgId) return;
     setLoading(true);
     api
-      .call({ acao: "ponto_listar_pontos", tgId })
-      .then((d: any) => {
-        if (d?.erro) {
-          setMsg({ key: "global", text: d.erro, ok: false });
-          return;
-        }
-        const linhas = d?.linhas || d?.rows || [];
-        const lista: PontoRow[] = linhas.map((r: any) => ({
-          linha: r.linha ?? r.row ?? 0,
-          artista: r.artista || r.ARTISTA || "",
-          musica: r.valores?.["MÚSICA"] || r.valores?.["NOME DA MÚSICA"] || r.valores?.["MUSICA"] || "(Sem título)",
-          valores: r.valores || {},
-          pontosDisponiveis: r.valores?.["PONTOS DISPONÍVEIS"] || "0%",
-          pontosUtilizados: r.valores?.["PONTOS UTILIZADOS"] || "0%",
-        }));
-        setRows(lista);
+      .listarPontos(tgId)
+      .then((d) => {
+        setGrupos(d.grupos);
+        if (d.grupos.length > 0) setArtistaAtivo((cur) => cur || d.grupos[0].artista);
       })
       .catch(() => {
         setMsg({ key: "global", text: "Erro ao se conectar com a planilha PONTOS.", ok: false });
@@ -114,17 +65,33 @@ function PontoPlanilha() {
       .finally(() => setLoading(false));
   }, [tgId]);
 
-  async function salvarPonto(row: PontoRow, coluna: string, valor: string) {
+  const grupoAtivo = useMemo(
+    () => grupos.find((g) => g.artista === artistaAtivo) || null,
+    [grupos, artistaAtivo],
+  );
+
+  async function salvarPonto(row: PontoMusica, coluna: string, valor: string) {
     const key = `${row.linha}-${coluna}`;
     setSaving(key);
     setMsg(null);
-    const d: any = await api.call({ acao: "ponto_salvar_celula", tgId, linha: row.linha, coluna, valor });
+    const r = await api.salvarPontoCelula(tgId, row.linha, coluna, valor);
     setSaving(null);
-    if (d?.ok || d?.message) {
-      setSalvo((prev) => ({ ...prev, [key]: valor }));
-      setMsg({ key, text: `Salvo com sucesso!`, ok: true });
+    if ((r as any)?.ok) {
+      haptic.success();
+      setGrupos((prev) =>
+        prev.map((g) => ({
+          ...g,
+          musicas: g.musicas.map((m) =>
+            m.linha === row.linha ? { ...m, categorias: { ...m.categorias, [coluna]: valor } } : m,
+          ),
+        })),
+      );
+      setMusicaSelecionada((prev) =>
+        prev && prev.linha === row.linha ? { ...prev, categorias: { ...prev.categorias, [coluna]: valor } } : prev,
+      );
+      setMsg({ key, text: "Salvo com sucesso!", ok: true });
     } else {
-      setMsg({ key, text: `${d?.erro || "Erro ao salvar"}`, ok: false });
+      setMsg({ key, text: (r as any)?.error || "Erro ao salvar", ok: false });
     }
   }
 
@@ -135,7 +102,7 @@ function PontoPlanilha() {
       </div>
     );
 
-  // === VIEW DE DETALHE DA MÚSICA (substitui a lista, sem overlay) ===
+  // === VIEW DE DETALHE DA MÚSICA ===
   if (musicaSelecionada) {
     return (
       <main className="flex-1 mx-auto w-full max-w-md px-5 pt-6 pb-24 flex flex-col gap-4">
@@ -149,7 +116,6 @@ function PontoPlanilha() {
           <ChevronLeft className="w-4 h-4" /> Voltar para músicas
         </button>
 
-        {/* Header da música */}
         <div className="rounded-2xl border border-white/10 bg-card p-4 flex items-start gap-3 shadow-lg">
           <div className="size-11 rounded-xl bg-primary/15 grid place-items-center shrink-0">
             <Music2 className="size-5 text-primary" />
@@ -162,29 +128,27 @@ function PontoPlanilha() {
           </div>
         </div>
 
-        {/* Saldo Disponível / Utilizado */}
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-2xl bg-card border border-white/10 p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <Wallet className="w-3.5 h-3.5 text-green-400" />
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Disponível</p>
             </div>
-            <p className="text-base font-black text-green-400">{musicaSelecionada.pontosDisponiveis}</p>
+            <p className="text-base font-black text-green-400">{musicaSelecionada.pontosDisponiveis || "0%"}</p>
           </div>
           <div className="rounded-2xl bg-card border border-white/10 p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <TrendingUp className="w-3.5 h-3.5 text-yellow-400" />
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Utilizado</p>
             </div>
-            <p className="text-base font-black text-yellow-400">{musicaSelecionada.pontosUtilizados}</p>
+            <p className="text-base font-black text-yellow-400">{musicaSelecionada.pontosUtilizados || "0%"}</p>
           </div>
         </div>
 
-        {/* Categorias — cada uma com TODAS as opções visíveis */}
         <div className="flex flex-col gap-3 mt-2">
           {Object.entries(OPCOES_PONTOS).map(([coluna, opcoes]) => {
             const colKey = `${musicaSelecionada.linha}-${coluna}`;
-            const salvoVal = salvo[colKey] || musicaSelecionada.valores?.[coluna] || "";
+            const salvoVal = musicaSelecionada.categorias?.[coluna] || "";
             const isSaving = saving === colKey;
 
             return (
@@ -234,7 +198,7 @@ function PontoPlanilha() {
     );
   }
 
-  // === VIEW DE LISTA DE MÚSICAS ===
+  // === VIEW DE LISTA DE MÚSICAS (por artista) ===
   return (
     <main className="flex-1 mx-auto w-full max-w-md px-5 pt-6 pb-24 flex flex-col gap-4">
       <Link to="/ponto/distribuir" className="flex items-center gap-1 text-sm text-muted-foreground mb-2 w-fit">
@@ -243,7 +207,7 @@ function PontoPlanilha() {
 
       <div className="mb-2">
         <h2 className="text-2xl font-black italic tracking-tighter">Pontos · Manual</h2>
-        <p className="text-sm text-muted-foreground mt-1">Toque em uma música para distribuir.</p>
+        <p className="text-sm text-muted-foreground mt-1">Escolha o artista e toque numa música pra distribuir.</p>
       </div>
 
       {msg?.key === "global" && (
@@ -252,7 +216,7 @@ function PontoPlanilha() {
         </div>
       )}
 
-      {rows.length === 0 && !msg ? (
+      {grupos.length === 0 && !msg ? (
         <div className="p-8 text-center bg-white/5 rounded-2xl border border-white/10">
           <AlertCircle className="w-8 h-8 mx-auto text-muted-foreground mb-3 opacity-50" />
           <p className="text-sm text-muted-foreground">
@@ -260,69 +224,97 @@ function PontoPlanilha() {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {rows.map((row) => {
-            const disponivelNum = parseFloat(String(row.pontosDisponiveis).replace("%", "").replace(",", ".")) || 0;
-            const utilizadoNum = parseFloat(String(row.pontosUtilizados).replace("%", "").replace(",", ".")) || 0;
-
-            return (
+        <>
+          <div className="flex overflow-x-auto gap-1.5 hide-scrollbar -mx-1 px-1">
+            {grupos.map((g) => (
               <button
-                key={row.linha}
+                key={g.artista}
                 onClick={() => {
-                  setMusicaSelecionada(row);
-                  setMsg(null);
+                  haptic.selection();
+                  setArtistaAtivo(g.artista);
                 }}
-                className="rounded-2xl border border-white/10 bg-card overflow-hidden shadow-lg transition-all hover:border-primary/40 text-left"
+                className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold transition-colors inline-flex items-center gap-1.5 ${
+                  artistaAtivo === g.artista
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10"
+                }`}
               >
-                <div className="px-4 py-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1 pr-4 min-w-0">
-                      <p className="text-[10px] text-primary font-bold uppercase tracking-widest mb-1 truncate">
-                        {row.artista}
-                      </p>
-                      <h3 className="font-bold text-base leading-tight truncate">{row.musica}</h3>
-                    </div>
-                    <div className="size-9 rounded-xl bg-primary/10 grid place-items-center shrink-0">
-                      <Music2 className="size-4 text-primary" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-xl bg-white/5 border border-white/5 px-3 py-2">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <Wallet className="w-3 h-3 text-green-400" />
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">
-                          Disponível
-                        </p>
-                      </div>
-                      <p className="text-sm font-black text-green-400">{row.pontosDisponiveis}</p>
-                    </div>
-                    <div className="rounded-xl bg-white/5 border border-white/5 px-3 py-2">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <TrendingUp className="w-3 h-3 text-yellow-400" />
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">
-                          Utilizado
-                        </p>
-                      </div>
-                      <p className="text-sm font-black text-yellow-400">{row.pontosUtilizados}</p>
-                    </div>
-                  </div>
-
-                  {(disponivelNum > 0 || utilizadoNum > 0) && (
-                    <div className="mt-3 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-yellow-400 to-primary transition-all"
-                        style={{
-                          width: `${Math.min(100, (utilizadoNum / Math.max(1, utilizadoNum + disponivelNum)) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
+                <Users className="w-3 h-3" /> {g.artista}
               </button>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {(grupoAtivo?.musicas || []).length === 0 ? (
+              <div className="p-6 text-center bg-white/5 rounded-2xl border border-white/10">
+                <p className="text-sm text-muted-foreground">Nenhuma música de {artistaAtivo} na aba PONTOS.</p>
+              </div>
+            ) : (
+              grupoAtivo!.musicas.map((row) => {
+                const disponivelNum = parseFloat(String(row.pontosDisponiveis).replace("%", "").replace(",", ".")) || 0;
+                const utilizadoNum = parseFloat(String(row.pontosUtilizados).replace("%", "").replace(",", ".")) || 0;
+
+                return (
+                  <button
+                    key={row.linha}
+                    onClick={() => {
+                      haptic.selection();
+                      setMusicaSelecionada(row);
+                      setMsg(null);
+                    }}
+                    className="rounded-2xl border border-white/10 bg-card overflow-hidden shadow-lg transition-all hover:border-primary/40 text-left"
+                  >
+                    <div className="px-4 py-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1 pr-4 min-w-0">
+                          <p className="text-[10px] text-primary font-bold uppercase tracking-widest mb-1 truncate">
+                            {row.artista}
+                          </p>
+                          <h3 className="font-bold text-base leading-tight truncate">{row.musica}</h3>
+                        </div>
+                        <div className="size-9 rounded-xl bg-primary/10 grid place-items-center shrink-0">
+                          <Music2 className="size-4 text-primary" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-xl bg-white/5 border border-white/5 px-3 py-2">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <Wallet className="w-3 h-3 text-green-400" />
+                            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">
+                              Disponível
+                            </p>
+                          </div>
+                          <p className="text-sm font-black text-green-400">{row.pontosDisponiveis || "0%"}</p>
+                        </div>
+                        <div className="rounded-xl bg-white/5 border border-white/5 px-3 py-2">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <TrendingUp className="w-3 h-3 text-yellow-400" />
+                            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">
+                              Utilizado
+                            </p>
+                          </div>
+                          <p className="text-sm font-black text-yellow-400">{row.pontosUtilizados || "0%"}</p>
+                        </div>
+                      </div>
+
+                      {(disponivelNum > 0 || utilizadoNum > 0) && (
+                        <div className="mt-3 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-yellow-400 to-primary transition-all"
+                            style={{
+                              width: `${Math.min(100, (utilizadoNum / Math.max(1, utilizadoNum + disponivelNum)) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </>
       )}
     </main>
   );
