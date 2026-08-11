@@ -54,7 +54,6 @@ import {
   savePlaylistController,
   deletePlaylistController,
 } from "../controllers/playlistsController";
-import { debugPlaylistsTabsController } from "../controllers/debugPlaylistsController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -119,7 +118,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/comentar",
     "/api/social/perfis",
     "/api/social/news",
-    "/api/debug/playlists-tabs",
   ]);
 
   if (!supportedPaths.has(url.pathname) && !isEditarPath && !isEmpirePlayPath && !isPlaylistsPath) {
@@ -283,8 +281,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
               JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/perfis." }),
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
-  } else if (url.pathname === "/api/debug/playlists-tabs") {
-    response = await debugPlaylistsTabsController();
   } else if (isPlaylistsPath) {
     if (url.pathname === "/api/playlists/excluir") {
       if (request.method !== "POST") {
