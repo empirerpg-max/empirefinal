@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Music2,
   Plus,
+  Search,
 } from "lucide-react";
 import { api, driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -97,6 +98,8 @@ function PontoPlaylistsPlanilha() {
   const [iniciando, setIniciando] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ key: string; text: string; ok: boolean } | null>(null);
+  const [buscaLista, setBuscaLista] = useState("");
+  const [buscaMusica, setBuscaMusica] = useState("");
 
   const carregar = () => {
     if (!tgId) return;
@@ -139,6 +142,19 @@ function PontoPlaylistsPlanilha() {
     const jaUsadas = new Set((grupoAtivo?.linhas || []).map((l) => l.musica));
     return todas.filter((m) => !jaUsadas.has(m));
   }, [artistaAtivo, musicasPorArtista, grupoAtivo]);
+
+  const musicasFiltradas = useMemo(() => {
+    const termo = buscaMusica.trim().toLowerCase();
+    if (!termo) return musicasDisponiveis;
+    return musicasDisponiveis.filter((m) => m.toLowerCase().includes(termo));
+  }, [musicasDisponiveis, buscaMusica]);
+
+  const linhasFiltradas = useMemo(() => {
+    const linhas = grupoAtivo?.linhas || [];
+    const termo = buscaLista.trim().toLowerCase();
+    if (!termo) return linhas;
+    return linhas.filter((l) => l.musica.toLowerCase().includes(termo));
+  }, [grupoAtivo, buscaLista]);
 
   async function iniciar(musica: string) {
     if (!artistaAtivo || iniciando) return;
@@ -202,7 +218,10 @@ function PontoPlaylistsPlanilha() {
     return (
       <main className="flex-1 mx-auto w-full max-w-md px-5 pt-6 pb-24 flex flex-col gap-4">
         <button
-          onClick={() => setEscolhendoMusica(false)}
+          onClick={() => {
+            setEscolhendoMusica(false);
+            setBuscaMusica("");
+          }}
           className="flex items-center gap-1 text-sm text-neutral-500 mb-2 hover:text-emerald-500 transition-colors w-fit"
         >
           <ChevronLeft className="w-4 h-4" /> Voltar
@@ -210,15 +229,32 @@ function PontoPlaylistsPlanilha() {
         <h2 className="text-xl font-black italic tracking-tighter text-white">Escolha a música</h2>
         <p className="text-sm text-neutral-500 -mt-2">Investir em {artistaAtivo}</p>
 
+        {musicasDisponiveis.length > 3 && (
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-neutral-600" />
+            <input
+              autoFocus
+              value={buscaMusica}
+              onChange={(e) => setBuscaMusica(e.target.value)}
+              placeholder="Buscar música..."
+              className="w-full h-10 bg-neutral-900 border border-white/10 rounded-xl pl-10 pr-4 text-sm font-bold text-white placeholder:text-neutral-600 outline-none focus:border-emerald-500/40 transition-colors"
+            />
+          </div>
+        )}
+
         {musicasDisponiveis.length === 0 ? (
           <div className="p-6 text-center bg-neutral-900 rounded-2xl border border-white/10">
             <p className="text-sm text-neutral-500">
               Todas as músicas de {artistaAtivo} já têm investimento, ou nenhuma música foi encontrada na aba PONTOS.
             </p>
           </div>
+        ) : musicasFiltradas.length === 0 ? (
+          <div className="p-6 text-center bg-neutral-900 rounded-2xl border border-white/10">
+            <p className="text-sm text-neutral-500">Nenhuma música encontrada para "{buscaMusica}".</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {musicasDisponiveis.map((m) => (
+            {musicasFiltradas.map((m) => (
               <button
                 key={m}
                 disabled={iniciando}
@@ -282,6 +318,7 @@ function PontoPlaylistsPlanilha() {
                         haptic.selection();
                         setArtistaAtivo(a);
                         setLinhaAberta(null);
+                        setBuscaLista("");
                       }}
                       className="flex flex-col items-center gap-1.5 shrink-0 w-16"
                     >
@@ -311,30 +348,56 @@ function PontoPlaylistsPlanilha() {
           )}
 
           {artistaAtivo && (
-            <div
-              className={`p-4 rounded-2xl border flex items-center justify-between ${
-                (grupoAtivo?.saldoRestante ?? 0) < 0 ? "bg-red-950/40 border-red-500/40" : "bg-neutral-900 border-white/10"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Coins className={`w-4 h-4 shrink-0 ${(grupoAtivo?.saldoRestante ?? 0) < 0 ? "text-red-400" : "text-amber-400"}`} />
-                <div>
-                  <p className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold leading-none">$ Bank</p>
-                  <p className={`text-base font-black leading-tight ${(grupoAtivo?.saldoRestante ?? 0) < 0 ? "text-red-400" : "text-amber-400"}`}>
-                    {grupoAtivo ? fmtMoeda(grupoAtivo.saldoRestante) : "—"}
+            <div className="rounded-2xl border border-white/10 bg-neutral-900 overflow-hidden">
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Coins className="w-4 h-4 shrink-0 text-amber-400" />
+                  <div>
+                    <p className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold leading-none">
+                      $ Bank Account
+                    </p>
+                    <p className="text-base font-black leading-tight text-amber-400">
+                      {grupoAtivo ? fmtMoeda(grupoAtivo.saldoFixo) : "—"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    haptic.selection();
+                    setEscolhendoMusica(true);
+                    setMsg(null);
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-full bg-emerald-500 text-black text-[10px] font-black uppercase tracking-wider active:scale-95 transition-transform"
+                >
+                  <Plus className="size-3.5" /> Nova
+                </button>
+              </div>
+              {grupoAtivo && grupoAtivo.linhas.length > 0 && (
+                <div
+                  className={`px-4 py-2.5 border-t flex items-center justify-between ${
+                    grupoAtivo.saldoRestante < 0 ? "bg-red-950/40 border-red-500/30" : "bg-white/5 border-white/5"
+                  }`}
+                >
+                  <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">
+                    Gasto total: <span className="text-neutral-300">{fmtMoeda(grupoAtivo.saldoFixo - grupoAtivo.saldoRestante)}</span>
+                  </p>
+                  <p className={`text-[10px] font-black uppercase tracking-wider ${grupoAtivo.saldoRestante < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                    Restante: {fmtMoeda(grupoAtivo.saldoRestante)}
                   </p>
                 </div>
-              </div>
-              <button
-                onClick={() => {
-                  haptic.selection();
-                  setEscolhendoMusica(true);
-                  setMsg(null);
-                }}
-                className="inline-flex items-center gap-1 px-3 py-2 rounded-full bg-emerald-500 text-black text-[10px] font-black uppercase tracking-wider active:scale-95 transition-transform"
-              >
-                <Plus className="size-3.5" /> Nova
-              </button>
+              )}
+            </div>
+          )}
+
+          {(grupoAtivo?.linhas.length || 0) > 3 && (
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-neutral-600" />
+              <input
+                value={buscaLista}
+                onChange={(e) => setBuscaLista(e.target.value)}
+                placeholder="Buscar música..."
+                className="w-full h-10 bg-neutral-900 border border-white/10 rounded-xl pl-10 pr-4 text-sm font-bold text-white placeholder:text-neutral-600 outline-none focus:border-emerald-500/40 transition-colors"
+              />
             </div>
           )}
 
@@ -343,8 +406,12 @@ function PontoPlaylistsPlanilha() {
               <div className="p-6 text-center bg-neutral-900 rounded-2xl border border-white/10">
                 <p className="text-sm text-neutral-500">Nenhum investimento ainda de {artistaAtivo}.</p>
               </div>
+            ) : linhasFiltradas.length === 0 ? (
+              <div className="p-6 text-center bg-neutral-900 rounded-2xl border border-white/10">
+                <p className="text-sm text-neutral-500">Nenhuma música encontrada para "{buscaLista}".</p>
+              </div>
             ) : (
-              grupoAtivo!.linhas.map((l) => {
+              linhasFiltradas.map((l) => {
                 const aberta = linhaAberta === l.linha;
                 const plataformasPreenchidas = [l.spotify, l.apple, l.youtube].filter(Boolean).length;
 
