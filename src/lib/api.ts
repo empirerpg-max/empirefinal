@@ -728,6 +728,57 @@ export const api = {
     return res.json();
   },
 
+  // ---- PONTO Playlists (ECOIN + INVESTIMENTO) ----
+  async listarInvestimentos(telegramId: string): Promise<{
+    artistas: string[];
+    grupos: Array<{
+      artista: string;
+      saldoFixo: number;
+      saldoRestante: number;
+      linhas: Array<{
+        linha: number;
+        musica: string;
+        bankAccount: string;
+        spotify: string;
+        spotifyValor: string;
+        apple: string;
+        appleValor: string;
+        youtube: string;
+        youtubeValor: string;
+        total: string;
+      }>;
+    }>;
+  }> {
+    const res = await fetch(`/api/ponto/playlists?telegramId=${encodeURIComponent(telegramId)}`);
+    const data = await res.json().catch(() => null);
+    return data && Array.isArray(data.grupos) ? data : { artistas: [], grupos: [] };
+  },
+  async iniciarInvestimento(p: {
+    telegramId: string;
+    artista: string;
+    musica: string;
+  }): Promise<CommonResponse & { linha?: number }> {
+    const res = await fetch("/api/ponto/playlists/iniciar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+    });
+    return res.json();
+  },
+  async investirPlaylist(p: {
+    telegramId: string;
+    linha: number;
+    plataforma: string;
+    playlist: string;
+  }): Promise<CommonResponse> {
+    const res = await fetch("/api/ponto/playlists/investir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+    });
+    return res.json();
+  },
+
   // ---- Bet ----
   async getMusicasBet(): Promise<{ semana: string; musicas: unknown[] } | null> {
     const acoes = ["musicas_bet", "get_musicas_bet", "musicas_charts", "get_musicas_charts"];

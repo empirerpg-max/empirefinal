@@ -43,7 +43,11 @@ import {
   salvarPontoCelulaController,
   distribuirPontosAleatorioController,
 } from "../controllers/pontoController";
-import { debugEcoinInvestimentoController } from "../controllers/debugController";
+import {
+  getInvestimentosController,
+  iniciarInvestimentoController,
+  investirPlaylistController,
+} from "../controllers/playlistsInvestimentoController";
 import {
   getSocialPostsController,
   createSocialPostController,
@@ -142,10 +146,12 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/ponto",
     "/api/ponto/salvar",
     "/api/ponto/distribuir-aleatorio",
+    "/api/ponto/playlists",
+    "/api/ponto/playlists/iniciar",
+    "/api/ponto/playlists/investir",
     "/api/social/posts/editar",
     "/api/social/perfis",
     "/api/social/news",
-    "/api/debug/ecoin-investimento",
   ]);
 
   if (
@@ -434,8 +440,30 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await distribuirPontosAleatorioController(request);
-  } else if (url.pathname === "/api/debug/ecoin-investimento") {
-    response = await debugEcoinInvestimentoController();
+  } else if (url.pathname === "/api/ponto/playlists") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/ponto/playlists." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getInvestimentosController(request);
+  } else if (url.pathname === "/api/ponto/playlists/iniciar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/ponto/playlists/iniciar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await iniciarInvestimentoController(request);
+  } else if (url.pathname === "/api/ponto/playlists/investir") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/ponto/playlists/investir." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await investirPlaylistController(request);
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"

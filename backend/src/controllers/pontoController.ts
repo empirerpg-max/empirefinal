@@ -37,7 +37,7 @@ export const CATEGORY_OPTIONS: Record<string, string[]> = {
   "BILLBOARD 200": ["10,00%", "15,00%", "20,00%", "25,00%", "30,00%", "35,00%", "40,00%", "45,00%", "50,00%", "55,00%", "60,00%", "65,00%", "70,00%"],
 };
 
-function colIndexToA1Letter(colIndex: number): string {
+export function colIndexToA1Letter(colIndex: number): string {
   let temp = colIndex;
   let letter = "";
   while (temp >= 0) {
@@ -47,7 +47,7 @@ function colIndexToA1Letter(colIndex: number): string {
   return letter;
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
+export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
