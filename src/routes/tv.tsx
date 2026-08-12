@@ -699,8 +699,12 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
   ];
 
   return (
-    <div className="h-full flex flex-col lg:flex-row">
-      <div className="flex-1 flex flex-col min-w-0">
+    <div className="h-full flex flex-col lg:flex-row min-h-0">
+      {/* No mobile isso NÃO pode ser flex-1: o vídeo já tem altura própria
+          (aspect-ratio), então dividir o espaço igualmente com o chat
+          (que precisa do resto da tela pra não cortar o campo de digitar
+          quando o teclado abre) deixava tudo espremido e imprevisível. */}
+      <div className="shrink-0 lg:flex-1 flex flex-col min-w-0">
         <div className="flex items-center gap-3 px-4 h-12 border-b border-border/60 bg-background/90 backdrop-blur shrink-0">
           <button onClick={onBack} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Voltar">
             <ArrowLeft className="size-4" />
@@ -1021,6 +1025,12 @@ function ChatPanel({ programaId }: { programaId: string }) {
           ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onFocus={(e) => {
+            // No mobile o teclado some com boa parte da tela e pode cobrir
+            // o campo — espera a animação do teclado e garante que ele
+            // fique visível acima dele.
+            setTimeout(() => e.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" }), 250);
+          }}
           placeholder={replyTo ? `Responder a ${replyTo.user}...` : "Mandar mensagem"}
           maxLength={300}
           className="flex-1 h-9 px-3 rounded-md bg-muted text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground min-w-0"
