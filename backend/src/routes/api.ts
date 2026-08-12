@@ -49,7 +49,11 @@ import {
   investirPlaylistController,
 } from "../controllers/playlistsInvestimentoController";
 import { listTvChatGifsController } from "../controllers/tvChatGifsController";
-import { debugGamificacaoController, debugFotosArtistasController } from "../controllers/debugController";
+import {
+  debugGamificacaoController,
+  debugFotosArtistasController,
+  debugTesteFotoController,
+} from "../controllers/debugController";
 import {
   getSocialPostsController,
   createSocialPostController,
@@ -157,6 +161,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/empire-tv/gifs",
     "/api/debug/gamificacao",
     "/api/debug/fotos-artistas",
+    "/api/debug/teste-foto",
   ]);
 
   if (
@@ -475,6 +480,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await debugGamificacaoController();
   } else if (url.pathname === "/api/debug/fotos-artistas") {
     response = await debugFotosArtistasController(request);
+  } else if (url.pathname === "/api/debug/teste-foto") {
+    response = await debugTesteFotoController();
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"

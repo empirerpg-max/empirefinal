@@ -87,6 +87,36 @@ export async function debugFotosArtistasController(request: Request): Promise<Re
   );
 }
 
+// TEMPORÁRIO — testa se as URLs de foto (lh3.googleusercontent.com) ainda
+// resolvem, direto do Worker (sem bloqueio de rede local).
+const URLS_TESTE = [
+  "https://lh3.googleusercontent.com/d/1NcVF2o-TtS6N3We_8ttFaCm1dkppVfZd=w100-h100-p",
+  "https://lh3.googleusercontent.com/d/1cp5lWZcpDPIYsPuv8bwY_tQApx2xgm2B=w100-h100-p",
+  "https://drive.google.com/uc?export=view&id=1NcVF2o-TtS6N3We_8ttFaCm1dkppVfZd",
+];
+
+export async function debugTesteFotoController(): Promise<Response> {
+  const resultados = [];
+  for (const url of URLS_TESTE) {
+    try {
+      const res = await fetch(url, { redirect: "follow" });
+      resultados.push({
+        url,
+        status: res.status,
+        finalUrl: res.url,
+        contentType: res.headers.get("content-type"),
+        contentLength: res.headers.get("content-length"),
+      });
+    } catch (err: any) {
+      resultados.push({ url, erro: err?.message || String(err) });
+    }
+  }
+  return new Response(JSON.stringify(resultados, null, 2), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 // TEMPORÁRIO — resolve os gids das abas de badges/gamificação (planilha
 // "usuarios") pro nome real e lê a estrutura ao vivo. Será removido depois
 // do mapeamento.
