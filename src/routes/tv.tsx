@@ -3,7 +3,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2 } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
-import { useTelegramUser } from "@/lib/telegram";
 import { api, driveImg, type ProgramaTV } from "@/lib/api";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
@@ -647,12 +646,16 @@ function ArquivoFull({ finalizados, loading }: { finalizados: Programa[]; loadin
 
 // ---------- WatchView (chat + participantes + sobre) ----------
 function WatchView({ programa, onBack }: { programa: Programa; onBack: () => void }) {
-  const { user } = useTelegramUser();
+  // Identidade vem só do login próprio (aba Usuários) — sem depender do
+  // Telegram pra nada.
+  const login = getStoredLogin();
+  const myId = login?.id;
+  const myName = login?.nome;
   const [tab, setTab] = useState<WatchTab>("chat");
 
   // Heartbeat de presença
   useEffect(() => {
-    if (!user?.id) return;
+    if (!myId) return;
     const start = Date.now();
     let accumulated = 0;
     let lastTick = start;
@@ -674,8 +677,8 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
       if (total < 5) return;
       api.registrarPresencaTV({
         programa_id: programa.id,
-        telegram_id: user.id,
-        nome: user.name || "Anônimo",
+        telegram_id: myId,
+        nome: myName || "Anônimo",
         watched_seconds: total,
       }).catch(() => {});
     };
@@ -695,7 +698,7 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
       const extra = visible ? Math.floor((Date.now() - lastTick) / 1000) : 0;
       send(extra);
     };
-  }, [programa.id, user?.id, user?.name]);
+  }, [programa.id, myId, myName]);
 
   const tabs: { id: WatchTab; label: string; icon: typeof MessageSquare }[] = [
     { id: "chat", label: "Chat", icon: MessageSquare },
@@ -786,7 +789,6 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
 
 // ---------- Chat (realtime via Lovable Cloud) ----------
 function ChatPanel({ programaId }: { programaId: string }) {
-  const { user } = useTelegramUser();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -797,11 +799,11 @@ function ChatPanel({ programaId }: { programaId: string }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const gifFileRef = useRef<HTMLInputElement>(null);
-  const displayName = user?.name || "Anônimo";
-  const myId = user?.id;
-  // Mesma foto de perfil já usada no resto do app (perfil.tsx): a foto
-  // mapeada no cadastro do jogador tem prioridade sobre a do Telegram.
-  const myPhoto = getStoredLogin()?.fotoPerfil || user?.photo_url || "";
+  // Identidade vem só do login próprio (aba Usuários) — sem Telegram.
+  const login = getStoredLogin();
+  const displayName = login?.nome || "Anônimo";
+  const myId = login?.id;
+  const myPhoto = login?.fotoPerfil || "";
 
   // Histórico inicial + subscrição realtime
   useEffect(() => {
