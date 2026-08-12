@@ -48,6 +48,7 @@ import {
   iniciarInvestimentoController,
   investirPlaylistController,
 } from "../controllers/playlistsInvestimentoController";
+import { debugRegistroController } from "../controllers/debugController";
 import {
   getSocialPostsController,
   createSocialPostController,
@@ -152,6 +153,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/posts/editar",
     "/api/social/perfis",
     "/api/social/news",
+    "/api/debug/registro",
   ]);
 
   if (
@@ -464,6 +466,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await investirPlaylistController(request);
+  } else if (url.pathname === "/api/debug/registro") {
+    response = await debugRegistroController();
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"
