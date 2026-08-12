@@ -344,17 +344,6 @@ export function MusicPlayer({
                   </p>
                 )}
               </div>
-            ) : isYtAudio && ytAudioId ? (
-              <div className="relative aspect-video w-full rounded-3xl bg-neutral-900 border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
-                <iframe
-                  src={`https://www.youtube-nocookie.com/embed/${ytAudioId}?autoplay=1&enablejsapi=1`}
-                  title={currentTrack.titulo}
-                  className="w-full h-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  referrerPolicy="strict-origin-when-cross-origin"
-                />
-              </div>
             ) : (
               <div className="relative aspect-square w-full rounded-3xl bg-neutral-900 border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] group">
                 {cover ? (
