@@ -5,6 +5,7 @@ import {
   normalizeComparison,
   dedupeHeaders,
 } from "../services/googleSheetsService";
+import { somarPrestigio } from "../services/prestigioService";
 
 const USUARIOS_SHEET = "Usuários";
 
@@ -54,6 +55,32 @@ function colIndexToA1Letter(colIndex: number): string {
     temp = Math.floor(temp / 26) - 1;
   }
   return letter;
+}
+
+/**
+ * Concede o prestígio de "login_diario" no máximo 1x por dia por usuário.
+ * Usa a coluna "Último login prestígio" (se existir na aba Usuários) pra
+ * guardar a data (YYYY-MM-DD) do último crédito — se a coluna ainda não
+ * existir, não credita (fail-safe: melhor não gamificar do que gamificar
+ * sem controle de repetição).
+ */
+async function concederPrestigioLoginDiario(match: UsuariosRow, usuarioFallback: string): Promise<void> {
+  const colKeys = Object.keys(match.rec);
+  const ultimoLoginColIndex = colKeys.indexOf("ultimo_login_prestigio");
+  if (ultimoLoginColIndex === -1) return;
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const ultimoRegistrado = match.rec["ultimo_login_prestigio"] || "";
+  if (ultimoRegistrado === hoje) return;
+
+  const colLetter = colIndexToA1Letter(ultimoLoginColIndex);
+  await googleSheetsService.usuarios.updateValues(USUARIOS_SHEET, `${colLetter}${match.rowIndex}`, [
+    [hoje],
+  ]);
+  await somarPrestigio(
+    { telegramId: match.rec["id"] || undefined, usuario: match.rec["usuario"] || usuarioFallback },
+    "login_diario",
+  );
 }
 
 export interface LoginBody {
@@ -123,6 +150,8 @@ export async function loginController(request: Request): Promise<Response> {
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    await concederPrestigioLoginDiario(match, usuario);
 
     return new Response(
       JSON.stringify({

@@ -1,6 +1,7 @@
 import { googleSheetsService } from "../services/googleSheetsService";
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
 import { registrarAuditLog } from "./registroLogController";
+import { somarPrestigio } from "../services/prestigioService";
 
 export interface CreateSongPayload {
   opcaoChart: string; // "a) Registrar essa música em chart" | "b) Substituir música no chart" | "c) Os comentários desse tópico devem valer para uma música já lançada"
@@ -238,6 +239,8 @@ export async function createSongController(request: Request): Promise<Response> 
       console.warn("[createSongController] Erro ao gravar no Audit Log REGISTRO:", err);
     }
 
+    somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -361,6 +364,8 @@ export async function createVideoController(request: Request): Promise<Response>
     } catch (err) {
       console.warn("[createVideoController] Erro no audit log:", err);
     }
+
+    somarPrestigio({ usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
     // 3. Quando o tipo selecionado for "Music Video", marcar o lançamento
     // do videoclipe na aba "Pontos" (coluna N) com a data de envio (coluna O).
@@ -934,6 +939,8 @@ export async function createAlbumController(request: Request): Promise<Response>
     } catch (err) {
       console.warn("[createAlbumController] Erro ao gravar Audit Log de Álbum:", err);
     }
+
+    somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
     return new Response(
       JSON.stringify({

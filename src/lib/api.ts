@@ -28,6 +28,21 @@ export interface Artist {
   pais?: string;
 }
 
+export interface NivelInfo {
+  nivel: number;
+  fase: string;
+  nome: string;
+  badge: string;
+  prestigio: number;
+}
+
+export interface NivelJogador {
+  prestigioAtual: number;
+  nivelAtual: NivelInfo | null;
+  proximoNivel: NivelInfo | null;
+  progresso: number;
+}
+
 export interface RadarItem {
   timestamp: string;
   nome: string;
@@ -312,6 +327,21 @@ export const api = {
           nome,
         },
     );
+  },
+  async meuNivel(identificador: { telegramId?: string; usuario?: string }): Promise<NivelJogador | null> {
+    const { telegramId, usuario } = identificador;
+    if (!telegramId && !usuario) return null;
+    const params = new URLSearchParams();
+    if (telegramId) params.set("telegramId", telegramId);
+    if (usuario) params.set("usuario", usuario);
+    try {
+      const res = await fetch(`/api/user/nivel?${params.toString()}`);
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.success ? (json.data as NivelJogador) : null;
+    } catch {
+      return null;
+    }
   },
   async listarTodos(): Promise<Artist[]> {
     const data = await call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true });

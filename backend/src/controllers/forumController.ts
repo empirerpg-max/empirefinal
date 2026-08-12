@@ -1,5 +1,6 @@
 import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
 import { registrarAuditLog } from "./registroLogController";
+import { somarPrestigio } from "../services/prestigioService";
 
 export interface CreateCommentBody {
   tipoMedia: "musica" | "music-video" | "video" | "album";
@@ -208,6 +209,8 @@ export async function createCommentController(request: Request): Promise<Respons
           : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
       isAlbum: tipoMedia === "album",
     });
+
+    somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(() => {});
 
     return new Response(
       JSON.stringify({

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { User, ShieldCheck, Music2, RefreshCw, Sparkles } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
-import { driveImg } from "@/lib/api";
+import { api, driveImg, type NivelJogador } from "@/lib/api";
 
 export interface EmpireUserProfile {
   telegram_id: string;
@@ -18,6 +18,7 @@ export function EmpirePlayHeader() {
   const { user, ready } = useTelegramUser();
   const [profile, setProfile] = useState<EmpireUserProfile | null>(null);
   const [loading, setLoading] = useState(false);
+  const [nivel, setNivel] = useState<NivelJogador | null>(null);
 
   const fetchProfile = async () => {
     if (!user || user.id === "guest") return;
@@ -48,6 +49,11 @@ export function EmpirePlayHeader() {
   }, [ready, user]);
 
   const login = getStoredLogin();
+
+  useEffect(() => {
+    if (!login?.usuario) return;
+    api.meuNivel({ usuario: login.usuario }).then(setNivel);
+  }, [login?.usuario]);
 
   const displayName = login?.nome || profile?.name || "Empire Player";
 
@@ -96,6 +102,22 @@ export function EmpirePlayHeader() {
               {login?.tipoPerfil && (
                 <span className="text-[10px] font-mono text-neutral-400">
                   {login.tipoPerfil}
+                </span>
+              )}
+              {nivel?.nivelAtual && (
+                <span
+                  className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 text-neutral-300"
+                  title={`Nível ${nivel.nivelAtual.nivel} · ${nivel.nivelAtual.fase}`}
+                >
+                  {nivel.nivelAtual.badge && (
+                    <img
+                      src={driveImg(nivel.nivelAtual.badge, 40)}
+                      alt={nivel.nivelAtual.nome}
+                      referrerPolicy="no-referrer"
+                      className="size-3.5 rounded-full object-cover"
+                    />
+                  )}
+                  {nivel.nivelAtual.nome}
                 </span>
               )}
             </div>
