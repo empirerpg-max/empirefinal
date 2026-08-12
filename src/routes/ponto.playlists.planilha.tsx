@@ -70,8 +70,7 @@ type LinhaInvestimento = {
 
 type GrupoInvestimento = {
   artista: string;
-  saldoFixo: number;
-  saldoRestante: number;
+  saldo: number;
   linhas: LinhaInvestimento[];
 };
 
@@ -82,6 +81,11 @@ function fmtMoeda(n: number): string {
 function parseMoeda(v: string): number {
   return parseFloat(String(v || "").replace(/[^\d,-]/g, "").replace(",", ".")) || 0;
 }
+
+// $ BANK ACCOUNT (coluna D) já é o saldo AO VIVO — a própria planilha
+// desconta o gasto de cada música do artista assim que uma playlist é
+// escolhida. Nunca recalculamos isso no app, só refletimos o valor que a
+// planilha devolve depois de cada escrita.
 
 function PontoPlaylistsPlanilha() {
   const { user, ready } = useTelegramUser();
@@ -190,12 +194,8 @@ function PontoPlaylistsPlanilha() {
             : {
                 ...g,
                 linhas: g.linhas.map((l) => (l.linha === linha.linha ? atualizada : l)),
-                saldoRestante:
-                  g.saldoFixo -
-                  g.linhas.reduce(
-                    (acc, l) => acc + (l.linha === linha.linha ? parseMoeda(atualizada.total) : parseMoeda(l.total)),
-                    0,
-                  ),
+                // D já vem recalculado ao vivo pela planilha na própria resposta.
+                saldo: parseMoeda(atualizada.bankAccount) || g.saldo,
               },
         ),
       );
@@ -348,44 +348,32 @@ function PontoPlaylistsPlanilha() {
           )}
 
           {artistaAtivo && (
-            <div className="rounded-2xl border border-white/10 bg-neutral-900 overflow-hidden">
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Coins className="w-4 h-4 shrink-0 text-amber-400" />
-                  <div>
-                    <p className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold leading-none">
-                      $ Bank Account
-                    </p>
-                    <p className="text-base font-black leading-tight text-amber-400">
-                      {grupoAtivo ? fmtMoeda(grupoAtivo.saldoFixo) : "—"}
-                    </p>
-                  </div>
+            <div
+              className={`p-4 rounded-2xl border flex items-center justify-between ${
+                (grupoAtivo?.saldo ?? 0) < 0 ? "bg-red-950/40 border-red-500/40" : "bg-neutral-900 border-white/10"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Coins className={`w-4 h-4 shrink-0 ${(grupoAtivo?.saldo ?? 0) < 0 ? "text-red-400" : "text-amber-400"}`} />
+                <div>
+                  <p className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold leading-none">
+                    $ Bank Account
+                  </p>
+                  <p className={`text-base font-black leading-tight ${(grupoAtivo?.saldo ?? 0) < 0 ? "text-red-400" : "text-amber-400"}`}>
+                    {grupoAtivo ? fmtMoeda(grupoAtivo.saldo) : "—"}
+                  </p>
                 </div>
-                <button
-                  onClick={() => {
-                    haptic.selection();
-                    setEscolhendoMusica(true);
-                    setMsg(null);
-                  }}
-                  className="inline-flex items-center gap-1 px-3 py-2 rounded-full bg-emerald-500 text-black text-[10px] font-black uppercase tracking-wider active:scale-95 transition-transform"
-                >
-                  <Plus className="size-3.5" /> Nova
-                </button>
               </div>
-              {grupoAtivo && grupoAtivo.linhas.length > 0 && (
-                <div
-                  className={`px-4 py-2.5 border-t flex items-center justify-between ${
-                    grupoAtivo.saldoRestante < 0 ? "bg-red-950/40 border-red-500/30" : "bg-white/5 border-white/5"
-                  }`}
-                >
-                  <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">
-                    Gasto total: <span className="text-neutral-300">{fmtMoeda(grupoAtivo.saldoFixo - grupoAtivo.saldoRestante)}</span>
-                  </p>
-                  <p className={`text-[10px] font-black uppercase tracking-wider ${grupoAtivo.saldoRestante < 0 ? "text-red-400" : "text-emerald-400"}`}>
-                    Restante: {fmtMoeda(grupoAtivo.saldoRestante)}
-                  </p>
-                </div>
-              )}
+              <button
+                onClick={() => {
+                  haptic.selection();
+                  setEscolhendoMusica(true);
+                  setMsg(null);
+                }}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-full bg-emerald-500 text-black text-[10px] font-black uppercase tracking-wider active:scale-95 transition-transform"
+              >
+                <Plus className="size-3.5" /> Nova
+              </button>
             </div>
           )}
 
@@ -492,7 +480,7 @@ function PontoPlaylistsPlanilha() {
                             </div>
                           );
                         })}
-                        {(grupoAtivo?.saldoRestante ?? 0) < 0 && (
+                        {(grupoAtivo?.saldo ?? 0) < 0 && (
                           <p className="text-[10px] text-red-400 flex items-center gap-1 mt-1">
                             <AlertTriangle className="w-3 h-3" /> Saldo estourado — pode continuar, mas fica no vermelho.
                           </p>

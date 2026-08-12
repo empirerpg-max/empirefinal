@@ -139,9 +139,13 @@ async function getMusicasDoArtista(artista: string): Promise<string[]> {
 /**
  * GET /api/ponto/playlists?telegramId=...
  * Devolve, agrupado por artista do jogador, as músicas já em investimento
- * (linhas da aba que já são desse artista) e o saldo restante calculado
- * (D da última linha lida menos a soma de O de todas as linhas do artista
- * — a planilha não desconta automaticamente, só guarda o depósito fixo).
+ * (linhas da aba que já são desse artista) e o saldo do artista.
+ *
+ * Importante: `D` ($ BANK ACCOUNT) já é o saldo AO VIVO, compartilhado
+ * entre todas as linhas do artista — a própria planilha desconta o gasto
+ * (H/J/L de toda música dele) assim que uma playlist é escolhida. Por
+ * isso é o mesmo valor em todas as linhas do artista num dado instante, e
+ * o backend só repassa esse valor — nunca subtrai nada de novo por cima.
  */
 export async function getInvestimentosController(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -155,7 +159,7 @@ export async function getInvestimentosController(request: Request): Promise<Resp
   const rows = await googleSheetsService.registrosCharts.readValues(SHEET);
 
   const grupos = new Map<string, InvestimentoLinha[]>();
-  const saldoFixoPorArtista = new Map<string, number>();
+  const saldoPorArtista = new Map<string, number>();
 
   for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
     const row = rows[i];
@@ -167,16 +171,16 @@ export async function getInvestimentosController(request: Request): Promise<Resp
     grupos.get(artista)!.push(rowToInvestimento(row, i + 1));
 
     const bank = normalizeText(row[COL.BANK]);
-    if (bank) saldoFixoPorArtista.set(artista, parseMoeda(bank));
+    if (bank) saldoPorArtista.set(artista, parseMoeda(bank));
   }
 
   return jsonResponse({
     artistas: artistNames,
-    grupos: Array.from(grupos.entries()).map(([artista, linhas]) => {
-      const saldoFixo = saldoFixoPorArtista.get(artista) ?? 0;
-      const totalGasto = linhas.reduce((acc, l) => acc + parseMoeda(l.total), 0);
-      return { artista, linhas, saldoFixo, saldoRestante: saldoFixo - totalGasto };
-    }),
+    grupos: Array.from(grupos.entries()).map(([artista, linhas]) => ({
+      artista,
+      linhas,
+      saldo: saldoPorArtista.get(artista) ?? 0,
+    })),
   });
 }
 
