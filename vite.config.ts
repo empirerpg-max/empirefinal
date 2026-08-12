@@ -10,7 +10,16 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 const GAS_URL = process.env.VITE_GAS_URL ||
   'https://script.google.com/macros/s/AKfycby7Epe3MHPMvje5OKtSlNn-tSWpowLPOJ7DVflFJqgZNOKCnN9IcGwWYL1QSeRtgJrQ7w/exec';
 
+// Carimbo único por build — usado pra versionar a URL do service worker
+// (/sw.js?v=BUILD_ID) e forçar o navegador a sempre buscar bytes frescos,
+// sem depender de nenhum cache (CDN ou navegador) de uma URL antiga expirar
+// sozinho. Também exibido no app como indicador visível de versão.
+const BUILD_ID = process.env.BUILD_ID || String(Date.now());
+
 export default defineConfig({
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+  },
   build: process.env.DEBUG_BUILD ? { minify: false, sourcemap: true } : undefined,
   plugins: [
     tsConfigPaths(),
