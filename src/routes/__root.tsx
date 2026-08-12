@@ -36,7 +36,7 @@ import { Toaster, toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import { useTelegramUser, haptic, useTelegramBackButton } from "@/lib/telegram";
 import { api, driveImg, type Artist } from "@/lib/api";
-import { registerServiceWorker } from "@/lib/pwa";
+import { useServiceWorkerUpdate } from "@/lib/pwa";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
 import { EmpirePlayerProvider, useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -579,9 +579,19 @@ function RootInner() {
     (window as any).setShowLinkModal = setShowLinkModal;
   }, []);
 
+  const { updateAvailable, applyUpdate } = useServiceWorkerUpdate();
+
   useEffect(() => {
-    registerServiceWorker();
-  }, []);
+    if (!updateAvailable) return;
+    toast("Nova versão disponível", {
+      description: "Atualize pra ver as últimas mudanças do app.",
+      duration: Infinity,
+      action: {
+        label: "Atualizar",
+        onClick: applyUpdate,
+      },
+    });
+  }, [updateAvailable]);
 
   useEffect(() => {
     const w = window.Telegram?.WebApp;

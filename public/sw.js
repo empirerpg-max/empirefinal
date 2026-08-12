@@ -3,7 +3,6 @@ const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -13,6 +12,13 @@ self.addEventListener("activate", (event) => {
     )
   );
   self.clients.claim();
+});
+
+// Fica esperando em "waiting" até o app mandar esse sinal (usuário clicou em
+// "Atualizar" no aviso de nova versão) — só então assume, em vez de trocar
+// os assets debaixo do usuário no meio de uma sessão em uso.
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {
