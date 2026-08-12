@@ -505,23 +505,32 @@ function resolveStreamEmbed(url: string | undefined, aoVivo: boolean): string | 
       return null; // canal offline ou rota não-embeddável
     }
 
+    // modestbranding/rel/iv_load_policy reduzem ao máximo a marca do
+    // YouTube (logo grande, sugestões de outros canais) — o player deve
+    // parecer o mesmo independente de qual plataforma serve o vídeo.
+    const YT_PARAMS = "modestbranding=1&rel=0&iv_load_policy=3&playsinline=1";
     if (host === "youtu.be") {
       const id = parsed.pathname.slice(1);
-      return id ? `https://www.youtube.com/embed/${id}` : null;
+      return id ? `https://www.youtube.com/embed/${id}?${YT_PARAMS}` : null;
     }
     if (host.endsWith("youtube.com")) {
       if (parsed.pathname === "/watch") {
         const id = parsed.searchParams.get("v");
-        return id ? `https://www.youtube.com/embed/${id}` : null;
+        return id ? `https://www.youtube.com/embed/${id}?${YT_PARAMS}` : null;
       }
-      if (parsed.pathname.startsWith("/embed/") || parsed.pathname.startsWith("/live/")) return u;
+      if (parsed.pathname.startsWith("/embed/") || parsed.pathname.startsWith("/live/")) {
+        return u.includes("?") ? `${u}&${YT_PARAMS}` : `${u}?${YT_PARAMS}`;
+      }
       return null;
     }
 
     if (host.includes("vimeo.com")) {
-      if (host === "player.vimeo.com") return u;
+      const VIMEO_PARAMS = "title=0&byline=0&portrait=0";
+      if (host === "player.vimeo.com") {
+        return u.includes("?") ? `${u}&${VIMEO_PARAMS}` : `${u}?${VIMEO_PARAMS}`;
+      }
       const id = parsed.pathname.split("/").filter(Boolean).pop();
-      return id && /^\d+$/.test(id) ? `https://player.vimeo.com/video/${id}` : null;
+      return id && /^\d+$/.test(id) ? `https://player.vimeo.com/video/${id}?${VIMEO_PARAMS}` : null;
     }
 
     return u; // assume embeddável

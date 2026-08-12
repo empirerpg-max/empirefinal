@@ -126,7 +126,14 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
     } else if (url.includes("shorts/")) {
       videoId = url.split("shorts/")[1]?.split("?")[0] || "";
     }
-    return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : url;
+    // modestbranding/iv_load_policy/rel reduzem ao máximo a marca do
+    // YouTube (logo grande, vídeos relacionados de outros canais) — o
+    // objetivo é a experiência parecer o mais uniforme possível com o
+    // player nativo (Drive/Telegram), já que tecnicamente um vídeo do
+    // YouTube só pode ser tocado via iframe deles, nunca via <video>.
+    return videoId
+      ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1`
+      : url;
   };
 
   // Vimeo, assim como YouTube, é a plataforma oficial embutida via iframe —
@@ -138,7 +145,11 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
 
   const getVimeoEmbedUrl = (url: string) => {
     const match = url.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
-    return match ? `https://player.vimeo.com/video/${match[1]}?autoplay=1` : url;
+    // title/byline/portrait=0 tiram a marca do Vimeo (nome do canal, avatar,
+    // título sobreposto) — mesmo motivo do modestbranding do YouTube acima.
+    return match
+      ? `https://player.vimeo.com/video/${match[1]}?autoplay=1&title=0&byline=0&portrait=0`
+      : url;
   };
 
   // Drive e Telegram tocam via <video> nativo apontando pro proxy do próprio
@@ -302,9 +313,12 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Sempre "Empire Play HD" — a fonte real (YouTube/Vimeo/Drive)
+                  é um detalhe interno, o layout deve parecer o mesmo pro
+                  jogador independente de onde o vídeo veio. */}
               <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-neutral-300 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="size-3.5 text-red-500" />
-                {isYt ? "YouTube HD" : isVimeo ? "Vimeo HD" : "Empire Play HD"}
+                Empire Play HD
               </span>
             </div>
           </div>
