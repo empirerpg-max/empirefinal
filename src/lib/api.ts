@@ -1147,13 +1147,16 @@ export function driveImg(url: string | undefined | null, size: number = 400): st
 
 // Badges de nível são SVG com fundo transparente — o proxy de thumbnail
 // lh3.googleusercontent.com (usado em driveImg) rasteriza pra PNG e acaba
-// preenchendo a transparência com branco. Pra badge, servimos o arquivo
-// original do Drive (preserva o SVG/transparência).
+// preenchendo a transparência com branco, e o link público direto do Drive
+// (uc?export=view) não é hotlinkável (o Drive devolve uma página de
+// confirmação em vez do arquivo). Por isso usamos o mesmo proxy autenticado
+// já usado pra áudio/vídeo (/api/media/*) — bytes crus do arquivo, com o
+// content-type original (preserva SVG/transparência de verdade).
 export function driveRawImg(url: string | undefined | null): string | undefined {
   if (!url) return undefined;
   const m = String(url).match(/[-\w]{25,}/);
-  if (!m) return url;
-  return `https://drive.google.com/uc?export=view&id=${m[0]}`;
+  if (!m) return undefined;
+  return `/api/media/image?id=${m[0]}`;
 }
 
 export function driveAudioSrc(url: string | undefined | null): string | undefined {

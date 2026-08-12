@@ -10,7 +10,10 @@ export async function handleMediaRoutes(request: Request): Promise<Response | nu
   const url = new URL(request.url);
   const pathname = url.pathname;
 
-  const isMediaRoute = pathname.startsWith("/api/media/audio") || pathname.startsWith("/api/media/video");
+  const isMediaRoute =
+    pathname.startsWith("/api/media/audio") ||
+    pathname.startsWith("/api/media/video") ||
+    pathname.startsWith("/api/media/image");
 
   if (!isMediaRoute) {
     return null;
