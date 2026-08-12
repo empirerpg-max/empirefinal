@@ -416,6 +416,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 // e o botão de Criar (acesso rápido à Gestão de lançamentos).
 function BottomNav() {
   const { pathname } = useLocation();
+  const perfilFoto = getStoredLogin()?.fotoPerfil || "";
   const items = [
     { to: "/", label: "Início", icon: Home },
     { to: "/empire-play", label: "Catálogo", icon: PlayCircle },
@@ -456,7 +457,16 @@ function BottomNav() {
                     : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 }`}
               >
-                <Icon className="size-[18px]" strokeWidth={active ? 2.5 : 2} aria-hidden="true" />
+                {it.to === "/perfil" && perfilFoto ? (
+                  <img
+                    src={driveImg(perfilFoto, 60)}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className={`size-[18px] rounded-full object-cover ${active ? "ring-2 ring-primary-foreground/80" : "ring-1 ring-white/20"}`}
+                  />
+                ) : (
+                  <Icon className="size-[18px]" strokeWidth={active ? 2.5 : 2} aria-hidden="true" />
+                )}
                 <span className="text-[9px] font-bold uppercase tracking-tight leading-none">
                   {it.label}
                 </span>

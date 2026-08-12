@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { User, ShieldCheck, Music2, RefreshCw, Sparkles } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+import { getStoredLogin } from "@/components/LoginScreen";
+import { driveImg } from "@/lib/api";
 
 export interface EmpireUserProfile {
   telegram_id: string;
@@ -45,14 +47,13 @@ export function EmpirePlayHeader() {
     }
   }, [ready, user]);
 
-  const telegramSdkUser =
-    typeof window !== "undefined" ? window.Telegram?.WebApp?.initDataUnsafe?.user : undefined;
+  const login = getStoredLogin();
 
-  const displayName = profile?.name || telegramSdkUser?.first_name || user?.name || "Empire Player";
+  const displayName = login?.nome || profile?.name || "Empire Player";
 
-  const displayUsername = profile?.username || telegramSdkUser?.username || user?.username || "";
+  const displayUsername = login?.usuario || profile?.username || "";
 
-  const displayPhoto = profile?.photo_url || user?.photo_url || "";
+  const displayPhoto = login?.fotoPerfil || profile?.photo_url || "";
 
   return (
     <header className="relative w-full overflow-hidden rounded-3xl bg-gradient-to-r from-neutral-900 via-black to-neutral-900 border border-white/10 p-5 shadow-2xl mb-6">
@@ -67,7 +68,12 @@ export function EmpirePlayHeader() {
             <div className="size-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-red-600 p-0.5 shadow-xl">
               <div className="size-full rounded-[14px] bg-neutral-950 overflow-hidden flex items-center justify-center">
                 {displayPhoto ? (
-                  <img src={displayPhoto} alt={displayName} className="size-full object-cover" />
+                  <img
+                    src={driveImg(displayPhoto, 200)}
+                    alt={displayName}
+                    referrerPolicy="no-referrer"
+                    className="size-full object-cover"
+                  />
                 ) : (
                   <User className="size-8 text-neutral-400" />
                 )}
@@ -87,9 +93,9 @@ export function EmpirePlayHeader() {
                 <Sparkles className="size-3" />
                 Catálogo
               </span>
-              {telegramSdkUser?.id && (
+              {login?.tipoPerfil && (
                 <span className="text-[10px] font-mono text-neutral-400">
-                  ID: {telegramSdkUser.id}
+                  {login.tipoPerfil}
                 </span>
               )}
             </div>
