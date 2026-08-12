@@ -1,0 +1,9 @@
+name: Debug Once
+on:
+  workflow_dispatch: {}
+jobs:
+  curl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl error-log
+        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/error-log"
