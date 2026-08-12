@@ -449,10 +449,10 @@ function SocialPage() {
 
         {myArtists.length > 0 && (
           <div className="mb-4 max-w-md mx-auto">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3 px-1">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 px-1">
               Interagir como
             </p>
-            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide px-1 items-center">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide px-1 items-center">
               {myArtists.map((art) => {
                 const isActive = activeArtist?.nome === art.nome;
                 const imgUrl = driveImg(art.foto);
@@ -464,50 +464,39 @@ function SocialPage() {
                       setActiveArtist(art);
                       setSelectedArtist(art.nome);
                     }}
-                    className="flex flex-col items-center gap-2 transition-all shrink-0 group relative active:scale-95"
+                    title={art.nome}
+                    className={`flex items-center gap-1.5 shrink-0 rounded-full border transition-all active:scale-95 ${
+                      isActive
+                        ? "border-primary bg-primary/10 pl-1 pr-3 py-1"
+                        : "border-white/10 opacity-70 hover:opacity-100 p-1"
+                    }`}
                   >
-                    <div
-                      className={`size-14 rounded-full overflow-hidden transition-all relative p-0.5 border-2 ${
-                        isActive
-                          ? "border-primary shadow-[0_0_15px_rgba(var(--primary-rgb,124,58,237),0.35)] scale-110 z-10"
-                          : "border-white/10 opacity-70 hover:opacity-100"
-                      }`}
-                    >
-                      <div className="w-full h-full rounded-full overflow-hidden bg-secondary">
-                        {imgUrl ? (
-                          <img
-                            loading="lazy"
-                            decoding="async"
-                            src={imgUrl}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                            crossOrigin="anonymous"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.onerror = null;
-                              target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(art.nome)}&background=111&color=fff&size=128&bold=true`;
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center font-black text-lg bg-primary/20 text-primary">
-                            {art.nome[0]}
-                          </div>
-                        )}
-                      </div>
+                    <div className="size-8 rounded-full overflow-hidden bg-secondary shrink-0">
+                      {imgUrl ? (
+                        <img
+                          loading="lazy"
+                          decoding="async"
+                          src={imgUrl}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          crossOrigin="anonymous"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.onerror = null;
+                            target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(art.nome)}&background=111&color=fff&size=128&bold=true`;
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center font-black text-xs bg-primary/20 text-primary">
+                          {art.nome[0]}
+                        </div>
+                      )}
                     </div>
                     {isActive && (
-                      <motion.div
-                        layoutId="activeIndicator"
-                        className="absolute bottom-6 right-0 size-3.5 bg-primary border-2 border-background rounded-full z-20"
-                      />
+                      <span className="text-[11px] font-black uppercase tracking-tight text-primary max-w-[6rem] truncate">
+                        {art.nome.split(" ")[0]}
+                      </span>
                     )}
-                    <span
-                      className={`text-[11px] font-black uppercase tracking-tight max-w-[4.5rem] truncate transition-all ${
-                        isActive ? "text-primary" : "text-muted-foreground"
-                      }`}
-                    >
-                      {art.nome.split(" ")[0]}
-                    </span>
                   </button>
                 );
               })}

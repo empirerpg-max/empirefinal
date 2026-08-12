@@ -18,6 +18,7 @@ import { useTelegramUser, haptic } from "@/lib/telegram";
 import {
   api,
   driveImg,
+  driveRawImg,
   fmtEC,
   type Artist,
   type NivelJogador,
@@ -228,10 +229,10 @@ function Perfil() {
               <div className="mt-4 w-full max-w-xs flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl p-3">
                 {nivel.nivelAtual.badge ? (
                   <img
-                    src={driveImg(nivel.nivelAtual.badge, 96)}
+                    src={driveRawImg(nivel.nivelAtual.badge)}
                     alt={nivel.nivelAtual.nome}
                     referrerPolicy="no-referrer"
-                    className="size-12 rounded-full object-cover border border-primary/30 flex-shrink-0"
+                    className="size-14 object-contain flex-shrink-0"
                   />
                 ) : (
                   <Crown className="size-8 text-primary flex-shrink-0" />

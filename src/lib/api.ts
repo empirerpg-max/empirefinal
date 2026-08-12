@@ -1145,6 +1145,17 @@ export function driveImg(url: string | undefined | null, size: number = 400): st
   return `https://lh3.googleusercontent.com/d/${m[0]}=w${size}-h${size}-p`;
 }
 
+// Badges de nível são SVG com fundo transparente — o proxy de thumbnail
+// lh3.googleusercontent.com (usado em driveImg) rasteriza pra PNG e acaba
+// preenchendo a transparência com branco. Pra badge, servimos o arquivo
+// original do Drive (preserva o SVG/transparência).
+export function driveRawImg(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  const m = String(url).match(/[-\w]{25,}/);
+  if (!m) return url;
+  return `https://drive.google.com/uc?export=view&id=${m[0]}`;
+}
+
 export function driveAudioSrc(url: string | undefined | null): string | undefined {
   if (!url) return undefined;
   const m = String(url).match(/[-\w]{25,}/);

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { User, ShieldCheck, Music2, RefreshCw, Sparkles } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
-import { api, driveImg, type NivelJogador } from "@/lib/api";
+import { api, driveImg, driveRawImg, type NivelJogador } from "@/lib/api";
 
 export interface EmpireUserProfile {
   telegram_id: string;
@@ -111,10 +111,10 @@ export function EmpirePlayHeader() {
                 >
                   {nivel.nivelAtual.badge && (
                     <img
-                      src={driveImg(nivel.nivelAtual.badge, 40)}
+                      src={driveRawImg(nivel.nivelAtual.badge)}
                       alt={nivel.nivelAtual.nome}
                       referrerPolicy="no-referrer"
-                      className="size-3.5 rounded-full object-cover"
+                      className="size-4 object-contain"
                     />
                   )}
                   {nivel.nivelAtual.nome}
