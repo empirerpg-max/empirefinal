@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Target, Loader2, Sparkles, ListMusic, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
+import { getStoredLogin } from "@/components/LoginScreen";
 
 export const Route = createFileRoute("/ponto/")({
   component: PontoHome,
@@ -19,10 +20,20 @@ function PontoHome() {
       setLoading(false);
       return;
     }
-    api.getJogador(String(user.id)).then((r) => {
-      setData(r);
-      setLoading(false);
-    });
+    // Mesma fonte de posse usada por Distribuir/Playlists (aba ARTISTAS via
+    // nosso backend) — a antiga acao "ponto_get_jogador" do Apps Script
+    // checava outra aba (Jogadores) e dava "jogador não encontrado" pra
+    // quem estava corretamente vinculado só na aba nova.
+    api
+      .listarPontos(String(user.id))
+      .then((r) => {
+        setData({ nomeOff: getStoredLogin()?.nome || user.name, artistas: r.artistas });
+        setLoading(false);
+      })
+      .catch(() => {
+        setData({ erro: "Não foi possível carregar seus artistas." });
+        setLoading(false);
+      });
   }, [user, ready]);
 
   if (!ready || loading) {
