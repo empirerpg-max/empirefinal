@@ -733,8 +733,7 @@ export const api = {
     artistas: string[];
     grupos: Array<{
       artista: string;
-      saldoFixo: number;
-      saldoRestante: number;
+      saldo: number;
       linhas: Array<{
         linha: number;
         musica: string;
