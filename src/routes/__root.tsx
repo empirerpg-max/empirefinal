@@ -614,9 +614,7 @@ function RootInner() {
   useTelegramBackButton(!isHome, handleBack);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
-    }
+    document.getElementById("app-scroll")?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   }, [pathname]);
 
   useEffect(() => {
@@ -632,10 +630,7 @@ function RootInner() {
   };
 
   return (
-    <div
-      className="min-h-screen flex flex-col bg-background pb-24"
-      style={{ paddingTop: "calc(4rem + env(safe-area-inset-top))" }}
-    >
+    <div className="h-[100dvh] flex flex-col bg-background overflow-hidden">
       {/* Top Bar */}
       <nav
         className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-5 sm:px-6 border-b border-white/[0.06] bg-gradient-to-b from-background/85 via-background/70 to-background/40 pt-[env(safe-area-inset-top)]"
@@ -825,7 +820,20 @@ function RootInner() {
       </AnimatePresence>
 
       <RouteTransitionOverlay />
-      <Outlet />
+
+      {/* Único elemento que rola de verdade — o resto (top bar, bottom nav)
+          fica fora dele, então nunca balança com o bounce/rubber-band do
+          iOS nem "sobe e desce" durante o arrasto. */}
+      <div
+        id="app-scroll"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
+        style={{
+          paddingTop: "calc(4rem + env(safe-area-inset-top))",
+          paddingBottom: "6rem",
+        }}
+      >
+        <Outlet />
+      </div>
 
       <GlobalPersistentPlayers />
       <BottomNav />
