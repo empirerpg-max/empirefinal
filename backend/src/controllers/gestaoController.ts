@@ -75,7 +75,8 @@ export type UploadFolderType =
   | "socialAvatars"
   | "socialNews"
   | "playerAvatars"
-  | "playlistTracks";
+  | "playlistTracks"
+  | "tvChatGifs";
 
 export interface UploadPayload {
   fileName: string;
@@ -1018,7 +1019,9 @@ export async function uploadDriveController(request: Request): Promise<Response>
                         ? DRIVE_FOLDERS.playerAvatars
                         : folderType === "playlistTracks"
                           ? DRIVE_FOLDERS.playlistTracks
-                          : DRIVE_FOLDERS.musicas;
+                          : folderType === "tvChatGifs"
+                            ? DRIVE_FOLDERS.tvChatGifs
+                            : DRIVE_FOLDERS.musicas;
 
     const fileUrl = base64Data
       ? await uploadFileToDrive(fileName, folderId, mimeType, base64Data)

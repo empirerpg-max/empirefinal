@@ -17,7 +17,33 @@ export const DRIVE_FOLDERS = {
   socialNews: "1ERLIAEZM_KiJBhtUOuVNyXEmsGb0pxcZ",
   playerAvatars: "14yMzU_4i2ZbySfSVP0Ug9tyxu99dgJI5",
   playlistTracks: "1l7sRj7-ibDpXLQ9lc7147PLwF5qjAdZY",
+  // GIFs/stickers do chat da Empire TV — qualquer jogador pode subir um
+  // arquivo aqui, e ele fica disponível pra todo mundo usar no chat.
+  tvChatGifs: "10LOfKeFfmnu2xXNUXmcIY-v7XGPKtlG9",
 } as const;
+
+export interface DriveFolderFile {
+  id: string;
+  name: string;
+  mimeType: string;
+}
+
+// Lista os arquivos de uma pasta (mais recentes primeiro) — usado pelo
+// seletor de GIF/sticker compartilhado do chat da Empire TV.
+export async function listFilesInFolder(folderId: string, pageSize = 100): Promise<DriveFolderFile[]> {
+  const token = await getDriveOAuthAccessToken();
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&orderBy=createdTime desc&pageSize=${pageSize}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const json = (await response.json()) as any;
+  if (!response.ok || !Array.isArray(json.files)) {
+    console.warn("[listFilesInFolder] Erro ao listar pasta:", json);
+    return [];
+  }
+  return json.files as DriveFolderFile[];
+}
 
 export async function deleteFileFromDrive(fileUrl: string): Promise<boolean> {
   if (!fileUrl) return false;

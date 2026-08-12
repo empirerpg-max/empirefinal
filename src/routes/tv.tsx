@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2 } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { useTelegramUser } from "@/lib/telegram";
 import { api, type ProgramaTV } from "@/lib/api";
@@ -46,6 +46,10 @@ function renderFormattedText(text: string) {
     return <span key={i}>{part}</span>;
   });
 }
+
+// Mensagens de GIF/sticker guardam só um marcador + a URL do Drive no
+// campo de texto (sem mudar o schema da tabela de novo).
+const GIF_PREFIX = "GIF::";
 
 type HomeTab = "home" | "arquivo" | "grade";
 type WatchTab = "chat" | "participantes" | "sobre";
@@ -786,8 +790,12 @@ function ChatPanel({ programaId }: { programaId: string }) {
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [sending, setSending] = useState(false);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const [gifs, setGifs] = useState<Array<{ id: string; name: string; url: string }> | null>(null);
+  const [uploadingGif, setUploadingGif] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const gifFileRef = useRef<HTMLInputElement>(null);
   const displayName = user?.name || "Anônimo";
   const myId = user?.id;
 
@@ -871,28 +879,89 @@ function ChatPanel({ programaId }: { programaId: string }) {
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  const send = async () => {
-    const t = text.trim();
-    if (!t || sending) return;
-    setSending(true);
+  const sendRaw = async (rawText: string) => {
     const payload = {
       programa_id: programaId,
       user_name: displayName.slice(0, 60),
       user_id: myId || null,
       user_photo: user?.photo_url || null,
-      text: t.slice(0, 500),
+      text: rawText.slice(0, 500),
       reply_to: replyTo ? { id: replyTo.id, user: replyTo.user, text: replyTo.text.slice(0, 80) } : null,
     };
-    setText("");
     setReplyTo(null);
+    const { supabase } = await import("@/integrations/supabase/client");
+    await supabase.from("tv_chat_messages").insert(payload);
+  };
+
+  const send = async () => {
+    const t = text.trim();
+    if (!t || sending) return;
+    setSending(true);
+    setText("");
     try {
-      const { supabase } = await import("@/integrations/supabase/client");
-      await supabase.from("tv_chat_messages").insert(payload);
+      await sendRaw(t);
     } catch {
       // restaura texto se falhar
       setText(t);
     } finally {
       setSending(false);
+    }
+  };
+
+  const openGifPicker = async () => {
+    setGifPickerOpen(true);
+    if (gifs !== null) return;
+    try {
+      const res = await fetch("/api/empire-tv/gifs");
+      const json = await res.json().catch(() => null);
+      setGifs(Array.isArray(json?.data) ? json.data : []);
+    } catch {
+      setGifs([]);
+    }
+  };
+
+  const sendGif = async (url: string) => {
+    setGifPickerOpen(false);
+    setSending(true);
+    try {
+      await sendRaw(`${GIF_PREFIX}${url}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const uploadGif = async (file: File) => {
+    if (uploadingGif) return;
+    setUploadingGif(true);
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/gestao/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type || "image/gif",
+          base64Data,
+          folderType: "tvChatGifs",
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      const driveUrl = json?.data?.fileUrl;
+      const match = typeof driveUrl === "string" ? driveUrl.match(/\/d\/([\w-]+)/) : null;
+      const thumbUrl = match ? `https://drive.google.com/thumbnail?id=${match[1]}&sz=w400` : driveUrl;
+      if (thumbUrl) {
+        setGifs((prev) => [{ id: match?.[1] || String(Date.now()), name: file.name, url: thumbUrl }, ...(prev || [])]);
+        await sendGif(thumbUrl);
+      }
+    } catch {
+      // silencioso — o jogador pode tentar de novo
+    } finally {
+      setUploadingGif(false);
     }
   };
 
@@ -962,16 +1031,31 @@ function ChatPanel({ programaId }: { programaId: string }) {
                       <span className="text-muted-foreground">: {m.reply_to.text}</span>
                     </button>
                   )}
-                  <div
-                    className={`relative rounded-2xl px-3 py-1.5 leading-snug break-words ${
-                      own
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
-                        : "bg-muted text-foreground rounded-bl-sm"
-                    }`}
-                  >
-                    {!own && <span className={`block text-[11px] font-bold ${m.color}`}>{m.user}</span>}
-                    <span>{renderFormattedText(m.text)}</span>
-                  </div>
+                  {m.text.startsWith(GIF_PREFIX) ? (
+                    <div className={`rounded-2xl overflow-hidden ${own ? "rounded-br-sm" : "rounded-bl-sm"} max-w-[180px]`}>
+                      {!own && (
+                        <span className={`block text-[11px] font-bold px-2 pt-1 bg-muted ${m.color}`}>{m.user}</span>
+                      )}
+                      <img
+                        src={m.text.slice(GIF_PREFIX.length)}
+                        alt="GIF"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-auto block"
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className={`relative rounded-2xl px-3 py-1.5 leading-snug break-words ${
+                        own
+                          ? "bg-primary text-primary-foreground rounded-br-sm"
+                          : "bg-muted text-foreground rounded-bl-sm"
+                      }`}
+                    >
+                      {!own && <span className={`block text-[11px] font-bold ${m.color}`}>{m.user}</span>}
+                      <span>{renderFormattedText(m.text)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <button
@@ -1001,6 +1085,63 @@ function ChatPanel({ programaId }: { programaId: string }) {
         </div>
       )}
 
+      {gifPickerOpen && (
+        <div className="border-t border-border bg-background/95 p-2 max-h-52 overflow-y-auto">
+          <div className="flex items-center justify-between px-1 pb-2">
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+              GIFs e stickers — de todo mundo
+            </span>
+            <button type="button" onClick={() => setGifPickerOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Fechar">
+              <X className="size-3.5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            <button
+              type="button"
+              onClick={() => gifFileRef.current?.click()}
+              disabled={uploadingGif}
+              className="aspect-square rounded-md border border-dashed border-border flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary hover:border-primary/50 transition disabled:opacity-50"
+              title="Enviar novo GIF/sticker (fica disponível pra todo mundo)"
+            >
+              {uploadingGif ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+              <span className="text-[9px] font-semibold">Enviar</span>
+            </button>
+            <input
+              ref={gifFileRef}
+              type="file"
+              accept="image/gif,image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadGif(file);
+                e.target.value = "";
+              }}
+            />
+            {gifs === null ? (
+              <div className="col-span-3 flex items-center justify-center text-xs text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+              </div>
+            ) : gifs.length === 0 ? (
+              <div className="col-span-3 flex items-center text-[11px] text-muted-foreground px-2">
+                Nenhum GIF enviado ainda — seja o primeiro.
+              </div>
+            ) : (
+              gifs.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => sendGif(g.url)}
+                  className="aspect-square rounded-md overflow-hidden bg-muted hover:ring-2 hover:ring-primary transition"
+                  title={g.name}
+                >
+                  <img src={g.url} alt={g.name} loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       <form
         onSubmit={(e) => { e.preventDefault(); send(); }}
         className="flex items-center gap-1.5 px-3 py-2 border-t border-border bg-background"
@@ -1020,6 +1161,14 @@ function ChatPanel({ programaId }: { programaId: string }) {
           className="size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted italic font-bold text-sm grid place-items-center"
         >
           I
+        </button>
+        <button
+          type="button"
+          onClick={() => (gifPickerOpen ? setGifPickerOpen(false) : openGifPicker())}
+          title="GIF / sticker"
+          className={`size-8 shrink-0 rounded-md grid place-items-center transition ${gifPickerOpen ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+        >
+          <ImagePlus className="size-4" />
         </button>
         <input
           ref={inputRef}
