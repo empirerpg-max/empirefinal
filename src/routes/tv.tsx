@@ -580,18 +580,38 @@ function GradeFull({ programas, onPlay, loading }: { programas: Programa[]; onPl
 }
 
 function ArquivoFull({ finalizados, loading }: { finalizados: Programa[]; loading: boolean }) {
-  const [chatRows, setChatRows] = useState<Array<{ data: string; hora: string; sala: string; total_msgs: number }>>([]);
+  const [chatByPrograma, setChatByPrograma] = useState<Map<string, number>>(new Map());
   const [loadChat, setLoadChat] = useState(true);
+  const idsKey = useMemo(() => finalizados.map((p) => p.id).join(","), [finalizados]);
+
+  // Total de mensagens por programa direto do chat real (Supabase) — a
+  // aba "Agenda_TV" antiga (listar_arquivo_tv) nunca é mais escrita desde
+  // que o chat virou realtime, então usar ela aqui mostraria sempre 0.
   useEffect(() => {
     let alive = true;
-    api.listarArquivoTV().then((r) => alive && setChatRows(r)).catch(() => {}).finally(() => alive && setLoadChat(false));
+    const ids = finalizados.map((p) => p.id).filter(Boolean);
+    if (ids.length === 0) {
+      setChatByPrograma(new Map());
+      setLoadChat(false);
+      return;
+    }
+    setLoadChat(true);
+    (async () => {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data } = await supabase
+        .from("tv_chat_messages")
+        .select("programa_id")
+        .in("programa_id", ids)
+        .limit(20000);
+      if (!alive) return;
+      const m = new Map<string, number>();
+      for (const r of data || []) m.set(r.programa_id, (m.get(r.programa_id) || 0) + 1);
+      setChatByPrograma(m);
+    })()
+      .catch(() => {})
+      .finally(() => alive && setLoadChat(false));
     return () => { alive = false; };
-  }, []);
-  const chatByPrograma = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of chatRows) m.set(r.sala, r.total_msgs);
-    return m;
-  }, [chatRows]);
+  }, [idsKey]);
 
   if (loading && finalizados.length === 0) return <div className="p-6 text-sm text-muted-foreground">Carregando...</div>;
   if (finalizados.length === 0) return <div className="p-6 text-sm text-muted-foreground italic">Sem transmissões finalizadas.</div>;
