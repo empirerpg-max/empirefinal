@@ -25,10 +25,26 @@ type Programa = ProgramaTV;
 interface ChatMessage {
   id: string;
   user: string;
+  userId?: string;
+  userPhoto?: string;
   text: string;
   ts: number;
   color: string;
   reply_to?: { id: string; user: string; text: string };
+}
+
+// *negrito* e _itálico_ (estilo Telegram) — renderiza em partes, sem HTML cru.
+function renderFormattedText(text: string) {
+  const parts = text.split(/(\*[^*\n]+\*|_[^_\n]+_)/g);
+  return parts.map((part, i) => {
+    if (part.length > 2 && part.startsWith("*") && part.endsWith("*")) {
+      return <strong key={i}>{part.slice(1, -1)}</strong>;
+    }
+    if (part.length > 2 && part.startsWith("_") && part.endsWith("_")) {
+      return <em key={i}>{part.slice(1, -1)}</em>;
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
 
 type HomeTab = "home" | "arquivo" | "grade";
@@ -749,6 +765,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const displayName = user?.name || "Anônimo";
+  const myId = user?.id;
 
   // Histórico inicial + subscrição realtime
   useEffect(() => {
@@ -759,7 +776,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
       const { supabase } = await import("@/integrations/supabase/client");
       const { data } = await supabase
         .from("tv_chat_messages")
-        .select("id,user_name,text,reply_to,created_at")
+        .select("id,user_name,user_id,user_photo,text,reply_to,created_at")
         .eq("programa_id", programaId)
         .order("created_at", { ascending: true })
         .limit(300);
@@ -768,6 +785,8 @@ function ChatPanel({ programaId }: { programaId: string }) {
         data.map((r: any) => ({
           id: r.id,
           user: r.user_name,
+          userId: r.user_id || undefined,
+          userPhoto: r.user_photo || undefined,
           text: r.text,
           ts: new Date(r.created_at).getTime(),
           color: colorFor(r.user_name),
@@ -793,6 +812,8 @@ function ChatPanel({ programaId }: { programaId: string }) {
                 {
                   id: r.id,
                   user: r.user_name,
+                  userId: r.user_id || undefined,
+                  userPhoto: r.user_photo || undefined,
                   text: r.text,
                   ts: new Date(r.created_at).getTime(),
                   color: colorFor(r.user_name),
@@ -833,6 +854,8 @@ function ChatPanel({ programaId }: { programaId: string }) {
     const payload = {
       programa_id: programaId,
       user_name: displayName.slice(0, 60),
+      user_id: myId || null,
+      user_photo: user?.photo_url || null,
       text: t.slice(0, 500),
       reply_to: replyTo ? { id: replyTo.id, user: replyTo.user, text: replyTo.text.slice(0, 80) } : null,
     };
@@ -849,6 +872,26 @@ function ChatPanel({ programaId }: { programaId: string }) {
     }
   };
 
+  // Envolve o texto selecionado no campo com o marcador de formatação
+  // (*negrito* / _itálico_) — se nada estiver selecionado, insere o par de
+  // marcadores no cursor pra o jogador digitar entre eles.
+  const wrapSelection = (marker: string) => {
+    const el = inputRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? text.length;
+    const end = el.selectionEnd ?? text.length;
+    const before = text.slice(0, start);
+    const middle = text.slice(start, end);
+    const after = text.slice(end);
+    const next = `${before}${marker}${middle}${marker}${after}`;
+    setText(next);
+    setTimeout(() => {
+      el.focus();
+      const cursor = middle ? start + marker.length + middle.length + marker.length : start + marker.length;
+      el.setSelectionRange(cursor, cursor);
+    }, 0);
+  };
+
   const scrollToMsg = (id: string) => {
     const el = document.getElementById(`tvmsg-${id}`);
     if (el) {
@@ -860,36 +903,64 @@ function ChatPanel({ programaId }: { programaId: string }) {
 
   return (
     <>
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 text-sm">
+      <div ref={scrollerRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-xs text-center px-6">
             Seja o primeiro a comentar.
           </div>
         ) : (
-          messages.map((m) => (
-            <div key={m.id} id={`tvmsg-${m.id}`} className="group leading-snug break-words rounded px-1 py-0.5 -mx-1">
-              {m.reply_to && (
+          messages.map((m) => {
+            const own = myId ? m.userId === myId : m.user === displayName;
+            return (
+              <div
+                key={m.id}
+                id={`tvmsg-${m.id}`}
+                className={`group flex items-end gap-2 rounded-lg px-1 py-0.5 -mx-1 ${own ? "flex-row-reverse" : ""}`}
+              >
+                {!own && (
+                  <div className="size-7 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mb-0.5">
+                    {m.userPhoto ? (
+                      <img src={m.userPhoto} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>
+                    )}
+                  </div>
+                )}
+
+                <div className={`max-w-[78%] flex flex-col ${own ? "items-end" : "items-start"}`}>
+                  {m.reply_to && (
+                    <button
+                      type="button"
+                      onClick={() => scrollToMsg(m.reply_to!.id)}
+                      className={`block w-full text-left mb-1 pl-2 py-1 border-l-2 border-primary/60 text-[11px] rounded-r bg-black/10 hover:bg-black/20 transition-colors ${own ? "text-right border-l-0 border-r-2 pr-2 pl-0" : ""}`}
+                    >
+                      <span className="font-semibold text-primary/80">{m.reply_to.user}</span>
+                      <span className="text-muted-foreground">: {m.reply_to.text}</span>
+                    </button>
+                  )}
+                  <div
+                    className={`relative rounded-2xl px-3 py-1.5 leading-snug break-words ${
+                      own
+                        ? "bg-primary text-primary-foreground rounded-br-sm"
+                        : "bg-muted text-foreground rounded-bl-sm"
+                    }`}
+                  >
+                    {!own && <span className={`block text-[11px] font-bold ${m.color}`}>{m.user}</span>}
+                    <span>{renderFormattedText(m.text)}</span>
+                  </div>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => scrollToMsg(m.reply_to!.id)}
-                  className="block w-full text-left mb-0.5 pl-2 border-l-2 border-primary/50 text-[11px] text-muted-foreground hover:bg-muted/50 rounded-r"
+                  onClick={() => startReply(m)}
+                  className="mb-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition shrink-0"
+                  aria-label="Responder"
                 >
-                  <span className="font-semibold text-primary/80">{m.reply_to.user}</span>: {m.reply_to.text}
+                  <Reply className="inline size-3.5" />
                 </button>
-              )}
-              <span className={`font-bold ${m.color}`}>{m.user}</span>
-              <span className="text-muted-foreground">: </span>
-              <span className="text-foreground">{m.text}</span>
-              <button
-                type="button"
-                onClick={() => startReply(m)}
-                className="ml-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition"
-                aria-label="Responder"
-              >
-                <Reply className="inline size-3" />
-              </button>
-            </div>
-          ))
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -908,20 +979,36 @@ function ChatPanel({ programaId }: { programaId: string }) {
 
       <form
         onSubmit={(e) => { e.preventDefault(); send(); }}
-        className="flex items-center gap-2 px-3 py-2 border-t border-border bg-background"
+        className="flex items-center gap-1.5 px-3 py-2 border-t border-border bg-background"
       >
+        <button
+          type="button"
+          onClick={() => wrapSelection("*")}
+          title="Negrito (*texto*)"
+          className="size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted font-black text-sm grid place-items-center"
+        >
+          B
+        </button>
+        <button
+          type="button"
+          onClick={() => wrapSelection("_")}
+          title="Itálico (_texto_)"
+          className="size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted italic font-bold text-sm grid place-items-center"
+        >
+          I
+        </button>
         <input
           ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={replyTo ? `Responder a ${replyTo.user}...` : "Mandar mensagem"}
           maxLength={300}
-          className="flex-1 h-9 px-3 rounded-md bg-muted text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+          className="flex-1 h-9 px-3 rounded-md bg-muted text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground min-w-0"
         />
         <button
           type="submit"
           disabled={!text.trim()}
-          className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-1 disabled:opacity-40"
+          className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-1 disabled:opacity-40 shrink-0"
         >
           <Send className="size-4" />
         </button>
