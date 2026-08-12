@@ -360,8 +360,8 @@ export default {
     if (url.pathname === "/api/log-error" && request.method === "POST") {
       return handleLogErrorApi(request, env as { FLAGS?: FlagsKv });
     }
-    // TEMPORÁRIO — debug: ler o error-log direto (sem o Empire Admin) pra
-    // investigar o "Something went wrong" no Ponto. Remover depois.
+    // Leitura direta do error-log (mesmo dado que o Empire Admin lê) — só
+    // consulta, nunca escreve nada além do que /api/log-error já grava.
     if (url.pathname === "/api/debug/error-log" && request.method === "GET") {
       const flags = env as { FLAGS?: FlagsKv };
       const raw = flags.FLAGS ? await flags.FLAGS.get("error-log") : null;
