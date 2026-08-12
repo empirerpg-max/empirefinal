@@ -236,7 +236,17 @@ export function MusicPlayer({
         ytPlayerRef.current.loadVideoById(ytAudioId);
         return;
       }
-      ytPlayerRef.current = new YT.Player(ytContainerRef.current, {
+      // A IFrame API substitui o elemento que recebe pelo iframe dela
+      // mesma — se fosse um nó que o React está de olho (via ref direta
+      // num elemento do JSX), o React tentava remover esse nó depois
+      // achando que ainda é dele, e quebrava com "removeChild... not a
+      // child of this node". Criando o alvo manualmente (fora da árvore
+      // que o React controla) e só anexando dentro do container, o
+      // React nunca fica sabendo que ele foi trocado.
+      ytContainerRef.current.innerHTML = "";
+      const mountEl = document.createElement("div");
+      ytContainerRef.current.appendChild(mountEl);
+      ytPlayerRef.current = new YT.Player(mountEl, {
         videoId: ytAudioId,
         playerVars: { autoplay: 1, controls: 0, playsinline: 1 },
         events: {
