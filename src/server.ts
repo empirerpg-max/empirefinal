@@ -375,16 +375,6 @@ export default {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-
-      // /sw.js nunca pode ser cacheado (nem pelo navegador, nem por CDN) —
-      // é assim que o app detecta versão nova; um cache agressivo aqui faz
-      // o "Nova versão disponível" nunca aparecer, mesmo com refresh manual.
-      if (url.pathname === "/sw.js") {
-        const headers = new Headers(response.headers);
-        headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
-        return new Response(response.body, { status: response.status, headers });
-      }
-
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);
