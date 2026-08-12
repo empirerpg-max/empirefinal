@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2 } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { useTelegramUser } from "@/lib/telegram";
-import { api, type ProgramaTV } from "@/lib/api";
+import { api, driveImg, type ProgramaTV } from "@/lib/api";
 import { getKickStatus } from "@/lib/kick.functions";
+import { getStoredLogin } from "@/components/LoginScreen";
 
 
 export const Route = createFileRoute("/tv")({
@@ -798,6 +799,9 @@ function ChatPanel({ programaId }: { programaId: string }) {
   const gifFileRef = useRef<HTMLInputElement>(null);
   const displayName = user?.name || "Anônimo";
   const myId = user?.id;
+  // Mesma foto de perfil já usada no resto do app (perfil.tsx): a foto
+  // mapeada no cadastro do jogador tem prioridade sobre a do Telegram.
+  const myPhoto = getStoredLogin()?.fotoPerfil || user?.photo_url || "";
 
   // Histórico inicial + subscrição realtime
   useEffect(() => {
@@ -884,7 +888,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
       programa_id: programaId,
       user_name: displayName.slice(0, 60),
       user_id: myId || null,
-      user_photo: user?.photo_url || null,
+      user_photo: myPhoto || null,
       text: rawText.slice(0, 500),
       reply_to: replyTo ? { id: replyTo.id, user: replyTo.user, text: replyTo.text.slice(0, 80) } : null,
     };
@@ -1013,7 +1017,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
                 {!own && (
                   <div className="size-7 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mb-0.5">
                     {m.userPhoto ? (
-                      <img src={m.userPhoto} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <img src={driveImg(m.userPhoto, 100)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>
                     )}
