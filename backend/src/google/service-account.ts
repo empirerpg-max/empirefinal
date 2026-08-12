@@ -60,6 +60,10 @@ function base64UrlEncode(input: string | Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+export function getServiceAccountEmail(): string {
+  return resolveServiceAccount().clientEmail;
+}
+
 function resolveServiceAccount(): GoogleServiceAccountCredentials {
   const rawJson =
     readRuntimeEnv("GOOGLE_SHEETS_CREDENTIALS") || readRuntimeEnv("GOOGLE_SERVICE_ACCOUNT_JSON");

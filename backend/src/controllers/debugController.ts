@@ -8,11 +8,13 @@ export async function debugRegistroWriteController(): Promise<Response> {
 
   let erroGravacao: string | null = null;
   let linhaGravada: number | null = null;
+  let contaDeServico: string | null = null;
   try {
     const spreadsheetId = "1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg";
     const a1Range = encodeURIComponent(`'${abaRegistro?.title || "REGISTRO"}'!B:D`);
-    const { getGoogleAccessToken } = await import("../google/service-account");
+    const { getGoogleAccessToken, getServiceAccountEmail } = await import("../google/service-account");
     const token = await getGoogleAccessToken(["https://www.googleapis.com/auth/spreadsheets"]);
+    contaDeServico = getServiceAccountEmail();
     const res = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       {
@@ -41,6 +43,7 @@ export async function debugRegistroWriteController(): Promise<Response> {
   return new Response(
     JSON.stringify(
       {
+        conta_de_servico: contaDeServico,
         abas_da_planilha_registrosCharts: abas.map((a) => a.title),
         aba_registro_encontrada: abaRegistro?.title || null,
         teste_gravacao_direta: { erro: erroGravacao, linha: linhaGravada },
