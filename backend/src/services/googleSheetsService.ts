@@ -289,11 +289,21 @@ interface GoogleSheetsAppendResponse {
   };
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Anexa uma linha e devolve o número da linha real onde ela caiu (1-based,
  * igual A1) — usado pra permitir reagir com emoji imediatamente após postar
  * um comentário, sem precisar reler a aba inteira pra achar a linha.
- * `null` quando a gravação falha (comportamento silencioso já existente).
+ * `null` quando a gravação falha mesmo após retry (comportamento silencioso
+ * já existente).
+ *
+ * 2 tentativas extras com backoff curto — sem isso, gravações concorrentes
+ * na mesma planilha (ex: vários comentários seguidos rápido) podiam esbarrar
+ * num erro passageiro (rate limit) da API do Sheets e sumir sem deixar
+ * rastro nenhum (nem no comentário salvo, nem no audit log REGISTRO).
  */
 export async function appendRow(
   spreadsheetKeyOrId: SpreadsheetKey | string,
@@ -302,29 +312,36 @@ export async function appendRow(
   range = "A:ZZ",
 ): Promise<number | null> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
-  try {
-    const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
-    const result = await sheetsRequest<GoogleSheetsAppendResponse>(
-      `/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          majorDimension: "ROWS",
-          values: [values],
-        }),
-      },
-      [SHEETS_READWRITE_SCOPE],
-    );
-    const updatedRange = result.updates?.updatedRange || "";
-    // updatedRange vem tipo "'Comentarios_Musicas'!A123:D123" — extrai o 123.
-    const match = updatedRange.match(/![A-Z]+(\d+)/);
-    return match ? parseInt(match[1], 10) : null;
-  } catch (err) {
-    console.warn(
-      `[googleSheetsService] Não foi possível anexar linha na planilha (${(err as Error).message})`,
-    );
-    return null;
+  const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
+  const attempts = 3;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const result = await sheetsRequest<GoogleSheetsAppendResponse>(
+        `/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            majorDimension: "ROWS",
+            values: [values],
+          }),
+        },
+        [SHEETS_READWRITE_SCOPE],
+      );
+      const updatedRange = result.updates?.updatedRange || "";
+      // updatedRange vem tipo "'Comentarios_Musicas'!A123:D123" — extrai o 123.
+      const match = updatedRange.match(/![A-Z]+(\d+)/);
+      return match ? parseInt(match[1], 10) : null;
+    } catch (err) {
+      const isLastAttempt = attempt === attempts;
+      console.warn(
+        `[googleSheetsService] Falha ao anexar linha em "${sheetName}" (tentativa ${attempt}/${attempts}): ${(err as Error).message}`,
+      );
+      if (isLastAttempt) return null;
+      await sleep(attempt * 400);
+    }
   }
+  return null;
 }
 
 export const googleSheetsService = {
