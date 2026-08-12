@@ -1,4 +1,5 @@
 import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
+import { registrarAuditLog } from "./registroLogController";
 
 export interface CreateCommentBody {
   tipoMedia: "musica" | "music-video" | "video" | "album";
@@ -110,64 +111,70 @@ export async function createCommentController(request: Request): Promise<Respons
       colAvgIndex = 14; // Coluna O (0-based 14)
     }
 
-    // 1. Atualizar nota/likes e média na planilha principal
-    const rows = await googleSheetsService.principal.readValues(targetSheet);
+    // 1. Atualizar nota/likes e média na planilha principal — isolado num
+    // try/catch pra uma falha aqui (ex: título sem match nenhum) nunca
+    // impedir os passos 2 e 3 (salvar o comentário e o audit log).
+    try {
+      const rows = await googleSheetsService.principal.readValues(targetSheet);
 
-    if (rows && rows.length > 0) {
-      // Busca pela coluna de ID do tópico certa pra essa aba (ver acima —
-      // Music Videos usa uma posição diferente de Musicas/Albuns). Só cai
-      // pra busca por título (substring, menos confiável) se o topicId não
-      // vier.
-      let foundRowIndex = -1;
+      if (rows && rows.length > 0) {
+        // Busca pela coluna de ID do tópico certa pra essa aba (ver acima —
+        // Music Videos usa uma posição diferente de Musicas/Albuns). Só cai
+        // pra busca por título (substring, menos confiável) se o topicId não
+        // vier.
+        let foundRowIndex = -1;
 
-      if (topicIdClean) {
-        const topicNorm = normalizeComparison(topicIdClean);
-        for (let i = 1; i < rows.length; i++) {
-          if (normalizeComparison(rows[i][colTopicIdIndex] || "") === topicNorm) {
-            foundRowIndex = i + 1; // A1 row number (1-based)
-            break;
+        if (topicIdClean) {
+          const topicNorm = normalizeComparison(topicIdClean);
+          for (let i = 1; i < rows.length; i++) {
+            if (normalizeComparison(rows[i][colTopicIdIndex] || "") === topicNorm) {
+              foundRowIndex = i + 1; // A1 row number (1-based)
+              break;
+            }
           }
         }
-      }
 
-      if (foundRowIndex === -1) {
-        const titleNorm = normalizeComparison(titleClean);
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          const rowText = row.join(" ");
-          if (normalizeComparison(rowText).includes(titleNorm)) {
-            foundRowIndex = i + 1; // A1 row number (1-based)
-            break;
+        if (foundRowIndex === -1) {
+          const titleNorm = normalizeComparison(titleClean);
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const rowText = row.join(" ");
+            if (normalizeComparison(rowText).includes(titleNorm)) {
+              foundRowIndex = i + 1; // A1 row number (1-based)
+              break;
+            }
           }
         }
+
+        if (foundRowIndex > 0) {
+          const rowData = rows[foundRowIndex - 1] || [];
+          const currentRatings = rowData[colRatingsIndex] || "";
+
+          const updatedRatings = currentRatings.trim()
+            ? `${currentRatings.trim()}, ${playerClean}: ${score}`
+            : `${playerClean}: ${score}`;
+
+          const newAvg = calculateAverageFromRatings(updatedRatings);
+
+          const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
+          const avgColLetter = colIndexToA1Letter(colAvgIndex);
+
+          // Atualiza a coluna de ratings por jogador e coluna de média
+          await googleSheetsService.principal.updateValues(
+            targetSheet,
+            `${ratingColLetter}${foundRowIndex}`,
+            [[updatedRatings]],
+          );
+
+          await googleSheetsService.principal.updateValues(
+            targetSheet,
+            `${avgColLetter}${foundRowIndex}`,
+            [[String(newAvg)]],
+          );
+        }
       }
-
-      if (foundRowIndex > 0) {
-        const rowData = rows[foundRowIndex - 1] || [];
-        const currentRatings = rowData[colRatingsIndex] || "";
-
-        const updatedRatings = currentRatings.trim()
-          ? `${currentRatings.trim()}, ${playerClean}: ${score}`
-          : `${playerClean}: ${score}`;
-
-        const newAvg = calculateAverageFromRatings(updatedRatings);
-
-        const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
-        const avgColLetter = colIndexToA1Letter(colAvgIndex);
-
-        // Atualiza a coluna de ratings por jogador e coluna de média
-        await googleSheetsService.principal.updateValues(
-          targetSheet,
-          `${ratingColLetter}${foundRowIndex}`,
-          [[updatedRatings]],
-        );
-
-        await googleSheetsService.principal.updateValues(
-          targetSheet,
-          `${avgColLetter}${foundRowIndex}`,
-          [[String(newAvg)]],
-        );
-      }
+    } catch (err) {
+      console.warn("[ForumController] Erro ao atualizar nota/média:", err);
     }
 
     // 2. Salvar comentário na aba de comentários correspondente
@@ -192,22 +199,15 @@ export async function createCommentController(request: Request): Promise<Respons
     }
 
     // 3. Registrar Audit Log na Planilha REGISTRO (1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg)
-    const auditTitle = tipoMedia === "album" ? `(ALBUM) — ${titleClean}` : titleClean;
-    const auditType =
-      tipoMedia === "album"
-        ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
-        : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)";
-
-    try {
-      await googleSheetsService.registrosCharts.appendRow("REGISTRO", [
-        nowStr,
-        playerClean,
-        auditTitle,
-        auditType,
-      ]);
-    } catch (auditErr) {
-      console.warn("[ForumController] Erro ao gravar Audit Log no REGISTRO:", auditErr);
-    }
+    await registrarAuditLog({
+      nomeJogador: playerClean,
+      titulo: titleClean,
+      tipo:
+        tipoMedia === "album"
+          ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
+          : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+      isAlbum: tipoMedia === "album",
+    });
 
     return new Response(
       JSON.stringify({
