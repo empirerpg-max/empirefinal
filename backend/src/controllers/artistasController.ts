@@ -85,6 +85,228 @@ export async function getArtistNamesForOwner(telegramId: string): Promise<string
   );
 }
 
+function colIndexToA1Letter(colIndex: number): string {
+  let temp = colIndex;
+  let letter = "";
+  while (temp >= 0) {
+    letter = String.fromCharCode((temp % 26) + 65) + letter;
+    temp = Math.floor(temp / 26) - 1;
+  }
+  return letter;
+}
+
+interface ArtistasRow {
+  rec: Record<string, string>;
+  rowIndex: number;
+  headers: string[];
+}
+
+async function readArtistasRows(): Promise<ArtistasRow[]> {
+  const rawRows = await googleSheetsService.usuarios.readValues(ARTISTAS_SHEET).catch(() => []);
+  if (!rawRows || rawRows.length < 2) return [];
+  const headers = dedupeHeaders(
+    ARTISTAS_SHEET,
+    rawRows[0].map((h, i) => normalizeHeader(h) || `coluna_${i + 1}`),
+  );
+  const out: ArtistasRow[] = [];
+  rawRows.slice(1).forEach((row, i) => {
+    if (!row.some((cell) => normalizeText(cell))) return;
+    const rec: Record<string, string> = {};
+    headers.forEach((h, hi) => {
+      rec[h] = normalizeText(row[hi]);
+    });
+    out.push({ rec, rowIndex: i + 2, headers });
+  });
+  return out;
+}
+
+/**
+ * GET /api/artistas/disponiveis
+ * Artistas da aba ARTISTAS sem dono (coluna "ID Usuário" vazia) — candidatos
+ * a vínculo. Cada artista livre já existe como linha própria na aba (não
+ * precisa criar linha nova pra vincular, só preencher o dono).
+ */
+export async function getArtistasDisponiveisController(): Promise<Response> {
+  try {
+    const rows = await readArtistasRows();
+    const disponiveis = rows
+      .filter((r) => r.rec["nome"] && !r.rec["id_usuario"])
+      .map((r) => ({
+        nome: r.rec["nome"],
+        foto: r.rec["foto"] || "",
+        gravadora: r.rec["gravadora"] || "",
+      }));
+    return new Response(JSON.stringify({ success: true, data: disponiveis }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (error: any) {
+    console.error("[getArtistasDisponiveisController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao listar artistas disponíveis." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+export interface VincularArtistaBody {
+  nome: string;
+  telegramId: string;
+}
+
+/**
+ * POST /api/artistas/vincular
+ * Vincula um artista SEM dono (linha já existe na aba ARTISTAS) ao jogador —
+ * preenche "ID Usuário" e recalcula "ID_unico" (padrão Nome+ID já usado nas
+ * linhas vinculadas). Recusa se o artista já tiver dono, pra nunca roubar
+ * vínculo de outro jogador.
+ */
+export async function vincularArtistaController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as VincularArtistaBody;
+    const nome = (body.nome || "").trim();
+    const telegramId = (body.telegramId || "").trim();
+
+    if (!nome || !telegramId) {
+      return new Response(JSON.stringify({ ok: false, erro: "nome e telegramId são obrigatórios." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const rows = await readArtistasRows();
+    const normNome = normalizeComparison(nome);
+    const match = rows.find((r) => normalizeComparison(r.rec["nome"]) === normNome);
+
+    if (!match) {
+      return new Response(JSON.stringify({ ok: false, erro: "Artista não encontrado." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (match.rec["id_usuario"]) {
+      return new Response(JSON.stringify({ ok: false, erro: "Esse artista já tem dono." }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const idUsuarioCol = match.headers.indexOf("id_usuario");
+    const idUnicoCol = match.headers.indexOf("id_unico");
+    if (idUsuarioCol === -1) {
+      return new Response(
+        JSON.stringify({ ok: false, erro: "Coluna 'ID Usuário' não encontrada na aba ARTISTAS." }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    await googleSheetsService.usuarios.updateValues(
+      ARTISTAS_SHEET,
+      `${colIndexToA1Letter(idUsuarioCol)}${match.rowIndex}`,
+      [[telegramId]],
+    );
+    if (idUnicoCol !== -1) {
+      await googleSheetsService.usuarios.updateValues(
+        ARTISTAS_SHEET,
+        `${colIndexToA1Letter(idUnicoCol)}${match.rowIndex}`,
+        [[`${match.rec["nome"]}${telegramId}`]],
+      );
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[vincularArtistaController] Erro:", error);
+    return new Response(JSON.stringify({ ok: false, erro: error.message || "Erro ao vincular artista." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+export interface CriarArtistaBody {
+  nome: string;
+  foto: string;
+  gravadora: string;
+  telegramId: string;
+}
+
+/**
+ * POST /api/artistas/criar
+ * Cria um artista novo (que ainda não existe na aba ARTISTAS) já vinculado
+ * ao jogador que criou. Recusa nome duplicado, pra não colidir com um
+ * artista já existente (vinculado ou livre).
+ */
+export async function criarArtistaController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as CriarArtistaBody;
+    const nome = (body.nome || "").trim();
+    const gravadora = (body.gravadora || "").trim();
+    const foto = (body.foto || "").trim();
+    const telegramId = (body.telegramId || "").trim();
+
+    if (!nome || !gravadora || !telegramId) {
+      return new Response(
+        JSON.stringify({ ok: false, erro: "nome, gravadora e telegramId são obrigatórios." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const rows = await readArtistasRows();
+    const normNome = normalizeComparison(nome);
+    if (rows.some((r) => normalizeComparison(r.rec["nome"]) === normNome)) {
+      return new Response(JSON.stringify({ ok: false, erro: "Já existe um artista com esse nome." }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const headers =
+      rows[0]?.headers ||
+      [
+        "nome",
+        "foto",
+        "status",
+        "saldo",
+        "gravadora",
+        "fortuna_real",
+        "fortuna_de_bens",
+        "fortuna_total",
+        "prestigio",
+        "fadiga",
+        "id_usuario",
+        "data_contrato",
+        "meses_contrato",
+        "multa",
+        "fortuna_calculo",
+        "id_unico",
+      ];
+    const values: Record<string, string> = {
+      nome,
+      foto,
+      gravadora,
+      id_usuario: telegramId,
+      id_unico: `${nome}${telegramId}`,
+    };
+    const row = headers.map((h) => values[h] ?? "");
+
+    await googleSheetsService.usuarios.appendRow(ARTISTAS_SHEET, row);
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[criarArtistaController] Erro:", error);
+    return new Response(JSON.stringify({ ok: false, erro: error.message || "Erro ao criar artista." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
 export async function getMeusArtistasNomesController(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);

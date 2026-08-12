@@ -5,7 +5,6 @@ import {
 } from "../controllers/catalogController";
 import { getUserMeController } from "../controllers/userController";
 import { getNivelController } from "../controllers/nivelController";
-import { debugArtistasSheetController } from "../controllers/debugController";
 import {
   createCommentController,
   getCommentsController,
@@ -39,7 +38,12 @@ import {
 import { reportVideoIssueController } from "../controllers/reportVideoController";
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
 import { loginController, updateProfileController } from "../controllers/authController";
-import { getMeusArtistasNomesController } from "../controllers/artistasController";
+import {
+  getMeusArtistasNomesController,
+  getArtistasDisponiveisController,
+  vincularArtistaController,
+  criarArtistaController,
+} from "../controllers/artistasController";
 import {
   getPontosController,
   salvarPontoCelulaController,
@@ -111,9 +115,11 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/auth/login",
     "/api/auth/perfil",
     "/api/artistas/meus-nomes",
+    "/api/artistas/disponiveis",
+    "/api/artistas/vincular",
+    "/api/artistas/criar",
     "/api/user/me",
     "/api/user/nivel",
-    "/api/debug/artistas-sheet",
     "/api/top-playlists",
     "/api/lancamentos",
     "/api/musicas",
@@ -472,6 +478,22 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await investirPlaylistController(request);
   } else if (url.pathname === "/api/empire-tv/gifs") {
     response = await listTvChatGifsController();
+  } else if (url.pathname === "/api/artistas/vincular") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/artistas/vincular." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await vincularArtistaController(request);
+  } else if (url.pathname === "/api/artistas/criar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/artistas/criar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await criarArtistaController(request);
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"
@@ -545,11 +567,11 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       case "/api/user/nivel":
         response = await getNivelController(request);
         break;
-      case "/api/debug/artistas-sheet":
-        response = await debugArtistasSheetController();
-        break;
       case "/api/artistas/meus-nomes":
         response = await getMeusArtistasNomesController(request);
+        break;
+      case "/api/artistas/disponiveis":
+        response = await getArtistasDisponiveisController();
         break;
       case "/api/gestao/musicas-em-chart":
         response = await getMusicasEmChartController();

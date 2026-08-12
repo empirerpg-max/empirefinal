@@ -867,13 +867,32 @@ export const api = {
     invalidateCache();
     return call<CommonResponse>({ acao: "vincular_imagem_tour", nome, url });
   },
+  // Artistas livres (sem dono) vêm direto da aba ARTISTAS (Worker próprio) —
+  // não mais do Apps Script legado, que ficava desconectado da fonte que
+  // "Meus Artistas" lê e fazia vínculos "sumirem" pro jogador.
   async getArtistasSemId(): Promise<Artist[]> {
-    const data = await call<Record<string, unknown>[]>({ acao: "artistas_sem_id" }, { cache: true });
-    return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
+    try {
+      const res = await fetch("/api/artistas/disponiveis");
+      if (!res.ok) return [];
+      const json = await res.json();
+      const data = Array.isArray(json?.data) ? json.data : [];
+      return data.map((a: Record<string, unknown>) => normalizeArtist(a));
+    } catch {
+      return [];
+    }
   },
   async vincularArtista(nome: string, telegramId: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "vincular_artista", nome, telegram_id: telegramId });
+    try {
+      const res = await fetch("/api/artistas/vincular", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome, telegramId }),
+      });
+      const json = await res.json();
+      return { ok: !!json.ok, erro: json.erro };
+    } catch {
+      return { ok: false, erro: "Erro na conexão." };
+    }
   },
   async criarArtista(payload: {
     nome: string;
@@ -881,14 +900,22 @@ export const api = {
     gravadora: string;
     telegram_id: string;
   }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({
-      acao: "criar_artista",
-      nome: payload.nome,
-      foto: payload.foto,
-      gravadora: payload.gravadora,
-      telegram_id: payload.telegram_id,
-    });
+    try {
+      const res = await fetch("/api/artistas/criar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: payload.nome,
+          foto: payload.foto,
+          gravadora: payload.gravadora,
+          telegramId: payload.telegram_id,
+        }),
+      });
+      const json = await res.json();
+      return { ok: !!json.ok, erro: json.erro };
+    } catch {
+      return { ok: false, erro: "Erro na conexão." };
+    }
   },
   async topCharts(): Promise<Record<string, ChartData>> {
     const data = await call<Record<string, ChartData>>({ acao: "top_charts" }, { cache: true });
