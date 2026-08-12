@@ -1,5 +1,6 @@
 import { googleSheetsService } from "../services/googleSheetsService";
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
+import { registrarAuditLog } from "./registroLogController";
 
 export interface CreateSongPayload {
   opcaoChart: string; // "a) Registrar essa música em chart" | "b) Substituir música no chart" | "c) Os comentários desse tópico devem valer para uma música já lançada"
@@ -227,13 +228,11 @@ export async function createSongController(request: Request): Promise<Response> 
 
     // 3. Gravar Audit Log na aba REGISTRO
     try {
-      await googleSheetsService.registrosCharts.appendRow("REGISTRO", [
-        nowStr,
+      await registrarAuditLog({
         nomeJogador,
-        fullTitle,
-        "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-        musicaReferencia || "",
-      ]);
+        titulo: fullTitle,
+        tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+      });
     } catch (err) {
       console.warn("[createSongController] Erro ao gravar no Audit Log REGISTRO:", err);
     }
@@ -353,12 +352,11 @@ export async function createVideoController(request: Request): Promise<Response>
 
     // 2. Audit Log em REGISTRO
     try {
-      await googleSheetsService.registrosCharts.appendRow("REGISTRO", [
-        nowStr,
+      await registrarAuditLog({
         nomeJogador,
-        fullTitle,
-        "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-      ]);
+        titulo: fullTitle,
+        tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+      });
     } catch (err) {
       console.warn("[createVideoController] Erro no audit log:", err);
     }
@@ -819,12 +817,12 @@ export async function substituirAlbumController(request: Request): Promise<Respo
     }
 
     try {
-      await googleSheetsService.registrosCharts.appendRow("REGISTRO", [
-        nowStr,
+      await registrarAuditLog({
         nomeJogador,
-        `(ALBUM) — ${albumFullTitle}`,
-        "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)",
-      ]);
+        titulo: albumFullTitle,
+        tipo: "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)",
+        isAlbum: true,
+      });
     } catch (err) {
       console.warn("[substituirAlbumController] Erro ao gravar Audit Log:", err);
     }
@@ -926,12 +924,12 @@ export async function createAlbumController(request: Request): Promise<Response>
 
     // 4. Gravar Audit Log na planilha de Registros
     try {
-      await googleSheetsService.registrosCharts.appendRow("REGISTRO", [
-        nowStr,
+      await registrarAuditLog({
         nomeJogador,
-        `(ALBUM) — ${albumFullTitle}`,
-        "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)",
-      ]);
+        titulo: albumFullTitle,
+        tipo: "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)",
+        isAlbum: true,
+      });
     } catch (err) {
       console.warn("[createAlbumController] Erro ao gravar Audit Log de Álbum:", err);
     }
