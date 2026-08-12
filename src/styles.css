@@ -158,10 +158,25 @@
     overscroll-behavior: none;
   }
 
+  /* html/body nunca rolam nem sanfonam (bounce do iOS) — só o container
+     interno dentro do app (ver __root.tsx) rola de verdade. Sem isso,
+     elementos "fixed" (top bar, bottom nav) tremem/deslizam durante o
+     arrasto no Safari/iOS, e um gesto horizontal solto arrasta a página
+     inteira como se tivesse zoom. */
   html,
-  body,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   #root {
-    min-height: 100vh;
+    height: 100%;
+  }
+
+  img,
+  video {
+    max-width: 100%;
   }
 }
 
