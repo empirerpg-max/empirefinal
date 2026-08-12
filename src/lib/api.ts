@@ -300,8 +300,18 @@ export const api = {
       api.listarTodos(),
     ]);
     const meusNomes: string[] = Array.isArray(nomesRes?.data) ? nomesRes.data : [];
-    const meusNomesNorm = new Set(meusNomes.map(normalizeNome));
-    return todos.filter((a) => meusNomesNorm.has(normalizeNome(a.nome)));
+    // A aba ARTISTAS é a fonte de verdade de posse — nunca escondemos um
+    // artista por ele não ter (ou não bater o nome) no catálogo legado
+    // (Apps Script). Quando não acha os dados completos lá, mostra um
+    // perfil mínimo só com o nome mesmo assim.
+    const porNomeNorm = new Map(todos.map((a) => [normalizeNome(a.nome), a]));
+    return meusNomes.map(
+      (nome) =>
+        porNomeNorm.get(normalizeNome(nome)) || {
+          ...normalizeArtist({}),
+          nome,
+        },
+    );
   },
   async listarTodos(): Promise<Artist[]> {
     const data = await call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true });
