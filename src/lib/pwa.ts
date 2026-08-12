@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 
-export function registerServiceWorker() {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
-  });
-}
+export const BUILD_ID = __BUILD_ID__;
 
 /**
  * Detecta quando uma nova versão do app foi publicada (o service worker
@@ -35,7 +30,7 @@ export function useServiceWorkerUpdate() {
       });
     };
 
-    navigator.serviceWorker.register("/sw.js").then((reg) => {
+    navigator.serviceWorker.register(`/sw.js?v=${__BUILD_ID__}`).then((reg) => {
       registration = reg;
       if (reg.waiting && navigator.serviceWorker.controller) {
         setWaitingWorker(reg.waiting);

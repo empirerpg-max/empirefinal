@@ -26,6 +26,7 @@ import {
   type PlaylistTrack,
 } from "@/lib/api";
 import { getStoredLogin, setStoredLogin, clearStoredLogin } from "@/components/LoginScreen";
+import { BUILD_ID } from "@/lib/pwa";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/perfil")({
@@ -463,6 +464,10 @@ function Perfil() {
           <span className="font-black uppercase text-xs tracking-widest">Sair</span>
         </button>
       </section>
+
+      <p className="mt-6 text-center text-[10px] font-mono text-muted-foreground/40">
+        build {BUILD_ID}
+      </p>
     </div>
   );
 }
