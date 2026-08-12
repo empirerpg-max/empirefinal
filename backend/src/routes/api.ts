@@ -5,7 +5,7 @@ import {
 } from "../controllers/catalogController";
 import { getUserMeController } from "../controllers/userController";
 import { getNivelController } from "../controllers/nivelController";
-import { debugTvCatalogoController } from "../controllers/debugController";
+import { debugArtistasSheetController } from "../controllers/debugController";
 import {
   createCommentController,
   getCommentsController,
@@ -113,7 +113,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/meus-nomes",
     "/api/user/me",
     "/api/user/nivel",
-    "/api/debug/tv-catalogo",
+    "/api/debug/artistas-sheet",
     "/api/top-playlists",
     "/api/lancamentos",
     "/api/musicas",
@@ -545,8 +545,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       case "/api/user/nivel":
         response = await getNivelController(request);
         break;
-      case "/api/debug/tv-catalogo":
-        response = await debugTvCatalogoController();
+      case "/api/debug/artistas-sheet":
+        response = await debugArtistasSheetController();
         break;
       case "/api/artistas/meus-nomes":
         response = await getMeusArtistasNomesController(request);
