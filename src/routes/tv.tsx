@@ -25,10 +25,26 @@ type Programa = ProgramaTV;
 interface ChatMessage {
   id: string;
   user: string;
+  userId?: string;
+  userPhoto?: string;
   text: string;
   ts: number;
   color: string;
   reply_to?: { id: string; user: string; text: string };
+}
+
+// *negrito* e _itálico_ (estilo Telegram) — renderiza em partes, sem HTML cru.
+function renderFormattedText(text: string) {
+  const parts = text.split(/(\*[^*\n]+\*|_[^_\n]+_)/g);
+  return parts.map((part, i) => {
+    if (part.length > 2 && part.startsWith("*") && part.endsWith("*")) {
+      return <strong key={i}>{part.slice(1, -1)}</strong>;
+    }
+    if (part.length > 2 && part.startsWith("_") && part.endsWith("_")) {
+      return <em key={i}>{part.slice(1, -1)}</em>;
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
 
 type HomeTab = "home" | "arquivo" | "grade";
@@ -505,23 +521,32 @@ function resolveStreamEmbed(url: string | undefined, aoVivo: boolean): string | 
       return null; // canal offline ou rota não-embeddável
     }
 
+    // modestbranding/rel/iv_load_policy reduzem ao máximo a marca do
+    // YouTube (logo grande, sugestões de outros canais) — o player deve
+    // parecer o mesmo independente de qual plataforma serve o vídeo.
+    const YT_PARAMS = "modestbranding=1&rel=0&iv_load_policy=3&playsinline=1";
     if (host === "youtu.be") {
       const id = parsed.pathname.slice(1);
-      return id ? `https://www.youtube.com/embed/${id}` : null;
+      return id ? `https://www.youtube.com/embed/${id}?${YT_PARAMS}` : null;
     }
     if (host.endsWith("youtube.com")) {
       if (parsed.pathname === "/watch") {
         const id = parsed.searchParams.get("v");
-        return id ? `https://www.youtube.com/embed/${id}` : null;
+        return id ? `https://www.youtube.com/embed/${id}?${YT_PARAMS}` : null;
       }
-      if (parsed.pathname.startsWith("/embed/") || parsed.pathname.startsWith("/live/")) return u;
+      if (parsed.pathname.startsWith("/embed/") || parsed.pathname.startsWith("/live/")) {
+        return u.includes("?") ? `${u}&${YT_PARAMS}` : `${u}?${YT_PARAMS}`;
+      }
       return null;
     }
 
     if (host.includes("vimeo.com")) {
-      if (host === "player.vimeo.com") return u;
+      const VIMEO_PARAMS = "title=0&byline=0&portrait=0";
+      if (host === "player.vimeo.com") {
+        return u.includes("?") ? `${u}&${VIMEO_PARAMS}` : `${u}?${VIMEO_PARAMS}`;
+      }
       const id = parsed.pathname.split("/").filter(Boolean).pop();
-      return id && /^\d+$/.test(id) ? `https://player.vimeo.com/video/${id}` : null;
+      return id && /^\d+$/.test(id) ? `https://player.vimeo.com/video/${id}?${VIMEO_PARAMS}` : null;
     }
 
     return u; // assume embeddável
@@ -555,18 +580,38 @@ function GradeFull({ programas, onPlay, loading }: { programas: Programa[]; onPl
 }
 
 function ArquivoFull({ finalizados, loading }: { finalizados: Programa[]; loading: boolean }) {
-  const [chatRows, setChatRows] = useState<Array<{ data: string; hora: string; sala: string; total_msgs: number }>>([]);
+  const [chatByPrograma, setChatByPrograma] = useState<Map<string, number>>(new Map());
   const [loadChat, setLoadChat] = useState(true);
+  const idsKey = useMemo(() => finalizados.map((p) => p.id).join(","), [finalizados]);
+
+  // Total de mensagens por programa direto do chat real (Supabase) — a
+  // aba "Agenda_TV" antiga (listar_arquivo_tv) nunca é mais escrita desde
+  // que o chat virou realtime, então usar ela aqui mostraria sempre 0.
   useEffect(() => {
     let alive = true;
-    api.listarArquivoTV().then((r) => alive && setChatRows(r)).catch(() => {}).finally(() => alive && setLoadChat(false));
+    const ids = finalizados.map((p) => p.id).filter(Boolean);
+    if (ids.length === 0) {
+      setChatByPrograma(new Map());
+      setLoadChat(false);
+      return;
+    }
+    setLoadChat(true);
+    (async () => {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data } = await supabase
+        .from("tv_chat_messages")
+        .select("programa_id")
+        .in("programa_id", ids)
+        .limit(20000);
+      if (!alive) return;
+      const m = new Map<string, number>();
+      for (const r of data || []) m.set(r.programa_id, (m.get(r.programa_id) || 0) + 1);
+      setChatByPrograma(m);
+    })()
+      .catch(() => {})
+      .finally(() => alive && setLoadChat(false));
     return () => { alive = false; };
-  }, []);
-  const chatByPrograma = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of chatRows) m.set(r.sala, r.total_msgs);
-    return m;
-  }, [chatRows]);
+  }, [idsKey]);
 
   if (loading && finalizados.length === 0) return <div className="p-6 text-sm text-muted-foreground">Carregando...</div>;
   if (finalizados.length === 0) return <div className="p-6 text-sm text-muted-foreground italic">Sem transmissões finalizadas.</div>;
@@ -654,8 +699,12 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
   ];
 
   return (
-    <div className="h-full flex flex-col lg:flex-row">
-      <div className="flex-1 flex flex-col min-w-0">
+    <div className="h-full flex flex-col lg:flex-row min-h-0">
+      {/* No mobile isso NÃO pode ser flex-1: o vídeo já tem altura própria
+          (aspect-ratio), então dividir o espaço igualmente com o chat
+          (que precisa do resto da tela pra não cortar o campo de digitar
+          quando o teclado abre) deixava tudo espremido e imprevisível. */}
+      <div className="shrink-0 lg:flex-1 flex flex-col min-w-0">
         <div className="flex items-center gap-3 px-4 h-12 border-b border-border/60 bg-background/90 backdrop-blur shrink-0">
           <button onClick={onBack} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Voltar">
             <ArrowLeft className="size-4" />
@@ -740,6 +789,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const displayName = user?.name || "Anônimo";
+  const myId = user?.id;
 
   // Histórico inicial + subscrição realtime
   useEffect(() => {
@@ -750,7 +800,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
       const { supabase } = await import("@/integrations/supabase/client");
       const { data } = await supabase
         .from("tv_chat_messages")
-        .select("id,user_name,text,reply_to,created_at")
+        .select("id,user_name,user_id,user_photo,text,reply_to,created_at")
         .eq("programa_id", programaId)
         .order("created_at", { ascending: true })
         .limit(300);
@@ -759,6 +809,8 @@ function ChatPanel({ programaId }: { programaId: string }) {
         data.map((r: any) => ({
           id: r.id,
           user: r.user_name,
+          userId: r.user_id || undefined,
+          userPhoto: r.user_photo || undefined,
           text: r.text,
           ts: new Date(r.created_at).getTime(),
           color: colorFor(r.user_name),
@@ -784,6 +836,8 @@ function ChatPanel({ programaId }: { programaId: string }) {
                 {
                   id: r.id,
                   user: r.user_name,
+                  userId: r.user_id || undefined,
+                  userPhoto: r.user_photo || undefined,
                   text: r.text,
                   ts: new Date(r.created_at).getTime(),
                   color: colorFor(r.user_name),
@@ -824,6 +878,8 @@ function ChatPanel({ programaId }: { programaId: string }) {
     const payload = {
       programa_id: programaId,
       user_name: displayName.slice(0, 60),
+      user_id: myId || null,
+      user_photo: user?.photo_url || null,
       text: t.slice(0, 500),
       reply_to: replyTo ? { id: replyTo.id, user: replyTo.user, text: replyTo.text.slice(0, 80) } : null,
     };
@@ -840,6 +896,26 @@ function ChatPanel({ programaId }: { programaId: string }) {
     }
   };
 
+  // Envolve o texto selecionado no campo com o marcador de formatação
+  // (*negrito* / _itálico_) — se nada estiver selecionado, insere o par de
+  // marcadores no cursor pra o jogador digitar entre eles.
+  const wrapSelection = (marker: string) => {
+    const el = inputRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? text.length;
+    const end = el.selectionEnd ?? text.length;
+    const before = text.slice(0, start);
+    const middle = text.slice(start, end);
+    const after = text.slice(end);
+    const next = `${before}${marker}${middle}${marker}${after}`;
+    setText(next);
+    setTimeout(() => {
+      el.focus();
+      const cursor = middle ? start + marker.length + middle.length + marker.length : start + marker.length;
+      el.setSelectionRange(cursor, cursor);
+    }, 0);
+  };
+
   const scrollToMsg = (id: string) => {
     const el = document.getElementById(`tvmsg-${id}`);
     if (el) {
@@ -851,36 +927,64 @@ function ChatPanel({ programaId }: { programaId: string }) {
 
   return (
     <>
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 text-sm">
+      <div ref={scrollerRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-xs text-center px-6">
             Seja o primeiro a comentar.
           </div>
         ) : (
-          messages.map((m) => (
-            <div key={m.id} id={`tvmsg-${m.id}`} className="group leading-snug break-words rounded px-1 py-0.5 -mx-1">
-              {m.reply_to && (
+          messages.map((m) => {
+            const own = myId ? m.userId === myId : m.user === displayName;
+            return (
+              <div
+                key={m.id}
+                id={`tvmsg-${m.id}`}
+                className={`group flex items-end gap-2 rounded-lg px-1 py-0.5 -mx-1 ${own ? "flex-row-reverse" : ""}`}
+              >
+                {!own && (
+                  <div className="size-7 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mb-0.5">
+                    {m.userPhoto ? (
+                      <img src={m.userPhoto} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>
+                    )}
+                  </div>
+                )}
+
+                <div className={`max-w-[78%] flex flex-col ${own ? "items-end" : "items-start"}`}>
+                  {m.reply_to && (
+                    <button
+                      type="button"
+                      onClick={() => scrollToMsg(m.reply_to!.id)}
+                      className={`block w-full text-left mb-1 pl-2 py-1 border-l-2 border-primary/60 text-[11px] rounded-r bg-black/10 hover:bg-black/20 transition-colors ${own ? "text-right border-l-0 border-r-2 pr-2 pl-0" : ""}`}
+                    >
+                      <span className="font-semibold text-primary/80">{m.reply_to.user}</span>
+                      <span className="text-muted-foreground">: {m.reply_to.text}</span>
+                    </button>
+                  )}
+                  <div
+                    className={`relative rounded-2xl px-3 py-1.5 leading-snug break-words ${
+                      own
+                        ? "bg-primary text-primary-foreground rounded-br-sm"
+                        : "bg-muted text-foreground rounded-bl-sm"
+                    }`}
+                  >
+                    {!own && <span className={`block text-[11px] font-bold ${m.color}`}>{m.user}</span>}
+                    <span>{renderFormattedText(m.text)}</span>
+                  </div>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => scrollToMsg(m.reply_to!.id)}
-                  className="block w-full text-left mb-0.5 pl-2 border-l-2 border-primary/50 text-[11px] text-muted-foreground hover:bg-muted/50 rounded-r"
+                  onClick={() => startReply(m)}
+                  className="mb-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition shrink-0"
+                  aria-label="Responder"
                 >
-                  <span className="font-semibold text-primary/80">{m.reply_to.user}</span>: {m.reply_to.text}
+                  <Reply className="inline size-3.5" />
                 </button>
-              )}
-              <span className={`font-bold ${m.color}`}>{m.user}</span>
-              <span className="text-muted-foreground">: </span>
-              <span className="text-foreground">{m.text}</span>
-              <button
-                type="button"
-                onClick={() => startReply(m)}
-                className="ml-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition"
-                aria-label="Responder"
-              >
-                <Reply className="inline size-3" />
-              </button>
-            </div>
-          ))
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -899,20 +1003,42 @@ function ChatPanel({ programaId }: { programaId: string }) {
 
       <form
         onSubmit={(e) => { e.preventDefault(); send(); }}
-        className="flex items-center gap-2 px-3 py-2 border-t border-border bg-background"
+        className="flex items-center gap-1.5 px-3 py-2 border-t border-border bg-background"
       >
+        <button
+          type="button"
+          onClick={() => wrapSelection("*")}
+          title="Negrito (*texto*)"
+          className="size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted font-black text-sm grid place-items-center"
+        >
+          B
+        </button>
+        <button
+          type="button"
+          onClick={() => wrapSelection("_")}
+          title="Itálico (_texto_)"
+          className="size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted italic font-bold text-sm grid place-items-center"
+        >
+          I
+        </button>
         <input
           ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onFocus={(e) => {
+            // No mobile o teclado some com boa parte da tela e pode cobrir
+            // o campo — espera a animação do teclado e garante que ele
+            // fique visível acima dele.
+            setTimeout(() => e.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" }), 250);
+          }}
           placeholder={replyTo ? `Responder a ${replyTo.user}...` : "Mandar mensagem"}
           maxLength={300}
-          className="flex-1 h-9 px-3 rounded-md bg-muted text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+          className="flex-1 h-9 px-3 rounded-md bg-muted text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground min-w-0"
         />
         <button
           type="submit"
           disabled={!text.trim()}
-          className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-1 disabled:opacity-40"
+          className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-1 disabled:opacity-40 shrink-0"
         >
           <Send className="size-4" />
         </button>

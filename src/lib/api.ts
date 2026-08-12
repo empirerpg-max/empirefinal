@@ -237,6 +237,19 @@ export function invalidateCache() {
 }
 
 
+// Compara nomes ignorando acento/maiúscula — mesma lógica do
+// normalizeComparison do backend. Sem isso, "Anníbal Páris" vindo da aba
+// ARTISTAS (fonte de verdade do vínculo) podia não bater com a grafia
+// vinda do catálogo geral (Apps Script) e sumir da lista "meus artistas"
+// mesmo estando corretamente vinculado.
+function normalizeNome(v: string): string {
+  return (v || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function normalizeArtist(a: Record<string, unknown>): Artist {
   return {
     nome: String(a.nome || "").trim(),
@@ -287,8 +300,18 @@ export const api = {
       api.listarTodos(),
     ]);
     const meusNomes: string[] = Array.isArray(nomesRes?.data) ? nomesRes.data : [];
-    const meusNomesNorm = new Set(meusNomes.map((n) => n.trim().toLowerCase()));
-    return todos.filter((a) => meusNomesNorm.has(a.nome.trim().toLowerCase()));
+    // A aba ARTISTAS é a fonte de verdade de posse — nunca escondemos um
+    // artista por ele não ter (ou não bater o nome) no catálogo legado
+    // (Apps Script). Quando não acha os dados completos lá, mostra um
+    // perfil mínimo só com o nome mesmo assim.
+    const porNomeNorm = new Map(todos.map((a) => [normalizeNome(a.nome), a]));
+    return meusNomes.map(
+      (nome) =>
+        porNomeNorm.get(normalizeNome(nome)) || {
+          ...normalizeArtist({}),
+          nome,
+        },
+    );
   },
   async listarTodos(): Promise<Artist[]> {
     const data = await call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true });

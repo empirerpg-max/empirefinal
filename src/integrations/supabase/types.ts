@@ -21,7 +21,9 @@ export type Database = {
           programa_id: string
           reply_to: Json | null
           text: string
+          user_id: string | null
           user_name: string
+          user_photo: string | null
         }
         Insert: {
           created_at?: string
@@ -29,7 +31,9 @@ export type Database = {
           programa_id: string
           reply_to?: Json | null
           text: string
+          user_id?: string | null
           user_name: string
+          user_photo?: string | null
         }
         Update: {
           created_at?: string
@@ -37,7 +41,9 @@ export type Database = {
           programa_id?: string
           reply_to?: Json | null
           text?: string
+          user_id?: string | null
           user_name?: string
+          user_photo?: string | null
         }
         Relationships: []
       }
