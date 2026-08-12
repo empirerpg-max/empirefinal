@@ -15,7 +15,15 @@ import {
   ListMusic,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { api, driveImg, fmtEC, type Artist, type PlaylistPayload, type PlaylistTrack } from "@/lib/api";
+import {
+  api,
+  driveImg,
+  fmtEC,
+  type Artist,
+  type NivelJogador,
+  type PlaylistPayload,
+  type PlaylistTrack,
+} from "@/lib/api";
 import { getStoredLogin, setStoredLogin, clearStoredLogin } from "@/components/LoginScreen";
 import { toast } from "sonner";
 
@@ -37,6 +45,7 @@ function Perfil() {
   const [libTab, setLibTab] = useState<"salvos" | "playlists">("salvos");
   const [salvos, setSalvos] = useState<LoadState<PlaylistTrack[]>>({ status: "loading" });
   const [minhasPlaylists, setMinhasPlaylists] = useState<LoadState<PlaylistPayload[]>>({ status: "loading" });
+  const [nivel, setNivel] = useState<NivelJogador | null>(null);
 
   const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
 
@@ -50,6 +59,11 @@ function Perfil() {
       .then((d) => setMyArtists({ status: "ok", data: d }))
       .catch(() => setMyArtists({ status: "error" }));
   }, [user]);
+
+  useEffect(() => {
+    if (!login?.usuario && !tgId) return;
+    api.meuNivel({ telegramId: tgId || undefined, usuario: login?.usuario }).then(setNivel);
+  }, [tgId, login?.usuario]);
 
   useEffect(() => {
     if (!tgId) return;
@@ -209,6 +223,39 @@ function Perfil() {
                 {login.tipoPerfil}
               </span>
             )}
+
+            {nivel?.nivelAtual && (
+              <div className="mt-4 w-full max-w-xs flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl p-3">
+                {nivel.nivelAtual.badge ? (
+                  <img
+                    src={driveImg(nivel.nivelAtual.badge, 96)}
+                    alt={nivel.nivelAtual.nome}
+                    referrerPolicy="no-referrer"
+                    className="size-12 rounded-full object-cover border border-primary/30 flex-shrink-0"
+                  />
+                ) : (
+                  <Crown className="size-8 text-primary flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider truncate">
+                    Nível {nivel.nivelAtual.nivel} · {nivel.nivelAtual.fase}
+                  </p>
+                  <p className="text-sm font-black uppercase truncate">{nivel.nivelAtual.nome}</p>
+                  <div className="mt-1.5 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${Math.round(nivel.progresso * 100)}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-[10px] font-medium text-muted-foreground">
+                    {nivel.proximoNivel
+                      ? `${nivel.prestigioAtual} / ${nivel.proximoNivel.prestigio} prestígio pro próximo nível`
+                      : `${nivel.prestigioAtual} prestígio · nível máximo`}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {login?.usuario && (
               <button
                 onClick={startEditing}

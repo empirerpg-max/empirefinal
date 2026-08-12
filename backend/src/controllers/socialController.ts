@@ -1,4 +1,5 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import { somarPrestigio } from "../services/prestigioService";
 
 // Dados sociais (posts, perfis, comentários e news) vivem na planilha
 // "usuarios" (a mesma de Usuários/ARTISTAS), em abas próprias: SOCIAL_POSTS,
@@ -122,6 +123,8 @@ export async function createSocialPostController(request: Request): Promise<Resp
     new Date().toISOString(),
     body.tgId || "",
   ]);
+
+  somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "post_social").catch(() => {});
 
   return jsonResponse({ ok: true, id });
 }
@@ -248,6 +251,8 @@ export async function comentarSocialPostController(request: Request): Promise<Re
     analytics.comments += 1;
     await googleSheetsService.usuarios.updateValues(SHEETS.posts, `G${rowIndex + 1}`, [[JSON.stringify(analytics)]]);
   }
+
+  somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "comentario").catch(() => {});
 
   return jsonResponse({ ok: true });
 }

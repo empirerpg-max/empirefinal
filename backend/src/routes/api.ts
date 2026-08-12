@@ -4,6 +4,7 @@ import {
   getTopPlaylistsController,
 } from "../controllers/catalogController";
 import { getUserMeController } from "../controllers/userController";
+import { getNivelController } from "../controllers/nivelController";
 import {
   createCommentController,
   getCommentsController,
@@ -110,6 +111,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/auth/perfil",
     "/api/artistas/meus-nomes",
     "/api/user/me",
+    "/api/user/nivel",
     "/api/top-playlists",
     "/api/lancamentos",
     "/api/musicas",
@@ -537,6 +539,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     switch (url.pathname) {
       case "/api/user/me":
         response = await getUserMeController(request);
+        break;
+      case "/api/user/nivel":
+        response = await getNivelController(request);
         break;
       case "/api/artistas/meus-nomes":
         response = await getMeusArtistasNomesController(request);
