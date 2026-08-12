@@ -76,6 +76,30 @@ export function extractDriveFileId(url: string | undefined): string | null {
   return match ? match[0] : null;
 }
 
+// Carrega a IFrame API do YouTube uma única vez (mesmo com vários
+// componentes montando/desmontando) — resolve assim que window.YT.Player
+// existir.
+let youtubeApiPromise: Promise<void> | null = null;
+function loadYouTubeIframeApi(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if ((window as any).YT?.Player) return Promise.resolve();
+  if (youtubeApiPromise) return youtubeApiPromise;
+
+  youtubeApiPromise = new Promise((resolve) => {
+    const prevCallback = (window as any).onYouTubeIframeAPIReady;
+    (window as any).onYouTubeIframeAPIReady = () => {
+      prevCallback?.();
+      resolve();
+    };
+    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
+    }
+  });
+  return youtubeApiPromise;
+}
+
 export function MusicPlayer({
   currentTrack,
   playlist = [],
@@ -83,6 +107,8 @@ export function MusicPlayer({
   onTrackChange,
 }: MusicPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ytContainerRef = useRef<HTMLDivElement | null>(null);
+  const ytPlayerRef = useRef<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -182,7 +208,92 @@ export function MusicPlayer({
     }
   }, [effectiveAudioSrc, isYtAudio]);
 
+  // Mantém a ref sempre com a versão mais recente de playNext, pra o
+  // player do YouTube (criado uma vez por faixa) poder chamar "próxima"
+  // no fim do vídeo sem precisar recriar o player a cada render.
+  const playNextRef = useRef<() => void>(() => {});
+
+  // Cria/reaproveita o player do YouTube via IFrame API — controlado
+  // pelos mesmos botões/barra de progresso do resto do player, pra tocar
+  // e mostrar o tempo exatamente igual às faixas do Drive.
+  useEffect(() => {
+    if (!isYtAudio || !ytAudioId) {
+      if (ytPlayerRef.current) {
+        ytPlayerRef.current.destroy?.();
+        ytPlayerRef.current = null;
+      }
+      return;
+    }
+    let cancelled = false;
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+
+    loadYouTubeIframeApi().then(() => {
+      if (cancelled || !ytContainerRef.current) return;
+      const YT = (window as any).YT;
+      if (ytPlayerRef.current?.loadVideoById) {
+        ytPlayerRef.current.loadVideoById(ytAudioId);
+        return;
+      }
+      ytPlayerRef.current = new YT.Player(ytContainerRef.current, {
+        videoId: ytAudioId,
+        playerVars: { autoplay: 1, controls: 0, playsinline: 1 },
+        events: {
+          onReady: (e: any) => {
+            if (cancelled) return;
+            e.target.playVideo();
+            setDuration(e.target.getDuration() || 0);
+          },
+          onStateChange: (e: any) => {
+            if (e.data === YT.PlayerState.PLAYING) setIsPlaying(true);
+            else if (e.data === YT.PlayerState.PAUSED) setIsPlaying(false);
+            else if (e.data === YT.PlayerState.ENDED) {
+              setIsPlaying(false);
+              playNextRef.current();
+            }
+          },
+        },
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isYtAudio, ytAudioId]);
+
+  // Destrói o player do YouTube quando o componente desmonta de vez.
+  useEffect(() => {
+    return () => {
+      ytPlayerRef.current?.destroy?.();
+      ytPlayerRef.current = null;
+    };
+  }, []);
+
+  // Enquanto uma faixa do YouTube está tocando, a IFrame API não dispara
+  // eventos contínuos de tempo (como o "timeupdate" do <audio>) — precisa
+  // perguntar o tempo atual de tempos em tempos pra barra de progresso
+  // andar igual à das faixas do Drive.
+  useEffect(() => {
+    if (!isYtAudio || !isPlaying) return;
+    const id = setInterval(() => {
+      const p = ytPlayerRef.current;
+      if (p?.getCurrentTime) {
+        setCurrentTime(p.getCurrentTime());
+        setDuration(p.getDuration() || 0);
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, [isYtAudio, isPlaying]);
+
   const togglePlay = () => {
+    if (isYtAudio) {
+      const p = ytPlayerRef.current;
+      if (!p) return;
+      if (isPlaying) p.pauseVideo?.();
+      else p.playVideo?.();
+      return;
+    }
     if (!audioRef.current) return;
     if (isPlaying) {
       audioRef.current.pause();
@@ -204,7 +315,9 @@ export function MusicPlayer({
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
     setCurrentTime(time);
-    if (audioRef.current) {
+    if (isYtAudio) {
+      ytPlayerRef.current?.seekTo?.(time, true);
+    } else if (audioRef.current) {
       audioRef.current.currentTime = time;
     }
   };
@@ -220,6 +333,10 @@ export function MusicPlayer({
       onTrackChange?.(playlist[0]);
     }
   };
+
+  useEffect(() => {
+    playNextRef.current = playNext;
+  });
 
   const playPrev = () => {
     if (!currentTrack || playlist.length === 0) return;
@@ -247,12 +364,12 @@ export function MusicPlayer({
   return (
     <>
       {isYtAudio && ytAudioId ? (
-        <iframe
-          src={`https://www.youtube-nocookie.com/embed/${ytAudioId}?autoplay=1&enablejsapi=1`}
-          title={currentTrack.titulo}
+        // A IFrame API substitui essa div pelo iframe dela mesma — fica
+        // fora de tela; o play/pause/progresso reais vêm da API (efeitos
+        // acima), controlados pelos mesmos botões do resto do player.
+        <div
+          ref={ytContainerRef}
           className="w-1 h-1 opacity-0 pointer-events-none fixed bottom-0 right-0 z-[-1]"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          referrerPolicy="strict-origin-when-cross-origin"
         />
       ) : (
         <audio
