@@ -417,6 +417,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function BottomNav() {
   const { pathname } = useLocation();
   const perfilFoto = getStoredLogin()?.fotoPerfil || "";
+  const [fotoFalhou, setFotoFalhou] = useState(false);
   const items = [
     { to: "/", label: "Início", icon: Home },
     { to: "/empire-play", label: "Catálogo", icon: PlayCircle },
@@ -457,11 +458,12 @@ function BottomNav() {
                     : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 }`}
               >
-                {it.to === "/perfil" && perfilFoto ? (
+                {it.to === "/perfil" && perfilFoto && !fotoFalhou ? (
                   <img
                     src={driveImg(perfilFoto, 60)}
                     alt=""
                     referrerPolicy="no-referrer"
+                    onError={() => setFotoFalhou(true)}
                     className={`size-[18px] rounded-full object-cover ${active ? "ring-2 ring-primary-foreground/80" : "ring-1 ring-white/20"}`}
                   />
                 ) : (

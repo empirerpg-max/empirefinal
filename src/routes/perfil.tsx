@@ -38,6 +38,7 @@ type LoadState<T> = { status: "loading" } | { status: "error" } | { status: "ok"
 function Perfil() {
   const { user } = useTelegramUser();
   const [login, setLogin] = useState(getStoredLogin());
+  const [fotoFalhou, setFotoFalhou] = useState(false);
   const [myArtists, setMyArtists] = useState<LoadState<Artist[]>>({ status: "loading" });
   const [isEditing, setIsEditing] = useState(false);
   const [editNome, setEditNome] = useState("");
@@ -206,12 +207,13 @@ function Perfil() {
         ) : (
           <>
             <div className="size-24 rounded-full bg-primary/20 border-2 border-primary/30 grid place-items-center overflow-hidden mb-4">
-              {login?.fotoPerfil || user?.photo_url ? (
+              {(login?.fotoPerfil || user?.photo_url) && !fotoFalhou ? (
                 <img
                   src={driveImg(login?.fotoPerfil || user?.photo_url || "", 200)}
                   className="size-24 rounded-full object-cover"
                   alt={login?.nome || user?.name || "Foto do jogador"}
                   referrerPolicy="no-referrer"
+                  onError={() => setFotoFalhou(true)}
                 />
               ) : (
                 <User className="size-10 text-primary" />

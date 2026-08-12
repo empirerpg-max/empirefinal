@@ -19,6 +19,7 @@ export function EmpirePlayHeader() {
   const [profile, setProfile] = useState<EmpireUserProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [nivel, setNivel] = useState<NivelJogador | null>(null);
+  const [fotoFalhou, setFotoFalhou] = useState(false);
 
   const fetchProfile = async () => {
     if (!user || user.id === "guest") return;
@@ -73,11 +74,12 @@ export function EmpirePlayHeader() {
           <div className="relative flex-shrink-0">
             <div className="size-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-red-600 p-0.5 shadow-xl">
               <div className="size-full rounded-[14px] bg-neutral-950 overflow-hidden flex items-center justify-center">
-                {displayPhoto ? (
+                {displayPhoto && !fotoFalhou ? (
                   <img
                     src={driveImg(displayPhoto, 200)}
                     alt={displayName}
                     referrerPolicy="no-referrer"
+                    onError={() => setFotoFalhou(true)}
                     className="size-full object-cover"
                   />
                 ) : (
