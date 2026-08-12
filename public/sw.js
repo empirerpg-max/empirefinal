@@ -1,5 +1,8 @@
 const CACHE = "empire-shell-v1";
-const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+// "/" não entra mais aqui — navegação nunca serve HTML cacheado (ver
+// comentário no listener de "fetch"), então pré-cachear a home só ocuparia
+// espaço à toa.
+const SHELL = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
@@ -29,8 +32,16 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
+    // Esse app faz SSR por rota (HTML diferente pra cada URL) — NUNCA cair
+    // pro HTML cacheado de "/" quando outra rota falha ao buscar. Fazer
+    // isso mostra a Home por baixo do capô pra qualquer outra tela sempre
+    // que a rede engasgar (comum logo no "cold start" de um PWA recém
+    // instalado no iOS), parecendo que "só o Início funciona". Uma
+    // tentativa de retry cobre esse soluço passageiro; se seguir falhando,
+    // deixa o erro de rede real aparecer — nunca substitui pelo conteúdo
+    // errado.
     event.respondWith(
-      fetch(request).catch(() => caches.match("/").then((res) => res || Response.error()))
+      fetch(request).catch(() => fetch(request))
     );
     return;
   }
