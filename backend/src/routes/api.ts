@@ -49,6 +49,7 @@ import {
   investirPlaylistController,
 } from "../controllers/playlistsInvestimentoController";
 import { listTvChatGifsController } from "../controllers/tvChatGifsController";
+import { debugGamificacaoController } from "../controllers/debugController";
 import {
   getSocialPostsController,
   createSocialPostController,
@@ -154,6 +155,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/perfis",
     "/api/social/news",
     "/api/empire-tv/gifs",
+    "/api/debug/gamificacao",
   ]);
 
   if (
@@ -468,6 +470,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await investirPlaylistController(request);
   } else if (url.pathname === "/api/empire-tv/gifs") {
     response = await listTvChatGifsController();
+  } else if (url.pathname === "/api/debug/gamificacao") {
+    response = await debugGamificacaoController();
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"
