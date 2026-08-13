@@ -1,0 +1,12 @@
+name: Debug Once
+on:
+  workflow_dispatch: {}
+jobs:
+  curl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl Kick API directly
+        run: |
+          curl -sS -D - "https://kick.com/api/v2/channels/empiretvoficial" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" \
+            -H "Accept: application/json" | head -c 3000

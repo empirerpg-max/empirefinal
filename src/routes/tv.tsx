@@ -8,6 +8,29 @@ import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
 
 
+// A altura da página (html/body) agora fica travada (ver __root.tsx — trava
+// o scroll do body pro bottom nav parar de tremer no iOS). Isso tirou do
+// navegador o truque padrão de "rolar a página pra desviar do teclado" ao
+// focar um input — sem ele, o teclado mobile cobria o vídeo/chat da Empire
+// TV em vez de empurrar o layout. visualViewport.height já exclui a área do
+// teclado, então usamos ela direto como altura real dessa tela.
+function useVisualViewportHeight(): number | undefined {
+  const [height, setHeight] = useState<number | undefined>(() =>
+    typeof window !== "undefined" ? window.visualViewport?.height ?? window.innerHeight : undefined,
+  );
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setHeight(vv.height);
+    update();
+    vv.addEventListener("resize", update);
+    return () => vv.removeEventListener("resize", update);
+  }, []);
+
+  return height;
+}
+
 export const Route = createFileRoute("/tv")({
   head: () => ({
     meta: [
@@ -706,8 +729,13 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
     { id: "sobre", label: "Sobre", icon: Info },
   ];
 
+  const viewportHeight = useVisualViewportHeight();
+
   return (
-    <div className="h-full flex flex-col lg:flex-row min-h-0">
+    <div
+      className="flex flex-col lg:flex-row min-h-0 lg:h-full"
+      style={viewportHeight ? { height: viewportHeight } : undefined}
+    >
       {/* No mobile isso NÃO pode ser flex-1: o vídeo já tem altura própria
           (aspect-ratio), então dividir o espaço igualmente com o chat
           (que precisa do resto da tela pra não cortar o campo de digitar
