@@ -8,42 +8,6 @@ import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
 
 
-// A altura da página (html/body) agora fica travada (ver __root.tsx — trava
-// o scroll do body pro bottom nav parar de tremer no iOS). Isso tirou do
-// navegador o truque padrão de "rolar a página pra desviar do teclado" ao
-// focar um input. Pior: esse container é `position: fixed`, e no iOS Safari
-// elementos fixed ficam presos ao viewport de LAYOUT (o tamanho de antes do
-// teclado abrir), não ao viewport VISUAL (o que realmente dá pra ver) — o
-// elemento simplesmente não encolhe nem se move sozinho, então o teclado
-// cobre a parte de baixo por cima dele. `visualViewport.height` e
-// `.offsetTop` descrevem a área realmente visível; aplicamos os dois no
-// container inteiro (altura + deslocamento) pra ele seguir o viewport de
-// verdade em vez de ficar fixo no lugar errado.
-function useVisualViewport(): { height: number | undefined; offsetTop: number } {
-  const [state, setState] = useState<{ height: number | undefined; offsetTop: number }>(() => ({
-    height: typeof window !== "undefined" ? window.visualViewport?.height ?? window.innerHeight : undefined,
-    offsetTop: 0,
-  }));
-
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    // Só "resize" (abrir/fechar teclado) — "scroll" dispara a qualquer toque
-    // ou rolagem mínima e estava causando re-render em cascata a cada
-    // interação (tela "se desorganizando" ao clicar). offsetTop fica fixo em
-    // 0: sacrifica um pixel-perfect no deslocamento vertical em troca de uma
-    // tela estável, o que importa muito mais aqui.
-    const update = () => {
-      setState((prev) => (prev.height === vv.height ? prev : { height: vv.height, offsetTop: 0 }));
-    };
-    update();
-    vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
-  }, []);
-
-  return state;
-}
-
 export const Route = createFileRoute("/tv")({
   head: () => ({
     meta: [
@@ -173,18 +137,11 @@ function TvPage() {
     }
   }, [programas, watching]);
 
-  // Só precisa seguir o viewport visual (altura + deslocamento) quando o
-  // chat (com input de texto) está na tela — é isso que o teclado afeta.
-  const { height: vvHeight, offsetTop: vvOffsetTop } = useVisualViewport();
-  const keyboardAwareStyle =
-    watching && vvHeight ? { top: vvOffsetTop, height: vvHeight, bottom: "auto" } : undefined;
-
   return (
     <div
       className={`fixed inset-0 bg-background text-foreground overflow-hidden transition-all ${
         watching ? "z-[70]" : "top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(4rem+env(safe-area-inset-bottom))]"
       }`}
-      style={keyboardAwareStyle}
     >
       {watching ? (
         <WatchView programa={watching} onBack={() => setWatching(null)} />
