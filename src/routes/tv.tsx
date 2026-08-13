@@ -543,9 +543,16 @@ function resolveStreamEmbed(url: string | undefined, aoVivo: boolean): string | 
 
     if (host === "player.kick.com") return u;
     if (host === "kick.com") {
+      // A checagem de "ao vivo" via API da Kick é bloqueada por proteção
+      // anti-bot server-side (confirmado: HTTP 403 "Request blocked by
+      // security policy") — não dá pra confiar nela pra decidir se embeda.
+      // Sempre embeda o canal quando a URL é válida; o próprio player da
+      // Kick mostra "offline" quando não tiver transmissão, então isso
+      // nunca piora a experiência, só deixa de depender de uma checagem
+      // que está bloqueada.
       const seg = parsed.pathname.split("/").filter(Boolean);
-      if (seg.length === 1 && aoVivo) return `https://player.kick.com/${seg[0]}`;
-      return null; // canal offline ou rota não-embeddável
+      if (seg.length === 1) return `https://player.kick.com/${seg[0]}`;
+      return null; // rota não-embeddável (ex: /video/..., /clips/...)
     }
 
     // modestbranding/rel/iv_load_policy reduzem ao máximo a marca do
