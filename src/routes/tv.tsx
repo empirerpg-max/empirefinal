@@ -22,20 +22,23 @@ import { getStoredLogin } from "@/components/LoginScreen";
 function useVisualViewport(): { height: number | undefined; offsetTop: number } {
   const [state, setState] = useState<{ height: number | undefined; offsetTop: number }>(() => ({
     height: typeof window !== "undefined" ? window.visualViewport?.height ?? window.innerHeight : undefined,
-    offsetTop: typeof window !== "undefined" ? window.visualViewport?.offsetTop ?? 0 : 0,
+    offsetTop: 0,
   }));
 
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const update = () => setState({ height: vv.height, offsetTop: vv.offsetTop });
+    // Só "resize" (abrir/fechar teclado) — "scroll" dispara a qualquer toque
+    // ou rolagem mínima e estava causando re-render em cascata a cada
+    // interação (tela "se desorganizando" ao clicar). offsetTop fica fixo em
+    // 0: sacrifica um pixel-perfect no deslocamento vertical em troca de uma
+    // tela estável, o que importa muito mais aqui.
+    const update = () => {
+      setState((prev) => (prev.height === vv.height ? prev : { height: vv.height, offsetTop: 0 }));
+    };
     update();
     vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
+    return () => vv.removeEventListener("resize", update);
   }, []);
 
   return state;
@@ -567,8 +570,9 @@ function resolveStreamEmbed(url: string | undefined, aoVivo: boolean): string | 
       // Kick mostra "offline" quando não tiver transmissão, então isso
       // nunca piora a experiência, só deixa de depender de uma checagem
       // que está bloqueada.
+      // muted=false: sem isso o player da Kick abre mudo por padrão.
       const seg = parsed.pathname.split("/").filter(Boolean);
-      if (seg.length === 1) return `https://player.kick.com/${seg[0]}`;
+      if (seg.length === 1) return `https://player.kick.com/${seg[0]}?autoplay=true&muted=false`;
       return null; // rota não-embeddável (ex: /video/..., /clips/...)
     }
 
