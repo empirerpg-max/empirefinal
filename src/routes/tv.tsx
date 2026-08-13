@@ -11,24 +11,34 @@ import { getStoredLogin } from "@/components/LoginScreen";
 // A altura da página (html/body) agora fica travada (ver __root.tsx — trava
 // o scroll do body pro bottom nav parar de tremer no iOS). Isso tirou do
 // navegador o truque padrão de "rolar a página pra desviar do teclado" ao
-// focar um input — sem ele, o teclado mobile cobria o vídeo/chat da Empire
-// TV em vez de empurrar o layout. visualViewport.height já exclui a área do
-// teclado, então usamos ela direto como altura real dessa tela.
-function useVisualViewportHeight(): number | undefined {
-  const [height, setHeight] = useState<number | undefined>(() =>
-    typeof window !== "undefined" ? window.visualViewport?.height ?? window.innerHeight : undefined,
-  );
+// focar um input. Pior: esse container é `position: fixed`, e no iOS Safari
+// elementos fixed ficam presos ao viewport de LAYOUT (o tamanho de antes do
+// teclado abrir), não ao viewport VISUAL (o que realmente dá pra ver) — o
+// elemento simplesmente não encolhe nem se move sozinho, então o teclado
+// cobre a parte de baixo por cima dele. `visualViewport.height` e
+// `.offsetTop` descrevem a área realmente visível; aplicamos os dois no
+// container inteiro (altura + deslocamento) pra ele seguir o viewport de
+// verdade em vez de ficar fixo no lugar errado.
+function useVisualViewport(): { height: number | undefined; offsetTop: number } {
+  const [state, setState] = useState<{ height: number | undefined; offsetTop: number }>(() => ({
+    height: typeof window !== "undefined" ? window.visualViewport?.height ?? window.innerHeight : undefined,
+    offsetTop: typeof window !== "undefined" ? window.visualViewport?.offsetTop ?? 0 : 0,
+  }));
 
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const update = () => setHeight(vv.height);
+    const update = () => setState({ height: vv.height, offsetTop: vv.offsetTop });
     update();
     vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
   }, []);
 
-  return height;
+  return state;
 }
 
 export const Route = createFileRoute("/tv")({
@@ -160,11 +170,18 @@ function TvPage() {
     }
   }, [programas, watching]);
 
+  // Só precisa seguir o viewport visual (altura + deslocamento) quando o
+  // chat (com input de texto) está na tela — é isso que o teclado afeta.
+  const { height: vvHeight, offsetTop: vvOffsetTop } = useVisualViewport();
+  const keyboardAwareStyle =
+    watching && vvHeight ? { top: vvOffsetTop, height: vvHeight, bottom: "auto" } : undefined;
+
   return (
     <div
       className={`fixed inset-0 bg-background text-foreground overflow-hidden transition-all ${
         watching ? "z-[70]" : "top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(4rem+env(safe-area-inset-bottom))]"
       }`}
+      style={keyboardAwareStyle}
     >
       {watching ? (
         <WatchView programa={watching} onBack={() => setWatching(null)} />
@@ -736,13 +753,8 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
     { id: "sobre", label: "Sobre", icon: Info },
   ];
 
-  const viewportHeight = useVisualViewportHeight();
-
   return (
-    <div
-      className="flex flex-col lg:flex-row min-h-0 lg:h-full"
-      style={viewportHeight ? { height: viewportHeight } : undefined}
-    >
+    <div className="h-full flex flex-col lg:flex-row min-h-0">
       {/* No mobile isso NÃO pode ser flex-1: o vídeo já tem altura própria
           (aspect-ratio), então dividir o espaço igualmente com o chat
           (que precisa do resto da tela pra não cortar o campo de digitar
