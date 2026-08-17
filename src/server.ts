@@ -368,6 +368,19 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // TEMPORÁRIO — diagnóstico do 502 no /api/media/image (fotos/badges
+    // quebrados). Só tenta pegar o token OAuth do Drive e devolve
+    // sucesso/erro; não expõe nenhum segredo. Remover depois de resolvido.
+    if (url.pathname === "/api/debug/drive-oauth" && request.method === "GET") {
+      try {
+        const { getDriveOAuthAccessToken } = await import("../backend/src/google/service-account");
+        const token = await getDriveOAuthAccessToken();
+        return Response.json({ ok: true, tokenPrefix: token.slice(0, 8) });
+      } catch (err) {
+        return Response.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
