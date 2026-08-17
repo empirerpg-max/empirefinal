@@ -1,9 +1,4 @@
-import {
-  googleSheetsService,
-  normalizeText,
-  normalizeComparison,
-  ensureSheetTab,
-} from "../services/googleSheetsService";
+import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 
 const PROGRAMACAO_SHEET = "Programacao_RPG";
 const PRESENCA_SHEET = "Presenca_TV";
@@ -464,7 +459,9 @@ export async function processarParticipacaoTV(): Promise<{
   transmissoesProcessadas: number;
   registrosGravados: number;
 }> {
-  await ensureSheetTab("agendaTV", PROCESSADO_SHEET);
+  // A conta de serviço não tem permissão pra criar abas novas na planilha
+  // Agenda_TV (só editar conteúdo de abas já existentes) — a aba
+  // TV_Participacao_Processada precisa já existir, criada manualmente.
   const processadoRows = await googleSheetsService.agendaTV.readValues(PROCESSADO_SHEET).catch(() => []);
   if (processadoRows.length === 0) {
     await googleSheetsService.agendaTV.appendRow(PROCESSADO_SHEET, ["Data", "Programa", "ProcessadoEm"]);
