@@ -161,6 +161,27 @@ export async function listSheetTabs(spreadsheetKeyOrId: SpreadsheetKey | string)
   }));
 }
 
+// Cria uma aba nova numa planilha, se ainda não existir (idempotente —
+// usado pra abas auxiliares de importação em lote).
+export async function ensureSheetTab(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+): Promise<void> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const tabs = await listSheetTabs(spreadsheetId);
+  if (tabs.some((t) => t.title === sheetName)) return;
+  await sheetsRequest(
+    `/${spreadsheetId}:batchUpdate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: sheetName } } }],
+      }),
+    },
+    [SHEETS_READWRITE_SCOPE],
+  );
+}
+
 export async function readValues(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
@@ -288,6 +309,26 @@ interface GoogleSheetsAppendResponse {
   updates?: {
     updatedRange?: string;
   };
+}
+
+// Anexa várias linhas de uma vez (uma chamada só à API) — usado por
+// importações em lote, onde appendRow linha-a-linha seria lento demais.
+export async function appendRows(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  rows: GoogleSheetMatrix,
+  range = "A:ZZ",
+): Promise<void> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
+  await sheetsRequest(
+    `/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: "POST",
+      body: JSON.stringify({ majorDimension: "ROWS", values: rows }),
+    },
+    [SHEETS_READWRITE_SCOPE],
+  );
 }
 
 function sleep(ms: number): Promise<void> {
