@@ -386,23 +386,20 @@ export default {
     }
 
     if (url.pathname === "/api/debug/testa-append-processado" && request.method === "GET") {
-      const { googleSheetsService, listSheetTabs } = await import("../backend/src/services/googleSheetsService");
-      const tabs = await listSheetTabs("agendaTV");
-      const existe = tabs.some((t) => t.title === "TV_Participacao_Processada");
-      let appendResult: number | null | string = null;
-      try {
-        appendResult = await googleSheetsService.agendaTV.appendRow("TV_Participacao_Processada", [
-          "TESTE",
-          "TESTE",
-          new Date().toISOString(),
-        ]);
-      } catch (e: any) {
-        appendResult = `throw: ${e.message}`;
-      }
-      const rowsDepois = await googleSheetsService.agendaTV
-        .readValues("TV_Participacao_Processada")
-        .catch((e) => `erro leitura: ${e.message}`);
-      return Response.json({ tabExiste: existe, tituloAbas: tabs.map((t) => t.title), appendResult, rowsDepois });
+      const { getGoogleAccessToken } = await import("../backend/src/google/service-account");
+      const spreadsheetId = "1onh3JyLiMWozurKqg10O2_0gNm_pia_Cm9vemiIStwk";
+      const token = await getGoogleAccessToken(["https://www.googleapis.com/auth/spreadsheets"]);
+      const a1 = encodeURIComponent("'TV_Participacao_Processada'!A:ZZ");
+      const res = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ majorDimension: "ROWS", values: [["TESTE", "TESTE", new Date().toISOString()]] }),
+        },
+      );
+      const body = await res.text();
+      return Response.json({ status: res.status, body });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
