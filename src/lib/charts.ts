@@ -64,6 +64,16 @@ export interface BannerN1s {
   bb200?: BannerN1Item;
 }
 
+export interface RealTimeData {
+  spotify?: ChartRow[];
+  apple?: ChartRow[];
+  youtube?: ChartRow[];
+}
+
+export async function getRealTime(): Promise<RealTimeData> {
+  return fetchCached(`${CHARTS_API}?action=getRealTime`);
+}
+
 export async function getBannerN1s(): Promise<BannerN1s> {
   return fetchCached(`${CHARTS_API}?action=getBannerN1s`);
 }

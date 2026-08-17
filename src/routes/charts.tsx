@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Music, Flame, Youtube, Disc3, DollarSign, Search, X, ChevronLeft, ChevronRight, Loader2,
+  Music, Flame, Youtube, Disc3, DollarSign, Search, X, ChevronLeft, ChevronRight, Loader2, Radio,
 } from "lucide-react";
 import {
   getBannerN1s, getTopArtistCover, getReleases, getChartFilters, getChartData, parseEditorial,
-  getMonthlyYears, getMonthlyDates, getMonthlyArtists, getMonthlyStats,
-  type ChartRow, type TopArtistCover, type ReleaseItem, type BannerN1s,
+  getMonthlyYears, getMonthlyDates, getMonthlyArtists, getMonthlyStats, getRealTime,
+  type ChartRow, type TopArtistCover, type ReleaseItem, type BannerN1s, type RealTimeData,
 } from "@/lib/charts";
 
 export const Route = createFileRoute("/charts")({
@@ -20,7 +20,7 @@ export const Route = createFileRoute("/charts")({
 });
 
 type CategoryId = "hot100" | "spotify" | "apple" | "youtube" | "albums" | "sales";
-type TabId = "home" | CategoryId;
+type TabId = "home" | "live" | CategoryId;
 
 interface CategoryConfig {
   id: CategoryId;
@@ -59,7 +59,13 @@ function ChartsPage() {
     <div className="fixed inset-0 top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(4rem+env(safe-area-inset-bottom))] bg-background text-foreground overflow-hidden flex flex-col">
       <ChartsTabBar active={tab} onChange={setTab} />
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
-        {tab === "home" ? <ChartsHome /> : category ? <ChartsCategoryView category={category} /> : null}
+        {tab === "home" ? (
+          <ChartsHome />
+        ) : tab === "live" ? (
+          <ChartsRealTime />
+        ) : category ? (
+          <ChartsCategoryView category={category} />
+        ) : null}
       </div>
     </div>
   );
@@ -75,6 +81,14 @@ function ChartsTabBar({ active, onChange }: { active: TabId; onChange: (t: TabId
         }`}
       >
         Início
+      </button>
+      <button
+        onClick={() => onChange("live")}
+        className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 transition ${
+          active === "live" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"
+        }`}
+      >
+        <Radio className="size-3.5 text-red-500 animate-pulse" /> Ao vivo
       </button>
       {CATEGORIES.map((c) => {
         const Icon = c.icon;
@@ -107,6 +121,71 @@ function CoverImg({ src, alt, className }: { src?: string; alt: string; classNam
   }
   return (
     <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />
+  );
+}
+
+// ---------- Ao vivo (Real Time) ----------
+const REALTIME_COLS: { key: keyof RealTimeData; label: string; color: string }[] = [
+  { key: "spotify", label: "Spotify", color: "text-emerald-400" },
+  { key: "apple", label: "Apple Music", color: "text-rose-400" },
+  { key: "youtube", label: "YouTube", color: "text-red-500" },
+];
+
+function ChartsRealTime() {
+  const [data, setData] = useState<RealTimeData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      getRealTime()
+        .then((d) => alive && setData(d))
+        .catch(() => alive && setData({}))
+        .finally(() => alive && setLoading(false));
+    };
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  if (loading) return <LoadingBlock text="Carregando ao vivo..." />;
+
+  return (
+    <div className="p-4">
+      <h1 className="text-xl font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+        <Radio className="size-5 text-red-500 animate-pulse" /> Ao vivo
+      </h1>
+      <div className="grid gap-5 sm:grid-cols-3">
+        {REALTIME_COLS.map(({ key, label, color }) => {
+          const items = data?.[key] || [];
+          return (
+            <div key={key}>
+              <h2 className={`text-sm font-bold uppercase tracking-wider mb-2 ${color}`}>{label}</h2>
+              {items.length === 0 ? (
+                <div className="text-xs text-muted-foreground italic py-6 text-center">Sem dados agora.</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {items.map((it, i) => {
+                    const pos = it.posicao || it.pos || it.p || "-";
+                    const cover = it.capa || it.c;
+                    const title = it.titulo || it.musica || it.tit || it.t || "—";
+                    const val = it.streams || it.semana || it.val || it.s || "-";
+                    return (
+                      <div key={i} className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-card/30 p-2">
+                        <div className="w-6 shrink-0 text-center text-sm font-black text-muted-foreground">{pos}</div>
+                        <CoverImg src={cover} alt={title} className="size-9 rounded-md object-cover shrink-0" />
+                        <div className="min-w-0 flex-1 text-xs font-semibold truncate">{title}</div>
+                        <div className={`shrink-0 text-xs font-bold ${color}`}>{val}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
