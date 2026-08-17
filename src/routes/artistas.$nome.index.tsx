@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,14 +20,24 @@ import {
   FileX,
   TrendingUp,
   Lock,
+  User,
+  Music,
+  Video,
+  Users2,
+  Instagram,
+  Star,
+  Sparkles,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
-import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload } from "@/lib/api";
+import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type BemItem, type NivelJogador } from "@/lib/api";
+import { getHOFProfile, type HOFProfile } from "@/lib/charts";
 import { notify } from "@/lib/notify";
 
 export const Route = createFileRoute("/artistas/$nome/")({
   component: ArtistDashboard,
 });
+
+type TabId = "geral" | "discografia" | "charts" | "tours" | "social" | "bens" | "gestao";
 
 function ArtistDashboard() {
   const { nome } = Route.useParams();
@@ -35,12 +45,13 @@ function ArtistDashboard() {
   const [artist, setArtist] = useState<Artist | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"bens" | "entretenimento" | "tours">("entretenimento");
+  const [activeTab, setActiveTab] = useState<TabId>("geral");
   const [modal, setModal] = useState<
     null | "viral" | "filantropia" | "payola" | "leilao" | "rescisao" | "composicao" | "imovel"
   >(null);
   const [albuns, setAlbuns] = useState<AlbumPayload[]>([]);
   const [tourData, setTourData] = useState<any>(null);
+  const [responsavelNivel, setResponsavelNivel] = useState<NivelJogador | null>(null);
 
   useEffect(() => {
     if (!ready) return;
@@ -66,6 +77,12 @@ function ArtistDashboard() {
       // Verifica se o artista pertence ao usuário logado
       const mine = (myArtists as Artist[]).some((a) => a.nome?.trim().toLowerCase() === safeNome);
       setIsOwner(mine);
+
+      // Nível/prestígio fica associado ao jogador responsável, não ao
+      // artista — busca o nível de quem é dono, se tiver telegram_id salvo.
+      if (art?.telegram_id) {
+        api.meuNivel({ telegramId: art.telegram_id }).then(setResponsavelNivel).catch(() => setResponsavelNivel(null));
+      }
 
       // Busca dados de turnê
       const tList = (toursList as any[]).find((t) => t.artista?.trim().toLowerCase() === safeNome);
@@ -103,6 +120,20 @@ function ArtistDashboard() {
       setLoading(false);
     });
   }, [ready, user, nome]);
+
+  const TABS = useMemo(() => {
+    const base: { id: TabId; label: string }[] = [
+      { id: "geral", label: "Visão Geral" },
+      { id: "discografia", label: "Discografia" },
+      { id: "charts", label: "Charts" },
+      { id: "tours", label: "Turnês & Projetos" },
+      { id: "social", label: "Social" },
+    ];
+    if (isOwner) {
+      base.push({ id: "bens", label: "Bens" }, { id: "gestao", label: "Gestão" });
+    }
+    return base;
+  }, [isOwner]);
 
   if (loading) {
     return (
@@ -210,8 +241,8 @@ function ArtistDashboard() {
         </div>
       </div>
 
-      <div className="px-6 space-y-8 relative z-20 -mt-2">
-        {/* ── Core Stats: Empire Coin + Fortuna + Prestígio + Fadiga ── */}
+      <div className="px-6 space-y-6 relative z-20 -mt-2">
+        {/* ── Core Stats: Empire Coin + Fortuna + Fadiga (sem prestígio — isso é do jogador, ver card do Responsável) ── */}
         <div className="grid grid-cols-2 gap-2">
           <StatCardV2
             label="Empire Coin (E$C)"
@@ -224,24 +255,14 @@ function ArtistDashboard() {
             value={fmtMoney(artist.fortuna_total)}
             icon={<Briefcase className="size-3.5" />}
           />
-          <div className="col-span-2 grid grid-cols-2 gap-2">
-            <StatCompact
-              label="Prestígio Imperial"
-              value={artist.prestigio}
-              max={1000}
-              icon={<Trophy className="size-3.5" />}
-              color="text-amber-400"
-            />
-            <StatCompact
-              label="Fadiga Vocal"
-              value={artist.fadiga}
-              max={100}
-              icon={<Zap className="size-3.5" />}
-              color="text-rose-400"
-              reverse
-            />
-          </div>
-          {/* Fortuna detalhada: real + bens */}
+          <StatCompact
+            label="Fadiga Vocal"
+            value={artist.fadiga}
+            max={100}
+            icon={<Zap className="size-3.5" />}
+            color="text-rose-400"
+            reverse
+          />
           <StatCardV2
             label="Fortuna em Caixa"
             value={fmtMoney(artist.fortuna_real)}
@@ -254,6 +275,22 @@ function ArtistDashboard() {
           />
         </div>
 
+        {/* ── Responsável: prestígio/nível do JOGADOR dono, não do artista ── */}
+        {responsavelNivel?.nivelAtual && (
+          <div className="p-4 rounded-[1.8rem] bg-white/5 backdrop-blur-md border border-white/10 flex items-center gap-4">
+            <div className="size-11 rounded-xl bg-amber-500/15 text-amber-400 grid place-items-center shrink-0">
+              <Trophy className="size-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">
+                Responsável — Nível {responsavelNivel.nivelAtual.nivel}
+              </div>
+              <div className="text-sm font-black truncate">{responsavelNivel.nivelAtual.nome}</div>
+            </div>
+            <div className="text-xs font-black text-amber-400 shrink-0">{responsavelNivel.prestigioAtual} pts</div>
+          </div>
+        )}
+
         {/* ── Ações rápidas — apenas para o dono do artista ── */}
         {isOwner && (
           <div className="grid grid-cols-3 gap-3">
@@ -263,91 +300,24 @@ function ArtistDashboard() {
           </div>
         )}
 
-        {isOwner && (
-          <section>
-            <div className="flex gap-2 p-1 bg-card rounded-[2rem] border border-white/5 mb-6">
-              <TabButton active={activeTab === "entretenimento"} onClick={() => setActiveTab("entretenimento")}>Gestão</TabButton>
-              <TabButton active={activeTab === "bens"} onClick={() => setActiveTab("bens")}>Bens</TabButton>
-              <TabButton active={activeTab === "tours"} onClick={() => setActiveTab("tours")}>Histórico</TabButton>
-            </div>
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {activeTab === "entretenimento" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <MiniAction label="Viral" icon={<Flame />} onClick={() => setModal("viral")} color="text-rose-500" />
-                  <MiniAction label="Payola" icon={<Radio />} onClick={() => setModal("payola")} color="text-primary" />
-                  <MiniAction label="Filantropia" icon={<HandHeart />} onClick={() => setModal("filantropia")} color="text-emerald-500" />
-                  <MiniAction label="Leilão" icon={<Gavel />} onClick={() => setModal("leilao")} color="text-amber-500" />
-                  <MiniAction label="Vender Comp." icon={<Disc3 />} onClick={() => setModal("composicao")} color="text-purple-500" />
-                  <div className="col-span-2 mt-4 space-y-3">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 px-1">Administrativo</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <MiniAction label="Rescindir" icon={<FileX />} onClick={() => setModal("rescisao")} color="text-destructive font-black" />
-                    </div>
-                  </div>
-                </div>
-              )}
-              {activeTab === "bens" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between px-1">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 text-emerald-500">Patrimônio Adquirido</h4>
-                    <button onClick={() => setModal("imovel")} className="text-[10px] font-black text-primary uppercase">+ Comprar</button>
-                  </div>
-                  <Link to="/artistas/$nome/bens" params={{ nome: artist.nome }} className="block p-8 rounded-[2.5rem] bg-card border border-white/5 text-center transition-all hover:bg-white/[0.04]">
-                    <Building2 className="size-10 text-muted-foreground/20 mx-auto mb-4" />
-                    <p className="text-xs text-muted-foreground italic">Clique para ver inventário de imóveis e empresas.</p>
-                  </Link>
-                </div>
-              )}
-              {activeTab === "tours" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between px-1">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">Histórico de Atividades</h4>
-                    <Link to="/tours" className="text-[10px] font-black text-primary uppercase">Todas Turnês</Link>
-                  </div>
-                  {tourData ? (
-                    <div className="p-6 rounded-[2.5rem] bg-card border border-white/5">
-                      <p className="text-xs font-black uppercase tracking-widest mb-2">{tourData.titulo}</p>
-                      <p className="text-[10px] text-muted-foreground">{tourData.realizados}/{tourData.total} shows — {tourData.status}</p>
-                    </div>
-                  ) : (
-                    <div className="p-12 rounded-[2.5rem] bg-card/40 border border-dashed border-white/10 text-center">
-                      <Mic2 className="size-8 text-muted-foreground/10 mx-auto mb-3" />
-                      <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Sem turnês recentes</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        <section className="pt-4 border-t border-white/5">
-          <div className="flex items-center justify-between mb-5 px-1">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Discografia Oficial</h2>
-            {isOwner && (
-              <Link to="/acoes/album" search={{ nome: artist.nome }} className="size-10 rounded-xl bg-primary/10 text-primary grid place-items-center active:scale-90 transition-transform">
-                <Disc3 className="size-5" />
-              </Link>
-            )}
+        {/* ── Abas do mega perfil ── */}
+        <section>
+          <div className="flex gap-1 p-1 bg-card rounded-[1.5rem] border border-white/5 mb-6 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            {TABS.map((t) => (
+              <TabButton key={t.id} active={activeTab === t.id} onClick={() => setActiveTab(t.id)}>
+                {t.label}
+              </TabButton>
+            ))}
           </div>
-          {albuns.length === 0 ? (
-            <div className="p-8 rounded-[2.5rem] border border-dashed border-white/5 text-center">
-              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest italic opacity-40">Nenhum álbum registrado ainda</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-4">
-              {albuns.map((a) => (
-                <Link key={a.id} to="/album/$id" params={{ id: a.id! }} className="group">
-                  <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5">
-                    {a.capa_url && (
-                      <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 grayscale group-hover:grayscale-0" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-                    )}
-                  </div>
-                  <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.titulo}</p>
-                </Link>
-              ))}
-            </div>
-          )}
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {activeTab === "geral" && <GeralTab artist={artist} albuns={albuns} tourData={tourData} />}
+            {activeTab === "discografia" && <DiscografiaTab nome={artist.nome} albuns={albuns} isOwner={isOwner} />}
+            {activeTab === "charts" && <ChartsTab nome={artist.nome} />}
+            {activeTab === "tours" && <ToursProjetosTab nome={artist.nome} tourData={tourData} isOwner={isOwner} />}
+            {activeTab === "social" && <SocialTab nome={artist.nome} />}
+            {isOwner && activeTab === "bens" && <BensTab nome={artist.nome} onComprar={() => setModal("imovel")} />}
+            {isOwner && activeTab === "gestao" && <GestaoTab onAction={setModal} />}
+          </div>
         </section>
       </div>
 
@@ -359,6 +329,522 @@ function ArtistDashboard() {
       {isOwner && modal === "composicao" && <ComposicaoModal nome={artist.nome} onClose={() => setModal(null)} />}
       {isOwner && modal === "imovel" && <ImovelModal nome={artist.nome} onClose={() => setModal(null)} />}
     </main>
+  );
+}
+
+// ---------- Aba: Visão Geral ----------
+function GeralTab({ artist, albuns, tourData }: { artist: Artist; albuns: AlbumPayload[]; tourData: any }) {
+  const [hof, setHof] = useState<HOFProfile | null | undefined>(undefined);
+
+  useEffect(() => {
+    let alive = true;
+    getHOFProfile(artist.nome).then((d) => alive && setHof(d));
+    return () => { alive = false; };
+  }, [artist.nome]);
+
+  const n1Total = hof
+    ? [hof.n1_hot100, hof.n1_spotify, hof.n1_youtube, hof.n1_bb200]
+        .map((v) => Number(v) || 0)
+        .reduce((a, b) => a + b, 0)
+    : 0;
+
+  return (
+    <div className="space-y-4">
+      {artist.descricao && (
+        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+          <p className="text-sm text-muted-foreground leading-relaxed">{artist.descricao}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <MiniStat icon={<Disc3 className="size-4" />} label="Álbuns" value={String(albuns.length)} />
+        <MiniStat icon={<Users2 className="size-4" />} label="Seguidores" value={String(artist.seguidores || 0)} />
+      </div>
+
+      {hof === undefined ? (
+        <div className="h-16 rounded-2xl bg-card animate-pulse" />
+      ) : hof && n1Total > 0 ? (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
+          <Trophy className="size-6 text-amber-400 shrink-0" />
+          <div>
+            <div className="text-sm font-black">{n1Total} #1{n1Total > 1 ? "s" : ""} no Hall of Fame</div>
+            <div className="text-xs text-muted-foreground">Veja o detalhe na aba Charts</div>
+          </div>
+        </div>
+      ) : null}
+
+      {tourData ? (
+        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Turnê em andamento</span>
+          </div>
+          <p className="text-sm font-bold">{tourData.titulo}</p>
+          <p className="text-xs text-muted-foreground">{tourData.realizados}/{tourData.total} shows — {tourData.status}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center gap-2.5">
+      <div className="size-8 rounded-lg bg-white/5 text-muted-foreground grid place-items-center shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <div className="text-sm font-black truncate">{value}</div>
+        <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 truncate">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Aba: Discografia ----------
+function DiscografiaTab({ nome, albuns, isOwner }: { nome: string; albuns: AlbumPayload[]; isOwner: boolean }) {
+  const [musicas, setMusicas] = useState<any[] | null>(null);
+  const [videos, setVideos] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      fetch(`/api/empire-play/musicas?artist=${encodeURIComponent(nome)}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/empire-play/videos?artist=${encodeURIComponent(nome)}`).then((r) => r.json()).catch(() => null),
+    ]).then(([m, v]) => {
+      if (!alive) return;
+      setMusicas(Array.isArray(m?.data) ? m.data : []);
+      setVideos(Array.isArray(v?.data) ? v.data : []);
+    });
+    return () => { alive = false; };
+  }, [nome]);
+
+  return (
+    <div className="space-y-8">
+      <section>
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Discografia Oficial</h2>
+          {isOwner && (
+            <Link to="/acoes/album" search={{ nome }} className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center active:scale-90 transition-transform">
+              <Disc3 className="size-4" />
+            </Link>
+          )}
+        </div>
+        {albuns.length === 0 ? (
+          <div className="p-8 rounded-[2.5rem] border border-dashed border-white/5 text-center">
+            <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest italic opacity-40">Nenhum álbum registrado ainda</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            {albuns.map((a) => (
+              <Link key={a.id} to="/album/$id" params={{ id: a.id! }} className="group">
+                <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5">
+                  {a.capa_url && (
+                    <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 grayscale group-hover:grayscale-0" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+                  )}
+                </div>
+                <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.titulo}</p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
+          <Music className="size-3.5" /> Músicas no catálogo
+        </h2>
+        {musicas === null ? (
+          <div className="h-14 rounded-2xl bg-card animate-pulse" />
+        ) : musicas.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground italic px-1">Nenhuma música no catálogo ainda.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {musicas.slice(0, 10).map((m, i) => (
+              <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
+                <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
+                  {m.cover ? <img src={m.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Music className="size-4 text-muted-foreground" />}
+                </div>
+                <span className="text-sm font-medium truncate flex-1">{m.title || m.titulo || "—"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
+          <Video className="size-3.5" /> Vídeos no catálogo
+        </h2>
+        {videos === null ? (
+          <div className="h-14 rounded-2xl bg-card animate-pulse" />
+        ) : videos.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground italic px-1">Nenhum vídeo no catálogo ainda.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {videos.slice(0, 10).map((v, i) => (
+              <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
+                <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
+                  {v.cover ? <img src={v.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Video className="size-4 text-muted-foreground" />}
+                </div>
+                <span className="text-sm font-medium truncate flex-1">{v.title || v.titulo || "—"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// ---------- Aba: Charts (Hall of Fame) ----------
+function ChartsTab({ nome }: { nome: string }) {
+  const [hof, setHof] = useState<HOFProfile | null | undefined>(undefined);
+
+  useEffect(() => {
+    let alive = true;
+    setHof(undefined);
+    getHOFProfile(nome).then((d) => alive && setHof(d));
+    return () => { alive = false; };
+  }, [nome]);
+
+  if (hof === undefined) {
+    return <div className="h-32 rounded-2xl bg-card animate-pulse" />;
+  }
+  if (!hof) {
+    return (
+      <div className="p-8 rounded-[2.5rem] border border-dashed border-white/5 text-center">
+        <Trophy className="size-8 text-muted-foreground/20 mx-auto mb-3" />
+        <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest italic opacity-40">
+          Sem posições registradas nos charts ainda
+        </p>
+      </div>
+    );
+  }
+
+  const n1s = [
+    { label: "Hot 100", val: hof.n1_hot100, color: "text-red-400" },
+    { label: "Spotify", val: hof.n1_spotify, color: "text-emerald-400" },
+    { label: "YouTube", val: hof.n1_youtube, color: "text-red-500" },
+    { label: "BB 200", val: hof.n1_bb200, color: "text-amber-400" },
+  ].filter((x) => x.val && Number(x.val) !== 0);
+
+  const runs = (hof.runs || [])
+    .map((r) => {
+      const positions = String(r.v).split("-").map((s) => Number(s.trim())).filter((n) => !isNaN(n) && n > 0);
+      const peak = positions.length ? Math.min(...positions) : 999;
+      return { title: r.t, peak, weeks: positions.length };
+    })
+    .sort((a, b) => (a.peak !== b.peak ? a.peak - b.peak : b.weeks - a.weeks));
+
+  const platformSection = (title: string, color: string, items?: { t: string; v: string }[]) => {
+    if (!items || !items.length) return null;
+    return (
+      <div>
+        <h3 className={`text-[10px] font-black uppercase tracking-widest mb-2 ${color}`}>{title}</h3>
+        <div className="space-y-1.5">
+          {items.slice(0, 5).map((it, i) => (
+            <div key={i} className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground w-4 text-right shrink-0">{i + 1}</span>
+              <span className="flex-1 truncate">{it.t}</span>
+              <span className={`text-xs font-bold shrink-0 ${color}`}>{it.v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {(hof.country || hof.style) && (
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground px-1">
+          {[hof.country, hof.style].filter(Boolean).join(" • ")}
+        </p>
+      )}
+
+      {n1s.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {n1s.map((x, i) => (
+            <div key={i} className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+              <div className={`text-xl font-black ${x.color}`}>{x.val}</div>
+              <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 mt-0.5">{x.label} #1s</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {runs.length > 0 && (
+        <div>
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 px-1">Chart Runs</h3>
+          <div className="space-y-1.5">
+            {runs.slice(0, 10).map((r, i) => (
+              <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
+                <span className={`text-sm font-black shrink-0 w-8 text-center ${r.peak === 1 ? "text-amber-400" : "text-muted-foreground"}`}>
+                  #{r.peak}
+                </span>
+                <span className="text-sm flex-1 truncate">{r.title}</span>
+                <span className="text-xs text-muted-foreground shrink-0">{r.weeks} sem.</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-5 sm:grid-cols-2">
+        {platformSection("Spotify", "text-emerald-400", hof.sp)}
+        {platformSection("Apple Music", "text-rose-400", hof.am)}
+        {platformSection("YouTube", "text-red-500", hof.yt)}
+        {platformSection("Álbuns", "text-amber-400", hof.alb)}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Aba: Turnês & Projetos ----------
+function ToursProjetosTab({ nome, tourData, isOwner }: { nome: string; tourData: any; isOwner: boolean }) {
+  const [projetos, setProjetos] = useState<Projeto[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.projetos(nome).then((p) => alive && setProjetos(p)).catch(() => alive && setProjetos([]));
+    return () => { alive = false; };
+  }, [nome]);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="flex items-center justify-between px-1 mb-3">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Turnê</h3>
+          <Link to="/tours" className="text-[10px] font-black text-primary uppercase">Todas Turnês</Link>
+        </div>
+        {tourData ? (
+          <Link to="/tours/$nome" params={{ nome }} className="block p-5 rounded-[2rem] bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] transition-all">
+            <p className="text-sm font-black uppercase tracking-tight mb-1">{tourData.titulo}</p>
+            <p className="text-xs text-muted-foreground">{tourData.realizados}/{tourData.total} shows — {tourData.status}</p>
+          </Link>
+        ) : (
+          <div className="p-8 rounded-[2rem] bg-card/40 border border-dashed border-white/10 text-center">
+            <Mic2 className="size-7 text-muted-foreground/10 mx-auto mb-2" />
+            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Sem turnês ativas</p>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between px-1 mb-3">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cinema & TV</h3>
+          {isOwner && (
+            <Link to="/acoes/cinema" search={{ nome }} className="text-[10px] font-black text-primary uppercase">+ Lançar</Link>
+          )}
+        </div>
+        {projetos === null ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 rounded-xl bg-card animate-pulse" />)}
+          </div>
+        ) : projetos.length === 0 ? (
+          <div className="p-8 rounded-[2rem] bg-card/40 border border-dashed border-white/10 text-center">
+            <Briefcase className="size-7 text-muted-foreground/10 mx-auto mb-2" />
+            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Nenhum projeto ainda</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {projetos.map((p, i) => (
+              <li key={i} className="p-3 rounded-xl bg-card">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">{p.tipo}</p>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${p.status === "Em andamento" ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>
+                    {p.status || "—"}
+                  </span>
+                </div>
+                <p className="font-bold mt-1 text-sm">{p.titulo}</p>
+                {p.detalhe && <p className="text-xs text-muted-foreground mt-1">{p.detalhe}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Aba: Social ----------
+function SocialTab({ nome }: { nome: string }) {
+  const [perfis, setPerfis] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.listarPerfisSocial().then((list) => {
+      if (!alive) return;
+      const mine = (list || []).filter((p: any) => (p.artista || "").trim().toLowerCase() === nome.trim().toLowerCase());
+      setPerfis(mine);
+    }).catch(() => alive && setPerfis([]));
+    return () => { alive = false; };
+  }, [nome]);
+
+  if (perfis === null) {
+    return <div className="h-20 rounded-2xl bg-card animate-pulse" />;
+  }
+  if (perfis.length === 0) {
+    return (
+      <div className="p-8 rounded-[2.5rem] border border-dashed border-white/5 text-center">
+        <Instagram className="size-8 text-muted-foreground/20 mx-auto mb-3" />
+        <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest italic opacity-40">
+          Nenhum perfil social vinculado ainda
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {perfis.map((p, i) => (
+        <div key={i} className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center gap-3">
+          <div className="size-11 rounded-full overflow-hidden bg-secondary shrink-0 grid place-items-center">
+            {p.avatar_url ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" /> : <User className="size-5 text-muted-foreground" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-black truncate">{p.rede} — @{p.handle}</div>
+            {p.bio && <div className="text-xs text-muted-foreground truncate">{p.bio}</div>}
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-sm font-black">{p.seguidores || 0}</div>
+            <div className="text-[9px] text-muted-foreground uppercase tracking-widest">seguidores</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------- Aba: Bens (dono) ----------
+function BensTab({ nome, onComprar }: { nome: string; onComprar: () => void }) {
+  const [bens, setBens] = useState<BemItem[] | null>(null);
+  const [selling, setSelling] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  const load = () => api.meusBens(nome).then(setBens);
+  useEffect(() => { load(); }, [nome]);
+
+  async function vender(id: string) {
+    setSelling(id);
+    const r = await api.venderBem({ nome, id });
+    notify(r, { successFallback: "Bem vendido." });
+    setSelling(null);
+    setConfirmId(null);
+    load();
+  }
+
+  const total = bens?.reduce((s, b) => s + (b.status === "Vendido" ? 0 : b.valor), 0) || 0;
+  const CAT_ICON: Record<string, React.ReactNode> = {
+    IMOVEIS: <Building2 className="size-5" />,
+    MARKET: <Sparkles className="size-5" />,
+    CARREIRA: <Briefcase className="size-5" />,
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between px-1 mb-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Patrimônio total</p>
+          <p className="text-lg font-black text-primary">{fmtMoney(total)}</p>
+        </div>
+        <button onClick={onComprar} className="text-[10px] font-black text-primary uppercase">+ Comprar</button>
+      </div>
+
+      <div className="space-y-3">
+        {bens === null ? (
+          <div className="rounded-xl bg-card animate-pulse h-32" />
+        ) : bens.length === 0 ? (
+          <div className="p-8 rounded-2xl bg-card text-center">
+            <Building2 className="size-8 text-primary/40 mx-auto mb-3" />
+            <p className="font-extrabold text-sm mb-1">Nenhum bem ainda</p>
+            <p className="text-xs text-muted-foreground">Imóveis, mansões e itens duráveis aparecem aqui como patrimônio.</p>
+          </div>
+        ) : (
+          bens.map((b, i) => {
+            const id = b.id || String(i);
+            const ativo = b.status !== "Vendido";
+            return (
+              <div key={id} className={`p-4 rounded-xl bg-card flex items-center gap-3 ${!ativo ? "opacity-50" : ""}`}>
+                <div className="size-12 rounded-lg bg-primary/15 text-primary grid place-items-center shrink-0">
+                  {CAT_ICON[b.categoria] || <Sparkles className="size-5" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-extrabold text-sm truncate">{b.item}</p>
+                  <p className="text-xs text-muted-foreground">{b.categoria} • {b.data?.split("T")[0] || ""}</p>
+                  <p className="text-sm font-bold text-primary">{fmtEC(b.valor)}</p>
+                </div>
+                {ativo && b.id && (
+                  <button onClick={() => setConfirmId(b.id!)} disabled={selling === b.id} className="px-3 py-2 rounded-full bg-secondary text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50">
+                    {selling === b.id ? <Loader2 className="size-3 animate-spin" /> : null} Vender
+                  </button>
+                )}
+                {!ativo && <span className="text-[10px] uppercase font-bold text-muted-foreground">Vendido</span>}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {confirmId && (
+        <ConfirmSell
+          item={bens?.find((b) => b.id === confirmId)}
+          onCancel={() => setConfirmId(null)}
+          onConfirm={() => vender(confirmId)}
+          loading={selling === confirmId}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmSell({ item, onCancel, onConfirm, loading }: { item?: BemItem; onCancel: () => void; onConfirm: () => void; loading: boolean }) {
+  if (!item) return null;
+  const retorno = Math.floor(item.valor * 0.7);
+  return (
+    <div onClick={onCancel} className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm grid place-items-end sm:place-items-center p-0 sm:p-4">
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md bg-card rounded-t-2xl sm:rounded-2xl p-5 border border-border">
+        <h3 className="text-lg font-extrabold mb-1">Vender este bem?</h3>
+        <p className="text-sm text-muted-foreground mb-4">{item.item}</p>
+        <div className="rounded-xl bg-background p-4 mb-4 space-y-1">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Pagou</span>
+            <span className="font-bold">{fmtEC(item.valor)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Você recebe (70%)</span>
+            <span className="font-black text-primary">{fmtEC(retorno)}</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={onCancel} className="py-3 rounded-full bg-secondary font-bold text-sm uppercase tracking-wider">Cancelar</button>
+          <button onClick={onConfirm} disabled={loading} className="py-3 rounded-full bg-primary text-primary-foreground font-extrabold text-sm uppercase tracking-wider disabled:opacity-50 inline-flex items-center justify-center gap-2">
+            {loading && <Loader2 className="size-4 animate-spin" />} Vender
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Aba: Gestão (dono) ----------
+function GestaoTab({ onAction }: { onAction: (m: "viral" | "filantropia" | "payola" | "leilao" | "rescisao" | "composicao") => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <MiniAction label="Viral" icon={<Flame />} onClick={() => onAction("viral")} color="text-rose-500" />
+      <MiniAction label="Payola" icon={<Radio />} onClick={() => onAction("payola")} color="text-primary" />
+      <MiniAction label="Filantropia" icon={<HandHeart />} onClick={() => onAction("filantropia")} color="text-emerald-500" />
+      <MiniAction label="Leilão" icon={<Gavel />} onClick={() => onAction("leilao")} color="text-amber-500" />
+      <MiniAction label="Vender Comp." icon={<Disc3 />} onClick={() => onAction("composicao")} color="text-purple-500" />
+      <div className="col-span-2 mt-4 space-y-3">
+        <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 px-1">Administrativo</h4>
+        <div className="grid grid-cols-2 gap-3">
+          <MiniAction label="Rescindir" icon={<FileX />} onClick={() => onAction("rescisao")} color="text-destructive font-black" />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -377,7 +863,7 @@ function StatCardV2({ label, value, icon, accent }: any) {
 function StatCompact({ label, value, max, icon, color, reverse }: any) {
   const percent = Math.min(100, (value / max) * 100);
   return (
-    <div className="p-4 rounded-[1.8rem] bg-white/5 backdrop-blur-md border border-white/10 flex items-center gap-4">
+    <div className="col-span-2 p-4 rounded-[1.8rem] bg-white/5 backdrop-blur-md border border-white/10 flex items-center gap-4">
       <div className={`size-10 rounded-xl bg-white/5 grid place-items-center shadow-inner shrink-0 ${color}`}>{icon}</div>
       <div className="flex-1 min-w-0">
         <div className="flex justify-between items-end mb-2">
@@ -403,7 +889,7 @@ function QuickAction({ icon, label, to, params, id }: any) {
 
 function TabButton({ active, onClick, children }: any) {
   return (
-    <button onClick={onClick} className={`flex-1 py-4 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-500 ${active ? "bg-primary text-primary-foreground shadow-2xl shadow-primary/30 scale-[1.02] z-10" : "text-muted-foreground hover:bg-white/5 hover:text-white/60"}`}>
+    <button onClick={onClick} className={`shrink-0 px-4 py-3 rounded-[1.3rem] text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-500 ${active ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" : "text-muted-foreground hover:bg-white/5 hover:text-white/60"}`}>
       {children}
     </button>
   );

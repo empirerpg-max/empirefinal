@@ -74,6 +74,43 @@ export async function getRealTime(): Promise<RealTimeData> {
   return fetchCached(`${CHARTS_API}?action=getRealTime`);
 }
 
+export interface HOFRun {
+  t: string;
+  v: string;
+}
+
+export interface HOFTrack {
+  t: string;
+  v: string;
+}
+
+export interface HOFProfile {
+  name?: string;
+  img?: string;
+  country?: string;
+  style?: string;
+  runs?: HOFRun[];
+  n1_hot100?: string | number;
+  n1_spotify?: string | number;
+  n1_youtube?: string | number;
+  n1_bb200?: string | number;
+  sp?: HOFTrack[];
+  am?: HOFTrack[];
+  yt?: HOFTrack[];
+  alb?: HOFTrack[];
+}
+
+// Perfil de Hall of Fame de um artista — pode não existir pra artistas
+// ainda sem posições em nenhum chart (retorna sem "name").
+export async function getHOFProfile(artist: string): Promise<HOFProfile | null> {
+  try {
+    const d = await fetchCached(`${CHARTS_API}?action=getHOFProfile&artist=${encodeURIComponent(artist)}`);
+    return d && d.name ? d : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getBannerN1s(): Promise<BannerN1s> {
   return fetchCached(`${CHARTS_API}?action=getBannerN1s`);
 }
