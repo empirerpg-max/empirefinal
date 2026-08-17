@@ -17,6 +17,8 @@ import {
   Pencil,
   X,
   Check,
+  ChevronDown,
+  ExternalLink,
 } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -161,6 +163,8 @@ export const Forum: React.FC<ForumProps> = ({
 
   // Audio preview no tópico de álbum/música
   const [playingTrackUrl, setPlayingTrackUrl] = useState<string | null>(null);
+  // Letra expandida inline na lista de faixas do álbum (sem sair da tela).
+  const [expandedTrackId, setExpandedTrackId] = useState<string | null>(null);
 
   const handleVideoPlay = (topic: ForumTopicItem) => {
     // Drive e Telegram nunca são tocáveis pelo link/id cru — precisam passar
@@ -721,43 +725,81 @@ export const Forum: React.FC<ForumProps> = ({
                   </h3>
                   <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
                     {selectedTopic.tracks && selectedTopic.tracks.length > 0 ? (
-                      selectedTopic.tracks.map((faixa, i) => (
-                        <button
-                          key={faixa.id || i}
-                          type="button"
-                          disabled={!faixa.audioUrl}
-                          onClick={() =>
-                            onPlayTrack?.(
-                              {
-                                titulo: faixa.title,
-                                artista: faixa.artist || selectedTopic.artist,
-                                capa_url: faixa.coverUrl || selectedTopic.cover || undefined,
-                                url: faixa.audioUrl || undefined,
-                              },
-                              selectedTopic.tracks!.map((t) => ({
-                                titulo: t.title,
-                                artista: t.artist || selectedTopic.artist,
-                                capa_url: t.coverUrl || selectedTopic.cover || undefined,
-                                url: t.audioUrl || undefined,
-                              })),
-                            )
-                          }
-                          className="w-full flex items-center gap-3 p-2.5 sm:p-3 bg-neutral-900/60 hover:bg-neutral-900 rounded-xl border border-white/5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 group"
-                        >
-                          <span className="w-5 shrink-0 text-center font-mono text-[11px] text-neutral-500 group-hover:hidden">
-                            {faixa.trackOrder || i + 1}
-                          </span>
-                          <Play className="size-3.5 shrink-0 hidden group-hover:block text-emerald-400" />
-                          <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 truncate">
-                            {faixa.title}
-                          </span>
-                          {!faixa.audioUrl && (
-                            <span className="text-[10px] text-neutral-500 italic shrink-0">
-                              sem áudio
-                            </span>
-                          )}
-                        </button>
-                      ))
+                      selectedTopic.tracks.map((faixa, i) => {
+                        const trackKey = faixa.id || String(i);
+                        const isExpanded = expandedTrackId === trackKey;
+                        const letra = faixa.lyrics?.trim();
+                        return (
+                          <div key={trackKey} className="bg-neutral-900/60 rounded-xl border border-white/5 overflow-hidden">
+                            <div className="w-full flex items-center gap-1 p-2.5 sm:p-3 group">
+                              <button
+                                type="button"
+                                disabled={!faixa.audioUrl}
+                                onClick={() =>
+                                  onPlayTrack?.(
+                                    {
+                                      titulo: faixa.title,
+                                      artista: faixa.artist || selectedTopic.artist,
+                                      capa_url: faixa.coverUrl || selectedTopic.cover || undefined,
+                                      url: faixa.audioUrl || undefined,
+                                    },
+                                    selectedTopic.tracks!.map((t) => ({
+                                      titulo: t.title,
+                                      artista: t.artist || selectedTopic.artist,
+                                      capa_url: t.coverUrl || selectedTopic.cover || undefined,
+                                      url: t.audioUrl || undefined,
+                                    })),
+                                  )
+                                }
+                                className="flex-1 min-w-0 flex items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <span className="w-5 shrink-0 text-center font-mono text-[11px] text-neutral-500 group-hover:hidden">
+                                  {faixa.trackOrder || i + 1}
+                                </span>
+                                <Play className="size-3.5 shrink-0 hidden group-hover:block text-emerald-400" />
+                                <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 truncate">
+                                  {faixa.title}
+                                </span>
+                                {!faixa.audioUrl && (
+                                  <span className="text-[10px] text-neutral-500 italic shrink-0">
+                                    sem áudio
+                                  </span>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedTrackId(isExpanded ? null : trackKey)}
+                                title="Ver letra"
+                                className={`size-7 shrink-0 rounded-lg grid place-items-center transition ${isExpanded ? "bg-emerald-500/20 text-emerald-400" : "text-neutral-500 hover:text-neutral-300 hover:bg-white/5"}`}
+                              >
+                                <ChevronDown className={`size-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                              </button>
+                            </div>
+                            {isExpanded && (
+                              <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400/80">Letra</span>
+                                  {faixa.id && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveSubmenu("musicas");
+                                        setPendingDeepLinkId(faixa.id);
+                                      }}
+                                      className="flex items-center gap-1 text-[10px] font-bold text-neutral-400 hover:text-emerald-400 transition"
+                                    >
+                                      Ver tópico <ExternalLink className="size-3" />
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="text-xs text-neutral-300 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto bg-neutral-950/60 p-3 rounded-xl border border-white/5">
+                                  {letra || "Letra oficial em processamento no acervo do Empire Hub."}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
                     ) : (
                       <p className="text-xs text-neutral-500 italic">
                         Nenhuma faixa vinculada a este álbum ainda.
