@@ -429,6 +429,16 @@ async function contarChatPorTransmissao(
   return resultado;
 }
 
+// Presença/chat às vezes trazem o nome todo em minúsculo (ex: "weuller" em
+// vez de "Weuller") — capitaliza cada palavra antes de gravar em REGISTRO,
+// só acabamento visual, não mexe na fonte (Presenca_TV/chat).
+function titleCase(nome: string): string {
+  return nome
+    .split(/(\s+)/)
+    .map((parte) => (parte.trim() ? parte[0].toUpperCase() + parte.slice(1).toLowerCase() : parte))
+    .join("");
+}
+
 // Grava uma linha de participação em REGISTRO — mesmo mecanismo do
 // registrarAuditLog (registroLogController.ts), mas coluna C fica vazia
 // (não é um conteúdo de chart, é participação na TV).
@@ -442,7 +452,7 @@ async function gravarRegistroParticipacaoTV(nomeJogador: string, tipoRegistro: s
     await googleSheetsService.registrosCharts.updateValues(
       REGISTRO_SHEET,
       `B${proximaLinha}:D${proximaLinha}`,
-      [[nomeJogador, "", tipoRegistro]],
+      [[titleCase(nomeJogador), "", tipoRegistro]],
     );
   } catch (err) {
     console.warn("[gravarRegistroParticipacaoTV] Erro ao gravar em REGISTRO:", err);
