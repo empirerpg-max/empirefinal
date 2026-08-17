@@ -370,13 +370,13 @@ export default {
 
     if (url.pathname === "/api/debug/programacao-headers" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const rows = await googleSheetsService.agendaTV
+      const programacao = await googleSheetsService.agendaTV
         .readValues("Programacao_RPG", "A1:T5")
         .catch(() => []);
-      const registro = await googleSheetsService.registrosCharts
-        .readValues("REGISTRO", "A1:E5")
+      const agendaTvTab = await googleSheetsService.agendaTV
+        .readValues("Agenda_TV", "A1:T5")
         .catch(() => []);
-      return Response.json({ programacao: rows, registro });
+      return Response.json({ programacao, agendaTvTab });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
