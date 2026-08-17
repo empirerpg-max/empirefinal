@@ -1073,8 +1073,13 @@ function ChatPanel({ programaId }: { programaId: string }) {
   };
 
   return (
-    <>
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm">
+    // Tudo (mensagens + campo de digitar) vive dentro do MESMO container
+    // rolável. Isso é o que faz o teclado do celular se comportar direito:
+    // o navegador só consegue rolar internamente pra revelar o campo em
+    // vez de arrastar a tela inteira (e o vídeo) quando o campo focado
+    // fica fora de qualquer ancestral rolável.
+    <div ref={scrollerRef} className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+      <div className="flex-1 px-3 py-3 space-y-2 text-sm">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-xs text-center px-6">
             Seja o primeiro a comentar.
@@ -1150,6 +1155,10 @@ function ChatPanel({ programaId }: { programaId: string }) {
         )}
       </div>
 
+      {/* Grudado no fundo do MESMO scroller das mensagens (não fora dele) —
+          é isso que dá ao Safari um ancestral rolável válido pra revelar o
+          campo sem precisar deslizar a página/vídeo inteiros. */}
+      <div className="sticky bottom-0 bg-background">
       {replyTo && (
         <div className="flex items-start gap-2 px-3 py-1.5 border-t border-border bg-muted/40 text-[11px]">
           <Reply className="size-3 mt-0.5 text-primary shrink-0" />
@@ -1264,7 +1273,8 @@ function ChatPanel({ programaId }: { programaId: string }) {
           <Send className="size-4" />
         </button>
       </form>
-    </>
+      </div>
+    </div>
   );
 }
 
