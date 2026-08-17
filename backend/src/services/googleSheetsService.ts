@@ -10,6 +10,7 @@ export const SPREADSHEETS = {
   registrosCharts: "1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg",
   edicaoCharts: "1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8",
   usuarios: "1lFw9l76tYZYCDXhZsoiftIEzCvKcjCrI_oBpvUdwAlo",
+  agendaTV: "1onh3JyLiMWozurKqg10O2_0gNm_pia_Cm9vemiIStwk",
 } as const;
 
 export type SpreadsheetKey = keyof typeof SPREADSHEETS;
@@ -407,5 +408,19 @@ export const googleSheetsService = {
       updateValues("usuarios", sheetName, range, values),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("usuarios", sheetName, values, range),
+  },
+  agendaTV: {
+    readValues: (sheetName: string, range?: string) => readValues("agendaTV", sheetName, range),
+    readSheetObjects: (sheetName: string, range?: string) =>
+      readSheetObjects("agendaTV", sheetName, range),
+    findRows: (
+      sheetName: string,
+      predicate: (row: string[], index: number) => boolean,
+      range?: string,
+    ) => findRows("agendaTV", sheetName, predicate, range),
+    updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
+      updateValues("agendaTV", sheetName, range, values),
+    appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
+      appendRow("agendaTV", sheetName, values, range),
   },
 };
