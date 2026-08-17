@@ -10,10 +10,10 @@ jobs:
           curl -sS -D - "https://kick.com/api/v2/channels/empiretvoficial" \
             -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" \
             -H "Accept: application/json" | head -c 3000
-      - name: Check listar_albuns for Matthew (legacy Apps Script)
+      - name: Check listar_albuns for Matthew (legacy Apps Script, follow redirects)
         run: |
-          curl -sS "https://script.google.com/macros/s/AKfycbwxbkUndhZPtFvtK1uIFTkPNN-m6WeiFVMU3IDzuahsC0oQp8Ba2GLQFOAPkWv8eiA3/exec?acao=listar_albuns&nome=Matthew" | head -c 3000
-      - name: Check meus-nomes for telegramId 1625310906 (ARTISTAS sheet)
+          curl -sS -L -D - "https://script.google.com/macros/s/AKfycbwxbkUndhZPtFvtK1uIFTkPNN-m6WeiFVMU3IDzuahsC0oQp8Ba2GLQFOAPkWv8eiA3/exec?acao=listar_albuns&nome=Matthew" | head -c 3000
+      - name: Check listar_albuns unfiltered (all albums)
         run: |
           echo ""
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/artistas/meus-nomes?telegramId=1625310906" | head -c 3000
+          curl -sS -L "https://script.google.com/macros/s/AKfycbwxbkUndhZPtFvtK1uIFTkPNN-m6WeiFVMU3IDzuahsC0oQp8Ba2GLQFOAPkWv8eiA3/exec?acao=listar_albuns" | head -c 3000
