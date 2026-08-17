@@ -446,7 +446,7 @@ function DiscografiaTab({ nome, albuns, isOwner }: { nome: string; albuns: Album
     <div className="space-y-8">
       <section>
         <div className="flex items-center justify-between mb-4 px-1">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Discografia Oficial</h2>
+          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Discografia Legada</h2>
           {isOwner && (
             <Link to="/acoes/album" search={{ nome }} className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center active:scale-90 transition-transform">
               <Disc3 className="size-4" />
