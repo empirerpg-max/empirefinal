@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { X, Send, Sparkles, Star, ThumbsUp, User, SmilePlus } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
+import { getStoredLogin } from "@/components/LoginScreen";
 import { EmojiPicker } from "./EmojiPicker";
 import { RichTextToolbar } from "./RichTextToolbar";
 
@@ -37,25 +38,18 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const comentarioRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // Nome do jogador logado — mesmo padrão usado em toda a Ponto/Header/etc:
+  // getStoredLogin()?.nome (login próprio) primeiro, telegramUser.name como
+  // fallback só pra quem ainda não migrou pro login novo. Sempre automático,
+  // nunca digitado à mão — antes esse campo dependia de /api/user/me (fonte
+  // antiga, telegram_id às vezes sem match) e ficava em branco, obrigando o
+  // jogador a digitar o próprio nome, com risco de erro de digitação.
   useEffect(() => {
-    if (isOpen && !nomeJogador && telegramUser?.id) {
-      const tgId = String(telegramUser.id);
-      fetch(`/api/user/me?telegram_id=${tgId}`, {
-        headers: { "x-telegram-id": tgId },
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.success && data.data?.playerName) {
-            setNomeJogador(data.data.playerName);
-          } else if (telegramUser?.name) {
-            setNomeJogador(telegramUser.name);
-          }
-        })
-        .catch(() => {
-          if (telegramUser?.name) setNomeJogador(telegramUser.name);
-        });
+    if (isOpen && !nomeJogador) {
+      const nomeLogin = getStoredLogin()?.nome || telegramUser?.name || "";
+      if (nomeLogin) setNomeJogador(nomeLogin);
     }
-  }, [isOpen, telegramUser]);
+  }, [isOpen, telegramUser, nomeJogador]);
 
   if (!isOpen) return null;
 
@@ -169,10 +163,9 @@ export const CommentModal: React.FC<CommentModalProps> = ({
             <input
               type="text"
               value={nomeJogador}
-              onChange={(e) => setNomeJogador(e.target.value)}
-              placeholder="Ex: Hugo_Empire"
-              className="w-full px-4 py-3 bg-neutral-800/80 border border-white/10 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition"
-              required
+              readOnly
+              placeholder="Carregando..."
+              className="w-full px-4 py-3 bg-neutral-800/40 border border-white/10 rounded-2xl text-sm text-neutral-300 placeholder-neutral-500 cursor-not-allowed"
             />
           </div>
 
