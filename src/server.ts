@@ -385,6 +385,30 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/testa-permissoes-tv" && request.method === "GET") {
+      const { ensureSheetTab, googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      const resultados: Record<string, string> = {};
+      try {
+        await ensureSheetTab("agendaTV", "TV_Participacao_Processada");
+        resultados.ensureSheetTab = "ok";
+      } catch (e: any) {
+        resultados.ensureSheetTab = `erro: ${e.message}`;
+      }
+      try {
+        await googleSheetsService.agendaTV.appendRow("TV_Participacao_Processada", ["teste", "teste", "teste"]);
+        resultados.appendRow = "ok";
+      } catch (e: any) {
+        resultados.appendRow = `erro: ${e.message}`;
+      }
+      try {
+        const colunaB = await googleSheetsService.registrosCharts.readValues("REGISTRO", "B:B");
+        resultados.lerRegistro = `ok (${colunaB.length} linhas)`;
+      } catch (e: any) {
+        resultados.lerRegistro = `erro: ${e.message}`;
+      }
+      return Response.json(resultados);
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
