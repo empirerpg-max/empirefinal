@@ -283,11 +283,14 @@ function stripArtistPrefix(nome: string, artista: string): string {
   return trimmedNome;
 }
 
-export const Gestao: React.FC = () => {
+export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }> = ({
+  initialTab,
+  initialArtista,
+}) => {
   const { user: telegramUser } = useTelegramUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<TabType>("musica");
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || "musica");
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
 
   // Músicas do catálogo para seleção
@@ -336,7 +339,7 @@ export const Gestao: React.FC = () => {
   }, [meusAlbunsLancados, profile]);
 
   // States Comuns
-  const [artistaResponsavel, setArtistaResponsavel] = useState<string>("");
+  const [artistaResponsavel, setArtistaResponsavel] = useState<string>(initialArtista || "");
   const [participantes, setParticipantes] = useState<string[]>([""]);
 
   // Capa & Mídia
