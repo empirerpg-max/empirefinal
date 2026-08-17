@@ -385,15 +385,14 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/ver-registro-tv" && request.method === "GET") {
+    if (url.pathname === "/api/debug/marca-12-08-processado" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const registro = await googleSheetsService.registrosCharts.readValues("REGISTRO").catch(() => []);
-      // Linhas cujo D (índice 3) bate com um dos rótulos de TV — identifica
-      // o bloco inteiro gerado pelo processamento de participação.
-      const linhasTV = registro
-        .map((row, i) => ({ linha: i + 1, row }))
-        .filter(({ row }) => /EMPIRE HITS|EVENTOS (PEQUENOS|OFICIAIS)/i.test(row[3] || ""));
-      return Response.json({ totalLinhasRegistro: registro.length, totalLinhasTV: linhasTV.length, linhasTV });
+      const resultado = await googleSheetsService.agendaTV.appendRow("TV_Participacao_Processada", [
+        "12/08/2026",
+        "Empire Hits",
+        new Date().toISOString(),
+      ]);
+      return Response.json({ resultado });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
