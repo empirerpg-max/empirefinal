@@ -907,7 +907,12 @@ export async function getEmpirePlayForumTopicController(
   if (tipoParam === "albuns" || tipoParam === "album") {
     sheetMedia = "Albuns";
     sheetComments = "Comentarios_Albuns";
-    sheetIdLabel = sheetMedia;
+    // getEmpirePlayAlbunsController gera o id do álbum como "album_N"
+    // (singular, hardcoded) — não "albuns_N" que buildCleanItem geraria
+    // aqui usando o nome da aba ("Albuns", plural). Com o rótulo errado, o
+    // id nunca batia com o item clicado no catálogo/fórum, a busca do
+    // tópico caía sempre no 404 e os comentários pareciam não existir.
+    sheetIdLabel = "Album";
   } else if (
     tipoParam === "videos" ||
     tipoParam === "video" ||
