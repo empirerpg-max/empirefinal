@@ -385,14 +385,24 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/ver-registro-tv" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const registro = await googleSheetsService.registrosCharts.readValues("REGISTRO").catch(() => []);
-      const processados = await googleSheetsService.agendaTV
+    if (url.pathname === "/api/debug/testa-append-processado" && request.method === "GET") {
+      const { googleSheetsService, listSheetTabs } = await import("../backend/src/services/googleSheetsService");
+      const tabs = await listSheetTabs("agendaTV");
+      const existe = tabs.some((t) => t.title === "TV_Participacao_Processada");
+      let appendResult: number | null | string = null;
+      try {
+        appendResult = await googleSheetsService.agendaTV.appendRow("TV_Participacao_Processada", [
+          "TESTE",
+          "TESTE",
+          new Date().toISOString(),
+        ]);
+      } catch (e: any) {
+        appendResult = `throw: ${e.message}`;
+      }
+      const rowsDepois = await googleSheetsService.agendaTV
         .readValues("TV_Participacao_Processada")
-        .catch(() => []);
-      const ultimasLinhas = registro.slice(-40);
-      return Response.json({ ultimasLinhasRegistro: ultimasLinhas, processados });
+        .catch((e) => `erro leitura: ${e.message}`);
+      return Response.json({ tabExiste: existe, tituloAbas: tabs.map((t) => t.title), appendResult, rowsDepois });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
