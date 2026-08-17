@@ -335,10 +335,12 @@ function ArtistDashboard() {
 // ---------- Aba: Visão Geral ----------
 function GeralTab({ artist, albuns, tourData }: { artist: Artist; albuns: AlbumPayload[]; tourData: any }) {
   const [hof, setHof] = useState<HOFProfile | null | undefined>(undefined);
+  const [biografia, setBiografia] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     getHOFProfile(artist.nome).then((d) => alive && setHof(d));
+    api.getArtistInfo(artist.nome).then((info) => alive && setBiografia(info?.biografia || null));
     return () => { alive = false; };
   }, [artist.nome]);
 
@@ -348,17 +350,11 @@ function GeralTab({ artist, albuns, tourData }: { artist: Artist; albuns: AlbumP
         .reduce((a, b) => a + b, 0)
     : 0;
 
-  // A fonte de dados (Apps Script legado) às vezes devolve uma data crua
-  // (ex: "Wed May 13 2026 00:00:00 GMT-0300...") no campo de descrição —
-  // nunca faz sentido mostrar isso, trata como se estivesse vazio.
-  const descricao = (artist.descricao || "").trim();
-  const hasDescricao = descricao && !/^\w{3}\s\w{3}\s\d{1,2}\s\d{4}.*GMT/i.test(descricao);
-
   return (
     <div className="space-y-4">
-      {hasDescricao && (
+      {biografia && (
         <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
-          <p className="text-sm text-muted-foreground leading-relaxed">{descricao}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">{biografia}</p>
         </div>
       )}
 
