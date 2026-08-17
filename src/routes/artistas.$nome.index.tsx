@@ -27,11 +27,14 @@ import {
   Instagram,
   Star,
   Sparkles,
+  Play,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
 import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type BemItem, type NivelJogador } from "@/lib/api";
 import { getHOFProfile, type HOFProfile } from "@/lib/charts";
 import { notify } from "@/lib/notify";
+import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
+import { toPlayableTrack, toPlayableVideo } from "@/components/EmpirePlay/mappers";
 
 export const Route = createFileRoute("/artistas/$nome/")({
   component: ArtistDashboard,
@@ -294,7 +297,7 @@ function ArtistDashboard() {
         {/* ── Ações rápidas — apenas para o dono do artista ── */}
         {isOwner && (
           <div className="grid grid-cols-3 gap-3">
-            <QuickAction icon={<Disc3 className="size-6 text-purple-400" />} label="Álbum" id="btn-album" to="/acoes/album" params={{ nome: artist.nome }} />
+            <QuickAction icon={<Disc3 className="size-6 text-purple-400" />} label="Álbum" id="btn-album" to="/empire-play/gestao" params={{ tab: "album", nome: artist.nome }} />
             <QuickAction icon={<Mic2 className="size-6 text-emerald-400" />} label="Turnê" id="btn-tour" to="/acoes/tour" params={{ nome: artist.nome }} />
             <QuickAction icon={<Film className="size-6 text-blue-400" />} label="Cinema" id="btn-cinema" to="/acoes/cinema" params={{ nome: artist.nome }} />
           </div>
@@ -415,18 +418,26 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
 
 // ---------- Aba: Discografia ----------
 function DiscografiaTab({ nome, albuns, isOwner }: { nome: string; albuns: AlbumPayload[]; isOwner: boolean }) {
+  const { playSong, playVideo } = useEmpirePlayer();
   const [musicas, setMusicas] = useState<any[] | null>(null);
   const [videos, setVideos] = useState<any[] | null>(null);
+  const [albunsCatalogo, setAlbunsCatalogo] = useState<any[] | null>(null);
 
   useEffect(() => {
     let alive = true;
+    const normNome = nome.trim().toLowerCase();
     Promise.all([
       fetch(`/api/empire-play/musicas?artist=${encodeURIComponent(nome)}`).then((r) => r.json()).catch(() => null),
       fetch(`/api/empire-play/videos?artist=${encodeURIComponent(nome)}`).then((r) => r.json()).catch(() => null),
-    ]).then(([m, v]) => {
+      fetch(`/api/empire-play/albuns`).then((r) => r.json()).catch(() => null),
+    ]).then(([m, v, alb]) => {
       if (!alive) return;
       setMusicas(Array.isArray(m?.data) ? m.data : []);
       setVideos(Array.isArray(v?.data) ? v.data : []);
+      const albunsList = Array.isArray(alb?.data) ? alb.data : [];
+      setAlbunsCatalogo(
+        albunsList.filter((a: any) => (a.artist || a.artista || "").trim().toLowerCase() === normNome),
+      );
     });
     return () => { alive = false; };
   }, [nome]);
@@ -464,6 +475,35 @@ function DiscografiaTab({ nome, albuns, isOwner }: { nome: string; albuns: Album
 
       <section>
         <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
+          <Disc3 className="size-3.5" /> Álbuns no catálogo (Empire Play)
+        </h2>
+        {albunsCatalogo === null ? (
+          <div className="h-24 rounded-2xl bg-card animate-pulse" />
+        ) : albunsCatalogo.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground italic px-1">Nenhum álbum publicado no catálogo ainda.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            {albunsCatalogo.map((a) => {
+              const cover = driveImg(a.coverUrl || a.cover || a.capa_url || a.capa_do_album || a.capa);
+              return (
+                <Link key={a.id} to="/empire-play/forum" search={{ tab: "albuns", id: a.id }} className="group">
+                  <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5 grid place-items-center">
+                    {cover ? (
+                      <img src={cover} alt={a.title || a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" referrerPolicy="no-referrer" />
+                    ) : (
+                      <Disc3 className="size-8 text-muted-foreground" />
+                    )}
+                  </div>
+                  <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.title || a.titulo}</p>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
           <Music className="size-3.5" /> Músicas no catálogo
         </h2>
         {musicas === null ? (
@@ -472,14 +512,22 @@ function DiscografiaTab({ nome, albuns, isOwner }: { nome: string; albuns: Album
           <p className="text-[10px] text-muted-foreground italic px-1">Nenhuma música no catálogo ainda.</p>
         ) : (
           <div className="space-y-1.5">
-            {musicas.slice(0, 10).map((m, i) => (
-              <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
-                <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
-                  {m.cover ? <img src={m.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Music className="size-4 text-muted-foreground" />}
-                </div>
-                <span className="text-sm font-medium truncate flex-1">{m.title || m.titulo || "—"}</span>
-              </div>
-            ))}
+            {musicas.slice(0, 10).map((m, i) => {
+              const cover = driveImg(m.coverUrl);
+              return (
+                <button
+                  key={i}
+                  onClick={() => playSong(toPlayableTrack(m), musicas.map(toPlayableTrack))}
+                  className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors text-left"
+                >
+                  <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
+                    {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Music className="size-4 text-muted-foreground" />}
+                  </div>
+                  <span className="text-sm font-medium truncate flex-1">{m.title || m.titulo || "—"}</span>
+                  <Play className="size-3.5 text-muted-foreground shrink-0" />
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
@@ -494,14 +542,22 @@ function DiscografiaTab({ nome, albuns, isOwner }: { nome: string; albuns: Album
           <p className="text-[10px] text-muted-foreground italic px-1">Nenhum vídeo no catálogo ainda.</p>
         ) : (
           <div className="space-y-1.5">
-            {videos.slice(0, 10).map((v, i) => (
-              <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
-                <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
-                  {v.cover ? <img src={v.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Video className="size-4 text-muted-foreground" />}
-                </div>
-                <span className="text-sm font-medium truncate flex-1">{v.title || v.titulo || "—"}</span>
-              </div>
-            ))}
+            {videos.slice(0, 10).map((v, i) => {
+              const cover = driveImg(v.coverUrl);
+              return (
+                <button
+                  key={i}
+                  onClick={() => playVideo(toPlayableVideo(v))}
+                  className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors text-left"
+                >
+                  <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
+                    {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Video className="size-4 text-muted-foreground" />}
+                  </div>
+                  <span className="text-sm font-medium truncate flex-1">{v.title || v.titulo || "—"}</span>
+                  <Play className="size-3.5 text-muted-foreground shrink-0" />
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
