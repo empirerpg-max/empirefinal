@@ -137,6 +137,24 @@ export function useTelegramUser(): {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // O login próprio (aba Usuários) é a identidade de verdade do app hoje
+    // — sempre tem prioridade sobre qualquer resquício do sistema antigo de
+    // Telegram WebApp. Sem isso, "user.id" caía no "tg_user_cache" (cache
+    // de uma sessão/dispositivo anterior, possivelmente de outro jogador no
+    // mesmo navegador), fazendo telas que checam posse por telegram_id
+    // (ex.: "Meus artistas") misturarem artistas de outro dono.
+    try {
+      const rawLogin = localStorage.getItem("empire_login_user");
+      if (rawLogin) {
+        const login = JSON.parse(rawLogin);
+        if (login?.id) {
+          setUser({ id: String(login.id), name: login.usuario || login.nome || "Jogador", isTest: false });
+          setReady(true);
+          return;
+        }
+      }
+    } catch {}
+
     const params = new URLSearchParams(window.location.search);
     const urlId =
       params.get("tg_id") ||

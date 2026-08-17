@@ -93,8 +93,14 @@ function ArtistasList() {
                 const generoVal = a.genero && a.genero.trim() !== "" ? a.genero : null;
                 const paisVal = a.pais && a.pais.trim() !== "" ? a.pais : null;
                 const cleanDescription = (a.descricao || "").trim();
+                // A fonte de dados (Apps Script legado) às vezes devolve uma
+                // data crua (ex: "Wed May 13 2026 00:00:00 GMT-0300...") no
+                // campo de descrição — nunca é um texto que faça sentido
+                // mostrar, então trata como se estivesse vazio.
+                const looksLikeRawDate = /^\w{3}\s\w{3}\s\d{1,2}\s\d{4}.*GMT/i.test(cleanDescription);
                 const hasDescription =
                   cleanDescription.length > 3 &&
+                  !looksLikeRawDate &&
                   !["sim", "não", "vazio", "n/a"].includes(cleanDescription.toLowerCase());
 
                 return (
@@ -148,8 +154,8 @@ function ArtistasList() {
                             </div>
                             <div className="w-[1px] h-6 bg-white/10" />
                             <div className="flex flex-col min-w-0">
-                              <span className="text-[10px] text-muted-foreground uppercase font-black tracking-wider">Prestígio</span>
-                              <span className="text-xs font-black text-amber-400 truncate">{a.prestigio.toLocaleString("pt-BR")} pts</span>
+                              <span className="text-[10px] text-muted-foreground uppercase font-black tracking-wider">Seguidores</span>
+                              <span className="text-xs font-black text-amber-400 truncate">{a.seguidores.toLocaleString("pt-BR")}</span>
                             </div>
                             <div className="w-[1px] h-6 bg-white/10" />
                             <div className="flex flex-col min-w-0">
