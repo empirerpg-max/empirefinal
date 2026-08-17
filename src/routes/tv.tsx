@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2 } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
-import { api, driveImg, type ProgramaTV } from "@/lib/api";
+import { api, driveImg, driveRawImg, type ProgramaTV } from "@/lib/api";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
 
@@ -714,84 +714,146 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
     { id: "sobre", label: "Sobre", icon: Info },
   ];
 
+  // Sheet estilo Reels aberto no mobile (null = fechado, mostra só o vídeo).
+  const [mobileSheet, setMobileSheet] = useState<WatchTab | null>(null);
+
+  const player = (() => {
+    const embed = resolveStreamEmbed(programa.stream_url, !!programa.ao_vivo);
+    if (embed) {
+      return (
+        <iframe
+          src={embed}
+          title={programa.titulo}
+          className="w-full h-full border-0 block"
+          allow="autoplay; camera; microphone; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          loading="lazy"
+        />
+      );
+    }
+    const hasKick = !!programa.stream_url && /kick\.com/.test(programa.stream_url);
+    const waiting = hasKick && !programa.ao_vivo;
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-center px-4">
+        {waiting ? (
+          <>
+            <div className="size-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+            <span className="text-sm text-foreground font-semibold">Aguardando início da transmissão</span>
+            <span className="text-xs text-muted-foreground">O player será ativado quando o canal estiver ao vivo.</span>
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">Sem vídeo.</span>
+        )}
+      </div>
+    );
+  })();
+
   return (
-    <div className="h-full flex flex-col lg:flex-row min-h-0">
-      {/* No mobile isso NÃO pode ser flex-1: o vídeo já tem altura própria
-          (aspect-ratio), então dividir o espaço igualmente com o chat
-          (que precisa do resto da tela pra não cortar o campo de digitar
-          quando o teclado abre) deixava tudo espremido e imprevisível. */}
-      <div className="shrink-0 lg:flex-1 flex flex-col min-w-0">
-        <div className="flex items-center gap-3 px-4 h-12 border-b border-border/60 bg-background/90 backdrop-blur shrink-0">
-          <button onClick={onBack} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Voltar">
-            <ArrowLeft className="size-4" />
+    <>
+      {/* ---------- Mobile: vídeo sempre visível em tela cheia + sheet
+          estilo Reels que sobe por cima, sem nunca cobrir o player. A
+          gaveta é um bloco comum (não position:fixed calculado por JS) com
+          rolagem própria, então o teclado do celular se comporta sozinho. */}
+      <div className="lg:hidden relative h-full bg-black">
+        <div className="absolute inset-0 flex flex-col">
+          <div className="flex items-center gap-3 px-4 h-12 shrink-0 bg-gradient-to-b from-black/70 to-transparent absolute top-0 inset-x-0 z-10">
+            <button onClick={onBack} className="size-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white" aria-label="Voltar">
+              <ArrowLeft className="size-4" />
+            </button>
+            <div className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{programa.titulo}</div>
+            {programa.ao_vivo && (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
+                <Radio className="size-2.5 animate-pulse" /> LIVE
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-h-0">{player}</div>
+        </div>
+
+        {/* Botões flutuantes estilo Reels (comentar / participantes / sobre) */}
+        <div className="absolute right-3 bottom-6 z-10 flex flex-col items-center gap-4">
+          <button
+            onClick={() => setMobileSheet(mobileSheet === "chat" ? null : "chat")}
+            className="size-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
+            aria-label="Comentários"
+          >
+            <MessageSquare className="size-5" />
           </button>
-          <div className="min-w-0 flex-1 truncate text-sm font-semibold">{programa.titulo}</div>
-          {programa.ao_vivo && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
-              <Radio className="size-2.5 animate-pulse" /> LIVE
-            </span>
-          )}
+          <button
+            onClick={() => setMobileSheet(mobileSheet === "participantes" ? null : "participantes")}
+            className="size-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
+            aria-label="Participantes"
+          >
+            <Users className="size-5" />
+          </button>
+          <button
+            onClick={() => setMobileSheet(mobileSheet === "sobre" ? null : "sobre")}
+            className="size-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
+            aria-label="Sobre"
+          >
+            <Info className="size-5" />
+          </button>
         </div>
 
-        <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>
-          {(() => {
-            const embed = resolveStreamEmbed(programa.stream_url, !!programa.ao_vivo);
-            if (embed) {
-              return (
-                <iframe
-                  src={embed}
-                  title={programa.titulo}
-                  className="w-full h-full border-0 block"
-                  allow="autoplay; camera; microphone; fullscreen; encrypted-media; picture-in-picture"
-                  allowFullScreen
-                  loading="lazy"
-                />
-              );
-            }
-            const hasKick = !!programa.stream_url && /kick\.com/.test(programa.stream_url);
-            const waiting = hasKick && !programa.ao_vivo;
-            return (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-center px-4">
-                {waiting ? (
-                  <>
-                    <div className="size-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-                    <span className="text-sm text-foreground font-semibold">Aguardando início da transmissão</span>
-                    <span className="text-xs text-muted-foreground">O player será ativado quando o canal estiver ao vivo.</span>
-                  </>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Sem vídeo.</span>
-                )}
-              </div>
-            );
-          })()}
-        </div>
-
-        <div className="lg:hidden px-4 py-3 border-b border-border/60">
-          <div className="text-sm font-semibold">{programa.titulo}</div>
-          {programa.subtitulo && <div className="text-xs text-muted-foreground mt-0.5">{programa.subtitulo}</div>}
-        </div>
-      </div>
-
-      <div className="flex-1 lg:flex-none lg:w-[360px] border-t lg:border-t-0 lg:border-l border-border flex flex-col min-h-0 bg-card/30">
-        <div className="flex items-center gap-1 px-2 h-10 border-b border-border shrink-0 overflow-x-auto">
-          {tabs.map((t) => {
-            const Icon = t.icon;
-            const active = tab === t.id;
-            return (
-              <button key={t.id} onClick={() => setTab(t.id)} className={`shrink-0 h-8 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition ${active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
-                <Icon className="size-3.5" /> {t.label}
+        {mobileSheet && (
+          <div className="absolute inset-x-0 bottom-0 z-20 max-h-[62dvh] h-[62dvh] bg-background rounded-t-2xl border-t border-border flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200">
+            <div className="flex items-center justify-between px-4 h-11 border-b border-border shrink-0">
+              <span className="text-sm font-bold flex items-center gap-1.5">
+                {mobileSheet === "chat" && <><MessageSquare className="size-3.5" /> Comentários</>}
+                {mobileSheet === "participantes" && <><Users className="size-3.5" /> Participantes</>}
+                {mobileSheet === "sobre" && <><Info className="size-3.5" /> Sobre</>}
+              </span>
+              <button onClick={() => setMobileSheet(null)} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Fechar">
+                <X className="size-4" />
               </button>
-            );
-          })}
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col">
+              {mobileSheet === "chat" && <ChatPanel programaId={programa.id} />}
+              {mobileSheet === "participantes" && <ParticipantesPanel programa={programa} />}
+              {mobileSheet === "sobre" && <SobrePanel programa={programa} />}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ---------- Desktop: player + painel lateral fixo, como antes ---------- */}
+      <div className="hidden lg:flex h-full min-h-0">
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex items-center gap-3 px-4 h-12 border-b border-border/60 bg-background/90 backdrop-blur shrink-0">
+            <button onClick={onBack} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Voltar">
+              <ArrowLeft className="size-4" />
+            </button>
+            <div className="min-w-0 flex-1 truncate text-sm font-semibold">{programa.titulo}</div>
+            {programa.ao_vivo && (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
+                <Radio className="size-2.5 animate-pulse" /> LIVE
+              </span>
+            )}
+          </div>
+          <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
         </div>
 
-        <div className="flex-1 min-h-0 flex flex-col">
-          {tab === "chat" && <ChatPanel programaId={programa.id} />}
-          {tab === "participantes" && <ParticipantesPanel programa={programa} />}
-          {tab === "sobre" && <SobrePanel programa={programa} />}
+        <div className="lg:w-[360px] border-l border-border flex flex-col min-h-0 bg-card/30">
+          <div className="flex items-center gap-1 px-2 h-10 border-b border-border shrink-0 overflow-x-auto">
+            {tabs.map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.id;
+              return (
+                <button key={t.id} onClick={() => setTab(t.id)} className={`shrink-0 h-8 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition ${active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
+                  <Icon className="size-3.5" /> {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex-1 min-h-0 flex flex-col">
+            {tab === "chat" && <ChatPanel programaId={programa.id} />}
+            {tab === "participantes" && <ParticipantesPanel programa={programa} />}
+            {tab === "sobre" && <SobrePanel programa={programa} />}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -967,7 +1029,9 @@ function ChatPanel({ programaId }: { programaId: string }) {
       const json = await res.json().catch(() => null);
       const driveUrl = json?.data?.fileUrl;
       const match = typeof driveUrl === "string" ? driveUrl.match(/\/d\/([\w-]+)/) : null;
-      const thumbUrl = match ? `https://drive.google.com/thumbnail?id=${match[1]}&sz=w400` : driveUrl;
+      // Proxy autenticado (não o link direto do Drive, que não é hotlinkável
+      // e faz o GIF aparecer como link quebrado pra alguns jogadores).
+      const thumbUrl = match ? `/api/media/image?id=${match[1]}` : driveUrl;
       if (thumbUrl) {
         setGifs((prev) => [{ id: match?.[1] || String(Date.now()), name: file.name, url: thumbUrl }, ...(prev || [])]);
         await sendGif(thumbUrl);
@@ -1027,7 +1091,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
                 {!own && (
                   <div className="size-7 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mb-0.5">
                     {m.userPhoto ? (
-                      <img src={driveImg(m.userPhoto, 100)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <img src={driveRawImg(m.userPhoto)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>
                     )}
@@ -1042,7 +1106,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
                       className={`block w-full text-left mb-1 pl-2 py-1 border-l-2 border-primary/60 text-[11px] rounded-r bg-black/10 hover:bg-black/20 transition-colors ${own ? "text-right border-l-0 border-r-2 pr-2 pl-0" : ""}`}
                     >
                       <span className="font-semibold text-primary/80">{m.reply_to.user}</span>
-                      <span className="text-muted-foreground">: {m.reply_to.text}</span>
+                      <span className="text-muted-foreground">: {m.reply_to.text.startsWith(GIF_PREFIX) ? "GIF/figurinha" : m.reply_to.text}</span>
                     </button>
                   )}
                   {m.text.startsWith(GIF_PREFIX) ? (
@@ -1075,7 +1139,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
                 <button
                   type="button"
                   onClick={() => startReply(m)}
-                  className="mb-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition shrink-0"
+                  className="mb-1 size-7 grid place-items-center rounded-full opacity-70 active:opacity-100 active:bg-muted lg:opacity-0 lg:group-hover:opacity-100 text-muted-foreground hover:text-primary transition shrink-0"
                   aria-label="Responder"
                 >
                   <Reply className="inline size-3.5" />
@@ -1091,7 +1155,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
           <Reply className="size-3 mt-0.5 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-muted-foreground">Respondendo a <span className={`font-semibold ${colorFor(replyTo.user)}`}>{replyTo.user}</span></div>
-            <div className="truncate text-foreground/80">{replyTo.text}</div>
+            <div className="truncate text-foreground/80">{replyTo.text.startsWith(GIF_PREFIX) ? "GIF/figurinha" : replyTo.text}</div>
           </div>
           <button type="button" onClick={() => setReplyTo(null)} className="shrink-0 hover:text-foreground text-muted-foreground" aria-label="Cancelar resposta">
             <X className="size-3.5" />
@@ -1188,12 +1252,6 @@ function ChatPanel({ programaId }: { programaId: string }) {
           ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onFocus={(e) => {
-            // No mobile o teclado some com boa parte da tela e pode cobrir
-            // o campo — espera a animação do teclado e garante que ele
-            // fique visível acima dele.
-            setTimeout(() => e.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" }), 250);
-          }}
           placeholder={replyTo ? `Responder a ${replyTo.user}...` : "Mandar mensagem"}
           maxLength={300}
           className="flex-1 h-9 px-3 rounded-md bg-muted text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground min-w-0"
