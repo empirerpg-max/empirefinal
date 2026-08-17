@@ -393,6 +393,51 @@ export async function setArtistFotoController(request: Request): Promise<Respons
   }
 }
 
+/**
+ * GET /api/artistas/listar-todos
+ * Substitui o `listar_todos` do Apps Script legado — lê a aba ARTISTAS
+ * (mesma fonte já usada pra posse/vínculo) e devolve todo mundo com os
+ * mesmos campos que o front espera (ver `normalizeArtist` em src/lib/api.ts).
+ * Colunas que não existem na aba (seguidores, vendas_total, descricao,
+ * genero, pais) saem vazias/zeradas — o front já trata isso como padrão.
+ */
+export async function getAllArtistasController(): Promise<Response> {
+  try {
+    const rows = await readArtistasRows();
+    const data = rows
+      .filter((r) => r.rec["nome"])
+      .map((r) => ({
+        nome: r.rec["nome"],
+        foto: r.rec["foto"] || "",
+        status: r.rec["status"] || "Livre",
+        saldo: r.rec["saldo"] || "0",
+        gravadora: r.rec["gravadora"] || "Independent",
+        fortuna_real: r.rec["fortuna_real"] || "0",
+        fortuna_bens: r.rec["fortuna_de_bens"] || r.rec["fortuna_bens"] || "0",
+        fortuna_total: r.rec["fortuna_total"] || r.rec["fortuna_calculo"] || "0",
+        prestigio: r.rec["prestigio"] || "0",
+        fadiga: r.rec["fadiga"] || "0",
+        seguidores: r.rec["seguidores"] || "0",
+        vendas_total: r.rec["vendas_total"] || "0",
+        telegram_id: r.rec["id_usuario"] || "",
+        descricao: r.rec["descricao"] || "",
+        genero: r.rec["genero"] || "",
+        pais: r.rec["pais"] || "",
+      }));
+
+    return new Response(JSON.stringify({ success: true, data }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (error: any) {
+    console.error("[getAllArtistasController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao listar artistas." }),
+      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
+  }
+}
+
 export async function getMeusArtistasNomesController(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);

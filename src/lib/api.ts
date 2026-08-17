@@ -368,9 +368,18 @@ export const api = {
     });
     return res.json();
   },
+  // Migrado do Apps Script (listar_todos) pro nosso backend — lê direto a
+  // aba ARTISTAS (mesma fonte de posse já usada em meusArtistas/vincular).
   async listarTodos(): Promise<Artist[]> {
-    const data = await call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true });
-    return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
+    try {
+      const res = await fetch(`/api/artistas/listar-todos`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      const data = Array.isArray(json?.data) ? json.data : [];
+      return data.map((a: Record<string, unknown>) => normalizeArtist(a));
+    } catch {
+      return [];
+    }
   },
   async radar(): Promise<RadarItem[]> {
     const data = await call<RadarItem[]>({ acao: "radar" }, { cache: true });
