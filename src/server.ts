@@ -336,6 +336,23 @@ async function logServerError(env: { FLAGS?: FlagsKv }, error: unknown, path?: s
 }
 
 export default {
+  // Roda a cada 10 min (ver wrangler.jsonc, "triggers.crons") — processa
+  // transmissões da Empire TV recém-encerradas e grava a participação dos
+  // jogadores (presença + chat) em REGISTRO.
+  async scheduled(_event: unknown, env: unknown, ctx: { waitUntil: (p: Promise<unknown>) => void }) {
+    injectRuntimeEnv(env);
+    const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
+    ctx.waitUntil(
+      processarParticipacaoTV()
+        .then((r) =>
+          console.log(
+            `[scheduled] Participação TV: ${r.transmissoesProcessadas} transmissões, ${r.registrosGravados} registros.`,
+          ),
+        )
+        .catch((err) => console.error("[scheduled] Erro ao processar participação TV:", err)),
+    );
+  },
+
   async fetch(request: Request, env: unknown, ctx: unknown) {
     const url = new URL(request.url);
 
@@ -366,16 +383,6 @@ export default {
       const flags = env as { FLAGS?: FlagsKv };
       const raw = flags.FLAGS ? await flags.FLAGS.get("error-log") : null;
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
-    }
-
-    if (url.pathname === "/api/debug/regra-tv" && request.method === "GET") {
-      const { listSheetTabs, googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const tabs = await listSheetTabs("agendaTV");
-      const target = tabs.find((t) => t.sheetId === 1749719136);
-      const regra = target
-        ? await googleSheetsService.agendaTV.readValues(target.title, "A1:F30").catch(() => [])
-        : [];
-      return Response.json({ tabs, targetTitle: target?.title, regra });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
