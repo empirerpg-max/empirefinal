@@ -18,6 +18,8 @@ import {
   Plus,
   ArrowUp,
   ArrowDown,
+  FileText,
+  Check,
 } from "lucide-react";
 
 // "music-videos" foi consolidado dentro de "videos" — vivem na mesma aba
@@ -40,6 +42,7 @@ interface AlbumFaixa {
   titulo: string;
   ordem: number;
   audioUrl: string;
+  letra?: string;
 }
 
 interface MusicaEmChart {
@@ -97,6 +100,7 @@ export const EditModal: React.FC<EditModalProps> = ({
   // Formulário do item em edição
   const [editTitulo, setEditTitulo] = useState<string>("");
   const [editDescricao, setEditDescricao] = useState<string>("");
+  const [editLetra, setEditLetra] = useState<string>("");
   const [capaFile, setCapaFile] = useState<File | null>(null);
   const [capaPreview, setCapaPreview] = useState<string | null>(null);
 
@@ -121,6 +125,12 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [novaFaixaMediaUrl, setNovaFaixaMediaUrl] = useState<string>("");
   const [novaFaixaAudioFile, setNovaFaixaAudioFile] = useState<File | null>(null);
   const [uploadingFaixaAudio, setUploadingFaixaAudio] = useState<boolean>(false);
+  const [novaFaixaLetra, setNovaFaixaLetra] = useState<string>("");
+
+  // Editar letra de uma faixa já existente do álbum (inline, por faixa).
+  const [editingFaixaLetraIndex, setEditingFaixaLetraIndex] = useState<number | null>(null);
+  const [faixaLetraText, setFaixaLetraText] = useState<string>("");
+  const [savingFaixaLetra, setSavingFaixaLetra] = useState<boolean>(false);
 
   // Atualizar artista quando props mudam
   useEffect(() => {
@@ -198,6 +208,7 @@ export const EditModal: React.FC<EditModalProps> = ({
     setEditingItem(item);
     setEditTitulo(item.titulo);
     setEditDescricao(item.descricao || "");
+    setEditLetra(item.fields?.letra || "");
     setCapaFile(null);
     setCapaPreview(item.capaUrl || null);
     setSuccessMsg(null);
@@ -208,6 +219,9 @@ export const EditModal: React.FC<EditModalProps> = ({
     setNovaFaixaBusca("");
     setNovaFaixaMediaUrl("");
     setNovaFaixaAudioFile(null);
+    setNovaFaixaLetra("");
+    setEditingFaixaLetraIndex(null);
+    setFaixaLetraText("");
     if (item.tipo === "albuns" && item.fields?.topicId) {
       fetchAlbumFaixas(item.fields.topicId);
     }
@@ -237,6 +251,36 @@ export const EditModal: React.FC<EditModalProps> = ({
       console.error("Erro ao reordenar faixas:", err);
     } finally {
       setSavingOrdem(false);
+    }
+  };
+
+  const handleToggleFaixaLetra = (idx: number) => {
+    if (editingFaixaLetraIndex === idx) {
+      setEditingFaixaLetraIndex(null);
+      return;
+    }
+    setEditingFaixaLetraIndex(idx);
+    setFaixaLetraText(albumFaixas[idx]?.letra || "");
+  };
+
+  const handleSaveFaixaLetra = async (faixa: AlbumFaixa, idx: number) => {
+    setSavingFaixaLetra(true);
+    try {
+      const res = await fetch("/api/gestao/faixa-letra", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ musicaRowIndex: faixa.musicaRowIndex, letra: faixaLetraText }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Erro ao salvar letra.");
+      setAlbumFaixas((prev) =>
+        prev.map((f, i) => (i === idx ? { ...f, letra: faixaLetraText } : f)),
+      );
+      setEditingFaixaLetraIndex(null);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Erro ao salvar letra da faixa.");
+    } finally {
+      setSavingFaixaLetra(false);
     }
   };
 
@@ -281,6 +325,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               tipoSingle: novaFaixaTipoSingle,
               tipoMusica: novaFaixaTipoMusica,
               mediaUrl,
+              letra: novaFaixaLetra.trim(),
               abrirTopico: false,
             },
           ],
@@ -297,6 +342,7 @@ export const EditModal: React.FC<EditModalProps> = ({
       setNovaFaixaBusca("");
       setNovaFaixaMediaUrl("");
       setNovaFaixaAudioFile(null);
+      setNovaFaixaLetra("");
       fetchAlbumFaixas(editingItem.fields.topicId);
       setTimeout(() => setSuccessMsg(null), 2000);
     } catch (err: any) {
@@ -387,6 +433,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         oldCapaUrl: editingItem.capaUrl,
         capaBase64,
         capaMimeType,
+        ...(category === "musicas" ? { letra: editLetra } : {}),
       };
 
       const res = await fetch("/api/editar", {
@@ -411,6 +458,8 @@ export const EditModal: React.FC<EditModalProps> = ({
                 titulo: editTitulo.trim(),
                 descricao: editDescricao.trim(),
                 capaUrl: json.capaUrl || r.capaUrl,
+                fields:
+                  category === "musicas" ? { ...r.fields, letra: editLetra } : r.fields,
               }
             : r,
         ),
@@ -566,34 +615,76 @@ export const EditModal: React.FC<EditModalProps> = ({
                   ) : (
                     <div className="space-y-1.5">
                       {albumFaixas.map((faixa, idx) => (
-                        <div
-                          key={faixa.musicaRowIndex}
-                          className="flex items-center gap-2 p-2.5 bg-neutral-800/40 border border-white/10 rounded-xl"
-                        >
-                          <span className="w-5 text-center font-mono text-[11px] text-neutral-500">
-                            {faixa.ordem}
-                          </span>
-                          <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 truncate">
-                            {faixa.titulo}
-                          </span>
-                          <button
-                            type="button"
-                            disabled={idx === 0 || savingOrdem}
-                            onClick={() => handleMoveFaixa(idx, -1)}
-                            className="size-7 rounded-lg bg-neutral-900 hover:bg-neutral-700 text-neutral-400 hover:text-white grid place-items-center transition disabled:opacity-30 disabled:pointer-events-none"
-                            title="Mover pra cima"
-                          >
-                            <ArrowUp className="size-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === albumFaixas.length - 1 || savingOrdem}
-                            onClick={() => handleMoveFaixa(idx, 1)}
-                            className="size-7 rounded-lg bg-neutral-900 hover:bg-neutral-700 text-neutral-400 hover:text-white grid place-items-center transition disabled:opacity-30 disabled:pointer-events-none"
-                            title="Mover pra baixo"
-                          >
-                            <ArrowDown className="size-3.5" />
-                          </button>
+                        <div key={faixa.musicaRowIndex}>
+                          <div className="flex items-center gap-2 p-2.5 bg-neutral-800/40 border border-white/10 rounded-xl">
+                            <span className="w-5 text-center font-mono text-[11px] text-neutral-500">
+                              {faixa.ordem}
+                            </span>
+                            <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 truncate">
+                              {faixa.titulo}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleFaixaLetra(idx)}
+                              className={`size-7 rounded-lg grid place-items-center transition ${
+                                faixa.letra
+                                  ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                                  : "bg-neutral-900 hover:bg-neutral-700 text-neutral-400 hover:text-white"
+                              }`}
+                              title={faixa.letra ? "Editar letra" : "Inserir letra"}
+                            >
+                              <FileText className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === 0 || savingOrdem}
+                              onClick={() => handleMoveFaixa(idx, -1)}
+                              className="size-7 rounded-lg bg-neutral-900 hover:bg-neutral-700 text-neutral-400 hover:text-white grid place-items-center transition disabled:opacity-30 disabled:pointer-events-none"
+                              title="Mover pra cima"
+                            >
+                              <ArrowUp className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === albumFaixas.length - 1 || savingOrdem}
+                              onClick={() => handleMoveFaixa(idx, 1)}
+                              className="size-7 rounded-lg bg-neutral-900 hover:bg-neutral-700 text-neutral-400 hover:text-white grid place-items-center transition disabled:opacity-30 disabled:pointer-events-none"
+                              title="Mover pra baixo"
+                            >
+                              <ArrowDown className="size-3.5" />
+                            </button>
+                          </div>
+
+                          {editingFaixaLetraIndex === idx && (
+                            <div className="mt-1.5 p-2.5 bg-neutral-800/60 border border-amber-500/30 rounded-xl space-y-2">
+                              <textarea
+                                rows={6}
+                                autoFocus
+                                value={faixaLetraText}
+                                onChange={(e) => setFaixaLetraText(e.target.value)}
+                                placeholder="Cole ou digite a letra completa..."
+                                className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none resize-y"
+                              />
+                              <div className="flex justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingFaixaLetraIndex(null)}
+                                  className="px-3 py-1.5 rounded-lg bg-neutral-900 text-neutral-400 text-[11px] font-bold uppercase"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={savingFaixaLetra}
+                                  onClick={() => handleSaveFaixaLetra(faixa, idx)}
+                                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black uppercase inline-flex items-center gap-1.5 disabled:opacity-50"
+                                >
+                                  <Check className="size-3.5" />
+                                  {savingFaixaLetra ? "Salvando..." : "Salvar Letra"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -681,6 +772,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                               className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none"
                             />
                           </div>
+                          <textarea
+                            rows={4}
+                            value={novaFaixaLetra}
+                            onChange={(e) => setNovaFaixaLetra(e.target.value)}
+                            placeholder="Letra da faixa (opcional)"
+                            className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none resize-y"
+                          />
                         </>
                       ) : (
                         <div className="relative">
@@ -780,6 +878,23 @@ export const EditModal: React.FC<EditModalProps> = ({
                     onChange={(e) => setEditDescricao(e.target.value)}
                     placeholder="Descrição oficial do vídeo/clipe..."
                     className="w-full px-4 py-3 bg-neutral-800 border border-white/10 rounded-2xl text-sm text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              )}
+
+              {/* LETRA (apenas para Músicas) — inserir ou editar a letra já
+                  lançada, gravada direto na coluna E de Musicas. */}
+              {category === "musicas" && (
+                <div>
+                  <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
+                    Letra da Música
+                  </label>
+                  <textarea
+                    rows={8}
+                    value={editLetra}
+                    onChange={(e) => setEditLetra(e.target.value)}
+                    placeholder="Cole ou digite a letra completa..."
+                    className="w-full px-4 py-3 bg-neutral-800 border border-white/10 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 resize-y"
                   />
                 </div>
               )}

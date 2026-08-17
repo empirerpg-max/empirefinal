@@ -74,7 +74,7 @@ export async function getReleasesForEditController(request: Request): Promise<Re
 
       if (tipoParam === "musicas") {
         // Coluna H = index 7 (Nome da música), Coluna D = index 3 (Capa),
-        // Coluna N = index 13 (ACT PRINCIPAL)
+        // Coluna N = index 13 (ACT PRINCIPAL), Coluna E = index 4 (Letra)
         title = row[7] || row[1] || "";
         artist = row[13] || "";
         cover = row[3] || "";
@@ -127,7 +127,12 @@ export async function getReleasesForEditController(request: Request): Promise<Re
           artista: normalizeText(artist),
           descricao: normalizeText(description),
           capaUrl: normalizeText(cover),
-          fields: tipoParam === "albuns" ? { topicId: normalizeText(row[1]) } : {},
+          fields:
+            tipoParam === "albuns"
+              ? { topicId: normalizeText(row[1]) }
+              : tipoParam === "musicas"
+                ? { letra: normalizeText(row[4]) }
+                : {},
         });
       }
     }
@@ -161,6 +166,7 @@ export async function updateReleaseController(request: Request): Promise<Respons
       capaMimeType,
       oldCapaUrl,
       oldTitulo,
+      letra,
     } = body;
 
     const tipoClean = (tipo || "musicas").toLowerCase() as EditCategory;
@@ -212,6 +218,12 @@ export async function updateReleaseController(request: Request): Promise<Respons
         await googleSheetsService.principal.updateValues(sheetName, `I${rowIndex}`, [
           [finalCapaUrl],
         ]);
+      }
+
+      // Letra (Coluna E) — opcional, só grava quando o campo veio no body
+      // (permite editar/inserir letra sem exigir os outros campos).
+      if (typeof letra === "string") {
+        await googleSheetsService.principal.updateValues(sheetName, `E${rowIndex}`, [[letra]]);
       }
 
       // Atualizar o novo título na planilha Edição Charts (1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8), aba EDIÇÃO CHARTS, Coluna A (MÚSICA)

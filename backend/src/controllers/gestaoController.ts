@@ -48,6 +48,7 @@ export interface TrackItemPayload {
   tipoMusica?: string;
   participantes?: string[]; // Artistas 2 a 6 — só se aplica a faixas inéditas
   mediaUrl?: string; // link do Drive/YouTube — só se aplica a faixas inéditas
+  letra?: string; // só se aplica a faixas inéditas
   // Só pra faixas inéditas: se true, a faixa vira tópico próprio no fórum
   // (Pendente? = "Não"); se false, fica invisível até o jogador decidir
   // abrir (Pendente? = "Sim").
@@ -519,7 +520,7 @@ async function processarFaixasDoAlbum(
         trackTopicId, // B - ID do tópico (só se abrir tópico próprio)
         faixa.mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
         capaUrl || "", // D - Capa da música
-        "", // E - Letra
+        faixa.letra || "", // E - Letra
         trackTopicId, // F - Comentários para
         jogadorId || "", // G - ID do Criador
         songTitle, // H - Nome da música
@@ -663,6 +664,7 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
         titulo: row[7] || "",
         ordem: parseInt(row[20] || "999", 10) || 999,
         audioUrl: row[2] || "",
+        letra: row[4] || "",
       }))
       .sort((a, b) => a.ordem - b.ordem);
 
@@ -674,6 +676,35 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
     console.error("[getAlbumFaixasController] Erro:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message || "Erro ao buscar faixas do álbum." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+// Grava/edita a letra (Musicas!E) de uma faixa já lançada — tanto pra uma
+// música avulsa quanto pra uma faixa dentro de um álbum (mesma aba, mesma
+// coluna, só muda de onde a tela chama).
+export async function updateFaixaLetraController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as { musicaRowIndex?: number; letra?: string };
+    const musicaRowIndex = Number(body.musicaRowIndex);
+    if (!musicaRowIndex || musicaRowIndex < 2) {
+      return new Response(
+        JSON.stringify({ success: false, error: "musicaRowIndex é obrigatório." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    await googleSheetsService.principal.updateValues("Musicas", `E${musicaRowIndex}`, [
+      [body.letra || ""],
+    ]);
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[updateFaixaLetraController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao gravar letra." }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
