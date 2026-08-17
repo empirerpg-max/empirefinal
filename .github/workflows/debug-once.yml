@@ -10,3 +10,6 @@ jobs:
           curl -sS -D - "https://kick.com/api/v2/channels/empiretvoficial" \
             -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" \
             -H "Accept: application/json" | head -c 3000
+      - name: Check media proxy status (post token fix)
+        run: |
+          curl -sS -D - -o /dev/null "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=1_hvLAoIfr6RhRAoQ5QmYIngoZgK23kVn" | head -c 1500
