@@ -13,10 +13,14 @@
   "vars": {
     "TELEGRAM_MEDIA_SERVICE_URL": "https://empire-telegram-media.onrender.com"
   },
-  // Roda a cada 10 min — processa transmissões da Empire TV recém-encerradas
-  // e grava a participação dos jogadores em REGISTRO (ver src/server.ts,
-  // handler "scheduled").
+  // PAUSADO (17/08): a aba TV_Participacao_Processada não conseguia gravar
+  // (permissão negada), então o cron reprocessava a mesma transmissão de
+  // 12/08 a cada 10 min, duplicando registros em REGISTRO. Reativar só
+  // depois de: 1) o usuário liberar edição pra
+  // empire-play-worker@empire-play-504020.iam.gserviceaccount.com na aba
+  // TV_Participacao_Processada, 2) confirmar que a marcação de processado
+  // está gravando de verdade, 3) limpar os registros duplicados já gerados.
   "triggers": {
-    "crons": ["*/10 * * * *"]
+    "crons": []
   }
 }
