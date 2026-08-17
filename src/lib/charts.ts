@@ -84,6 +84,31 @@ export async function getChartData(tab: string, date: string): Promise<ChartRow[
   return fetchCached(`${CHARTS_API}?action=getChart&tab=${encodeURIComponent(tab)}&date=${encodeURIComponent(date)}`);
 }
 
+export async function getMonthlyYears(): Promise<string[]> {
+  return fetchCached(`${CHARTS_API}?action=getMonthlyYears`);
+}
+
+export async function getMonthlyDates(year: string): Promise<string[]> {
+  return fetchCached(`${CHARTS_API}?action=getMonthlyDates&year=${encodeURIComponent(year)}`);
+}
+
+export async function getMonthlyArtists(platform: string, month: string, year: string): Promise<string[]> {
+  return fetchCached(
+    `${CHARTS_API}?action=getArtists&platform=${encodeURIComponent(platform)}&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}`,
+  );
+}
+
+export async function getMonthlyStats(
+  platform: string,
+  month: string,
+  year: string,
+  artist: string,
+): Promise<ChartRow[]> {
+  return fetchCached(
+    `${CHARTS_API}?action=getMonthlyStats&platform=${encodeURIComponent(platform)}&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}&artist=${encodeURIComponent(artist)}`,
+  );
+}
+
 // "site\n\n<b>TÍTULO</b>\n\ntexto" → parágrafos estruturados, pro editorial
 // da home renderizar sem precisar de dangerouslySetInnerHTML na maior parte.
 export interface EditorialLine {
