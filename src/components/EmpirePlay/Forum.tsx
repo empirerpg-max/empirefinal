@@ -19,6 +19,7 @@ import {
   Check,
   ChevronDown,
   ExternalLink,
+  Maximize2,
 } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -165,6 +166,11 @@ export const Forum: React.FC<ForumProps> = ({
   const [playingTrackUrl, setPlayingTrackUrl] = useState<string | null>(null);
   // Letra expandida inline na lista de faixas do álbum (sem sair da tela).
   const [expandedTrackId, setExpandedTrackId] = useState<string | null>(null);
+  // Capa do álbum em tela cheia (lightbox).
+  const [coverExpanded, setCoverExpanded] = useState(false);
+  useEffect(() => {
+    setCoverExpanded(false);
+  }, [selectedTopic?.id]);
 
   const handleVideoPlay = (topic: ForumTopicItem) => {
     // Drive e Telegram nunca são tocáveis pelo link/id cru — precisam passar
@@ -647,6 +653,19 @@ export const Forum: React.FC<ForumProps> = ({
                     }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {activeSubmenu === "albuns" && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCoverExpanded(true);
+                      }}
+                      title="Ver capa em tela cheia"
+                      className="absolute top-2 right-2 sm:top-3 sm:right-3 size-8 sm:size-9 rounded-full bg-black/50 backdrop-blur text-white grid place-items-center opacity-100 sm:opacity-0 group-hover:opacity-100 transition hover:bg-black/70 z-10"
+                    >
+                      <Maximize2 className="size-3.5 sm:size-4" />
+                    </button>
+                  )}
                   {selectedTopic.link && (
                     <button
                       onClick={() =>
@@ -1106,6 +1125,29 @@ export const Forum: React.FC<ForumProps> = ({
 
       {/* MODAL DE PLAYER DE VÍDEO EXPANDIDO */}
       {activeVideo && <VideoPlayer video={activeVideo} onClose={() => setActiveVideo(null)} />}
+
+      {/* CAPA DO ÁLBUM EM TELA CHEIA */}
+      {coverExpanded && selectedTopic && (
+        <div
+          onClick={() => setCoverExpanded(false)}
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8"
+        >
+          <button
+            type="button"
+            onClick={() => setCoverExpanded(false)}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 size-10 rounded-full bg-white/10 hover:bg-white/20 text-white grid place-items-center transition"
+            aria-label="Fechar"
+          >
+            <X className="size-5" />
+          </button>
+          <img
+            src={driveImg(selectedTopic.cover, 1600) || "/placeholder.png"}
+            alt={selectedTopic.title}
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
+          />
+        </div>
+      )}
 
       {/* MODAL DE COMENTÁRIO E AVALIAÇÃO INTERATIVA */}
       {selectedTopic && (
