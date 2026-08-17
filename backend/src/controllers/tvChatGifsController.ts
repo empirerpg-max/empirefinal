@@ -11,7 +11,12 @@ export async function listTvChatGifsController(): Promise<Response> {
       .map((f) => ({
         id: f.id,
         name: f.name,
-        url: `https://drive.google.com/thumbnail?id=${f.id}&sz=w400`,
+        // drive.google.com/thumbnail não é hotlinkável de forma confiável —
+        // o Drive às vezes devolve uma página HTML (limite de acesso/rate
+        // limit) em vez da imagem, fazendo o GIF aparecer como link quebrado
+        // pra alguns jogadores. Usa o proxy autenticado (mesmo já usado pra
+        // fotos de perfil/badge) que sempre devolve os bytes reais do arquivo.
+        url: `/api/media/image?id=${f.id}`,
       }));
     return new Response(JSON.stringify({ success: true, data: items }), {
       status: 200,
