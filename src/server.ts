@@ -385,16 +385,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/marca-12-08-processado" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const resultado = await googleSheetsService.agendaTV.appendRow("TV_Participacao_Processada", [
-        "12/08/2026",
-        "Empire Hits",
-        new Date().toISOString(),
-      ]);
-      return Response.json({ resultado });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);

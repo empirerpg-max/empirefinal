@@ -13,14 +13,11 @@
   "vars": {
     "TELEGRAM_MEDIA_SERVICE_URL": "https://empire-telegram-media.onrender.com"
   },
-  // PAUSADO (17/08): a aba TV_Participacao_Processada não conseguia gravar
-  // (permissão negada), então o cron reprocessava a mesma transmissão de
-  // 12/08 a cada 10 min, duplicando registros em REGISTRO. Reativar só
-  // depois de: 1) o usuário liberar edição pra
-  // empire-play-worker@empire-play-504020.iam.gserviceaccount.com na aba
-  // TV_Participacao_Processada, 2) confirmar que a marcação de processado
-  // está gravando de verdade, 3) limpar os registros duplicados já gerados.
+  // Reativado (17/08): a conta de serviço já tem permissão de edição na aba
+  // TV_Participacao_Processada, a transmissão de 12/08 foi marcada como
+  // processada manualmente (evita duplicar o lote já gravado em REGISTRO) e
+  // REGISTRO foi conferido sem duplicatas.
   "triggers": {
-    "crons": []
+    "crons": ["*/10 * * * *"]
   }
 }
