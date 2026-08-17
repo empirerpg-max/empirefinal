@@ -23,6 +23,13 @@ async function hashPassword(senha: string): Promise<string> {
     .join("");
 }
 
+// Um hash SHA-256 é sempre 64 caracteres hex — usado pra distinguir "já é
+// hash" de "senha inicial em texto puro digitada pelo admin na planilha".
+const HASH_RE = /^[0-9a-f]{64}$/;
+function looksLikeHash(v: string): boolean {
+  return HASH_RE.test(v);
+}
+
 interface UsuariosRow {
   rec: Record<string, string>;
   rowIndex: number;
@@ -96,10 +103,14 @@ export interface LoginBody {
  * relacionar com tudo que já existe no app (comentários, cadastros), nunca
  * pro login em si.
  *
- * Como a Senha ainda está vazia pra todo mundo (conta pré-cadastrada, senha
- * nunca definida): se a conta encontrada não tem hash de senha gravado
- * ainda, a primeira tentativa de login "reivindica" a conta — grava o hash
- * da senha digitada. A partir daí, login exige que a senha bata com o hash.
+ * Contas pré-cadastradas só entram depois que um admin define uma senha
+ * inicial na coluna "Senha" da planilha (texto puro, digitado à mão — sem
+ * isso, NINGUÉM entra, nem "reivindicando" a conta com qualquer senha,
+ * como funcionava antes: isso permitia sequestro de conta por quem soubesse
+ * o nome de usuário). No primeiro login com a senha inicial, o jogador é
+ * obrigado a trocar por uma senha própria (`precisaTrocarSenha: true` na
+ * resposta) via POST /api/auth/trocar-senha — só depois disso a senha vira
+ * hash de verdade na planilha.
  */
 export async function loginController(request: Request): Promise<Response> {
   try {
@@ -125,30 +136,37 @@ export async function loginController(request: Request): Promise<Response> {
       );
     }
 
-    const storedHash = (match.rec["senha"] || "").trim();
+    const storedRaw = (match.rec["senha"] || "").trim();
     const incomingHash = await hashPassword(senha);
 
-    if (!storedHash) {
-      // Primeira vez: reivindica a conta gravando o hash da senha escolhida.
-      const senhaColIndex = Object.keys(match.rec).indexOf("senha");
-      if (senhaColIndex === -1) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: "Coluna 'Senha' não encontrada na aba Usuários.",
-          }),
-          { status: 500, headers: { "Content-Type": "application/json" } },
-        );
+    if (!storedRaw) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Essa conta ainda não tem uma senha inicial definida. Peça a um admin para configurar.",
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    let precisaTrocarSenha = false;
+    if (looksLikeHash(storedRaw)) {
+      if (storedRaw !== incomingHash) {
+        return new Response(JSON.stringify({ success: false, error: "Senha incorreta." }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
       }
-      const colLetter = colIndexToA1Letter(senhaColIndex);
-      await googleSheetsService.usuarios.updateValues(USUARIOS_SHEET, `${colLetter}${match.rowIndex}`, [
-        [incomingHash],
-      ]);
-    } else if (storedHash !== incomingHash) {
-      return new Response(JSON.stringify({ success: false, error: "Senha incorreta." }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+    } else {
+      // Senha inicial em texto puro, digitada pelo admin na planilha.
+      const initialHash = await hashPassword(storedRaw);
+      if (initialHash !== incomingHash) {
+        return new Response(JSON.stringify({ success: false, error: "Senha incorreta." }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      precisaTrocarSenha = true;
     }
 
     await concederPrestigioLoginDiario(match, usuario);
@@ -166,6 +184,7 @@ export async function loginController(request: Request): Promise<Response> {
           tipoPerfil: match.rec["tipo_de_perfil"] || "Usuário",
           fotoPerfil: match.rec["foto_do_perfil"] || "",
           prestigio: match.rec["prestigio"] || "",
+          precisaTrocarSenha,
         },
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
@@ -174,6 +193,92 @@ export async function loginController(request: Request): Promise<Response> {
     console.error("[loginController] Erro:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message || "Erro ao processar login." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+export interface TrocarSenhaBody {
+  usuario: string;
+  senhaAtual: string;
+  novaSenha: string;
+}
+
+/**
+ * POST /api/auth/trocar-senha
+ * Exige a senha atual (bate contra o hash já salvo, ou contra a senha
+ * inicial em texto puro que o admin ainda não trocou) pra gravar uma nova —
+ * usado tanto pra forçar a troca no primeiro acesso quanto pra qualquer
+ * jogador trocar a própria senha depois.
+ */
+export async function trocarSenhaController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as TrocarSenhaBody;
+    const usuario = (body.usuario || "").trim();
+    const senhaAtual = body.senhaAtual || "";
+    const novaSenha = body.novaSenha || "";
+
+    if (!usuario || !senhaAtual || !novaSenha) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Preencha usuário, senha atual e nova senha." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (novaSenha.length < 4) {
+      return new Response(
+        JSON.stringify({ success: false, error: "A nova senha precisa ter pelo menos 4 caracteres." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const rows = await readUsuariosWithRowIndex();
+    const normUsuario = normalizeComparison(usuario);
+    const match = rows.find((r) => normalizeComparison(r.rec["usuario"] || "") === normUsuario);
+    if (!match) {
+      return new Response(JSON.stringify({ success: false, error: "Usuário não encontrado." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const storedRaw = (match.rec["senha"] || "").trim();
+    if (!storedRaw) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Essa conta ainda não tem uma senha inicial definida." }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const validHash = looksLikeHash(storedRaw) ? storedRaw : await hashPassword(storedRaw);
+    const incomingHash = await hashPassword(senhaAtual);
+    if (validHash !== incomingHash) {
+      return new Response(JSON.stringify({ success: false, error: "Senha atual incorreta." }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const senhaColIndex = Object.keys(match.rec).indexOf("senha");
+    if (senhaColIndex === -1) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Coluna 'Senha' não encontrada na aba Usuários." }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    const colLetter = colIndexToA1Letter(senhaColIndex);
+    const novoHash = await hashPassword(novaSenha);
+    await googleSheetsService.usuarios.updateValues(USUARIOS_SHEET, `${colLetter}${match.rowIndex}`, [
+      [novoHash],
+    ]);
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[trocarSenhaController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao trocar senha." }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
