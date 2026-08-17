@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { X, Send, Sparkles, Star, ThumbsUp, User, SmilePlus } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
 import { EmojiPicker } from "./EmojiPicker";
+import { RichTextToolbar } from "./RichTextToolbar";
 
 // Mesma paleta de destaque do EmojiPicker — atalho rápido pra reagir sem
 // precisar abrir o seletor completo.
@@ -34,6 +35,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const comentarioRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (isOpen && !nomeJogador && telegramUser?.id) {
@@ -214,7 +216,9 @@ export const CommentModal: React.FC<CommentModalProps> = ({
             <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
               Seu Comentário
             </label>
+            <RichTextToolbar textareaRef={comentarioRef} value={comentario} onChange={setComentario} />
             <textarea
+              ref={comentarioRef}
               rows={4}
               value={comentario}
               onChange={(e) => setComentario(e.target.value)}
