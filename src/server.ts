@@ -385,21 +385,15 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/corrige-processado" && request.method === "GET") {
-      const { getGoogleAccessToken } = await import("../backend/src/google/service-account");
-      const spreadsheetId = "1onh3JyLiMWozurKqg10O2_0gNm_pia_Cm9vemiIStwk";
-      const token = await getGoogleAccessToken(["https://www.googleapis.com/auth/spreadsheets"]);
-      const a1 = encodeURIComponent("'TV_Participacao_Processada'!A1:C1");
-      const res = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1}?valueInputOption=USER_ENTERED`,
-        {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ majorDimension: "ROWS", values: [["Data", "Programa", "ProcessadoEm"]] }),
-        },
-      );
-      const body = await res.text();
-      return Response.json({ status: res.status, body });
+    if (url.pathname === "/api/debug/ver-registro-tv" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      const registro = await googleSheetsService.registrosCharts.readValues("REGISTRO").catch(() => []);
+      // Linhas cujo D (índice 3) bate com um dos rótulos de TV — identifica
+      // o bloco inteiro gerado pelo processamento de participação.
+      const linhasTV = registro
+        .map((row, i) => ({ linha: i + 1, row }))
+        .filter(({ row }) => /EMPIRE HITS|EVENTOS (PEQUENOS|OFICIAIS)/i.test(row[3] || ""));
+      return Response.json({ totalLinhasRegistro: registro.length, totalLinhasTV: linhasTV.length, linhasTV });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
