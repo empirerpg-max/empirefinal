@@ -302,12 +302,18 @@ function ArtistDashboard() {
 
         {/* ── Abas do mega perfil ── */}
         <section>
-          <div className="flex gap-1 p-1 bg-card rounded-[1.5rem] border border-white/5 mb-6 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            {TABS.map((t) => (
-              <TabButton key={t.id} active={activeTab === t.id} onClick={() => setActiveTab(t.id)}>
-                {t.label}
-              </TabButton>
-            ))}
+          <div className="relative mb-6">
+            <div className="flex gap-1 p-1 bg-card rounded-[1.5rem] border border-white/5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {TABS.map((t) => (
+                <TabButton key={t.id} active={activeTab === t.id} onClick={() => setActiveTab(t.id)}>
+                  {t.label}
+                </TabButton>
+              ))}
+            </div>
+            {/* Sinaliza que há mais abas pra rolar — sem isso não fica óbvio
+                que existe mais conteúdo além do que já está visível. */}
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 rounded-r-[1.5rem] bg-gradient-to-l from-card to-transparent" />
+            <ChevronRight className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/60" />
           </div>
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             {activeTab === "geral" && <GeralTab artist={artist} albuns={albuns} tourData={tourData} />}
@@ -703,13 +709,12 @@ function SocialTab({ nome }: { nome: string }) {
     <div className="space-y-3">
       {perfis.map((p, i) => {
         const handle = String(p.handle || "").replace(/^@+/, "");
-        const url = socialProfileUrl(p.rede, handle);
         const avatarSrc = driveImg(p.avatar_url);
-        const Wrapper = url ? "a" : "div";
         return (
-          <Wrapper
+          <Link
             key={i}
-            {...(url ? { href: url, target: "_blank", rel: "noreferrer" } : {})}
+            to="/social"
+            search={{ artist: nome }}
             className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center gap-3 hover:bg-white/[0.05] transition-colors"
           >
           <div className="size-11 rounded-full overflow-hidden bg-secondary shrink-0 grid place-items-center">
@@ -723,26 +728,11 @@ function SocialTab({ nome }: { nome: string }) {
             <div className="text-sm font-black">{p.seguidores || 0}</div>
             <div className="text-[9px] text-muted-foreground uppercase tracking-widest">seguidores</div>
           </div>
-          </Wrapper>
+          </Link>
         );
       })}
     </div>
   );
-}
-
-// Sem link próprio salvo (só handle) — monta a URL do perfil real na rede
-// pras principais plataformas, pra "clicar e ser levado pro perfil" funcionar
-// sem precisar guardar mais um campo na planilha.
-function socialProfileUrl(rede: string, handle: string): string | null {
-  if (!handle) return null;
-  const r = (rede || "").trim().toLowerCase();
-  if (r.includes("instagram")) return `https://instagram.com/${handle}`;
-  if (r.includes("tiktok")) return `https://www.tiktok.com/@${handle}`;
-  if (r.includes("twitter") || r === "x") return `https://x.com/${handle}`;
-  if (r.includes("youtube")) return `https://youtube.com/@${handle}`;
-  if (r.includes("threads")) return `https://www.threads.net/@${handle}`;
-  if (r.includes("facebook")) return `https://facebook.com/${handle}`;
-  return null;
 }
 
 // ---------- Aba: Bens (dono) ----------

@@ -41,8 +41,9 @@ function formatCount(n: number | undefined): string {
 }
 
 export const Route = createFileRoute("/social")({
-  validateSearch: (s: Record<string, unknown>): { postId?: string } => ({
+  validateSearch: (s: Record<string, unknown>): { postId?: string; artist?: string } => ({
     postId: s.postId ? String(s.postId) : undefined,
+    artist: s.artist ? String(s.artist) : undefined,
   }),
   component: SocialPage,
 });
@@ -83,7 +84,7 @@ type News = {
 };
 
 function SocialPage() {
-  const { postId } = Route.useSearch();
+  const { postId, artist: artistParam } = Route.useSearch();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -166,6 +167,20 @@ function SocialPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, loading]);
+
+  // Deep-link "/social?artist=Nome" (usado pelo mega perfil do artista) —
+  // já abre direto na aba Perfis (Industry), no artista certo.
+  useEffect(() => {
+    if (!artistParam || allArtists.length === 0) return;
+    const norm = artistParam.trim().toLowerCase();
+    const found = allArtists.find((a) => (a.nome || "").trim().toLowerCase() === norm);
+    if (found) {
+      setViewMode("Industry");
+      setSelectedIndustryArtist(found);
+      setIndustryViewTab(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artistParam, allArtists]);
 
   async function loadContext() {
     const tgId = user?.id || "";

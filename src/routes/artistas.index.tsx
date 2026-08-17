@@ -47,10 +47,10 @@ function ArtistasList() {
         {user && user.id !== "guest" && (
           <Link
             to="/artistas"
-            search={{ filter: "mine" }}
+            search={{ filter: filter === "mine" ? "all" : "mine" }}
             className="px-4 py-2.5 rounded-2xl bg-white/5 border border-white/10 text-muted-foreground font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all hover:bg-white/10"
           >
-            Meus artistas
+            {filter === "mine" ? "Todos os artistas" : "Meus artistas"}
           </Link>
         )}
       </header>
@@ -90,7 +90,10 @@ function ArtistasList() {
             {[...filtered]
               .sort((a, b) => a.nome.localeCompare(b.nome))
               .map((a) => {
-                const generoVal = a.genero && a.genero.trim() !== "" ? a.genero : null;
+                // A fonte de dados (Apps Script legado) às vezes devolve uma
+                // data crua nesse campo em vez do gênero de verdade.
+                const generoRaw = (a.genero || "").trim();
+                const generoVal = generoRaw && !/^\w{3}\s\w{3}\s\d{1,2}\s\d{4}.*GMT/i.test(generoRaw) ? generoRaw : null;
                 const paisVal = a.pais && a.pais.trim() !== "" ? a.pais : null;
                 const cleanDescription = (a.descricao || "").trim();
                 // A fonte de dados (Apps Script legado) às vezes devolve uma
