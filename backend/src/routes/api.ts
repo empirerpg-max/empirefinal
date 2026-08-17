@@ -48,6 +48,11 @@ import {
   getAllArtistasController,
 } from "../controllers/artistasController";
 import {
+  getProgramasTVController,
+  registrarPresencaTVController,
+  listarPresencaTVController,
+} from "../controllers/tvController";
+import {
   getPontosController,
   salvarPontoCelulaController,
   distribuirPontosAleatorioController,
@@ -121,6 +126,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/meus-nomes",
     "/api/artistas/disponiveis",
     "/api/artistas/listar-todos",
+    "/api/tv/programas",
+    "/api/tv/presenca",
     "/api/artistas/vincular",
     "/api/artistas/criar",
     "/api/artistas/infos",
@@ -509,6 +516,16 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await setArtistFotoController(request);
+  } else if (url.pathname === "/api/tv/presenca") {
+    response =
+      request.method === "GET"
+        ? await listarPresencaTVController(request)
+        : request.method === "POST"
+          ? await registrarPresencaTVController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/tv/presenca." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"
@@ -601,6 +618,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         break;
       case "/api/artistas/listar-todos":
         response = await getAllArtistasController();
+        break;
+      case "/api/tv/programas":
+        response = await getProgramasTVController();
         break;
       case "/api/gestao/musicas-em-chart":
         response = await getMusicasEmChartController();
