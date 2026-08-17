@@ -522,87 +522,63 @@ export const api = {
   },
 
   // ---- Empire TV ----
+  // Migrado do Apps Script (TV_SCRIPT_URL) pro nosso backend — lê direto a
+  // aba Programacao_RPG (planilha Agenda_TV) e já calcula "ao vivo agora"
+  // numa passada só, sem a segunda chamada extra que o Apps Script exigia.
   async listarProgramasTV(): Promise<ProgramaTV[]> {
-    // Em paralelo:
-    //  - listar_programas_tv: catálogo completo (passado/agendado/ao vivo por status)
-    //  - buildPayload (sem acao): detecta o que está broadcasting AGORA pelo horário
-    //    e grava "Transmitindo" na planilha como efeito colateral.
-    const [r, live] = await Promise.all([
-      call<Record<string, unknown>[]>({ acao: "listar_programas_tv" }, { cache: true, tv: true }),
-      call<Record<string, unknown>>({}, { tv: true }).catch(() => ({} as Record<string, unknown>)),
-    ]);
-    if (!Array.isArray(r)) return [];
-
-    const current = (live && typeof live === "object" ? (live as any).current : null) || null;
-    const liveRowNum = current && current.status === "broadcasting" ? String(current.rowNum ?? "") : "";
-    const liveKey = current && current.status === "broadcasting"
-      ? `${String(current.programa || "").trim()}|${String(current.data || "")}|${String(current.horarioStr || "")}`
-      : "";
-
-    return r.map((x) => {
-      const titulo    = String(x.titulo    ?? x.programa  ?? "");
-      const categoria = String(x.categoria ?? x.tipo      ?? "");
-      const subtitulo = String(x.subtitulo ?? x.material  ?? "");
-      const cover     = driveImg(String(x.cover ?? x.capaUrl ?? "")) || String(x.cover ?? x.capaUrl ?? "");
-      const stream    = String(x.stream_url ?? x.topicoUrl ?? "");
-      const estado    = String(x.estado    ?? "").toLowerCase();
-      const data      = x.data      ? String(x.data)      : undefined;
-      const horario   = x.horarioStr ? String(x.horarioStr) : (x.horario ? String(x.horario) : undefined);
-      const dataInicio = x.data_inicio
-        ? String(x.data_inicio)
-        : (data && horario ? `${data} ${horario}` : undefined);
-      const rowNum = String(x.rowNum ?? "");
-      const key = `${titulo.trim()}|${data || ""}|${horario || ""}`;
-      const isLiveFromPayload = !!liveKey && (
-        (liveRowNum && rowNum && liveRowNum === rowNum) || key === liveKey
-      );
-      const aoVivo = isLiveFromPayload
-        || estado === "ao_vivo"
-        || x.ao_vivo === true
-        || String(x.ao_vivo || "").toLowerCase() === "true"
-        || String(x.ao_vivo || "") === "1"
-        || String(x.ao_vivo || "").toLowerCase() === "sim";
-      const finalizado = !aoVivo && (
-        estado === "arquivo"
-        || String(x.status || "").toLowerCase() === "finalizado"
-        || String(x.status || "").toLowerCase() === "concluido"
-        || String(x.status || "").toLowerCase() === "concluído"
-        || String(x.status || "").toLowerCase() === "transmitido"
-      );
-      return {
-        id: String(x.id ?? x.rowNum ?? titulo ?? Math.random().toString(36).slice(2)),
-        titulo,
-        subtitulo,
-        categoria,
-        ao_vivo: aoVivo,
-        finalizado,
-        status: aoVivo ? "transmitindo" : (x.status ? String(x.status) : undefined),
+    try {
+      const res = await fetch(`/api/tv/programas`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      const data = Array.isArray(json?.data) ? json.data : [];
+      return data.map((x: Record<string, unknown>) => ({
+        id: String(x.id || ""),
+        titulo: String(x.titulo || ""),
+        subtitulo: String(x.subtitulo || ""),
+        categoria: String(x.categoria || ""),
+        ao_vivo: !!x.ao_vivo,
+        finalizado: !!x.finalizado,
+        status: x.status ? String(x.status) : undefined,
         espectadores: Number(x.espectadores || 0),
-        cover,
-        stream_url: stream,
-        data,
-        horario,
-        data_inicio: dataInicio,
+        cover: driveImg(String(x.cover || "")) || String(x.cover || ""),
+        stream_url: String(x.stream_url || ""),
+        data: x.data ? String(x.data) : undefined,
+        horario: x.horario ? String(x.horario) : undefined,
+        data_inicio: x.data && x.horario ? `${x.data} ${x.horario}` : undefined,
         duracao_min: x.duracao_min ? Number(x.duracao_min) : undefined,
         buff: x.buff ? String(x.buff) : undefined,
-        topico_url: stream || undefined,
-      };
-    });
+        topico_url: x.topico_url ? String(x.topico_url) : undefined,
+      }));
+    } catch {
+      return [];
+    }
   },
 
   async registrarPresencaTV(p: {
     programa_id: string; telegram_id: string; nome: string; watched_seconds: number;
   }): Promise<CommonResponse> {
-    return call<CommonResponse>({ acao: "registrar_presenca_tv", ...p, watched_seconds: String(p.watched_seconds) }, { tv: true });
+    const res = await fetch("/api/tv/presenca", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+    });
+    return res.json();
   },
   async listarPresencaTV(programa_id: string): Promise<Array<{ telegram_id: string; nome: string; watched_seconds: number; percentual: number }>> {
-    const r = await call<any[]>({ acao: "listar_presenca_tv", programa_id }, { tv: true });
-    return Array.isArray(r) ? r.map((x) => ({
-      telegram_id: String(x.telegram_id || ""),
-      nome: String(x.nome || "Anônimo"),
-      watched_seconds: Number(x.watched_seconds || 0),
-      percentual: Number(x.percentual || 0),
-    })) : [];
+    try {
+      const res = await fetch(`/api/tv/presenca?programa_id=${encodeURIComponent(programa_id)}`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      const data = Array.isArray(json?.data) ? json.data : [];
+      return data.map((x: Record<string, unknown>) => ({
+        telegram_id: String(x.telegram_id || ""),
+        nome: String(x.nome || "Anônimo"),
+        watched_seconds: Number(x.watched_seconds || 0),
+        percentual: Number(x.percentual || 0),
+      }));
+    } catch {
+      return [];
+    }
   },
   async salvarChatTV(p: { programa_id: string; mensagens: Array<{ user: string; text: string; ts: number; reply_to?: { id: string; user: string; text: string } }>; total_msgs: number }): Promise<CommonResponse> {
     return call<CommonResponse>({
