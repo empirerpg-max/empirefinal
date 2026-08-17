@@ -368,6 +368,20 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/criar-musicas-import" && request.method === "POST") {
+      const { ensureSheetTab, appendRows } = await import("../backend/src/services/googleSheetsService");
+      const rows = (await import("../backend/src/musicasImportRows.json")).default as string[][];
+      const HEADERS = [
+        "Status", "Telegram_Message_ID", "Data_Envio", "Jogador_Que_Enviou", "Nome_Arquivo_Original",
+        "Artista_Sugerido", "Nome_Musica_Sugerido", "Link_Drive_Audio", "Capa", "Letra",
+        "ID_Criador_Telegram", "Album", "Tipo_Single", "Tipo_Musica", "Artista2", "Artista3",
+        "Artista4", "Artista5", "Artista6", "Genero", "Ordem", "Pendente", "Referencia",
+      ];
+      await ensureSheetTab("principal", "Musicas_Import");
+      await appendRows("principal", "Musicas_Import", [HEADERS, ...rows]);
+      return Response.json({ ok: true, linhas: rows.length });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
