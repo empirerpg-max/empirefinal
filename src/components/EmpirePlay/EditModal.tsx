@@ -119,6 +119,8 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [novaFaixaTipoSingle, setNovaFaixaTipoSingle] = useState<string>("TRACKLIST ALBUM");
   const [novaFaixaTipoMusica, setNovaFaixaTipoMusica] = useState<string>("SOLO");
   const [novaFaixaMediaUrl, setNovaFaixaMediaUrl] = useState<string>("");
+  const [novaFaixaAudioFile, setNovaFaixaAudioFile] = useState<File | null>(null);
+  const [uploadingFaixaAudio, setUploadingFaixaAudio] = useState<boolean>(false);
 
   // Atualizar artista quando props mudam
   useEffect(() => {
@@ -205,6 +207,7 @@ export const EditModal: React.FC<EditModalProps> = ({
     setNovaFaixaTitulo("");
     setNovaFaixaBusca("");
     setNovaFaixaMediaUrl("");
+    setNovaFaixaAudioFile(null);
     if (item.tipo === "albuns" && item.fields?.topicId) {
       fetchAlbumFaixas(item.fields.topicId);
     }
@@ -243,8 +246,8 @@ export const EditModal: React.FC<EditModalProps> = ({
       setErrorMsg("Informe o título da nova faixa.");
       return;
     }
-    if (novaFaixaInedita && !novaFaixaMediaUrl.trim()) {
-      setErrorMsg("Informe o link do áudio (Drive ou YouTube) da nova faixa.");
+    if (novaFaixaInedita && !novaFaixaMediaUrl.trim() && !novaFaixaAudioFile) {
+      setErrorMsg("Envie o arquivo de áudio ou informe o link (Drive/YouTube) da nova faixa.");
       return;
     }
     if (!novaFaixaInedita && !novaFaixaTitulo.trim()) {
@@ -255,6 +258,16 @@ export const EditModal: React.FC<EditModalProps> = ({
     setSaving(true);
     setErrorMsg(null);
     try {
+      let mediaUrl = novaFaixaMediaUrl.trim();
+      if (novaFaixaInedita && novaFaixaAudioFile) {
+        setUploadingFaixaAudio(true);
+        mediaUrl = await handleUploadAudioToDrive(
+          novaFaixaAudioFile,
+          `AUDIO_${selectedArtist || "faixa"}_${novaFaixaTitulo}_${Date.now()}`,
+        );
+        setUploadingFaixaAudio(false);
+      }
+
       const res = await fetch("/api/gestao/album/substituir", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -267,7 +280,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               titulo: novaFaixaTitulo,
               tipoSingle: novaFaixaTipoSingle,
               tipoMusica: novaFaixaTipoMusica,
-              mediaUrl: novaFaixaMediaUrl,
+              mediaUrl,
               abrirTopico: false,
             },
           ],
@@ -283,13 +296,54 @@ export const EditModal: React.FC<EditModalProps> = ({
       setNovaFaixaTitulo("");
       setNovaFaixaBusca("");
       setNovaFaixaMediaUrl("");
+      setNovaFaixaAudioFile(null);
       fetchAlbumFaixas(editingItem.fields.topicId);
       setTimeout(() => setSuccessMsg(null), 2000);
     } catch (err: any) {
       setErrorMsg(err.message || "Erro ao adicionar faixa.");
     } finally {
       setSaving(false);
+      setUploadingFaixaAudio(false);
     }
+  };
+
+  // Upload direto pro Drive (mesmo padrão do Lançamento em Gestao.tsx) — pasta
+  // "musicaAudio" pra áudio de faixa nova, evita depender só de link colado.
+  const handleUploadAudioToDrive = async (file: File, customName?: string): Promise<string> => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", customName || file.name);
+      formData.append("folderType", "musicaAudio");
+
+      const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.data?.fileUrl) {
+        return data.data.fileUrl;
+      }
+    } catch (err) {
+      console.warn("[EditModal] Upload de áudio por FormData falhou, tentando Base64:", err);
+    }
+
+    try {
+      const base64 = await fileToBase64(file);
+      const res = await fetch("/api/gestao/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: customName || file.name,
+          mimeType: file.type || "audio/mpeg",
+          base64Data: base64,
+          folderType: "musicaAudio",
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (data?.data?.fileUrl) return data.data.fileUrl;
+    } catch (err) {
+      console.warn("[EditModal] Upload de áudio por Base64 falhou:", err);
+    }
+
+    throw new Error("Não foi possível fazer upload do áudio.");
   };
 
   // Converte imagem para base64
@@ -592,13 +646,41 @@ export const EditModal: React.FC<EditModalProps> = ({
                               ))}
                             </select>
                           </div>
-                          <input
-                            type="text"
-                            value={novaFaixaMediaUrl}
-                            onChange={(e) => setNovaFaixaMediaUrl(e.target.value)}
-                            placeholder="Link do Drive ou YouTube (áudio)"
-                            className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none"
-                          />
+                          <div className="space-y-1.5">
+                            <input
+                              type="file"
+                              accept="audio/*"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) {
+                                  setNovaFaixaAudioFile(f);
+                                  setNovaFaixaMediaUrl("");
+                                }
+                              }}
+                              className="hidden"
+                              id="nova-faixa-audio-input"
+                            />
+                            <label
+                              htmlFor="nova-faixa-audio-input"
+                              className="w-full inline-flex items-center gap-2 bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white cursor-pointer hover:border-amber-500 transition"
+                            >
+                              <Upload className="size-3.5 text-amber-400 shrink-0" />
+                              <span className="truncate">
+                                {novaFaixaAudioFile ? novaFaixaAudioFile.name : "Fazer upload do áudio"}
+                              </span>
+                            </label>
+                            <p className="text-[10px] text-neutral-500 text-center">ou</p>
+                            <input
+                              type="text"
+                              value={novaFaixaMediaUrl}
+                              onChange={(e) => {
+                                setNovaFaixaMediaUrl(e.target.value);
+                                if (e.target.value) setNovaFaixaAudioFile(null);
+                              }}
+                              placeholder="Link do Drive ou YouTube (áudio)"
+                              className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none"
+                            />
+                          </div>
                         </>
                       ) : (
                         <div className="relative">
@@ -665,7 +747,11 @@ export const EditModal: React.FC<EditModalProps> = ({
                           disabled={saving}
                           className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black uppercase disabled:opacity-50"
                         >
-                          {saving ? "Adicionando..." : "Adicionar Faixa"}
+                          {uploadingFaixaAudio
+                            ? "Enviando áudio..."
+                            : saving
+                              ? "Adicionando..."
+                              : "Adicionar Faixa"}
                         </button>
                       </div>
                     </div>
