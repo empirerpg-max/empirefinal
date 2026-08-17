@@ -368,6 +368,16 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/regra-tv" && request.method === "GET") {
+      const { listSheetTabs, googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      const tabs = await listSheetTabs("agendaTV");
+      const target = tabs.find((t) => t.sheetId === 1749719136);
+      const regra = target
+        ? await googleSheetsService.agendaTV.readValues(target.title, "A1:F30").catch(() => [])
+        : [];
+      return Response.json({ tabs, targetTitle: target?.title, regra });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
