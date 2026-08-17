@@ -26,6 +26,8 @@ import { useTelegramUser, haptic } from "@/lib/telegram";
 import { CommentModal } from "./CommentModal";
 import { ScoreBadge } from "./ScoreBadge";
 import { ReactionBar } from "./ReactionBar";
+import { RichTextToolbar } from "./RichTextToolbar";
+import { renderRichText } from "@/lib/richText";
 
 // "music-videos" foi consolidado dentro de "videos" — Vídeos e Music Videos
 // vivem na mesma aba da planilha ("Music Videos"), diferenciados por tag
@@ -151,6 +153,7 @@ export const Forum: React.FC<ForumProps> = ({
   const [loadingComments, setLoadingComments] = useState<boolean>(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const editTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   // ID do tópico REAL da planilha (coluna "ID do tópico"), usado como chave
   // ao gravar comentários — nunca o id sintético gerado pelo app.
@@ -924,7 +927,13 @@ export const Forum: React.FC<ForumProps> = ({
                       <div className="min-w-0 flex-1">
                         {editingCommentId === c.id ? (
                           <div className="rounded-2xl rounded-tl-sm bg-neutral-800/70 border border-emerald-500/30 px-3 py-2 sm:px-4 sm:py-2.5">
+                            <RichTextToolbar
+                              textareaRef={editTextareaRef}
+                              value={editText}
+                              onChange={setEditText}
+                            />
                             <textarea
+                              ref={editTextareaRef}
                               value={editText}
                               onChange={(e) => setEditText(e.target.value)}
                               rows={2}
@@ -964,7 +973,7 @@ export const Forum: React.FC<ForumProps> = ({
                               )}
                             </div>
                             <p className="text-xs sm:text-sm text-neutral-100 leading-relaxed whitespace-pre-wrap break-words">
-                              {c.comentario}
+                              {renderRichText(c.comentario)}
                             </p>
                             <span className="block text-right text-[10px] text-neutral-500 mt-1 select-none">
                               {c.data}
