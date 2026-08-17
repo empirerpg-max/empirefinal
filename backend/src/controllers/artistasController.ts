@@ -351,6 +351,48 @@ export async function getArtistInfoController(request: Request): Promise<Respons
   }
 }
 
+/**
+ * POST /api/artistas/foto
+ * Grava o link do novo upload de foto do artista na coluna F da aba
+ * "INFOS ACTS" (nunca sobrescreve a coluna C — essa é editada à mão pelo
+ * dono do artista direto na planilha, junto com a biografia). Cria a linha
+ * se o artista ainda não tiver uma nessa aba.
+ */
+export async function setArtistFotoController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as { nome?: string; fotoUrl?: string };
+    const nome = (body.nome || "").trim();
+    const fotoUrl = (body.fotoUrl || "").trim();
+    if (!nome || !fotoUrl) {
+      return new Response(JSON.stringify({ success: false, error: "nome e fotoUrl são obrigatórios." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+
+    const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+    const normNome = normalizeComparison(nome);
+    const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
+
+    if (rowIndex !== -1) {
+      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `F${rowIndex + 1}`, [[fotoUrl]]);
+    } else {
+      await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [nome, "", "", "", "", fotoUrl]);
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (error: any) {
+    console.error("[setArtistFotoController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao gravar foto do artista." }),
+      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
+  }
+}
+
 export async function getMeusArtistasNomesController(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);
