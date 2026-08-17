@@ -47,7 +47,7 @@ function ArtistDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("geral");
   const [modal, setModal] = useState<
-    null | "viral" | "filantropia" | "payola" | "leilao" | "rescisao" | "composicao" | "imovel"
+    null | "viral" | "filantropia" | "payola" | "leilao" | "rescisao" | "composicao" | "imovel" | "foto"
   >(null);
   const [albuns, setAlbuns] = useState<AlbumPayload[]>([]);
   const [tourData, setTourData] = useState<any>(null);
@@ -334,6 +334,9 @@ function ArtistDashboard() {
       {isOwner && modal === "rescisao" && <RescisaoModal nome={artist.nome} onClose={() => setModal(null)} />}
       {isOwner && modal === "composicao" && <ComposicaoModal nome={artist.nome} onClose={() => setModal(null)} />}
       {isOwner && modal === "imovel" && <ImovelModal nome={artist.nome} onClose={() => setModal(null)} />}
+      {isOwner && modal === "foto" && (
+        <FotoModal nome={artist.nome} onClose={() => setModal(null)} onDone={() => window.location.reload()} />
+      )}
     </main>
   );
 }
@@ -847,9 +850,10 @@ function ConfirmSell({ item, onCancel, onConfirm, loading }: { item?: BemItem; o
 }
 
 // ---------- Aba: Gestão (dono) ----------
-function GestaoTab({ onAction }: { onAction: (m: "viral" | "filantropia" | "payola" | "leilao" | "rescisao" | "composicao") => void }) {
+function GestaoTab({ onAction }: { onAction: (m: "viral" | "filantropia" | "payola" | "leilao" | "rescisao" | "composicao" | "foto") => void }) {
   return (
     <div className="grid grid-cols-2 gap-3">
+      <MiniAction label="Trocar Foto" icon={<User />} onClick={() => onAction("foto")} color="text-sky-400" />
       <MiniAction label="Viral" icon={<Flame />} onClick={() => onAction("viral")} color="text-rose-500" />
       <MiniAction label="Payola" icon={<Radio />} onClick={() => onAction("payola")} color="text-primary" />
       <MiniAction label="Filantropia" icon={<HandHeart />} onClick={() => onAction("filantropia")} color="text-emerald-500" />
@@ -1025,6 +1029,83 @@ function ImovelModal({ nome, onClose }: { nome: string; onClose: () => void }) {
       </select>
       <input value={cidade} onChange={(e) => setCidade(e.target.value)} placeholder="Cidade" className={inputCls()} />
       <button onClick={go} disabled={s || !cidade} className={btnCls()}>{s && <Loader2 className="size-4 animate-spin" />} Comprar</button>
+    </Modal>
+  );
+}
+
+function FotoModal({ nome, onClose, onDone }: { nome: string; onClose: () => void; onDone: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [s, setS] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  function pick(f: File | undefined) {
+    if (!f) return;
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+    setErrorMsg(null);
+  }
+
+  async function go() {
+    if (!file) return;
+    setS(true);
+    setErrorMsg(null);
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/gestao/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type || "image/jpeg",
+          base64Data,
+          folderType: "artistPhotos",
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      const fileUrl = json?.data?.fileUrl;
+      if (!fileUrl) throw new Error("Falha ao subir a foto.");
+      await api.setArtistFoto(nome, fileUrl);
+      onDone();
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Não deu pra trocar a foto agora.");
+    } finally {
+      setS(false);
+    }
+  }
+
+  return (
+    <Modal title="Trocar foto do artista" onClose={onClose}>
+      <p className="text-xs text-muted-foreground mb-3">
+        Isso envia uma foto nova pra revisão — não substitui a foto oficial na hora. Pra biografia e foto definitiva,
+        edite direto na planilha INFOS ACTS.
+      </p>
+      <label className="block mb-3">
+        <div className="aspect-square w-32 mx-auto rounded-2xl overflow-hidden bg-secondary border border-white/10 grid place-items-center">
+          {preview ? (
+            <img src={preview} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <User className="size-8 text-muted-foreground" />
+          )}
+        </div>
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => pick(e.target.files?.[0])}
+        />
+        <span className="block text-center text-xs font-bold text-primary mt-2 underline">Escolher arquivo</span>
+      </label>
+      {errorMsg && <p className="text-xs text-destructive mb-2">{errorMsg}</p>}
+      <button onClick={go} disabled={s || !file} className={btnCls()}>
+        {s && <Loader2 className="size-4 animate-spin" />} Enviar
+      </button>
     </Modal>
   );
 }
