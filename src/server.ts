@@ -385,17 +385,17 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/testa-permissao-processado" && request.method === "GET") {
+    if (url.pathname === "/api/debug/corrige-processado" && request.method === "GET") {
       const { getGoogleAccessToken } = await import("../backend/src/google/service-account");
       const spreadsheetId = "1onh3JyLiMWozurKqg10O2_0gNm_pia_Cm9vemiIStwk";
       const token = await getGoogleAccessToken(["https://www.googleapis.com/auth/spreadsheets"]);
-      const a1 = encodeURIComponent("'TV_Participacao_Processada'!A:ZZ");
+      const a1 = encodeURIComponent("'TV_Participacao_Processada'!A1:C1");
       const res = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1}?valueInputOption=USER_ENTERED`,
         {
-          method: "POST",
+          method: "PUT",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ majorDimension: "ROWS", values: [["TESTE", "TESTE", new Date().toISOString()]] }),
+          body: JSON.stringify({ majorDimension: "ROWS", values: [["Data", "Programa", "ProcessadoEm"]] }),
         },
       );
       const body = await res.text();
