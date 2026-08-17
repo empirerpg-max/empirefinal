@@ -385,21 +385,20 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/testa-append-processado" && request.method === "GET") {
-      const { getGoogleAccessToken } = await import("../backend/src/google/service-account");
-      const spreadsheetId = "1onh3JyLiMWozurKqg10O2_0gNm_pia_Cm9vemiIStwk";
-      const token = await getGoogleAccessToken(["https://www.googleapis.com/auth/spreadsheets"]);
-      const a1 = encodeURIComponent("'TV_Participacao_Processada'!A:ZZ");
-      const res = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ majorDimension: "ROWS", values: [["TESTE", "TESTE", new Date().toISOString()]] }),
-        },
-      );
-      const body = await res.text();
-      return Response.json({ status: res.status, body });
+    if (url.pathname === "/api/debug/qual-service-account" && request.method === "GET") {
+      const jsonRaw =
+        (typeof process !== "undefined" && process.env?.GOOGLE_SERVICE_ACCOUNT_JSON) ||
+        (globalThis as any).__GOOGLE_SERVICE_ACCOUNT_JSON__ ||
+        "";
+      const emailDireto =
+        (typeof process !== "undefined" && process.env?.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL) ||
+        (globalThis as any).__GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL__ ||
+        "";
+      let emailDoJson = "";
+      try {
+        emailDoJson = jsonRaw ? JSON.parse(jsonRaw).client_email || "" : "";
+      } catch {}
+      return Response.json({ clientEmail: emailDoJson || emailDireto || "não encontrado" });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
