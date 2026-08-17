@@ -750,12 +750,15 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
 
   return (
     <>
-      {/* ---------- Mobile: vídeo sempre visível em tela cheia + sheet
-          estilo Reels que sobe por cima, sem nunca cobrir o player. A
-          gaveta é um bloco comum (não position:fixed calculado por JS) com
-          rolagem própria, então o teclado do celular se comporta sozinho. */}
-      <div className="lg:hidden relative h-full bg-black">
-        <div className="absolute inset-0 flex flex-col">
+      {/* ---------- Mobile: vídeo "grudado" (sticky) no topo de UMA página
+          rolável só (estilo Reels) — não é mais um bloco fixo com uma
+          gaveta por cima calculada em dvh (isso quebrava quando o teclado
+          abria, porque o dvh não encolhe com o teclado no iPhone). Sendo
+          sticky dentro do próprio container que rola, o vídeo nunca some
+          da tela, e é o Safari quem decide como rolar o resto — sem
+          nenhuma conta de altura feita por nós. */}
+      <div id="tv-mobile-scroll" className="lg:hidden h-full overflow-y-auto overscroll-contain bg-black">
+        <div className="sticky top-0 z-10 bg-black h-[38vh] min-h-[200px]">
           <div className="flex items-center gap-3 px-4 h-12 shrink-0 bg-gradient-to-b from-black/70 to-transparent absolute top-0 inset-x-0 z-10">
             <button onClick={onBack} className="size-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white" aria-label="Voltar">
               <ArrowLeft className="size-4" />
@@ -767,39 +770,39 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
               </span>
             )}
           </div>
-          <div className="flex-1 min-h-0">{player}</div>
+          <div className="w-full h-full">{player}</div>
+
+          {/* participantes / sobre — não envolvem teclado, então podem
+              continuar como sheet por cima sem risco. */}
+          <div className="absolute right-3 bottom-3 z-10 flex items-center gap-2">
+            <button
+              onClick={() => setMobileSheet(mobileSheet === "participantes" ? null : "participantes")}
+              className="size-9 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
+              aria-label="Participantes"
+            >
+              <Users className="size-4" />
+            </button>
+            <button
+              onClick={() => setMobileSheet(mobileSheet === "sobre" ? null : "sobre")}
+              className="size-9 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
+              aria-label="Sobre"
+            >
+              <Info className="size-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Botões flutuantes estilo Reels (comentar / participantes / sobre) */}
-        <div className="absolute right-3 bottom-6 z-10 flex flex-col items-center gap-4">
-          <button
-            onClick={() => setMobileSheet(mobileSheet === "chat" ? null : "chat")}
-            className="size-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
-            aria-label="Comentários"
-          >
-            <MessageSquare className="size-5" />
-          </button>
-          <button
-            onClick={() => setMobileSheet(mobileSheet === "participantes" ? null : "participantes")}
-            className="size-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
-            aria-label="Participantes"
-          >
-            <Users className="size-5" />
-          </button>
-          <button
-            onClick={() => setMobileSheet(mobileSheet === "sobre" ? null : "sobre")}
-            className="size-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
-            aria-label="Sobre"
-          >
-            <Info className="size-5" />
-          </button>
+        <div className="relative z-[5] bg-background rounded-t-2xl -mt-3 min-h-[62vh] flex flex-col">
+          <div className="flex items-center gap-1.5 px-4 h-9 shrink-0 text-xs font-bold text-muted-foreground">
+            <MessageSquare className="size-3.5" /> Comentários
+          </div>
+          <ChatPanel programaId={programa.id} scrollContainerId="tv-mobile-scroll" />
         </div>
 
-        {mobileSheet && (
-          <div className="absolute inset-x-0 bottom-0 z-20 max-h-[62dvh] h-[62dvh] bg-background rounded-t-2xl border-t border-border flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200">
+        {mobileSheet && (mobileSheet === "participantes" || mobileSheet === "sobre") && (
+          <div className="fixed inset-x-0 bottom-0 z-20 max-h-[62dvh] h-[62dvh] bg-background rounded-t-2xl border-t border-border flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between px-4 h-11 border-b border-border shrink-0">
               <span className="text-sm font-bold flex items-center gap-1.5">
-                {mobileSheet === "chat" && <><MessageSquare className="size-3.5" /> Comentários</>}
                 {mobileSheet === "participantes" && <><Users className="size-3.5" /> Participantes</>}
                 {mobileSheet === "sobre" && <><Info className="size-3.5" /> Sobre</>}
               </span>
@@ -808,7 +811,6 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
               </button>
             </div>
             <div className="flex-1 min-h-0 flex flex-col">
-              {mobileSheet === "chat" && <ChatPanel programaId={programa.id} />}
               {mobileSheet === "participantes" && <ParticipantesPanel programa={programa} />}
               {mobileSheet === "sobre" && <SobrePanel programa={programa} />}
             </div>
@@ -858,7 +860,7 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
 }
 
 // ---------- Chat (realtime via Lovable Cloud) ----------
-function ChatPanel({ programaId }: { programaId: string }) {
+function ChatPanel({ programaId, scrollContainerId }: { programaId: string; scrollContainerId?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -944,11 +946,12 @@ function ChatPanel({ programaId }: { programaId: string }) {
     };
   }, [programaId]);
 
-  // auto-scroll
+  // auto-scroll — no mobile (scrollContainerId) quem rola é a página
+  // inteira (vídeo sticky no topo dela), não este componente.
   useEffect(() => {
-    const el = scrollerRef.current;
+    const el = scrollContainerId ? document.getElementById(scrollContainerId) : scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, scrollContainerId]);
 
   const startReply = (m: ChatMessage) => {
     setReplyTo(m);
@@ -1077,8 +1080,13 @@ function ChatPanel({ programaId }: { programaId: string }) {
     // rolável. Isso é o que faz o teclado do celular se comportar direito:
     // o navegador só consegue rolar internamente pra revelar o campo em
     // vez de arrastar a tela inteira (e o vídeo) quando o campo focado
-    // fica fora de qualquer ancestral rolável.
-    <div ref={scrollerRef} className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+    // fica fora de qualquer ancestral rolável. No mobile (scrollContainerId)
+    // quem já é esse ancestral rolável é a própria página (o vídeo fica
+    // sticky nela), então aqui não criamos outro scroll aninhado.
+    <div
+      ref={scrollContainerId ? undefined : scrollerRef}
+      className={scrollContainerId ? "flex flex-col" : "flex-1 overflow-y-auto min-h-0 flex flex-col"}
+    >
       <div className="flex-1 px-3 py-3 space-y-2 text-sm">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-xs text-center px-6">
