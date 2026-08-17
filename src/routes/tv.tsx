@@ -1254,7 +1254,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
           onChange={(e) => setText(e.target.value)}
           placeholder={replyTo ? `Responder a ${replyTo.user}...` : "Mandar mensagem"}
           maxLength={300}
-          className="flex-1 h-9 px-3 rounded-md bg-muted text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground min-w-0"
+          className="flex-1 h-9 px-3 rounded-md bg-muted text-base outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground min-w-0"
         />
         <button
           type="submit"
