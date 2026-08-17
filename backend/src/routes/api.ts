@@ -52,6 +52,7 @@ import {
   getProgramasTVController,
   registrarPresencaTVController,
   listarPresencaTVController,
+  processarParticipacaoTV,
 } from "../controllers/tvController";
 import {
   getPontosController,
@@ -129,6 +130,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/listar-todos",
     "/api/tv/programas",
     "/api/tv/presenca",
+    "/api/tv/processar-participacao",
     "/api/artistas/vincular",
     "/api/artistas/criar",
     "/api/artistas/infos",
@@ -536,6 +538,25 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
               JSON.stringify({ success: false, error: "Use GET ou POST para /api/tv/presenca." }),
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
+  } else if (url.pathname === "/api/tv/processar-participacao") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/tv/processar-participacao." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    try {
+      const resultado = await processarParticipacaoTV();
+      response = new Response(JSON.stringify({ success: true, data: resultado }), {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    } catch (error: any) {
+      response = new Response(
+        JSON.stringify({ success: false, error: error.message || "Erro ao processar participação." }),
+        { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
+      );
+    }
   } else if (url.pathname === "/api/social/news") {
     response =
       request.method === "GET"
