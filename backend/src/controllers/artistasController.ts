@@ -307,6 +307,50 @@ export async function criarArtistaController(request: Request): Promise<Response
   }
 }
 
+const INFOS_ACTS_SHEET = "INFOS ACTS";
+
+/**
+ * GET /api/artistas/infos?nome=<nome>
+ * Biografia (e foto "de origem") do artista — vive numa aba própria
+ * ("INFOS ACTS", planilha registrosCharts): A nome | C foto | E biografia.
+ * O dono do artista edita a biografia direto nessa aba (não tem tela de
+ * edição no app pra isso — só leitura aqui). O upload de foto novo (quando
+ * existir essa feature) deve gravar em F, não em C.
+ */
+export async function getArtistInfoController(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const nome = normalizeText(url.searchParams.get("nome"));
+    if (!nome) {
+      return new Response(JSON.stringify({ success: false, error: "nome é obrigatório." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+
+    const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+    const normNome = normalizeComparison(nome);
+    const row = rows.slice(1).find((r) => normalizeComparison(r[0]) === normNome);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          foto: row ? normalizeText(row[2]) : "",
+          biografia: row ? normalizeText(row[4]) : "",
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
+  } catch (error: any) {
+    console.error("[getArtistInfoController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao buscar informações do artista." }),
+      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
+  }
+}
+
 export async function getMeusArtistasNomesController(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);

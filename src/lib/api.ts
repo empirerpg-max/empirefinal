@@ -343,6 +343,21 @@ export const api = {
       return null;
     }
   },
+  // Biografia (e foto de origem) do artista — aba própria "INFOS ACTS" na
+  // planilha registrosCharts, editada direto pelo dono do artista lá (não
+  // tem tela de edição no app pra isso). Fonte real da biografia — o campo
+  // "descricao" que vinha do Apps Script legado às vezes trazia lixo (até
+  // uma data crua) em vez de texto de verdade.
+  async getArtistInfo(nome: string): Promise<{ foto: string; biografia: string } | null> {
+    try {
+      const res = await fetch(`/api/artistas/infos?nome=${encodeURIComponent(nome)}`);
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.success ? json.data : null;
+    } catch {
+      return null;
+    }
+  },
   async listarTodos(): Promise<Artist[]> {
     const data = await call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true });
     return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];

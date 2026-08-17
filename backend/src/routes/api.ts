@@ -43,6 +43,7 @@ import {
   getArtistasDisponiveisController,
   vincularArtistaController,
   criarArtistaController,
+  getArtistInfoController,
 } from "../controllers/artistasController";
 import {
   getPontosController,
@@ -119,6 +120,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/disponiveis",
     "/api/artistas/vincular",
     "/api/artistas/criar",
+    "/api/artistas/infos",
     "/api/user/me",
     "/api/user/nivel",
     "/api/top-playlists",
@@ -581,6 +583,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         break;
       case "/api/artistas/disponiveis":
         response = await getArtistasDisponiveisController();
+        break;
+      case "/api/artistas/infos":
+        response = await getArtistInfoController(request);
         break;
       case "/api/gestao/musicas-em-chart":
         response = await getMusicasEmChartController();

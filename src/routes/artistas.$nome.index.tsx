@@ -335,10 +335,12 @@ function ArtistDashboard() {
 // ---------- Aba: Visão Geral ----------
 function GeralTab({ artist, albuns, tourData }: { artist: Artist; albuns: AlbumPayload[]; tourData: any }) {
   const [hof, setHof] = useState<HOFProfile | null | undefined>(undefined);
+  const [biografia, setBiografia] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     getHOFProfile(artist.nome).then((d) => alive && setHof(d));
+    api.getArtistInfo(artist.nome).then((info) => alive && setBiografia(info?.biografia || null));
     return () => { alive = false; };
   }, [artist.nome]);
 
@@ -350,9 +352,9 @@ function GeralTab({ artist, albuns, tourData }: { artist: Artist; albuns: AlbumP
 
   return (
     <div className="space-y-4">
-      {artist.descricao && (
+      {biografia && (
         <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
-          <p className="text-sm text-muted-foreground leading-relaxed">{artist.descricao}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">{biografia}</p>
         </div>
       )}
 
@@ -699,23 +701,48 @@ function SocialTab({ nome }: { nome: string }) {
 
   return (
     <div className="space-y-3">
-      {perfis.map((p, i) => (
-        <div key={i} className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center gap-3">
+      {perfis.map((p, i) => {
+        const handle = String(p.handle || "").replace(/^@+/, "");
+        const url = socialProfileUrl(p.rede, handle);
+        const avatarSrc = driveImg(p.avatar_url);
+        const Wrapper = url ? "a" : "div";
+        return (
+          <Wrapper
+            key={i}
+            {...(url ? { href: url, target: "_blank", rel: "noreferrer" } : {})}
+            className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center gap-3 hover:bg-white/[0.05] transition-colors"
+          >
           <div className="size-11 rounded-full overflow-hidden bg-secondary shrink-0 grid place-items-center">
-            {p.avatar_url ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" /> : <User className="size-5 text-muted-foreground" />}
+            {avatarSrc ? <img src={avatarSrc} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <User className="size-5 text-muted-foreground" />}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-black truncate">{p.rede} — @{p.handle}</div>
+            <div className="text-sm font-black truncate">{p.rede} — @{handle}</div>
             {p.bio && <div className="text-xs text-muted-foreground truncate">{p.bio}</div>}
           </div>
           <div className="text-right shrink-0">
             <div className="text-sm font-black">{p.seguidores || 0}</div>
             <div className="text-[9px] text-muted-foreground uppercase tracking-widest">seguidores</div>
           </div>
-        </div>
-      ))}
+          </Wrapper>
+        );
+      })}
     </div>
   );
+}
+
+// Sem link próprio salvo (só handle) — monta a URL do perfil real na rede
+// pras principais plataformas, pra "clicar e ser levado pro perfil" funcionar
+// sem precisar guardar mais um campo na planilha.
+function socialProfileUrl(rede: string, handle: string): string | null {
+  if (!handle) return null;
+  const r = (rede || "").trim().toLowerCase();
+  if (r.includes("instagram")) return `https://instagram.com/${handle}`;
+  if (r.includes("tiktok")) return `https://www.tiktok.com/@${handle}`;
+  if (r.includes("twitter") || r === "x") return `https://x.com/${handle}`;
+  if (r.includes("youtube")) return `https://youtube.com/@${handle}`;
+  if (r.includes("threads")) return `https://www.threads.net/@${handle}`;
+  if (r.includes("facebook")) return `https://facebook.com/${handle}`;
+  return null;
 }
 
 // ---------- Aba: Bens (dono) ----------
