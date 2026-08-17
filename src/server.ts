@@ -368,6 +368,48 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // TEMPORÁRIO — checa se os comentários de Comentarios_Albuns estão
+    // batendo com os álbuns de verdade (aba Albuns), via o mesmo caminho de
+    // leitura que a produção usa. Só leitura, remover depois.
+    if (url.pathname === "/api/debug/comentarios-albuns" && request.method === "GET") {
+      const { googleSheetsService, normalizeComparison } = await import("../backend/src/services/googleSheetsService");
+      const getVal = (rec: Record<string, string>, aliases: string[]): string => {
+        for (const a of aliases) if (rec[a]) return rec[a];
+        return "";
+      };
+      const [albuns, comentarios] = await Promise.all([
+        googleSheetsService.readSheetObjects("principal", "Albuns"),
+        googleSheetsService.readSheetObjects("principal", "Comentarios_Albuns"),
+      ]);
+      const albumTopicIds = new Set(
+        (albuns as Record<string, string>[])
+          .map((rec) => normalizeComparison(getVal(rec, ["id_do_topico", "id_topico", "id", "topico_id", "topico"])))
+          .filter(Boolean),
+      );
+      const albumTitles = (albuns as Record<string, string>[]).map((rec) => ({
+        titulo: getVal(rec, ["nome_do_album", "titulo_do_album", "titulo", "album", "nome"]),
+        topicId: getVal(rec, ["id_do_topico", "id_topico", "id", "topico_id", "topico"]),
+      }));
+      const unmatched: any[] = [];
+      let matched = 0;
+      for (const rec of comentarios as Record<string, string>[]) {
+        const topicoVal = normalizeComparison(getVal(rec, ["id_do_topico", "id_topico", "topico_id", "id_media", "id_do_item", "id", "topico", "comentarios_para"]));
+        if (topicoVal && albumTopicIds.has(topicoVal)) {
+          matched++;
+        } else {
+          unmatched.push(rec);
+        }
+      }
+      return Response.json({
+        totalAlbuns: albuns.length,
+        totalComentarios: comentarios.length,
+        matched,
+        unmatchedCount: unmatched.length,
+        unmatchedSample: unmatched.slice(0, 5),
+        albumTitlesSample: albumTitles.slice(0, 10),
+      });
+    }
+
     // TEMPORÁRIO — diagnóstico do 502 no /api/media/image (fotos/badges
     // quebrados). Só tenta pegar o token OAuth do Drive e devolve
     // sucesso/erro; não expõe nenhum segredo. Remover depois de resolvido.
