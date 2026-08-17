@@ -386,19 +386,19 @@ export default {
     }
 
     if (url.pathname === "/api/debug/qual-service-account" && request.method === "GET") {
-      const jsonRaw =
-        (typeof process !== "undefined" && process.env?.GOOGLE_SERVICE_ACCOUNT_JSON) ||
-        (globalThis as any).__GOOGLE_SERVICE_ACCOUNT_JSON__ ||
-        "";
-      const emailDireto =
-        (typeof process !== "undefined" && process.env?.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL) ||
-        (globalThis as any).__GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL__ ||
-        "";
-      let emailDoJson = "";
+      const { getServiceAccountEmail } = await import("../backend/src/google/service-account");
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      let clientEmail = "";
       try {
-        emailDoJson = jsonRaw ? JSON.parse(jsonRaw).client_email || "" : "";
-      } catch {}
-      return Response.json({ clientEmail: emailDoJson || emailDireto || "não encontrado" });
+        clientEmail = getServiceAccountEmail();
+      } catch (e: any) {
+        clientEmail = `erro: ${e.message}`;
+      }
+      const programacao = await googleSheetsService.agendaTV.readValues("Programacao_RPG").catch(() => []);
+      const datasUnicas = Array.from(new Set(programacao.slice(1).map((r) => r[2]))).filter(Boolean);
+      const presenca = await googleSheetsService.agendaTV.readValues("Presenca_TV").catch(() => []);
+      const nomesPresenca = presenca.slice(-30).map((r) => [r[1], r[2], r[3], r[4]]);
+      return Response.json({ clientEmail, datasUnicasProgramacao: datasUnicas, ultimasLinhasPresenca: nomesPresenca });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
