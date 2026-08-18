@@ -391,13 +391,35 @@ export default {
       const { googleSheetsService, normalizeComparison } = await import(
         "../backend/src/services/googleSheetsService"
       );
-      const [registro, comMusicas, comAlbuns, comMV, artistas] = await Promise.all([
+      const [registro, comMusicas, comAlbuns, comMV, artistas, usuarios] = await Promise.all([
         googleSheetsService.registrosCharts.readValues("REGISTRO"),
         googleSheetsService.principal.readValues("Comentarios_Musicas"),
         googleSheetsService.principal.readValues("Comentarios_Albuns"),
         googleSheetsService.principal.readValues("Comentarios_MV"),
         googleSheetsService.usuarios.readValues("ARTISTAS"),
+        googleSheetsService.usuarios.readValues("Usuários"),
       ]);
+
+      // Todas as linhas de REGISTRO (não só Chris/Daniel) — pra ver se o
+      // audit log funciona pra qualquer jogador ou só raramente.
+      const registroTodasLinhas = registro.slice(1).filter((r) => (r[1] || "").trim());
+
+      // Duplicatas de ID na aba Usuários — se o mesmo ID aparecer em mais de
+      // um login, todo mundo com esse ID vê os mesmos artistas.
+      const idCol = 0; // coluna A = "ID" (confirmado no prestigioService: headers.indexOf("id"))
+      const contagemPorId = new Map<string, string[]>();
+      for (const r of usuarios.slice(1)) {
+        const id = (r[idCol] || "").trim();
+        if (!id) continue;
+        if (!contagemPorId.has(id)) contagemPorId.set(id, []);
+        contagemPorId.get(id)!.push(r.join(" | "));
+      }
+      const idsDuplicados = Array.from(contagemPorId.entries()).filter(([, rows]) => rows.length > 1);
+      const usuariosHeader = usuarios[0];
+      const usuarioDoDanielId = usuarios
+        .slice(1)
+        .filter((r) => (r[idCol] || "").trim() === "7701082951");
+
       const nomes = ["chris", "daniel"];
       const filtraRegistro = registro
         .slice(1)
@@ -409,12 +431,18 @@ export default {
         .filter((r) => normalizeComparison(r[0] || "").includes("jessica johnson"));
       return Response.json({
         registroTotalLinhas: registro.length,
+        registroTodasLinhasCount: registroTodasLinhas.length,
+        registroUltimasLinhas: registroTodasLinhas.slice(-20),
         registroChrisDaniel: filtraRegistro,
         comentariosMusicasChrisDaniel: filtraComentarios(comMusicas),
         comentariosAlbunsChrisDaniel: filtraComentarios(comAlbuns),
         comentariosMVChrisDaniel: filtraComentarios(comMV),
         artistasHeader: artistas[0],
         jessicaRows,
+        usuariosHeader,
+        idsDuplicadosCount: idsDuplicados.length,
+        idsDuplicados: idsDuplicados.slice(0, 15),
+        usuarioDoDanielId,
       });
     }
 
