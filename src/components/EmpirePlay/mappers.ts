@@ -41,6 +41,7 @@ export function toPlayableTrack(item: any): PlayableTrack {
     album: item.album || item.nome_do_album || "Single",
     metacriticAvg: item.metacriticAvg ?? item.metacritic ?? item.nota,
     forumTab: item.type || "musicas",
+    artista_foto_url: item.artistPhotoUrl || item.artista_foto_url,
   };
 }
 
@@ -92,5 +93,6 @@ export function toPlayableVideo(item: any): PlayableVideo {
     reportPending: !!item.reportPending,
     metacriticAvg: item.metacriticAvg ?? item.likes ?? item.nota,
     forumTab: item.type || "videos",
+    artista_foto_url: item.artistPhotoUrl || item.artista_foto_url,
   };
 }
