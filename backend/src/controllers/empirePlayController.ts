@@ -317,13 +317,14 @@ function buildCleanItem(
   ]);
 
   // As abas de chart (Top_50_Spotify/Top_Songs_Apple_Music/Top_Videos_YT)
-  // não têm coluna própria de artista — o fallback de "artist" acima cai no
-  // id_do_criador (um ID numérico do Telegram, não um nome), e sem essa
-  // checagem esse ID vazava como se fosse o nome do artista. O "Título" da
-  // própria aba já vem como "Artista - Música" nesses casos, então reusa o
-  // mesmo split abaixo.
+  // não têm coluna própria de artista — o fallback de "artist" acima ou vem
+  // vazio, ou cai no id_do_criador (um ID numérico do Telegram, não um
+  // nome), e sem essa checagem esse valor vazava como se fosse o nome do
+  // artista (ou virava "Artista Independente" perdendo o dado de verdade).
+  // O "Título" da própria aba já vem como "Artista - Música" nesses casos,
+  // então reusa o mesmo split abaixo.
   const looksLikeRawId = (v: string | null | undefined) => !!v && /^\d+$/.test(v.trim());
-  if (title && looksLikeRawId(artist)) {
+  if (title && (!artist || looksLikeRawId(artist))) {
     const dashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
     if (dashMatch) {
       artist = dashMatch[1].trim();
