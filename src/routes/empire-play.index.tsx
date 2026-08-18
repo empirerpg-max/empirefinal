@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X } from "lucide-react";
 import { driveImg } from "@/lib/api";
+import { DynamicCoverCard } from "@/components/EmpirePlay/DynamicCoverCard";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 import { toPlayableTrack, toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -133,23 +134,26 @@ function EmpirePlayInicio() {
             haptic.selection();
             setActiveSlidingPlaylist("spotify");
           }}
-          className="relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group bg-white/5 border-white/10 hover:border-emerald-500/40 hover:bg-white/10 active:scale-[0.98]"
+          className="relative overflow-hidden rounded-3xl border backdrop-blur-xl cursor-pointer transition-all duration-300 group aspect-square border-white/10 hover:border-emerald-500/40 active:scale-[0.98]"
         >
-          <div className="absolute top-0 right-0 -mr-6 -mt-6 size-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
-          <div className="flex items-center justify-between mb-3">
-            <div className="size-11 sm:size-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 grid place-items-center text-emerald-400 group-hover:scale-110 transition-transform">
-              <Flame className="size-6 fill-current" />
-            </div>
-            <span className="text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              Abrir Tela
-            </span>
+          <DynamicCoverCard
+            platform="spotify"
+            artistName={topPlaylists.spotify?.[0]?.artista}
+            artistPhotoUrl={topPlaylists.spotify?.[0]?.artista_foto_url}
+            className="absolute inset-0"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
+          <span className="absolute top-3 right-3 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 backdrop-blur">
+            Abrir Tela
+          </span>
+          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+            <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-emerald-400 transition-colors">
+              Spotify Global
+            </h3>
+            <p className="text-[11px] text-neutral-300 mt-1 font-medium">
+              {(topPlaylists.spotify && topPlaylists.spotify.length) || 100} Faixas em Alta
+            </p>
           </div>
-          <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-emerald-400 transition-colors">
-            Spotify Global
-          </h3>
-          <p className="text-[11px] text-neutral-400 mt-1 font-medium">
-            {(topPlaylists.spotify && topPlaylists.spotify.length) || 100} Faixas em Alta
-          </p>
         </div>
 
         {/* Card 2: Top 100 Apple Music */}
@@ -158,23 +162,27 @@ function EmpirePlayInicio() {
             haptic.selection();
             setActiveSlidingPlaylist("apple");
           }}
-          className="relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group bg-white/5 border-white/10 hover:border-rose-500/40 hover:bg-white/10 active:scale-[0.98]"
+          className="relative overflow-hidden rounded-3xl border backdrop-blur-xl cursor-pointer transition-all duration-300 group aspect-square border-white/10 hover:border-rose-500/40 active:scale-[0.98]"
         >
-          <div className="absolute top-0 right-0 -mr-6 -mt-6 size-24 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-all" />
-          <div className="flex items-center justify-between mb-3">
-            <div className="size-11 sm:size-12 rounded-2xl bg-rose-500/20 border border-rose-500/40 grid place-items-center text-rose-400 group-hover:scale-110 transition-transform">
-              <Music className="size-6" />
-            </div>
-            <span className="text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
-              Abrir Tela
-            </span>
+          <DynamicCoverCard
+            platform="apple"
+            artistName={topPlaylists.apple?.[0]?.artista}
+            artistPhotoUrl={topPlaylists.apple?.[0]?.artista_foto_url}
+            coverUrl={topPlaylists.apple?.[0]?.capa_url}
+            className="absolute inset-0"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
+          <span className="absolute top-3 right-3 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 backdrop-blur">
+            Abrir Tela
+          </span>
+          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+            <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-rose-400 transition-colors">
+              Apple Music
+            </h3>
+            <p className="text-[11px] text-neutral-300 mt-1 font-medium">
+              {(topPlaylists.apple && topPlaylists.apple.length) || 100} Faixas em Alta
+            </p>
           </div>
-          <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-rose-400 transition-colors">
-            Apple Music
-          </h3>
-          <p className="text-[11px] text-neutral-400 mt-1 font-medium">
-            {(topPlaylists.apple && topPlaylists.apple.length) || 100} Faixas em Alta
-          </p>
         </div>
 
         {/* Card 3: Top 100 YouTube Videos */}
@@ -183,48 +191,54 @@ function EmpirePlayInicio() {
             haptic.selection();
             setActiveSlidingPlaylist("youtube");
           }}
-          className="relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group bg-white/5 border-white/10 hover:border-red-600/40 hover:bg-white/10 active:scale-[0.98]"
+          className="relative overflow-hidden rounded-3xl border backdrop-blur-xl cursor-pointer transition-all duration-300 group aspect-square border-white/10 hover:border-red-600/40 active:scale-[0.98]"
         >
-          <div className="absolute top-0 right-0 -mr-6 -mt-6 size-24 bg-red-600/10 rounded-full blur-2xl group-hover:bg-red-600/20 transition-all" />
-          <div className="flex items-center justify-between mb-3">
-            <div className="size-11 sm:size-12 rounded-2xl bg-red-600/20 border border-red-600/40 grid place-items-center text-red-500 group-hover:scale-110 transition-transform">
-              <Film className="size-6" />
-            </div>
-            <span className="text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-red-600/20 text-red-300 border border-red-600/30">
-              Abrir Tela
-            </span>
+          <DynamicCoverCard
+            platform="youtube"
+            artistName={topPlaylists.youtube?.[0]?.artista}
+            artistPhotoUrl={topPlaylists.youtube?.[0]?.artista_foto_url}
+            className="absolute inset-0"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
+          <span className="absolute top-3 right-3 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-red-600/20 text-red-300 border border-red-600/30 backdrop-blur">
+            Abrir Tela
+          </span>
+          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+            <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-red-400 transition-colors">
+              YouTube Hits
+            </h3>
+            <p className="text-[11px] text-neutral-300 mt-1 font-medium">
+              {(topPlaylists.youtube && topPlaylists.youtube.length) || musicVideos.length} Vídeos
+            </p>
           </div>
-          <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-red-400 transition-colors">
-            YouTube Hits
-          </h3>
-          <p className="text-[11px] text-neutral-400 mt-1 font-medium">
-            {(topPlaylists.youtube && topPlaylists.youtube.length) || musicVideos.length} Vídeos
-          </p>
         </div>
 
-        {/* Card 4: Lançamentos Recentes */}
+        {/* Card 4: Hot (Lançamentos Recentes) */}
         <div
           onClick={() => {
             haptic.selection();
             setActiveSlidingPlaylist("lancamentos");
           }}
-          className="relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 group bg-white/5 border-white/10 hover:border-purple-500/40 hover:bg-white/10 active:scale-[0.98]"
+          className="relative overflow-hidden rounded-3xl border backdrop-blur-xl cursor-pointer transition-all duration-300 group aspect-square border-white/10 hover:border-purple-500/40 active:scale-[0.98]"
         >
-          <div className="absolute top-0 right-0 -mr-6 -mt-6 size-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all" />
-          <div className="flex items-center justify-between mb-3">
-            <div className="size-11 sm:size-12 rounded-2xl bg-purple-500/20 border border-purple-500/40 grid place-items-center text-purple-400 group-hover:scale-110 transition-transform">
-              <Sparkles className="size-6" />
-            </div>
-            <span className="text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-              30 Recentes
-            </span>
+          <DynamicCoverCard
+            platform="hot"
+            artistName={lancamentos?.[0]?.artista}
+            coverUrl={lancamentos?.[0]?.capa_url}
+            className="absolute inset-0"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
+          <span className="absolute top-3 right-3 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 backdrop-blur">
+            30 Recentes
+          </span>
+          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+            <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-purple-400 transition-colors">
+              Hot
+            </h3>
+            <p className="text-[11px] text-neutral-300 mt-1 font-medium">
+              {lancamentos.length || 30} Novidades da Rede
+            </p>
           </div>
-          <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-purple-400 transition-colors">
-            Hot
-          </h3>
-          <p className="text-[11px] text-neutral-400 mt-1 font-medium">
-            {lancamentos.length || 30} Novidades da Rede
-          </p>
         </div>
       </div>
 
