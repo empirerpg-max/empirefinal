@@ -33,6 +33,8 @@ export interface PlayableVideo {
   metacriticAvg?: number | string | null;
   /** Aba do fórum onde este item aparece ("videos" ou "music-videos"). */
   forumTab?: string;
+  /** Foto de perfil do artista (aba ARTISTAS) — distinta de capa_url. */
+  artista_foto_url?: string;
 }
 
 interface VideoPlayerProps {

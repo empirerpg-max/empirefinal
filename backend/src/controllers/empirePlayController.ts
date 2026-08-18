@@ -64,6 +64,10 @@ export interface EmpirePlayCleanItem {
   description?: string | null;
   category?: string | null;
   trackOrder?: number | null;
+  // Foto de perfil do artista (aba ARTISTAS, planilha "usuarios") — distinta
+  // de coverUrl, que é a capa da música/vídeo. Usada nas capas dinâmicas de
+  // Catálogo > Início (nº1 de cada chart com o rosto do artista).
+  artistPhotoUrl?: string | null;
 }
 
 export interface EmpirePlayCleanAlbumTrack {
@@ -311,6 +315,21 @@ function buildCleanItem(
     "id_do_criador",
   ]);
 
+  // As abas de chart (Top_50_Spotify/Top_Songs_Apple_Music/Top_Videos_YT)
+  // não têm coluna própria de artista — o fallback de "artist" acima cai no
+  // id_do_criador (um ID numérico do Telegram, não um nome), e sem essa
+  // checagem esse ID vazava como se fosse o nome do artista. O "Título" da
+  // própria aba já vem como "Artista - Música" nesses casos, então reusa o
+  // mesmo split abaixo.
+  const looksLikeRawId = (v: string | null | undefined) => !!v && /^\d+$/.test(v.trim());
+  if (title && looksLikeRawId(artist)) {
+    const dashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
+    if (dashMatch) {
+      artist = dashMatch[1].trim();
+      title = dashMatch[2].trim();
+    }
+  }
+
   // A aba "Music Videos" (Vídeos + Music Videos consolidados) não tem
   // colunas dedicadas de título/artista — o jogador nomeia o tópico do
   // Telegram como "Artista - Nome do vídeo" e é esse texto (coluna "Título
@@ -485,13 +504,17 @@ export async function getEmpirePlayUserController(request: Request): Promise<Res
  */
 export async function getEmpirePlayHomeController(): Promise<Response> {
   try {
-    const [spotifyRecords, appleRecords, youtubeRecords, musicaRecords, videoRecords] =
+    const [spotifyRecords, appleRecords, youtubeRecords, musicaRecords, videoRecords, artistRecords] =
       await Promise.all([
         sheetsService.readSheetObjects("Top_50_Spotify").catch(() => []),
         sheetsService.readSheetObjects("Top_Songs_Apple_Music").catch(() => []),
         sheetsService.readSheetObjects("Top_Videos_YT").catch(() => []),
         sheetsService.readSheetObjects("Musicas").catch(() => []),
         sheetsService.readSheetObjects("Music Videos").catch(() => []),
+        // ARTISTAS vive na planilha "usuarios" (diferente da "principal" usada
+        // acima) — é de lá que vem a foto de perfil de verdade do artista,
+        // pra distinguir da capa da música/vídeo.
+        googleSheetsService.usuarios.readSheetObjects("ARTISTAS").catch(() => []),
       ]);
 
     const recentMusicas = musicaRecords
@@ -535,18 +558,40 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
         return score ? { ...item, metacriticAvg: score } : item;
       });
 
-    const topSpotify = enrichWithScore(
-      spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx)),
-      musicaScoreIndex,
+    // Foto de PERFIL do artista (aba ARTISTAS) — cruzada por nome normalizado,
+    // diferente de coverUrl (capa da música/vídeo). Usada nas capas dinâmicas
+    // de Catálogo > Início.
+    const artistPhotoIndex = new Map<string, string>();
+    for (const rec of artistRecords) {
+      const nome = normalizeComparison(rec["nome"]);
+      const foto = normalizeText(rec["foto"]);
+      if (nome && foto && !artistPhotoIndex.has(nome)) artistPhotoIndex.set(nome, foto);
+    }
+    const enrichWithArtistPhoto = (items: EmpirePlayCleanItem[]): EmpirePlayCleanItem[] =>
+      items.map((item) => {
+        const foto = artistPhotoIndex.get(normalizeComparison(item.artist));
+        return foto ? { ...item, artistPhotoUrl: foto } : item;
+      });
+
+    const topSpotify = enrichWithArtistPhoto(
+      enrichWithScore(
+        spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx)),
+        musicaScoreIndex,
+      ),
     );
-    const topAppleMusic = enrichWithScore(
-      appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
-      musicaScoreIndex,
+    const topAppleMusic = enrichWithArtistPhoto(
+      enrichWithScore(
+        appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
+        musicaScoreIndex,
+      ),
     );
-    const topYoutube = enrichWithScore(
-      youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx)),
-      videoScoreIndex,
+    const topYoutube = enrichWithArtistPhoto(
+      enrichWithScore(
+        youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx)),
+        videoScoreIndex,
+      ),
     );
+    const recentMusicasWithPhoto = enrichWithArtistPhoto(recentMusicas);
 
     return new Response(
       JSON.stringify({
@@ -555,7 +600,7 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
           topSpotify,
           topAppleMusic,
           topYoutube,
-          recentMusicas,
+          recentMusicas: recentMusicasWithPhoto,
         },
       }),
       { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
