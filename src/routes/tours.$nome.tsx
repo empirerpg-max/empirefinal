@@ -29,7 +29,8 @@ interface TourAcaoDia {
   texto: string;
   fotoUrl?: string | null;
   data: string;
-  hypeGanho: number;
+  vendidosPct: number;
+  automatica?: boolean;
 }
 
 interface TourShow {
@@ -45,7 +46,6 @@ interface TourShow {
   lucroMaximo: number;
   receita: number;
   status: string;
-  hype: number;
   soldOut: boolean;
   acoes: TourAcaoDia[];
 }
@@ -151,9 +151,10 @@ function TourDetails() {
   const hoje = formatDataBR(new Date());
   const showDeHoje = tour.agenda.find((s) => s.data === hoje);
 
-  // Feed: shows com ações registradas, mais recentes primeiro.
+  // Feed: shows com ação de verdade do jogador (não os resolvidos sozinhos
+  // pelo sistema por falta de ação), mais recentes primeiro.
   const feed = [...tour.agenda]
-    .filter((s) => s.acoes && s.acoes.length > 0)
+    .filter((s) => s.acoes.length > 0 && !s.acoes[0].automatica)
     .sort((a, b) => (parseDataBR(b.data)?.getTime() || 0) - (parseDataBR(a.data)?.getTime() || 0));
 
   return (
@@ -242,7 +243,7 @@ function TourDetails() {
               />
             </section>
 
-            {isDono && showDeHoje && !showDeHoje.soldOut && (
+            {isDono && showDeHoje && showDeHoje.acoes.length === 0 && (
               <button
                 onClick={() => setAcaoAberta(showDeHoje)}
                 className="w-full py-4 rounded-3xl bg-primary text-primary-foreground font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 active:scale-[0.98] transition"
@@ -346,8 +347,10 @@ function ShowRow({ show }: { show: TourShow }) {
             <div className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-black uppercase rounded-lg">
               SOLD OUT
             </div>
+          ) : show.acoes.length > 0 ? (
+            <span className="text-[10px] font-black text-muted-foreground/60 uppercase">Realizado</span>
           ) : (
-            <span className="text-[10px] font-black text-muted-foreground/40 uppercase">Em vendas</span>
+            <span className="text-[10px] font-black text-muted-foreground/40 uppercase">Aguardando</span>
           )}
         </div>
       </div>
@@ -495,29 +498,40 @@ const TIPOS_ACAO: {
   label: string;
   icon: React.ReactNode;
   precisaFoto: boolean;
-  hype: number;
+  vendidosPct: number;
+  resultado: string;
 }[] = [
-  { tipo: "foto", label: "Foto + resumo", icon: <Camera className="size-5" />, precisaFoto: true, hype: 40 },
+  {
+    tipo: "foto",
+    label: "Foto + resumo",
+    icon: <Camera className="size-5" />,
+    precisaFoto: true,
+    vendidosPct: 100,
+    resultado: "Sold out garantido",
+  },
   {
     tipo: "interacao",
     label: "Interação com fã",
     icon: <MessageCircle className="size-5" />,
     precisaFoto: false,
-    hype: 25,
+    vendidosPct: 50,
+    resultado: "50% dos ingressos",
   },
   {
     tipo: "entrevista",
     label: "Entrevista rápida",
     icon: <Mic className="size-5" />,
     precisaFoto: false,
-    hype: 30,
+    vendidosPct: 70,
+    resultado: "70% dos ingressos",
   },
   {
     tipo: "especial",
     label: "Evento especial",
     icon: <PartyPopper className="size-5" />,
     precisaFoto: true,
-    hype: 50,
+    vendidosPct: 100,
+    resultado: "Sold out garantido",
   },
 ];
 
@@ -614,13 +628,18 @@ function TourActionModal({
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 pb-32">
         <div>
-          <p className="text-[11px] font-black uppercase text-neutral-400 mb-2">Escolha a ação</p>
+          <p className="text-[11px] font-black uppercase text-neutral-400 mb-1">
+            Escolha A ação de hoje
+          </p>
+          <p className="text-[11px] text-neutral-500 mb-2">
+            Só dá pra fazer uma — o resultado é imediato, sem combinar com outra depois.
+          </p>
           <div className="grid grid-cols-2 gap-2">
             {TIPOS_ACAO.map((t) => (
               <button
                 key={t.tipo}
                 onClick={() => setTipo(t.tipo)}
-                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition ${
+                className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border transition ${
                   tipo === t.tipo
                     ? "bg-primary/10 border-primary/40 text-primary"
                     : "bg-neutral-900/60 border-white/5 text-neutral-300"
@@ -628,6 +647,13 @@ function TourActionModal({
               >
                 {t.icon}
                 <span className="text-[11px] font-black uppercase text-center">{t.label}</span>
+                <span
+                  className={`text-[10px] font-bold uppercase ${
+                    tipo === t.tipo ? "text-primary/80" : "text-neutral-500"
+                  }`}
+                >
+                  {t.resultado}
+                </span>
               </button>
             ))}
           </div>
@@ -673,9 +699,9 @@ function TourActionModal({
         </div>
 
         <p className="text-[11px] text-neutral-500">
-          Essa ação soma <span className="text-primary font-black">+{config.hype} de hype</span> pro show de
-          hoje ({show.hype}/100 até agora). Ao atingir 100, o show fica esgotado automaticamente. Dá pra
-          combinar mais de uma ação no mesmo dia.
+          Com <span className="text-white font-black">{config.label}</span>, esse show vende{" "}
+          <span className="text-primary font-black">{config.resultado.toLowerCase()}</span> na hora — não dá
+          pra voltar atrás depois de publicar.
         </p>
 
         {erro && <p className="text-xs text-red-400 font-bold">{erro}</p>}
