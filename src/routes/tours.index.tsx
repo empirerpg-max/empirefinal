@@ -12,6 +12,11 @@ import {
   MessageCircle,
   Mic,
   PartyPopper,
+  Radio,
+  Users2,
+  Ticket,
+  Clapperboard,
+  Flame,
 } from "lucide-react";
 import { api, fmtMoney, driveImg } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
@@ -60,7 +65,15 @@ interface Missao {
   hoje: boolean;
 }
 
-type TipoAcao = "foto" | "interacao" | "entrevista" | "especial";
+type TipoAcao =
+  | "foto"
+  | "interacao"
+  | "entrevista"
+  | "especial"
+  | "live"
+  | "colab"
+  | "sorteio"
+  | "bastidores";
 
 interface FeedItem {
   idUnico: string;
@@ -80,9 +93,13 @@ interface FeedItem {
 
 const TIPO_INFO: Record<TipoAcao, { label: string; icon: React.ReactNode }> = {
   foto: { label: "Foto + resumo", icon: <Camera className="size-3.5" /> },
-  interacao: { label: "Interação com fã", icon: <MessageCircle className="size-3.5" /> },
-  entrevista: { label: "Entrevista rápida", icon: <Mic className="size-3.5" /> },
   especial: { label: "Evento especial", icon: <PartyPopper className="size-3.5" /> },
+  entrevista: { label: "Entrevista rápida", icon: <Mic className="size-3.5" /> },
+  interacao: { label: "Interação com fã", icon: <MessageCircle className="size-3.5" /> },
+  live: { label: "Live nas redes", icon: <Radio className="size-3.5" /> },
+  colab: { label: "Colab surpresa", icon: <Users2 className="size-3.5" /> },
+  sorteio: { label: "Sorteio VIP", icon: <Ticket className="size-3.5" /> },
+  bastidores: { label: "Bastidores", icon: <Clapperboard className="size-3.5" /> },
 };
 
 function realizados(t: TourCard) {
@@ -105,6 +122,7 @@ function ToursIndex() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [missoes, setMissoes] = useState<Missao[] | null>(null);
+  const [aba, setAba] = useState<"central" | "finalizados">("central");
   const [feed, setFeed] = useState<FeedItem[] | null>(null);
 
   function loadMinhas() {
@@ -144,7 +162,7 @@ function ToursIndex() {
   }, []);
 
   const minhasIds = new Set((minhasTurnes || []).map((t) => t.idUnico));
-  const turnesDoImperio = (publicas || []).filter((t) => !minhasIds.has(t.idUnico));
+  const finalizados = (publicas || []).filter((t) => !minhasIds.has(t.idUnico));
 
   return (
     <main className="flex-1 mx-auto w-full max-w-2xl px-4 pt-6 pb-20">
@@ -157,7 +175,7 @@ function ToursIndex() {
             <h1 className="text-2xl font-black italic tracking-tight">Empire Tours</h1>
           </div>
           <p className="text-xs text-muted-foreground font-medium pl-1">
-            Gerencie sua turnê e acompanhe as maiores do Império
+            Gerencie sua turnê e acompanhe o Império
           </p>
         </div>
         {meusArtistas.length > 0 && (
@@ -171,58 +189,83 @@ function ToursIndex() {
         )}
       </header>
 
-      {telegramId && missoes && missoes.length > 0 && <MissoesCarousel missoes={missoes} />}
+      <div className="flex gap-1 p-1 bg-card rounded-2xl border border-white/5 mb-6">
+        <button
+          onClick={() => setAba("central")}
+          className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition ${
+            aba === "central" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+          }`}
+        >
+          Central
+        </button>
+        <button
+          onClick={() => setAba("finalizados")}
+          className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition ${
+            aba === "finalizados" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+          }`}
+        >
+          Finalizados
+        </button>
+      </div>
 
-      <FeedGlobal feed={feed} />
+      {aba === "central" ? (
+        <>
+          {telegramId && missoes && missoes.length > 0 && <MissoesCarousel missoes={missoes} />}
 
-      {telegramId && meusArtistas.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1">Minhas Turnês</h2>
-          {!minhasTurnes ? (
-            <div className="flex justify-center py-8 opacity-50">
-              <Loader2 className="size-6 animate-spin" />
+          <FeedGlobal feed={feed} />
+
+          {telegramId && meusArtistas.length > 0 && (
+            <section className="mb-8">
+              <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1">Minhas Turnês</h2>
+              {!minhasTurnes ? (
+                <div className="flex justify-center py-8 opacity-50">
+                  <Loader2 className="size-6 animate-spin" />
+                </div>
+              ) : minhasTurnes.length === 0 ? (
+                <div className="rounded-2xl bg-white/[0.03] border border-dashed border-white/10 p-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Você ainda não tem nenhuma turnê. Que tal criar a primeira?
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {minhasTurnes.map((t) => (
+                    <TourCardItem key={t.idUnico} t={t} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      ) : (
+        <section>
+          <p className="text-xs text-muted-foreground mb-4 px-1">
+            Turnês do método antigo e outras já concluídas — histórico, só leitura.
+          </p>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 opacity-50">
+              <Loader2 className="size-8 animate-spin" />
+              <p className="text-xs font-bold uppercase tracking-widest">Carregando turnês...</p>
             </div>
-          ) : minhasTurnes.length === 0 ? (
-            <div className="rounded-2xl bg-white/[0.03] border border-dashed border-white/10 p-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                Você ainda não tem nenhuma turnê. Que tal criar a primeira?
+          ) : finalizados.length === 0 ? (
+            <div className="rounded-3xl bg-white/[0.03] border border-dashed border-white/10 p-12 text-center">
+              <div className="size-16 rounded-full bg-muted/20 text-muted-foreground grid place-items-center mx-auto mb-4">
+                <Mic2 className="size-8" />
+              </div>
+              <h2 className="text-lg font-bold mb-1">Nada por aqui ainda</h2>
+              <p className="text-sm text-muted-foreground max-w-[240px] mx-auto text-balance">
+                Nenhuma turnê finalizada no momento.
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {minhasTurnes.map((t) => (
+            <div className="space-y-4">
+              {finalizados.map((t) => (
                 <TourCardItem key={t.idUnico} t={t} />
               ))}
             </div>
           )}
         </section>
       )}
-
-      <section>
-        <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1">Turnês do Império</h2>
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3 opacity-50">
-            <Loader2 className="size-8 animate-spin" />
-            <p className="text-xs font-bold uppercase tracking-widest">Carregando turnês...</p>
-          </div>
-        ) : turnesDoImperio.length === 0 ? (
-          <div className="rounded-3xl bg-white/[0.03] border border-dashed border-white/10 p-12 text-center">
-            <div className="size-16 rounded-full bg-muted/20 text-muted-foreground grid place-items-center mx-auto mb-4">
-              <Mic2 className="size-8" />
-            </div>
-            <h2 className="text-lg font-bold mb-1">Silêncio nos Estádios</h2>
-            <p className="text-sm text-muted-foreground max-w-[240px] mx-auto text-balance">
-              Nenhuma outra turnê em andamento no momento.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {turnesDoImperio.map((t) => (
-              <TourCardItem key={t.idUnico} t={t} />
-            ))}
-          </div>
-        )}
-      </section>
 
       {creating && (
         <CreateTourSheet
@@ -280,14 +323,14 @@ function MissoesCarousel({ missoes }: { missoes: Missao[] }) {
               <p className="text-[10px] text-muted-foreground font-medium mb-2.5">
                 {m.cidade} · {m.data}
               </p>
-              <div className="pt-2.5 border-t border-dashed border-white/10 space-y-1">
-                <p className="text-[9.5px] font-black uppercase text-muted-foreground/60 mb-1">
-                  Ação do dia decide:
+              <div className="pt-2.5 border-t border-dashed border-white/10">
+                <p className="flex items-center gap-1.5 text-[9.5px] font-black uppercase text-emerald-400">
+                  <Flame className="size-3" />
+                  Qualquer ação = sold out
                 </p>
-                <MiniAcaoLine icon={<Camera className="size-3" />} label="Foto" result="sold out" />
-                <MiniAcaoLine icon={<PartyPopper className="size-3" />} label="Especial" result="sold out" />
-                <MiniAcaoLine icon={<Mic className="size-3" />} label="Entrevista" result="70%" />
-                <MiniAcaoLine icon={<MessageCircle className="size-3" />} label="Interação" result="50%" />
+                <p className="text-[9px] text-muted-foreground font-medium mt-1">
+                  Escolha entre 8 tipos — foto, entrevista, live e mais.
+                </p>
               </div>
             </Link>
           ))}
@@ -301,17 +344,6 @@ function MissoesCarousel({ missoes }: { missoes: Missao[] }) {
   );
 }
 
-function MiniAcaoLine({ icon, label, result }: { icon: React.ReactNode; label: string; result: string }) {
-  return (
-    <div className="flex items-center justify-between text-[9.5px] font-bold text-muted-foreground">
-      <span className="flex items-center gap-1">
-        {icon}
-        {label}
-      </span>
-      <span className="text-emerald-400">{result}</span>
-    </div>
-  );
-}
 
 function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
   if (feed && feed.length === 0) return null;

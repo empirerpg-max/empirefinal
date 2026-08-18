@@ -15,6 +15,10 @@ import {
   Send,
   X,
   ImagePlus,
+  Radio,
+  Users2,
+  Ticket,
+  Clapperboard,
 } from "lucide-react";
 import { fmtMoney, driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -25,7 +29,15 @@ export const Route = createFileRoute("/tours/$nome")({
 });
 
 interface TourAcaoDia {
-  tipo: "foto" | "interacao" | "entrevista" | "especial";
+  tipo:
+    | "foto"
+    | "interacao"
+    | "entrevista"
+    | "especial"
+    | "live"
+    | "colab"
+    | "sorteio"
+    | "bastidores";
   texto: string;
   fotoUrl?: string | null;
   data: string;
@@ -493,45 +505,47 @@ function ShowFeedPost({
   );
 }
 
+// Todos os 8 tipos garantem sold out — a diferença entre eles é só o tipo de
+// conteúdo/narrativa que fica registrado na Central de Notícias, pra não
+// ficar repetitivo postar sempre a mesma coisa show após show.
 const TIPOS_ACAO: {
   tipo: TourAcaoDia["tipo"];
   label: string;
   icon: React.ReactNode;
   precisaFoto: boolean;
-  vendidosPct: number;
-  resultado: string;
 }[] = [
+  { tipo: "foto", label: "Foto + resumo", icon: <Camera className="size-5" />, precisaFoto: true },
   {
-    tipo: "foto",
-    label: "Foto + resumo",
-    icon: <Camera className="size-5" />,
+    tipo: "especial",
+    label: "Evento especial",
+    icon: <PartyPopper className="size-5" />,
     precisaFoto: true,
-    vendidosPct: 100,
-    resultado: "Sold out garantido",
-  },
-  {
-    tipo: "interacao",
-    label: "Interação com fã",
-    icon: <MessageCircle className="size-5" />,
-    precisaFoto: false,
-    vendidosPct: 50,
-    resultado: "50% dos ingressos",
   },
   {
     tipo: "entrevista",
     label: "Entrevista rápida",
     icon: <Mic className="size-5" />,
     precisaFoto: false,
-    vendidosPct: 70,
-    resultado: "70% dos ingressos",
   },
   {
-    tipo: "especial",
-    label: "Evento especial",
-    icon: <PartyPopper className="size-5" />,
+    tipo: "interacao",
+    label: "Interação com fã",
+    icon: <MessageCircle className="size-5" />,
+    precisaFoto: false,
+  },
+  { tipo: "live", label: "Live nas redes", icon: <Radio className="size-5" />, precisaFoto: false },
+  { tipo: "colab", label: "Colab surpresa", icon: <Users2 className="size-5" />, precisaFoto: true },
+  {
+    tipo: "sorteio",
+    label: "Sorteio de ingressos VIP",
+    icon: <Ticket className="size-5" />,
+    precisaFoto: false,
+  },
+  {
+    tipo: "bastidores",
+    label: "Bastidores",
+    icon: <Clapperboard className="size-5" />,
     precisaFoto: true,
-    vendidosPct: 100,
-    resultado: "Sold out garantido",
   },
 ];
 
@@ -632,7 +646,8 @@ function TourActionModal({
             Escolha A ação de hoje
           </p>
           <p className="text-[11px] text-neutral-500 mb-2">
-            Só dá pra fazer uma — o resultado é imediato, sem combinar com outra depois.
+            Qualquer uma garante sold out — escolha só pelo clima que você quer registrar. Só dá pra fazer
+            uma, sem voltar atrás depois.
           </p>
           <div className="grid grid-cols-2 gap-2">
             {TIPOS_ACAO.map((t) => (
@@ -646,13 +661,8 @@ function TourActionModal({
                 }`}
               >
                 {t.icon}
-                <span className="text-[11px] font-black uppercase text-center">{t.label}</span>
-                <span
-                  className={`text-[10px] font-bold uppercase ${
-                    tipo === t.tipo ? "text-primary/80" : "text-neutral-500"
-                  }`}
-                >
-                  {t.resultado}
+                <span className="text-[11px] font-black uppercase text-center leading-tight">
+                  {t.label}
                 </span>
               </button>
             ))}
@@ -699,9 +709,8 @@ function TourActionModal({
         </div>
 
         <p className="text-[11px] text-neutral-500">
-          Com <span className="text-white font-black">{config.label}</span>, esse show vende{" "}
-          <span className="text-primary font-black">{config.resultado.toLowerCase()}</span> na hora — não dá
-          pra voltar atrás depois de publicar.
+          Ao publicar como <span className="text-white font-black">{config.label}</span>, esse show vira{" "}
+          <span className="text-primary font-black">sold out</span> na hora — não dá pra voltar atrás.
         </p>
 
         {erro && <p className="text-xs text-red-400 font-bold">{erro}</p>}
