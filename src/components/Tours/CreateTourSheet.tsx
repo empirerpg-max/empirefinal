@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, Loader2, ImagePlus, Sparkles, Check } from "lucide-react";
-import { fmtMoney } from "@/lib/api";
+import { X, Loader2, ImagePlus, Sparkles, Check, Wand2, ListChecks, Music2, Building2, Landmark } from "lucide-react";
+import { fmtMoney, driveImg } from "@/lib/api";
 import { haptic } from "@/lib/telegram";
 
 interface LocalTurne {
@@ -12,6 +12,40 @@ interface LocalTurne {
   precoIngresso: number;
   repasseIngresso: number;
   lucroMaximo: number;
+}
+
+const CATEGORIA_STYLE: Record<string, { icon: React.ReactNode; classes: string }> = {
+  Club: { icon: <Music2 className="size-4" />, classes: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30" },
+  Arena: { icon: <Building2 className="size-4" />, classes: "bg-sky-500/15 text-sky-300 border-sky-500/30" },
+  Estádio: { icon: <Landmark className="size-4" />, classes: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+};
+
+function categoriaStyle(categoria: string) {
+  return (
+    CATEGORIA_STYLE[categoria] || {
+      icon: <Building2 className="size-4" />,
+      classes: "bg-white/10 text-neutral-300 border-white/20",
+    }
+  );
+}
+
+// Gera automaticamente `qtd` locais tentando aproximar a soma do lucro
+// máximo de cada um ao "valorAlvo" total informado — greedy por show, sempre
+// pegando o local ainda não escolhido mais próximo da média alvo restante.
+function gerarLocaisAutomaticos(todos: LocalTurne[], qtd: number, valorAlvo: number): string[] {
+  if (qtd <= 0 || todos.length === 0) return [];
+  const disponiveis = [...todos];
+  const escolhidos: LocalTurne[] = [];
+  let restanteAlvo = valorAlvo;
+  for (let i = 0; i < qtd && disponiveis.length > 0; i++) {
+    const showsRestantes = qtd - i;
+    const mediaAlvo = restanteAlvo / showsRestantes;
+    disponiveis.sort((a, b) => Math.abs(a.lucroMaximo - mediaAlvo) - Math.abs(b.lucroMaximo - mediaAlvo));
+    const pick = disponiveis.shift()!;
+    escolhidos.push(pick);
+    restanteAlvo -= pick.lucroMaximo;
+  }
+  return escolhidos.map((l) => l.local);
 }
 
 export function CreateTourSheet({
@@ -43,24 +77,34 @@ export function CreateTourSheet({
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState("");
 
+  const [modo, setModo] = useState<"manual" | "auto">("manual");
+  const [continenteAtivo, setContinenteAtivo] = useState<string | null>(null);
+  const [autoQtd, setAutoQtd] = useState(6);
+  const [autoValorAlvo, setAutoValorAlvo] = useState(5000000);
+
   useEffect(() => {
     fetch("/api/turnes/locais")
       .then((r) => r.json())
       .then((res) => {
-        if (res?.success) setLocais(res.data || []);
+        if (res?.success) {
+          setLocais(res.data || []);
+          const primeiroContinente = res.data?.[0]?.continente;
+          if (primeiroContinente) setContinenteAtivo(primeiroContinente);
+        }
       })
       .finally(() => setLoadingLocais(false));
   }, []);
 
-  const porContinente = useMemo(() => {
-    const map = new Map<string, LocalTurne[]>();
-    for (const l of locais) {
-      const key = l.continente || "Outros";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(l);
-    }
-    return map;
+  const continentes = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of locais) set.add(l.continente || "Outros");
+    return Array.from(set);
   }, [locais]);
+
+  const locaisDoContinente = useMemo(
+    () => locais.filter((l) => (l.continente || "Outros") === continenteAtivo),
+    [locais, continenteAtivo],
+  );
 
   useEffect(() => {
     const nomes = Array.from(selecionados);
@@ -96,6 +140,14 @@ export function CreateTourSheet({
       else next.add(nome);
       return next;
     });
+  }
+
+  function handleGerarAutomatico() {
+    if (locais.length === 0) return;
+    haptic.selection();
+    const nomes = gerarLocaisAutomaticos(locais, autoQtd, autoValorAlvo);
+    setSelecionados(new Set(nomes));
+    setModo("manual");
   }
 
   async function handleUploadCapa(file: File) {
@@ -169,7 +221,7 @@ export function CreateTourSheet({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 pb-32">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 pb-4">
         {artistas.length > 1 && (
           <section>
             <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">Artista</label>
@@ -207,7 +259,7 @@ export function CreateTourSheet({
           <div className="flex items-center gap-3">
             <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 overflow-hidden shrink-0 grid place-items-center">
               {capaUrl ? (
-                <img src={capaUrl} alt="Capa" className="size-full object-cover" />
+                <img src={driveImg(capaUrl, 200)} alt="Capa" className="size-full object-cover" />
               ) : (
                 <ImagePlus className="size-6 text-neutral-600" />
               )}
@@ -242,7 +294,7 @@ export function CreateTourSheet({
           </div>
           <div>
             <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">
-              Dias entre shows
+              Espaçamento (dias)
             </label>
             <input
               type="number"
@@ -252,59 +304,150 @@ export function CreateTourSheet({
               onChange={(e) => setIntervaloDias(Math.max(1, Number(e.target.value) || 1))}
               className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white"
             />
+            <p className="text-[10px] text-neutral-500 mt-1.5 leading-snug">
+              Quantos dias de descanso entre um show e o próximo. Com 3, a agenda fica: dia 1, dia 4, dia
+              7...
+            </p>
           </div>
         </section>
 
         <section>
-          <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">
-            Locais ({selecionados.size} selecionados)
-          </label>
-          {loadingLocais ? (
-            <div className="flex justify-center py-10 opacity-50">
-              <Loader2 className="size-6 animate-spin" />
+          <div className="flex items-center gap-2 p-1 rounded-2xl bg-neutral-900 border border-white/10 mb-4">
+            <button
+              onClick={() => setModo("manual")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-black uppercase transition ${
+                modo === "manual" ? "bg-primary text-primary-foreground" : "text-neutral-400"
+              }`}
+            >
+              <ListChecks className="size-3.5" />
+              Escolher locais
+            </button>
+            <button
+              onClick={() => setModo("auto")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-black uppercase transition ${
+                modo === "auto" ? "bg-primary text-primary-foreground" : "text-neutral-400"
+              }`}
+            >
+              <Wand2 className="size-3.5" />
+              Gerar automático
+            </button>
+          </div>
+
+          {modo === "auto" ? (
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4 space-y-4">
+              <p className="text-[11px] text-neutral-400 leading-snug">
+                Diga quantos shows quer e um lucro máximo aproximado — o app escolhe os locais que mais
+                se aproximam disso pra você. Dá pra ajustar manualmente depois.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">
+                    Quantidade de shows
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={locais.length || 40}
+                    value={autoQtd}
+                    onChange={(e) => setAutoQtd(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">
+                    Lucro máximo desejado
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={100000}
+                    value={autoValorAlvo}
+                    onChange={(e) => setAutoValorAlvo(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleGerarAutomatico}
+                disabled={loadingLocais}
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition disabled:opacity-50"
+              >
+                <Wand2 className="size-4" />
+                Gerar {autoQtd} shows
+              </button>
             </div>
           ) : (
-            <div className="space-y-4">
-              {Array.from(porContinente.entries()).map(([continente, lista]) => (
-                <div key={continente}>
-                  <p className="text-[10px] font-black uppercase text-neutral-500 mb-1.5">{continente}</p>
-                  <div className="space-y-1.5">
-                    {lista.map((l) => {
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-black uppercase text-neutral-400">
+                  {selecionados.size} selecionados
+                </span>
+              </div>
+              {loadingLocais ? (
+                <div className="flex justify-center py-10 opacity-50">
+                  <Loader2 className="size-6 animate-spin" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2 overflow-x-auto pb-1 mb-3 -mx-1 px-1">
+                    {continentes.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setContinenteAtivo(c)}
+                        className={`shrink-0 px-3.5 py-2 rounded-full text-[11px] font-black uppercase whitespace-nowrap transition border ${
+                          continenteAtivo === c
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-white/5 text-neutral-400 border-white/10"
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {locaisDoContinente.map((l) => {
                       const checked = selecionados.has(l.local);
+                      const style = categoriaStyle(l.categoria);
                       return (
                         <button
                           key={l.local}
                           type="button"
                           onClick={() => toggleLocal(l.local)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition ${
+                          className={`relative text-left rounded-2xl border p-3.5 transition overflow-hidden ${
                             checked
-                              ? "bg-primary/10 border-primary/40"
-                              : "bg-neutral-900/60 border-white/5 hover:border-white/15"
+                              ? "bg-primary/10 border-primary shadow-[0_0_0_1px_rgba(var(--primary),0.4)]"
+                              : "bg-neutral-900/60 border-white/5 hover:border-white/20"
                           }`}
                         >
+                          {checked && (
+                            <div className="absolute top-2.5 right-2.5 size-5 rounded-full bg-primary grid place-items-center">
+                              <Check className="size-3.5 text-black" />
+                            </div>
+                          )}
                           <div
-                            className={`size-5 rounded-md border shrink-0 grid place-items-center ${
-                              checked ? "bg-primary border-primary" : "border-white/20"
-                            }`}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-black uppercase mb-2 ${style.classes}`}
                           >
-                            {checked && <Check className="size-3.5 text-black" />}
+                            {style.icon}
+                            {l.categoria}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-white truncate">{l.local}</p>
-                            <p className="text-[10px] text-neutral-400">
-                              {l.cidade} · {l.categoria} · {l.capacidade.toLocaleString("pt-BR")} lugares
-                            </p>
+                          <p className="text-xs font-bold text-white leading-tight mb-0.5 pr-6">{l.local}</p>
+                          <p className="text-[10px] text-neutral-500 mb-2">{l.cidade}</p>
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-neutral-400">
+                              {l.capacidade.toLocaleString("pt-BR")} lugares
+                            </span>
+                            <span className="font-black text-emerald-400">
+                              {fmtMoney(l.capacidade * l.repasseIngresso)}
+                            </span>
                           </div>
-                          <p className="text-[11px] font-black text-emerald-400 shrink-0">
-                            até {fmtMoney(l.capacidade * l.repasseIngresso)}
-                          </p>
                         </button>
                       );
                     })}
                   </div>
-                </div>
-              ))}
-            </div>
+                </>
+              )}
+            </>
           )}
         </section>
 
@@ -339,7 +482,15 @@ export function CreateTourSheet({
         {erro && <p className="text-xs text-red-400 font-bold">{erro}</p>}
       </div>
 
-      <div className="p-4 sm:p-6 border-t border-white/10 bg-neutral-900/90 shrink-0">
+      <div className="p-4 sm:p-6 border-t border-white/10 bg-neutral-900/95 shrink-0 space-y-2">
+        {sim && (
+          <div className="flex items-center justify-between text-[11px] font-black uppercase text-neutral-400 px-1">
+            <span>
+              {selecionados.size} shows selecionados
+            </span>
+            <span className="text-emerald-400">até {fmtMoney(sim.lucroMaximo)}</span>
+          </div>
+        )}
         <button
           onClick={handleSubmit}
           disabled={submitting}
