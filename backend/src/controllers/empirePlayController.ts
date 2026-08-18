@@ -577,6 +577,33 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
         return score ? { ...item, metacriticAvg: score } : item;
       });
 
+    // Top_Songs_Apple_Music/Top_Videos_YT também não têm coluna própria de
+    // capa — mesmo cruzamento por artista+título com o catálogo real, agora
+    // pra herdar coverUrl (capa do single/vídeo), usada nos quadrados
+    // laterais da capa dinâmica do Apple Music.
+    const buildCoverIndex = (items: EmpirePlayCleanItem[]) => {
+      const map = new Map<string, string>();
+      for (const it of items) {
+        if (!it.coverUrl) continue;
+        const key = `${normalizeComparison(it.artist)}::${normalizeComparison(it.title)}`;
+        if (!map.has(key)) map.set(key, it.coverUrl);
+      }
+      return map;
+    };
+    const musicaCoverIndex = buildCoverIndex(musicaAllItems);
+    const videoCoverIndex = buildCoverIndex(videoAllItems);
+
+    const enrichWithCover = (
+      chartItems: EmpirePlayCleanItem[],
+      coverIndex: Map<string, string>,
+    ): EmpirePlayCleanItem[] =>
+      chartItems.map((item) => {
+        if (item.coverUrl) return item;
+        const key = `${normalizeComparison(item.artist)}::${normalizeComparison(item.title)}`;
+        const cover = coverIndex.get(key);
+        return cover ? { ...item, coverUrl: cover } : item;
+      });
+
     // Foto de PERFIL do artista (aba ARTISTAS) — cruzada por nome normalizado,
     // diferente de coverUrl (capa da música/vídeo). Usada nas capas dinâmicas
     // de Catálogo > Início.
@@ -593,21 +620,30 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
       });
 
     const topSpotify = enrichWithArtistPhoto(
-      enrichWithScore(
-        spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx)),
-        musicaScoreIndex,
+      enrichWithCover(
+        enrichWithScore(
+          spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx)),
+          musicaScoreIndex,
+        ),
+        musicaCoverIndex,
       ),
     );
     const topAppleMusic = enrichWithArtistPhoto(
-      enrichWithScore(
-        appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
-        musicaScoreIndex,
+      enrichWithCover(
+        enrichWithScore(
+          appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
+          musicaScoreIndex,
+        ),
+        musicaCoverIndex,
       ),
     );
     const topYoutube = enrichWithArtistPhoto(
-      enrichWithScore(
-        youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx)),
-        videoScoreIndex,
+      enrichWithCover(
+        enrichWithScore(
+          youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx)),
+          videoScoreIndex,
+        ),
+        videoCoverIndex,
       ),
     );
     const recentMusicasWithPhoto = enrichWithArtistPhoto(recentMusicas);
