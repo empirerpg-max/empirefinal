@@ -6,4 +6,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/tours-sheets" | tee /tmp/out.json
+        run: |
+          BASE="https://tanstack-start-app.empirerpg-forum.workers.dev"
+          echo "--- locais (primeiros 800 chars) ---"
+          curl -sS "$BASE/api/turnes/locais" | head -c 800
+          echo
+          echo "--- simular ---"
+          curl -sS -X POST "$BASE/api/turnes/simular" -H "Content-Type: application/json" \
+            -d '{"locais":["Madison Square Garden","MetLife Stadium"]}'
+          echo
+          echo "--- turnes (todas, primeiros 1500 chars) ---"
+          curl -sS "$BASE/api/turnes" | head -c 1500
+          echo
+          echo "--- criar (deve dar 403, artista nao pertence a esse telegramId) ---"
+          curl -sS -X POST "$BASE/api/turnes/criar" -H "Content-Type: application/json" \
+            -d '{"telegramId":"999999999","artista":"Matthew","nomeTurne":"Teste","locais":["Madison Square Garden"]}'
+          echo
