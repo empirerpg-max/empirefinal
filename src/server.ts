@@ -388,48 +388,6 @@ export default {
 
 
 
-    if (url.pathname === "/api/debug/cezar-jessica" && request.method === "GET") {
-      const { googleSheetsService, normalizeComparison } = await import(
-        "../backend/src/services/googleSheetsService"
-      );
-      const { getArtistNamesForOwner } = await import("../backend/src/controllers/artistasController");
-
-      const [usuarios, artistas] = await Promise.all([
-        googleSheetsService.usuarios.readValues("Usuários"),
-        googleSheetsService.usuarios.readValues("ARTISTAS"),
-      ]);
-
-      const usuariosHeader = usuarios[0];
-      const cezarRows = usuarios
-        .slice(1)
-        .filter((r) => r.some((c) => normalizeComparison(c).includes("cezar")));
-
-      const artistasHeader = artistas[0];
-      // Todas as linhas de ARTISTAS cujo id_usuario aparece em qualquer
-      // linha do Cezar encontrada acima, mais qualquer linha cujo NOME
-      // contenha "jessica" (não só "jessica johnson" — pra pegar variações).
-      const cezarIds = cezarRows.map((r) => (r[1] || "").trim()).filter(Boolean);
-      const artistasDoCezar = artistas
-        .slice(1)
-        .filter((r) => cezarIds.includes((r[10] || "").trim()));
-      const jessicaLinhas = artistas
-        .slice(1)
-        .filter((r) => normalizeComparison(r[0] || "").includes("jessica"));
-
-      const nomesViaFuncao = await Promise.all(
-        cezarIds.map(async (id) => ({ id, nomes: await getArtistNamesForOwner(id) })),
-      );
-
-      return Response.json({
-        usuariosHeader,
-        cezarRows,
-        cezarIds,
-        artistasHeader,
-        artistasDoCezar,
-        jessicaLinhas,
-        nomesViaFuncao,
-      });
-    }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
