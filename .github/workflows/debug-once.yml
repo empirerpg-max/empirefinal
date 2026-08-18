@@ -6,4 +6,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/home" | tee /tmp/out.json
+        run: |
+          curl -sS -o artist.jpg "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=1goDgN0Y6O-cNR3XmKngYysra1qwD5rM7"
+          file artist.jpg
+          echo "===BASE64_START==="
+          base64 -w 200 artist.jpg
+          echo "===BASE64_END==="
