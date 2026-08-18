@@ -446,32 +446,19 @@ export default {
       });
     }
 
-    if (url.pathname === "/api/debug/testar-registro" && request.method === "GET") {
-      const { registrarAuditLog } = await import("../backend/src/controllers/registroLogController");
+    if (url.pathname === "/api/debug/limpar-teste-registro" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      // Dispara 3 gravações "simultâneas" (Promise.all, sem await entre
-      // elas) — é exatamente o cenário que antes causava sobrescrita
-      // silenciosa. Se a correção funcionar, as 3 devem sobreviver.
-      await Promise.all([
-        registrarAuditLog({
-          nomeJogador: "TESTE_CLAUDE_1",
-          titulo: "Teste de concorrência 1",
-          tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-        }),
-        registrarAuditLog({
-          nomeJogador: "TESTE_CLAUDE_2",
-          titulo: "Teste de concorrência 2",
-          tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-        }),
-        registrarAuditLog({
-          nomeJogador: "TESTE_CLAUDE_3",
-          titulo: "Teste de concorrência 3",
-          tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-        }),
-      ]);
       const registro = await googleSheetsService.registrosCharts.readValues("REGISTRO");
-      const testeRows = registro.filter((r) => (r[1] || "").startsWith("TESTE_CLAUDE"));
-      return Response.json({ sobreviveram: testeRows.length, testeRows, totalLinhas: registro.length });
+      let apagadas = 0;
+      for (let i = 1; i < registro.length; i++) {
+        if ((registro[i][1] || "").startsWith("TESTE_CLAUDE")) {
+          await googleSheetsService.registrosCharts.updateValues("REGISTRO", `B${i + 1}:D${i + 1}`, [
+            ["", "", ""],
+          ]);
+          apagadas++;
+        }
+      }
+      return Response.json({ apagadas });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
