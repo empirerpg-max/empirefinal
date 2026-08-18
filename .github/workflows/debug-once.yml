@@ -6,4 +6,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/kick/status" | tee /tmp/out.json
+        run: curl -sS -o cover.png "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=1HzcUaW91zn-45UbGjFotDS3BQs8kMTcR"
+      - name: Upload cover as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotify-cover
+          path: cover.png
