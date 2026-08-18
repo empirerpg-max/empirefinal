@@ -385,6 +385,37 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/check-avatar" && request.method === "GET") {
+      const { googleSheetsService, normalizeText, normalizeComparison } = await import("../backend/src/services/googleSheetsService");
+      const { getDriveOAuthAccessToken } = await import("../backend/src/google/service-account");
+      const q = normalizeComparison(url.searchParams.get("q") || "");
+      const rows = await googleSheetsService.usuarios.readValues("SOCIAL_PERFIS");
+      const match = rows.slice(1).find((row) => normalizeComparison(row[0]).includes(q));
+      if (!match) return Response.json({ found: false, q });
+      const avatarUrl = normalizeText(match[4]);
+      const idMatch = avatarUrl.match(/[-\w]{25,}/);
+      let driveCheck: any = null;
+      if (idMatch) {
+        try {
+          const token = await getDriveOAuthAccessToken();
+          const metaRes = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${idMatch[0]}?fields=id,name,mimeType,size`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          driveCheck = { status: metaRes.status, body: await metaRes.json().catch(() => null) };
+        } catch (err: any) {
+          driveCheck = { error: err?.message || String(err) };
+        }
+      }
+      return Response.json({
+        found: true,
+        artista: normalizeText(match[0]),
+        avatarUrl,
+        extractedId: idMatch?.[0] || null,
+        driveCheck,
+      });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
