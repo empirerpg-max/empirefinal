@@ -390,9 +390,18 @@ export default {
       const { getDriveOAuthAccessToken } = await import("../backend/src/google/service-account");
       const q = normalizeComparison(url.searchParams.get("q") || "");
       const rows = await googleSheetsService.usuarios.readValues("SOCIAL_PERFIS");
-      const match = rows.slice(1).find((row) => normalizeComparison(row[0]).includes(q));
-      if (!match) return Response.json({ found: false, q });
+      const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeComparison(row[0]).includes(q));
+      if (rowIndex === -1) return Response.json({ found: false, q });
+      const match = rows[rowIndex];
       const avatarUrl = normalizeText(match[4]);
+      // Link de PASTA (não de arquivo) na coluna de avatar = resíduo do bug
+      // de fallback silencioso do uploadFileToDrive (já corrigido) — nunca
+      // vai renderizar como imagem. Limpa de volta pra vazio (mostra o
+      // ícone padrão) até a pessoa subir a foto de novo.
+      if (url.searchParams.get("fix") === "1" && /\/folders\//.test(avatarUrl)) {
+        await googleSheetsService.usuarios.updateValues("SOCIAL_PERFIS", `E${rowIndex + 1}`, [[""]]);
+        return Response.json({ fixed: true, rowIndex: rowIndex + 1, clearedAvatarUrl: avatarUrl });
+      }
       const idMatch = avatarUrl.match(/[-\w]{25,}/);
       let driveCheck: any = null;
       if (idMatch) {
