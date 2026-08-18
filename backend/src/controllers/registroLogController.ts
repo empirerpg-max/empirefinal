@@ -37,12 +37,16 @@ async function buscarNomeCanonico(tituloOriginal: string, isAlbum: boolean): Pro
  * Grava uma linha de audit log na aba REGISTRO — só em B (jogador), C
  * (conteúdo, nome canônico do chart) e D (tipo). Nunca escreve em A ou E.
  *
- * Usa updateValues numa linha específica (a próxima vazia, achada lendo a
- * coluna B) em vez de appendRow com INSERT_ROWS: inserir uma linha nova
- * insere através da planilha inteira, incluindo a coluna E ("VALOR"), que é
- * calculada por fórmula e protegida contra edição manual — isso fazia o
- * Google Sheets recusar a gravação inteira com "editing a protected cell",
- * mesmo B:D estando liberadas pra edição.
+ * Usa `appendRow` com o range restrito a "B:D" e insertDataOption=OVERWRITE
+ * (não INSERT_ROWS): a própria API do Sheets acha e ocupa a próxima linha
+ * vazia OLHANDO SÓ pras colunas B:D, de forma atômica do lado do Google —
+ * ao contrário do jeito antigo (ler a coluna B, calcular a linha aqui, e só
+ * depois escrever), que tinha uma condição de corrida real: dois
+ * comentários publicados perto um do outro liam a MESMA "próxima linha
+ * vazia" antes de qualquer um escrever, e o segundo `updateValues` sobrescrevia
+ * silenciosamente o primeiro — sem erro nenhum, só um registro "sumido". Como
+ * o range aqui nunca inclui a coluna E (protegida, calculada por fórmula), a
+ * gravação não esbarra na proteção mesmo com OVERWRITE.
  */
 export async function registrarAuditLog(params: {
   nomeJogador: string;
@@ -55,18 +59,15 @@ export async function registrarAuditLog(params: {
     const nomeCanonico = await buscarNomeCanonico(titulo, !!isAlbum);
     const conteudo = isAlbum ? `(ALBUM) - ${nomeCanonico}` : nomeCanonico;
 
-    const colunaB = await googleSheetsService.registrosCharts.readValues("REGISTRO", "B:B");
-    let proximaLinha = colunaB.length + 1;
-    // A coluna B pode ter "buracos" (linhas em branco no meio) — anda pra
-    // trás até achar de fato a última linha com conteúdo, pra não pisar
-    // numa linha existente nem deixar buracos maiores.
-    while (proximaLinha > 1 && !normalizeText(colunaB[proximaLinha - 2]?.[0])) {
-      proximaLinha--;
-    }
-
-    await googleSheetsService.registrosCharts.updateValues("REGISTRO", `B${proximaLinha}:D${proximaLinha}`, [
+    const linha = await googleSheetsService.registrosCharts.appendRow(
+      "REGISTRO",
       [nomeJogador, conteudo, tipo],
-    ]);
+      "B:D",
+      "OVERWRITE",
+    );
+    if (linha === null) {
+      console.warn("[registroLog] Gravação em REGISTRO falhou após todas as tentativas.");
+    }
   } catch (err) {
     console.warn("[registroLog] Erro ao gravar em REGISTRO:", err);
   }
