@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2 } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
-import { api, driveImg, driveRawImg, type ProgramaTV } from "@/lib/api";
+import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV } from "@/lib/api";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
 
@@ -315,7 +315,7 @@ function TwitchRail({
                 >
                   <div className="size-7 rounded-full overflow-hidden bg-muted shrink-0 grid place-items-center">
                     {p.cover ? (
-                      <img src={driveRawImg(p.cover)} alt={p.titulo} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <img src={resolveImg(p.cover)} alt={p.titulo} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <Radio className="size-3 text-muted-foreground" />
                     )}
@@ -371,7 +371,7 @@ function HomeTabView({
     <>
       <div className="relative w-full h-[55vh] min-h-[320px] overflow-hidden">
         {featured.cover ? (
-          <img src={driveRawImg(featured.cover)} alt={featured.titulo} className="absolute inset-0 w-full h-full object-cover" referrerPolicy="no-referrer" />
+          <img src={resolveImg(featured.cover)} alt={featured.titulo} className="absolute inset-0 w-full h-full object-cover" referrerPolicy="no-referrer" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-muted" />
         )}
@@ -477,7 +477,7 @@ function ProgramRow({ title, programas, onPlay, showSchedule, emptyText }: {
               <button key={p.id} onClick={() => onPlay(p)} className="snap-start shrink-0 w-64 group text-left">
                 <div className="relative aspect-video rounded-md overflow-hidden bg-muted">
                   {p.cover ? (
-                    <img src={driveRawImg(p.cover)} alt={p.titulo} className="w-full h-full object-cover group-hover:scale-105 transition-transform" referrerPolicy="no-referrer" />
+                    <img src={resolveImg(p.cover)} alt={p.titulo} className="w-full h-full object-cover group-hover:scale-105 transition-transform" referrerPolicy="no-referrer" />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-primary/20 to-muted" />
                   )}
@@ -576,7 +576,7 @@ function GradeFull({ programas, onPlay, loading }: { programas: Programa[]; onPl
       {programas.map((p) => (
         <button key={p.id} onClick={() => onPlay(p)} className="w-full flex gap-3 p-2 rounded-md hover:bg-muted text-left">
           <div className="w-28 aspect-video rounded overflow-hidden bg-muted shrink-0">
-            {p.cover && <img src={driveRawImg(p.cover)} alt={p.titulo} className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
+            {p.cover && <img src={resolveImg(p.cover)} alt={p.titulo} className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold truncate">{p.titulo}</div>
@@ -633,7 +633,7 @@ function ArquivoFull({ finalizados, loading }: { finalizados: Programa[]; loadin
       {finalizados.map((p) => (
         <div key={p.id} className="flex gap-3 p-2 rounded-md hover:bg-muted">
           <div className="w-28 aspect-video rounded overflow-hidden bg-muted shrink-0">
-            {p.cover && <img src={driveRawImg(p.cover)} alt={p.titulo} className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
+            {p.cover && <img src={resolveImg(p.cover)} alt={p.titulo} className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold truncate">{p.titulo}</div>
