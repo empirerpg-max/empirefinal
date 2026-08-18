@@ -10,6 +10,41 @@ import {
 } from "../services/googleSheetsService";
 import { getUserProfile } from "./userController";
 
+function levenshtein(a: string, b: string): number {
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+// Corrige erro de digitação no nome do artista vindo das abas de chart
+// (ex: "Abigal" na planilha, "Abigail" cadastrada de verdade em ARTISTAS) —
+// só corrige quando existe exatamente UM nome cadastrado muito próximo
+// (distância de edição <= 2), pra nunca trocar o nome de um artista
+// diferente por engano.
+function correctArtistName(rawName: string, knownNames: string[]): string {
+  const normalized = normalizeComparison(rawName);
+  if (!normalized) return rawName;
+  let best: { name: string; dist: number }[] = [];
+  for (const known of knownNames) {
+    const dist = levenshtein(normalized, normalizeComparison(known));
+    if (dist === 0) return known;
+    if (dist <= 2) best.push({ name: known, dist });
+  }
+  if (best.length === 0) return rawName;
+  best.sort((a, b) => a.dist - b.dist);
+  if (best.length > 1 && best[0].dist === best[1].dist) return rawName;
+  return best[0].name;
+}
+
 /**
  * Igual a sheetsService.readSheetObjects, mas preserva o número real da
  * linha na planilha (1-based) em cada registro — necessário pra depois
@@ -546,13 +581,32 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
       })
       .slice(0, 100);
 
+    // Nomes cadastrados de verdade em ARTISTAS — usados abaixo pra corrigir
+    // erro de digitação no nome do artista vindo das abas de chart (elas não
+    // têm coluna própria de artista, então herdam o texto livre do Título,
+    // que às vezes tem erro, ex: "Abigal" em vez de "Abigail"). Corrigir
+    // ANTES de qualquer cruzamento é essencial: sem isso nem a capa do
+    // catálogo nem a foto do artista são encontradas, porque o nome errado
+    // não bate com o cadastro.
+    const knownArtistNames: string[] = [];
+    for (const rec of artistRecords) {
+      const nomeRaw = normalizeText(rec["nome"]);
+      if (nomeRaw) knownArtistNames.push(nomeRaw);
+    }
+    const correctArtistNames = (items: EmpirePlayCleanItem[]): EmpirePlayCleanItem[] =>
+      items.map((item) => ({ ...item, artist: correctArtistName(item.artist, knownArtistNames) }));
+
     // As abas de chart (Top_50_Spotify/Top_Songs_Apple_Music/Top_Videos_YT)
     // só guardam posição/título — não têm coluna própria de nota Metacritic
     // nem de likes, então esse dado nunca aparecia nos cards de destaque.
     // Cruza cada entrada do chart com o catálogo real (Musicas/Music Videos)
     // por artista+título pra herdar a nota/likes já calculados lá.
-    const musicaAllItems = musicaRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
-    const videoAllItems = videoRecords.map((rec, idx) => buildCleanItem("Videos", rec, idx));
+    const musicaAllItems = correctArtistNames(
+      musicaRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx)),
+    );
+    const videoAllItems = correctArtistNames(
+      videoRecords.map((rec, idx) => buildCleanItem("Videos", rec, idx)),
+    );
 
     const buildScoreIndex = (items: EmpirePlayCleanItem[]) => {
       const map = new Map<string, string>();
@@ -622,7 +676,7 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
     const topSpotify = enrichWithArtistPhoto(
       enrichWithCover(
         enrichWithScore(
-          spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx)),
+          correctArtistNames(spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx))),
           musicaScoreIndex,
         ),
         musicaCoverIndex,
@@ -631,7 +685,9 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
     const topAppleMusic = enrichWithArtistPhoto(
       enrichWithCover(
         enrichWithScore(
-          appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
+          correctArtistNames(
+            appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
+          ),
           musicaScoreIndex,
         ),
         musicaCoverIndex,
@@ -640,7 +696,7 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
     const topYoutube = enrichWithArtistPhoto(
       enrichWithCover(
         enrichWithScore(
-          youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx)),
+          correctArtistNames(youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx))),
           videoScoreIndex,
         ),
         videoCoverIndex,
