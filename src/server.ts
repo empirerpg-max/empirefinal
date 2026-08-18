@@ -385,6 +385,20 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/check-abigal" && request.method === "GET") {
+      const { sheetsService } = await import("../backend/src/services/sheetsService");
+      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
+      const appleRows = await sheetsService.readValues("Top_Songs_Apple_Music");
+      const artistRows = await googleSheetsService.usuarios.readValues("ARTISTAS");
+      const headerApple = appleRows[0];
+      const row1Apple = appleRows[1];
+      const abigMatches = artistRows
+        .slice(1)
+        .filter((r) => normalizeText(r[0]).toLowerCase().includes("abig"))
+        .map((r) => r[0]);
+      return Response.json({ headerApple, row1Apple, abigMatchesInArtistas: abigMatches });
+    }
+
 
 
     if (url.pathname === "/api/debug/check-cover-files" && request.method === "GET") {
