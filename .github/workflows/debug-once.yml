@@ -7,25 +7,30 @@ jobs:
     steps:
       - name: Curl debug endpoint
         run: |
-          pip install --quiet Pillow
-          declare -A FILES=(
-            [apple_base]="1Kq9AZ3We9NfEGXOR3CaXX1aISL3_4DCw"
-            [hot_base]="1yXHsKqvdpdM2F2F4hP5ksP6YVugmh6_C"
-            [hot_sub]="1D_zfoJ2hASAkdKhq6tHDvQYoNLSLju-K"
-            [youtube_base]="1iL2PWPgHW30YuTGK4tQMobBESnCMD0Es"
-            [youtube_sub]="13ygT5tAFmgVRIC2Wd7qa74xj6Yi4EMjR"
-            [spotify_sub]="1DggkwV5S3JEjwNIl2TCJXKQktbFPI5Ch"
-          )
-          for name in "${!FILES[@]}"; do
-            curl -sS -o "$name.png" "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=${FILES[$name]}"
-            python3 -c "
+          pip install --quiet Pillow numpy scipy
+          curl -sS -o apple_base.png "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=1Kq9AZ3We9NfEGXOR3CaXX1aISL3_4DCw"
+          python3 << 'EOF'
+          import numpy as np
           from PIL import Image
-          im = Image.open('$name.png').convert('RGB')
-          im.thumbnail((500,500))
-          im.save('${name}_small.jpg', quality=60)
-          "
-            echo "=== $name ==="
-            echo "===BASE64_START_${name}==="
-            base64 -w 200 "${name}_small.jpg"
-            echo "===BASE64_END_${name}==="
-          done
+          from scipy import ndimage
+
+          im = Image.open("apple_base.png").convert("RGBA")
+          w, h = im.size
+          arr = np.array(im)
+          r, g, b, a = arr[:,:,0], arr[:,:,1], arr[:,:,2], arr[:,:,3]
+          # quadrados pretos sólidos e opacos (nao transparentes)
+          is_black = (r < 15) & (g < 15) & (b < 15) & (a > 200)
+          labeled, n = ndimage.label(is_black)
+          print(f"{w}x{h} — {n} regioes pretas")
+          regions = []
+          for i in range(1, n+1):
+              ys, xs = np.where(labeled == i)
+              if len(xs) < 5000:
+                  continue
+              x0,x1 = xs.min(), xs.max()
+              y0,y1 = ys.min(), ys.max()
+              regions.append((x0,y0,x1-x0,y1-y0,len(xs)))
+          regions.sort(key=lambda r: r[0])
+          for (x,y,rw,rh,area) in regions:
+              print(f"  x={x} y={y} w={rw} h={rh} area={area} pct_w={rw/w*100:.1f}% pct_h={rh/h*100:.1f}%")
+          EOF
