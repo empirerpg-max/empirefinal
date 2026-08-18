@@ -387,19 +387,35 @@ export default {
 
 
 
-    if (url.pathname === "/api/debug/tours-sheets" && request.method === "GET") {
-      const { listSheetTabs, googleSheetsService } = await import(
+    if (url.pathname === "/api/debug/forum-registro" && request.method === "GET") {
+      const { googleSheetsService, normalizeComparison } = await import(
         "../backend/src/services/googleSheetsService"
       );
-      const tabs = await listSheetTabs("usuarios");
-      const wanted = new Set([358759572, 1423449392]);
-      const matches = tabs.filter((t) => wanted.has(t.sheetId));
-      const previews: Record<string, unknown> = {};
-      for (const m of matches) {
-        const rows = await googleSheetsService.usuarios.readValues(m.title);
-        previews[m.title] = rows.slice(0, 6);
-      }
-      return Response.json({ tabs, matches, previews });
+      const [registro, comMusicas, comAlbuns, comMV, artistas] = await Promise.all([
+        googleSheetsService.registrosCharts.readValues("REGISTRO"),
+        googleSheetsService.principal.readValues("Comentarios_Musicas"),
+        googleSheetsService.principal.readValues("Comentarios_Albuns"),
+        googleSheetsService.principal.readValues("Comentarios_MV"),
+        googleSheetsService.usuarios.readValues("ARTISTAS"),
+      ]);
+      const nomes = ["chris", "daniel"];
+      const filtraRegistro = registro
+        .slice(1)
+        .filter((r) => nomes.some((n) => normalizeComparison(r[1] || "").includes(n)));
+      const filtraComentarios = (rows: string[][]) =>
+        rows.slice(1).filter((r) => nomes.some((n) => r.some((c) => normalizeComparison(c).includes(n))));
+      const jessicaRows = artistas
+        .slice(1)
+        .filter((r) => normalizeComparison(r[0] || "").includes("jessica johnson"));
+      return Response.json({
+        registroTotalLinhas: registro.length,
+        registroChrisDaniel: filtraRegistro,
+        comentariosMusicasChrisDaniel: filtraComentarios(comMusicas),
+        comentariosAlbunsChrisDaniel: filtraComentarios(comAlbuns),
+        comentariosMVChrisDaniel: filtraComentarios(comMV),
+        artistasHeader: artistas[0],
+        jessicaRows,
+      });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
