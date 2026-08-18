@@ -385,6 +385,26 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/check-drive-oauth" && request.method === "GET") {
+      const { getDriveOAuthAccessToken } = await import("../backend/src/google/service-account");
+      try {
+        const token = await getDriveOAuthAccessToken();
+        const aboutRes = await fetch(
+          "https://www.googleapis.com/drive/v3/about?fields=user,storageQuota",
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        const aboutBody = await aboutRes.json().catch(() => null);
+        return Response.json({
+          tokenObtained: true,
+          tokenPrefix: token.slice(0, 12),
+          aboutStatus: aboutRes.status,
+          aboutBody,
+        });
+      } catch (err: any) {
+        return Response.json({ tokenObtained: false, error: err?.message || String(err) });
+      }
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
