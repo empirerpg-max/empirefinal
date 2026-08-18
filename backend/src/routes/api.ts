@@ -100,6 +100,8 @@ import {
   realizarAcaoDiaController,
   getComentariosTurneController,
   comentarTurneController,
+  getMissoesController,
+  getFeedGlobalController,
 } from "../controllers/tourController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
@@ -200,6 +202,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/turnes/acao",
     "/api/turnes/comentarios",
     "/api/turnes/comentar",
+    "/api/turnes/missoes",
+    "/api/turnes/feed",
   ]);
 
   if (
@@ -705,6 +709,22 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await comentarTurneController(request);
+  } else if (url.pathname === "/api/turnes/missoes") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/turnes/missoes." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getMissoesController(request);
+  } else if (url.pathname === "/api/turnes/feed") {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/turnes/feed." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await getFeedGlobalController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(

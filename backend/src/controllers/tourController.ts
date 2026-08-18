@@ -101,7 +101,8 @@ export interface TourAcaoDia {
   texto: string;
   fotoUrl?: string | null;
   data: string; // ISO timestamp de quando a ação foi feita
-  hypeGanho: number;
+  vendidosPct: number; // % da capacidade que essa ação garantiu
+  automatica?: boolean; // true quando o show passou sem o jogador agir
 }
 
 export interface TourShow {
@@ -117,7 +118,6 @@ export interface TourShow {
   lucroMaximo: number;
   receita: number;
   status: string;
-  hype: number;
   soldOut: boolean;
   acoes: TourAcaoDia[];
 }
@@ -166,7 +166,6 @@ function rowToTour(row: string[]): Tour {
           lucroMaximo: Number(s.lucroMaximo) || 0,
           receita: Number(s.receita) || 0,
           status: String(s.status || "Agendado"),
-          hype: Number(s.hype) || 0,
           soldOut: !!s.soldOut,
           acoes: Array.isArray(s.acoes) ? s.acoes : [],
         }))
@@ -276,14 +275,22 @@ export async function getTurnesController(request: Request): Promise<Response> {
     const meusArtistasNorm = new Set(meusArtistas.map((a) => normalizeComparison(a)));
 
     const tours = raw
-      .map(({ row }) => rowToTour(row))
-      .filter((t) => {
-        if (artistaFiltro) return normalizeComparison(t.artista) === artistaFiltro;
-        if (telegramId) return meusArtistasNorm.has(normalizeComparison(t.artista));
+      .map(({ row, rowIndex }) => ({ tour: rowToTour(row), rowIndex }))
+      .filter(({ tour }) => {
+        if (artistaFiltro) return normalizeComparison(tour.artista) === artistaFiltro;
+        if (telegramId) return meusArtistasNorm.has(normalizeComparison(tour.artista));
         return true;
       });
 
-    return jsonOk(tours);
+    await Promise.all(
+      tours.map(async ({ tour, rowIndex }) => {
+        if (tour.sistemaNovo && resolverShowsAutomaticos(tour)) {
+          await persistAgenda(rowIndex, tour).catch(() => {});
+        }
+      }),
+    );
+
+    return jsonOk(tours.map(({ tour }) => tour));
   } catch (err) {
     console.error("[getTurnesController] Erro:", err);
     return jsonError("Falha ao carregar as turnês.", 500);
@@ -303,7 +310,12 @@ export async function getTurneDetalheController(request: Request): Promise<Respo
     const found = raw.find(({ row }) => normalizeComparison(row[idUnicoCol]) === idUnico);
     if (!found) return jsonError("Turnê não encontrada.", 404);
 
-    return jsonOk(rowToTour(found.row));
+    const tour = rowToTour(found.row);
+    if (tour.sistemaNovo && resolverShowsAutomaticos(tour)) {
+      await persistAgenda(found.rowIndex, tour).catch(() => {});
+    }
+
+    return jsonOk(tour);
   } catch (err) {
     console.error("[getTurneDetalheController] Erro:", err);
     return jsonError("Falha ao carregar a turnê.", 500);
@@ -386,7 +398,6 @@ export async function criarTurneController(request: Request): Promise<Response> 
         lucroMaximo: local.capacidade * local.repasseIngresso,
         receita: 0,
         status: "Agendado",
-        hype: 0,
         soldOut: false,
         acoes: [],
       };
@@ -442,14 +453,77 @@ export async function criarTurneController(request: Request): Promise<Response> 
   }
 }
 
-const HYPE_POR_ACAO: Record<TourAcaoDia["tipo"], number> = {
-  foto: 40,
-  interacao: 25,
-  entrevista: 30,
-  especial: 50,
+// Cada show recebe SÓ UMA ação — não acumula. O tipo escolhido já define o
+// resultado direto (% da capacidade vendida) na hora.
+const VENDIDOS_PCT_POR_ACAO: Record<TourAcaoDia["tipo"], number> = {
+  foto: 100, // foto + resumo: sold out garantido
+  interacao: 50,
+  entrevista: 70,
+  especial: 100, // evento especial: sold out garantido
 };
 
-const HYPE_SOLD_OUT = 100;
+// Faixa usada quando o jogador NÃO faz nenhuma ação no dia do show — a
+// arrecadação não fica zerada, só sai de um sorteio dentro desse limite.
+const AUTOMATICO_PCT_MIN = 10;
+const AUTOMATICO_PCT_MAX = 55;
+
+// Hash simples e determinístico (mesmo seed => sempre o mesmo resultado) —
+// evita usar Math.random() e mudar o resultado toda vez que a turnê é lida.
+function seededPct(seed: string, min: number, max: number): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  const normalizado = (Math.abs(hash) % 1000) / 1000; // 0..1
+  return Math.round(min + normalizado * (max - min));
+}
+
+async function persistAgenda(rowIndex: number, tour: Tour): Promise<void> {
+  const novaArrecadacao = tour.agenda.reduce((s, x) => s + x.receita, 0);
+  const agendaCol = colIndexToA1Letter(TOUR_HEADERS.indexOf("agenda"));
+  const arrecadacaoCol = colIndexToA1Letter(TOUR_HEADERS.indexOf("arrecadacao_em_tempo_real"));
+  await Promise.all([
+    googleSheetsService.usuarios.updateValues(TOURS_SHEET, `${agendaCol}${rowIndex}`, [
+      [JSON.stringify(tour.agenda)],
+    ]),
+    googleSheetsService.usuarios.updateValues(TOURS_SHEET, `${arrecadacaoCol}${rowIndex}`, [
+      [novaArrecadacao],
+    ]),
+  ]);
+}
+
+// Resolve automaticamente (in-place) qualquer show cuja data já passou e que
+// o jogador nunca tocou (sem ação nenhuma) — dá um resultado aleatório
+// (porém determinístico, sempre o mesmo pro mesmo show) dentro da faixa
+// AUTOMATICO_PCT_*, em vez de deixar a arrecadação zerada pra sempre.
+// Devolve true se algo mudou (pra saber se precisa persistir).
+function resolverShowsAutomaticos(tour: Tour): boolean {
+  const hoje = formatDataBR(new Date());
+  const hojeDate = parseDataBR(hoje);
+  let mudou = false;
+  for (const show of tour.agenda) {
+    if (show.acoes.length > 0) continue;
+    const data = parseDataBR(show.data);
+    if (!data || !hojeDate || data >= hojeDate) continue;
+
+    const pct = seededPct(`${tour.idUnico}-${show.numero}`, AUTOMATICO_PCT_MIN, AUTOMATICO_PCT_MAX);
+    show.acoes.push({
+      tipo: "interacao",
+      texto: "O artista não fez nada especial nesse dia — o público apareceu por conta própria.",
+      fotoUrl: null,
+      data: data.toISOString(),
+      vendidosPct: pct,
+      automatica: true,
+    });
+    show.vendidos = Math.round((show.capacidade * pct) / 100);
+    show.receita = show.vendidos * show.repasseIngresso;
+    show.soldOut = false;
+    show.status = "Realizado automaticamente";
+    mudou = true;
+  }
+  return mudou;
+}
 
 interface AcaoDiaPayload {
   telegramId?: string;
@@ -460,9 +534,10 @@ interface AcaoDiaPayload {
   fotoUrl?: string;
 }
 
-// POST /api/turnes/acao — o jogador realiza uma ação no dia do show (foto,
-// interação, entrevista ou evento especial). Cada ação soma "hype"; ao
-// atingir o limiar, o show fica esgotado (sold out garantido).
+// POST /api/turnes/acao — o jogador realiza A ação do dia do show (foto,
+// interação, entrevista ou evento especial) — só uma por show, sem
+// acumular; o tipo escolhido já decide o resultado (sold out ou não) na
+// hora.
 export async function realizarAcaoDiaController(request: Request): Promise<Response> {
   try {
     const body = (await request.json().catch(() => ({}))) as AcaoDiaPayload;
@@ -472,7 +547,7 @@ export async function realizarAcaoDiaController(request: Request): Promise<Respo
     const tipo = body.tipo;
     const texto = normalizeText(body.texto);
 
-    if (!telegramId || !idUnico || !showNumero || !tipo || !HYPE_POR_ACAO[tipo]) {
+    if (!telegramId || !idUnico || !showNumero || !tipo || !VENDIDOS_PCT_POR_ACAO[tipo]) {
       return jsonError("telegramId, idUnico, showNumero e tipo (válido) são obrigatórios.");
     }
     if (!texto) return jsonError("Escreva um resumo/texto para a ação.");
@@ -491,47 +566,32 @@ export async function realizarAcaoDiaController(request: Request): Promise<Respo
 
     const show = tour.agenda.find((s) => s.numero === showNumero);
     if (!show) return jsonError("Show não encontrado nessa turnê.", 404);
-    if (show.soldOut) return jsonError("Esse show já está esgotado.");
+    if (show.acoes.length > 0) {
+      return jsonError("Esse show já teve a ação do dia registrada.");
+    }
 
     const hoje = formatDataBR(new Date());
     if (show.data !== hoje) {
       return jsonError(`Ações só podem ser feitas no dia do show (${show.data}).`);
     }
 
-    const hypeGanho = HYPE_POR_ACAO[tipo];
+    const pct = VENDIDOS_PCT_POR_ACAO[tipo];
     show.acoes.push({
       tipo,
       texto,
       fotoUrl: normalizeText(body.fotoUrl) || null,
       data: new Date().toISOString(),
-      hypeGanho,
+      vendidosPct: pct,
     });
-    show.hype = Math.min(HYPE_SOLD_OUT, show.hype + hypeGanho);
-
-    if (show.hype >= HYPE_SOLD_OUT) {
-      show.soldOut = true;
-      show.vendidos = show.capacidade;
-      show.status = "Esgotado";
-    } else {
-      show.vendidos = Math.round((show.capacidade * show.hype) / 100);
-      show.status = "Agendado";
-    }
+    show.vendidos = Math.round((show.capacidade * pct) / 100);
+    show.soldOut = pct >= 100;
+    show.status = show.soldOut ? "Esgotado" : "Realizado";
     show.receita = show.vendidos * show.repasseIngresso;
 
-    const novaArrecadacao = tour.agenda.reduce((s, x) => s + x.receita, 0);
-
     const rowIndex = found.rowIndex;
-    const agendaCol = colIndexToA1Letter(TOUR_HEADERS.indexOf("agenda"));
-    const arrecadacaoCol = colIndexToA1Letter(TOUR_HEADERS.indexOf("arrecadacao_em_tempo_real"));
     const showAtualCol = colIndexToA1Letter(TOUR_HEADERS.indexOf("show_atual"));
-
     await Promise.all([
-      googleSheetsService.usuarios.updateValues(TOURS_SHEET, `${agendaCol}${rowIndex}`, [
-        [JSON.stringify(tour.agenda)],
-      ]),
-      googleSheetsService.usuarios.updateValues(TOURS_SHEET, `${arrecadacaoCol}${rowIndex}`, [
-        [novaArrecadacao],
-      ]),
+      persistAgenda(rowIndex, tour),
       googleSheetsService.usuarios.updateValues(TOURS_SHEET, `${showAtualCol}${rowIndex}`, [
         [`${show.cidade} (show ${show.numero})`],
       ]),
@@ -542,6 +602,7 @@ export async function realizarAcaoDiaController(request: Request): Promise<Respo
       somarPrestigio({ telegramId }, "turne_sold_out").catch(() => {});
     }
 
+    const novaArrecadacao = tour.agenda.reduce((s, x) => s + x.receita, 0);
     return jsonOk({ show, arrecadacaoTempoReal: novaArrecadacao });
   } catch (err) {
     console.error("[realizarAcaoDiaController] Erro:", err);
@@ -645,5 +706,126 @@ export async function comentarTurneController(request: Request): Promise<Respons
   } catch (err) {
     console.error("[comentarTurneController] Erro:", err);
     return jsonError("Falha ao comentar.", 500);
+  }
+}
+
+export interface MissaoProxima {
+  idUnico: string;
+  artista: string;
+  nomeTurne: string;
+  showNumero: number;
+  local: string;
+  cidade: string;
+  data: string;
+  diasRestantes: number;
+  hoje: boolean;
+}
+
+// GET /api/turnes/missoes?telegramId=... — próximos shows (não esgotados)
+// de todos os artistas do jogador, ordenados por data — pra ele se planejar
+// antes do dia da ação chegar.
+export async function getMissoesController(request: Request): Promise<Response> {
+  try {
+    const telegramId = getTelegramId(request);
+    if (!telegramId) return jsonOk([]);
+
+    const meusArtistas = await getArtistNamesForOwner(telegramId);
+    const meusArtistasNorm = new Set(meusArtistas.map((a) => normalizeComparison(a)));
+
+    const raw = await readToursRaw();
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const missoes: MissaoProxima[] = [];
+    for (const { row } of raw) {
+      const tour = rowToTour(row);
+      if (!tour.sistemaNovo) continue;
+      if (!meusArtistasNorm.has(normalizeComparison(tour.artista))) continue;
+
+      for (const show of tour.agenda) {
+        if (show.soldOut) continue;
+        const data = parseDataBR(show.data);
+        if (!data) continue;
+        const diffMs = data.getTime() - hoje.getTime();
+        const diasRestantes = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        if (diasRestantes < 0) continue;
+        missoes.push({
+          idUnico: tour.idUnico,
+          artista: tour.artista,
+          nomeTurne: tour.nomeTurne,
+          showNumero: show.numero,
+          local: show.local,
+          cidade: show.cidade,
+          data: show.data,
+          diasRestantes,
+          hoje: diasRestantes === 0,
+        });
+      }
+    }
+
+    missoes.sort((a, b) => a.diasRestantes - b.diasRestantes);
+    return jsonOk(missoes.slice(0, 20));
+  } catch (err) {
+    console.error("[getMissoesController] Erro:", err);
+    return jsonError("Falha ao carregar as próximas missões.", 500);
+  }
+}
+
+export interface FeedItem {
+  idUnico: string;
+  artista: string;
+  nomeTurne: string;
+  showNumero: number;
+  local: string;
+  cidade: string;
+  data: string;
+  soldOut: boolean;
+  tipo: TourAcaoDia["tipo"];
+  texto: string;
+  fotoUrl?: string | null;
+  vendidosPct: number;
+  timestamp: string;
+}
+
+// GET /api/turnes/feed?limit=20 — central de notícias global: últimas ações
+// do dia postadas em QUALQUER turnê do sistema novo, mais recentes primeiro.
+// Não inclui shows resolvidos automaticamente (o jogador não postou nada).
+export async function getFeedGlobalController(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10) || 20));
+
+    const raw = await readToursRaw();
+    const itens: FeedItem[] = [];
+    for (const { row } of raw) {
+      const tour = rowToTour(row);
+      if (!tour.sistemaNovo) continue;
+      for (const show of tour.agenda) {
+        for (const acao of show.acoes) {
+          if (acao.automatica) continue;
+          itens.push({
+            idUnico: tour.idUnico,
+            artista: tour.artista,
+            nomeTurne: tour.nomeTurne,
+            showNumero: show.numero,
+            local: show.local,
+            cidade: show.cidade,
+            data: show.data,
+            soldOut: show.soldOut,
+            tipo: acao.tipo,
+            texto: acao.texto,
+            fotoUrl: acao.fotoUrl,
+            vendidosPct: acao.vendidosPct,
+            timestamp: acao.data,
+          });
+        }
+      }
+    }
+
+    itens.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return jsonOk(itens.slice(0, limit));
+  } catch (err) {
+    console.error("[getFeedGlobalController] Erro:", err);
+    return jsonError("Falha ao carregar a central de notícias.", 500);
   }
 }

@@ -1,6 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { Mic2, Globe, Users, ChevronRight, Loader2, Crown, Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  Mic2,
+  Globe,
+  Users,
+  ChevronRight,
+  Loader2,
+  Crown,
+  Plus,
+  Camera,
+  MessageCircle,
+  Mic,
+  PartyPopper,
+} from "lucide-react";
 import { api, fmtMoney, driveImg } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
 import { CreateTourSheet } from "@/components/Tours/CreateTourSheet";
@@ -36,6 +48,43 @@ function parseDataBR(value: string): Date | null {
   return new Date(Number(y), Number(mo) - 1, Number(d));
 }
 
+interface Missao {
+  idUnico: string;
+  artista: string;
+  nomeTurne: string;
+  showNumero: number;
+  local: string;
+  cidade: string;
+  data: string;
+  diasRestantes: number;
+  hoje: boolean;
+}
+
+type TipoAcao = "foto" | "interacao" | "entrevista" | "especial";
+
+interface FeedItem {
+  idUnico: string;
+  artista: string;
+  nomeTurne: string;
+  showNumero: number;
+  local: string;
+  cidade: string;
+  data: string;
+  soldOut: boolean;
+  tipo: TipoAcao;
+  texto: string;
+  fotoUrl?: string | null;
+  vendidosPct: number;
+  timestamp: string;
+}
+
+const TIPO_INFO: Record<TipoAcao, { label: string; icon: React.ReactNode }> = {
+  foto: { label: "Foto + resumo", icon: <Camera className="size-3.5" /> },
+  interacao: { label: "Interação com fã", icon: <MessageCircle className="size-3.5" /> },
+  entrevista: { label: "Entrevista rápida", icon: <Mic className="size-3.5" /> },
+  especial: { label: "Evento especial", icon: <PartyPopper className="size-3.5" /> },
+};
+
 function realizados(t: TourCard) {
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
@@ -55,6 +104,8 @@ function ToursIndex() {
   const [publicas, setPublicas] = useState<TourCard[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [missoes, setMissoes] = useState<Missao[] | null>(null);
+  const [feed, setFeed] = useState<FeedItem[] | null>(null);
 
   function loadMinhas() {
     if (!telegramId) return;
@@ -71,6 +122,11 @@ function ToursIndex() {
       setMeusArtistas(artists.map((a: any) => a.nome).filter(Boolean));
     });
     loadMinhas();
+    fetch(`/api/turnes/missoes?telegramId=${encodeURIComponent(telegramId)}`)
+      .then((r) => r.json())
+      .then((res) => {
+        if (res?.success) setMissoes(res.data || []);
+      });
   }, [telegramId]);
 
   useEffect(() => {
@@ -80,6 +136,11 @@ function ToursIndex() {
         if (res?.success) setPublicas(res.data || []);
       })
       .finally(() => setLoading(false));
+    fetch("/api/turnes/feed?limit=15")
+      .then((r) => r.json())
+      .then((res) => {
+        if (res?.success) setFeed(res.data || []);
+      });
   }, []);
 
   const minhasIds = new Set((minhasTurnes || []).map((t) => t.idUnico));
@@ -109,6 +170,10 @@ function ToursIndex() {
           </button>
         )}
       </header>
+
+      {telegramId && missoes && missoes.length > 0 && <MissoesCarousel missoes={missoes} />}
+
+      <FeedGlobal feed={feed} />
 
       {telegramId && meusArtistas.length > 0 && (
         <section className="mb-8">
@@ -171,6 +236,156 @@ function ToursIndex() {
         />
       )}
     </main>
+  );
+}
+
+function MissoesCarousel({ missoes }: { missoes: Missao[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <section className="mb-8">
+      <div className="flex items-center justify-between mb-3 px-1">
+        <h2 className="text-[11px] font-black uppercase text-neutral-400">Suas próximas missões</h2>
+        <span className="text-[10px] font-bold text-muted-foreground/60">
+          {missoes.length} {missoes.length === 1 ? "show" : "shows"}
+        </span>
+      </div>
+      <div className="relative">
+        <div
+          ref={scrollRef}
+          className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {missoes.map((m) => (
+            <Link
+              key={`${m.idUnico}-${m.showNumero}`}
+              to="/tours/$nome"
+              params={{ nome: m.artista }}
+              className={`shrink-0 w-[188px] rounded-2xl border p-3.5 transition ${
+                m.hoje
+                  ? "bg-amber-500/10 border-amber-500/40"
+                  : "bg-card border-white/5 hover:border-white/15"
+              }`}
+            >
+              <span
+                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wide mb-2.5 ${
+                  m.hoje ? "bg-amber-500 text-black" : "bg-white/5 text-muted-foreground border border-white/10"
+                }`}
+              >
+                {m.hoje ? "● Hoje" : `Em ${m.diasRestantes} dia${m.diasRestantes === 1 ? "" : "s"}`}
+              </span>
+              <p className="text-[10px] font-black uppercase text-primary/80 tracking-wide mb-0.5">
+                {m.artista}
+              </p>
+              <p className="font-black text-sm leading-tight mb-0.5 truncate">{m.local}</p>
+              <p className="text-[10px] text-muted-foreground font-medium mb-2.5">
+                {m.cidade} · {m.data}
+              </p>
+              <div className="pt-2.5 border-t border-dashed border-white/10 space-y-1">
+                <p className="text-[9.5px] font-black uppercase text-muted-foreground/60 mb-1">
+                  Ação do dia decide:
+                </p>
+                <MiniAcaoLine icon={<Camera className="size-3" />} label="Foto" result="sold out" />
+                <MiniAcaoLine icon={<PartyPopper className="size-3" />} label="Especial" result="sold out" />
+                <MiniAcaoLine icon={<Mic className="size-3" />} label="Entrevista" result="70%" />
+                <MiniAcaoLine icon={<MessageCircle className="size-3" />} label="Interação" result="50%" />
+              </div>
+            </Link>
+          ))}
+        </div>
+        {/* Sinaliza que há mais missões pra rolar — mesmo padrão de fade + seta
+            já usado na tela do Artista. */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-10 bg-gradient-to-l from-background to-transparent" />
+        <ChevronRight className="pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/60" />
+      </div>
+    </section>
+  );
+}
+
+function MiniAcaoLine({ icon, label, result }: { icon: React.ReactNode; label: string; result: string }) {
+  return (
+    <div className="flex items-center justify-between text-[9.5px] font-bold text-muted-foreground">
+      <span className="flex items-center gap-1">
+        {icon}
+        {label}
+      </span>
+      <span className="text-emerald-400">{result}</span>
+    </div>
+  );
+}
+
+function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
+  if (feed && feed.length === 0) return null;
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1">Central de Notícias</h2>
+      {!feed ? (
+        <div className="flex justify-center py-8 opacity-50">
+          <Loader2 className="size-6 animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {feed.map((item) => (
+            <Link
+              key={`${item.idUnico}-${item.showNumero}`}
+              to="/tours/$nome"
+              params={{ nome: item.artista }}
+              className="block group"
+            >
+              <div className="rounded-[1.75rem] bg-card border border-white/5 overflow-hidden transition hover:border-white/15">
+                {item.fotoUrl && (
+                  <div className="relative">
+                    <img
+                      src={driveImg(item.fotoUrl, 800)}
+                      alt=""
+                      className="w-full aspect-[16/8.5] object-cover"
+                      loading="lazy"
+                    />
+                    {item.soldOut && (
+                      <span className="absolute top-3 right-3 px-2 py-1 rounded-full bg-amber-500 text-black text-[9.5px] font-black uppercase">
+                        Sold Out
+                      </span>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
+                      <p className="text-[10px] font-black uppercase text-primary tracking-wide">
+                        {item.artista}
+                      </p>
+                      <p className="text-xs font-bold text-white/90">
+                        {item.local} · {item.cidade}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="p-4">
+                  {!item.fotoUrl && (
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] font-black uppercase text-primary tracking-wide">
+                        {item.artista} · {item.local}
+                      </p>
+                      {item.soldOut && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[9.5px] font-black uppercase shrink-0">
+                          Sold Out
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-sm text-white/90 leading-relaxed line-clamp-3 mb-2.5">{item.texto}</p>
+                  <div className="flex items-center justify-between text-[10.5px] font-bold text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      {TIPO_INFO[item.tipo]?.icon}
+                      {TIPO_INFO[item.tipo]?.label}
+                    </span>
+                    <span className="flex items-center gap-1 text-primary group-hover:text-primary/80">
+                      Comentar <ChevronRight className="size-3" />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
