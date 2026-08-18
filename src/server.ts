@@ -387,21 +387,6 @@ export default {
 
 
 
-    if (url.pathname === "/api/debug/tours-sheets" && request.method === "GET") {
-      const { listSheetTabs, googleSheetsService } = await import(
-        "../backend/src/services/googleSheetsService"
-      );
-      const tabs = await listSheetTabs("usuarios");
-      const wanted = new Set([358759572, 1423449392]);
-      const matches = tabs.filter((t) => wanted.has(t.sheetId));
-      const previews: Record<string, unknown> = {};
-      for (const m of matches) {
-        const rows = await googleSheetsService.usuarios.readValues(m.title);
-        previews[m.title] = rows.slice(0, 6);
-      }
-      return Response.json({ tabs, matches, previews });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
