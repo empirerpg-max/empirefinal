@@ -1,4 +1,5 @@
 import { sheetsService } from "../services/sheetsService";
+import { findFileByName } from "../services/googleDriveService";
 import {
   googleSheetsService,
   normalizeComparison,
@@ -502,20 +503,37 @@ export async function getEmpirePlayUserController(request: Request): Promise<Res
  * Lê as abas Top_50_Spotify, Top_Songs_Apple_Music, Top_Videos_YT e os 30 lançamentos mais recentes
  * da aba Musicas (ordenados por data de lançamento).
  */
+// Pasta "Capa Playlist" no Drive (dentro de Empire Hub) — guarda os moldes
+// das capas dinâmicas e a foto "Substituta" usada quando o artista não tem
+// foto cadastrada na aba ARTISTAS. Resolvido por nome (não ID fixo), porque
+// apagar+subir de novo no Drive gera um ID novo mesmo com o mesmo nome.
+const CAPA_PLAYLIST_FOLDER_ID = "1KgGwing62UB9bf6MqhNlbi9mREs70sUJ";
+
 export async function getEmpirePlayHomeController(): Promise<Response> {
   try {
-    const [spotifyRecords, appleRecords, youtubeRecords, musicaRecords, videoRecords, artistRecords] =
-      await Promise.all([
-        sheetsService.readSheetObjects("Top_50_Spotify").catch(() => []),
-        sheetsService.readSheetObjects("Top_Songs_Apple_Music").catch(() => []),
-        sheetsService.readSheetObjects("Top_Videos_YT").catch(() => []),
-        sheetsService.readSheetObjects("Musicas").catch(() => []),
-        sheetsService.readSheetObjects("Music Videos").catch(() => []),
-        // ARTISTAS vive na planilha "usuarios" (diferente da "principal" usada
-        // acima) — é de lá que vem a foto de perfil de verdade do artista,
-        // pra distinguir da capa da música/vídeo.
-        googleSheetsService.usuarios.readSheetObjects("ARTISTAS").catch(() => []),
-      ]);
+    const [
+      spotifyRecords,
+      appleRecords,
+      youtubeRecords,
+      musicaRecords,
+      videoRecords,
+      artistRecords,
+      fallbackPhotoFile,
+    ] = await Promise.all([
+      sheetsService.readSheetObjects("Top_50_Spotify").catch(() => []),
+      sheetsService.readSheetObjects("Top_Songs_Apple_Music").catch(() => []),
+      sheetsService.readSheetObjects("Top_Videos_YT").catch(() => []),
+      sheetsService.readSheetObjects("Musicas").catch(() => []),
+      sheetsService.readSheetObjects("Music Videos").catch(() => []),
+      // ARTISTAS vive na planilha "usuarios" (diferente da "principal" usada
+      // acima) — é de lá que vem a foto de perfil de verdade do artista,
+      // pra distinguir da capa da música/vídeo.
+      googleSheetsService.usuarios.readSheetObjects("ARTISTAS").catch(() => []),
+      findFileByName(CAPA_PLAYLIST_FOLDER_ID, "substituta").catch(() => null),
+    ]);
+    const fallbackPhotoUrl = fallbackPhotoFile
+      ? `https://drive.google.com/uc?export=view&id=${fallbackPhotoFile.id}`
+      : null;
 
     const recentMusicas = musicaRecords
       .map((rec, idx) => buildCleanItem("Musicas", rec, idx))
@@ -569,7 +587,7 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
     }
     const enrichWithArtistPhoto = (items: EmpirePlayCleanItem[]): EmpirePlayCleanItem[] =>
       items.map((item) => {
-        const foto = artistPhotoIndex.get(normalizeComparison(item.artist));
+        const foto = artistPhotoIndex.get(normalizeComparison(item.artist)) || fallbackPhotoUrl;
         return foto ? { ...item, artistPhotoUrl: foto } : item;
       });
 

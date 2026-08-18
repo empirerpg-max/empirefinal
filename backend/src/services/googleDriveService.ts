@@ -45,6 +45,22 @@ export async function listFilesInFolder(folderId: string, pageSize = 100): Promi
   return json.files as DriveFolderFile[];
 }
 
+// Acha um arquivo numa pasta pelo nome (case-insensitive, ignora extensão) —
+// usado pra resolver por nome fixo em vez de ID fixo, já que apagar+subir de
+// novo no Drive gera um ID novo mesmo com o mesmo nome de arquivo.
+export async function findFileByName(
+  folderId: string,
+  nameQuery: string,
+): Promise<DriveFolderFile | null> {
+  const files = await listFilesInFolder(folderId);
+  const normalizedQuery = nameQuery.trim().toLowerCase();
+  const match = files.find((f) => {
+    const nameWithoutExt = f.name.replace(/\.[a-z0-9]+$/i, "").trim().toLowerCase();
+    return nameWithoutExt === normalizedQuery || nameWithoutExt.includes(normalizedQuery);
+  });
+  return match || null;
+}
+
 export async function deleteFileFromDrive(fileUrl: string): Promise<boolean> {
   if (!fileUrl) return false;
   try {
