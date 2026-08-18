@@ -406,7 +406,7 @@ export default {
 
       // Duplicatas de ID na aba Usuários — se o mesmo ID aparecer em mais de
       // um login, todo mundo com esse ID vê os mesmos artistas.
-      const idCol = 0; // coluna A = "ID" (confirmado no prestigioService: headers.indexOf("id"))
+      const idCol = 1; // coluna B = "ID" (confirmado ao vivo: header real é [Nome, ID, Usuário, ...])
       const contagemPorId = new Map<string, string[]>();
       for (const r of usuarios.slice(1)) {
         const id = (r[idCol] || "").trim();
@@ -444,6 +444,34 @@ export default {
         idsDuplicados: idsDuplicados.slice(0, 15),
         usuarioDoDanielId,
       });
+    }
+
+    if (url.pathname === "/api/debug/testar-registro" && request.method === "GET") {
+      const { registrarAuditLog } = await import("../backend/src/controllers/registroLogController");
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      // Dispara 3 gravações "simultâneas" (Promise.all, sem await entre
+      // elas) — é exatamente o cenário que antes causava sobrescrita
+      // silenciosa. Se a correção funcionar, as 3 devem sobreviver.
+      await Promise.all([
+        registrarAuditLog({
+          nomeJogador: "TESTE_CLAUDE_1",
+          titulo: "Teste de concorrência 1",
+          tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+        }),
+        registrarAuditLog({
+          nomeJogador: "TESTE_CLAUDE_2",
+          titulo: "Teste de concorrência 2",
+          tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+        }),
+        registrarAuditLog({
+          nomeJogador: "TESTE_CLAUDE_3",
+          titulo: "Teste de concorrência 3",
+          tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+        }),
+      ]);
+      const registro = await googleSheetsService.registrosCharts.readValues("REGISTRO");
+      const testeRows = registro.filter((r) => (r[1] || "").startsWith("TESTE_CLAUDE"));
+      return Response.json({ sobreviveram: testeRows.length, testeRows, totalLinhas: registro.length });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).

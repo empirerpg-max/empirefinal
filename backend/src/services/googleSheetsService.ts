@@ -352,6 +352,7 @@ export async function appendRow(
   sheetName: string,
   values: GoogleSheetRow,
   range = "A:ZZ",
+  insertDataOption: "INSERT_ROWS" | "OVERWRITE" = "INSERT_ROWS",
 ): Promise<number | null> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
   const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
@@ -360,7 +361,7 @@ export async function appendRow(
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const result = await sheetsRequest<GoogleSheetsAppendResponse>(
-        `/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        `/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=${insertDataOption}`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -419,8 +420,12 @@ export const googleSheetsService = {
     ) => findRows("registrosCharts", sheetName, predicate, range),
     updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
       updateValues("registrosCharts", sheetName, range, values),
-    appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
-      appendRow("registrosCharts", sheetName, values, range),
+    appendRow: (
+      sheetName: string,
+      values: GoogleSheetRow,
+      range?: string,
+      insertDataOption?: "INSERT_ROWS" | "OVERWRITE",
+    ) => appendRow("registrosCharts", sheetName, values, range, insertDataOption),
   },
   edicaoCharts: {
     readValues: (sheetName: string, range?: string) => readValues("edicaoCharts", sheetName, range),
