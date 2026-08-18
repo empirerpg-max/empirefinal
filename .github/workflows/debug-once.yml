@@ -6,21 +6,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: |
-          pip install --quiet Pillow
-          declare -A FILES=(
-            [youtube_base]="1iL2PWPgHW30YuTGK4tQMobBESnCMD0Es"
-            [hot_base]="1yXHsKqvdpdM2F2F4hP5ksP6YVugmh6_C"
-          )
-          for name in "${!FILES[@]}"; do
-            curl -sS -o "$name.raw.png" "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=${FILES[$name]}"
-            python3 -c "
-          from PIL import Image
-          im = Image.open('$name.raw.png').convert('RGBA')
-          im.thumbnail((600,600))
-          im.save('${name}_alpha.png', optimize=True)
-          "
-            echo "===BASE64_START_${name}==="
-            base64 -w 200 "${name}_alpha.png"
-            echo "===BASE64_END_${name}==="
-          done
+        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/check-abigal" | tee /tmp/out.json
