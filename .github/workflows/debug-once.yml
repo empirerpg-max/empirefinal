@@ -9,7 +9,15 @@ jobs:
         run: |
           curl -sS -o artist.jpg "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=1goDgN0Y6O-cNR3XmKngYysra1qwD5rM7"
           file artist.jpg
-          convert artist.jpg -resize 400x400^ -gravity center -extent 400x400 -quality 70 artist_small.jpg
+          pip install --quiet Pillow
+          python3 -c "
+          from PIL import Image
+          im = Image.open('artist.jpg').convert('RGB')
+          w,h = im.size
+          s = min(w,h)
+          im = im.crop(((w-s)//2, (h-s)//2, (w-s)//2+s, (h-s)//2+s)).resize((400,400))
+          im.save('artist_small.jpg', quality=65)
+          "
           ls -la artist_small.jpg
           echo "===BASE64_START==="
           base64 -w 200 artist_small.jpg
