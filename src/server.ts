@@ -385,13 +385,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/cleanup-test-file" && request.method === "GET") {
-      const { deleteFileFromDrive } = await import("../backend/src/services/googleDriveService");
-      const ok = await deleteFileFromDrive(
-        "https://drive.google.com/file/d/1Sw070wZOuYrQ-EC5eIQMuoyO-IaDD1Y0/view",
-      );
-      return Response.json({ deleted: ok });
-    }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
