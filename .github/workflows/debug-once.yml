@@ -6,4 +6,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/home" | tee /tmp/out.json
+        run: |
+          pip install --quiet Pillow
+          declare -A FILES=(
+            [jessica_photo]="1Z2w0knyWMYDLJKrTH3mSR9dwTnbM4Cn7"
+            [yt_single_cover]="19r6ZCkGDwcVxfuwI4uvbNo7Uh2ateIWB"
+          )
+          for name in "${!FILES[@]}"; do
+            curl -sS -o "$name.raw" "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=${FILES[$name]}"
+            python3 -c "
+          from PIL import Image
+          im = Image.open('$name.raw').convert('RGB')
+          w,h = im.size
+          s = min(w,h)
+          im = im.crop(((w-s)//2, (h-s)//2, (w-s)//2+s, (h-s)//2+s)).resize((400,400))
+          im.save('${name}.jpg', quality=65)
+          "
+            echo "===BASE64_START_${name}==="
+            base64 -w 200 "${name}.jpg"
+            echo "===BASE64_END_${name}==="
+          done
