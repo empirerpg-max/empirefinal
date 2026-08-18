@@ -6,4 +6,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/check-capa-playlist-folder" | tee /tmp/out.json
+        run: |
+          curl -sS -o cover.png "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=1HzcUaW91zn-45UbGjFotDS3BQs8kMTcR"
+          file cover.png
+          pip install --quiet Pillow
+          python3 - <<'EOF'
+          from PIL import Image
+          im = Image.open("cover.png").convert("RGBA")
+          w, h = im.size
+          print(f"size: {w}x{h}")
+          px = im.load()
+          alphas = []
+          samples = {}
+          for (label, x, y) in [
+              ("top-left logo area", int(w*0.15), int(h*0.1)),
+              ("center", w//2, h//2),
+              ("bottom-right corner", int(w*0.85), int(h*0.9)),
+              ("mid-left", int(w*0.1), int(h*0.5)),
+              ("mid-bottom", int(w*0.5), int(h*0.85)),
+          ]:
+              r,g,b,a = px[x,y]
+              samples[label] = (x,y,r,g,b,a)
+          for k,v in samples.items():
+              print(k, v)
+          # alpha histogram across whole image (sampled every 10px)
+          from collections import Counter
+          c = Counter()
+          for y in range(0, h, 10):
+              for x in range(0, w, 10):
+                  a = px[x,y][3]
+                  bucket = "0 (transparente)" if a == 0 else ("255 (opaco)" if a == 255 else f"{a} (parcial)")
+                  c[bucket] += 1
+          print("alpha histogram (amostra):", dict(c))
+          EOF
+
