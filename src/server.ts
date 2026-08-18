@@ -387,6 +387,28 @@ export default {
 
 
 
+    if (url.pathname === "/api/debug/check-cover-files" && request.method === "GET") {
+      const { getDriveOAuthAccessToken } = await import("../backend/src/google/service-account");
+      const ids: Record<string, string> = {
+        appleBase: "1Kq9AZ3We9NfEGXOR3CaXX1aISL3_4DCw",
+        spotifySubstituto: "1DggkwV5S3JEjwNIl2TCJXKQktbFPI5Ch",
+        youtubeBase: "1iL2PWPgHW30YuTGK4tQMobBESnCMD0Es",
+        youtubeSubstituto: "13ygT5tAFmgVRIC2Wd7qa74xj6Yi4EMjR",
+        hotBase: "1yXHsKqvdpdM2F2F4hP5ksP6YVugmh6_C",
+        hotSubstituto: "1D_zfoJ2hASAkdKhq6tHDvQYoNLSLju-K",
+      };
+      const token = await getDriveOAuthAccessToken();
+      const results: Record<string, any> = {};
+      for (const [label, id] of Object.entries(ids)) {
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${id}?fields=id,name,parents,mimeType,imageMediaMetadata(width,height)`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        results[label] = { status: res.status, body: await res.json().catch(() => null) };
+      }
+      return Response.json(results);
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
