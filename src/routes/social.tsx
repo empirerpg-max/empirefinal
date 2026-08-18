@@ -199,9 +199,11 @@ function SocialPage() {
       const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && data?.data?.fileUrl) return data.data.fileUrl as string;
+      console.error("Erro no upload:", data?.error || res.status);
     } catch (err) {
       console.error("Erro no upload:", err);
     }
+    alert("Não deu pra enviar a imagem. Tente de novo ou cole o link direto.");
     return null;
   }
 

@@ -111,8 +111,13 @@ export async function uploadFileToDrive(
     const json = (await response.json()) as any;
 
     if (!response.ok || !json.id) {
-      console.warn("[uploadFileToDrive] Aviso/Erro Google Drive API:", json);
-      return `https://drive.google.com/drive/folders/${folderId}`;
+      // Antes isso caía num link de PASTA como se fosse o link do arquivo
+      // upado — o chamador achava que tinha dado certo e salvava esse link
+      // de pasta como se fosse a imagem, que nunca vai renderizar (é assim
+      // que uma foto de perfil upada "quebra" sem nenhum aviso). Agora o
+      // erro sobe de verdade, pro chamador reportar falha real.
+      console.error("[uploadFileToDrive] Erro Google Drive API:", json);
+      throw new Error(`Falha ao enviar arquivo pro Drive (HTTP ${response.status}).`);
     }
 
     // Permissão pública é só um "extra" — o app nunca depende dela pra
@@ -146,7 +151,8 @@ export async function uploadFileToDrive(
     // verdade — não funciona pra áudio/vídeo.
     return `https://drive.google.com/file/d/${json.id}/view?usp=drivesdk`;
   } catch (err) {
-    console.error("[uploadFileToDrive] Fallback por erro de upload:", err);
-    return `https://drive.google.com/drive/folders/${folderId}`;
+    if (err instanceof Error && err.message.startsWith("Falha ao enviar arquivo pro Drive")) throw err;
+    console.error("[uploadFileToDrive] Erro ao enviar arquivo:", err);
+    throw new Error("Falha ao enviar arquivo pro Drive.");
   }
 }
