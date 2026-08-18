@@ -385,6 +385,57 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Varre todas as colunas de imagem conhecidas atrás de links de PASTA do
+    // Drive (resíduo do bug de fallback silencioso do uploadFileToDrive, já
+    // corrigido) — nunca renderizam como imagem. Com fix=1, limpa de volta
+    // pra vazio (só quando o valor bate no padrão /folders/, nunca mexe em
+    // link de arquivo válido).
+    if (url.pathname === "/api/debug/scan-broken-images" && request.method === "GET") {
+      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
+      const doFix = url.searchParams.get("fix") === "1";
+      const isFolderLink = (v: string) => /drive\.google\.com\/drive\/folders\//.test(v);
+      const targets: { spreadsheet: "usuarios" | "registrosCharts" | "agendaTV"; sheet: string; col: number; headerName?: string; label: string }[] = [
+        { spreadsheet: "usuarios", sheet: "SOCIAL_PERFIS", col: 4, label: "avatar_url" },
+        { spreadsheet: "usuarios", sheet: "SOCIAL_POSTS", col: 5, label: "media_url" },
+        { spreadsheet: "usuarios", sheet: "SOCIAL_NEWS", col: 3, label: "imagem" },
+        { spreadsheet: "usuarios", sheet: "USUARIOS", col: -1, headerName: "foto_do_perfil", label: "foto_do_perfil" },
+        { spreadsheet: "usuarios", sheet: "ARTISTAS", col: -1, headerName: "foto", label: "foto" },
+        { spreadsheet: "registrosCharts", sheet: "INFOS ACTS", col: 2, label: "foto" },
+        { spreadsheet: "agendaTV", sheet: "Programacao_RPG", col: 12, label: "Capa_URL" },
+      ];
+      const results: any[] = [];
+      for (const t of targets) {
+        const svc = googleSheetsService[t.spreadsheet];
+        const rows: string[][] = await svc.readValues(t.sheet).catch(() => []);
+        if (rows.length === 0) continue;
+        let colIndex = t.col;
+        if (colIndex === -1 && t.headerName) {
+          const headers = rows[0].map((h) => normalizeText(h).toLowerCase().replace(/\s+/g, "_"));
+          colIndex = headers.indexOf(t.headerName);
+          if (colIndex === -1) continue;
+        }
+        for (let i = 1; i < rows.length; i++) {
+          const val = normalizeText(rows[i][colIndex]);
+          if (val && isFolderLink(val)) {
+            const rowNum = i + 1;
+            const colLetter = String.fromCharCode(65 + colIndex);
+            if (doFix) {
+              await svc.updateValues(t.sheet, `${colLetter}${rowNum}`, [[""]]);
+            }
+            results.push({
+              sheet: t.sheet,
+              col: t.label,
+              row: rowNum,
+              identifier: normalizeText(rows[i][0]),
+              brokenValue: val,
+              fixed: doFix,
+            });
+          }
+        }
+      }
+      return Response.json({ scanned: targets.map((t) => t.sheet), found: results.length, results });
+    }
+
     if (url.pathname === "/api/debug/check-avatar" && request.method === "GET") {
       const { googleSheetsService, normalizeText, normalizeComparison } = await import("../backend/src/services/googleSheetsService");
       const { getDriveOAuthAccessToken } = await import("../backend/src/google/service-account");
