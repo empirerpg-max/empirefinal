@@ -385,27 +385,12 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/check-drive-oauth" && request.method === "GET") {
-      const { getDriveOAuthAccessToken } = await import("../backend/src/google/service-account");
-      const { DRIVE_FOLDERS } = await import("../backend/src/services/googleDriveService");
-      try {
-        const token = await getDriveOAuthAccessToken();
-        const folderChecks: Record<string, any> = {};
-        const allFolders: Record<string, string> = {
-          ...DRIVE_FOLDERS,
-          pastaPrincipal: "1aCsR5WySGeZxDOorPAYUt_dMFcKNcDUM",
-        };
-        for (const [label, id] of Object.entries(allFolders)) {
-          const res = await fetch(
-            `https://www.googleapis.com/drive/v3/files/${id}?fields=id,name,mimeType,trashed,capabilities(canAddChildren)`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          folderChecks[label] = { status: res.status, body: await res.json().catch(() => null) };
-        }
-        return Response.json({ tokenObtained: true, folderChecks });
-      } catch (err: any) {
-        return Response.json({ tokenObtained: false, error: err?.message || String(err) });
-      }
+    if (url.pathname === "/api/debug/cleanup-test-file" && request.method === "GET") {
+      const { deleteFileFromDrive } = await import("../backend/src/services/googleDriveService");
+      const ok = await deleteFileFromDrive(
+        "https://drive.google.com/file/d/1Sw070wZOuYrQ-EC5eIQMuoyO-IaDD1Y0/view",
+      );
+      return Response.json({ deleted: ok });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
