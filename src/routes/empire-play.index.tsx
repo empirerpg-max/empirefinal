@@ -143,9 +143,6 @@ function EmpirePlayInicio() {
             className="absolute inset-0"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
-          <span className="absolute top-3 right-3 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 backdrop-blur">
-            Abrir Tela
-          </span>
           <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
             <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-emerald-400 transition-colors">
               Spotify Global
@@ -172,9 +169,6 @@ function EmpirePlayInicio() {
             className="absolute inset-0"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
-          <span className="absolute top-3 right-3 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 backdrop-blur">
-            Abrir Tela
-          </span>
           <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
             <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-rose-400 transition-colors">
               Apple Music
@@ -200,9 +194,6 @@ function EmpirePlayInicio() {
             className="absolute inset-0"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
-          <span className="absolute top-3 right-3 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-red-600/20 text-red-300 border border-red-600/30 backdrop-blur">
-            Abrir Tela
-          </span>
           <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
             <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-red-400 transition-colors">
               YouTube Hits
