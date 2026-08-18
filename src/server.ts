@@ -387,21 +387,6 @@ export default {
 
 
 
-    if (url.pathname === "/api/debug/check-abigail-photo" && request.method === "GET") {
-      const { sheetsService } = await import("../backend/src/services/sheetsService");
-      const { googleSheetsService, normalizeText, normalizeComparison } = await import(
-        "../backend/src/services/googleSheetsService"
-      );
-      const artistRows = await googleSheetsService.usuarios.readSheetObjects("ARTISTAS");
-      const abigailArtista = artistRows.find((r) => normalizeComparison(r["nome"]).includes("abigail"));
-      const musicaRows = await sheetsService.readValues("Musicas");
-      const headerMusica = musicaRows[0];
-      const abigailMusicaRows = musicaRows
-        .slice(1)
-        .filter((r) => r.some((cell) => normalizeText(cell).toLowerCase().includes("abigail")));
-      return Response.json({ abigailArtista, headerMusica, abigailMusicaRows });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
