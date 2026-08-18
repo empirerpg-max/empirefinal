@@ -220,7 +220,7 @@ function EmpirePlayInicio() {
             </span>
           </div>
           <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-purple-400 transition-colors">
-            Lançamentos
+            Hot
           </h3>
           <p className="text-[11px] text-neutral-400 mt-1 font-medium">
             {lancamentos.length || 30} Novidades da Rede
@@ -260,7 +260,7 @@ function EmpirePlayInicio() {
                     {activeSlidingPlaylist === "spotify" && "Top 100 Spotify Global"}
                     {activeSlidingPlaylist === "apple" && "Top 100 Apple Music"}
                     {activeSlidingPlaylist === "youtube" && "Top 100 YouTube Hits"}
-                    {activeSlidingPlaylist === "lancamentos" && "Lançamentos (30 Primeiros)"}
+                    {activeSlidingPlaylist === "lancamentos" && "Hot (30 Primeiros)"}
                   </h2>
                 </div>
               </div>
