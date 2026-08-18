@@ -97,7 +97,15 @@ async function readLocais(): Promise<LocalTurne[]> {
 }
 
 export interface TourAcaoDia {
-  tipo: "foto" | "interacao" | "entrevista" | "especial";
+  tipo:
+    | "foto"
+    | "interacao"
+    | "entrevista"
+    | "especial"
+    | "live"
+    | "colab"
+    | "sorteio"
+    | "bastidores";
   texto: string;
   fotoUrl?: string | null;
   data: string; // ISO timestamp de quando a ação foi feita
@@ -453,13 +461,18 @@ export async function criarTurneController(request: Request): Promise<Response> 
   }
 }
 
-// Cada show recebe SÓ UMA ação — não acumula. O tipo escolhido já define o
-// resultado direto (% da capacidade vendida) na hora.
+// Cada show recebe SÓ UMA ação — não acumula. Qualquer um dos 8 tipos
+// garante sold out (100%) na hora — a diferença entre eles é só o tipo de
+// conteúdo/narrativa que aparece na Central de Notícias.
 const VENDIDOS_PCT_POR_ACAO: Record<TourAcaoDia["tipo"], number> = {
-  foto: 100, // foto + resumo: sold out garantido
-  interacao: 50,
-  entrevista: 70,
-  especial: 100, // evento especial: sold out garantido
+  foto: 100,
+  especial: 100,
+  entrevista: 100,
+  interacao: 100,
+  live: 100,
+  colab: 100,
+  sorteio: 100,
+  bastidores: 100,
 };
 
 // Faixa usada quando o jogador NÃO faz nenhuma ação no dia do show — a
