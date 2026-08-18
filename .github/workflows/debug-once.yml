@@ -6,9 +6,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: |
-          echo "--- home ---"
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/home" | head -c 4000
-          echo
-          echo "--- media image (spotify base) ---"
-          curl -sS -o /dev/null -w "%{http_code} %{content_type} %{size_download}\n" "https://tanstack-start-app.empirerpg-forum.workers.dev/api/media/image?id=1HzcUaW91zn-45UbGjFotDS3BQs8kMTcR"
+        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/kick/status" | tee /tmp/out.json
