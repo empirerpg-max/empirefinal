@@ -386,6 +386,12 @@ export default {
     }
 
 
+    if (url.pathname === "/api/debug/check-capa-playlist-folder" && request.method === "GET") {
+      const { listFilesInFolder } = await import("../backend/src/services/googleDriveService");
+      const files = await listFilesInFolder("1KgGwing62UB9bf6MqhNlbi9mREs70sUJ");
+      return Response.json({ files });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
