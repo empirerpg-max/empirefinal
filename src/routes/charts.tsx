@@ -8,6 +8,7 @@ import {
   getMonthlyYears, getMonthlyDates, getMonthlyArtists, getMonthlyStats, getRealTime,
   type ChartRow, type TopArtistCover, type ReleaseItem, type BannerN1s, type RealTimeData,
 } from "@/lib/charts";
+import { resolveImg } from "@/lib/api";
 
 export const Route = createFileRoute("/charts")({
   head: () => ({
@@ -120,7 +121,7 @@ function CoverImg({ src, alt, className }: { src?: string; alt: string; classNam
     );
   }
   return (
-    <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />
+    <img src={resolveImg(src)} alt={alt} loading="lazy" className={className} referrerPolicy="no-referrer" onError={() => setFailed(true)} />
   );
 }
 

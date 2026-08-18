@@ -30,8 +30,65 @@ import {
   Loader2,
   Edit,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, resolveImg, isDirectImageUrl } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+
+// Alternativa ao upload: colar direto o link de uma imagem já hospedada em
+// outro lugar (.png/.jpg/.jpeg/.webp). Só aplica se o link for válido —
+// links do Drive continuam exigindo upload (precisam passar pelo proxy
+// autenticado, ver resolveImg em @/lib/api).
+function PasteImageLinkInput({
+  onApply,
+  className,
+}: {
+  onApply: (url: string) => void;
+  className?: string;
+}) {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState(false);
+
+  function commit() {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setError(false);
+      return;
+    }
+    if (isDirectImageUrl(trimmed)) {
+      onApply(trimmed);
+      setError(false);
+    } else {
+      setError(true);
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <input
+        type="url"
+        inputMode="url"
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          if (error) setError(false);
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        placeholder="ou cole o link da imagem (.png/.jpg)"
+        className={className}
+      />
+      {error && (
+        <p className="text-[10px] font-bold text-red-400">
+          O link precisa terminar em .png, .jpg ou .jpeg (e não pode ser um link do Drive).
+        </p>
+      )}
+    </div>
+  );
+}
 
 function formatCount(n: number | undefined): string {
   const v = Number(n || 0);
@@ -404,13 +461,10 @@ function SocialPage() {
     }
   }
 
-  const driveImg = (url: string | null | undefined) => {
-    if (!url) return undefined;
-    if (url.includes("lh3.googleusercontent.com")) return url;
-    const m = String(url).match(/[-\w]{25,}/);
-    if (!m) return url;
-    return `https://lh3.googleusercontent.com/d/${m[0]}=w600`;
-  };
+  // Resolve link do Drive (via proxy autenticado, não depende de permissão
+  // pública) ou link direto de imagem colado pelo usuário — ver resolveImg
+  // em @/lib/api.
+  const driveImg = resolveImg;
 
   const networkAccent = (tipo: string) => {
     if (tipo === "Twitter") return { icon: Twitter, color: "text-[#1d9bf0]", ring: "border-[#1d9bf0]/30" };
@@ -419,11 +473,15 @@ function SocialPage() {
   };
 
   const card = "rounded-[1.75rem] bg-white/5 border border-white/10 transition-all";
+  // text-base (16px) — abaixo disso o Safari/iOS dá zoom automático ao
+  // focar o campo, e é esse zoom que "estica"/desalinha a tela até o
+  // usuário beliscar pra voltar. Nunca usar texto menor que 16px em
+  // input/textarea que o usuário vai tocar pra digitar.
   const inputCls =
-    "w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-sm font-medium focus:outline-none focus:border-primary/50 transition-colors placeholder:text-muted-foreground/60";
+    "w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-base font-medium focus:outline-none focus:border-primary/50 transition-colors placeholder:text-muted-foreground/60";
 
   return (
-    <div className="flex-1 bg-background min-h-screen pb-32">
+    <div className="flex-1 bg-background min-h-dvh pb-32">
       {/* Header */}
       <div className="pt-6 px-4 sticky top-0 bg-background/90 backdrop-blur-md z-[60] border-b border-white/5">
         <div className="flex flex-col gap-4 mb-4 max-w-md mx-auto">
@@ -1337,7 +1395,7 @@ function SocialPage() {
               initial={{ y: 200 }}
               animate={{ y: 0 }}
               exit={{ y: 200 }}
-              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90dvh] overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-black uppercase">{editingPost ? "Editar post" : "Lançar Hype"}</h2>
@@ -1460,6 +1518,7 @@ function SocialPage() {
                         }}
                       />
                     </label>
+                    <PasteImageLinkInput onApply={setImageUrl} className={inputCls} />
                   </div>
 
                   <button
@@ -1491,7 +1550,7 @@ function SocialPage() {
               initial={{ y: 200 }}
               animate={{ y: 0 }}
               exit={{ y: 200 }}
-              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90dvh] overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-black uppercase">Nova Matéria</h2>
@@ -1555,6 +1614,7 @@ function SocialPage() {
                       }}
                     />
                   </label>
+                  <PasteImageLinkInput onApply={setNewsImage} className={inputCls} />
                 </div>
 
                 <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl flex items-center gap-2.5">
@@ -1596,7 +1656,7 @@ function SocialPage() {
               initial={{ y: 100, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
-              className="bg-card border border-white/10 rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+              className="bg-card border border-white/10 rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90dvh] overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-6">
                 <div className="flex flex-col min-w-0">
@@ -1687,6 +1747,7 @@ function SocialPage() {
                       />
                     </label>
                   </div>
+                  <PasteImageLinkInput onApply={setProfileAvatar} className={inputCls} />
                 </div>
 
                 <div className="space-y-1.5">
@@ -1717,7 +1778,7 @@ function SocialPage() {
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-0 sm:p-4 bg-black/95 backdrop-blur-md">
             <motion.div
               layoutId={selectedNews.id}
-              className="bg-card border border-white/10 sm:rounded-[1.75rem] max-w-lg w-full h-full sm:h-auto sm:max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
+              className="bg-card border border-white/10 sm:rounded-[1.75rem] max-w-lg w-full h-full sm:h-auto sm:max-h-[85dvh] overflow-hidden flex flex-col shadow-2xl"
             >
               <div className="relative h-56 sm:h-64 flex-shrink-0">
                 {selectedNews.imagem ? (
@@ -1783,7 +1844,7 @@ function SocialPage() {
               initial={{ y: 100, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
-              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-md w-full shadow-2xl max-h-[90vh] flex flex-col"
+              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-md w-full shadow-2xl max-h-[90dvh] flex flex-col"
             >
               <div className="flex justify-between items-center mb-5">
                 <h2 className="text-lg font-black uppercase">Comentários</h2>
@@ -1826,7 +1887,7 @@ function SocialPage() {
                               onChange={(e) => setEditCommentText(e.target.value)}
                               rows={2}
                               autoFocus
-                              className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs outline-none resize-none"
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-base outline-none resize-none"
                             />
                             <div className="flex justify-end gap-1.5 mt-1">
                               <button

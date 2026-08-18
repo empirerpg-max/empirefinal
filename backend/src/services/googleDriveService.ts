@@ -115,9 +115,13 @@ export async function uploadFileToDrive(
       return `https://drive.google.com/drive/folders/${folderId}`;
     }
 
-    // Set permission to anyone with link if allowed
+    // Permissão pública é só um "extra" — o app nunca depende dela pra
+    // exibir a imagem, porque toda leitura passa pelo proxy autenticado
+    // /api/media/image (mesma conta que fez o upload, sempre tem acesso).
+    // Mesmo assim, deixamos o erro visível (não silencioso) pra facilitar
+    // diagnóstico se algum dia algo externo precisar do link público.
     try {
-      await fetch(`https://www.googleapis.com/drive/v3/files/${json.id}/permissions`, {
+      const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${json.id}/permissions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -125,6 +129,12 @@ export async function uploadFileToDrive(
         },
         body: JSON.stringify({ role: "reader", type: "anyone" }),
       });
+      if (!permRes.ok) {
+        console.warn(
+          `[uploadFileToDrive] Permissão pública não aplicada (HTTP ${permRes.status}) pro arquivo ${json.id}:`,
+          await permRes.text().catch(() => ""),
+        );
+      }
     } catch (permErr) {
       console.warn("[uploadFileToDrive] Permissão de visualização:", permErr);
     }

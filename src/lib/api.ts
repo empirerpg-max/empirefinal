@@ -1192,6 +1192,31 @@ export function driveRawImg(url: string | undefined | null): string | undefined 
   return `/api/media/image?id=${m[0]}`;
 }
 
+// Resolve qualquer campo de imagem vindo da planilha: link do Drive (via
+// proxy autenticado, funciona independente de permissão pública do
+// arquivo) ou link direto de imagem que o usuário colou em vez de subir um
+// arquivo (.png/.jpg/.jpeg/.webp/.gif) — nesse caso usa a URL como está.
+export function resolveImg(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  const trimmed = String(url).trim();
+  if (!trimmed) return undefined;
+  const isDriveLink = trimmed.includes("drive.google.com") || trimmed.includes("docs.google.com");
+  if (!isDriveLink && /\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(trimmed)) {
+    return trimmed;
+  }
+  return driveRawImg(trimmed) || trimmed;
+}
+
+// Valida se um link colado é aceitável como imagem direta (sem upload):
+// precisa terminar em .png/.jpg/.jpeg/.webp e não pode ser um link do Drive
+// (esses continuam exigindo upload, pra passar pelo proxy autenticado).
+export function isDirectImageUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (trimmed.includes("drive.google.com") || trimmed.includes("docs.google.com")) return false;
+  return /^https?:\/\/.+\.(png|jpe?g|webp)(\?.*)?$/i.test(trimmed);
+}
+
 export function driveAudioSrc(url: string | undefined | null): string | undefined {
   if (!url) return undefined;
   const m = String(url).match(/[-\w]{25,}/);
