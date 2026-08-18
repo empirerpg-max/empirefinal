@@ -639,7 +639,7 @@ function TourActionModal({
             <div className="flex items-center gap-3">
               <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 overflow-hidden shrink-0 grid place-items-center">
                 {fotoUrl ? (
-                  <img src={fotoUrl} alt="" className="size-full object-cover" />
+                  <img src={driveImg(fotoUrl, 200)} alt="" className="size-full object-cover" />
                 ) : (
                   <ImagePlus className="size-6 text-neutral-600" />
                 )}
