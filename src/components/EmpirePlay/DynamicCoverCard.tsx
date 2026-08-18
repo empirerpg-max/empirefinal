@@ -43,7 +43,7 @@ export function DynamicCoverCard({
   if (platform === "spotify") {
     const hasPhoto = !!photo;
     return (
-      <div className={`relative overflow-hidden ${className}`}>
+      <div className={`overflow-hidden ${className}`}>
         {hasPhoto && (
           <img src={photo} alt="" className="absolute inset-0 size-full object-cover" />
         )}
@@ -68,7 +68,7 @@ export function DynamicCoverCard({
     const squareCover = cover;
     const middlePhoto = photo || cover;
     return (
-      <div className={`relative overflow-hidden bg-black ${className}`}>
+      <div className={`overflow-hidden bg-black ${className}`}>
         <img
           src={driveRawImg(TEMPLATES.appleBase)}
           alt=""
@@ -116,7 +116,7 @@ export function DynamicCoverCard({
   if (platform === "youtube") {
     const hasPhoto = !!photo;
     return (
-      <div className={`relative overflow-hidden ${className}`}>
+      <div className={`overflow-hidden ${className}`}>
         {hasPhoto ? (
           <>
             <img src={photo} alt="" className="absolute inset-0 size-full object-cover" />
@@ -150,7 +150,7 @@ export function DynamicCoverCard({
   // platform === "hot"
   const hasCover = !!cover;
   return (
-    <div className={`relative overflow-hidden ${className}`}>
+    <div className={`overflow-hidden ${className}`}>
       {hasCover && <img src={cover} alt="" className="absolute inset-0 size-full object-cover" />}
       <img
         src={driveRawImg(hasCover ? TEMPLATES.hotBase : TEMPLATES.hotSub)}
