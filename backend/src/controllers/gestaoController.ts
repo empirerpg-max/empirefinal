@@ -79,7 +79,8 @@ export type UploadFolderType =
   | "playerAvatars"
   | "artistPhotos"
   | "playlistTracks"
-  | "tvChatGifs";
+  | "tvChatGifs"
+  | "turnes";
 
 export interface UploadPayload {
   fileName: string;
@@ -1064,7 +1065,12 @@ export async function uploadDriveController(request: Request): Promise<Response>
                           ? DRIVE_FOLDERS.playlistTracks
                           : folderType === "tvChatGifs"
                             ? DRIVE_FOLDERS.tvChatGifs
-                            : DRIVE_FOLDERS.musicas;
+                            : folderType === "turnes"
+                              // Sem pasta própria ainda — reaproveita a de
+                              // posts sociais (mesmo padrão do artistPhotos
+                              // acima) até existir uma pasta dedicada.
+                              ? DRIVE_FOLDERS.socialPosts
+                              : DRIVE_FOLDERS.musicas;
 
     const fileUrl = base64Data
       ? await uploadFileToDrive(fileName, folderId, mimeType, base64Data)

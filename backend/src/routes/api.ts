@@ -91,6 +91,16 @@ import {
   getAlbunsAntigosController,
   getAlbumAntigoByIdController,
 } from "../controllers/playlistsController";
+import {
+  getLocaisTurneController,
+  simularTurneController,
+  getTurnesController,
+  getTurneDetalheController,
+  criarTurneController,
+  realizarAcaoDiaController,
+  getComentariosTurneController,
+  comentarTurneController,
+} from "../controllers/tourController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -182,6 +192,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/perfis",
     "/api/social/news",
     "/api/empire-tv/gifs",
+    "/api/turnes/locais",
+    "/api/turnes/simular",
+    "/api/turnes",
+    "/api/turnes/detalhe",
+    "/api/turnes/criar",
+    "/api/turnes/acao",
+    "/api/turnes/comentarios",
+    "/api/turnes/comentar",
   ]);
 
   if (
@@ -623,6 +641,70 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await editCommentController(request);
+  } else if (url.pathname === "/api/turnes/locais") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/turnes/locais." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getLocaisTurneController();
+  } else if (url.pathname === "/api/turnes/simular") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/turnes/simular." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await simularTurneController(request);
+  } else if (url.pathname === "/api/turnes") {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/turnes." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await getTurnesController(request);
+  } else if (url.pathname === "/api/turnes/detalhe") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/turnes/detalhe." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getTurneDetalheController(request);
+  } else if (url.pathname === "/api/turnes/criar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/turnes/criar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await criarTurneController(request);
+  } else if (url.pathname === "/api/turnes/acao") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/turnes/acao." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await realizarAcaoDiaController(request);
+  } else if (url.pathname === "/api/turnes/comentarios") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/turnes/comentarios." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getComentariosTurneController(request);
+  } else if (url.pathname === "/api/turnes/comentar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/turnes/comentar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await comentarTurneController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(
