@@ -146,6 +146,23 @@
     border-color: var(--color-border);
   }
 
+  /* Trava global de 16px em todo campo de texto — abaixo disso o
+     Safari/iOS dá zoom automático ao focar o campo (some páginas já
+     cuidavam disso manualmente com "text-base" no Tailwind, mas era por
+     componente e fácil de esquecer numa tela nova). Isso garante que
+     NENHUM input/textarea/select do app, existente ou futuro, dispara
+     esse zoom, sem precisar de nenhuma classe extra em lugar nenhum — e
+     sem mudar nada visualmente pra quem já usava 16px+. Só entra em
+     telas pequenas (mobile) pra não forçar 16px em inputs de admin/desktop
+     que podem ter sido desenhados menores de propósito. */
+  @media (max-width: 767px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
