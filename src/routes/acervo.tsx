@@ -35,6 +35,7 @@ type Revista = {
   paginas: string[];
   data: string;
   telegram_id?: string;
+  musicas?: string[];
 };
 
 type Pergunta = { pergunta: string; resposta: string };
@@ -47,6 +48,7 @@ type Entrevista = {
   perguntas: Pergunta[];
   data: string;
   telegram_id?: string;
+  musicas?: string[];
 };
 
 async function uploadToDrive(file: File): Promise<string | null> {
@@ -286,7 +288,9 @@ function RevistaViewer({ revista, onClose }: { revista: Revista; onClose: () => 
             {[
               <p key="a" className="text-[11px] font-black uppercase text-primary tracking-wide">{revista.artista}</p>,
               <h2 key="b" className="text-3xl font-black leading-tight text-white mb-1">{revista.titulo}</h2>,
-              <p key="c" className="text-xs text-white/60 font-medium mb-5">{total} páginas</p>,
+              <p key="c" className="text-xs text-white/60 font-medium mb-5">
+                {total} páginas{revista.musicas?.length ? ` · Sobre: ${revista.musicas.join(", ")}` : ""}
+              </p>,
               <button
                 key="d"
                 onClick={() => {
@@ -353,6 +357,9 @@ function EntrevistaViewer({ entrevista, onClose }: { entrevista: Entrevista; onC
     <div key="head" className="min-w-0">
       <p className="text-[10px] font-black uppercase text-primary truncate">{entrevista.artista}</p>
       <h2 className="text-lg font-black leading-tight">{entrevista.titulo}</h2>
+      {entrevista.musicas?.length ? (
+        <p className="text-[10px] text-muted-foreground font-medium mt-1">Sobre: {entrevista.musicas.join(", ")}</p>
+      ) : null}
     </div>,
     ...entrevista.perguntas.map((p, i) => (
       <div key={`p-${i}`}>
@@ -430,9 +437,50 @@ function CreateModal({
   const [uploadingCapa, setUploadingCapa] = useState(false);
   const [perguntas, setPerguntas] = useState<Pergunta[]>([{ pergunta: "", resposta: "" }]);
 
+  // Toda publicação (revista ou entrevista) precisa estar vinculada a pelo
+  // menos 1 música do chart do artista — vira registro em REGISTRO ao
+  // publicar. Mesma fonte já usada em Editar Lançamentos (aba Pontos).
+  const [musicasChart, setMusicasChart] = useState<{ label: string; artist: string }[]>([]);
+  const [loadingMusicas, setLoadingMusicas] = useState(true);
+  const [musicasSelecionadas, setMusicasSelecionadas] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetch("/api/gestao/musicas-em-chart")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && Array.isArray(data.data)) setMusicasChart(data.data);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMusicas(false));
+  }, []);
+
+  const musicasDoArtista = musicasChart.filter(
+    (m) => m.artist.trim().toLowerCase() === artista.trim().toLowerCase(),
+  );
+
+  // Troca de artista invalida a seleção anterior (era de outro artista).
+  useEffect(() => {
+    setMusicasSelecionadas(new Set());
+  }, [artista]);
+
+  function toggleMusica(label: string) {
+    setMusicasSelecionadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
+
   async function handleSubmit() {
     if (!artista || !titulo.trim() || submitting) return;
     setErrorMsg(null);
+
+    if (musicasSelecionadas.size === 0) {
+      setErrorMsg("Selecione ao menos 1 música do chart pra essa publicação.");
+      return;
+    }
+    const musicas = Array.from(musicasSelecionadas);
 
     if (tab === "revistas") {
       if (paginas.length === 0) {
@@ -440,7 +488,7 @@ function CreateModal({
         return;
       }
       setSubmitting(true);
-      const res = await api.criarRevistaAcervo({ artista, titulo: titulo.trim(), paginas }, tgId);
+      const res = await api.criarRevistaAcervo({ artista, titulo: titulo.trim(), paginas, musicas }, tgId);
       setSubmitting(false);
       if (res.ok) {
         haptic.success();
@@ -458,7 +506,7 @@ function CreateModal({
     }
     setSubmitting(true);
     const res = await api.criarEntrevistaAcervo(
-      { artista, titulo: titulo.trim(), capa, perguntas: perguntasValidas },
+      { artista, titulo: titulo.trim(), capa, perguntas: perguntasValidas, musicas },
       tgId,
     );
     setSubmitting(false);
@@ -495,6 +543,44 @@ function CreateModal({
               </select>
             ) : (
               <p className="text-xs text-muted-foreground">Você precisa ter um artista pra publicar.</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-black uppercase text-muted-foreground">
+              Sobre qual música (ou músicas) do chart?
+            </p>
+            <p className="text-[10px] text-muted-foreground/70 font-medium -mt-1 mb-1">
+              Obrigatório — vira registro no chart pra cada música marcada.
+            </p>
+            {loadingMusicas ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                <Loader2 className="size-3.5 animate-spin" /> Carregando músicas do chart...
+              </div>
+            ) : musicasDoArtista.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic py-2">
+                Nenhuma música de {artista || "seu artista"} no chart ainda.
+              </p>
+            ) : (
+              <div className="max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 divide-y divide-white/5">
+                {musicasDoArtista.map((m) => {
+                  const checked = musicasSelecionadas.has(m.label);
+                  return (
+                    <label
+                      key={m.label}
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer active:bg-white/5"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleMusica(m.label)}
+                        className="size-4 accent-primary shrink-0"
+                      />
+                      <span className="text-sm font-medium truncate">{m.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
             )}
           </div>
 
@@ -628,7 +714,7 @@ function CreateModal({
 
           <button
             onClick={handleSubmit}
-            disabled={submitting || !artista || !titulo.trim()}
+            disabled={submitting || !artista || !titulo.trim() || musicasSelecionadas.size === 0}
             className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
           >
             {submitting ? "Publicando..." : "Publicar"}
