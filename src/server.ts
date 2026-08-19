@@ -391,10 +391,11 @@ export default {
 
     if (url.pathname === "/api/debug/tv-imagens" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const [programacao, usuarios, presenca] = await Promise.all([
+      const [programacao, usuarios, presenca, prestigio] = await Promise.all([
         googleSheetsService.agendaTV.readValues("Programacao_RPG"),
         googleSheetsService.usuarios.readValues("Usuários"),
         googleSheetsService.agendaTV.readValues("Presenca_TV").catch(() => []),
+        googleSheetsService.usuarios.readValues("Prestígio").catch(() => []),
       ]);
       return Response.json({
         programacaoHeader: programacao[0],
@@ -403,6 +404,7 @@ export default {
         usuariosFotoAmostra: usuarios.slice(1, 8).map((r) => ({ nome: r[0], fotoPerfil: r[5] })),
         presencaHeader: presenca[0],
         presencaAmostra: presenca.slice(1, 8),
+        prestigioTodasLinhas: prestigio,
       });
     }
 
