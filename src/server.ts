@@ -385,7 +385,29 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-// Proxy de vídeos grandes do Telegram (Music Videos).
+if (url.pathname === "/api/debug/hugo-prestigio" && request.method === "GET") {
+      const { googleSheetsService, normalizeHeader, normalizeText, dedupeHeaders, normalizeComparison } = await import(
+        "../backend/src/services/googleSheetsService"
+      );
+      const rows = await googleSheetsService.usuarios.readValues("Usuários").catch((e) => [[`erro: ${e.message}`]]);
+      const headers = dedupeHeaders("Usuários", rows[0].map((h: unknown, i: number) => normalizeHeader(h) || `coluna_${i + 1}`));
+      const nomeCol = headers.indexOf("nome");
+      const idCol = headers.indexOf("id");
+      const usuarioCol = headers.indexOf("usuario");
+      const prestigioCol = headers.indexOf("prestigio");
+      const ultimoLoginCol = headers.indexOf("ultimo_login_prestigio");
+      const hugoRows = rows.slice(1).filter((r) => normalizeComparison(r[nomeCol]).includes("hugo"));
+      const posts = await googleSheetsService.usuarios.readValues("SOCIAL_POSTS").catch(() => []);
+      const comments = await googleSheetsService.usuarios.readValues("SOCIAL_COMMENTS").catch(() => []);
+      return Response.json({
+        headers,
+        hugoRows: hugoRows.map((r) => ({ nome: r[nomeCol], id: r[idCol], usuario: r[usuarioCol], prestigio: r[prestigioCol], ultimoLogin: r[ultimoLoginCol] })),
+        ultimosPosts: posts.slice(-6).map((r) => ({ id: r[0], autor: r[3], analytics: r[6], tgId: r[8] })),
+        ultimosComentarios: comments.slice(-6).map((r) => ({ postId: r[0], autor: r[1], tgId: r[4] })),
+      });
+    }
+
+    // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
       return handleTelegramVideoProxy(
