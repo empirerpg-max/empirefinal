@@ -6,6 +6,7 @@ import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV } from "@/lib/api";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
+import { useBackClose } from "@/hooks/use-back-close";
 
 
 export const Route = createFileRoute("/tv")({
@@ -736,6 +737,9 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
 
   // Sheet estilo Reels aberto no mobile (null = fechado, mostra só o vídeo).
   const [mobileSheet, setMobileSheet] = useState<WatchTab | null>(null);
+  // "Voltar" (físico/swipe iOS) fecha a gaveta de comentários/participantes
+  // em vez de sair da tela do Empire TV.
+  useBackClose(!!mobileSheet, () => setMobileSheet(null));
   const visibleHeight = useVisibleViewportHeight();
   // Deixa sempre uma faixa do vídeo visível no topo (~110px), mesmo com o
   // teclado aberto — é a única coisa calculada; nada de posição/top/bottom.
@@ -820,26 +824,40 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
         </div>
 
         {mobileSheet && (
-          <div
-            className="absolute inset-x-0 bottom-0 z-20 max-h-[62dvh] h-[62dvh] bg-background rounded-t-2xl border-t border-border flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200"
-            style={sheetMaxHeight ? { height: sheetMaxHeight, maxHeight: sheetMaxHeight } : undefined}
-          >
-            <div className="flex items-center justify-between px-4 h-11 border-b border-border shrink-0">
-              <span className="text-sm font-bold flex items-center gap-1.5">
-                {mobileSheet === "chat" && <><MessageSquare className="size-3.5" /> Comentários</>}
-                {mobileSheet === "participantes" && <><Users className="size-3.5" /> Participantes</>}
-                {mobileSheet === "sobre" && <><Info className="size-3.5" /> Sobre</>}
-              </span>
-              <button onClick={() => setMobileSheet(null)} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Fechar">
-                <X className="size-4" />
-              </button>
+          <>
+            {/* Scrim escurecendo o vídeo por trás — igual TikTok/Reels ao
+                abrir comentários: o vídeo continua rodando (áudio incluso),
+                só fica visível por cima. Tocar fora fecha a gaveta. */}
+            <div
+              className="absolute inset-0 z-10 bg-black/40 animate-in fade-in duration-200"
+              onClick={() => setMobileSheet(null)}
+            />
+            <div
+              className="absolute inset-x-0 bottom-0 z-20 max-h-[62dvh] h-[62dvh] bg-background rounded-t-2xl border-t border-border flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200"
+              style={sheetMaxHeight ? { height: sheetMaxHeight, maxHeight: sheetMaxHeight } : undefined}
+            >
+              {/* Alça de arrastar (só visual, como no TikTok — fechar continua
+                  sendo pelo X, tap fora, ou "voltar"). */}
+              <div className="flex justify-center pt-2 pb-1 shrink-0">
+                <div className="h-1 w-9 rounded-full bg-muted-foreground/30" />
+              </div>
+              <div className="flex items-center justify-between px-4 h-11 border-b border-border shrink-0">
+                <span className="text-sm font-bold flex items-center gap-1.5">
+                  {mobileSheet === "chat" && <><MessageSquare className="size-3.5" /> Comentários</>}
+                  {mobileSheet === "participantes" && <><Users className="size-3.5" /> Participantes</>}
+                  {mobileSheet === "sobre" && <><Info className="size-3.5" /> Sobre</>}
+                </span>
+                <button onClick={() => setMobileSheet(null)} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Fechar">
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 flex flex-col">
+                {mobileSheet === "chat" && <ChatPanel programaId={programa.id} />}
+                {mobileSheet === "participantes" && <ParticipantesPanel programa={programa} />}
+                {mobileSheet === "sobre" && <SobrePanel programa={programa} />}
+              </div>
             </div>
-            <div className="flex-1 min-h-0 flex flex-col">
-              {mobileSheet === "chat" && <ChatPanel programaId={programa.id} />}
-              {mobileSheet === "participantes" && <ParticipantesPanel programa={programa} />}
-              {mobileSheet === "sobre" && <SobrePanel programa={programa} />}
-            </div>
-          </div>
+          </>
         )}
       </div>
 
