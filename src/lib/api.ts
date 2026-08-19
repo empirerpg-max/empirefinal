@@ -975,11 +975,12 @@ export const api = {
     mediaUrl: string,
     tgId: string,
     autor?: string,
+    mediaTipo?: string,
   ): Promise<CommonResponse> {
     const res = await fetch("/api/social/posts/editar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postId, texto, media_url: mediaUrl, tgId, autor }),
+      body: JSON.stringify({ postId, texto, media_url: mediaUrl, tgId, autor, media_tipo: mediaTipo }),
     });
     return res.json();
   },
@@ -1223,6 +1224,17 @@ export function driveRawImg(url: string | undefined | null): string | undefined 
   const m = String(url).match(/[-\w]{25,}/);
   if (!m) return undefined;
   return `/api/media/image?id=${m[0]}`;
+}
+
+// Mesmo proxy autenticado de bytes crus (streamDriveFileController serve
+// /api/media/image, /api/media/video e /api/media/audio de forma idêntica,
+// só o path muda) — usado aqui pra vídeos de post social, que precisam de
+// Range request pra dar seek, já suportado no proxy.
+export function driveVideo(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  const m = String(url).match(/[-\w]{25,}/);
+  if (!m) return undefined;
+  return `/api/media/video?id=${m[0]}`;
 }
 
 // Resolve qualquer campo de imagem vindo da planilha: link do Drive (via

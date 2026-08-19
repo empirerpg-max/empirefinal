@@ -33,7 +33,7 @@ import {
   Eye,
   Shuffle,
 } from "lucide-react";
-import { api, resolveImg, isDirectImageUrl } from "@/lib/api";
+import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 
 // Alternativa ao upload: colar direto o link de uma imagem já hospedada em
@@ -93,6 +93,45 @@ function PasteImageLinkInput({
   );
 }
 
+// Renderiza a mídia de um post — imagem (comportamento de sempre) ou vídeo
+// (com controles nativos, tocando via /api/media/video — mesmo proxy
+// autenticado com suporte a Range request pra dar seek). `resolveUrl` é a
+// função `driveImg`/`resolveImg` já em uso no componente chamador, pra não
+// duplicar a lógica de resolução de link.
+function PostMedia({
+  url,
+  tipo,
+  className,
+  resolveUrl,
+}: {
+  url?: string;
+  tipo?: string;
+  className?: string;
+  resolveUrl: (u?: string) => string | undefined;
+}) {
+  if (!url) return null;
+  if (tipo === "video") {
+    return (
+      <video
+        src={driveVideo(url)}
+        controls
+        playsInline
+        preload="metadata"
+        className={className}
+      />
+    );
+  }
+  return (
+    <img
+      loading="lazy"
+      decoding="async"
+      src={resolveUrl(url)}
+      className={className}
+      referrerPolicy="no-referrer"
+    />
+  );
+}
+
 function formatCount(n: number | undefined): string {
   const v = Number(n || 0);
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1).replace(/\.0$/, "") + "M";
@@ -117,6 +156,7 @@ type Post = {
   avatar?: string;
   texto: string;
   media_url?: string;
+  media_tipo?: "imagem" | "video" | string;
   analytics: { likes: number; comments: number; shares: number };
   data: string;
   telegram_id?: string;
@@ -153,6 +193,7 @@ function SocialPage() {
   const [igMode, setIgMode] = useState<"Feed" | "Story">("Feed");
   const [postText, setPostText] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [mediaTipo, setMediaTipo] = useState<"imagem" | "video">("imagem");
   const [editingPost, setEditingPost] = useState<any | null>(null);
   // Blackout Mode — posta com um nome fictício em vez do nome real do
   // artista, pra criar suspense antes de um anúncio (ex: lançamento de era).
@@ -395,6 +436,7 @@ function SocialPage() {
     setIgMode(post.subtipo === "Story" ? "Story" : "Feed");
     setPostText(post.texto);
     setImageUrl(post.media_url || "");
+    setMediaTipo(post.media_tipo === "video" ? "video" : "imagem");
     // Se o nome no post não bate com nenhum dos seus artistas, ele foi
     // publicado em Blackout Mode — reabre já no modo certo, com o nome
     // fictício pronto pra editar (ou voltar ao normal).
@@ -409,6 +451,7 @@ function SocialPage() {
     setSelectedType(null);
     setPostText("");
     setImageUrl("");
+    setMediaTipo("imagem");
     setEditingPost(null);
     setBlackoutMode(false);
     setBlackoutUsername("");
@@ -431,7 +474,14 @@ function SocialPage() {
 
     try {
       if (editingPost) {
-        const res = await (api as any).editarPostSocial(editingPost.id, postText, imageUrl, tgId, autorFinal);
+        const res = await (api as any).editarPostSocial(
+          editingPost.id,
+          postText,
+          imageUrl,
+          tgId,
+          autorFinal,
+          mediaTipo,
+        );
         if (res.ok) {
           haptic.success();
           closePostModal();
@@ -446,6 +496,7 @@ function SocialPage() {
         autor: autorFinal,
         texto: postText,
         media_url: imageUrl,
+        media_tipo: mediaTipo,
         analytics: { likes: 0, comments: 0, shares: 0 },
       };
 
@@ -683,15 +734,11 @@ function SocialPage() {
                         {post.tipo === "Instagram" && post.subtipo === "Story" ? (
                           <div className="relative aspect-[9/16] max-h-[26rem] bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10">
                             {post.media_url ? (
-                              <img
-                                loading="lazy"
-                                decoding="async"
-                                src={driveImg(post.media_url)}
+                              <PostMedia
+                                url={post.media_url}
+                                tipo={post.media_tipo}
+                                resolveUrl={driveImg}
                                 className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = "https://placehold.co/600x1067?text=Story";
-                                }}
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-muted-foreground font-black uppercase text-xs">
@@ -707,15 +754,11 @@ function SocialPage() {
                         ) : (
                           post.media_url && (
                             <div className="aspect-square bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10">
-                              <img
-                                loading="lazy"
-                                decoding="async"
-                                src={driveImg(post.media_url)}
+                              <PostMedia
+                                url={post.media_url}
+                                tipo={post.media_tipo}
+                                resolveUrl={driveImg}
                                 className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = "https://placehold.co/600x600?text=Post";
-                                }}
                               />
                             </div>
                           )
@@ -1091,19 +1134,26 @@ function SocialPage() {
                               className="aspect-square bg-zinc-50 relative overflow-hidden group"
                             >
                               {p.media_url ? (
-                                <img
-                                  src={driveImg(p.media_url)}
-                                  className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                  loading="lazy"
-                                  decoding="async"
-                                />
+                                p.media_tipo === "video" ? (
+                                  <video src={driveVideo(p.media_url)} muted preload="metadata" className="w-full h-full object-cover" />
+                                ) : (
+                                  <img
+                                    src={driveImg(p.media_url)}
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                )
                               ) : (
                                 <div className="w-full h-full bg-gradient-to-br from-pink-200 via-purple-200 to-orange-200 flex items-center justify-center p-2">
                                   <p className="text-[10px] text-black/70 font-bold line-clamp-3 text-left">
                                     {p.texto}
                                   </p>
                                 </div>
+                              )}
+                              {p.media_tipo === "video" && (
+                                <Play className="absolute inset-0 m-auto size-6 text-white drop-shadow fill-white/30" />
                               )}
                               {p.subtipo === "Story" && (
                                 <Film className="absolute top-1.5 right-1.5 size-3.5 text-white drop-shadow" />
@@ -1216,12 +1266,11 @@ function SocialPage() {
                                 <p className="text-[14px] mt-0.5 leading-snug whitespace-pre-line">{p.texto}</p>
                                 {p.media_url && (
                                   <div className="mt-2 rounded-2xl overflow-hidden border border-zinc-800 aspect-video bg-zinc-900">
-                                    <img
-                                      src={driveImg(p.media_url)}
+                                    <PostMedia
+                                      url={p.media_url}
+                                      tipo={p.media_tipo}
+                                      resolveUrl={driveImg}
                                       className="w-full h-full object-cover"
-                                      referrerPolicy="no-referrer"
-                                      loading="lazy"
-                                      decoding="async"
                                     />
                                   </div>
                                 )}
@@ -1326,13 +1375,17 @@ function SocialPage() {
                             className="aspect-[9/16] bg-zinc-900 relative overflow-hidden"
                           >
                             {p.media_url ? (
-                              <img
-                                src={driveImg(p.media_url)}
-                                className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
-                                loading="lazy"
-                                decoding="async"
-                              />
+                              p.media_tipo === "video" ? (
+                                <video src={driveVideo(p.media_url)} muted preload="metadata" className="w-full h-full object-cover" />
+                              ) : (
+                                <img
+                                  src={driveImg(p.media_url)}
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                              )
                             ) : (
                               <div className="w-full h-full bg-gradient-to-br from-[#FE2C55]/40 via-black to-[#25F4EE]/30 flex items-center justify-center p-2">
                                 <p className="text-[10px] text-white/80 font-bold line-clamp-4 text-left">{p.texto}</p>
@@ -1576,10 +1629,14 @@ function SocialPage() {
                   />
 
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground">Mídia (imagem):</p>
+                    <p className="text-[10px] font-black uppercase text-muted-foreground">Mídia (imagem ou vídeo):</p>
                     {imageUrl && (
                       <div className="w-full aspect-video rounded-xl overflow-hidden bg-secondary border border-white/10">
-                        <img src={driveImg(imageUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        {mediaTipo === "video" ? (
+                          <video src={driveVideo(imageUrl)} controls playsInline className="w-full h-full object-cover" />
+                        ) : (
+                          <img src={driveImg(imageUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        )}
                       </div>
                     )}
                     <label
@@ -1589,25 +1646,29 @@ function SocialPage() {
                         (uploadingImage ? "opacity-60 pointer-events-none" : "")
                       }
                     >
-                      <ImageIcon className="size-4" />
-                      {uploadingImage ? "Enviando..." : imageUrl ? "Trocar imagem" : "Selecionar do dispositivo"}
+                      {mediaTipo === "video" ? <Video className="size-4" /> : <ImageIcon className="size-4" />}
+                      {uploadingImage ? "Enviando..." : imageUrl ? "Trocar mídia" : "Selecionar do dispositivo"}
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*,video/*"
                         className="hidden"
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
+                          const isVideo = file.type.startsWith("video/");
                           setUploadingImage(true);
                           const folderType: SocialFolderType =
                             selectedType === "Instagram" && igMode === "Story" ? "socialStories" : "socialPosts";
                           const url = await uploadToDrive(file, folderType);
-                          if (url) setImageUrl(url);
+                          if (url) {
+                            setImageUrl(url);
+                            setMediaTipo(isVideo ? "video" : "imagem");
+                          }
                           setUploadingImage(false);
                         }}
                       />
                     </label>
-                    <PasteImageLinkInput onApply={setImageUrl} className={inputCls} />
+                    {mediaTipo === "imagem" && <PasteImageLinkInput onApply={setImageUrl} className={inputCls} />}
                   </div>
 
                   <button
