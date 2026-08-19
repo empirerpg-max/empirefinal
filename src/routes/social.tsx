@@ -29,6 +29,9 @@ import {
   Settings2,
   Loader2,
   Edit,
+  EyeOff,
+  Eye,
+  Shuffle,
 } from "lucide-react";
 import { api, resolveImg, isDirectImageUrl } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -151,6 +154,12 @@ function SocialPage() {
   const [postText, setPostText] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [editingPost, setEditingPost] = useState<any | null>(null);
+  // Blackout Mode — posta com um nome fictício em vez do nome real do
+  // artista, pra criar suspense antes de um anúncio (ex: lançamento de era).
+  // O post continua vinculado ao telegram_id de verdade (dono não muda),
+  // só o nome exibido; por isso o dono sempre pode editar/reverter depois.
+  const [blackoutMode, setBlackoutMode] = useState(false);
+  const [blackoutUsername, setBlackoutUsername] = useState("");
   const [myArtists, setMyArtists] = useState<any[]>([]);
   const [selectedArtist, setSelectedArtist] = useState("");
   const [viewMode, setViewMode] = useState<"Feed" | "Settings" | "News" | "Industry">("Feed");
@@ -386,6 +395,12 @@ function SocialPage() {
     setIgMode(post.subtipo === "Story" ? "Story" : "Feed");
     setPostText(post.texto);
     setImageUrl(post.media_url || "");
+    // Se o nome no post não bate com nenhum dos seus artistas, ele foi
+    // publicado em Blackout Mode — reabre já no modo certo, com o nome
+    // fictício pronto pra editar (ou voltar ao normal).
+    const eraBlackout = !!post.autor && !myArtists.some((a) => a.nome === post.autor);
+    setBlackoutMode(eraBlackout);
+    setBlackoutUsername(eraBlackout ? post.autor : "");
     setIsModalOpen(true);
   }
 
@@ -395,17 +410,28 @@ function SocialPage() {
     setPostText("");
     setImageUrl("");
     setEditingPost(null);
+    setBlackoutMode(false);
+    setBlackoutUsername("");
+  }
+
+  function gerarNomeBlackout() {
+    const adjetivos = ["fã", "insider", "leak", "anônimo", "ghost", "fonte"];
+    const adjetivo = adjetivos[Math.floor(Math.random() * adjetivos.length)];
+    const numero = Math.floor(1000 + Math.random() * 9000);
+    setBlackoutUsername(`${adjetivo}_${numero}`);
   }
 
   async function handlePost() {
     if (!selectedType || !postText.trim() || !activeArtist || submitting) return;
+    if (blackoutMode && !blackoutUsername.trim()) return;
 
     setSubmitting(true);
     const tgId = user?.id || "";
+    const autorFinal = blackoutMode ? blackoutUsername.trim() : activeArtist.nome;
 
     try {
       if (editingPost) {
-        const res = await (api as any).editarPostSocial(editingPost.id, postText, imageUrl, tgId);
+        const res = await (api as any).editarPostSocial(editingPost.id, postText, imageUrl, tgId, autorFinal);
         if (res.ok) {
           haptic.success();
           closePostModal();
@@ -417,7 +443,7 @@ function SocialPage() {
       const payload = {
         tipo: selectedType,
         subtipo: selectedType === "Instagram" ? igMode : undefined,
-        autor: activeArtist.nome,
+        autor: autorFinal,
         texto: postText,
         media_url: imageUrl,
         analytics: { likes: 0, comments: 0, shares: 0 },
@@ -729,12 +755,19 @@ function SocialPage() {
                           <Share2 className="size-4" />
                         </button>
                         {post.telegram_id && String(post.telegram_id) === String(user?.id || "") && (
-                          <button
-                            onClick={() => openEditPost(post)}
-                            className="flex items-center gap-1.5 font-black text-xs text-muted-foreground ml-auto min-h-9 active:scale-90 transition-transform"
-                          >
-                            <Edit className="size-4" /> Editar
-                          </button>
+                          <div className="flex items-center gap-3 ml-auto">
+                            {!myArtists.some((a) => a.nome === post.autor) && (
+                              <span className="flex items-center gap-1 text-[9px] font-black uppercase text-muted-foreground">
+                                <EyeOff className="size-3" /> Blackout
+                              </span>
+                            )}
+                            <button
+                              onClick={() => openEditPost(post)}
+                              className="flex items-center gap-1.5 font-black text-xs text-muted-foreground min-h-9 active:scale-90 transition-transform"
+                            >
+                              <Edit className="size-4" /> Editar
+                            </button>
+                          </div>
                         )}
                       </div>
                     </motion.div>
@@ -1445,24 +1478,78 @@ function SocialPage() {
               ) : (
                 <div className="grid gap-4">
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground">Postar como:</p>
-                    <div className={inputCls + " flex items-center gap-2 text-muted-foreground"}>
-                      <div className="size-5 rounded-full bg-white/10 flex items-center justify-center font-black text-[11px] overflow-hidden shrink-0">
-                        {activeArtist?.foto ? (
-                          <img
-                            src={driveImg(activeArtist.foto)}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        ) : (
-                          activeArtist?.nome[0]
-                        )}
-                      </div>
-                      <span className="truncate">{activeArtist?.nome || "Magnata"}</span>
+                    <p className="text-[10px] font-black uppercase text-muted-foreground">Modo de publicação:</p>
+                    <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1">
+                      <button
+                        onClick={() => {
+                          haptic.selection();
+                          setBlackoutMode(false);
+                        }}
+                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase flex items-center justify-center gap-1.5 transition-all ${!blackoutMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                      >
+                        <Eye className="size-3.5" /> Normal
+                      </button>
+                      <button
+                        onClick={() => {
+                          haptic.selection();
+                          setBlackoutMode(true);
+                        }}
+                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase flex items-center justify-center gap-1.5 transition-all ${blackoutMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                      >
+                        <EyeOff className="size-3.5" /> Blackout
+                      </button>
                     </div>
                   </div>
+
+                  {blackoutMode ? (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground">
+                        Nome fictício que vai aparecer no post:
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          value={blackoutUsername}
+                          onChange={(e) => setBlackoutUsername(e.target.value)}
+                          placeholder="ex: fã_secreto482"
+                          className={inputCls + " flex-1"}
+                        />
+                        <button
+                          onClick={() => {
+                            haptic.selection();
+                            gerarNomeBlackout();
+                          }}
+                          className="size-11 shrink-0 rounded-xl bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
+                          title="Gerar nome aleatório"
+                        >
+                          <Shuffle className="size-4" />
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-medium leading-snug">
+                        Ninguém vai ver que é {activeArtist?.nome || "seu artista"} — bom pra criar suspense antes de
+                        um anúncio. Só você (o responsável) consegue editar ou voltar ao Normal depois.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground">Postar como:</p>
+                      <div className={inputCls + " flex items-center gap-2 text-muted-foreground"}>
+                        <div className="size-5 rounded-full bg-white/10 flex items-center justify-center font-black text-[11px] overflow-hidden shrink-0">
+                          {activeArtist?.foto ? (
+                            <img
+                              src={driveImg(activeArtist.foto)}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            activeArtist?.nome[0]
+                          )}
+                        </div>
+                        <span className="truncate">{activeArtist?.nome || "Magnata"}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {selectedType === "Instagram" && (
                     <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1">
@@ -1525,7 +1612,7 @@ function SocialPage() {
 
                   <button
                     onClick={handlePost}
-                    disabled={submitting || !postText.trim() || !activeArtist}
+                    disabled={submitting || !postText.trim() || !activeArtist || (blackoutMode && !blackoutUsername.trim())}
                     className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
                   >
                     {submitting

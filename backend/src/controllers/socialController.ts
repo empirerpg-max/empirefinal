@@ -160,6 +160,7 @@ export async function editSocialPostController(request: Request): Promise<Respon
     texto?: string;
     media_url?: string;
     tgId?: string;
+    autor?: string;
   };
   const { postId, texto, tgId } = body;
   const media_url = body.media_url ?? "";
@@ -177,9 +178,19 @@ export async function editSocialPostController(request: Request): Promise<Respon
     return jsonResponse({ ok: false, error: "Você só pode editar seus próprios posts." }, 403);
   }
 
-  await googleSheetsService.usuarios.updateValues(SHEETS.posts, `E${rowIndex + 1}:F${rowIndex + 1}`, [
-    [texto.trim(), media_url],
-  ]);
+  // autor (coluna D) é opcional — só quando o dono está trocando entre
+  // Blackout Mode (nome fictício) e Normal Mode (nome real do artista) ou
+  // ajustando o nome fictício depois de já ter publicado.
+  const autorTrim = body.autor?.trim();
+  if (autorTrim) {
+    await googleSheetsService.usuarios.updateValues(SHEETS.posts, `D${rowIndex + 1}:F${rowIndex + 1}`, [
+      [autorTrim, texto.trim(), media_url],
+    ]);
+  } else {
+    await googleSheetsService.usuarios.updateValues(SHEETS.posts, `E${rowIndex + 1}:F${rowIndex + 1}`, [
+      [texto.trim(), media_url],
+    ]);
+  }
 
   return jsonResponse({ ok: true });
 }
