@@ -6,4 +6,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/charts-verifica?acao=getTopArtistCover" | tee /tmp/out.json
+        run: curl -sS --max-time 100 "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/charts-verifica" | tee /tmp/out.json

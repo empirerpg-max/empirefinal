@@ -386,8 +386,25 @@ export default {
     }
 
     if (url.pathname === "/api/debug/charts-verifica" && request.method === "GET") {
-      const { getServiceAccountEmail } = await import("../backend/src/google/service-account");
-      return Response.json({ serviceAccountEmail: getServiceAccountEmail() });
+      const { chartsApiController } = await import("../backend/src/controllers/chartsController");
+      const acoes = [
+        "getBannerN1s",
+        "getTopArtistCover",
+        "getReleases",
+        "getFilters&tab=SPOTIFY",
+        "getMonthlyYears",
+        "getRealTime",
+      ];
+      const only = url.searchParams.get("acao");
+      const lista = only ? [only] : acoes;
+      const results: Record<string, unknown> = {};
+      for (const qs of lista) {
+        const start = Date.now();
+        const r = await chartsApiController(new Request(`https://x/api/charts?action=${qs}`));
+        const j = await r.json();
+        results[qs] = { ms: Date.now() - start, data: j };
+      }
+      return Response.json(results);
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
