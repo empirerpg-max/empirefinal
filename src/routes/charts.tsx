@@ -52,6 +52,21 @@ const CATEGORIES: CategoryConfig[] = [
   { id: "sales", label: "Sales", tab: "DIGITAL SALES", icon: DollarSign, color: "text-sky-400" },
 ];
 
+// Bolhas coloridas desfocadas no fundo — mesma linguagem visual do mockup
+// de referência (fundo "Discover"), adaptada pro tema escuro do app: em vez
+// de bolhas pastel sólidas numa base clara, usam glows translúcidos numa
+// base escura. Puramente decorativo, fixo atrás do conteúdo (pointer-events
+// none), então nunca atrapalha scroll/toque.
+function ChartsBubbleBackdrop() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="absolute -top-24 -right-16 size-72 rounded-full bg-primary/25 blur-3xl" />
+      <div className="absolute top-1/3 -left-20 size-64 rounded-full bg-sky-500/15 blur-3xl" />
+      <div className="absolute bottom-0 right-1/4 size-48 rounded-full bg-fuchsia-500/10 blur-3xl" />
+    </div>
+  );
+}
+
 function ChartsPage() {
   const [tab, setTab] = useState<TabId>("home");
   const category = CATEGORIES.find((c) => c.id === tab) || null;
@@ -59,14 +74,17 @@ function ChartsPage() {
   return (
     <div className="fixed inset-0 top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(4rem+env(safe-area-inset-bottom))] bg-background text-foreground overflow-hidden flex flex-col">
       <ChartsTabBar active={tab} onChange={setTab} />
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
-        {tab === "home" ? (
-          <ChartsHome />
-        ) : tab === "live" ? (
-          <ChartsRealTime />
-        ) : category ? (
-          <ChartsCategoryView category={category} />
-        ) : null}
+      <div className="relative flex-1 overflow-y-auto overflow-x-hidden">
+        <ChartsBubbleBackdrop />
+        <div className="relative">
+          {tab === "home" ? (
+            <ChartsHome />
+          ) : tab === "live" ? (
+            <ChartsRealTime />
+          ) : category ? (
+            <ChartsCategoryView category={category} />
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -78,7 +96,7 @@ function ChartsTabBar({ active, onChange }: { active: TabId; onChange: (t: TabId
       <button
         onClick={() => onChange("home")}
         className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold transition ${
-          active === "home" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"
+          active === "home" ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30" : "text-muted-foreground hover:bg-muted"
         }`}
       >
         Início
@@ -86,10 +104,10 @@ function ChartsTabBar({ active, onChange }: { active: TabId; onChange: (t: TabId
       <button
         onClick={() => onChange("live")}
         className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 transition ${
-          active === "live" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"
+          active === "live" ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30" : "text-muted-foreground hover:bg-muted"
         }`}
       >
-        <Radio className="size-3.5 text-red-500 animate-pulse" /> Ao vivo
+        <Radio className={`size-3.5 ${active === "live" ? "text-primary-foreground" : "text-red-500"} animate-pulse`} /> Ao vivo
       </button>
       {CATEGORIES.map((c) => {
         const Icon = c.icon;
@@ -99,7 +117,7 @@ function ChartsTabBar({ active, onChange }: { active: TabId; onChange: (t: TabId
             key={c.id}
             onClick={() => onChange(c.id)}
             className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 transition ${
-              isActive ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"
+              isActive ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30" : "text-muted-foreground hover:bg-muted"
             }`}
           >
             <Icon className={`size-3.5 ${isActive ? "" : c.color}`} /> {c.label}
@@ -153,7 +171,7 @@ function ChartsRealTime() {
 
   return (
     <div className="p-4">
-      <h1 className="text-xl font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+      <h1 className="font-['Fjalla_One'] text-2xl uppercase tracking-tight mb-4 flex items-center gap-2">
         <Radio className="size-5 text-red-500 animate-pulse" /> Ao vivo
       </h1>
       <div className="grid gap-5 sm:grid-cols-3">
@@ -172,9 +190,9 @@ function ChartsRealTime() {
                     const title = it.titulo || it.musica || it.tit || it.t || "—";
                     const val = it.streams || it.semana || it.val || it.s || "-";
                     return (
-                      <div key={i} className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-card/30 p-2">
+                      <div key={i} className="flex items-center gap-2.5 rounded-2xl border border-border/50 bg-card/40 p-2 shadow-sm shadow-black/10">
                         <div className="w-6 shrink-0 text-center text-sm font-black text-muted-foreground">{pos}</div>
-                        <CoverImg src={cover} alt={title} className="size-9 rounded-md object-cover shrink-0" />
+                        <CoverImg src={cover} alt={title} className="size-9 rounded-xl object-cover shrink-0" />
                         <div className="min-w-0 flex-1 text-xs font-semibold truncate">{title}</div>
                         <div className={`shrink-0 text-xs font-bold ${color}`}>{val}</div>
                       </div>
@@ -245,7 +263,7 @@ function ChartsHome() {
   return (
     <div>
       {cover?.name ? (
-        <div className="relative w-full h-[55vh] min-h-[320px] overflow-hidden">
+        <div className="relative w-full h-[55vh] min-h-[320px] overflow-hidden rounded-b-3xl">
           <CoverImg src={cover.img} alt={cover.name} className="absolute inset-0 w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/20" />
           <div className="absolute inset-0 bg-gradient-to-r from-background/80 to-transparent" />
@@ -253,7 +271,7 @@ function ChartsHome() {
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold w-fit mb-2 bg-primary/20 text-primary">
               TOP ARTIST {cover.month ? `— ${cover.month}` : ""}
             </span>
-            <h1 className="text-4xl sm:text-5xl font-black tracking-tight uppercase">{cover.name}</h1>
+            <h1 className="font-['Fjalla_One'] text-4xl sm:text-5xl tracking-tight uppercase">{cover.name}</h1>
             {cover.pts && (
               <div className="mt-2 text-sm font-bold text-muted-foreground">{cover.pts} <span className="text-xs">PTS</span></div>
             )}
@@ -284,11 +302,11 @@ function ChartsHome() {
 
       {n1s.length > 0 && (
         <section className="px-4 pb-6">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 px-2">#1s da semana</h2>
+          <h2 className="font-['Fjalla_One'] text-sm tracking-wider text-muted-foreground mb-3 px-2">#1s DA SEMANA</h2>
           <div className="flex gap-3 overflow-x-auto pb-2 px-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {n1s.map((x, i) => (
-              <div key={i} className="shrink-0 w-56 rounded-xl border border-border/60 bg-card/40 p-3 flex items-center gap-3">
-                <CoverImg src={x.item?.capa} alt={x.item?.tit || ""} className="size-12 rounded-md object-cover shrink-0" />
+              <div key={i} className="shrink-0 w-56 rounded-2xl border border-border/60 bg-card/40 p-3 flex items-center gap-3 shadow-sm shadow-black/10">
+                <CoverImg src={x.item?.capa} alt={x.item?.tit || ""} className="size-12 rounded-xl object-cover shrink-0" />
                 <div className="min-w-0">
                   <div className={`text-[10px] font-bold uppercase tracking-wider ${x.color}`}>{x.label}</div>
                   <div className="text-sm font-semibold truncate">{x.item?.tit || "—"}</div>
@@ -302,11 +320,11 @@ function ChartsHome() {
 
       {releases.length > 0 && (
         <section className="px-4 pb-8">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 px-2">Lançamentos recentes</h2>
+          <h2 className="font-['Fjalla_One'] text-sm tracking-wider text-muted-foreground mb-3 px-2">LANÇAMENTOS RECENTES</h2>
           <div className="flex gap-3 overflow-x-auto pb-2 px-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {releases.map((r, i) => (
-              <div key={i} className="shrink-0 w-44 rounded-xl border border-border/60 bg-card/40 p-3">
-                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary uppercase mb-2">
+              <div key={i} className="shrink-0 w-44 rounded-2xl border border-border/60 bg-card/40 p-3 shadow-sm shadow-black/10">
+                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary uppercase mb-2">
                   {r.tipo || "Single"}
                 </span>
                 <div className="text-sm font-semibold truncate">{r.musica || r.titulo || r.t || "—"}</div>
@@ -461,7 +479,7 @@ function ChartsGlobalView({ category }: { category: CategoryConfig }) {
 
   return (
     <div className="p-4">
-      <h1 className="text-xl font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+      <h1 className="font-['Fjalla_One'] text-2xl uppercase tracking-tight mb-4 flex items-center gap-2">
         <category.icon className={`size-5 ${category.color}`} /> {category.label}
       </h1>
 
@@ -542,12 +560,12 @@ function ChartsGlobalView({ category }: { category: CategoryConfig }) {
             const stColor = st === "↑" ? "text-emerald-400" : st === "↓" ? "text-red-400" : st === "NEW" ? "text-primary" : "text-muted-foreground";
             const stLabel = st === "↑" ? "▲" : st === "↓" ? "▼" : st === "NEW" ? "NEW" : "=";
             return (
-              <div key={i} className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/30 p-2.5">
+              <div key={i} className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/40 p-2.5 shadow-sm shadow-black/10">
                 <div className="w-9 shrink-0 text-center">
                   <div className="text-base font-black">{pos}</div>
                   <div className={`text-[9px] font-bold ${stColor}`}>{stLabel}</div>
                 </div>
-                <CoverImg src={cover} alt={title} className="size-11 rounded-md object-cover shrink-0" />
+                <CoverImg src={cover} alt={title} className="size-11 rounded-xl object-cover shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold truncate">{title}</div>
                   {artist && <div className="text-xs text-muted-foreground truncate">{artist}</div>}
@@ -670,9 +688,9 @@ function ChartsCountryView({ tab }: { tab: string }) {
       ) : (
         <div className="space-y-1.5">
           {filtered.map((r, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/30 p-2.5">
+            <div key={i} className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/40 p-2.5 shadow-sm shadow-black/10">
               <div className="w-9 shrink-0 text-center text-base font-black">{r.pos || "-"}</div>
-              <CoverImg src={r.capa} alt={r.tit || ""} className="size-11 rounded-md object-cover shrink-0" />
+              <CoverImg src={r.capa} alt={r.tit || ""} className="size-11 rounded-xl object-cover shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold truncate">{r.tit || "—"}</div>
                 {r.art && <div className="text-xs text-muted-foreground truncate">{r.art}</div>}
@@ -818,7 +836,7 @@ function MonthlyArtistProfile({
         <CoverImg src={cover} alt={artist} className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
         <div className="absolute bottom-3 left-4 right-4">
-          <h2 className="text-2xl font-black text-white uppercase tracking-tight">{artist}</h2>
+          <h2 className="font-['Fjalla_One'] text-2xl text-white uppercase tracking-tight">{artist}</h2>
           {listeners && <div className={`text-sm font-semibold ${color}`}>{listeners} {listenerLabel}</div>}
           {rank && (
             <span className="inline-block mt-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white/15 text-white">
