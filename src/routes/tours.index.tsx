@@ -303,34 +303,42 @@ function MissoesCarousel({ missoes }: { missoes: Missao[] }) {
               key={`${m.idUnico}-${m.showNumero}`}
               to="/tours/$nome"
               params={{ nome: m.artista }}
-              className={`shrink-0 w-[188px] rounded-2xl border p-3.5 transition ${
-                m.hoje
-                  ? "bg-amber-500/10 border-amber-500/40"
-                  : "bg-card border-white/5 hover:border-white/15"
+              className={`group shrink-0 w-[188px] rounded-3xl border overflow-hidden shadow-xl shadow-black/10 transition hover:scale-[1.02] active:scale-[0.97] ${
+                m.hoje ? "bg-amber-500/10 border-amber-500/40" : "bg-card border-white/5 hover:border-white/15"
               }`}
             >
-              <span
-                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wide mb-2.5 ${
-                  m.hoje ? "bg-amber-500 text-black" : "bg-white/5 text-muted-foreground border border-white/10"
+              {/* "Lado da imagem" simplificado — sem capa aqui, então usa uma
+                  faixa de gradiente colorida como cabeçalho pra carregar o
+                  mesmo peso visual do card de turnê. */}
+              <div
+                className={`h-2 w-full ${
+                  m.hoje ? "bg-gradient-to-r from-amber-400 to-amber-600" : "bg-gradient-to-r from-primary to-fuchsia-600"
                 }`}
-              >
-                {m.hoje ? "● Hoje" : `Em ${m.diasRestantes} dia${m.diasRestantes === 1 ? "" : "s"}`}
-              </span>
-              <p className="text-[10px] font-black uppercase text-primary/80 tracking-wide mb-0.5">
-                {m.artista}
-              </p>
-              <p className="font-black text-sm leading-tight mb-0.5 truncate">{m.local}</p>
-              <p className="text-[10px] text-muted-foreground font-medium mb-2.5">
-                {m.cidade} · {m.data}
-              </p>
-              <div className="pt-2.5 border-t border-dashed border-white/10">
-                <p className="flex items-center gap-1.5 text-[9.5px] font-black uppercase text-emerald-400">
-                  <Flame className="size-3" />
-                  Qualquer ação = sold out
+              />
+              <div className="p-3.5">
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wide mb-2.5 ${
+                    m.hoje ? "bg-amber-500 text-black" : "bg-white/5 text-muted-foreground border border-white/10"
+                  }`}
+                >
+                  {m.hoje ? "● Hoje" : `Em ${m.diasRestantes} dia${m.diasRestantes === 1 ? "" : "s"}`}
+                </span>
+                <p className="text-[10px] font-black uppercase text-primary/80 tracking-wide mb-0.5">
+                  {m.artista}
                 </p>
-                <p className="text-[9px] text-muted-foreground font-medium mt-1">
-                  Escolha entre 8 tipos — foto, entrevista, live e mais.
+                <p className="font-black text-sm leading-tight mb-0.5 truncate">{m.local}</p>
+                <p className="text-[10px] text-muted-foreground font-medium mb-2.5">
+                  {m.cidade} · {m.data}
                 </p>
+                <div className="rounded-xl bg-white/5 border border-white/5 px-2.5 py-2">
+                  <p className="flex items-center gap-1.5 text-[9.5px] font-black uppercase text-emerald-400">
+                    <Flame className="size-3" />
+                    Qualquer ação = sold out
+                  </p>
+                  <p className="text-[9px] text-muted-foreground font-medium mt-1">
+                    Escolha entre 8 tipos — foto, entrevista, live e mais.
+                  </p>
+                </div>
               </div>
             </Link>
           ))}
@@ -364,8 +372,8 @@ function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
               params={{ nome: item.artista }}
               className="block group"
             >
-              <div className="rounded-[1.75rem] bg-card border border-white/5 overflow-hidden transition hover:border-white/15">
-                {item.fotoUrl && (
+              <div className="rounded-3xl bg-card border border-white/5 overflow-hidden shadow-xl shadow-black/10 transition hover:scale-[1.01] active:scale-[0.98] hover:border-white/15">
+                {item.fotoUrl ? (
                   <div className="relative">
                     <img
                       src={driveImg(item.fotoUrl, 800)}
@@ -373,12 +381,13 @@ function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
                       className="w-full aspect-[16/8.5] object-cover"
                       loading="lazy"
                     />
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-transparent to-fuchsia-600/15" />
                     {item.soldOut && (
                       <span className="absolute top-3 right-3 px-2 py-1 rounded-full bg-amber-500 text-black text-[9.5px] font-black uppercase">
                         Sold Out
                       </span>
                     )}
-                    <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
+                    <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 via-black/40 to-transparent">
                       <p className="text-[10px] font-black uppercase text-primary tracking-wide">
                         {item.artista}
                       </p>
@@ -387,6 +396,8 @@ function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
                       </p>
                     </div>
                   </div>
+                ) : (
+                  <div className="h-2 w-full bg-gradient-to-r from-primary to-fuchsia-600" />
                 )}
                 <div className="p-4">
                   {!item.fotoUrl && (
