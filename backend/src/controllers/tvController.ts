@@ -1,6 +1,13 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 
-const PROGRAMACAO_SHEET = "Programacao_RPG";
+// "Programacao_RPG" é uma aba antiga/duplicada que ficou sem manutenção —
+// as capas lá estão todas com o link quebrado (uc?export=view&id= sem
+// nenhum ID depois do "="). A aba realmente mantida hoje, com capas válidas,
+// é "Agenda_TV" (confirmado pelo usuário) — layout diferente, sem coluna de
+// duração (Duracao_Seg simplesmente não existe nela, por isso fica sempre 0
+// aqui; nada no app hoje depende desse valor pra funcionar de verdade, só
+// afeta o cálculo interno de "ao vivo agora"/progresso assistido).
+const PROGRAMACAO_SHEET = "Agenda_TV";
 const PRESENCA_SHEET = "Presenca_TV";
 
 interface ProgramaRow {
@@ -34,7 +41,7 @@ function parseDataHorario(data: string, horario: string): number | null {
 async function readProgramas(): Promise<ProgramaRow[]> {
   const rows = await googleSheetsService.agendaTV.readValues(PROGRAMACAO_SHEET).catch(() => []);
   if (!rows || rows.length < 2) return [];
-  // Ordem, Drive_ID, Data, Horario, Duracao_Seg, Programa, Tipo, Material, Buff, Status, Topico_ID, Topico_URL, Capa_URL, [...TIPO_EVENTO em qualquer coluna extra]
+  // Agenda_TV: Programa, Tipo, Material, Buff, Data, Horario, Capa_URL, Status, Topico_ID, Topico_URL, TIPO_EVENTO
   const headers = rows[0].map((h) => normalizeComparison(h));
   const tipoEventoCol = headers.findIndex((h) => h === "tipo_evento");
 
@@ -42,16 +49,16 @@ async function readProgramas(): Promise<ProgramaRow[]> {
     .slice(1)
     .map((r, i) => ({
       rowIndex: i + 2,
-      programa: normalizeText(r[5]),
-      tipo: normalizeText(r[6]),
-      material: normalizeText(r[7]),
-      buff: normalizeText(r[8]),
-      status: normalizeText(r[9]),
-      data: normalizeText(r[2]),
-      horario: normalizeText(r[3]),
-      duracaoSeg: Number(r[4] || 0),
-      topicoUrl: normalizeText(r[11]),
-      capaUrl: normalizeText(r[12]),
+      programa: normalizeText(r[0]),
+      tipo: normalizeText(r[1]),
+      material: normalizeText(r[2]),
+      buff: normalizeText(r[3]),
+      status: normalizeText(r[7]),
+      data: normalizeText(r[4]),
+      horario: normalizeText(r[5]),
+      duracaoSeg: 0,
+      topicoUrl: normalizeText(r[9]),
+      capaUrl: normalizeText(r[6]),
       tipoEvento: tipoEventoCol >= 0 ? normalizeText(r[tipoEventoCol]) : "",
     }))
     .filter((r) => r.programa)
