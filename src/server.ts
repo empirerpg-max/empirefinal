@@ -385,29 +385,7 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/prestigio-turnes" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const tours = await googleSheetsService.usuarios
-        .readValues("CONTROLE_TOURS")
-        .catch((e) => [[`erro: ${e.message}`]]);
-      const comentarios = await googleSheetsService.usuarios
-        .readValues("Turnes_Comentarios")
-        .catch((e) => [[`erro: ${e.message}`]]);
-      const acoesRows = tours.slice(1).filter((r) => String(r[8] || "").includes('"acoes":[{'));
-      return Response.json({
-        totalTours: tours.length - 1,
-        toursComAcoes: acoesRows.map((r) => ({
-          idUsuario: r[0],
-          artista: r[1],
-          nome: r[3],
-          agendaComAcoes: r[8],
-        })),
-        comentariosHeader: comentarios[0],
-        comentariosAmostra: comentarios.slice(1, 10),
-      });
-    }
-
-    // Proxy de vídeos grandes do Telegram (Music Videos).
+// Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
       return handleTelegramVideoProxy(
