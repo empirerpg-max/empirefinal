@@ -385,6 +385,43 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/charts-mapa" && request.method === "GET") {
+      const { listSheetTabs } = await import("../backend/src/services/googleSheetsService");
+      const CHARTS_API =
+        "https://script.google.com/macros/s/AKfycbyDQK3x0fU5V6qnFgtRyf8IPTNPDm2eeQsvZRwmHnCb_sCKLyc8wuwhuNZxEWjGEiYe/exec";
+      const actions = [
+        "getBannerN1s",
+        "getTopArtistCover",
+        "getReleases",
+        "getFilters&tab=SPOTIFY",
+        "getMonthlyYears",
+      ];
+      const t0 = Date.now();
+      const results: Record<string, unknown> = {};
+      for (const a of actions) {
+        const start = Date.now();
+        try {
+          const r = await fetch(`${CHARTS_API}?action=${a}`, { redirect: "follow" });
+          const j = await r.json();
+          results[a] = { ms: Date.now() - start, data: j };
+        } catch (e: any) {
+          results[a] = { ms: Date.now() - start, error: e.message };
+        }
+      }
+      const [principalTabs, registrosTabs, edicaoTabs] = await Promise.all([
+        listSheetTabs("principal").catch((e) => [{ title: `erro: ${e.message}` }]),
+        listSheetTabs("registrosCharts").catch((e) => [{ title: `erro: ${e.message}` }]),
+        listSheetTabs("edicaoCharts").catch((e) => [{ title: `erro: ${e.message}` }]),
+      ]);
+      return Response.json({
+        totalMs: Date.now() - t0,
+        results,
+        principalTabs: principalTabs.map((t: any) => t.title),
+        registrosTabs: registrosTabs.map((t: any) => t.title),
+        edicaoTabs: edicaoTabs.map((t: any) => t.title),
+      });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
