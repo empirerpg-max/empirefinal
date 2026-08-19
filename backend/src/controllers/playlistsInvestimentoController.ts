@@ -288,3 +288,42 @@ export async function investirPlaylistController(request: Request): Promise<Resp
 
   return jsonResponse({ ok: true, investimento: rowToInvestimento(rowAtualizada, linha) });
 }
+
+/**
+ * POST /api/ponto/playlists/limpar
+ * Apaga as 3 plataformas escolhidas numa linha (Spotify/Apple/YouTube),
+ * mantendo a reserva artista+música — pra quem se arrependeu do
+ * investimento e quer escolher outras playlists do zero.
+ */
+export async function limparInvestimentoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    telegramId?: string;
+    linha?: number;
+  };
+  const { telegramId, linha } = body;
+
+  if (!telegramId || !linha || linha < DATA_START_ROW) {
+    return jsonResponse({ ok: false, error: "Parâmetros inválidos." }, 400);
+  }
+
+  const artistNames = await getArtistNamesForOwner(telegramId);
+  const normArtistNames = new Set(artistNames.map(normalizeComparison));
+
+  const rowCells = await googleSheetsService.registrosCharts.readValues(SHEET, `A${linha}:O${linha}`);
+  const row = rowCells?.[0] || [];
+  const artistaDaLinha = normalizeText(row[COL.ARTISTA]);
+  if (!artistaDaLinha || !normArtistNames.has(normalizeComparison(artistaDaLinha))) {
+    return jsonResponse({ ok: false, error: "Essa linha não pertence a um artista seu." }, 403);
+  }
+
+  await Promise.all(
+    [COL.SPOTIFY, COL.APPLE, COL.YOUTUBE].map((col) =>
+      googleSheetsService.registrosCharts.updateValues(SHEET, `${colIndexToA1Letter(col)}${linha}`, [[""]]),
+    ),
+  );
+
+  const confirmacao = await googleSheetsService.registrosCharts.readValues(SHEET, `A${linha}:O${linha}`);
+  const rowAtualizada = confirmacao?.[0] || [];
+
+  return jsonResponse({ ok: true, investimento: rowToInvestimento(rowAtualizada, linha) });
+}

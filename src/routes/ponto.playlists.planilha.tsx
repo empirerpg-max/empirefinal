@@ -10,6 +10,7 @@ import {
   Music2,
   Plus,
   Search,
+  RotateCcw,
 } from "lucide-react";
 import { api, driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -203,6 +204,29 @@ function PontoPlaylistsPlanilha() {
     } else {
       haptic.error();
       setMsg({ key, text: (r as any)?.error || "Erro ao investir", ok: false });
+    }
+  }
+
+  async function limparInvestimentos(linha: LinhaInvestimento) {
+    const key = `${linha.linha}-limpar`;
+    setSaving(key);
+    setMsg(null);
+    const r = await api.limparInvestimento(tgId, linha.linha);
+    setSaving(null);
+    if ((r as any)?.ok && (r as any).investimento) {
+      haptic.success();
+      const atualizada: LinhaInvestimento = (r as any).investimento;
+      setGrupos((prev) =>
+        prev.map((g) =>
+          g.artista !== artistaAtivo
+            ? g
+            : { ...g, linhas: g.linhas.map((l) => (l.linha === linha.linha ? atualizada : l)) },
+        ),
+      );
+      setMsg({ key, text: "Limpo! Escolha de novo.", ok: true });
+    } else {
+      haptic.error();
+      setMsg({ key, text: (r as any)?.error || "Erro ao limpar", ok: false });
     }
   }
 
@@ -483,6 +507,25 @@ function PontoPlaylistsPlanilha() {
                         {(grupoAtivo?.saldo ?? 0) < 0 && (
                           <p className="text-[10px] text-red-400 flex items-center gap-1 mt-1">
                             <AlertTriangle className="w-3 h-3" /> Saldo estourado — pode continuar, mas fica no vermelho.
+                          </p>
+                        )}
+                        {plataformasPreenchidas > 0 && (
+                          <button
+                            onClick={() => limparInvestimentos(l)}
+                            disabled={saving === `${l.linha}-limpar`}
+                            className="self-start flex items-center gap-1.5 text-xs font-bold text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 mt-1"
+                          >
+                            {saving === `${l.linha}-limpar` ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            )}
+                            Limpar tudo e recomeçar
+                          </button>
+                        )}
+                        {msg?.key === `${l.linha}-limpar` && (
+                          <p className={`text-[10px] font-semibold ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>
+                            {msg.text}
                           </p>
                         )}
                       </div>

@@ -1,6 +1,53 @@
-import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
+import {
+  googleSheetsService,
+  normalizeComparison,
+  normalizeHeader,
+  normalizeText,
+  dedupeHeaders,
+} from "../services/googleSheetsService";
 import { registrarAuditLog } from "./registroLogController";
 import { somarPrestigio } from "../services/prestigioService";
+
+const USUARIOS_SHEET = "Usuários";
+
+/**
+ * Resolve o nome "oficial" do jogador — coluna A ("Nome") da aba Usuários,
+ * o nome padrão de registro — a partir do ID (jogadorId) ou, se não achar,
+ * do login (Usuário, coluna C). Usado só pra gravar comentários/audit log
+ * com o nome correto; nunca falha o comentário se a busca der errado, cai
+ * pro nome que o cliente mandou.
+ */
+async function resolveNomeOficial(jogadorId: string, fallback: string): Promise<string> {
+  try {
+    const rows = await googleSheetsService.usuarios.readValues(USUARIOS_SHEET);
+    if (!rows || rows.length < 2) return fallback;
+    const headers = dedupeHeaders(
+      USUARIOS_SHEET,
+      rows[0].map((h, i) => normalizeHeader(h) || `coluna_${i + 1}`),
+    );
+    const nomeCol = headers.indexOf("nome");
+    const idCol = headers.indexOf("id");
+    const usuarioCol = headers.indexOf("usuario");
+    if (nomeCol === -1) return fallback;
+
+    const normId = normalizeComparison(jogadorId);
+    const normFallback = normalizeComparison(fallback);
+    const match = rows.slice(1).find((r) => {
+      const matchId = !!normId && idCol !== -1 && normalizeComparison(r[idCol]) === normId;
+      const matchUsuario =
+        !matchId &&
+        !!normFallback &&
+        usuarioCol !== -1 &&
+        normalizeComparison(r[usuarioCol]) === normFallback;
+      return matchId || matchUsuario;
+    });
+    const nome = match ? normalizeText(match[nomeCol]) : "";
+    return nome || fallback;
+  } catch (err) {
+    console.warn("[forumController] Falha ao resolver nome oficial:", err);
+    return fallback;
+  }
+}
 
 export interface CreateCommentBody {
   tipoMedia: "musica" | "music-video" | "video" | "album";
@@ -81,10 +128,13 @@ export async function createCommentController(request: Request): Promise<Respons
     }
 
     const score = rollRandomScore(intervalo);
-    const playerClean = nomeJogador.trim();
     const titleClean = tituloMedia.trim();
     const topicIdClean = (topicId || "").trim();
     const jogadorIdClean = (jogadorId || "").trim();
+    // Comentário/audit log sempre gravam o nome "oficial" (coluna A da aba
+    // Usuários), nunca o nome de login (coluna C) — mesmo que o cliente
+    // mande outro nome, ele só serve de fallback caso a busca falhe.
+    const playerClean = await resolveNomeOficial(jogadorIdClean, nomeJogador.trim());
 
     // Configuração de abas e colunas conforme tipo da mídia
     let targetSheet = "Musicas";

@@ -58,11 +58,13 @@ import {
   getPontosController,
   salvarPontoCelulaController,
   distribuirPontosAleatorioController,
+  limparPontoCelulaController,
 } from "../controllers/pontoController";
 import {
   getInvestimentosController,
   iniciarInvestimentoController,
   investirPlaylistController,
+  limparInvestimentoController,
 } from "../controllers/playlistsInvestimentoController";
 import { listTvChatGifsController } from "../controllers/tvChatGifsController";
 import {
@@ -187,9 +189,11 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/ponto",
     "/api/ponto/salvar",
     "/api/ponto/distribuir-aleatorio",
+    "/api/ponto/limpar",
     "/api/ponto/playlists",
     "/api/ponto/playlists/iniciar",
     "/api/ponto/playlists/investir",
+    "/api/ponto/playlists/limpar",
     "/api/social/posts/editar",
     "/api/social/perfis",
     "/api/social/news",
@@ -524,6 +528,22 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await investirPlaylistController(request);
+  } else if (url.pathname === "/api/ponto/limpar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/ponto/limpar." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await limparPontoCelulaController(request);
+  } else if (url.pathname === "/api/ponto/playlists/limpar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/ponto/playlists/limpar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await limparInvestimentoController(request);
   } else if (url.pathname === "/api/empire-tv/gifs") {
     response = await listTvChatGifsController();
   } else if (url.pathname === "/api/artistas/vincular") {

@@ -271,3 +271,44 @@ export async function distribuirPontosAleatorioController(request: Request): Pro
 
   return jsonResponse({ ok: true, distribuidas });
 }
+
+/**
+ * POST /api/ponto/limpar
+ * Apaga as 6 categorias de uma música (volta pra vazio) — pra quem se
+ * arrependeu da escolha e quer recomeçar do zero, seja pra escolher
+ * manualmente de novo ou pra rodar "distribuir aleatório" de novo nela
+ * (que só preenche linhas totalmente vazias).
+ */
+export async function limparPontoCelulaController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    telegramId?: string;
+    linha?: number;
+  };
+  const { telegramId, linha } = body;
+
+  if (!telegramId || !linha || linha < DATA_START_ROW) {
+    return jsonResponse({ ok: false, error: "Parâmetros inválidos." }, 400);
+  }
+
+  const artistNames = await getArtistNamesForOwner(telegramId);
+  if (artistNames.length === 0) {
+    return jsonResponse({ ok: false, error: "Nenhum artista vinculado a esse jogador." }, 403);
+  }
+
+  const rowCells = await googleSheetsService.registrosCharts.readValues(SHEET, `A${linha}:M${linha}`);
+  const row = rowCells?.[0] || [];
+  const artistaDaLinha = normalizeText(row[2]);
+  const normArtistNames = new Set(artistNames.map(normalizeComparison));
+  if (!artistaDaLinha || !normArtistNames.has(normalizeComparison(artistaDaLinha))) {
+    return jsonResponse({ ok: false, error: "Essa música não pertence a um artista seu." }, 403);
+  }
+
+  const colunas = Object.values(CATEGORY_COLUMNS).sort((a, b) => a - b);
+  const primeira = colIndexToA1Letter(colunas[0]);
+  const ultima = colIndexToA1Letter(colunas[colunas.length - 1]);
+  await googleSheetsService.registrosCharts.updateValues(SHEET, `${primeira}${linha}:${ultima}${linha}`, [
+    colunas.map(() => ""),
+  ]);
+
+  return jsonResponse({ ok: true });
+}
