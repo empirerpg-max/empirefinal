@@ -1,4 +1,4 @@
-import { googleSheetsService } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
 import { registrarAuditLog } from "./registroLogController";
 import { somarPrestigio } from "../services/prestigioService";
@@ -434,20 +434,27 @@ export async function getMusicasEmChartController(): Promise<Response> {
 
 // Vincula uma faixa já lançada (selecionada nos charts) ao álbum: grava o
 // nome do álbum e a ordem na aba Musicas (colunas K e U, buscando a música
-// pelo título exato na coluna H) e o nome do álbum na aba "EDIÇÃO CHARTS" da
+// pelo título na coluna H) e o nome do álbum na aba "EDIÇÃO CHARTS" da
 // planilha edicaoCharts (coluna E, buscando pela coluna B) — mapeamento
-// confirmado via dump ao vivo, não adivinhado.
+// confirmado via dump ao vivo, não adivinhado. Usa normalizeComparison (tira
+// acento/caixa) em vez de comparação exata, pra não falhar por diferença
+// boba de formatação entre o título mostrado na busca e o gravado na
+// planilha. Devolve o que NÃO foi encontrado em cada aba, pra quem chamou
+// poder avisar o jogador em vez de deixar a faixa "meio vinculada" sem
+// ninguém perceber.
 async function vincularFaixaExistenteAoAlbum(
   musicaSelecionada: string,
   albumFullTitle: string,
   ordem: number,
-) {
-  const alvoNorm = musicaSelecionada.trim().toLowerCase();
+): Promise<{ musicasOk: boolean; edicaoChartsOk: boolean }> {
+  const alvoNorm = normalizeComparison(musicaSelecionada);
+  let musicasOk = false;
+  let edicaoChartsOk = false;
 
   try {
     const musicasMatches = await googleSheetsService.principal.findRows(
       "Musicas",
-      (row) => (row[7] || "").trim().toLowerCase() === alvoNorm,
+      (row) => normalizeComparison(row[7] || "") === alvoNorm,
     );
     for (const { rowIndex } of musicasMatches) {
       await googleSheetsService.principal.updateValues("Musicas", `K${rowIndex}`, [
@@ -457,7 +464,8 @@ async function vincularFaixaExistenteAoAlbum(
         [String(ordem)],
       ]);
     }
-    if (musicasMatches.length === 0) {
+    musicasOk = musicasMatches.length > 0;
+    if (!musicasOk) {
       console.warn(`[vincularFaixaExistenteAoAlbum] Música não encontrada em Musicas: ${musicaSelecionada}`);
     }
   } catch (err) {
@@ -467,19 +475,22 @@ async function vincularFaixaExistenteAoAlbum(
   try {
     const edicaoMatches = await googleSheetsService.edicaoCharts.findRows(
       "EDIÇÃO CHARTS",
-      (row) => (row[1] || "").trim().toLowerCase() === alvoNorm,
+      (row) => normalizeComparison(row[1] || "") === alvoNorm,
     );
     for (const { rowIndex } of edicaoMatches) {
       await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `E${rowIndex}`, [
         [albumFullTitle],
       ]);
     }
-    if (edicaoMatches.length === 0) {
+    edicaoChartsOk = edicaoMatches.length > 0;
+    if (!edicaoChartsOk) {
       console.warn(`[vincularFaixaExistenteAoAlbum] Música não encontrada em EDIÇÃO CHARTS: ${musicaSelecionada}`);
     }
   } catch (err) {
     console.warn("[vincularFaixaExistenteAoAlbum] Erro ao atualizar EDIÇÃO CHARTS:", err);
   }
+
+  return { musicasOk, edicaoChartsOk };
 }
 
 // Processa a lista de faixas de um álbum (criação ou substituição): faixa
@@ -855,15 +866,22 @@ export async function substituirAlbumController(request: Request): Promise<Respo
       }
     }
 
-    try {
-      await registrarAuditLog({
-        nomeJogador,
-        titulo: albumFullTitle,
-        tipo: "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)",
-        isAlbum: true,
-      });
-    } catch (err) {
-      console.warn("[substituirAlbumController] Erro ao gravar Audit Log:", err);
+    // Só grava em REGISTRO quando pelo menos uma faixa INÉDITA foi
+    // publicada — isso sim é um lançamento de conteúdo novo. Editar o
+    // álbum (trocar capa/encarte) ou só vincular uma faixa que já existia
+    // no chart não é lançamento nenhum, e não deve gerar registro.
+    const temFaixaInedita = novasFaixas.some((f) => f.inedita);
+    if (temFaixaInedita) {
+      try {
+        await registrarAuditLog({
+          nomeJogador,
+          titulo: albumFullTitle,
+          tipo: "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)",
+          isAlbum: true,
+        });
+      } catch (err) {
+        console.warn("[substituirAlbumController] Erro ao gravar Audit Log:", err);
+      }
     }
 
     return new Response(
