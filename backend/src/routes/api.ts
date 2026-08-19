@@ -4,6 +4,7 @@ import {
   getTopPlaylistsController,
 } from "../controllers/catalogController";
 import { getUserMeController } from "../controllers/userController";
+import { chartsApiController } from "../controllers/chartsController";
 import { getNivelController } from "../controllers/nivelController";
 import {
   createCommentController,
@@ -141,6 +142,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     url.pathname === "/api/albuns-antigos" || url.pathname.startsWith("/api/albuns-antigos/");
 
   const supportedPaths = new Set([
+    "/api/charts",
     "/api/auth/login",
     "/api/auth/heartbeat",
     "/api/auth/perfil",
@@ -623,6 +625,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await loginController(request);
+  } else if (url.pathname === "/api/charts") {
+    response = await chartsApiController(request);
   } else if (url.pathname === "/api/auth/heartbeat") {
     if (request.method !== "POST") {
       return new Response(
