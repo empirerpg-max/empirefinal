@@ -389,6 +389,23 @@ export default {
 
 
 
+    if (url.pathname === "/api/debug/tv-imagens" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      const [programacao, usuarios, presenca] = await Promise.all([
+        googleSheetsService.agendaTV.readValues("Programacao_RPG"),
+        googleSheetsService.usuarios.readValues("Usuários"),
+        googleSheetsService.agendaTV.readValues("Presenca_TV").catch(() => []),
+      ]);
+      return Response.json({
+        programacaoHeader: programacao[0],
+        programacaoAmostra: programacao.slice(1, 8).map((r) => ({ programa: r[5], capaUrl: r[12] })),
+        usuariosHeader: usuarios[0],
+        usuariosFotoAmostra: usuarios.slice(1, 8).map((r) => ({ nome: r[0], fotoPerfil: r[5] })),
+        presencaHeader: presenca[0],
+        presencaAmostra: presenca.slice(1, 8),
+      });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
