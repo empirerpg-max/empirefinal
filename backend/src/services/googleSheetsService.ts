@@ -11,6 +11,17 @@ export const SPREADSHEETS = {
   edicaoCharts: "1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8",
   usuarios: "1lFw9l76tYZYCDXhZsoiftIEzCvKcjCrI_oBpvUdwAlo",
   agendaTV: "1onh3JyLiMWozurKqg10O2_0gNm_pia_Cm9vemiIStwk",
+  // Charts — antes servidas por um Apps Script separado (SpreadsheetApp,
+  // sem cache real além de 10min no CacheService), migradas pra ler direto
+  // via Sheets API igual o resto do app. 7 planilhas próprias, nada a ver
+  // com registrosCharts/edicaoCharts.
+  chartsBase: "1ThRhljmAS41JmVBPkPtYwe0JQHRx9Pih2PQAPT2ebyA",
+  chartsCountries: "1c-6Xr1zYSagAF56jPM7d952cWZzfLtbFDjthArWkrLg",
+  chartsAlbums: "1wUoCpi7_VSbXBhu7XGsqs2ZAJBwcPrx_TFmTS0OMyhY",
+  chartsMonthly: "1D48KkHvFNLdLaEt9TooLch1RurTBWQ6D5P9kza9XCyU",
+  chartsRealtime: "1w-3ptf4uZ2lggNCW9PvZmKRZ59r85fkqObleuzTL3U0",
+  chartsTop50: "1TMT7apUIA9Dt_yyVzIkXhx5iwQzNH9mjy1OGX8Ojjvk",
+  chartsReleases: "1nQKujAE2C23s9gt4zV9eNU1xuAvAHzPXgBUoFIrIY-0",
 } as const;
 
 export type SpreadsheetKey = keyof typeof SPREADSHEETS;
@@ -468,5 +479,25 @@ export const googleSheetsService = {
       updateValues("agendaTV", sheetName, range, values),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("agendaTV", sheetName, values, range),
+  },
+  // Charts — só leitura, planilhas editoriais mantidas fora do app.
+  chartsBase: { readValues: (sheetName: string, range?: string) => readValues("chartsBase", sheetName, range) },
+  chartsCountries: {
+    readValues: (sheetName: string, range?: string) => readValues("chartsCountries", sheetName, range),
+  },
+  chartsAlbums: {
+    readValues: (sheetName: string, range?: string) => readValues("chartsAlbums", sheetName, range),
+  },
+  chartsMonthly: {
+    readValues: (sheetName: string, range?: string) => readValues("chartsMonthly", sheetName, range),
+  },
+  chartsRealtime: {
+    readValues: (sheetName: string, range?: string) => readValues("chartsRealtime", sheetName, range),
+  },
+  chartsTop50: {
+    readValues: (sheetName: string, range?: string) => readValues("chartsTop50", sheetName, range),
+  },
+  chartsReleases: {
+    readValues: (sheetName: string, range?: string) => readValues("chartsReleases", sheetName, range),
   },
 };

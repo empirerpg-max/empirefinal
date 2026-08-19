@@ -385,41 +385,25 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/charts-mapa" && request.method === "GET") {
-      const { listSheetTabs } = await import("../backend/src/services/googleSheetsService");
-      const CHARTS_API =
-        "https://script.google.com/macros/s/AKfycbyDQK3x0fU5V6qnFgtRyf8IPTNPDm2eeQsvZRwmHnCb_sCKLyc8wuwhuNZxEWjGEiYe/exec";
+    if (url.pathname === "/api/debug/charts-verifica" && request.method === "GET") {
+      const { chartsApiController } = await import("../backend/src/controllers/chartsController");
       const actions = [
-        "getBannerN1s",
-        "getTopArtistCover",
-        "getReleases",
-        "getFilters&tab=SPOTIFY",
-        "getMonthlyYears",
+        "action=getBannerN1s",
+        "action=getTopArtistCover",
+        "action=getReleases",
+        "action=getFilters&tab=SPOTIFY",
+        "action=getMonthlyYears",
+        "action=getRealTime",
       ];
       const t0 = Date.now();
       const results: Record<string, unknown> = {};
-      for (const a of actions) {
+      for (const qs of actions) {
         const start = Date.now();
-        try {
-          const r = await fetch(`${CHARTS_API}?action=${a}`, { redirect: "follow" });
-          const j = await r.json();
-          results[a] = { ms: Date.now() - start, data: j };
-        } catch (e: any) {
-          results[a] = { ms: Date.now() - start, error: e.message };
-        }
+        const r = await chartsApiController(new Request(`https://x/api/charts?${qs}`));
+        const j = await r.json();
+        results[qs] = { ms: Date.now() - start, data: j };
       }
-      const [principalTabs, registrosTabs, edicaoTabs] = await Promise.all([
-        listSheetTabs("principal").catch((e) => [{ title: `erro: ${e.message}` }]),
-        listSheetTabs("registrosCharts").catch((e) => [{ title: `erro: ${e.message}` }]),
-        listSheetTabs("edicaoCharts").catch((e) => [{ title: `erro: ${e.message}` }]),
-      ]);
-      return Response.json({
-        totalMs: Date.now() - t0,
-        results,
-        principalTabs: principalTabs.map((t: any) => t.title),
-        registrosTabs: registrosTabs.map((t: any) => t.title),
-        edicaoTabs: edicaoTabs.map((t: any) => t.title),
-      });
+      return Response.json({ totalMs: Date.now() - t0, results });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).

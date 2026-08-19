@@ -1,8 +1,10 @@
-// Empire Charts — mesma API (Google Apps Script) que o app externo
-// (public/charts-app/) já usava, só que agora chamada direto das telas
-// React do PWA, sem passar por um iframe pra um site separado.
-const CHARTS_API =
-  "https://script.google.com/macros/s/AKfycbyDQK3x0fU5V6qnFgtRyf8IPTNPDm2eeQsvZRwmHnCb_sCKLyc8wuwhuNZxEWjGEiYe/exec";
+// Empire Charts — antes chamava um Google Apps Script direto do navegador
+// (SpreadsheetApp.getDataRange() escaneando a aba inteira a cada request,
+// minutos de latência, sem CDN). Migrado pro próprio Worker
+// (backend/src/controllers/chartsController.ts), que lê as mesmas 7
+// planilhas via Sheets API — mesmíssimo contrato de query params
+// (?action=...), só a base da URL mudou.
+const CHARTS_API = "/api/charts";
 
 // Cache em memória por URL — evita refetch repetido ao trocar de aba e
 // voltar (mesmo comportamento do app antigo).
