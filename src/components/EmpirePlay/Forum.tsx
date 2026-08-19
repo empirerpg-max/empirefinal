@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+import { useBackClose } from "@/hooks/use-back-close";
 import { CommentModal } from "./CommentModal";
 import { ScoreBadge } from "./ScoreBadge";
 import { ReactionBar } from "./ReactionBar";
@@ -174,6 +175,11 @@ export const Forum: React.FC<ForumProps> = ({
   useEffect(() => {
     setCoverExpanded(false);
   }, [selectedTopic?.id]);
+
+  // "Voltar" (botão físico Android, swipe do iOS ou o BackButton do app)
+  // fecha o tópico aberto e volta pra lista do fórum, em vez de sair da
+  // rota do fórum inteira — ver src/hooks/use-back-close.ts.
+  useBackClose(!!selectedTopic, () => setSelectedTopic(null));
 
   const handleVideoPlay = (topic: ForumTopicItem) => {
     // Drive e Telegram nunca são tocáveis pelo link/id cru — precisam passar

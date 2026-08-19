@@ -4,6 +4,7 @@ import { useTelegramUser } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { EmojiPicker } from "./EmojiPicker";
 import { RichTextToolbar } from "./RichTextToolbar";
+import { useBackClose } from "@/hooks/use-back-close";
 
 // Mesma paleta de destaque do EmojiPicker — atalho rápido pra reagir sem
 // precisar abrir o seletor completo.
@@ -50,6 +51,9 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       if (nomeLogin) setNomeJogador(nomeLogin);
     }
   }, [isOpen, telegramUser, nomeJogador]);
+
+  // "Voltar" fecha o modal em vez de sair da tela por trás dele.
+  useBackClose(isOpen, onClose);
 
   if (!isOpen) return null;
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { driveImg } from "@/lib/api";
+import { useBackClose } from "@/hooks/use-back-close";
 import {
   X,
   Pencil,
@@ -206,6 +207,9 @@ export const EditModal: React.FC<EditModalProps> = ({
       .catch(() => {})
       .finally(() => setLoadingFaixas(false));
   };
+
+  // "Voltar" fecha o modal em vez de sair da tela por trás dele.
+  useBackClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
