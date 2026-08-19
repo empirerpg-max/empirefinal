@@ -969,11 +969,17 @@ export const api = {
       // Silencioso — não é crítico pro app abrir mesmo se isso falhar.
     }
   },
-  async editarPostSocial(postId: string, texto: string, mediaUrl: string, tgId: string): Promise<CommonResponse> {
+  async editarPostSocial(
+    postId: string,
+    texto: string,
+    mediaUrl: string,
+    tgId: string,
+    autor?: string,
+  ): Promise<CommonResponse> {
     const res = await fetch("/api/social/posts/editar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postId, texto, media_url: mediaUrl, tgId }),
+      body: JSON.stringify({ postId, texto, media_url: mediaUrl, tgId, autor }),
     });
     return res.json();
   },
