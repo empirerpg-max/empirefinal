@@ -5,6 +5,12 @@ import {
 } from "../controllers/catalogController";
 import { getUserMeController } from "../controllers/userController";
 import { chartsApiController } from "../controllers/chartsController";
+import {
+  getAcervoRevistasController,
+  createAcervoRevistaController,
+  getAcervoEntrevistasController,
+  createAcervoEntrevistaController,
+} from "../controllers/acervoController";
 import { getNivelController } from "../controllers/nivelController";
 import {
   createCommentController,
@@ -143,6 +149,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
 
   const supportedPaths = new Set([
     "/api/charts",
+    "/api/acervo/revistas",
+    "/api/acervo/entrevistas",
     "/api/auth/login",
     "/api/auth/heartbeat",
     "/api/auth/perfil",
@@ -350,6 +358,26 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await uploadDriveController(request);
+  } else if (url.pathname === "/api/acervo/revistas") {
+    response =
+      request.method === "GET"
+        ? await getAcervoRevistasController()
+        : request.method === "POST"
+          ? await createAcervoRevistaController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/acervo/revistas." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
+  } else if (url.pathname === "/api/acervo/entrevistas") {
+    response =
+      request.method === "GET"
+        ? await getAcervoEntrevistasController()
+        : request.method === "POST"
+          ? await createAcervoEntrevistaController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/acervo/entrevistas." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
   } else if (url.pathname === "/api/social/posts") {
     response =
       request.method === "GET"

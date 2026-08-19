@@ -984,6 +984,32 @@ export const api = {
     });
     return res.json();
   },
+  async listarRevistasAcervo(): Promise<any[]> {
+    const res = await fetch("/api/acervo/revistas");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
+  },
+  async criarRevistaAcervo(payload: any, tgId: string): Promise<{ ok: boolean; id?: string; error?: string }> {
+    const res = await fetch("/api/acervo/revistas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, tgId }),
+    });
+    return res.json();
+  },
+  async listarEntrevistasAcervo(): Promise<any[]> {
+    const res = await fetch("/api/acervo/entrevistas");
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? data : [];
+  },
+  async criarEntrevistaAcervo(payload: any, tgId: string): Promise<{ ok: boolean; id?: string; error?: string }> {
+    const res = await fetch("/api/acervo/entrevistas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, tgId }),
+    });
+    return res.json();
+  },
   async listarPerfisSocial(): Promise<any[]> {
     const res = await fetch("/api/social/perfis");
     const data = await res.json().catch(() => null);

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AcervoRouteImport } from './routes/acervo'
 import { Route as AcessoRapidoRouteImport } from './routes/acesso-rapido'
 import { Route as AlbunsRouteImport } from './routes/albuns'
 import { Route as ChartsRouteImport } from './routes/charts'
@@ -53,6 +54,11 @@ import { Route as EmpirePlayPlaylistsIdEditarRouteImport } from './routes/empire
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AcervoRoute = AcervoRouteImport.update({
+  id: '/acervo',
+  path: '/acervo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AcessoRapidoRoute = AcessoRapidoRouteImport.update({
@@ -258,6 +264,7 @@ const EmpirePlayPlaylistsIdEditarRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/acervo': typeof AcervoRoute
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
@@ -300,6 +307,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/acervo': typeof AcervoRoute
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
@@ -338,6 +346,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/acervo': typeof AcervoRoute
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
@@ -382,6 +391,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/acervo'
     | '/acesso-rapido'
     | '/albuns'
     | '/charts'
@@ -424,6 +434,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/acervo'
     | '/acesso-rapido'
     | '/albuns'
     | '/charts'
@@ -461,6 +472,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/acervo'
     | '/acesso-rapido'
     | '/albuns'
     | '/charts'
@@ -504,6 +516,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AcervoRoute: typeof AcervoRoute
   AcessoRapidoRoute: typeof AcessoRapidoRoute
   AlbunsRoute: typeof AlbunsRoute
   ChartsRoute: typeof ChartsRoute
@@ -532,6 +545,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/acervo': {
+      id: '/acervo'
+      path: '/acervo'
+      fullPath: '/acervo'
+      preLoaderRoute: typeof AcervoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/acesso-rapido': {
@@ -923,6 +943,7 @@ const PontoPlaylistsRouteWithChildren = PontoPlaylistsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AcervoRoute: AcervoRoute,
   AcessoRapidoRoute: AcessoRapidoRoute,
   AlbunsRoute: AlbunsRoute,
   ChartsRoute: ChartsRoute,
