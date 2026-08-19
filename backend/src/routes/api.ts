@@ -25,6 +25,7 @@ import {
   getAlbumFaixasController,
   getMeusAlbunsController,
   getMusicasEmChartController,
+  getFaixasSemAlbumController,
   reordenarAlbumFaixasController,
   substituirAlbumController,
   uploadDriveController,
@@ -185,6 +186,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/gestao/album-faixas/reordenar",
     "/api/gestao/faixa-letra",
     "/api/gestao/musicas-em-chart",
+    "/api/gestao/faixas-sem-album",
     "/api/gestao/meus-albuns",
     "/api/gestao/upload",
     "/api/editar",
@@ -823,6 +825,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         break;
       case "/api/gestao/musicas-em-chart":
         response = await getMusicasEmChartController();
+        break;
+      case "/api/gestao/faixas-sem-album":
+        response = await getFaixasSemAlbumController(request);
         break;
       case "/api/gestao/meus-albuns":
         response = await getMeusAlbunsController();
