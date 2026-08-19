@@ -1,6 +1,7 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 import { getArtistNamesForOwner } from "./artistasController";
 import { colIndexToA1Letter, jsonResponse } from "./pontoController";
+import { somarPrestigio } from "../services/prestigioService";
 
 // Ponto → Playlists vive na mesma planilha "registrosCharts", aba
 // "ECOIN + INVESTIMENTO" — layout confirmado ao vivo (linha 1 vazia, linha 2
@@ -285,6 +286,8 @@ export async function investirPlaylistController(request: Request): Promise<Resp
 
   const confirmacao = await googleSheetsService.registrosCharts.readValues(SHEET, `A${linha}:O${linha}`);
   const rowAtualizada = confirmacao?.[0] || [];
+
+  somarPrestigio({ telegramId }, "playlist").catch(() => {});
 
   return jsonResponse({ ok: true, investimento: rowToInvestimento(rowAtualizada, linha) });
 }

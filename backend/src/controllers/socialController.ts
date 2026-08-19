@@ -130,7 +130,7 @@ export async function createSocialPostController(request: Request): Promise<Resp
 }
 
 export async function curtirSocialPostController(request: Request): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as { postId?: string };
+  const body = (await request.json().catch(() => ({}))) as { postId?: string; tgId?: string };
   if (!body.postId) return jsonResponse({ ok: false, error: "postId obrigatório." }, 400);
 
   const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts);
@@ -141,6 +141,10 @@ export async function curtirSocialPostController(request: Request): Promise<Resp
   analytics.likes += 1;
 
   await googleSheetsService.usuarios.updateValues(SHEETS.posts, `G${rowIndex + 1}`, [[JSON.stringify(analytics)]]);
+
+  if (body.tgId) {
+    somarPrestigio({ telegramId: body.tgId }, "curtida").catch(() => {});
+  }
 
   return jsonResponse({ ok: true, likes: analytics.likes });
 }
