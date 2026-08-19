@@ -482,6 +482,10 @@ export async function toggleCommentReactionController(request: Request): Promise
       [JSON.stringify(reactionsMap)],
     ]);
 
+    if (!alreadyReacted) {
+      somarPrestigio({ telegramId: jogadorId }, "curtida").catch(() => {});
+    }
+
     const reactions: Record<string, number> = {};
     Object.entries(reactionsMap).forEach(([e, ids]) => {
       reactions[e] = ids.length;

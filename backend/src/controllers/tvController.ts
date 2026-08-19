@@ -1,4 +1,5 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import { somarPrestigio } from "../services/prestigioService";
 
 // "Programacao_RPG" é uma aba antiga/duplicada que ficou sem manutenção —
 // as capas lá estão todas com o link quebrado (uc?export=view&id= sem
@@ -531,6 +532,18 @@ export async function processarParticipacaoTV(): Promise<{
       const nomeJogador = p?.nome || c?.nome || "Anônimo";
       await gravarRegistroParticipacaoTV(nomeJogador, tier.label);
       registrosGravados++;
+
+      // Assistir_tv exige presença quase completa (>=90%); chat_tv só
+      // precisa de ao menos 1 mensagem no chat da transmissão — cada
+      // prestígio é somado no máximo uma vez por jogador por transmissão,
+      // já que este loop roda uma única vez por grupo (marcado como
+      // processado logo abaixo).
+      if (presencaPct >= 90) {
+        somarPrestigio({ telegramId }, "assistir_tv").catch(() => {});
+      }
+      if ((c?.count || 0) > 0) {
+        somarPrestigio({ telegramId }, "chat_tv").catch(() => {});
+      }
     }
 
     await googleSheetsService.agendaTV.appendRow(PROCESSADO_SHEET, [
