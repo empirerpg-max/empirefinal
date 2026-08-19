@@ -90,36 +90,34 @@ function ChartsPage() {
   );
 }
 
+// Botão padrão de aba/filtro do Charts — mesmo tratamento visual em todo
+// lugar (tab bar do topo e "caixinhas de escolha" de data/estilo/ano/mês):
+// pílula com borda sutil em repouso, preenche sólido com leve escala e
+// sombra colorida quando ativa, e feedback de toque (active:scale-95).
+function chartsPillClass(active: boolean, withIcon = false) {
+  return `shrink-0 h-8 px-3.5 rounded-full text-xs font-bold transition-all duration-150 active:scale-95 ${
+    withIcon ? "flex items-center gap-1.5" : ""
+  } ${
+    active
+      ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 scale-[1.03]"
+      : "bg-muted/60 text-muted-foreground border border-border/60 hover:bg-muted hover:text-foreground"
+  }`;
+}
+
 function ChartsTabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
   return (
     <div className="shrink-0 h-12 border-b border-border/60 bg-background/95 backdrop-blur flex items-center gap-1.5 px-3 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-      <button
-        onClick={() => onChange("home")}
-        className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold transition ${
-          active === "home" ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30" : "text-muted-foreground hover:bg-muted"
-        }`}
-      >
+      <button onClick={() => onChange("home")} className={chartsPillClass(active === "home")}>
         Início
       </button>
-      <button
-        onClick={() => onChange("live")}
-        className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 transition ${
-          active === "live" ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30" : "text-muted-foreground hover:bg-muted"
-        }`}
-      >
+      <button onClick={() => onChange("live")} className={chartsPillClass(active === "live", true)}>
         <Radio className={`size-3.5 ${active === "live" ? "text-primary-foreground" : "text-red-500"} animate-pulse`} /> Ao vivo
       </button>
       {CATEGORIES.map((c) => {
         const Icon = c.icon;
         const isActive = active === c.id;
         return (
-          <button
-            key={c.id}
-            onClick={() => onChange(c.id)}
-            className={`shrink-0 h-8 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 transition ${
-              isActive ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30" : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
+          <button key={c.id} onClick={() => onChange(c.id)} className={chartsPillClass(isActive, true)}>
             <Icon className={`size-3.5 ${isActive ? "" : c.color}`} /> {c.label}
           </button>
         );
@@ -193,7 +191,7 @@ function ChartsRealTime() {
                       <div key={i} className="flex items-center gap-2.5 rounded-2xl border border-border/50 bg-card/40 p-2 shadow-sm shadow-black/10">
                         <div className="w-6 shrink-0 text-center text-sm font-black text-muted-foreground">{pos}</div>
                         <CoverImg src={cover} alt={title} className="size-9 rounded-xl object-cover shrink-0" />
-                        <div className="min-w-0 flex-1 text-xs font-semibold truncate">{title}</div>
+                        <div className="min-w-0 flex-1 text-xs font-semibold line-clamp-2 leading-snug break-words">{title}</div>
                         <div className={`shrink-0 text-xs font-bold ${color}`}>{val}</div>
                       </div>
                     );
@@ -309,8 +307,8 @@ function ChartsHome() {
                 <CoverImg src={x.item?.capa} alt={x.item?.tit || ""} className="size-12 rounded-xl object-cover shrink-0" />
                 <div className="min-w-0">
                   <div className={`text-[10px] font-bold uppercase tracking-wider ${x.color}`}>{x.label}</div>
-                  <div className="text-sm font-semibold truncate">{x.item?.tit || "—"}</div>
-                  {x.item?.art && <div className="text-xs text-muted-foreground truncate">{x.item.art}</div>}
+                  <div className="text-sm font-semibold line-clamp-2 leading-snug break-words">{x.item?.tit || "—"}</div>
+                  {x.item?.art && <div className="text-xs text-muted-foreground line-clamp-1 break-words">{x.item.art}</div>}
                 </div>
               </div>
             ))}
@@ -327,7 +325,7 @@ function ChartsHome() {
                 <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary uppercase mb-2">
                   {r.tipo || "Single"}
                 </span>
-                <div className="text-sm font-semibold truncate">{r.musica || r.titulo || r.t || "—"}</div>
+                <div className="text-sm font-semibold line-clamp-2 leading-snug break-words">{r.musica || r.titulo || r.t || "—"}</div>
                 {r.data && <div className="text-xs text-muted-foreground mt-1">{r.data}</div>}
               </div>
             ))}
@@ -351,9 +349,7 @@ function EmptyBlock({ text }: { text: string }) {
 }
 
 function pillClass(active: boolean) {
-  return `shrink-0 h-8 px-3 rounded-full text-xs font-semibold transition ${
-    active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
-  }`;
+  return chartsPillClass(active);
 }
 
 // ---------- Categoria (Hot 100 / Spotify / Apple / YouTube / Álbuns / Sales) ----------
@@ -529,7 +525,7 @@ function ChartsGlobalView({ category }: { category: CategoryConfig }) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar artista ou música..."
-          className="w-full h-10 pl-9 pr-9 rounded-full bg-muted text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+          className="w-full h-10 pl-9 pr-9 rounded-full bg-muted/60 border border-border/60 text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
         />
         {search && (
           <button
@@ -567,8 +563,8 @@ function ChartsGlobalView({ category }: { category: CategoryConfig }) {
                 </div>
                 <CoverImg src={cover} alt={title} className="size-11 rounded-xl object-cover shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold truncate">{title}</div>
-                  {artist && <div className="text-xs text-muted-foreground truncate">{artist}</div>}
+                  <div className="text-sm font-semibold line-clamp-2 leading-snug break-words">{title}</div>
+                  {artist && <div className="text-xs text-muted-foreground line-clamp-1 break-words">{artist}</div>}
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-sm font-black">{val}</div>
@@ -661,7 +657,7 @@ function ChartsCountryView({ tab }: { tab: string }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="País, artista ou música..."
-            className="w-full h-10 pl-9 pr-9 rounded-full bg-muted text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+            className="w-full h-10 pl-9 pr-9 rounded-full bg-muted/60 border border-border/60 text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Limpar busca">
@@ -672,7 +668,7 @@ function ChartsCountryView({ tab }: { tab: string }) {
         <select
           value={country}
           onChange={(e) => setCountry(e.target.value)}
-          className="h-10 px-3 rounded-full bg-muted text-sm outline-none focus:ring-1 focus:ring-primary shrink-0"
+          className="h-10 px-3 rounded-full bg-muted/60 border border-border/60 text-sm font-semibold outline-none focus:ring-1 focus:ring-primary shrink-0"
         >
           <option value="">Todos os países</option>
           {countries.map((c) => (
@@ -692,8 +688,8 @@ function ChartsCountryView({ tab }: { tab: string }) {
               <div className="w-9 shrink-0 text-center text-base font-black">{r.pos || "-"}</div>
               <CoverImg src={r.capa} alt={r.tit || ""} className="size-11 rounded-xl object-cover shrink-0" />
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold truncate">{r.tit || "—"}</div>
-                {r.art && <div className="text-xs text-muted-foreground truncate">{r.art}</div>}
+                <div className="text-sm font-semibold line-clamp-2 leading-snug break-words">{r.tit || "—"}</div>
+                {r.art && <div className="text-xs text-muted-foreground line-clamp-1 break-words">{r.art}</div>}
               </div>
               <div className="shrink-0 text-right">
                 <div className="text-sm font-black">{r.val || "0"}</div>
@@ -799,7 +795,7 @@ function ChartsMonthlyView({ platform, color }: { platform: string; color: strin
         <select
           value={artist}
           onChange={(e) => pickArtist(e.target.value)}
-          className="w-full h-10 px-3 rounded-full bg-muted text-sm outline-none focus:ring-1 focus:ring-primary"
+          className="w-full h-10 px-3 rounded-full bg-muted/60 border border-border/60 text-sm font-semibold outline-none focus:ring-1 focus:ring-primary"
         >
           <option value="">Selecionar artista</option>
           {artists.map((a) => (
@@ -856,7 +852,7 @@ function MonthlyArtistProfile({
                 <div key={i} className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground w-4 text-right shrink-0">{i + 1}</span>
                   <CoverImg src={s.capaMusica || s.c} alt={s.titulo || s.t || ""} className="size-10 rounded-md object-cover shrink-0" />
-                  <span className="text-sm font-medium flex-1 truncate">{s.titulo || s.t}</span>
+                  <span className="text-sm font-medium flex-1 line-clamp-2 leading-snug break-words">{s.titulo || s.t}</span>
                   <span className={`text-xs font-bold shrink-0 ${color}`}>{s.streams || s.s}</span>
                 </div>
               ))}
