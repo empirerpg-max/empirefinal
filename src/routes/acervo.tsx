@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   Archive,
   BookOpen,
@@ -11,9 +12,16 @@ import {
   ChevronRight,
   ImageIcon,
   Trash2,
+  BookOpenText,
 } from "lucide-react";
 import { api, resolveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+
+// Transição de "capa vira detalhe" (mesmo mecanismo do card de notícia no
+// Social — layoutId + AnimatePresence) e o stagger de entrada do conteúdo
+// (título, meta, texto, botão) inspirados no CodePen de referência do
+// usuário, adaptados ao tema escuro do app.
+const STAGGER_DELAYS = [0, 0.08, 0.16, 0.24];
 
 export const Route = createFileRoute("/acervo")({
   component: AcervoPage,
@@ -137,15 +145,16 @@ function AcervoPage() {
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {revistas.map((r) => (
-                <button
+                <motion.button
                   key={r.id}
+                  layoutId={`revista-card-${r.id}`}
                   onClick={() => {
                     haptic.selection();
                     setSelectedRevista(r);
                   }}
                   className={`${card} overflow-hidden text-left active:scale-95`}
                 >
-                  <div className="aspect-[3/4] bg-secondary">
+                  <motion.div layoutId={`revista-cover-${r.id}`} className="aspect-[3/4] bg-secondary">
                     {r.capa && (
                       <img
                         src={resolveImg(r.capa)}
@@ -154,13 +163,13 @@ function AcervoPage() {
                         loading="lazy"
                       />
                     )}
-                  </div>
+                  </motion.div>
                   <div className="p-2.5">
                     <p className="text-[10px] font-black uppercase text-primary truncate">{r.artista}</p>
                     <p className="text-xs font-bold leading-snug line-clamp-2">{r.titulo}</p>
                     <p className="text-[10px] text-muted-foreground font-medium mt-1">{r.paginas.length} páginas</p>
                   </div>
-                </button>
+                </motion.button>
               ))}
             </div>
           )
@@ -169,19 +178,20 @@ function AcervoPage() {
         ) : (
           <div className="grid gap-3">
             {entrevistas.map((e) => (
-              <button
+              <motion.button
                 key={e.id}
+                layoutId={`entrevista-card-${e.id}`}
                 onClick={() => {
                   haptic.selection();
                   setSelectedEntrevista(e);
                 }}
                 className={`${card} p-3.5 flex items-center gap-3 text-left active:scale-95`}
               >
-                <div className="size-14 shrink-0 rounded-xl overflow-hidden bg-secondary">
+                <motion.div layoutId={`entrevista-cover-${e.id}`} className="size-14 shrink-0 rounded-xl overflow-hidden bg-secondary">
                   {e.capa && (
                     <img src={resolveImg(e.capa)} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
                   )}
-                </div>
+                </motion.div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] font-black uppercase text-primary truncate">{e.artista}</p>
                   <p className="text-sm font-bold leading-snug line-clamp-2">{e.titulo}</p>
@@ -189,7 +199,7 @@ function AcervoPage() {
                     {e.perguntas.length} pergunta{e.perguntas.length === 1 ? "" : "s"}
                   </p>
                 </div>
-              </button>
+              </motion.button>
             ))}
           </div>
         )}
@@ -238,80 +248,155 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
+// Abre em duas etapas, igual o CodePen de referência (grid → detalhe com
+// capa grande + botão "play" → só aí o conteúdo de verdade): capa expande
+// (layoutId compartilhado com o card do grid) numa hero com título/artista
+// por cima e um botão "Ler revista"; ao tocar nele entra no leitor
+// página-a-página.
 function RevistaViewer({ revista, onClose }: { revista: Revista; onClose: () => void }) {
+  const [lendo, setLendo] = useState(false);
   const [page, setPage] = useState(0);
   const total = revista.paginas.length;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col">
-      <div className="flex items-center justify-between p-4 shrink-0">
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase text-primary truncate">{revista.artista}</p>
-          <p className="text-sm font-bold truncate">{revista.titulo}</p>
-        </div>
-        <button onClick={onClose} className="size-9 shrink-0 rounded-full bg-white/10 grid place-items-center active:scale-90">
-          <X className="size-4" />
-        </button>
-      </div>
+    <motion.div
+      layoutId={`revista-card-${revista.id}`}
+      className="fixed inset-0 z-[100] bg-black flex flex-col overflow-hidden"
+    >
+      <button
+        onClick={lendo ? () => setLendo(false) : onClose}
+        className="absolute top-4 right-4 z-20 size-9 rounded-full bg-black/50 border border-white/10 grid place-items-center active:scale-90"
+      >
+        <X className="size-4 text-white" />
+      </button>
 
-      <div className="flex-1 relative overflow-hidden">
-        <img
-          src={resolveImg(revista.paginas[page])}
-          className="w-full h-full object-contain"
-          referrerPolicy="no-referrer"
-        />
-        {page > 0 && (
-          <button
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            className="absolute left-2 top-1/2 -translate-y-1/2 size-10 rounded-full bg-black/50 grid place-items-center active:scale-90"
+      {!lendo ? (
+        <>
+          <motion.div layoutId={`revista-cover-${revista.id}`} className="relative flex-1 bg-secondary">
+            {revista.capa && (
+              <img src={resolveImg(revista.capa)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+          </motion.div>
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            className="absolute inset-x-0 bottom-0 p-6"
           >
-            <ChevronLeft className="size-5 text-white" />
-          </button>
-        )}
-        {page < total - 1 && (
-          <button
-            onClick={() => setPage((p) => Math.min(total - 1, p + 1))}
-            className="absolute right-2 top-1/2 -translate-y-1/2 size-10 rounded-full bg-black/50 grid place-items-center active:scale-90"
-          >
-            <ChevronRight className="size-5 text-white" />
-          </button>
-        )}
-      </div>
-
-      <div className="p-4 shrink-0 text-center text-xs font-bold text-white/70">
-        Página {page + 1} / {total}
-      </div>
-    </div>
+            {[
+              <p key="a" className="text-[11px] font-black uppercase text-primary tracking-wide">{revista.artista}</p>,
+              <h2 key="b" className="text-3xl font-black leading-tight text-white mb-1">{revista.titulo}</h2>,
+              <p key="c" className="text-xs text-white/60 font-medium mb-5">{total} páginas</p>,
+              <button
+                key="d"
+                onClick={() => {
+                  haptic.light();
+                  setLendo(true);
+                  setPage(0);
+                }}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-primary to-fuchsia-600 text-primary-foreground text-xs font-black uppercase tracking-wide shadow-lg active:scale-95 transition-transform"
+              >
+                <BookOpenText className="size-4" /> Ler revista
+              </button>,
+            ].map((el, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: STAGGER_DELAYS[i] + 0.1, duration: 0.4 }}
+              >
+                {el}
+              </motion.div>
+            ))}
+          </motion.div>
+        </>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex-1 flex flex-col overflow-hidden"
+        >
+          <div className="flex-1 relative overflow-hidden">
+            <img
+              src={resolveImg(revista.paginas[page])}
+              className="w-full h-full object-contain"
+              referrerPolicy="no-referrer"
+            />
+            {page > 0 && (
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="absolute left-2 top-1/2 -translate-y-1/2 size-10 rounded-full bg-black/50 grid place-items-center active:scale-90"
+              >
+                <ChevronLeft className="size-5 text-white" />
+              </button>
+            )}
+            {page < total - 1 && (
+              <button
+                onClick={() => setPage((p) => Math.min(total - 1, p + 1))}
+                className="absolute right-2 top-1/2 -translate-y-1/2 size-10 rounded-full bg-black/50 grid place-items-center active:scale-90"
+              >
+                <ChevronRight className="size-5 text-white" />
+              </button>
+            )}
+          </div>
+          <div className="p-4 shrink-0 text-center text-xs font-bold text-white/70">
+            Página {page + 1} / {total}
+          </div>
+        </motion.div>
+      )}
+    </motion.div>
   );
 }
 
 function EntrevistaViewer({ entrevista, onClose }: { entrevista: Entrevista; onClose: () => void }) {
+  const blocos = [
+    <div key="head" className="min-w-0">
+      <p className="text-[10px] font-black uppercase text-primary truncate">{entrevista.artista}</p>
+      <h2 className="text-lg font-black leading-tight">{entrevista.titulo}</h2>
+    </div>,
+    ...entrevista.perguntas.map((p, i) => (
+      <div key={`p-${i}`}>
+        <p className="text-sm font-black text-primary mb-1">{p.pergunta}</p>
+        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{p.resposta}</p>
+      </div>
+    )),
+  ];
+
   return (
     <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
-      <div className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] max-w-lg w-full max-h-[90dvh] overflow-y-auto">
+      <motion.div
+        layoutId={`entrevista-card-${entrevista.id}`}
+        className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] max-w-lg w-full max-h-[90dvh] overflow-y-auto"
+      >
         {entrevista.capa && (
-          <img src={resolveImg(entrevista.capa)} className="w-full aspect-video object-cover" referrerPolicy="no-referrer" />
+          <motion.img
+            layoutId={`entrevista-cover-${entrevista.id}`}
+            src={resolveImg(entrevista.capa)}
+            className="w-full aspect-video object-cover"
+            referrerPolicy="no-referrer"
+          />
         )}
         <div className="p-6">
           <div className="flex justify-between items-start mb-4 gap-3">
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase text-primary truncate">{entrevista.artista}</p>
-              <h2 className="text-lg font-black leading-tight">{entrevista.titulo}</h2>
-            </div>
+            {blocos[0]}
             <button onClick={onClose} className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90">
               <X className="size-4" />
             </button>
           </div>
           <div className="space-y-5">
-            {entrevista.perguntas.map((p, i) => (
-              <div key={i}>
-                <p className="text-sm font-black text-primary mb-1">{p.pergunta}</p>
-                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{p.resposta}</p>
-              </div>
+            {blocos.slice(1).map((el, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 + Math.min(i, 3) * 0.08, duration: 0.4 }}
+              >
+                {el}
+              </motion.div>
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
