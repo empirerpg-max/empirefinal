@@ -38,7 +38,12 @@ import {
 } from "../controllers/empirePlayController";
 import { reportVideoIssueController } from "../controllers/reportVideoController";
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
-import { loginController, updateProfileController, trocarSenhaController } from "../controllers/authController";
+import {
+  loginController,
+  updateProfileController,
+  trocarSenhaController,
+  authHeartbeatController,
+} from "../controllers/authController";
 import {
   getMeusArtistasNomesController,
   getArtistasDisponiveisController,
@@ -137,6 +142,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
 
   const supportedPaths = new Set([
     "/api/auth/login",
+    "/api/auth/heartbeat",
     "/api/auth/perfil",
     "/api/auth/trocar-senha",
     "/api/artistas/meus-nomes",
@@ -617,6 +623,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await loginController(request);
+  } else if (url.pathname === "/api/auth/heartbeat") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/auth/heartbeat." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await authHeartbeatController(request);
   } else if (url.pathname === "/api/auth/perfil") {
     if (request.method !== "POST") {
       return new Response(

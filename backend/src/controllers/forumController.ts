@@ -260,7 +260,7 @@ export async function createCommentController(request: Request): Promise<Respons
       isAlbum: tipoMedia === "album",
     });
 
-    somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(() => {});
+    await somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(() => {});
 
     return new Response(
       JSON.stringify({
@@ -483,7 +483,7 @@ export async function toggleCommentReactionController(request: Request): Promise
     ]);
 
     if (!alreadyReacted) {
-      somarPrestigio({ telegramId: jogadorId }, "curtida").catch(() => {});
+      await somarPrestigio({ telegramId: jogadorId }, "curtida").catch(() => {});
     }
 
     const reactions: Record<string, number> = {};

@@ -958,6 +958,17 @@ export const api = {
     });
     return res.json();
   },
+  async authHeartbeat(telegramId: string, usuario: string): Promise<void> {
+    try {
+      await fetch("/api/auth/heartbeat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId, usuario }),
+      });
+    } catch {
+      // Silencioso — não é crítico pro app abrir mesmo se isso falhar.
+    }
+  },
   async editarPostSocial(postId: string, texto: string, mediaUrl: string, tgId: string): Promise<CommonResponse> {
     const res = await fetch("/api/social/posts/editar", {
       method: "POST",

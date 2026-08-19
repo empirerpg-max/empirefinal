@@ -124,7 +124,7 @@ export async function createSocialPostController(request: Request): Promise<Resp
     body.tgId || "",
   ]);
 
-  somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "post_social").catch(() => {});
+  await somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "post_social").catch(() => {});
 
   return jsonResponse({ ok: true, id });
 }
@@ -143,7 +143,7 @@ export async function curtirSocialPostController(request: Request): Promise<Resp
   await googleSheetsService.usuarios.updateValues(SHEETS.posts, `G${rowIndex + 1}`, [[JSON.stringify(analytics)]]);
 
   if (body.tgId) {
-    somarPrestigio({ telegramId: body.tgId }, "curtida").catch(() => {});
+    await somarPrestigio({ telegramId: body.tgId }, "curtida").catch(() => {});
   }
 
   return jsonResponse({ ok: true, likes: analytics.likes });
@@ -256,7 +256,7 @@ export async function comentarSocialPostController(request: Request): Promise<Re
     await googleSheetsService.usuarios.updateValues(SHEETS.posts, `G${rowIndex + 1}`, [[JSON.stringify(analytics)]]);
   }
 
-  somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "comentario").catch(() => {});
+  await somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "comentario").catch(() => {});
 
   return jsonResponse({ ok: true });
 }

@@ -528,6 +528,20 @@ function AuthGate() {
   const [loggedInUser, setLoggedInUser] = useState<LoginResult | null>(authUser);
   const { setUserManually } = useTelegramUser();
 
+  // Sessão retomada do localStorage (não veio de LoginScreen agora) — o
+  // prestígio de "login_diario" só era concedido dentro de
+  // POST /api/auth/login, que só roda numa autenticação de verdade. Quem
+  // abre o app já logado (o caso comum, já que a sessão fica salva) nunca
+  // disparava esse crédito de novo em dias seguintes. O heartbeat é
+  // idempotente (no máximo 1x/dia por jogador), então é seguro chamar toda
+  // vez que o app abre.
+  useEffect(() => {
+    if (authUser) {
+      api.authHeartbeat(authUser.id, authUser.usuario).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!loggedInUser) {
     return (
       <LoginScreen
