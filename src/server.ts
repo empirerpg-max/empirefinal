@@ -386,11 +386,11 @@ export default {
     }
 
     if (url.pathname === "/api/debug/charts-verifica" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      const { listSheetTabs } = await import("../backend/src/services/googleSheetsService");
       const start = Date.now();
       try {
-        const rows = await googleSheetsService.chartsTop50.readValues("TOP_50_ARTISTAS_MENSAL");
-        return Response.json({ ms: Date.now() - start, rowCount: rows.length, sample: rows.slice(0, 2) });
+        const tabs = await listSheetTabs("chartsTop50");
+        return Response.json({ ms: Date.now() - start, tabs });
       } catch (e: any) {
         return Response.json({ ms: Date.now() - start, error: e.message, stack: e.stack });
       }
