@@ -385,22 +385,24 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-
-
-
-
-    if (url.pathname === "/api/debug/tv-imagens" && request.method === "GET") {
-      const { googleSheetsService, listSheetTabs } = await import(
-        "../backend/src/services/googleSheetsService"
-      );
-      const tabs = await listSheetTabs("agendaTV");
-      const agendaTvRows = await googleSheetsService.agendaTV
-        .readValues("Agenda_TV")
+    if (url.pathname === "/api/debug/prestigio-turnes" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      const tours = await googleSheetsService.usuarios
+        .readValues("CONTROLE_TOURS")
+        .catch((e) => [[`erro: ${e.message}`]]);
+      const comentarios = await googleSheetsService.usuarios
+        .readValues("Turnes_Comentarios")
+        .catch((e) => [[`erro: ${e.message}`]]);
+      const usuarios = await googleSheetsService.usuarios
+        .readValues("Usuários")
         .catch((e) => [[`erro: ${e.message}`]]);
       return Response.json({
-        tabs,
-        agendaTvHeader: agendaTvRows[0],
-        agendaTvAmostra: agendaTvRows.slice(1, 10),
+        toursHeader: tours[0],
+        toursAmostra: tours.slice(1, 15),
+        comentariosHeader: comentarios[0],
+        comentariosAmostra: comentarios.slice(1, 10),
+        usuariosHeader: usuarios[0],
+        usuariosAmostra: usuarios.slice(1, 15),
       });
     }
 
