@@ -386,14 +386,8 @@ export default {
     }
 
     if (url.pathname === "/api/debug/charts-verifica" && request.method === "GET") {
-      const { listSheetTabs } = await import("../backend/src/services/googleSheetsService");
-      const start = Date.now();
-      try {
-        const tabs = await listSheetTabs("chartsTop50");
-        return Response.json({ ms: Date.now() - start, tabs });
-      } catch (e: any) {
-        return Response.json({ ms: Date.now() - start, error: e.message, stack: e.stack });
-      }
+      const { getServiceAccountEmail } = await import("../backend/src/google/service-account");
+      return Response.json({ serviceAccountEmail: getServiceAccountEmail() });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
