@@ -386,12 +386,14 @@ export default {
     }
 
     if (url.pathname === "/api/debug/charts-verifica" && request.method === "GET") {
-      const { chartsApiController } = await import("../backend/src/controllers/chartsController");
-      const acao = url.searchParams.get("acao") || "getMonthlyYears";
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
       const start = Date.now();
-      const r = await chartsApiController(new Request(`https://x/api/charts?action=${acao}`));
-      const j = await r.json();
-      return Response.json({ ms: Date.now() - start, data: j });
+      try {
+        const rows = await googleSheetsService.chartsTop50.readValues("TOP_50_ARTISTAS_MENSAL");
+        return Response.json({ ms: Date.now() - start, rowCount: rows.length, sample: rows.slice(0, 2) });
+      } catch (e: any) {
+        return Response.json({ ms: Date.now() - start, error: e.message, stack: e.stack });
+      }
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
