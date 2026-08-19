@@ -610,9 +610,9 @@ export async function realizarAcaoDiaController(request: Request): Promise<Respo
       ]),
     ]);
 
-    somarPrestigio({ telegramId }, "turne_acao_dia").catch(() => {});
+    await somarPrestigio({ telegramId }, "turne_acao_dia").catch(() => {});
     if (show.soldOut) {
-      somarPrestigio({ telegramId }, "turne_sold_out").catch(() => {});
+      await somarPrestigio({ telegramId }, "turne_sold_out").catch(() => {});
     }
 
     const novaArrecadacao = tour.agenda.reduce((s, x) => s + x.receita, 0);
@@ -713,7 +713,7 @@ export async function comentarTurneController(request: Request): Promise<Respons
     const row = [idUnico, showNumero, telegramId, usuario, texto, new Date().toISOString()];
     await googleSheetsService.usuarios.appendRow(COMENTARIOS_SHEET, row);
 
-    somarPrestigio({ telegramId, usuario }, "comentario_turne").catch(() => {});
+    await somarPrestigio({ telegramId, usuario }, "comentario_turne").catch(() => {});
 
     return jsonOk({ ok: true });
   } catch (err) {

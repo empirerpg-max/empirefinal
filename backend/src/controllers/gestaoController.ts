@@ -242,7 +242,7 @@ export async function createSongController(request: Request): Promise<Response> 
       console.warn("[createSongController] Erro ao gravar no Audit Log REGISTRO:", err);
     }
 
-    somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
+    await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
     return new Response(
       JSON.stringify({
@@ -368,7 +368,7 @@ export async function createVideoController(request: Request): Promise<Response>
       console.warn("[createVideoController] Erro no audit log:", err);
     }
 
-    somarPrestigio({ usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
+    await somarPrestigio({ usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
     // 3. Quando o tipo selecionado for "Music Video", marcar o lançamento
     // do videoclipe na aba "Pontos" (coluna N) com a data de envio (coluna O).
@@ -973,7 +973,7 @@ export async function createAlbumController(request: Request): Promise<Response>
       console.warn("[createAlbumController] Erro ao gravar Audit Log de Álbum:", err);
     }
 
-    somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
+    await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
     return new Response(
       JSON.stringify({

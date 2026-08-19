@@ -90,6 +90,54 @@ async function concederPrestigioLoginDiario(match: UsuariosRow, usuarioFallback:
   );
 }
 
+/**
+ * POST /api/auth/heartbeat
+ * O login por usuário/senha só roda uma vez — depois disso a sessão fica
+ * salva no localStorage do navegador e o app nunca mais chama
+ * /api/auth/login de novo, então o prestígio de "login_diario" (que só era
+ * concedido ali) nunca era creditado em dias seguintes, a não ser que o
+ * jogador saísse e entrasse de novo manualmente. Este endpoint é chamado
+ * pelo AuthGate toda vez que o app abre com uma sessão já salva — mesma
+ * proteção de "no máximo 1x por dia" de concederPrestigioLoginDiario, só
+ * não exige senha (a sessão local já prova quem é o jogador).
+ */
+export async function authHeartbeatController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as { telegramId?: string; usuario?: string };
+    const telegramId = (body.telegramId || "").trim();
+    const usuario = (body.usuario || "").trim();
+    if (!telegramId && !usuario) {
+      return new Response(JSON.stringify({ success: false, error: "telegramId ou usuario obrigatório." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const rows = await readUsuariosWithRowIndex();
+    const normId = normalizeComparison(telegramId);
+    const normUsuario = normalizeComparison(usuario);
+    const match = rows.find((r) => {
+      const matchId = !!normId && normalizeComparison(r.rec["id"] || "") === normId;
+      const matchUsuario = !!normUsuario && normalizeComparison(r.rec["usuario"] || "") === normUsuario;
+      return matchId || matchUsuario;
+    });
+    if (match) {
+      await concederPrestigioLoginDiario(match, usuario);
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[authHeartbeatController] Erro:", error);
+    return new Response(JSON.stringify({ success: false, error: error.message || "Erro no heartbeat." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
 export interface LoginBody {
   usuario: string;
   senha: string;

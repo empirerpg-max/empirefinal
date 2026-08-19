@@ -287,7 +287,7 @@ export async function investirPlaylistController(request: Request): Promise<Resp
   const confirmacao = await googleSheetsService.registrosCharts.readValues(SHEET, `A${linha}:O${linha}`);
   const rowAtualizada = confirmacao?.[0] || [];
 
-  somarPrestigio({ telegramId }, "playlist").catch(() => {});
+  await somarPrestigio({ telegramId }, "playlist").catch(() => {});
 
   return jsonResponse({ ok: true, investimento: rowToInvestimento(rowAtualizada, linha) });
 }

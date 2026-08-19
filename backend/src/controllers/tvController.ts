@@ -539,10 +539,10 @@ export async function processarParticipacaoTV(): Promise<{
       // já que este loop roda uma única vez por grupo (marcado como
       // processado logo abaixo).
       if (presencaPct >= 90) {
-        somarPrestigio({ telegramId }, "assistir_tv").catch(() => {});
+        await somarPrestigio({ telegramId }, "assistir_tv").catch(() => {});
       }
       if ((c?.count || 0) > 0) {
-        somarPrestigio({ telegramId }, "chat_tv").catch(() => {});
+        await somarPrestigio({ telegramId }, "chat_tv").catch(() => {});
       }
     }
 
