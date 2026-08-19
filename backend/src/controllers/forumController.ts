@@ -140,6 +140,7 @@ export async function createCommentController(request: Request): Promise<Respons
     let targetSheet = "Musicas";
     let commentSheet = "Comentarios_Musicas";
     let colTopicIdIndex = 1; // Coluna B — "ID do tópico"
+    let colTituloIndex = 7; // Coluna H — "Nome da música"
     let colRatingsIndex = 21; // Coluna V (0-based 21)
     let colAvgIndex = 22; // Coluna W (0-based 22)
 
@@ -147,6 +148,7 @@ export async function createCommentController(request: Request): Promise<Respons
       targetSheet = "Albuns";
       commentSheet = "Comentarios_Albuns";
       colTopicIdIndex = 1; // Coluna B — "ID do tópico"
+      colTituloIndex = 6; // Coluna G — "Novo Nome"
       colRatingsIndex = 7; // Coluna H
       colAvgIndex = 8; // Coluna I
     } else if (tipoMedia === "video" || tipoMedia === "music-video") {
@@ -158,9 +160,18 @@ export async function createCommentController(request: Request): Promise<Respons
       targetSheet = "Music Videos";
       commentSheet = "Comentarios_MV";
       colTopicIdIndex = 5; // Coluna F — "message_thread_id"
+      colTituloIndex = 1; // Coluna B — Título do tópico
       colRatingsIndex = 13; // Coluna N (0-based 13)
       colAvgIndex = 14; // Coluna O (0-based 14)
     }
+
+    // Título "oficial" pro Audit Log — resolvido pelo ID único (topicId) da
+    // linha certa na planilha, não pelo título que o cliente mandou. O
+    // cliente pode estar com uma versão desatualizada em cache (ex: título
+    // mudou depois de um feat. ser adicionado), e nesse caso o registro em
+    // REGISTRO saía com o título errado. Só cai pro título do cliente se o
+    // topicId não bater com nenhuma linha (nunca bloqueia o registro).
+    let tituloOficial = titleClean;
 
     // 1. Atualizar nota/likes e média na planilha principal — isolado num
     // try/catch pra uma falha aqui (ex: título sem match nenhum) nunca
@@ -199,6 +210,9 @@ export async function createCommentController(request: Request): Promise<Respons
 
         if (foundRowIndex > 0) {
           const rowData = rows[foundRowIndex - 1] || [];
+          const tituloDaLinha = normalizeText(rowData[colTituloIndex]);
+          if (tituloDaLinha) tituloOficial = tituloDaLinha;
+
           const currentRatings = rowData[colRatingsIndex] || "";
 
           const updatedRatings = currentRatings.trim()
@@ -252,7 +266,7 @@ export async function createCommentController(request: Request): Promise<Respons
     // 3. Registrar Audit Log na Planilha REGISTRO (1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg)
     await registrarAuditLog({
       nomeJogador: playerClean,
-      titulo: titleClean,
+      titulo: tituloOficial,
       tipo:
         tipoMedia === "album"
           ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
