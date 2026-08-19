@@ -393,16 +393,17 @@ export default {
       const comentarios = await googleSheetsService.usuarios
         .readValues("Turnes_Comentarios")
         .catch((e) => [[`erro: ${e.message}`]]);
-      const usuarios = await googleSheetsService.usuarios
-        .readValues("Usuários")
-        .catch((e) => [[`erro: ${e.message}`]]);
+      const acoesRows = tours.slice(1).filter((r) => String(r[8] || "").includes('"acoes":[{'));
       return Response.json({
-        toursHeader: tours[0],
-        toursAmostra: tours.slice(1, 15),
+        totalTours: tours.length - 1,
+        toursComAcoes: acoesRows.map((r) => ({
+          idUsuario: r[0],
+          artista: r[1],
+          nome: r[3],
+          agendaComAcoes: r[8],
+        })),
         comentariosHeader: comentarios[0],
         comentariosAmostra: comentarios.slice(1, 10),
-        usuariosHeader: usuarios[0],
-        usuariosAmostra: usuarios.slice(1, 15),
       });
     }
 
