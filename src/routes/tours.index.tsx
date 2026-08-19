@@ -421,84 +421,87 @@ function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
   );
 }
 
+// Cartão de turnê — inspirado num widget de clima (lado da imagem cheio de
+// contexto sob um gradiente, lado da info com estatísticas em "pílulas" e
+// um botão de ação no rodapé), adaptado ao padrão do app: empilhado
+// (imagem em cima, info embaixo) em vez de lado a lado, já que aqui é uma
+// lista de uma coluna só.
 function TourCardItem({ t }: { t: TourCard }) {
   const total = t.totalShows || t.agenda.length || 1;
   const feitos = realizados(t);
   const soldOuts = t.agenda.filter((s) => s.soldOut).length;
+  const progresso = Math.min(100, Math.round((feitos / total) * 100));
 
   return (
     <Link to="/tours/$nome" params={{ nome: t.artista }} className="block group">
-      <div className="relative overflow-hidden rounded-3xl bg-card border border-white/5 p-4 transition-all hover:bg-white/[0.06] hover:scale-[1.01] active:scale-[0.98] shadow-2xl shadow-black/20">
-        <div className="absolute -right-20 -bottom-20 size-48 bg-primary/10 blur-[60px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="relative overflow-hidden rounded-3xl bg-card border border-white/5 transition-all hover:scale-[1.01] active:scale-[0.98] shadow-2xl shadow-black/20">
+        {/* Lado da imagem — capa + gradiente, nome da turnê e artista sobrepostos */}
+        <div className="relative h-36 overflow-hidden">
+          {t.capaUrl ? (
+            <img
+              src={driveImg(t.capaUrl, 600)}
+              alt={t.artista}
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-slate-900 grid place-items-center">
+              <Crown className="size-12 text-primary/30" />
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/25 via-transparent to-fuchsia-600/20" />
 
-        <div className="flex gap-4 items-center relative z-10">
-          <div className="relative size-20 shrink-0 rounded-2xl overflow-hidden border-2 border-white/10 bg-slate-900 shadow-lg flex items-center justify-center">
-            {t.capaUrl ? (
-              <img
-                src={driveImg(t.capaUrl, 400)}
-                alt={t.artista}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                loading="lazy"
-                decoding="async"
-              />
-            ) : (
-              <Crown className="size-10 text-primary/40 group-hover:scale-110 group-hover:text-primary transition-all duration-500" />
+          <div className="absolute top-3 left-4 right-4 flex items-center gap-2">
+            <span className="text-[11px] font-black uppercase tracking-widest text-white/90 drop-shadow">
+              {t.artista}
+            </span>
+            {t.status === "Em andamento" && (
+              <span className="flex items-center gap-1 text-[10px] font-black uppercase text-emerald-300">
+                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" /> Ao vivo
+              </span>
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           </div>
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] font-black uppercase tracking-widest text-primary/80">
-                {t.artista}
-              </span>
-              {t.status === "Em andamento" && (
-                <div className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              )}
-            </div>
-
-            <h3 className="text-xl font-black italic uppercase tracking-tighter leading-tight truncate mb-2">
+          <div className="absolute bottom-3 left-4 right-4">
+            <h3 className="text-2xl font-black italic uppercase tracking-tighter leading-tight truncate text-white drop-shadow">
               {t.nomeTurne}
             </h3>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-black uppercase bg-white/5 px-2 py-0.5 rounded-md border border-white/5">
-                <Users className="size-3 text-primary" /> {t.porte || "Turnê"}
-              </div>
+            <div className="mt-1 flex items-center gap-1 text-[11px] text-white/70 font-bold uppercase">
+              <Users className="size-3" /> {t.porte || "Turnê"}
             </div>
-          </div>
-
-          <div className="size-10 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-all">
-            <ChevronRight className="size-5" />
           </div>
         </div>
 
-        <div className="mt-5 relative z-10">
-          <div className="flex justify-between items-end mb-2 px-1">
-            <div>
-              <p className="text-muted-foreground text-[11px] uppercase font-black tracking-widest mb-0.5">
-                Execução
-              </p>
-              <p className="text-xs font-black tracking-tight">
-                {feitos} <span className="text-muted-foreground/40 font-bold">/ {total} SHOWS</span>
+        {/* Lado da info — estatísticas em pílulas + botão de ação */}
+        <div className="p-4">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-white/5 border border-white/5 px-2 py-2 text-center">
+              <p className="text-muted-foreground text-[9px] uppercase font-black tracking-widest mb-1">Execução</p>
+              <p className="text-sm font-black tracking-tight">
+                {feitos}<span className="text-muted-foreground/40 font-bold">/{total}</span>
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-muted-foreground text-[11px] uppercase font-black tracking-widest mb-0.5">
-                Arrecadado
-              </p>
-              <p className="text-xs font-black text-amber-500 tracking-tight">
-                {fmtMoney(t.arrecadacaoTempoReal)}
-                {soldOuts > 0 && <span className="text-emerald-400"> · {soldOuts} sold out</span>}
-              </p>
+            <div className="rounded-xl bg-white/5 border border-white/5 px-2 py-2 text-center">
+              <p className="text-muted-foreground text-[9px] uppercase font-black tracking-widest mb-1">Arrecadado</p>
+              <p className="text-sm font-black text-amber-500 tracking-tight truncate">{fmtMoney(t.arrecadacaoTempoReal)}</p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/5 px-2 py-2 text-center">
+              <p className="text-muted-foreground text-[9px] uppercase font-black tracking-widest mb-1">Sold outs</p>
+              <p className="text-sm font-black text-emerald-400 tracking-tight">{soldOuts}</p>
             </div>
           </div>
 
-          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden p-[1px]">
+          <div className="mt-3 h-1.5 bg-white/10 rounded-full overflow-hidden p-[1px]">
             <div
               className="h-full bg-gradient-to-r from-primary/80 to-primary rounded-full transition-all duration-700"
-              style={{ width: `${Math.min(100, (feitos / total) * 100)}%` }}
+              style={{ width: `${progresso}%` }}
             />
+          </div>
+
+          <div className="mt-3 flex items-center justify-center gap-1.5 h-9 rounded-full bg-gradient-to-r from-primary to-fuchsia-600 text-primary-foreground text-xs font-black uppercase tracking-wide shadow-md shadow-primary/25 group-active:scale-95 transition-transform">
+            Ver turnê <ChevronRight className="size-3.5" />
           </div>
         </div>
       </div>
