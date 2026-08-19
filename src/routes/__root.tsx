@@ -21,6 +21,7 @@ import {
   Building2,
   ChevronDown,
   TrendingUp,
+  Archive,
   Search,
   HelpCircle,
   Share2,
@@ -411,9 +412,9 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Menu fixo do app — os 9 itens definidos na reorganização: Início,
-// Catálogo (ex-Empire Play), Tour, Empire TV, Charts, Ponto, Social, Perfil
-// e o botão de Criar (acesso rápido à Gestão de lançamentos).
+// Menu fixo do app: Início, Catálogo (ex-Empire Play), Tour, Empire TV,
+// Charts, Ponto, Social, Acervo, Perfil, e o botão de Criar (acesso rápido
+// à Gestão de lançamentos).
 function BottomNav() {
   const { pathname } = useLocation();
   const perfilFoto = getStoredLogin()?.fotoPerfil || "";
@@ -426,6 +427,7 @@ function BottomNav() {
     { to: "/charts", label: "Charts", icon: TrendingUp },
     { to: "/ponto", label: "Ponto", icon: Target },
     { to: "/social", label: "Social", icon: Share2 },
+    { to: "/acervo", label: "Acervo", icon: Archive },
     { to: "/perfil", label: "Perfil", icon: User },
   ];
   return (

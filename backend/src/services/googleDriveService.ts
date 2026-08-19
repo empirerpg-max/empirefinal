@@ -20,6 +20,10 @@ export const DRIVE_FOLDERS = {
   // GIFs/stickers do chat da Empire TV — qualquer jogador pode subir um
   // arquivo aqui, e ele fica disponível pra todo mundo usar no chat.
   tvChatGifs: "10LOfKeFfmnu2xXNUXmcIY-v7XGPKtlG9",
+  // Menu Acervo — capas/páginas de revista e capas de entrevista, mesma
+  // pasta pros dois tipos (o usuário não pediu uma pasta própria só pra
+  // entrevista).
+  acervo: "1KC5YjWmWJcgIQHHY9iZtDdDO8lB9eXaM",
 } as const;
 
 export interface DriveFolderFile {
