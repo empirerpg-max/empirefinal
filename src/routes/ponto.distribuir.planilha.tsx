@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Wallet,
   Search,
+  RotateCcw,
 } from "lucide-react";
 import { api, driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -92,6 +93,28 @@ function PontoPlanilha() {
     if (!termo) return musicas;
     return musicas.filter((m) => m.musica.toLowerCase().includes(termo));
   }, [grupoAtivo, busca]);
+
+  async function limparTudo(row: PontoMusica) {
+    const key = `${row.linha}-limpar`;
+    setSaving(key);
+    setMsg(null);
+    const r = await api.limparPontoCelula(tgId, row.linha);
+    setSaving(null);
+    if ((r as any)?.ok) {
+      haptic.success();
+      setGrupos((prev) =>
+        prev.map((g) => ({
+          ...g,
+          musicas: g.musicas.map((m) => (m.linha === row.linha ? { ...m, categorias: {} } : m)),
+        })),
+      );
+      setMusicaSelecionada((prev) => (prev && prev.linha === row.linha ? { ...prev, categorias: {} } : prev));
+      setMsg({ key, text: "Limpo! Escolha de novo.", ok: true });
+    } else {
+      haptic.error();
+      setMsg({ key, text: (r as any)?.error || "Erro ao limpar", ok: false });
+    }
+  }
 
   async function salvarPonto(row: PontoMusica, coluna: string, valor: string) {
     const key = `${row.linha}-${coluna}`;
@@ -191,6 +214,26 @@ function PontoPlanilha() {
             </p>
           </div>
         </div>
+
+        {somaPreenchida > 0 && (
+          <button
+            onClick={() => limparTudo(musicaSelecionada)}
+            disabled={saving === `${musicaSelecionada.linha}-limpar`}
+            className="self-start flex items-center gap-1.5 text-xs font-bold text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+          >
+            {saving === `${musicaSelecionada.linha}-limpar` ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="w-3.5 h-3.5" />
+            )}
+            Limpar tudo e recomeçar
+          </button>
+        )}
+        {msg?.key === `${musicaSelecionada.linha}-limpar` && (
+          <p className={`text-[10px] font-semibold -mt-2 ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>
+            {msg.text}
+          </p>
+        )}
 
         <div className="flex flex-col gap-3 mt-2">
           {Object.entries(OPCOES_PONTOS).map(([coluna, opcoes]) => {

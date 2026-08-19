@@ -786,6 +786,14 @@ export const api = {
     });
     return res.json();
   },
+  async limparPontoCelula(telegramId: string, linha: number): Promise<CommonResponse> {
+    const res = await fetch("/api/ponto/limpar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramId, linha }),
+    });
+    return res.json();
+  },
 
   // ---- PONTO Playlists (ECOIN + INVESTIMENTO) ----
   async listarInvestimentos(telegramId: string): Promise<{
@@ -833,6 +841,14 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(p),
+    });
+    return res.json();
+  },
+  async limparInvestimento(telegramId: string, linha: number): Promise<CommonResponse> {
+    const res = await fetch("/api/ponto/playlists/limpar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramId, linha }),
     });
     return res.json();
   },
