@@ -727,6 +727,7 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
         ordem: parseInt(row[20] || "999", 10) || 999,
         audioUrl: row[2] || "",
         letra: row[4] || "",
+        pendente: !(row[1] || "").trim(), // sem tópico (coluna B vazia) = pendente
       }))
       .sort((a, b) => a.ordem - b.ordem);
 
@@ -767,6 +768,78 @@ export async function updateFaixaLetraController(request: Request): Promise<Resp
     console.error("[updateFaixaLetraController] Erro:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message || "Erro ao gravar letra." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+// Publica o tópico de uma faixa pendente (adicionada a um álbum sem "abrir
+// tópico" no momento) — gera o topicId, grava nas colunas B e F de Musicas
+// (mesmo par que createSongController usa pra faixa avulsa) e vira
+// "Pendente? = Não". Só a partir daqui a faixa pode receber comentário.
+// Mesma regra da faixa avulsa: soma prestígio e grava Audit Log em
+// REGISTRO nesse momento — é aqui que ela vira conteúdo publicado de
+// verdade, mesmo já estando no chart desde que foi adicionada ao álbum.
+export async function publicarFaixaPendenteController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as {
+      musicaRowIndex?: number;
+      nomeJogador?: string;
+      jogadorId?: string;
+    };
+    const musicaRowIndex = Number(body.musicaRowIndex);
+    const nomeJogador = (body.nomeJogador || "").trim();
+    const jogadorId = (body.jogadorId || "").trim();
+
+    if (!musicaRowIndex || musicaRowIndex < 2 || !nomeJogador) {
+      return new Response(
+        JSON.stringify({ success: false, error: "musicaRowIndex e nomeJogador são obrigatórios." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const rows = await googleSheetsService.principal.readValues("Musicas", `A${musicaRowIndex}:Y${musicaRowIndex}`);
+    const row = rows?.[0];
+    if (!row) {
+      return new Response(JSON.stringify({ success: false, error: "Faixa não encontrada." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if ((row[1] || "").trim()) {
+      return new Response(JSON.stringify({ success: false, error: "Essa faixa já tem tópico publicado." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const fullTitle = row[7] || "";
+    const topicId = `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    await googleSheetsService.principal.updateValues("Musicas", `B${musicaRowIndex}`, [[topicId]]);
+    await googleSheetsService.principal.updateValues("Musicas", `F${musicaRowIndex}`, [[topicId]]);
+    await googleSheetsService.principal.updateValues("Musicas", `X${musicaRowIndex}`, [["Não"]]);
+
+    try {
+      await registrarAuditLog({
+        nomeJogador,
+        titulo: fullTitle,
+        tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+      });
+    } catch (err) {
+      console.warn("[publicarFaixaPendenteController] Erro ao gravar Audit Log:", err);
+    }
+
+    await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
+
+    return new Response(JSON.stringify({ success: true, data: { topicId, titulo: fullTitle } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[publicarFaixaPendenteController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao publicar faixa pendente." }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }

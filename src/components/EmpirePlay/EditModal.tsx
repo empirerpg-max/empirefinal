@@ -43,6 +43,7 @@ interface AlbumFaixa {
   ordem: number;
   audioUrl: string;
   letra?: string;
+  pendente?: boolean;
 }
 
 interface MusicaEmChart {
@@ -114,6 +115,7 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [loadingFaixas, setLoadingFaixas] = useState<boolean>(false);
   const [savingOrdem, setSavingOrdem] = useState<boolean>(false);
   const [musicasEmChart, setMusicasEmChart] = useState<MusicaEmChart[]>([]);
+  const [publicandoFaixaIdx, setPublicandoFaixaIdx] = useState<number | null>(null);
 
   // Formulário de "adicionar faixa nova"
   const [addingFaixa, setAddingFaixa] = useState<boolean>(false);
@@ -354,6 +356,37 @@ export const EditModal: React.FC<EditModalProps> = ({
     } finally {
       setSaving(false);
       setUploadingFaixaAudio(false);
+    }
+  };
+
+  // Publica o tópico de uma faixa "Pendente" — a partir daqui ela some da
+  // lista de pendentes, recebe comentário no fórum e conta prestígio/REGISTRO
+  // igual uma faixa avulsa (mesma regra confirmada com o usuário).
+  const handlePublicarFaixa = async (faixa: AlbumFaixa, idx: number) => {
+    setPublicandoFaixaIdx(idx);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/gestao/faixa/publicar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          musicaRowIndex: faixa.musicaRowIndex,
+          nomeJogador: selectedArtist || "Jogador",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Erro ao publicar faixa.");
+      }
+      setSuccessMsg("Faixa publicada com sucesso!");
+      if (editingItem?.fields?.topicId) {
+        fetchAlbumFaixas(editingItem.fields.topicId);
+      }
+      setTimeout(() => setSuccessMsg(null), 2000);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Erro ao publicar faixa.");
+    } finally {
+      setPublicandoFaixaIdx(null);
     }
   };
 
@@ -627,6 +660,27 @@ export const EditModal: React.FC<EditModalProps> = ({
                             <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 truncate">
                               {faixa.titulo}
                             </span>
+                            {faixa.pendente && (
+                              <span className="px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 text-[10px] font-black uppercase tracking-wide">
+                                Pendente
+                              </span>
+                            )}
+                            {faixa.pendente && (
+                              <button
+                                type="button"
+                                disabled={publicandoFaixaIdx === idx}
+                                onClick={() => handlePublicarFaixa(faixa, idx)}
+                                className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-black uppercase inline-flex items-center gap-1 disabled:opacity-50"
+                                title="Publicar faixa (abre tópico no fórum)"
+                              >
+                                {publicandoFaixaIdx === idx ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                  <Sparkles className="size-3" />
+                                )}
+                                Publicar
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleToggleFaixaLetra(idx)}
