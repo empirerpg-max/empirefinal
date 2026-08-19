@@ -433,6 +433,55 @@ export async function getMusicasEmChartController(): Promise<Response> {
   }
 }
 
+// Lista faixas do artista prontas pra vincular a um álbum: precisam ter um
+// tópico de verdade no fórum (Musicas!B não vazio — senão não tem o que
+// "vincular", a música ainda nem existe como conteúdo publicado) e ainda
+// não pertencer a nenhum álbum (Musicas!K vazio — senão a gente "roubaria"
+// silenciosamente a faixa de outro álbum). Faixas "Pendente" (sem tópico
+// ainda, aguardando serem publicadas) ficam de fora de propósito — hoje
+// isso só é possível fora deste app; quando existir um fluxo de "publicar
+// faixa pendente" aqui dentro, aí sim elas passam a aparecer aqui.
+export async function getFaixasSemAlbumController(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const artista = (url.searchParams.get("artista") || "").trim();
+    if (!artista) {
+      return new Response(JSON.stringify({ success: false, error: "Parâmetro 'artista' é obrigatório." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const rows = await googleSheetsService.principal.readValues("Musicas");
+    const normArtista = normalizeComparison(artista);
+    const faixas: { label: string; title: string }[] = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const topicId = (row[1] || "").trim(); // B - ID do tópico
+      const albumAtual = (row[10] || "").trim(); // K - ALBUM
+      const actPrincipal = (row[13] || "").trim(); // N - ACT PRINCIPAL
+      const titulo = (row[7] || "").trim(); // H - Nome da música
+
+      if (!topicId || albumAtual || !titulo) continue;
+      if (normalizeComparison(actPrincipal) !== normArtista) continue;
+
+      faixas.push({ label: titulo, title: titulo });
+    }
+
+    return new Response(JSON.stringify({ success: true, data: faixas }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[getFaixasSemAlbumController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao buscar faixas sem álbum." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
 // Vincula uma faixa já lançada (selecionada nos charts) ao álbum: grava o
 // nome do álbum e a ordem na aba Musicas (colunas K e U, buscando a música
 // pelo título na coluna H) e o nome do álbum na aba "EDIÇÃO CHARTS" da

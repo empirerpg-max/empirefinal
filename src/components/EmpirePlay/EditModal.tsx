@@ -47,7 +47,7 @@ interface AlbumFaixa {
 
 interface MusicaEmChart {
   label: string;
-  artist: string;
+  artist?: string;
   title: string;
 }
 
@@ -176,17 +176,21 @@ export const EditModal: React.FC<EditModalProps> = ({
     };
   }, [isOpen, selectedArtist, category]);
 
-  // Buscar músicas em chart (aba Pontos) — usado na busca de faixa existente
-  // pra adicionar a um álbum.
+  // Busca de "faixa existente" pra vincular a um álbum — só faixas do
+  // artista que já têm tópico publicado (Musicas!B preenchido) e ainda não
+  // pertencem a nenhum álbum (Musicas!K vazio). Faixas "Pendente" (sem
+  // tópico ainda) não entram aqui de propósito: elas já pertencem ao álbum
+  // desde a criação, não precisam ser "vinculadas", e publicá-las é uma
+  // ação separada que ainda não existe no app.
   useEffect(() => {
-    if (!isOpen || category !== "albuns") return;
-    fetch("/api/gestao/musicas-em-chart")
+    if (!isOpen || category !== "albuns" || !selectedArtist) return;
+    fetch(`/api/gestao/faixas-sem-album?artista=${encodeURIComponent(selectedArtist)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.success && Array.isArray(data.data)) setMusicasEmChart(data.data);
       })
       .catch(() => {});
-  }, [isOpen, category]);
+  }, [isOpen, category, selectedArtist]);
 
   const fetchAlbumFaixas = (topicId: string) => {
     setLoadingFaixas(true);
@@ -801,7 +805,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                                 type="text"
                                 value={novaFaixaBusca}
                                 onChange={(e) => setNovaFaixaBusca(e.target.value)}
-                                placeholder="Busque a música já lançada nos charts..."
+                                placeholder="Busque uma faixa já publicada, sem álbum..."
                                 className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none"
                               />
                               {novaFaixaBusca.trim().length > 0 && (
