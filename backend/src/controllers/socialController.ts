@@ -8,7 +8,7 @@ import { somarPrestigio } from "../services/prestigioService";
 // cabeçalhos numerados tipo "1. ID", então indexamos por posição, que é
 // robusto pros dois casos):
 //
-// SOCIAL_POSTS:   A id | B tipo | C subtipo | D autor | E texto | F media_url | G analytics(json) | H data | I telegram_id
+// SOCIAL_POSTS:   A id | B tipo | C subtipo | D autor | E texto | F media_url | G analytics(json) | H data | I telegram_id | J media_tipo ("imagem"/"video", coluna nova — linhas antigas ficam vazias e continuam tratadas como imagem)
 // SOCIAL_PERFIS:  A artista | B rede | C handle | D bio | E avatar_url | F telegram_id | G seguidores | H seguindo
 // SOCIAL_COMMENTS:A postid | B autor | C texto | D data | E telegram_id
 // SOCIAL_NEWS:    A id | B titulo | C conteudo | D imagem | E autor | F data | G telegram_id
@@ -82,6 +82,7 @@ export async function getSocialPostsController(): Promise<Response> {
         analytics: parseAnalytics(row[6]),
         data: normalizeText(row[7]),
         telegram_id: normalizeText(row[8]) || undefined,
+        media_tipo: normalizeText(row[9]) || undefined,
       };
     })
     .filter((p) => p.id);
@@ -102,6 +103,7 @@ export async function createSocialPostController(request: Request): Promise<Resp
     autor?: string;
     texto?: string;
     media_url?: string;
+    media_tipo?: string;
     analytics?: AnalyticsJson;
   };
 
@@ -122,6 +124,7 @@ export async function createSocialPostController(request: Request): Promise<Resp
     JSON.stringify(analytics),
     new Date().toISOString(),
     body.tgId || "",
+    payload.media_url ? payload.media_tipo || "imagem" : "",
   ]);
 
   await somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "post_social").catch(() => {});
@@ -159,6 +162,7 @@ export async function editSocialPostController(request: Request): Promise<Respon
     postId?: string;
     texto?: string;
     media_url?: string;
+    media_tipo?: string;
     tgId?: string;
     autor?: string;
   };
@@ -191,6 +195,13 @@ export async function editSocialPostController(request: Request): Promise<Respon
       [texto.trim(), media_url],
     ]);
   }
+
+  // media_tipo (coluna J) — só reescreve quando o dono trocou a mídia (uma
+  // coluna solta, fora do range contíguo D:F acima, por isso um update
+  // separado em vez de tentar encaixar no mesmo range).
+  await googleSheetsService.usuarios.updateValues(SHEETS.posts, `J${rowIndex + 1}`, [
+    [media_url ? body.media_tipo || "imagem" : ""],
+  ]);
 
   return jsonResponse({ ok: true });
 }
