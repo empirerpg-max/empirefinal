@@ -264,6 +264,38 @@ export const EditModal: React.FC<EditModalProps> = ({
     }
   };
 
+  // Edita a Ordem digitando o número direto, em vez de só subir/descer uma
+  // posição por vez — pedido depois que mover pro topo com as setas não
+  // deixava claro que a Ordem tinha realmente virado 1. Move a faixa pra
+  // posição digitada e reindexa todo mundo em sequência (1, 2, 3...), igual
+  // ao handleMoveFaixa, só que num pulo só.
+  const handleSetOrdem = async (index: number, novaOrdemStr: string) => {
+    const novaPosicao = parseInt(novaOrdemStr, 10);
+    if (!novaPosicao || novaPosicao < 1) return;
+    const alvo = Math.min(novaPosicao, albumFaixas.length) - 1;
+    if (alvo === index) return;
+
+    const updated = [...albumFaixas];
+    const [faixa] = updated.splice(index, 1);
+    updated.splice(alvo, 0, faixa);
+    const reindexed = updated.map((f, i) => ({ ...f, ordem: i + 1 }));
+    setAlbumFaixas(reindexed);
+    setSavingOrdem(true);
+    try {
+      await fetch("/api/gestao/album-faixas/reordenar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ordens: reindexed.map((f) => ({ musicaRowIndex: f.musicaRowIndex, ordem: f.ordem })),
+        }),
+      });
+    } catch (err) {
+      console.error("Erro ao reordenar faixas:", err);
+    } finally {
+      setSavingOrdem(false);
+    }
+  };
+
   const handleToggleFaixaLetra = (idx: number) => {
     if (editingFaixaLetraIndex === idx) {
       setEditingFaixaLetraIndex(null);
@@ -664,9 +696,20 @@ export const EditModal: React.FC<EditModalProps> = ({
                       {albumFaixas.map((faixa, idx) => (
                         <div key={faixa.musicaRowIndex}>
                           <div className="flex items-center gap-2 p-2.5 bg-neutral-800/40 border border-white/10 rounded-xl">
-                            <span className="w-5 text-center font-mono text-[11px] text-neutral-500">
-                              {faixa.ordem}
-                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={albumFaixas.length}
+                              defaultValue={faixa.ordem}
+                              key={`ordem-${faixa.musicaRowIndex}-${faixa.ordem}`}
+                              disabled={savingOrdem}
+                              onBlur={(e) => handleSetOrdem(idx, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              }}
+                              title="Editar posição na tracklist"
+                              className="w-9 text-center font-mono text-[11px] text-neutral-300 bg-neutral-900 border border-white/10 rounded-md py-1 outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
                             <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 truncate">
                               {faixa.titulo}
                             </span>
