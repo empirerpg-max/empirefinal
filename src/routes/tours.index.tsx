@@ -339,6 +339,7 @@ function MissoesCarousel({ missoes }: { missoes: Missao[] }) {
               key={`${m.idUnico}-${m.showNumero}`}
               to="/tours/$nome"
               params={{ nome: m.artista }}
+              search={{ id: m.idUnico }}
               className={`group shrink-0 w-[188px] rounded-3xl border overflow-hidden shadow-xl shadow-black/10 transition hover:scale-[1.02] active:scale-[0.97] ${
                 m.hoje ? "bg-amber-500/10 border-amber-500/40" : "bg-card border-white/5 hover:border-white/15"
               }`}
@@ -406,6 +407,7 @@ function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
               key={`${item.idUnico}-${item.showNumero}`}
               to="/tours/$nome"
               params={{ nome: item.artista }}
+              search={{ id: item.idUnico }}
               className="block group"
             >
               <div className="rounded-3xl bg-card border border-white/5 overflow-hidden shadow-xl shadow-black/10 transition hover:scale-[1.01] active:scale-[0.98] hover:border-white/15">
@@ -480,7 +482,7 @@ function TourCardItem({ t }: { t: TourCard }) {
   const progresso = Math.min(100, Math.round((feitos / total) * 100));
 
   return (
-    <Link to="/tours/$nome" params={{ nome: t.artista }} className="block group">
+    <Link to="/tours/$nome" params={{ nome: t.artista }} search={{ id: t.idUnico }} className="block group">
       <div className="relative overflow-hidden rounded-3xl bg-card border border-white/5 transition-all hover:scale-[1.01] active:scale-[0.98] shadow-2xl shadow-black/20">
         {/* Lado da imagem — capa + gradiente, nome da turnê e artista sobrepostos */}
         <div className="relative h-36 overflow-hidden">
