@@ -6,4 +6,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/migrar-albuns-legado?corrigirDono=1&nomes=Marco%20-%20Rise%20Up!%7CTED%20-%20industry%7CPaul%20Carter%20-%20MORNINGSTAR" | tee /tmp/out.json
+        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/checar-marco" | tee /tmp/out.json

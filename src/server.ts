@@ -385,6 +385,19 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/checar-marco" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      try {
+        const albunsApp = await googleSheetsService.principal.readValues("Albuns", "A1:K5000");
+        const matches = albunsApp
+          .map((r, i) => ({ i: i + 1, row: r }))
+          .filter(({ row }) => (row[6] || "").toLowerCase().includes("rise up"));
+        return Response.json({ matches });
+      } catch (err: any) {
+        return Response.json({ error: err?.message || String(err) }, { status: 500 });
+      }
+    }
+
     if (url.pathname === "/api/debug/migrar-albuns-legado" && request.method === "GET") {
       const { migrarAlbunsLegadoController } = await import(
         "../backend/src/controllers/migracaoAlbunsLegadoController"
