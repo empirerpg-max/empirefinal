@@ -662,48 +662,6 @@ function ArquivoFull({ finalizados, loading }: { finalizados: Programa[]; loadin
   );
 }
 
-// Altura real visível na tela (exclui o teclado quando ele está aberto).
-// Só isso — nenhum cálculo de posição/top/bottom, nenhum listener de
-// scroll. Serve só pra impedir que a gaveta de comentários cresça a
-// ponto de cobrir o vídeo quando o teclado abre (o dvh não encolhe
-// sozinho com o teclado no iPhone).
-function useVisibleViewportHeight() {
-  const [h, setH] = useState<number>(() =>
-    typeof window !== "undefined" ? window.visualViewport?.height ?? window.innerHeight : 0
-  );
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => setH(vv.height);
-    update();
-    vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
-  }, []);
-  return h;
-}
-
-// Se o teclado está aberto, de verdade — via foco em campo de texto, não
-// comparando alturas de viewport (isso dava falso positivo: no iOS a barra
-// de endereço/safe area já faz visualViewport.height < innerHeight mesmo
-// sem teclado nenhum aberto, então a gaveta nunca voltava ao tamanho normal
-// de 62dvh). Só encolhe de verdade quando alguém está digitando.
-function useKeyboardOpen() {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    const isTextField = (el: EventTarget | null) =>
-      el instanceof HTMLElement && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
-    const onFocusIn = (e: FocusEvent) => { if (isTextField(e.target)) setOpen(true); };
-    const onFocusOut = (e: FocusEvent) => { if (isTextField(e.target)) setOpen(false); };
-    document.addEventListener("focusin", onFocusIn);
-    document.addEventListener("focusout", onFocusOut);
-    return () => {
-      document.removeEventListener("focusin", onFocusIn);
-      document.removeEventListener("focusout", onFocusOut);
-    };
-  }, []);
-  return open;
-}
-
 // ---------- WatchView (chat + participantes + sobre) ----------
 function WatchView({ programa, onBack }: { programa: Programa; onBack: () => void }) {
   // Identidade vem só do login próprio (aba Usuários) — sem depender do
@@ -771,15 +729,16 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
   // "Voltar" (físico/swipe iOS) fecha a gaveta de comentários/participantes
   // em vez de sair da tela do Empire TV.
   useBackClose(!!mobileSheet, () => setMobileSheet(null));
-  const visibleHeight = useVisibleViewportHeight();
-  const keyboardOpen = useKeyboardOpen();
-  // Altura do vídeo quando a gaveta está aberta — calculada em px a partir
-  // da altura REAL visível (não em dvh, que no iOS não encolhe com o
-  // teclado), pra continuar proporcional mesmo com o teclado aberto
-  // roubando espaço da tela.
-  const videoHeightWithSheet = visibleHeight
-    ? Math.max(110, Math.round(visibleHeight * (keyboardOpen ? 0.2 : 0.32)))
-    : undefined;
+  // Altura do vídeo quando a gaveta está aberta — fixa em dvh (CSS puro,
+  // className abaixo), NÃO calculada via JS a partir do teclado/
+  // visualViewport. Tentar recalcular a altura quando o teclado abre foi a
+  // causa de tudo cobrir tudo: em PWA standalone o teclado do iOS não
+  // redimensiona o visualViewport, só sobrepõe por cima, então uma altura
+  // "recalculada" com base nele ficava presa atrás do teclado. O padrão já
+  // usado no resto do app (Fórum, CommentModal etc.) é bem mais simples e
+  // robusto: campo de digitar + lista vivem no MESMO container rolável
+  // (ver ChatPanel), e é o próprio Safari quem rola esse container pra
+  // revelar o campo acima do teclado — sem nenhuma conta de altura aqui.
 
   // O navegador força o autoplay como mudo até haver uma interação real do
   // usuário — como o player é um iframe de outro domínio (Kick), não dá pra
@@ -860,13 +819,11 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
           inteiro, não cortado) e a gaveta ocupa o resto, lado a lado no
           mesmo fluxo. Dá pra ver vídeo E comentários ao mesmo tempo, sem um
           cobrir o outro. Fechada, o vídeo volta a ocupar a tela toda. */}
-      <div
-        className="lg:hidden relative bg-black flex flex-col"
-        style={{ height: visibleHeight || undefined }}
-      >
+      <div className="lg:hidden relative h-full bg-black flex flex-col">
         <div
-          className={`relative shrink-0 transition-[height] duration-200 ${!mobileSheet ? "flex-1 min-h-0" : ""}`}
-          style={mobileSheet && videoHeightWithSheet ? { height: videoHeightWithSheet } : undefined}
+          className={`relative shrink-0 transition-[height] duration-200 ${
+            mobileSheet ? "h-[30dvh]" : "flex-1 min-h-0"
+          }`}
         >
           <div className="flex items-center gap-3 px-4 h-12 shrink-0 bg-gradient-to-b from-black/70 to-transparent absolute top-0 inset-x-0 z-10">
             <button onClick={onBack} className="size-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white" aria-label="Voltar">
