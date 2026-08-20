@@ -437,9 +437,22 @@ export async function getAllArtistasController(): Promise<Response> {
     // linha certa) — sem isso, o mesmo artista aparecia várias vezes na
     // lista e na busca. Mantém só uma linha por nome: a que tiver o maior
     // "Fortuna Total" (a mais completa/atualizada).
+    // normalizeComparison só dá trim() nas pontas — linhas duplicadas na
+    // planilha continuavam contando como nomes diferentes quando tinham
+    // espaço duplo, espaço não-quebrável (copiar/colar de outro lugar) ou
+    // caractere invisível no meio do nome ("Jessica  Johnson" com 2
+    // espaços, por exemplo). Aqui colapsa qualquer sequência de espaço em
+    // branco (normal ou não) pra um espaço só, garantindo que essas
+    // variações batam como o mesmo artista.
+    const chaveDedupe = (nome: string) =>
+      normalizeComparison(nome)
+        .replace(/[\u200B-\u200D\uFEFF]/g, "") // caracteres invisiveis (zero-width)
+        .replace(/\s+/g, " ")
+        .trim();
+
     const porNome = new Map<string, (typeof mapped)[number]>();
     for (const artista of mapped) {
-      const chave = normalizeComparison(artista.nome);
+      const chave = chaveDedupe(artista.nome);
       const atual = porNome.get(chave);
       if (!atual || parseNumeroBR(artista.fortuna_total) > parseNumeroBR(atual.fortuna_total)) {
         porNome.set(chave, artista);
