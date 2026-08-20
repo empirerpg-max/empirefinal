@@ -385,19 +385,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/artista-row" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const nome = url.searchParams.get("nome") || "";
-      try {
-        const rows = await googleSheetsService.usuarios.readValues("ARTISTAS").catch(() => []);
-        const header = rows[0] || [];
-        const idx = rows.findIndex((r, i) => i > 0 && (r[0] || "").trim().toLowerCase() === nome.trim().toLowerCase());
-        return Response.json({ header, rowIndex: idx >= 0 ? idx + 1 : -1, row: idx >= 0 ? rows[idx] : null });
-      } catch (err: any) {
-        return Response.json({ error: err?.message || String(err) }, { status: 500 });
-      }
-    }
-
     if (url.pathname === "/api/debug/charts-shape" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
       try {
