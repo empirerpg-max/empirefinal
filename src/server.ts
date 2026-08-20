@@ -385,6 +385,21 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/albuns-legado" && request.method === "GET") {
+      const { listSheetTabs, googleSheetsService } = await import(
+        "../backend/src/services/googleSheetsService"
+      );
+      try {
+        const [tabsEdicao, tabsSaidos] = await Promise.all([
+          listSheetTabs("edicaoCharts"),
+          listSheetTabs("saidosCharts"),
+        ]);
+        return Response.json({ tabsEdicao, tabsSaidos });
+      } catch (err: any) {
+        return Response.json({ error: err?.message || String(err) }, { status: 500 });
+      }
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
