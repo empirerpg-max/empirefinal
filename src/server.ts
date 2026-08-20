@@ -388,11 +388,11 @@ export default {
     if (url.pathname === "/api/debug/checar-marco" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
       try {
-        const albunsApp = await googleSheetsService.principal.readValues("Albuns", "A1:K5000");
-        const matches = albunsApp
+        const musicasApp = await googleSheetsService.principal.readValues("Musicas", "A1:Y5000");
+        const matches = musicasApp
           .map((r, i) => ({ i: i + 1, row: r }))
-          .filter(({ row }) => (row[6] || "").toLowerCase().includes("rise up"));
-        return Response.json({ matches });
+          .filter(({ row }) => (row[10] || "") === "Marco - Rise Up!");
+        return Response.json({ count: matches.length, matches: matches.slice(0, 4) });
       } catch (err: any) {
         return Response.json({ error: err?.message || String(err) }, { status: 500 });
       }
