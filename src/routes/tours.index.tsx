@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Mic2,
   Globe,
   Users,
   ChevronRight,
+  ChevronDown,
   Loader2,
   Crown,
   Plus,
@@ -111,6 +112,45 @@ function realizados(t: TourCard) {
     const data = parseDataBR(s.data);
     return !!data && data < hoje;
   }).length;
+}
+
+// Cabeçalho de seção que expande/recolhe o conteúdo — usado nas seções da
+// Central que podem crescer bastante (Minhas Turnês, Ranking) pra não
+// ocupar a tela toda o tempo inteiro.
+function CollapsibleSection({
+  title,
+  count,
+  defaultOpen = true,
+  children,
+}: {
+  title: ReactNode;
+  count?: number;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="mb-8">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-2 mb-3 pl-1 pr-2"
+      >
+        <h2 className="text-[11px] font-black uppercase text-neutral-400 flex items-center gap-1.5">
+          {title}
+          {typeof count === "number" && (
+            <span className="px-1.5 py-0.5 rounded-full bg-white/5 text-[9.5px] font-black text-muted-foreground">
+              {count}
+            </span>
+          )}
+        </h2>
+        <ChevronDown
+          className={`size-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && children}
+    </section>
+  );
 }
 
 function ToursIndex() {
@@ -237,8 +277,7 @@ function ToursIndex() {
           {rankingRentaveis.length > 0 && <RankingRentaveis turnes={rankingRentaveis} />}
 
           {telegramId && meusArtistas.length > 0 && (
-            <section className="mb-8">
-              <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1">Minhas Turnês</h2>
+            <CollapsibleSection title="Minhas Turnês" count={minhasTurnes?.length}>
               {!minhasTurnes ? (
                 <div className="flex justify-center py-8 opacity-50">
                   <Loader2 className="size-6 animate-spin" />
@@ -256,12 +295,12 @@ function ToursIndex() {
                   ))}
                 </div>
               )}
-            </section>
+            </CollapsibleSection>
           )}
 
           <section className="mb-8">
             <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1">
-              Turnês em Andamento — Império
+              Turnês em Andamento
             </h2>
             {publicas === null ? (
               <div className="flex justify-center py-8 opacity-50">
@@ -402,10 +441,13 @@ function MissoesCarousel({ missoes }: { missoes: Missao[] }) {
 function RankingRentaveis({ turnes }: { turnes: TourCard[] }) {
   const medalhas = ["🥇", "🥈", "🥉"];
   return (
-    <section className="mb-8">
-      <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1 flex items-center gap-1.5">
-        <Trophy className="size-3.5 text-amber-400" /> Turnês Mais Rentáveis — Império
-      </h2>
+    <CollapsibleSection
+      title={
+        <span className="flex items-center gap-1.5">
+          <Trophy className="size-3.5 text-amber-400" /> Turnês Mais Rentáveis
+        </span>
+      }
+    >
       <div className="rounded-3xl bg-card border border-white/5 divide-y divide-white/5 overflow-hidden shadow-xl shadow-black/10">
         {turnes.map((t, i) => (
           <Link
@@ -430,12 +472,19 @@ function RankingRentaveis({ turnes }: { turnes: TourCard[] }) {
           </Link>
         ))}
       </div>
-    </section>
+    </CollapsibleSection>
   );
 }
 
+// Só mostra as N primeiras por padrão — o feed cresce sem parar conforme
+// mais jogadores fazem ações, e cada card é grande (imagem + texto), então
+// sem esse limite a Central vira uma rolagem infinita.
+const FEED_PREVIEW_COUNT = 3;
+
 function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
+  const [verTudo, setVerTudo] = useState(false);
   if (feed && feed.length === 0) return null;
+  const visiveis = !feed || verTudo ? feed : feed.slice(0, FEED_PREVIEW_COUNT);
 
   return (
     <section className="mb-8">
@@ -446,7 +495,7 @@ function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {feed.map((item) => (
+          {visiveis?.map((item) => (
             <Link
               key={`${item.idUnico}-${item.showNumero}`}
               to="/tours/$nome"
@@ -508,6 +557,15 @@ function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
               </div>
             </Link>
           ))}
+          {!verTudo && feed.length > FEED_PREVIEW_COUNT && (
+            <button
+              type="button"
+              onClick={() => setVerTudo(true)}
+              className="w-full py-2.5 rounded-2xl bg-white/[0.03] border border-white/5 text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition"
+            >
+              Ver mais ({feed.length - FEED_PREVIEW_COUNT})
+            </button>
+          )}
         </div>
       )}
     </section>
