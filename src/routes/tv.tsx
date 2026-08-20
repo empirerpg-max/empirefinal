@@ -519,7 +519,16 @@ function resolveStreamEmbed(url: string | undefined, aoVivo: boolean): string | 
 
     if (host === "t.me" || host === "telegram.me") return null;
 
-    if (host === "player.kick.com") return u;
+    // player.kick.com direto — forçamos os mesmos parâmetros do outro ramo
+    // abaixo (autoplay=true&muted=false) em vez de usar a URL crua como
+    // veio salva, porque se ela não tiver "muted=false" o player abre mudo
+    // silenciosamente sem nenhum erro visível — foi exatamente esse o caso
+    // que fez o som "sumir do nada" pra uma transmissão específica.
+    if (host === "player.kick.com") {
+      parsed.searchParams.set("autoplay", "true");
+      parsed.searchParams.set("muted", "false");
+      return parsed.toString();
+    }
     if (host === "kick.com") {
       // A checagem de "ao vivo" via API da Kick é bloqueada por proteção
       // anti-bot server-side (confirmado: HTTP 403 "Request blocked by
