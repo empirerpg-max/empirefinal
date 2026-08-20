@@ -125,6 +125,8 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [novaFaixaBusca, setNovaFaixaBusca] = useState<string>("");
   const [novaFaixaTipoSingle, setNovaFaixaTipoSingle] = useState<string>("TRACKLIST ALBUM");
   const [novaFaixaTipoMusica, setNovaFaixaTipoMusica] = useState<string>("SOLO");
+  // Artistas 2-6 (feat/parceria) — só faz sentido fora de SOLO.
+  const [novaFaixaParticipantes, setNovaFaixaParticipantes] = useState<string>("");
   const [novaFaixaMediaUrl, setNovaFaixaMediaUrl] = useState<string>("");
   const [novaFaixaAudioFile, setNovaFaixaAudioFile] = useState<File | null>(null);
   const [uploadingFaixaAudio, setUploadingFaixaAudio] = useState<boolean>(false);
@@ -230,6 +232,7 @@ export const EditModal: React.FC<EditModalProps> = ({
     setNovaFaixaMediaUrl("");
     setNovaFaixaAudioFile(null);
     setNovaFaixaLetra("");
+    setNovaFaixaParticipantes("");
     setEditingFaixaLetraIndex(null);
     setFaixaLetraText("");
     if (item.tipo === "albuns" && item.fields?.topicId) {
@@ -366,6 +369,13 @@ export const EditModal: React.FC<EditModalProps> = ({
               titulo: novaFaixaTitulo,
               tipoSingle: novaFaixaTipoSingle,
               tipoMusica: novaFaixaTipoMusica,
+              participantes:
+                novaFaixaTipoMusica !== "SOLO"
+                  ? novaFaixaParticipantes
+                      .split(",")
+                      .map((p) => p.trim())
+                      .filter(Boolean)
+                  : [],
               mediaUrl,
               letra: novaFaixaLetra.trim(),
               abrirTopico: false,
@@ -390,6 +400,7 @@ export const EditModal: React.FC<EditModalProps> = ({
       setNovaFaixaMediaUrl("");
       setNovaFaixaAudioFile(null);
       setNovaFaixaLetra("");
+    setNovaFaixaParticipantes("");
       fetchAlbumFaixas(editingItem.fields.topicId);
       const duracaoMsg = json.data?.faixasCriadas?.length > 0 ? 6000 : 2000;
       setTimeout(() => setSuccessMsg(null), duracaoMsg);
@@ -848,6 +859,15 @@ export const EditModal: React.FC<EditModalProps> = ({
                               ))}
                             </select>
                           </div>
+                          {novaFaixaTipoMusica !== "SOLO" && (
+                            <input
+                              type="text"
+                              value={novaFaixaParticipantes}
+                              onChange={(e) => setNovaFaixaParticipantes(e.target.value)}
+                              placeholder="Artistas (feat/parceria), separados por vírgula"
+                              className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none"
+                            />
+                          )}
                           <div className="space-y-1.5">
                             <input
                               type="file"
