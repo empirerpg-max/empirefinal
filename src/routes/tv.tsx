@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2 } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV } from "@/lib/api";
 import { getKickStatus } from "@/lib/kick.functions";
@@ -771,18 +771,45 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
   // atrás do teclado — nunca o contrário.
   const sheetMaxHeight = keyboardOpen && visibleHeight ? Math.max(160, visibleHeight - 110) : undefined;
 
+  // O navegador força o autoplay como mudo até haver uma interação real do
+  // usuário — como o player é um iframe de outro domínio (Kick), não dá pra
+  // ativar o som via código nosso sem essa interação acontecer dentro dele.
+  // Recarregar o iframe como resposta direta a um clique conta como essa
+  // interação pro navegador, então o autoplay seguinte já sai com som.
+  const [unmutedOnce, setUnmutedOnce] = useState(false);
+  const [iframeReloadKey, setIframeReloadKey] = useState(0);
+  const handleUnmute = () => {
+    setUnmutedOnce(true);
+    setIframeReloadKey((k) => k + 1);
+  };
+  useEffect(() => {
+    setUnmutedOnce(false);
+  }, [programa.id]);
+
   const player = (() => {
     const embed = resolveStreamEmbed(programa.stream_url, !!programa.ao_vivo);
     if (embed) {
       return (
-        <iframe
-          src={embed}
-          title={programa.titulo}
-          className="w-full h-full border-0 block"
-          allow="autoplay; camera; microphone; fullscreen; encrypted-media; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-        />
+        <div className="relative w-full h-full">
+          <iframe
+            key={iframeReloadKey}
+            src={embed}
+            title={programa.titulo}
+            className="w-full h-full border-0 block"
+            allow="autoplay; camera; microphone; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+          />
+          {!unmutedOnce && (
+            <button
+              type="button"
+              onClick={handleUnmute}
+              className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
+            >
+              <VolumeX className="size-3.5" /> Toque para ativar o som
+            </button>
+          )}
+        </div>
       );
     }
     const hasKick = !!programa.stream_url && /kick\.com/.test(programa.stream_url);
