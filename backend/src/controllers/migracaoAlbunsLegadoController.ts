@@ -1,4 +1,5 @@
 import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
+import { getOwnerIdForArtist } from "./artistasController";
 
 // Migração pontual dos álbuns "legados" (planilha separada, materiais que já
 // saíram dos charts) pro app: cria o tópico do álbum + uma linha pendente em
@@ -80,10 +81,13 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
       .map((n) => n.trim().toLowerCase())
       .filter(Boolean);
 
-    const [albumsFull, singlesFull, albunsApp] = await Promise.all([
+    const corrigirDono = url.searchParams.get("corrigirDono") === "1";
+
+    const [albumsFull, singlesFull, albunsApp, musicasApp] = await Promise.all([
       googleSheetsService.saidosCharts.readValues("ALBUMS", "A1:BZ5000"),
       googleSheetsService.saidosCharts.readValues("SINGLES", "A1:BZ5000"),
-      googleSheetsService.principal.readValues("Albuns", "A1:J5000"),
+      googleSheetsService.principal.readValues("Albuns", "A1:K5000"),
+      googleSheetsService.principal.readValues("Musicas", "A1:Y5000"),
     ]);
 
     const albunsHeader = albumsFull[0] || [];
@@ -117,7 +121,33 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
       if (!nome) continue;
 
       if (albunsAppNomes.has(nome.toLowerCase())) {
-        resultados.push({ nome, artista, faixas: 0, status: "pulado_ja_existe" });
+        if (corrigirDono) {
+          // Corrige um álbum já migrado (ex: o lote de teste, que saiu com
+          // "Migração" em vez do artista, e sem dono vinculado).
+          try {
+            const donoId = await getOwnerIdForArtist(artista);
+            const albumRowIndex = albunsApp.findIndex(
+              (r, i) => i > 0 && (r[6] || "").trim().toLowerCase() === nome.toLowerCase(),
+            );
+            if (albumRowIndex > 0) {
+              await googleSheetsService.principal.updateValues(
+                "Albuns",
+                `E${albumRowIndex + 1}:F${albumRowIndex + 1}`,
+                [[donoId, artista]],
+              );
+            }
+            for (let i = 1; i < musicasApp.length; i++) {
+              if ((musicasApp[i][10] || "").trim() === nome) {
+                await googleSheetsService.principal.updateValues("Musicas", `G${i + 1}`, [[donoId]]);
+              }
+            }
+            resultados.push({ nome, artista, faixas: 0, status: "pulado_ja_existe" });
+          } catch (err: any) {
+            resultados.push({ nome, artista, faixas: 0, status: "erro", erro: err?.message || String(err) });
+          }
+        } else {
+          resultados.push({ nome, artista, faixas: 0, status: "pulado_ja_existe" });
+        }
         continue;
       }
 
@@ -131,16 +161,21 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
         const codigoAlbum = `EMPALBM${String(proximoAlbumNum).padStart(3, "0")}`;
         proximoAlbumNum++;
 
-        // 1. Tópico do álbum em Albuns (principal) — sem jogador dono real
-        // (é migração, não lançamento de ninguém); capa fica vazia até o
-        // dono do artista editar.
+        // ID do dono de verdade do artista (aba ARTISTAS) — sem isso o
+        // conteúdo migrado nunca aparece como editável pro jogador certo,
+        // vira uma trava. "Nome do criador" (F) leva o nome do artista
+        // principal, não "Migração".
+        const donoId = await getOwnerIdForArtist(artista);
+
+        // 1. Tópico do álbum em Albuns (principal) — capa fica vazia até o
+        // dono do artista editar e subir uma.
         await googleSheetsService.principal.appendRow("Albuns", [
           data || "", // A - Data de lançamento
           albumTopicId, // B - ID do tópico
           "", // C - Capa
           albumTopicId, // D - Comentários para
-          "", // E - ID do Criador
-          "Migração", // F - Nome do criador
+          donoId, // E - ID do Criador
+          artista, // F - Nome do criador
           nome, // G - Nome (Artista - Título)
           "", // H - Metacritic por jogador
           "", // I - Média Metacritic
@@ -169,7 +204,7 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
             "", // D - Capa
             "", // E - Letra
             "", // F - Comentários para
-            "", // G - ID do Criador
+            donoId, // G - ID do Criador
             tituloFaixa, // H - Nome da música
             tipoSingle, // I - TIPO DE SINGLE
             tipoMusica, // J - TIPO DE MÚSICA
