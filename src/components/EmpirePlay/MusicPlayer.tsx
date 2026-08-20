@@ -334,11 +334,24 @@ export function MusicPlayer({
     }
   };
 
-  const playNext = () => {
-    if (!currentTrack || playlist.length === 0) return;
-    const idx = playlist.findIndex(
+  // Prefere casar pelo "id" (estável, único por faixa) quando disponível —
+  // casar só por título+artista pode achar a ocorrência ERRADA (índice
+  // "congelado" no primeiro match) sempre que duas faixas da mesma lista
+  // têm título/artista iguais, o que trava avançar/voltar na mesma faixa.
+  const findCurrentIndex = () => {
+    if (!currentTrack || playlist.length === 0) return -1;
+    if (currentTrack.id) {
+      const byId = playlist.findIndex((t) => t.id === currentTrack.id);
+      if (byId >= 0) return byId;
+    }
+    return playlist.findIndex(
       (t) => t.titulo === currentTrack.titulo && t.artista === currentTrack.artista,
     );
+  };
+
+  const playNext = () => {
+    if (!currentTrack || playlist.length === 0) return;
+    const idx = findCurrentIndex();
     if (idx >= 0 && idx < playlist.length - 1) {
       onTrackChange?.(playlist[idx + 1]);
     } else if (playlist.length > 0) {
@@ -352,9 +365,7 @@ export function MusicPlayer({
 
   const playPrev = () => {
     if (!currentTrack || playlist.length === 0) return;
-    const idx = playlist.findIndex(
-      (t) => t.titulo === currentTrack.titulo && t.artista === currentTrack.artista,
-    );
+    const idx = findCurrentIndex();
     if (idx > 0) {
       onTrackChange?.(playlist[idx - 1]);
     } else if (playlist.length > 0) {
