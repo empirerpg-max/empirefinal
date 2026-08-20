@@ -17,6 +17,7 @@ import {
   Ticket,
   Clapperboard,
   Flame,
+  Trophy,
 } from "lucide-react";
 import { api, fmtMoney, driveImg } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
@@ -176,6 +177,12 @@ function ToursIndex() {
   const finalizados = (publicas || []).filter(
     (t) => !minhasIds.has(t.idUnico) && t.status !== "Em andamento",
   );
+  // Ranking das turnês em andamento mais rentáveis do Império inteiro
+  // (minhas + de todo mundo), como combinado.
+  const rankingRentaveis = [...(minhasTurnes || []), ...outrasEmAndamento]
+    .filter((t) => t.status === "Em andamento")
+    .sort((a, b) => b.arrecadacaoTempoReal - a.arrecadacaoTempoReal)
+    .slice(0, 5);
 
   return (
     <main className="flex-1 mx-auto w-full max-w-2xl px-4 pt-6 pb-20">
@@ -226,6 +233,8 @@ function ToursIndex() {
           {telegramId && missoes && missoes.length > 0 && <MissoesCarousel missoes={missoes} />}
 
           <FeedGlobal feed={feed} />
+
+          {rankingRentaveis.length > 0 && <RankingRentaveis turnes={rankingRentaveis} />}
 
           {telegramId && meusArtistas.length > 0 && (
             <section className="mb-8">
@@ -389,6 +398,41 @@ function MissoesCarousel({ missoes }: { missoes: Missao[] }) {
   );
 }
 
+
+function RankingRentaveis({ turnes }: { turnes: TourCard[] }) {
+  const medalhas = ["🥇", "🥈", "🥉"];
+  return (
+    <section className="mb-8">
+      <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1 flex items-center gap-1.5">
+        <Trophy className="size-3.5 text-amber-400" /> Turnês Mais Rentáveis — Império
+      </h2>
+      <div className="rounded-3xl bg-card border border-white/5 divide-y divide-white/5 overflow-hidden shadow-xl shadow-black/10">
+        {turnes.map((t, i) => (
+          <Link
+            key={t.idUnico}
+            to="/tours/$nome"
+            params={{ nome: t.artista }}
+            search={{ id: t.idUnico }}
+            className="flex items-center gap-3 p-3.5 hover:bg-white/[0.03] transition"
+          >
+            <span className="shrink-0 w-7 text-center text-base font-black">
+              {medalhas[i] || `${i + 1}º`}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-black uppercase text-primary/80 tracking-wide truncate">
+                {t.artista}
+              </p>
+              <p className="text-sm font-bold truncate">{t.nomeTurne}</p>
+            </div>
+            <span className="shrink-0 text-sm font-black text-emerald-400">
+              {fmtMoney(t.arrecadacaoTempoReal)}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
   if (feed && feed.length === 0) return null;
