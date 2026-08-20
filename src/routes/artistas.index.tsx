@@ -151,11 +151,15 @@ function ArtistasList() {
 
                           {/* Stats rápidos: fortuna + prestígio */}
                           <div className="flex items-center gap-4 mb-2">
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-[10px] text-muted-foreground uppercase font-black tracking-wider">Fortuna</span>
-                              <span className="text-xs font-black text-emerald-400 truncate">{fmtMoney(a.fortuna_total)}</span>
-                            </div>
-                            <div className="w-[1px] h-6 bg-white/10" />
+                            {a.fortuna_total !== null && (
+                              <>
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-[10px] text-muted-foreground uppercase font-black tracking-wider">Fortuna</span>
+                                  <span className="text-xs font-black text-emerald-400 truncate">{fmtMoney(a.fortuna_total)}</span>
+                                </div>
+                                <div className="w-[1px] h-6 bg-white/10" />
+                              </>
+                            )}
                             <div className="flex flex-col min-w-0">
                               <span className="text-[10px] text-muted-foreground uppercase font-black tracking-wider">Seguidores</span>
                               <span className="text-xs font-black text-amber-400 truncate">{a.seguidores.toLocaleString("pt-BR")}</span>

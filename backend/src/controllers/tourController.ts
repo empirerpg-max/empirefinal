@@ -7,7 +7,12 @@ import {
   ensureSheetTab,
 } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
-import { getArtistNamesForOwner } from "./artistasController";
+import { getArtistNamesForOwner, creditarFortunaTurnes } from "./artistasController";
+
+// Percentual do arrecadado em turnê (tempo real) que vira Fortuna Turnês do
+// artista quando a turnê finaliza — meio-termo entre 60% e 70% acordado.
+// Fácil de ajustar se o combinado mudar.
+const PERCENTUAL_FORTUNA_TURNES = 0.65;
 
 const LOCAIS_SHEET = "DADOS_TOUR";
 const TOURS_SHEET = "CONTROLE_TOURS";
@@ -298,10 +303,12 @@ export async function getTurnesController(request: Request): Promise<Response> {
         }
         const dinamico = statusDinamico(tour);
         if (dinamico !== tour.status) {
+          const statusAnterior = tour.status;
           tour.status = dinamico;
           await googleSheetsService.usuarios
             .updateValues(TOURS_SHEET, `${statusCol}${rowIndex}`, [[dinamico]])
             .catch(() => {});
+          await creditarFortunaTurnesDaTurne(tour, dinamico, statusAnterior);
         }
       }),
     );
@@ -332,11 +339,13 @@ export async function getTurneDetalheController(request: Request): Promise<Respo
     }
     const dinamico = statusDinamico(tour);
     if (dinamico !== tour.status) {
+      const statusAnterior = tour.status;
       tour.status = dinamico;
       const statusCol = colIndexToA1Letter(TOUR_HEADERS.indexOf("status"));
       await googleSheetsService.usuarios
         .updateValues(TOURS_SHEET, `${statusCol}${found.rowIndex}`, [[dinamico]])
         .catch(() => {});
+      await creditarFortunaTurnesDaTurne(tour, dinamico, statusAnterior);
     }
 
     return jsonOk(tour);
@@ -575,6 +584,24 @@ function statusDinamico(tour: Tour): string {
   if (hoje < inicio) return STATUS_PLANEJANDO;
   if (hoje > termino) return STATUS_FINALIZADA;
   return STATUS_EM_ANDAMENTO;
+}
+
+// Credita a Fortuna Turnês do artista quando a turnê acabou de transicionar
+// PRA "Finalizada" (nunca em outras transições, e nunca de novo depois —
+// uma vez que o status vira "Finalizada" na planilha, essa condição não bate
+// mais nas próximas leituras). Só turnês do sistema novo entram aqui: as
+// antigas (sem capa) sempre calculam como "Finalizada" mesmo sem ter
+// transicionado de verdade agora, então não fazem sentido pro crédito.
+async function creditarFortunaTurnesDaTurne(
+  tour: Tour,
+  statusNovo: string,
+  statusAnterior: string,
+): Promise<void> {
+  if (!tour.sistemaNovo) return;
+  if (statusNovo !== STATUS_FINALIZADA || statusAnterior === STATUS_FINALIZADA) return;
+  if (!tour.arrecadacaoTempoReal) return;
+  const valor = tour.arrecadacaoTempoReal * PERCENTUAL_FORTUNA_TURNES;
+  await creditarFortunaTurnes(tour.artista, valor).catch(() => {});
 }
 
 interface AcaoDiaPayload {

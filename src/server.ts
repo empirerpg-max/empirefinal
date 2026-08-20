@@ -385,20 +385,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/artistas-header" && request.method === "GET") {
-      const { googleSheetsService, listSheetTabs } = await import(
-        "../backend/src/services/googleSheetsService"
-      );
-      try {
-        const tabs = await listSheetTabs("usuarios");
-        const rows = await googleSheetsService.usuarios.readValues("ARTISTAS", "A1:BZ3");
-        return Response.json({ tabs, rows });
-      } catch (err: any) {
-        return Response.json({ error: err?.message || String(err) }, { status: 500 });
-      }
-    }
-
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
