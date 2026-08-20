@@ -346,7 +346,12 @@ export const EditModal: React.FC<EditModalProps> = ({
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Erro ao adicionar faixa.");
       }
-      setSuccessMsg("Faixa adicionada com sucesso!");
+      if (json.data?.faixasFalhas?.length > 0) {
+        // A faixa selecionada não bateu com nenhuma linha em "Musicas" nem
+        // pôde ser criada — não finge sucesso, mostra o motivo real.
+        throw new Error(json.data.mensagem || "Não foi possível vincular a faixa selecionada.");
+      }
+      setSuccessMsg(json.data?.mensagem || "Faixa adicionada com sucesso!");
       setAddingFaixa(false);
       setNovaFaixaTitulo("");
       setNovaFaixaBusca("");
@@ -354,7 +359,8 @@ export const EditModal: React.FC<EditModalProps> = ({
       setNovaFaixaAudioFile(null);
       setNovaFaixaLetra("");
       fetchAlbumFaixas(editingItem.fields.topicId);
-      setTimeout(() => setSuccessMsg(null), 2000);
+      const duracaoMsg = json.data?.faixasCriadas?.length > 0 ? 6000 : 2000;
+      setTimeout(() => setSuccessMsg(null), duracaoMsg);
     } catch (err: any) {
       setErrorMsg(err.message || "Erro ao adicionar faixa.");
     } finally {
