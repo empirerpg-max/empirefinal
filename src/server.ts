@@ -385,59 +385,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/checar-marco" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      try {
-        const musicasApp = await googleSheetsService.principal.readValues("Musicas", "A1:Y5000");
-        const matches = musicasApp
-          .map((r, i) => ({ i: i + 1, row: r }))
-          .filter(({ row }) => (row[10] || "") === "Marco - Rise Up!");
-        return Response.json({ count: matches.length, matches: matches.slice(0, 4) });
-      } catch (err: any) {
-        return Response.json({ error: err?.message || String(err) }, { status: 500 });
-      }
-    }
-
-    if (url.pathname === "/api/debug/migrar-albuns-legado" && request.method === "GET") {
-      const { migrarAlbunsLegadoController } = await import(
-        "../backend/src/controllers/migracaoAlbunsLegadoController"
-      );
-      return migrarAlbunsLegadoController(request);
-    }
-
-    if (url.pathname === "/api/debug/albuns-legado" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      try {
-        const [singlesFull, albumsFull, albunsApp, musicasApp] = await Promise.all([
-          googleSheetsService.saidosCharts.readValues("SINGLES", "A1:BZ5000"),
-          googleSheetsService.saidosCharts.readValues("ALBUMS", "A1:BZ5000"),
-          googleSheetsService.principal.readValues("Albuns", "A1:J5000"),
-          googleSheetsService.principal.readValues("Musicas", "A1:Y5000"),
-        ]);
-        // Nome do álbum já existente no app (aba Albuns, coluna G).
-        const albunsAppNomes = new Set(
-          albunsApp.slice(1).map((r) => (r[6] || "").trim().toLowerCase()).filter(Boolean),
-        );
-        const albumsRows = albumsFull.slice(1);
-        const singlesRows = singlesFull.slice(1);
-        const albunsResumo = albumsRows.map((r) => {
-          const nome = (r[3] || "").trim();
-          const artista = (r[0] || "").trim();
-          const jaExiste = albunsAppNomes.has(nome.toLowerCase());
-          const faixasDoAlbum = singlesRows.filter((s) => (s[5] || "").trim() === nome).length;
-          return { artista, nome, data: r[1] || "", faixasNoSingles: faixasDoAlbum, jaExisteNoApp: jaExiste };
-        });
-        return Response.json({
-          singlesCount: singlesRows.length,
-          albumsCount: albumsRows.length,
-          albunsAppCount: albunsApp.length - 1,
-          musicasAppCount: musicasApp.length - 1,
-          albunsResumo,
-        });
-      } catch (err: any) {
-        return Response.json({ error: err?.message || String(err) }, { status: 500 });
-      }
-    }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
