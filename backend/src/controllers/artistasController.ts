@@ -462,11 +462,29 @@ export async function getAllArtistasController(): Promise<Response> {
         .replace(/\s+/g, " ")
         .trim();
 
+    // "Mais completa" não é só quem tem mais fortuna — uma linha duplicada
+    // pode ter fortuna maior só por coincidência de cálculo e ainda assim
+    // estar com a foto/dono em branco (foi o caso do SA5M: a linha mantida
+    // tinha mais fortuna, mas sem foto, então o perfil aparecia com imagem
+    // quebrada). Prioriza ter foto e dono preenchidos antes de olhar pra
+    // fortuna.
+    const pontuacaoCompletude = (a: (typeof mapped)[number]) =>
+      (a.foto.trim() ? 2 : 0) + (a.telegram_id.trim() ? 1 : 0);
+
     const porNome = new Map<string, (typeof mapped)[number]>();
     for (const artista of mapped) {
       const chave = chaveDedupe(artista.nome);
       const atual = porNome.get(chave);
-      if (!atual || parseNumeroBR(artista.fortuna_total) > parseNumeroBR(atual.fortuna_total)) {
+      if (!atual) {
+        porNome.set(chave, artista);
+        continue;
+      }
+      const pontosNovo = pontuacaoCompletude(artista);
+      const pontosAtual = pontuacaoCompletude(atual);
+      if (
+        pontosNovo > pontosAtual ||
+        (pontosNovo === pontosAtual && parseNumeroBR(artista.fortuna_total) > parseNumeroBR(atual.fortuna_total))
+      ) {
         porNome.set(chave, artista);
       }
     }
