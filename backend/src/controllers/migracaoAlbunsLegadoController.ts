@@ -74,7 +74,7 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
   try {
     const url = new URL(request.url);
     const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10) || 0);
-    const limit = Math.max(1, Math.min(5, parseInt(url.searchParams.get("limit") || "1", 10) || 1));
+    const limit = Math.max(1, Math.min(10, parseInt(url.searchParams.get("limit") || "1", 10) || 1));
     // Pra rodar um teste com álbuns específicos (não os N primeiros por
     // posição) — nomes exatos separados por "|".
     const nomesAlvo = (url.searchParams.get("nomes") || "")
