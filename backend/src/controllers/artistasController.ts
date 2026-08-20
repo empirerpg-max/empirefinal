@@ -9,6 +9,13 @@ import {
 const ARTISTAS_SHEET = "ARTISTAS";
 const USUARIOS_SHEET = "Usuários";
 
+// Planilha usa "2.019.325,96" (ponto como separador de milhar) — mesmo
+// parser usado no resto do backend pra números em formato BR.
+function parseNumeroBR(v: string): number {
+  const cleaned = normalizeText(v).replace(/\./g, "").replace(",", ".");
+  return parseFloat(cleaned) || 0;
+}
+
 /**
  * Resolve um "usuario" (login) pro ID (telegram_id histórico), via a aba
  * Usuários — usado só quando a chamada vem com `usuario` em vez de
@@ -404,7 +411,7 @@ export async function setArtistFotoController(request: Request): Promise<Respons
 export async function getAllArtistasController(): Promise<Response> {
   try {
     const rows = await readArtistasRows();
-    const data = rows
+    const mapped = rows
       .filter((r) => r.rec["nome"])
       .map((r) => ({
         nome: r.rec["nome"],
@@ -424,6 +431,21 @@ export async function getAllArtistasController(): Promise<Response> {
         genero: r.rec["genero"] || "",
         pais: r.rec["pais"] || "",
       }));
+
+    // A aba ARTISTAS tem algumas linhas duplicadas pro mesmo artista (nome
+    // repetido, geralmente uma linha "quebrada"/desatualizada ao lado da
+    // linha certa) — sem isso, o mesmo artista aparecia várias vezes na
+    // lista e na busca. Mantém só uma linha por nome: a que tiver o maior
+    // "Fortuna Total" (a mais completa/atualizada).
+    const porNome = new Map<string, (typeof mapped)[number]>();
+    for (const artista of mapped) {
+      const chave = normalizeComparison(artista.nome);
+      const atual = porNome.get(chave);
+      if (!atual || parseNumeroBR(artista.fortuna_total) > parseNumeroBR(atual.fortuna_total)) {
+        porNome.set(chave, artista);
+      }
+    }
+    const data = Array.from(porNome.values());
 
     return new Response(JSON.stringify({ success: true, data }), {
       status: 200,
