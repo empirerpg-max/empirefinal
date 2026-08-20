@@ -95,6 +95,24 @@ export async function getOwnerIdForArtist(nomeArtista: string): Promise<string> 
   return match?.[1] || "";
 }
 
+// Soma `valor` na coluna "Fortuna Turnês" do artista (nunca sobrescreve —
+// acumula em cima do que já tiver lá). Usada quando uma turnê é finalizada,
+// pra creditar o corte do jogo em cima do arrecadado.
+export async function creditarFortunaTurnes(nomeArtista: string, valor: number): Promise<void> {
+  if (!nomeArtista || !valor) return;
+  const rows = await readArtistasRows();
+  const normNome = normalizeComparison(nomeArtista);
+  const row = rows.find((r) => normalizeComparison(r.rec["nome"]) === normNome);
+  if (!row) return;
+  const atual = parseNumeroBR(row.rec["fortuna_turnes"] || "0");
+  const novo = atual + valor;
+  const col = colIndexToA1Letter(row.headers.indexOf("fortuna_turnes"));
+  const novoFormatado = novo.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  await googleSheetsService.usuarios
+    .updateValues(ARTISTAS_SHEET, `${col}${row.rowIndex}`, [[novoFormatado]])
+    .catch(() => {});
+}
+
 export async function getArtistNamesForOwner(telegramId: string): Promise<string[]> {
   if (!telegramId) return [];
   const normId = normalizeComparison(telegramId);
@@ -431,9 +449,9 @@ export async function getAllArtistasController(): Promise<Response> {
         status: r.rec["status"] || "Livre",
         saldo: r.rec["saldo"] || "0",
         gravadora: r.rec["gravadora"] || "Independent",
-        fortuna_real: r.rec["fortuna_real"] || "0",
-        fortuna_bens: r.rec["fortuna_de_bens"] || r.rec["fortuna_bens"] || "0",
-        fortuna_total: r.rec["fortuna_total"] || r.rec["fortuna_calculo"] || "0",
+        fortuna_vendas: r.rec["fortuna_vendas"] || "",
+        fortuna_turnes: r.rec["fortuna_turnes"] || "",
+        fortuna_total: r.rec["fortuna_total"] || "",
         prestigio: r.rec["prestigio"] || "0",
         fadiga: r.rec["fadiga"] || "0",
         seguidores: r.rec["seguidores"] || "0",

@@ -253,11 +253,13 @@ function ArtistDashboard() {
             icon={<Wallet className="size-3.5" />}
             accent
           />
-          <StatCardV2
-            label="Fortuna Total"
-            value={fmtMoney(artist.fortuna_total)}
-            icon={<Briefcase className="size-3.5" />}
-          />
+          {artist.fortuna_total !== null && (
+            <StatCardV2
+              label="Fortuna Total"
+              value={fmtMoney(artist.fortuna_total)}
+              icon={<Briefcase className="size-3.5" />}
+            />
+          )}
           <StatCompact
             label="Fadiga Vocal"
             value={artist.fadiga}
@@ -266,16 +268,20 @@ function ArtistDashboard() {
             color="text-rose-400"
             reverse
           />
-          <StatCardV2
-            label="Fortuna em Caixa"
-            value={fmtMoney(artist.fortuna_real)}
-            icon={<Wallet className="size-3.5" />}
-          />
-          <StatCardV2
-            label="Fortuna em Bens"
-            value={fmtMoney(artist.fortuna_bens)}
-            icon={<Building2 className="size-3.5" />}
-          />
+          {artist.fortuna_vendas !== null && (
+            <StatCardV2
+              label="Fortuna Vendas"
+              value={fmtMoney(artist.fortuna_vendas)}
+              icon={<Wallet className="size-3.5" />}
+            />
+          )}
+          {artist.fortuna_turnes !== null && (
+            <StatCardV2
+              label="Fortuna Turnês"
+              value={fmtMoney(artist.fortuna_turnes)}
+              icon={<Building2 className="size-3.5" />}
+            />
+          )}
         </div>
 
         {/* ── Responsável: prestígio/nível do JOGADOR dono, não do artista ── */}

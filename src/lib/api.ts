@@ -14,9 +14,9 @@ export interface Artist {
   status: string;
   saldo: number;
   gravadora: string;
-  fortuna_real: number;
-  fortuna_bens: number;
-  fortuna_total: number;
+  fortuna_vendas: number | null;
+  fortuna_turnes: number | null;
+  fortuna_total: number | null;
   prestigio: number;
   fadiga: number;
   seguidores: number;
@@ -265,6 +265,13 @@ function normalizeNome(v: string): string {
     .toLowerCase();
 }
 
+function parseNumeroBR(v: unknown): number | null {
+  if (v === undefined || v === null || v === "") return null;
+  const cleaned = String(v).trim().replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
 function normalizeArtist(a: Record<string, unknown>): Artist {
   return {
     nome: String(a.nome || "").trim(),
@@ -272,9 +279,9 @@ function normalizeArtist(a: Record<string, unknown>): Artist {
     status: String(a.status || "Livre"),
     saldo: Number(a.saldo || 0),
     gravadora: String(a.gravadora || "Independent").replace(/\s*#\d+$/, ""),
-    fortuna_real: Number(a.fortuna_real || 0),
-    fortuna_bens: Number(a.fortuna_bens || 0),
-    fortuna_total: Number(a.fortuna_total || 0),
+    fortuna_vendas: parseNumeroBR(a.fortuna_vendas),
+    fortuna_turnes: parseNumeroBR(a.fortuna_turnes),
+    fortuna_total: parseNumeroBR(a.fortuna_total),
     prestigio: Number(a.prestigio || 0),
     fadiga: Number(a.fadiga || 0),
     seguidores: Number(a.seguidores || 0),
