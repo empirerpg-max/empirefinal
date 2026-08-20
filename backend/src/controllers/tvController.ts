@@ -105,10 +105,19 @@ export async function getProgramasTVController(): Promise<Response> {
 
     const now = Date.now();
     const data = programas.map((p) => {
+      const statusLower = p.statusRaw.toLowerCase();
+      // "Transmitindo" na planilha é a fonte da verdade — o admin marca
+      // manualmente quando a live começa. O cálculo por horário (abaixo)
+      // era o único jeito antes, mas como "Agenda_TV" não tem coluna de
+      // duração (duracao_seg sempre 0), a "janela" de transmissão durava 0
+      // segundos e NUNCA batia com o horário atual — status "Transmitindo"
+      // era sempre ignorado. Por isso nada aparecia como ao vivo mesmo com
+      // o status certo na planilha.
+      const statusDizAoVivo = statusLower === "transmitindo" || statusLower === "ao vivo" || statusLower === "ao_vivo";
       const start = parseDataHorario(p.data, p.horario);
       const end = start !== null ? start + p.duracao_seg * 1000 : null;
-      const aoVivo = start !== null && end !== null && now >= start && now <= end;
-      const statusLower = p.statusRaw.toLowerCase();
+      const aoVivoPorHorario = start !== null && end !== null && now >= start && now <= end;
+      const aoVivo = statusDizAoVivo || aoVivoPorHorario;
       const finalizado =
         !aoVivo && (statusLower === "finalizado" || statusLower === "concluido" || statusLower === "concluído");
       return {
