@@ -95,7 +95,7 @@ function TvPage() {
         .finally(() => alive && setLoading(false));
     };
     load();
-    const id = setInterval(load, 30_000);
+    const id = setInterval(load, 12_000);
     return () => { alive = false; clearInterval(id); };
   }, []);
 
@@ -124,7 +124,7 @@ function TvPage() {
       setLiveChannels(next);
     };
     tick();
-    const id = setInterval(tick, 30_000);
+    const id = setInterval(tick, 12_000);
     return () => { alive = false; clearInterval(id); };
   }, [programasRaw, fetchKick]);
 
