@@ -162,7 +162,20 @@ function ToursIndex() {
   }, []);
 
   const minhasIds = new Set((minhasTurnes || []).map((t) => t.idUnico));
-  const finalizados = (publicas || []).filter((t) => !minhasIds.has(t.idUnico));
+  // Turnês em andamento de TODOS os outros jogadores — antes só existia
+  // "Minhas Turnês" na Central e a lista pública inteira (misturada com
+  // material antigo/finalizado) ficava escondida na aba "Finalizados", sem
+  // nenhum jeito de ver o que os outros jogadores estão fazendo agora.
+  const outrasEmAndamento = (publicas || []).filter(
+    (t) => !minhasIds.has(t.idUnico) && t.status === "Em andamento",
+  );
+  // A aba "Finalizados" não filtrava por status nenhum — só "não é minha"
+  // — então turnês de outros jogadores ainda EM ANDAMENTO apareciam ali
+  // misturadas como se já tivessem acabado. Agora só entra quem realmente
+  // não está mais em andamento.
+  const finalizados = (publicas || []).filter(
+    (t) => !minhasIds.has(t.idUnico) && t.status !== "Em andamento",
+  );
 
   return (
     <main className="flex-1 mx-auto w-full max-w-2xl px-4 pt-6 pb-20">
@@ -236,6 +249,29 @@ function ToursIndex() {
               )}
             </section>
           )}
+
+          <section className="mb-8">
+            <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1">
+              Turnês em Andamento — Império
+            </h2>
+            {publicas === null ? (
+              <div className="flex justify-center py-8 opacity-50">
+                <Loader2 className="size-6 animate-spin" />
+              </div>
+            ) : outrasEmAndamento.length === 0 ? (
+              <div className="rounded-2xl bg-white/[0.03] border border-dashed border-white/10 p-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Nenhum outro jogador com turnê em andamento no momento.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {outrasEmAndamento.map((t) => (
+                  <TourCardItem key={t.idUnico} t={t} />
+                ))}
+              </div>
+            )}
+          </section>
         </>
       ) : (
         <section>

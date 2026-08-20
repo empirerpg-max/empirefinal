@@ -671,6 +671,26 @@ function ArquivoFull({ finalizados, loading }: { finalizados: Programa[]; loadin
   );
 }
 
+// O layout mobile/desktop usava só CSS (lg:hidden / hidden lg:flex) pra
+// alternar os dois blocos — só que os dois ficavam MONTADOS no DOM ao
+// mesmo tempo (um só "hidden" via CSS), e cada um tinha seu próprio
+// {player}, ou seja, DOIS iframes da transmissão tocando ao mesmo tempo.
+// No iOS isso passava despercebido (o navegador geralmente pausa mídia de
+// iframe escondido), mas no Android os dois continuam tocando — daí o
+// áudio duplicado. Aqui a gente decide via JS qual bloco existe de fato,
+// garantindo um único player montado por vez.
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    setIsDesktop(mq.matches);
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return isDesktop;
+}
+
 // ---------- WatchView (chat + participantes + sobre) ----------
 function WatchView({ programa, onBack }: { programa: Programa; onBack: () => void }) {
   // Identidade vem só do login próprio (aba Usuários) — sem depender do
@@ -679,6 +699,7 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
   const myId = login?.id;
   const myName = login?.nome;
   const [tab, setTab] = useState<WatchTab>("chat");
+  const isDesktop = useIsDesktop();
 
   // Heartbeat de presença
   useEffect(() => {
@@ -828,7 +849,7 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
           inteiro, não cortado) e a gaveta ocupa o resto, lado a lado no
           mesmo fluxo. Dá pra ver vídeo E comentários ao mesmo tempo, sem um
           cobrir o outro. Fechada, o vídeo volta a ocupar a tela toda. */}
-      <div className="lg:hidden relative h-full bg-black flex flex-col">
+      {!isDesktop && <div className="relative h-full bg-black flex flex-col">
         <div
           className={`relative shrink-0 transition-[height] duration-200 ${
             mobileSheet ? "h-[30dvh]" : "flex-1 min-h-0"
@@ -899,10 +920,10 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
               </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ---------- Desktop: player + painel lateral fixo, como antes ---------- */}
-      <div className="hidden lg:flex h-full min-h-0">
+      {isDesktop && <div className="flex h-full min-h-0">
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex items-center gap-3 px-4 h-12 border-b border-border/60 bg-background/90 backdrop-blur shrink-0">
             <button onClick={onBack} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Voltar">
@@ -937,7 +958,7 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
             {tab === "sobre" && <SobrePanel programa={programa} />}
           </div>
         </div>
-      </div>
+      </div>}
     </>
   );
 }
