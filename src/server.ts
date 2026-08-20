@@ -385,6 +385,13 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/migrar-albuns-legado" && request.method === "GET") {
+      const { migrarAlbunsLegadoController } = await import(
+        "../backend/src/controllers/migracaoAlbunsLegadoController"
+      );
+      return migrarAlbunsLegadoController(request);
+    }
+
     if (url.pathname === "/api/debug/albuns-legado" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
       try {
