@@ -30,6 +30,50 @@ async function gerarProximoCodigoUnico(
   return `${prefixo}${String(maior + 1).padStart(digitos, "0")}`;
 }
 
+// Registra a música lançada em "EDIÇÃO CHARTS" (edicaoCharts) — a aba real
+// de cálculo semanal dos charts, confirmada com o usuário. Só escreve A-Q;
+// nunca toca na coluna G ("não mexer") nem em nada depois de Q — a coluna
+// "Código único" (lá longe, na BD) tem uma ARRAYFORMULA própria na planilha
+// que já preenche sozinha ("=ARRAYFORMULA(IF(B2:B=\"\";\"\";\"EMP\"&TEXT(ROW(B2:B)-1;\"000\")))")
+// assim que a coluna B (título) é preenchida — escrever nela por cima
+// quebraria a fórmula.
+async function registrarNaEdicaoCharts(params: {
+  dataFormatada: string;
+  fullTitle: string; // "Artista - Título"
+  tipoSingle: string;
+  tipoMusica: string;
+  album?: string;
+  artistaPrincipal: string;
+  participantes?: string[]; // até 5 (ARTISTA 2-6)
+  albunsExtras?: string[]; // até 4 (ALBUM 2-5) — música em mais de um álbum
+}): Promise<void> {
+  const participantesLimpos = (params.participantes || []).filter(Boolean).slice(0, 5);
+  const albunsExtrasLimpos = (params.albunsExtras || []).filter(Boolean).slice(0, 4);
+  try {
+    await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
+      params.dataFormatada, // A - Data de lançamento
+      params.fullTitle, // B - Nome (Artista - Título)
+      params.tipoSingle || "", // C - TIPO DE SINGLE
+      params.tipoMusica || "", // D - TIPO DE MÚSICA
+      params.album || "", // E - ALBUM
+      "1", // F - WEEKS
+      "", // G - não mexer
+      params.artistaPrincipal, // H - ACT PRINCIPAL
+      participantesLimpos[0] || "", // I - ARTISTA 2
+      participantesLimpos[1] || "", // J - ARTISTA 3
+      participantesLimpos[2] || "", // K - ARTISTA 4
+      participantesLimpos[3] || "", // L - ARTISTA 5
+      participantesLimpos[4] || "", // M - ARTISTA 6
+      albunsExtrasLimpos[0] || "", // N - ALBUM 2
+      albunsExtrasLimpos[1] || "", // O - ALBUM 3
+      albunsExtrasLimpos[2] || "", // P - ALBUM 4
+      albunsExtrasLimpos[3] || "", // Q - ALBUM 5
+    ]);
+  } catch (err) {
+    console.warn("[registrarNaEdicaoCharts] Erro ao gravar em EDIÇÃO CHARTS:", err);
+  }
+}
+
 export interface CreateSongPayload {
   opcaoChart: string; // "a) Registrar essa música em chart" | "b) Substituir música no chart" | "c) Os comentários desse tópico devem valer para uma música já lançada"
   tituloMusica: string;
@@ -205,6 +249,20 @@ export async function createSongController(request: Request): Promise<Response> 
     } catch (err) {
       console.warn("[createSongController] Erro ao gravar em Musicas (Principal):", err);
     }
+
+    // 1.5 Registrar em "EDIÇÃO CHARTS" (edicaoCharts) — aba real de cálculo
+    // semanal dos charts. Antes disso nenhuma música lançada pelo app
+    // entrava nessa aba, então nunca ganhava o "Código único" (EMP00X, que
+    // é gerado sozinho por uma ARRAYFORMULA na coluna BD assim que a
+    // coluna B é preenchida).
+    await registrarNaEdicaoCharts({
+      dataFormatada,
+      fullTitle,
+      tipoSingle: tipoSingle || "LEAD SINGLE",
+      tipoMusica: tipoMusica || "SOLO",
+      artistaPrincipal,
+      participantes: participantesLimpos,
+    });
 
     // 2. Gravar em REGISTRO DE MÚSICA na planilha de Registros — só as
     // colunas definidas no documento oficial (B, C, D, H, I-L, N, P), na
@@ -689,6 +747,19 @@ async function processarFaixasDoAlbum(
     } catch (faixaErr) {
       console.warn("[processarFaixasDoAlbum] Erro ao registrar faixa inédita em Musicas:", faixaErr);
     }
+
+    // Registrar em "EDIÇÃO CHARTS" (mesma lógica do createSongController) —
+    // aqui a coluna E (ALBUM) já sai preenchida, porque essa faixa nasce
+    // dentro de um álbum.
+    await registrarNaEdicaoCharts({
+      dataFormatada,
+      fullTitle: songTitle,
+      tipoSingle: faixa.tipoSingle || "TRACKLIST ALBUM",
+      tipoMusica: faixa.tipoMusica || "SOLO",
+      album: albumFullTitle,
+      artistaPrincipal: artistaAlbum,
+      participantes: participantesLimpos,
+    });
 
     // REGISTRO DE MÚSICA — mesmo mapeamento B:P do createSongController,
     // mas com E = nome do álbum (aqui nunca fica em branco, diferente do
