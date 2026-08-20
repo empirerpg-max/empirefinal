@@ -147,9 +147,6 @@ function EmpirePlayInicio() {
             <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-emerald-400 transition-colors">
               Spotify Global
             </h3>
-            <p className="text-[11px] text-neutral-300 mt-1 font-medium">
-              {(topPlaylists.spotify && topPlaylists.spotify.length) || 100} Faixas em Alta
-            </p>
           </div>
         </div>
 
@@ -173,9 +170,6 @@ function EmpirePlayInicio() {
             <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-rose-400 transition-colors">
               Apple Music
             </h3>
-            <p className="text-[11px] text-neutral-300 mt-1 font-medium">
-              {(topPlaylists.apple && topPlaylists.apple.length) || 100} Faixas em Alta
-            </p>
           </div>
         </div>
 
@@ -198,9 +192,6 @@ function EmpirePlayInicio() {
             <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-red-400 transition-colors">
               YouTube Hits
             </h3>
-            <p className="text-[11px] text-neutral-300 mt-1 font-medium">
-              {(topPlaylists.youtube && topPlaylists.youtube.length) || musicVideos.length} Vídeos
-            </p>
           </div>
         </div>
 
@@ -219,16 +210,10 @@ function EmpirePlayInicio() {
             className="absolute inset-0"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
-          <span className="absolute top-3 right-3 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 backdrop-blur">
-            30 Recentes
-          </span>
           <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
             <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight group-hover:text-purple-400 transition-colors">
               Hot
             </h3>
-            <p className="text-[11px] text-neutral-300 mt-1 font-medium">
-              {lancamentos.length || 30} Novidades da Rede
-            </p>
           </div>
         </div>
       </div>

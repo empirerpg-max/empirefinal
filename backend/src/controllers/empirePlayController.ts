@@ -571,7 +571,11 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
       ? `https://drive.google.com/uc?export=view&id=${fallbackPhotoFile.id}`
       : null;
 
+    // Nunca mostra faixa Pendente (sem tópico ainda) na playlist Hot — ela
+    // não é conteúdo publicado de verdade, só existe internamente até
+    // alguém decidir abrir o tópico.
     const recentMusicas = musicaRecords
+      .filter((rec) => (getValue(rec, ["pendente"]) || "").trim().toLowerCase() !== "sim")
       .map((rec, idx) => buildCleanItem("Musicas", rec, idx))
       .sort((a, b) => {
         if (a.releaseDateIso && b.releaseDateIso) {
