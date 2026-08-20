@@ -64,8 +64,9 @@ function colIndexToA1Letter(colIndex: number): string {
 interface AlbumMigrado {
   nome: string;
   artista: string;
-  faixas: number;
-  status: "migrado" | "pulado_ja_existe" | "erro";
+  faixasEsperadas: number;
+  faixasGravadas: number;
+  status: "migrado" | "migrado_parcial" | "pulado_ja_existe" | "erro";
   erro?: string;
 }
 
@@ -73,7 +74,7 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
   try {
     const url = new URL(request.url);
     const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10) || 0);
-    const limit = Math.max(1, Math.min(20, parseInt(url.searchParams.get("limit") || "3", 10) || 3));
+    const limit = Math.max(1, Math.min(5, parseInt(url.searchParams.get("limit") || "1", 10) || 1));
     // Pra rodar um teste com álbuns específicos (não os N primeiros por
     // posição) — nomes exatos separados por "|".
     const nomesAlvo = (url.searchParams.get("nomes") || "")
@@ -82,6 +83,7 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
       .filter(Boolean);
 
     const corrigirDono = url.searchParams.get("corrigirDono") === "1";
+    const completarFaixas = url.searchParams.get("completarFaixas") === "1";
 
     const [albumsFull, singlesFull, albunsApp, musicasApp] = await Promise.all([
       googleSheetsService.saidosCharts.readValues("ALBUMS", "A1:BZ5000"),
@@ -141,21 +143,116 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
                 await googleSheetsService.principal.updateValues("Musicas", `G${i + 1}`, [[donoId]]);
               }
             }
-            resultados.push({ nome, artista, faixas: 0, status: "pulado_ja_existe" });
+            resultados.push({ nome, artista, faixasEsperadas: 0, faixasGravadas: 0, status: "pulado_ja_existe" });
           } catch (err: any) {
-            resultados.push({ nome, artista, faixas: 0, status: "erro", erro: err?.message || String(err) });
+            resultados.push({
+              nome,
+              artista,
+              faixasEsperadas: 0,
+              faixasGravadas: 0,
+              status: "erro",
+              erro: err?.message || String(err),
+            });
+          }
+        } else if (completarFaixas) {
+          // Completa faixas que faltaram numa migração anterior incompleta
+          // (ex: "Marco - Rise Up!" só gravou 6 de 14) — sem recriar o
+          // álbum, só preenche as faixas que ainda não têm linha em
+          // Musicas com esse K (ALBUM) + H (título) exatos.
+          try {
+            const donoId = await getOwnerIdForArtist(artista);
+            const jaGravadas = new Set(
+              musicasApp
+                .slice(1)
+                .filter((r) => (r[10] || "").trim() === nome)
+                .map((r) => (r[7] || "").trim()),
+            );
+            const faixasDoAlbumTodas = singlesRows
+              .map((r, i) => ({ r, rowIndex: i + 2 }))
+              .filter(({ r }) => (r[5] || "").trim() === nome);
+            const faltando = faixasDoAlbumTodas.filter(({ r }) => !jaGravadas.has((r[3] || "").trim()));
+
+            let gravadasAgora = 0;
+            let ordemBase = jaGravadas.size;
+            for (const { r: single, rowIndex } of faltando) {
+              ordemBase++;
+              try {
+                const tituloFaixa = (single[3] || "").trim();
+                const artistaFaixa = (single[0] || "").trim() || artista;
+                const tipoSingle = (single[1] || "").trim() || "TRACKLIST ALBUM";
+                const artistas2a5 = [single[13], single[14], single[15], single[16]]
+                  .map((v) => (v || "").trim())
+                  .filter(Boolean);
+                const tipoMusica = artistas2a5.length > 0 ? "PARCERIA" : "SOLO";
+                const codigoMusica = `EMP${String(proximoMusicaNum).padStart(3, "0")}`;
+                proximoMusicaNum++;
+
+                await googleSheetsService.principal.appendRow("Musicas", [
+                  data || "",
+                  "",
+                  "",
+                  "",
+                  "",
+                  "",
+                  donoId,
+                  tituloFaixa,
+                  tipoSingle,
+                  tipoMusica,
+                  nome,
+                  "",
+                  "",
+                  artistaFaixa,
+                  artistas2a5[0] || "",
+                  artistas2a5[1] || "",
+                  artistas2a5[2] || "",
+                  artistas2a5[3] || "",
+                  "",
+                  "",
+                  String(ordemBase),
+                  "",
+                  "",
+                  "Sim",
+                  "",
+                ]);
+                await googleSheetsService.saidosCharts.updateValues(
+                  "SINGLES",
+                  `${colLetterSingles}${rowIndex}`,
+                  [[codigoMusica]],
+                );
+                gravadasAgora++;
+              } catch (faixaErr) {
+                console.warn(`[migrarAlbunsLegadoController] Falha ao completar faixa "${(single[3] || "").trim()}" de "${nome}":`, faixaErr);
+              }
+            }
+            resultados.push({
+              nome,
+              artista,
+              faixasEsperadas: faltando.length,
+              faixasGravadas: gravadasAgora,
+              status: gravadasAgora === faltando.length ? "migrado" : "migrado_parcial",
+            });
+          } catch (err: any) {
+            resultados.push({
+              nome,
+              artista,
+              faixasEsperadas: 0,
+              faixasGravadas: 0,
+              status: "erro",
+              erro: err?.message || String(err),
+            });
           }
         } else {
-          resultados.push({ nome, artista, faixas: 0, status: "pulado_ja_existe" });
+          resultados.push({ nome, artista, faixasEsperadas: 0, faixasGravadas: 0, status: "pulado_ja_existe" });
         }
         continue;
       }
 
-      try {
-        const faixasDoAlbum = singlesRows
-          .map((r, i) => ({ r, rowIndex: i + 2 }))
-          .filter(({ r }) => (r[5] || "").trim() === nome);
+      const faixasDoAlbum = singlesRows
+        .map((r, i) => ({ r, rowIndex: i + 2 }))
+        .filter(({ r }) => (r[5] || "").trim() === nome);
 
+      let faixasGravadas = 0;
+      try {
         const tipoAlbum = faixasDoAlbum.length > 0 && faixasDoAlbum.length <= 6 ? "EP" : "Álbum";
         const albumTopicId = `album_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const codigoAlbum = `EMPALBM${String(proximoAlbumNum).padStart(3, "0")}`;
@@ -184,53 +281,63 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
         ]);
 
         // 2. Uma linha pendente em Musicas por faixa, na ordem em que
-        // aparecem na planilha legada.
+        // aparecem na planilha legada — cada faixa tem seu PRÓPRIO
+        // try/catch: se uma falhar (timeout, erro de rede etc.), as
+        // outras continuam e a falha fica visível no resultado, em vez de
+        // reportar "migrado" com metade das faixas faltando em silêncio
+        // (foi exatamente isso que aconteceu com "Marco - Rise Up!").
         let ordem = 1;
         for (const { r: single, rowIndex } of faixasDoAlbum) {
-          const tituloFaixa = (single[3] || "").trim();
-          const artistaFaixa = (single[0] || "").trim() || artista;
-          const tipoSingle = (single[1] || "").trim() || "TRACKLIST ALBUM";
-          const artistas2a5 = [single[13], single[14], single[15], single[16]]
-            .map((v) => (v || "").trim())
-            .filter(Boolean);
-          const tipoMusica = artistas2a5.length > 0 ? "PARCERIA" : "SOLO";
-          const codigoMusica = `EMP${String(proximoMusicaNum).padStart(3, "0")}`;
-          proximoMusicaNum++;
-
-          await googleSheetsService.principal.appendRow("Musicas", [
-            data || "", // A - Data
-            "", // B - ID do tópico (pendente)
-            "", // C - ID do arquivo
-            "", // D - Capa
-            "", // E - Letra
-            "", // F - Comentários para
-            donoId, // G - ID do Criador
-            tituloFaixa, // H - Nome da música
-            tipoSingle, // I - TIPO DE SINGLE
-            tipoMusica, // J - TIPO DE MÚSICA
-            nome, // K - ALBUM
-            "", // L - WEEKS
-            "", // M - WEEKS VIDEO
-            artistaFaixa, // N - ACT PRINCIPAL
-            artistas2a5[0] || "", // O - ARTISTA 2
-            artistas2a5[1] || "", // P - ARTISTA 3
-            artistas2a5[2] || "", // Q - ARTISTA 4
-            artistas2a5[3] || "", // R - ARTISTA 5
-            "", // S - ARTISTA 6
-            "", // T - GÊNERO
-            String(ordem), // U - Ordem
-            "", // V - Metacritic por jogador
-            "", // W - Média Metacritic
-            "Sim", // X - Pendente?
-            "", // Y - Referência
-          ]);
+          const ordemAtual = ordem;
           ordem++;
+          try {
+            const tituloFaixa = (single[3] || "").trim();
+            const artistaFaixa = (single[0] || "").trim() || artista;
+            const tipoSingle = (single[1] || "").trim() || "TRACKLIST ALBUM";
+            const artistas2a5 = [single[13], single[14], single[15], single[16]]
+              .map((v) => (v || "").trim())
+              .filter(Boolean);
+            const tipoMusica = artistas2a5.length > 0 ? "PARCERIA" : "SOLO";
+            const codigoMusica = `EMP${String(proximoMusicaNum).padStart(3, "0")}`;
+            proximoMusicaNum++;
 
-          await googleSheetsService.saidosCharts.updateValues(
-            "SINGLES",
-            `${colLetterSingles}${rowIndex}`,
-            [[codigoMusica]],
-          );
+            await googleSheetsService.principal.appendRow("Musicas", [
+              data || "", // A - Data
+              "", // B - ID do tópico (pendente)
+              "", // C - ID do arquivo
+              "", // D - Capa
+              "", // E - Letra
+              "", // F - Comentários para
+              donoId, // G - ID do Criador
+              tituloFaixa, // H - Nome da música
+              tipoSingle, // I - TIPO DE SINGLE
+              tipoMusica, // J - TIPO DE MÚSICA
+              nome, // K - ALBUM
+              "", // L - WEEKS
+              "", // M - WEEKS VIDEO
+              artistaFaixa, // N - ACT PRINCIPAL
+              artistas2a5[0] || "", // O - ARTISTA 2
+              artistas2a5[1] || "", // P - ARTISTA 3
+              artistas2a5[2] || "", // Q - ARTISTA 4
+              artistas2a5[3] || "", // R - ARTISTA 5
+              "", // S - ARTISTA 6
+              "", // T - GÊNERO
+              String(ordemAtual), // U - Ordem
+              "", // V - Metacritic por jogador
+              "", // W - Média Metacritic
+              "Sim", // X - Pendente?
+              "", // Y - Referência
+            ]);
+
+            await googleSheetsService.saidosCharts.updateValues(
+              "SINGLES",
+              `${colLetterSingles}${rowIndex}`,
+              [[codigoMusica]],
+            );
+            faixasGravadas++;
+          } catch (faixaErr) {
+            console.warn(`[migrarAlbunsLegadoController] Falha na faixa "${(single[3] || "").trim()}" de "${nome}":`, faixaErr);
+          }
         }
 
         await googleSheetsService.saidosCharts.updateValues(
@@ -239,9 +346,22 @@ export async function migrarAlbunsLegadoController(request: Request): Promise<Re
           [[codigoAlbum]],
         );
 
-        resultados.push({ nome, artista, faixas: faixasDoAlbum.length, status: "migrado" });
+        resultados.push({
+          nome,
+          artista,
+          faixasEsperadas: faixasDoAlbum.length,
+          faixasGravadas,
+          status: faixasGravadas === faixasDoAlbum.length ? "migrado" : "migrado_parcial",
+        });
       } catch (err: any) {
-        resultados.push({ nome, artista, faixas: 0, status: "erro", erro: err?.message || String(err) });
+        resultados.push({
+          nome,
+          artista,
+          faixasEsperadas: faixasDoAlbum.length,
+          faixasGravadas,
+          status: "erro",
+          erro: err?.message || String(err),
+        });
       }
     }
 
