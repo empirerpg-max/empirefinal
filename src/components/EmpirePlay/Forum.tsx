@@ -677,7 +677,26 @@ export const Forum: React.FC<ForumProps> = ({
                   )}
                   {selectedTopic.link && (
                     <button
-                      onClick={() =>
+                      onClick={() => {
+                        // Botão de play do CABEÇALHO do álbum — antes mandava
+                        // a playlist vazia ([]), então "avançar/voltar" nunca
+                        // tinha pra onde ir, mesmo com o álbum tendo várias
+                        // faixas. Agora, se o álbum tem faixas próprias, toca
+                        // a tracklist inteira a partir da primeira (igual
+                        // clicar na primeira faixa da lista); só cai pro link
+                        // único do tópico quando não há faixas cadastradas.
+                        const tracksComAudio = (selectedTopic.tracks || []).filter((t) => t.audioUrl);
+                        if (tracksComAudio.length > 0) {
+                          const playlist = tracksComAudio.map((t, ti) => ({
+                            id: t.id || String(ti),
+                            titulo: t.title,
+                            artista: t.artist || selectedTopic.artist,
+                            capa_url: t.coverUrl || selectedTopic.cover || undefined,
+                            url: t.audioUrl || undefined,
+                          }));
+                          onPlayTrack?.(playlist[0], playlist);
+                          return;
+                        }
                         onPlayTrack?.(
                           {
                             titulo: selectedTopic.title,
@@ -686,8 +705,8 @@ export const Forum: React.FC<ForumProps> = ({
                             url: selectedTopic.link || undefined,
                           },
                           [],
-                        )
-                      }
+                        );
+                      }}
                       className="absolute inset-0 m-auto size-16 sm:size-20 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black flex items-center justify-center shadow-2xl shadow-emerald-500/30 opacity-95 sm:opacity-0 group-hover:opacity-100 transition scale-90 group-hover:scale-100"
                     >
                       <Play className="size-7 sm:size-9 ml-0.5 sm:ml-1 fill-black" />
@@ -766,12 +785,14 @@ export const Forum: React.FC<ForumProps> = ({
                                 onClick={() =>
                                   onPlayTrack?.(
                                     {
+                                      id: trackKey,
                                       titulo: faixa.title,
                                       artista: faixa.artist || selectedTopic.artist,
                                       capa_url: faixa.coverUrl || selectedTopic.cover || undefined,
                                       url: faixa.audioUrl || undefined,
                                     },
-                                    selectedTopic.tracks!.map((t) => ({
+                                    selectedTopic.tracks!.map((t, ti) => ({
+                                      id: t.id || String(ti),
                                       titulo: t.title,
                                       artista: t.artist || selectedTopic.artist,
                                       capa_url: t.coverUrl || selectedTopic.cover || undefined,
