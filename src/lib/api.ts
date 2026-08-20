@@ -375,14 +375,38 @@ export const api = {
     });
     return res.json();
   },
-  // REVERTIDO pro Apps Script: a aba ARTISTAS não guarda saldo/fortuna
-  // prontos (a maioria das linhas vem vazia nessas colunas) — o Apps
-  // Script calcula esses valores dinamicamente cruzando outras planilhas
-  // (vendas, compras etc.), então não dá pra ler direto de uma aba só.
-  // Deixado como TODO até mapear onde esse cálculo realmente acontece.
+  // Saldo/seguidores/etc continuam vindo do Apps Script legado (a aba
+  // ARTISTAS não guarda esses campos prontos), mas a Fortuna (Vendas/
+  // Turnês/Total) SEMPRE sobrescreve com o valor real da aba ARTISTAS via
+  // /api/artistas/listar-todos — o Apps Script tinha sua própria conta
+  // interna pra "fortuna_total" que não batia com o que o dono via na
+  // planilha (chegava a mostrar bilhões que não existiam em lugar nenhum).
   async listarTodos(): Promise<Artist[]> {
-    const data = await call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true });
-    return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
+    const [data, fortunas] = await Promise.all([
+      call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true }),
+      api.fortunasArtistas(),
+    ]);
+    const arr = Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
+    const porNome = new Map(fortunas.map((f) => [normalizeNome(f.nome), f]));
+    return arr.map((a) => {
+      const f = porNome.get(normalizeNome(a.nome));
+      return f
+        ? { ...a, fortuna_vendas: f.fortuna_vendas, fortuna_turnes: f.fortuna_turnes, fortuna_total: f.fortuna_total }
+        : a;
+    });
+  },
+  async fortunasArtistas(): Promise<
+    Pick<Artist, "nome" | "fortuna_vendas" | "fortuna_turnes" | "fortuna_total">[]
+  > {
+    try {
+      const res = await fetch("/api/artistas/listar-todos", { cache: "no-store" });
+      if (!res.ok) return [];
+      const json = await res.json();
+      const rows: Record<string, unknown>[] = Array.isArray(json?.data) ? json.data : [];
+      return rows.map((r) => normalizeArtist(r));
+    } catch {
+      return [];
+    }
   },
   async radar(): Promise<RadarItem[]> {
     const data = await call<RadarItem[]>({ acao: "radar" }, { cache: true });
