@@ -741,9 +741,14 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
   // em vez de sair da tela do Empire TV.
   useBackClose(!!mobileSheet, () => setMobileSheet(null));
   const visibleHeight = useVisibleViewportHeight();
-  // Deixa sempre uma faixa do vídeo visível no topo (~110px), mesmo com o
-  // teclado aberto — é a única coisa calculada; nada de posição/top/bottom.
-  const sheetMaxHeight = visibleHeight ? Math.max(160, visibleHeight - 110) : undefined;
+  // Com o teclado FECHADO, a gaveta fica na altura normal (62dvh, ver
+  // className abaixo) — sobra bastante vídeo visível em cima, como no
+  // TikTok. Só quando o teclado ABRE (visualViewport encolhe de verdade) é
+  // que reservamos uma faixa mínima de vídeo (~110px) pra ele não sumir
+  // atrás do teclado — nunca o contrário.
+  const keyboardOpen =
+    typeof window !== "undefined" && visibleHeight > 0 && window.innerHeight - visibleHeight > 120;
+  const sheetMaxHeight = keyboardOpen ? Math.max(160, visibleHeight - 110) : undefined;
 
   const player = (() => {
     const embed = resolveStreamEmbed(programa.stream_url, !!programa.ao_vivo);
