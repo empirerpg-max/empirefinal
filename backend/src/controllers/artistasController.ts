@@ -83,6 +83,18 @@ async function readArtistOwnerPairs(): Promise<[string, string][]> {
  * Reaproveitada por qualquer feature que precise saber "quais artistas são
  * meus" a partir de um telegram_id (ex.: Ponto).
  */
+// Caminho inverso de getArtistNamesForOwner: dado o nome do artista,
+// devolve o telegram_id do dono — usado pra vincular conteúdo criado
+// internamente (ex: migração de álbuns legados) ao dono de verdade, senão
+// ele nunca aparece como editável pro jogador certo.
+export async function getOwnerIdForArtist(nomeArtista: string): Promise<string> {
+  if (!nomeArtista) return "";
+  const normNome = normalizeComparison(nomeArtista);
+  const pairs = await readArtistOwnerPairs();
+  const match = pairs.find(([artista]) => normalizeComparison(artista) === normNome);
+  return match?.[1] || "";
+}
+
 export async function getArtistNamesForOwner(telegramId: string): Promise<string[]> {
   if (!telegramId) return [];
   const normId = normalizeComparison(telegramId);
