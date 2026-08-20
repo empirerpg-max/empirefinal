@@ -386,15 +386,15 @@ export default {
     }
 
     if (url.pathname === "/api/debug/albuns-legado" && request.method === "GET") {
-      const { listSheetTabs, googleSheetsService } = await import(
-        "../backend/src/services/googleSheetsService"
-      );
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
       try {
-        const [tabsEdicao, tabsSaidos] = await Promise.all([
-          listSheetTabs("edicaoCharts"),
-          listSheetTabs("saidosCharts"),
+        const [musicasLegado, albunsLegado, singles, albums] = await Promise.all([
+          googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A1:Z6"),
+          googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A1:Z6"),
+          googleSheetsService.saidosCharts.readValues("SINGLES", "A1:Z6"),
+          googleSheetsService.saidosCharts.readValues("ALBUMS", "A1:Z6"),
         ]);
-        return Response.json({ tabsEdicao, tabsSaidos });
+        return Response.json({ musicasLegado, albunsLegado, singles, albums });
       } catch (err: any) {
         return Response.json({ error: err?.message || String(err) }, { status: 500 });
       }
