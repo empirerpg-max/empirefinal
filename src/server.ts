@@ -388,12 +388,32 @@ export default {
     if (url.pathname === "/api/debug/albuns-legado" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
       try {
-        const [musicasHeader, singlesFull, albumsFull] = await Promise.all([
-          googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A1:BZ2"),
-          googleSheetsService.saidosCharts.readValues("SINGLES", "A1:BZ4"),
-          googleSheetsService.saidosCharts.readValues("ALBUMS", "A1:BZ4"),
+        const [singlesFull, albumsFull, albunsApp, musicasApp] = await Promise.all([
+          googleSheetsService.saidosCharts.readValues("SINGLES", "A1:BZ5000"),
+          googleSheetsService.saidosCharts.readValues("ALBUMS", "A1:BZ5000"),
+          googleSheetsService.principal.readValues("Albuns", "A1:J5000"),
+          googleSheetsService.principal.readValues("Musicas", "A1:Y5000"),
         ]);
-        return Response.json({ musicasHeader, singlesFull, albumsFull });
+        // Nome do álbum já existente no app (aba Albuns, coluna G).
+        const albunsAppNomes = new Set(
+          albunsApp.slice(1).map((r) => (r[6] || "").trim().toLowerCase()).filter(Boolean),
+        );
+        const albumsRows = albumsFull.slice(1);
+        const singlesRows = singlesFull.slice(1);
+        const albunsResumo = albumsRows.map((r) => {
+          const nome = (r[3] || "").trim();
+          const artista = (r[0] || "").trim();
+          const jaExiste = albunsAppNomes.has(nome.toLowerCase());
+          const faixasDoAlbum = singlesRows.filter((s) => (s[5] || "").trim() === nome).length;
+          return { artista, nome, data: r[1] || "", faixasNoSingles: faixasDoAlbum, jaExisteNoApp: jaExiste };
+        });
+        return Response.json({
+          singlesCount: singlesRows.length,
+          albumsCount: albumsRows.length,
+          albunsAppCount: albunsApp.length - 1,
+          musicasAppCount: musicasApp.length - 1,
+          albunsResumo,
+        });
       } catch (err: any) {
         return Response.json({ error: err?.message || String(err) }, { status: 500 });
       }
