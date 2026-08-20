@@ -81,13 +81,22 @@ function TvPage() {
   const [liveChannels, setLiveChannels] = useState<Record<string, { viewers?: number; title?: string }>>({});
   const fetchKick = useServerFn(getKickStatus);
 
+  // Recarrega a grade periodicamente — antes buscava só uma vez ao abrir a
+  // tela, então marcar uma transmissão como "ao vivo" na planilha (pra
+  // canais que não são Kick, cuja checagem abaixo só cobre Kick) só
+  // aparecia pra quem desse reload manual na página. Com o polling, todo
+  // mundo já vendo a tela do TV pega a mudança sozinho.
   useEffect(() => {
     let alive = true;
-    api.listarProgramasTV()
-      .then((list) => alive && setProgramasRaw(list))
-      .catch(() => alive && setProgramasRaw([]))
-      .finally(() => alive && setLoading(false));
-    return () => { alive = false; };
+    const load = () => {
+      api.listarProgramasTV()
+        .then((list) => alive && setProgramasRaw(list))
+        .catch(() => {})
+        .finally(() => alive && setLoading(false));
+    };
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { alive = false; clearInterval(id); };
   }, []);
 
   // Detecta ao vivo direto pela API do Kick (fonte da verdade).
