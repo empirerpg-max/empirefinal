@@ -960,12 +960,18 @@ function ChatPanel({ programaId }: { programaId: string }) {
   const myId = login?.id;
   const myPhoto = login?.fotoPerfil || "";
 
-  // Histórico inicial + subscrição realtime
+  // Histórico inicial + subscrição realtime — celular em segundo plano
+  // (troca de app, tela apagada) costuma derrubar o websocket em silêncio,
+  // sem disparar nenhum evento de erro; o app só reconectava se a pessoa
+  // saísse e voltasse pro chat (remontando o componente do zero). Agora,
+  // sempre que a aba volta a ficar visível, refaz a busca do histórico
+  // (pra recuperar o que passou enquanto a conexão estava morta) e recria
+  // a subscrição — sem precisar sair de lugar nenhum.
   useEffect(() => {
     let alive = true;
-    setMessages([]);
+    let channel: any = null;
 
-    (async () => {
+    const fetchHistory = async () => {
       const { supabase } = await import("@/integrations/supabase/client");
       const { data } = await supabase
         .from("tv_chat_messages")
@@ -986,13 +992,17 @@ function ChatPanel({ programaId }: { programaId: string }) {
           reply_to: r.reply_to || undefined,
         }))
       );
-    })();
+    };
 
-    let channel: any;
-    (async () => {
+    const openChannel = async () => {
       const { supabase } = await import("@/integrations/supabase/client");
+      if (channel) {
+        supabase.removeChannel(channel);
+        channel = null;
+      }
+      if (!alive) return;
       channel = supabase
-        .channel(`tv_chat_${programaId}`)
+        .channel(`tv_chat_${programaId}_${Date.now()}`)
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "tv_chat_messages", filter: `programa_id=eq.${programaId}` },
@@ -1017,10 +1027,22 @@ function ChatPanel({ programaId }: { programaId: string }) {
           }
         )
         .subscribe();
-    })();
+    };
+
+    setMessages([]);
+    fetchHistory();
+    openChannel();
+
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      fetchHistory();
+      openChannel();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       alive = false;
+      document.removeEventListener("visibilitychange", onVisible);
       (async () => {
         if (!channel) return;
         const { supabase } = await import("@/integrations/supabase/client");
