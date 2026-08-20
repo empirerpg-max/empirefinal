@@ -496,10 +496,14 @@ async function vincularFaixaExistenteAoAlbum(
   musicaSelecionada: string,
   albumFullTitle: string,
   ordem: number,
-): Promise<{ musicasOk: boolean; edicaoChartsOk: boolean }> {
+  artistaAlbum: string,
+  jogadorId: string,
+  dataFormatada: string,
+): Promise<{ musicasOk: boolean; edicaoChartsOk: boolean; criada: boolean }> {
   const alvoNorm = normalizeComparison(musicaSelecionada);
   let musicasOk = false;
   let edicaoChartsOk = false;
+  let criada = false;
 
   try {
     const musicasMatches = await googleSheetsService.principal.findRows(
@@ -515,8 +519,45 @@ async function vincularFaixaExistenteAoAlbum(
       ]);
     }
     musicasOk = musicasMatches.length > 0;
+    // Migração antiga: algumas faixas de álbum contabilizavam vendas/streams
+    // pro total do álbum nos charts, mas nunca tiveram linha própria em
+    // "Musicas" (só existiam como tópico do álbum, sem tópico individual).
+    // Selecionar essa faixa como "existente" não tem o que vincular — sem
+    // isso, a ação falhava calada e a UI dizia "sucesso" mesmo sem
+    // acontecer nada. Agora cria a linha faltante como faixa PENDENTE (sem
+    // tópico ainda, mesmo estado de quem lança faixa nova sem publicar) —
+    // dali em diante ela aparece na lista de faixas do álbum, pronta pra
+    // "Publicar" quando alguém quiser abrir o tópico dela de verdade.
     if (!musicasOk) {
-      console.warn(`[vincularFaixaExistenteAoAlbum] Música não encontrada em Musicas: ${musicaSelecionada}`);
+      try {
+        await googleSheetsService.principal.appendRow("Musicas", [
+          dataFormatada, // A - Data
+          "", // B - ID do tópico (pendente)
+          "", // C - ID do arquivo
+          "", // D - Capa
+          "", // E - Letra
+          "", // F - Comentários para
+          jogadorId || "", // G - ID do Criador
+          musicaSelecionada, // H - Nome da música
+          "", // I - TIPO DE SINGLE
+          "", // J - TIPO DE MÚSICA
+          albumFullTitle, // K - ALBUM
+          "", // L - WEEKS
+          "", // M - WEEKS VIDEO
+          artistaAlbum, // N - ACT PRINCIPAL
+          "", "", "", "", "", // O-S - ARTISTA 2-6
+          "", // T - GÊNERO
+          String(ordem), // U - Ordem
+          "", // V - Metacritic por jogador
+          "", // W - Média Metacritic
+          "Sim", // X - Pendente?
+          "", // Y - Referência
+        ]);
+        musicasOk = true;
+        criada = true;
+      } catch (err) {
+        console.warn(`[vincularFaixaExistenteAoAlbum] Erro ao criar linha pendente pra "${musicaSelecionada}":`, err);
+      }
     }
   } catch (err) {
     console.warn("[vincularFaixaExistenteAoAlbum] Erro ao atualizar Musicas:", err);
@@ -540,7 +581,7 @@ async function vincularFaixaExistenteAoAlbum(
     console.warn("[vincularFaixaExistenteAoAlbum] Erro ao atualizar EDIÇÃO CHARTS:", err);
   }
 
-  return { musicasOk, edicaoChartsOk };
+  return { musicasOk, edicaoChartsOk, criada };
 }
 
 // Processa a lista de faixas de um álbum (criação ou substituição): faixa
@@ -554,13 +595,28 @@ async function processarFaixasDoAlbum(
   jogadorId: string,
   dataFormatada: string,
 ) {
+  const resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
+
   for (const faixa of faixas) {
     if (!faixa.inedita) {
       // Faixa existente, selecionada na busca da aba Pontos.
       try {
-        await vincularFaixaExistenteAoAlbum(faixa.titulo, albumFullTitle, faixa.num);
+        const resultado = await vincularFaixaExistenteAoAlbum(
+          faixa.titulo,
+          albumFullTitle,
+          faixa.num,
+          artistaAlbum,
+          jogadorId,
+          dataFormatada,
+        );
+        resultadosFaixasExistentes.push({
+          titulo: faixa.titulo,
+          ok: resultado.musicasOk,
+          criada: resultado.criada,
+        });
       } catch (faixaErr) {
         console.warn("[processarFaixasDoAlbum] Erro ao vincular faixa existente:", faixaErr);
+        resultadosFaixasExistentes.push({ titulo: faixa.titulo, ok: false, criada: false });
       }
       continue;
     }
@@ -652,6 +708,8 @@ async function processarFaixasDoAlbum(
       console.warn("[processarFaixasDoAlbum] Erro ao gravar em REGISTRO DE MÚSICA:", err);
     }
   }
+
+  return resultadosFaixasExistentes;
 }
 
 // Lista os álbuns já lançados na aba Albuns (planilha principal) — usado na
@@ -959,8 +1017,9 @@ export async function substituirAlbumController(request: Request): Promise<Respo
       }
     }
 
+    let resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
     if (novasFaixas.length > 0) {
-      await processarFaixasDoAlbum(
+      resultadosFaixasExistentes = await processarFaixasDoAlbum(
         novasFaixas,
         albumFullTitle,
         artistaAlbum,
@@ -1007,10 +1066,20 @@ export async function substituirAlbumController(request: Request): Promise<Respo
       }
     }
 
+    const faixasCriadas = resultadosFaixasExistentes.filter((f) => f.criada).map((f) => f.titulo);
+    const faixasFalhas = resultadosFaixasExistentes.filter((f) => !f.ok).map((f) => f.titulo);
+    let mensagem = "Álbum atualizado com sucesso!";
+    if (faixasCriadas.length > 0) {
+      mensagem += ` Atenção: "${faixasCriadas.join('", "')}" não tinha registro individual (migração antiga) — foi criada como faixa pendente, sem tópico ainda; publique quando quiser abrir o tópico dela.`;
+    }
+    if (faixasFalhas.length > 0) {
+      mensagem += ` Falha ao vincular: "${faixasFalhas.join('", "')}".`;
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        data: { titulo: albumFullTitle, mensagem: "Álbum atualizado com sucesso!" },
+        data: { titulo: albumFullTitle, mensagem, faixasCriadas, faixasFalhas },
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );
