@@ -773,16 +773,13 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
   useBackClose(!!mobileSheet, () => setMobileSheet(null));
   const visibleHeight = useVisibleViewportHeight();
   const keyboardOpen = useKeyboardOpen();
-  // Com o teclado FECHADO, a gaveta fica na altura normal (62dvh, ver
-  // className abaixo) — sobra bastante vídeo visível em cima, como no
-  // TikTok. Só quando o teclado ABRE de verdade (campo de texto focado) é
-  // que reservamos uma faixa mínima de vídeo (~110px) pra ele não sumir
-  // atrás do teclado — nunca o contrário.
-  // Enquanto o teclado está aberto sobra pouco espaço de tela — reserva uma
-  // fatia proporcional (não um valor fixo pequeno) pra o vídeo continuar
-  // reconhecível, em vez de virar uma tarja quase invisível.
-  const keyboardReserve = visibleHeight ? Math.round(visibleHeight * 0.28) : 160;
-  const sheetMaxHeight = keyboardOpen && visibleHeight ? Math.max(160, visibleHeight - keyboardReserve) : undefined;
+  // Altura do vídeo quando a gaveta está aberta — calculada em px a partir
+  // da altura REAL visível (não em dvh, que no iOS não encolhe com o
+  // teclado), pra continuar proporcional mesmo com o teclado aberto
+  // roubando espaço da tela.
+  const videoHeightWithSheet = visibleHeight
+    ? Math.max(110, Math.round(visibleHeight * (keyboardOpen ? 0.2 : 0.32)))
+    : undefined;
 
   // O navegador força o autoplay como mudo até haver uma interação real do
   // usuário — como o player é um iframe de outro domínio (Kick), não dá pra
@@ -801,6 +798,12 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
       const url = new URL(el.src, window.location.href);
       url.searchParams.set("muted", "false");
       url.searchParams.set("autoplay", "true");
+      // A URL já pode vir IDÊNTICA (já tem muted=false desde o embed
+      // inicial) — nesse caso trocar el.src pro mesmo valor não recarrega
+      // nada e o clique não faz efeito nenhum. Um parâmetro que muda a
+      // cada clique garante que o iframe sempre navega de novo, de fato,
+      // como resposta direta a esse clique.
+      url.searchParams.set("_unmute", String(Date.now()));
       el.src = url.toString();
     }
   };
@@ -852,12 +855,19 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
 
   return (
     <>
-      {/* ---------- Mobile: vídeo sempre visível em tela cheia + sheet
-          estilo Reels que sobe por cima, sem nunca cobrir o player. A
-          gaveta é um bloco comum (não position:fixed calculado por JS) com
-          rolagem própria, então o teclado do celular se comporta sozinho. */}
-      <div className="lg:hidden relative h-full bg-black">
-        <div className="absolute inset-0 flex flex-col">
+      {/* ---------- Mobile: divisão real de tela (não overlay) — com a
+          gaveta aberta, o vídeo ENCOLHE pra uma faixa fixa no topo (ainda
+          inteiro, não cortado) e a gaveta ocupa o resto, lado a lado no
+          mesmo fluxo. Dá pra ver vídeo E comentários ao mesmo tempo, sem um
+          cobrir o outro. Fechada, o vídeo volta a ocupar a tela toda. */}
+      <div
+        className="lg:hidden relative bg-black flex flex-col"
+        style={{ height: visibleHeight || undefined }}
+      >
+        <div
+          className={`relative shrink-0 transition-[height] duration-200 ${!mobileSheet ? "flex-1 min-h-0" : ""}`}
+          style={mobileSheet && videoHeightWithSheet ? { height: videoHeightWithSheet } : undefined}
+        >
           <div className="flex items-center gap-3 px-4 h-12 shrink-0 bg-gradient-to-b from-black/70 to-transparent absolute top-0 inset-x-0 z-10">
             <button onClick={onBack} className="size-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white" aria-label="Voltar">
               <ArrowLeft className="size-4" />
@@ -869,49 +879,40 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
               </span>
             )}
           </div>
-          <div className="flex-1 min-h-0">{player}</div>
-        </div>
+          <div className="w-full h-full">{player}</div>
 
-        {/* Botões flutuantes estilo Reels (comentar / participantes / sobre) */}
-        <div className="absolute right-3 bottom-6 z-10 flex flex-col items-center gap-4">
-          <button
-            onClick={() => setMobileSheet(mobileSheet === "chat" ? null : "chat")}
-            className="size-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
-            aria-label="Comentários"
-          >
-            <MessageSquare className="size-5" />
-          </button>
-          <button
-            onClick={() => setMobileSheet(mobileSheet === "participantes" ? null : "participantes")}
-            className="size-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
-            aria-label="Participantes"
-          >
-            <Users className="size-5" />
-          </button>
-          <button
-            onClick={() => setMobileSheet(mobileSheet === "sobre" ? null : "sobre")}
-            className="size-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
-            aria-label="Sobre"
-          >
-            <Info className="size-5" />
-          </button>
+          {/* Botões flutuantes estilo Reels (comentar / participantes / sobre)
+              — pinados no canto do próprio vídeo, então nunca ficam por cima
+              da gaveta quando ela está aberta. */}
+          <div className="absolute right-3 bottom-3 z-10 flex flex-col items-center gap-3">
+            <button
+              onClick={() => setMobileSheet(mobileSheet === "chat" ? null : "chat")}
+              className="size-10 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
+              aria-label="Comentários"
+            >
+              <MessageSquare className="size-4.5" />
+            </button>
+            <button
+              onClick={() => setMobileSheet(mobileSheet === "participantes" ? null : "participantes")}
+              className="size-10 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
+              aria-label="Participantes"
+            >
+              <Users className="size-4.5" />
+            </button>
+            <button
+              onClick={() => setMobileSheet(mobileSheet === "sobre" ? null : "sobre")}
+              className="size-10 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
+              aria-label="Sobre"
+            >
+              <Info className="size-4.5" />
+            </button>
+          </div>
         </div>
 
         {mobileSheet && (
-          <>
-            {/* Scrim escurecendo o vídeo por trás — igual TikTok/Reels ao
-                abrir comentários: o vídeo continua rodando (áudio incluso),
-                só fica visível por cima. Tocar fora fecha a gaveta. */}
-            <div
-              className="absolute inset-0 z-10 bg-black/40 animate-in fade-in duration-200"
-              onClick={() => setMobileSheet(null)}
-            />
-            <div
-              className="absolute inset-x-0 bottom-0 z-20 max-h-[62dvh] h-[62dvh] bg-background rounded-t-2xl border-t border-border flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200"
-              style={sheetMaxHeight ? { height: sheetMaxHeight, maxHeight: sheetMaxHeight } : undefined}
-            >
+          <div className="flex-1 min-h-0 bg-background rounded-t-2xl border-t border-border flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200">
               {/* Alça de arrastar (só visual, como no TikTok — fechar continua
-                  sendo pelo X, tap fora, ou "voltar"). */}
+                  sendo pelo X ou "voltar"). */}
               <div className="flex justify-center pt-2 pb-1 shrink-0">
                 <div className="h-1 w-9 rounded-full bg-muted-foreground/30" />
               </div>
@@ -930,8 +931,7 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
                 {mobileSheet === "participantes" && <ParticipantesPanel programa={programa} />}
                 {mobileSheet === "sobre" && <SobrePanel programa={programa} />}
               </div>
-            </div>
-          </>
+          </div>
         )}
       </div>
 
