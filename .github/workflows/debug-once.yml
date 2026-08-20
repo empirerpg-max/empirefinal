@@ -6,4 +6,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/migrar-albuns-legado?offset=65&limit=10" | tee /tmp/out.json
+        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/migrar-albuns-legado?offset=75&limit=10" | tee /tmp/out.json
