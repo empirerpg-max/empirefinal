@@ -3,6 +3,33 @@ import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService
 import { registrarAuditLog } from "./registroLogController";
 import { somarPrestigio } from "../services/prestigioService";
 
+// Gera o próximo "Código único" (padrão EMPALBM001 pra álbum, EMP001 pra
+// música) — acha a coluna "Código único" pelo cabeçalho (não por letra
+// fixa, porque cada aba tem ela numa posição diferente), pega o maior
+// número já usado com esse prefixo e devolve o próximo, com o mesmo
+// zero-padding. Nunca reaproveita número: mesmo que uma linha seja
+// apagada, o próximo código continua a partir do maior já visto.
+async function gerarProximoCodigoUnico(
+  sheetName: string,
+  prefixo: string,
+  digitos: number,
+): Promise<string> {
+  const rows = await googleSheetsService.edicaoCharts.readValues(sheetName, "A1:BZ5000").catch(() => []);
+  if (!rows || rows.length < 1) return `${prefixo}${"1".padStart(digitos, "0")}`;
+  const headers = rows[0].map((h) => normalizeComparison(h));
+  const col = headers.findIndex((h) => h.startsWith("codigo unico"));
+  let maior = 0;
+  if (col >= 0) {
+    const re = new RegExp(`^${prefixo}(\\d+)$`, "i");
+    for (let i = 1; i < rows.length; i++) {
+      const val = (rows[i][col] || "").trim();
+      const m = val.match(re);
+      if (m) maior = Math.max(maior, parseInt(m[1], 10));
+    }
+  }
+  return `${prefixo}${String(maior + 1).padStart(digitos, "0")}`;
+}
+
 export interface CreateSongPayload {
   opcaoChart: string; // "a) Registrar essa música em chart" | "b) Substituir música no chart" | "c) Os comentários desse tópico devem valer para uma música já lançada"
   tituloMusica: string;
@@ -1156,9 +1183,13 @@ export async function createAlbumController(request: Request): Promise<Response>
     }
 
     // 3. Gravar em "EDIÇÃO CHARTS ÁLBUMS" (edicaoCharts) — aba separada da
-    // "EDIÇÃO CHARTS" usada pelas faixas, confirmada via dump ao vivo.
+    // "EDIÇÃO CHARTS" usada pelas faixas, confirmada via dump ao vivo. Já
+    // inclui o "Código único" (coluna R, padrão EMPALBM001, EMPALBM002...)
+    // — antes essa coluna ficava sempre em branco pra álbum lançado pelo
+    // app, só os legados/manuais tinham código.
     try {
       const tipoNum = tipoAlbum.trim().toUpperCase() === "EP" ? "1" : "2";
+      const codigoUnico = await gerarProximoCodigoUnico("EDIÇÃO CHARTS ÁLBUMS", "EMPALBM", 3);
       await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS ÁLBUMS", [
         artistaAlbum, // A - ARTISTA
         dataFormatada, // B - DATA DE LANÇAMENTO
@@ -1166,6 +1197,9 @@ export async function createAlbumController(request: Request): Promise<Response>
         albumFullTitle, // D - NOME DO ALBUM
         String(faixas.length), // E - NÚMERO DE FAIXAS
         tipoNum, // F - TIPO DE ÁLBUM (2 = Álbum/Deluxe, 1 = EP)
+        "", "", "", "", "", "", "", "", "", "", // G-P (streams/vendas/certificação/multiplicador — calculados à parte)
+        "", // Q - CÁLCULO 1
+        codigoUnico, // R - Código único
       ]);
     } catch (err) {
       console.warn("[createAlbumController] Erro ao gravar em EDIÇÃO CHARTS ÁLBUMS:", err);
