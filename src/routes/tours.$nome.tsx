@@ -26,6 +26,9 @@ import { Calendar } from "@/components/ui/calendar";
 
 export const Route = createFileRoute("/tours/$nome")({
   component: TourDetails,
+  validateSearch: (search: Record<string, unknown>): { id?: string } => ({
+    id: typeof search.id === "string" ? search.id : undefined,
+  }),
 });
 
 interface TourAcaoDia {
@@ -95,6 +98,7 @@ function formatDataBR(date: Date): string {
 
 function TourDetails() {
   const { nome } = Route.useParams();
+  const { id: idUnicoDaBusca } = Route.useSearch();
   const { user } = useTelegramUser();
   const telegramId = user?.id || "";
   const usuario = user?.name || "";
@@ -120,9 +124,18 @@ function TourDetails() {
 
   const tour = useMemo(() => {
     if (!tours || tours.length === 0) return null;
+    // Um artista pode ter mais de uma turnê (ex: "Home" antiga + a atual) —
+    // sem o id específico, a página sempre caía na última do array,
+    // ignorando qual card foi realmente clicado na listagem. Quando o
+    // link já vem com o idUnico (ver tours/index.tsx), usa ele; senão
+    // mantém o fallback antigo (deep link só com o nome do artista).
+    if (idUnicoDaBusca) {
+      const exata = tours.find((t) => t.idUnico === idUnicoDaBusca);
+      if (exata) return exata;
+    }
     const novos = tours.filter((t) => t.sistemaNovo);
     return novos[novos.length - 1] || tours[tours.length - 1];
-  }, [tours]);
+  }, [tours, idUnicoDaBusca]);
 
   if (loading) {
     return (
