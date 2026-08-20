@@ -290,10 +290,18 @@ export async function getTurnesController(request: Request): Promise<Response> {
         return true;
       });
 
+    const statusCol = colIndexToA1Letter(TOUR_HEADERS.indexOf("status"));
     await Promise.all(
       tours.map(async ({ tour, rowIndex }) => {
         if (tour.sistemaNovo && resolverShowsAutomaticos(tour)) {
           await persistAgenda(rowIndex, tour).catch(() => {});
+        }
+        const dinamico = statusDinamico(tour);
+        if (dinamico !== tour.status) {
+          tour.status = dinamico;
+          await googleSheetsService.usuarios
+            .updateValues(TOURS_SHEET, `${statusCol}${rowIndex}`, [[dinamico]])
+            .catch(() => {});
         }
       }),
     );
@@ -321,6 +329,14 @@ export async function getTurneDetalheController(request: Request): Promise<Respo
     const tour = rowToTour(found.row);
     if (tour.sistemaNovo && resolverShowsAutomaticos(tour)) {
       await persistAgenda(found.rowIndex, tour).catch(() => {});
+    }
+    const dinamico = statusDinamico(tour);
+    if (dinamico !== tour.status) {
+      tour.status = dinamico;
+      const statusCol = colIndexToA1Letter(TOUR_HEADERS.indexOf("status"));
+      await googleSheetsService.usuarios
+        .updateValues(TOURS_SHEET, `${statusCol}${found.rowIndex}`, [[dinamico]])
+        .catch(() => {});
     }
 
     return jsonOk(tour);
@@ -536,6 +552,29 @@ function resolverShowsAutomaticos(tour: Tour): boolean {
     mudou = true;
   }
   return mudou;
+}
+
+const STATUS_EM_ANDAMENTO = "Em andamento";
+const STATUS_PLANEJANDO = "Planejando";
+const STATUS_FINALIZADA = "Finalizada";
+
+// A coluna "Status" da planilha nunca era atualizada automaticamente em
+// lugar nenhum — turnês do sistema novo nasciam com "Planejando" (ver
+// criarTurneController) e ficavam PRA SEMPRE assim, mesmo já em cartaz ou
+// já encerradas, porque nada nunca escrevia "Em andamento"/"Finalizada"
+// nessa célula. Isso fazia turnês recém-lançadas (com data de início hoje)
+// não aparecerem como ativas em lugar nenhum do app. Turnês do sistema
+// antigo (sem capa) nunca mais recebem shows/ações novas — por definição
+// já acabaram, então sempre contam como finalizadas.
+function statusDinamico(tour: Tour): string {
+  if (!tour.sistemaNovo) return STATUS_FINALIZADA;
+  const hoje = parseDataBR(formatDataBR(new Date()));
+  const inicio = parseDataBR(tour.dataInicio);
+  const termino = parseDataBR(tour.dataTermino);
+  if (!hoje || !inicio || !termino) return tour.status || STATUS_PLANEJANDO;
+  if (hoje < inicio) return STATUS_PLANEJANDO;
+  if (hoje > termino) return STATUS_FINALIZADA;
+  return STATUS_EM_ANDAMENTO;
 }
 
 interface AcaoDiaPayload {
