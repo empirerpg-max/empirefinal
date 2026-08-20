@@ -673,6 +673,28 @@ function useVisibleViewportHeight() {
   return h;
 }
 
+// Se o teclado está aberto, de verdade — via foco em campo de texto, não
+// comparando alturas de viewport (isso dava falso positivo: no iOS a barra
+// de endereço/safe area já faz visualViewport.height < innerHeight mesmo
+// sem teclado nenhum aberto, então a gaveta nunca voltava ao tamanho normal
+// de 62dvh). Só encolhe de verdade quando alguém está digitando.
+function useKeyboardOpen() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const isTextField = (el: EventTarget | null) =>
+      el instanceof HTMLElement && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+    const onFocusIn = (e: FocusEvent) => { if (isTextField(e.target)) setOpen(true); };
+    const onFocusOut = (e: FocusEvent) => { if (isTextField(e.target)) setOpen(false); };
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
+  }, []);
+  return open;
+}
+
 // ---------- WatchView (chat + participantes + sobre) ----------
 function WatchView({ programa, onBack }: { programa: Programa; onBack: () => void }) {
   // Identidade vem só do login próprio (aba Usuários) — sem depender do
@@ -741,14 +763,13 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
   // em vez de sair da tela do Empire TV.
   useBackClose(!!mobileSheet, () => setMobileSheet(null));
   const visibleHeight = useVisibleViewportHeight();
+  const keyboardOpen = useKeyboardOpen();
   // Com o teclado FECHADO, a gaveta fica na altura normal (62dvh, ver
   // className abaixo) — sobra bastante vídeo visível em cima, como no
-  // TikTok. Só quando o teclado ABRE (visualViewport encolhe de verdade) é
+  // TikTok. Só quando o teclado ABRE de verdade (campo de texto focado) é
   // que reservamos uma faixa mínima de vídeo (~110px) pra ele não sumir
   // atrás do teclado — nunca o contrário.
-  const keyboardOpen =
-    typeof window !== "undefined" && visibleHeight > 0 && window.innerHeight - visibleHeight > 120;
-  const sheetMaxHeight = keyboardOpen ? Math.max(160, visibleHeight - 110) : undefined;
+  const sheetMaxHeight = keyboardOpen && visibleHeight ? Math.max(160, visibleHeight - 110) : undefined;
 
   const player = (() => {
     const embed = resolveStreamEmbed(programa.stream_url, !!programa.ao_vivo);
