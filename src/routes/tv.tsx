@@ -769,18 +769,31 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
   // TikTok. Só quando o teclado ABRE de verdade (campo de texto focado) é
   // que reservamos uma faixa mínima de vídeo (~110px) pra ele não sumir
   // atrás do teclado — nunca o contrário.
-  const sheetMaxHeight = keyboardOpen && visibleHeight ? Math.max(160, visibleHeight - 110) : undefined;
+  // Enquanto o teclado está aberto sobra pouco espaço de tela — reserva uma
+  // fatia proporcional (não um valor fixo pequeno) pra o vídeo continuar
+  // reconhecível, em vez de virar uma tarja quase invisível.
+  const keyboardReserve = visibleHeight ? Math.round(visibleHeight * 0.28) : 160;
+  const sheetMaxHeight = keyboardOpen && visibleHeight ? Math.max(160, visibleHeight - keyboardReserve) : undefined;
 
   // O navegador força o autoplay como mudo até haver uma interação real do
   // usuário — como o player é um iframe de outro domínio (Kick), não dá pra
   // ativar o som via código nosso sem essa interação acontecer dentro dele.
-  // Recarregar o iframe como resposta direta a um clique conta como essa
-  // interação pro navegador, então o autoplay seguinte já sai com som.
+  // Setar o src do iframe DIRETO no DOM (via ref), de forma síncrona dentro
+  // do próprio handler de clique, é o que preserva a "ativação do usuário"
+  // pro navegador — trocar via state do React (re-render, key novo) atrasa
+  // a troca pro próximo paint e a ativação já não vale mais pro navegador
+  // nessa hora, então o player recarregava mudo do mesmo jeito.
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [unmutedOnce, setUnmutedOnce] = useState(false);
-  const [iframeReloadKey, setIframeReloadKey] = useState(0);
   const handleUnmute = () => {
     setUnmutedOnce(true);
-    setIframeReloadKey((k) => k + 1);
+    const el = iframeRef.current;
+    if (el) {
+      const url = new URL(el.src, window.location.href);
+      url.searchParams.set("muted", "false");
+      url.searchParams.set("autoplay", "true");
+      el.src = url.toString();
+    }
   };
   useEffect(() => {
     setUnmutedOnce(false);
@@ -792,13 +805,12 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
       return (
         <div className="relative w-full h-full">
           <iframe
-            key={iframeReloadKey}
+            ref={iframeRef}
             src={embed}
             title={programa.titulo}
             className="w-full h-full border-0 block"
             allow="autoplay; camera; microphone; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
-            loading="lazy"
           />
           {!unmutedOnce && (
             <button
