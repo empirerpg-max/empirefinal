@@ -62,6 +62,7 @@ import {
   setArtistFotoController,
   getAllArtistasController,
 } from "../controllers/artistasController";
+import { calcularFortunaChartsController } from "../controllers/fortunaChartsController";
 import {
   getProgramasTVController,
   registrarPresencaTVController,
@@ -160,6 +161,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/meus-nomes",
     "/api/artistas/disponiveis",
     "/api/artistas/listar-todos",
+    "/api/artistas/calcular-fortuna-charts",
     "/api/tv/programas",
     "/api/tv/presenca",
     "/api/tv/processar-participacao",
@@ -829,6 +831,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         break;
       case "/api/artistas/listar-todos":
         response = await getAllArtistasController();
+        break;
+      case "/api/artistas/calcular-fortuna-charts":
+        response = await calcularFortunaChartsController();
         break;
       case "/api/tv/programas":
         response = await getProgramasTVController();
