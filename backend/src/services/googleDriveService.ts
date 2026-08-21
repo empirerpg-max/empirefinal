@@ -16,6 +16,7 @@ export const DRIVE_FOLDERS = {
   socialAvatars: "1uuemSEv0mtvtFZtxJdFNjedb55tUUpDm",
   socialNews: "1ERLIAEZM_KiJBhtUOuVNyXEmsGb0pxcZ",
   playerAvatars: "14yMzU_4i2ZbySfSVP0Ug9tyxu99dgJI5",
+  artistPhotos: "1OrSYjVf2LN_zKmcs0j7GNdK7s9EljtO1",
   playlistTracks: "1l7sRj7-ibDpXLQ9lc7147PLwF5qjAdZY",
   // GIFs/stickers do chat da Empire TV — qualquer jogador pode subir um
   // arquivo aqui, e ele fica disponível pra todo mundo usar no chat.

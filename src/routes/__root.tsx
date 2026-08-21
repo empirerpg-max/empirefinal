@@ -53,9 +53,16 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
   const [linking, setLinking] = useState(false);
 
   const [novoNome, setNovoNome] = useState("");
-  const [novoFoto, setNovoFoto] = useState("");
+  const [novoFotoFile, setNovoFotoFile] = useState<File | null>(null);
+  const [novoFotoPreview, setNovoFotoPreview] = useState("");
   const [novoGravadora, setNovoGravadora] = useState("");
   const [creating, setCreating] = useState(false);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+
+  const handleNovoFotoSelect = (file: File) => {
+    setNovoFotoFile(file);
+    setNovoFotoPreview(URL.createObjectURL(file));
+  };
 
   useEffect(() => {
     api.getArtistasSemId().then(setAvailable);
@@ -110,16 +117,28 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
     }
     setCreating(true);
     try {
+      let fotoUrl = "";
+      if (novoFotoFile) {
+        setUploadingFoto(true);
+        fotoUrl = await api.uploadArtistPhoto(novoFotoFile);
+        setUploadingFoto(false);
+        if (!fotoUrl) {
+          toast.error("Falha ao enviar a foto — tenta de novo.");
+          setCreating(false);
+          return;
+        }
+      }
       const res = await api.criarArtista({
         nome: novoNome.trim(),
-        foto: novoFoto.trim(),
+        foto: fotoUrl,
         gravadora: novoGravadora.trim(),
         telegram_id: user.id,
       });
       if (res.ok) {
         toast.success("Artista criado!", { description: `${novoNome} entrou no seu plantel.` });
         setNovoNome("");
-        setNovoFoto("");
+        setNovoFotoFile(null);
+        setNovoFotoPreview("");
         setNovoGravadora("");
         onClose();
       } else {
@@ -129,6 +148,7 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
       toast.error("Erro na conexão");
     } finally {
       setCreating(false);
+      setUploadingFoto(false);
     }
   };
 
@@ -250,16 +270,28 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
             </div>
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5 block">
-                Foto (link Google Drive)
+                Foto do artista
               </label>
-              <input
-                value={novoFoto}
-                onChange={(e) => setNovoFoto(e.target.value)}
-                placeholder="https://drive.google.com/file/d/..."
-                className="w-full h-12 bg-white/5 border border-white/10 rounded-2xl px-4 text-xs font-bold outline-none focus:border-primary/40"
-              />
+              <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl p-3">
+                <div className="size-14 shrink-0 rounded-xl overflow-hidden bg-white/5 border border-white/10 grid place-items-center">
+                  {novoFotoPreview ? (
+                    <img src={novoFotoPreview} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="size-5 text-muted-foreground/40" />
+                  )}
+                </div>
+                <label className="flex-1 cursor-pointer px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-center text-[11px] font-black uppercase tracking-widest border border-white/10 transition">
+                  {novoFotoFile ? "Trocar foto" : "Selecionar foto"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => e.target.files?.[0] && handleNovoFotoSelect(e.target.files[0])}
+                    className="hidden"
+                  />
+                </label>
+              </div>
               <p className="text-[9px] text-muted-foreground/60 mt-1 px-1">
-                Cole o link de compartilhamento do Drive. Opcional.
+                Opcional. Enviado direto pro Drive quando você criar o artista.
               </p>
             </div>
             <div>
@@ -278,7 +310,7 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
               onClick={handleCreate}
               className="mt-2 w-full h-14 rounded-[2rem] bg-primary text-primary-foreground font-black uppercase text-[11px] tracking-[0.2em] active:scale-95 transition-all disabled:opacity-30 shadow-[0_10px_30px_rgba(var(--primary-rgb),0.3)]"
             >
-              {creating ? "Criando..." : "Criar Artista"}
+              {uploadingFoto ? "Enviando foto..." : creating ? "Criando..." : "Criar Artista"}
             </button>
           </div>
         )}
