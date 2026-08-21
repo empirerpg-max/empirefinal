@@ -6,4 +6,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/kick/status" | tee /tmp/out.json
+        run: |
+          python3 -c "
+          import json, os
+          data = bytes([i % 256 for i in range(3 * 1024 * 1024)])
+          import base64
+          b64 = base64.b64encode(data).decode()
+          payload = {'fileName': 'teste-grande.jpg', 'mimeType': 'image/jpeg', 'base64Data': b64, 'folderType': 'socialPosts'}
+          with open('/tmp/payload.json', 'w') as f:
+              json.dump(payload, f)
+          "
+          curl -sS -w "\nHTTP_STATUS:%{http_code}\n" -X POST "https://tanstack-start-app.empirerpg-forum.workers.dev/api/gestao/upload" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/payload.json | tail -c 2000
