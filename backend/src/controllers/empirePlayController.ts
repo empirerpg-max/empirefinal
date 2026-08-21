@@ -750,7 +750,12 @@ export async function getEmpirePlayMusicasController(request: Request): Promise<
 
   try {
     const records = await sheetsService.readSheetObjects("Musicas");
-    let items = records.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+    // Faixa "Pendente" (Sim) nunca aparece no Fórum — só existe internamente
+    // até alguém decidir lançar oficialmente nos charts (mesma regra já
+    // aplicada na playlist Hot, ver getEmpirePlayHomeController).
+    let items = records
+      .filter((rec) => (getValue(rec, ["pendente"]) || "").trim().toLowerCase() !== "sim")
+      .map((rec, idx) => buildCleanItem("Musicas", rec, idx));
 
     if (filterArtist) {
       items = items.filter((item) => {
