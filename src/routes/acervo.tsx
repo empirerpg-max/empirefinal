@@ -13,8 +13,9 @@ import {
   ImageIcon,
   Trash2,
   BookOpenText,
+  Crown,
 } from "lucide-react";
-import { api, resolveImg } from "@/lib/api";
+import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 
 // Transição de "capa vira detalhe" (mesmo mecanismo do card de notícia no
@@ -68,9 +69,10 @@ async function uploadToDrive(file: File): Promise<string | null> {
 
 function AcervoPage() {
   const { user } = useTelegramUser();
-  const [tab, setTab] = useState<"revistas" | "entrevistas">("revistas");
+  const [tab, setTab] = useState<"revistas" | "entrevistas" | "forbes">("revistas");
   const [revistas, setRevistas] = useState<Revista[]>([]);
   const [entrevistas, setEntrevistas] = useState<Entrevista[]>([]);
+  const [forbes, setForbes] = useState<Artist[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [myArtists, setMyArtists] = useState<any[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -92,6 +94,16 @@ function AcervoPage() {
   useEffect(() => {
     loadAll();
   }, []);
+
+  useEffect(() => {
+    if (tab !== "forbes" || forbes !== null) return;
+    api.listarTodos().then((artists) => {
+      const ranked = artists
+        .filter((a) => a.fortuna_total !== null)
+        .sort((a, b) => (b.fortuna_total || 0) - (a.fortuna_total || 0));
+      setForbes(ranked);
+    });
+  }, [tab, forbes]);
 
   useEffect(() => {
     const tgId = user?.id || "";
@@ -134,10 +146,53 @@ function AcervoPage() {
         >
           <MessageSquareText className="size-3.5" /> Entrevistas
         </button>
+        <button
+          onClick={() => {
+            haptic.selection();
+            setTab("forbes");
+          }}
+          className={`flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all ${
+            tab === "forbes" ? "bg-primary text-primary-foreground" : "bg-white/5 text-muted-foreground border border-white/10"
+          }`}
+        >
+          <Crown className="size-3.5" /> Forbes
+        </button>
       </div>
 
       <div className="px-4">
-        {loading ? (
+        {tab === "forbes" ? (
+          forbes === null ? (
+            <div className="flex flex-col items-center justify-center p-20 gap-4">
+              <Loader2 className="size-8 text-primary animate-spin" />
+            </div>
+          ) : forbes.length === 0 ? (
+            <EmptyState text="Nenhum artista com Fortuna Total preenchida ainda." />
+          ) : (
+            <div className="grid gap-2">
+              {forbes.map((a, idx) => (
+                <div key={a.nome} className={`${card} p-3.5 flex items-center gap-3`}>
+                  <span
+                    className={`w-7 shrink-0 text-center text-sm font-black ${
+                      idx === 0 ? "text-amber-400" : idx === 1 ? "text-slate-300" : idx === 2 ? "text-amber-700" : "text-muted-foreground"
+                    }`}
+                  >
+                    {idx + 1}
+                  </span>
+                  <div className="size-11 shrink-0 rounded-xl overflow-hidden bg-secondary">
+                    {a.foto && (
+                      <img src={driveImg(a.foto, 150)} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold leading-snug truncate">{a.nome}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium">{a.gravadora}</p>
+                  </div>
+                  <p className="text-sm font-black text-primary shrink-0">{fmtMoney(a.fortuna_total || 0)}</p>
+                </div>
+              ))}
+            </div>
+          )
+        ) : loading ? (
           <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="size-8 text-primary animate-spin" />
           </div>
@@ -207,15 +262,17 @@ function AcervoPage() {
         )}
       </div>
 
-      <button
-        onClick={() => {
-          haptic.light();
-          setIsCreateOpen(true);
-        }}
-        className="fixed bottom-24 right-5 size-14 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-2xl active:scale-90 transition-transform z-40"
-      >
-        <Plus className="size-6" />
-      </button>
+      {tab !== "forbes" && (
+        <button
+          onClick={() => {
+            haptic.light();
+            setIsCreateOpen(true);
+          }}
+          className="fixed bottom-24 right-5 size-14 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-2xl active:scale-90 transition-transform z-40"
+        >
+          <Plus className="size-6" />
+        </button>
+      )}
 
       {selectedRevista && (
         <RevistaViewer revista={selectedRevista} onClose={() => setSelectedRevista(null)} />
@@ -223,7 +280,7 @@ function AcervoPage() {
       {selectedEntrevista && (
         <EntrevistaViewer entrevista={selectedEntrevista} onClose={() => setSelectedEntrevista(null)} />
       )}
-      {isCreateOpen && (
+      {isCreateOpen && tab !== "forbes" && (
         <CreateModal
           tab={tab}
           myArtists={myArtists}
