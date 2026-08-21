@@ -206,6 +206,51 @@ export async function editSocialPostController(request: Request): Promise<Respon
   return jsonResponse({ ok: true });
 }
 
+const PRAZO_EXCLUSAO_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * POST /api/social/deletar
+ * Apaga um post (limpa a linha inteira, mesma lógica de "linha vazia =
+ * ignorada" que já existe em readRows). Só o dono do post pode apagar, e só
+ * até 24h depois de publicado — depois disso, fica registrado pra sempre
+ * (mesma regra usada em outras redes sociais reais). Admin (810141686)
+ * ignora as duas checagens, igual editSocialPostController já fazia.
+ */
+export async function deleteSocialPostController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { postId?: string; tgId?: string };
+  const { postId, tgId } = body;
+
+  if (!postId || !tgId) {
+    return jsonResponse({ ok: false, error: "Dados incompletos para excluir o post." }, 400);
+  }
+
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts);
+  const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === postId);
+  if (rowIndex === -1) return jsonResponse({ ok: false, error: "Post não encontrado." }, 404);
+
+  const isAdmin = tgId.trim() === "810141686";
+  const ownerId = normalizeText(rows[rowIndex][8]);
+  if (!isAdmin && (!ownerId || ownerId !== tgId.trim())) {
+    return jsonResponse({ ok: false, error: "Você só pode excluir seus próprios posts." }, 403);
+  }
+
+  if (!isAdmin) {
+    const dataPost = new Date(normalizeText(rows[rowIndex][7])).getTime();
+    if (Number.isFinite(dataPost) && Date.now() - dataPost > PRAZO_EXCLUSAO_MS) {
+      return jsonResponse(
+        { ok: false, error: "O prazo de 24h pra excluir esse post já passou." },
+        403,
+      );
+    }
+  }
+
+  await googleSheetsService.usuarios.updateValues(SHEETS.posts, `A${rowIndex + 1}:J${rowIndex + 1}`, [
+    ["", "", "", "", "", "", "", "", "", ""],
+  ]);
+
+  return jsonResponse({ ok: true });
+}
+
 // -------------------- COMENTÁRIOS --------------------
 
 export async function getSocialComentariosController(request: Request): Promise<Response> {

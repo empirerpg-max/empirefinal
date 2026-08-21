@@ -29,6 +29,7 @@ import {
   Settings2,
   Loader2,
   Edit,
+  Trash2,
   EyeOff,
   Eye,
   Shuffle,
@@ -446,6 +447,18 @@ function SocialPage() {
     setIsModalOpen(true);
   }
 
+  async function handleDeletePost(post: any) {
+    haptic.selection();
+    if (!confirm("Excluir este post? Não dá pra desfazer.")) return;
+    const res = await api.deletarPostSocial(post.id, user?.id || "");
+    if (res.ok) {
+      haptic.success();
+      loadPosts();
+    } else {
+      alert((res as any).error || res.erro || "Não deu pra excluir o post.");
+    }
+  }
+
   function closePostModal() {
     setIsModalOpen(false);
     setSelectedType(null);
@@ -810,6 +823,14 @@ function SocialPage() {
                             >
                               <Edit className="size-4" /> Editar
                             </button>
+                            {Date.now() - new Date(post.data).getTime() <= 24 * 60 * 60 * 1000 && (
+                              <button
+                                onClick={() => handleDeletePost(post)}
+                                className="flex items-center gap-1.5 font-black text-xs text-muted-foreground min-h-9 active:scale-90 transition-transform hover:text-destructive"
+                              >
+                                <Trash2 className="size-4" /> Excluir
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>

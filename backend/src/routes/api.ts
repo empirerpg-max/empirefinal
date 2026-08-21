@@ -90,6 +90,7 @@ import {
   comentarSocialPostController,
   editSocialCommentController,
   editSocialPostController,
+  deleteSocialPostController,
   getSocialPerfisController,
   saveSocialPerfilController,
   getSocialNewsController,
@@ -217,6 +218,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/ponto/playlists/investir",
     "/api/ponto/playlists/limpar",
     "/api/social/posts/editar",
+    "/api/social/posts/deletar",
     "/api/social/perfis",
     "/api/social/news",
     "/api/empire-tv/gifs",
@@ -410,6 +412,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await editSocialPostController(request);
+  } else if (url.pathname === "/api/social/posts/deletar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/posts/deletar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await deleteSocialPostController(request);
   } else if (url.pathname === "/api/social/curtir") {
     if (request.method !== "POST") {
       return new Response(
