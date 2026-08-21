@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Disc3, Play, FileText, X } from "lucide-react";
-import { api, driveImg } from "@/lib/api";
+import { ChevronLeft, Disc3, Play, FileText, X, MoreVertical } from "lucide-react";
+import { api, driveImg, type PlaylistTrack } from "@/lib/api";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
+import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 
 export const Route = createFileRoute("/empire-play/albuns-antigos/$id")({
   component: AlbumAntigoDetail,
@@ -14,6 +15,7 @@ function AlbumAntigoDetail() {
   const { playSong, currentTrack } = useEmpirePlayer();
   const [album, setAlbum] = useState<Awaited<ReturnType<typeof api.getAlbumAntigo>> | null | undefined>(undefined);
   const [showLyrics, setShowLyrics] = useState<number | null>(null);
+  const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
 
   useEffect(() => {
     api.getAlbumAntigo(id).then(setAlbum);
@@ -82,7 +84,7 @@ function AlbumAntigoDetail() {
             <li
               key={i}
               onClick={() => playSong(toPlayable(f), album.faixas.map(toPlayable))}
-              className={`grid grid-cols-[2.5rem_1fr_auto_auto] items-center gap-3 px-2 py-2 rounded-xl cursor-pointer ${active ? "bg-emerald-500/10" : "hover:bg-white/5"}`}
+              className={`grid grid-cols-[2.5rem_1fr_auto_auto_auto] items-center gap-3 px-2 py-2 rounded-xl cursor-pointer ${active ? "bg-emerald-500/10" : "hover:bg-white/5"}`}
             >
               <span className="text-neutral-500 text-center">{f.numero || i + 1}</span>
               <div className="min-w-0">
@@ -103,6 +105,25 @@ function AlbumAntigoDetail() {
                   <FileText className="size-4" />
                 </button>
               )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuTrack({
+                    album_id: album.id,
+                    faixa_numero: f.numero || i + 1,
+                    titulo: f.titulo,
+                    artistas: f.artistas || album.artista,
+                    drive_url: f.drive_url,
+                    capa_url: album.capa_url || "",
+                    duracao: f.duracao,
+                    letra: f.letra || "",
+                  });
+                }}
+                className="text-neutral-500 hover:text-white"
+                title="Salvar / adicionar à playlist"
+              >
+                <MoreVertical className="size-4" />
+              </button>
               <div className={active ? "text-emerald-500" : "text-neutral-400"}>
                 <Play className="size-4" fill="currentColor" />
               </div>
@@ -136,6 +157,8 @@ function AlbumAntigoDetail() {
           </div>
         </div>
       )}
+
+      <AddToPlaylistSheet track={menuTrack} onClose={() => setMenuTrack(null)} />
     </div>
   );
 }

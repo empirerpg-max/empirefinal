@@ -42,6 +42,17 @@ export const Route = createFileRoute("/artistas/$nome/")({
 
 type TabId = "geral" | "discografia" | "charts" | "tours" | "social" | "bens" | "gestao";
 
+// Um único item de discografia, seja qual for a fonte (álbum próprio via
+// Gestao, publicado no catálogo Empire Play, ou legado/antigo) — mostrados
+// juntos, sem separação por origem, e contados como um só total.
+interface DiscoItem {
+  key: string;
+  titulo: string;
+  capa_url?: string;
+  kind: "propria" | "catalogo" | "legado";
+  id: string;
+}
+
 function ArtistDashboard() {
   const { nome } = Route.useParams();
   const { user, ready } = useTelegramUser();
@@ -53,8 +64,64 @@ function ArtistDashboard() {
     null | "viral" | "filantropia" | "payola" | "leilao" | "rescisao" | "composicao" | "imovel" | "foto"
   >(null);
   const [albuns, setAlbuns] = useState<AlbumPayload[]>([]);
+  const [discografia, setDiscografia] = useState<DiscoItem[]>([]);
   const [tourData, setTourData] = useState<any>(null);
   const [responsavelNivel, setResponsavelNivel] = useState<NivelJogador | null>(null);
+
+  // Discografia unificada — junta álbuns próprios (Gestao), catálogo Empire
+  // Play e álbuns legados numa lista só, deduplicada por título, pra contar
+  // e exibir tudo junto sem separação de origem.
+  useEffect(() => {
+    let alive = true;
+    const normNome = decodeURIComponent(nome || "").trim().toLowerCase();
+    const chave = (t: string) => t.trim().toLowerCase();
+
+    Promise.all([
+      api.listarAlbuns(nome).catch(() => []),
+      fetch(`/api/empire-play/albuns`).then((r) => r.json()).catch(() => null),
+      api.listarAlbunsAntigos().catch(() => []),
+    ]).then(([proprios, catalogoRes, legados]) => {
+      if (!alive) return;
+      const catalogo = Array.isArray(catalogoRes?.data) ? catalogoRes.data : [];
+      const catalogoDoArtista = catalogo.filter(
+        (a: any) => (a.artist || a.artista || "").trim().toLowerCase() === normNome,
+      );
+      const legadosDoArtista = legados.filter((a) => a.artista.trim().toLowerCase() === normNome);
+
+      const vistos = new Set<string>();
+      const items: DiscoItem[] = [];
+
+      for (const a of proprios) {
+        const k = chave(a.titulo);
+        if (!a.titulo || vistos.has(k)) continue;
+        vistos.add(k);
+        items.push({ key: `p-${a.id}`, titulo: a.titulo, capa_url: a.capa_url, kind: "propria", id: a.id || "" });
+      }
+      for (const a of catalogoDoArtista) {
+        const titulo = a.title || a.titulo || "";
+        const k = chave(titulo);
+        if (!titulo || vistos.has(k)) continue;
+        vistos.add(k);
+        items.push({
+          key: `c-${a.id}`,
+          titulo,
+          capa_url: a.coverUrl || a.cover || a.capa_url || a.capa_do_album || a.capa,
+          kind: "catalogo",
+          id: a.id,
+        });
+      }
+      for (const a of legadosDoArtista) {
+        const k = chave(a.titulo);
+        if (vistos.has(k)) continue;
+        vistos.add(k);
+        items.push({ key: `l-${a.id}`, titulo: a.titulo, capa_url: a.capa_url, kind: "legado", id: a.id });
+      }
+      setDiscografia(items);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [nome]);
 
   useEffect(() => {
     if (!ready) return;
@@ -320,8 +387,10 @@ function ArtistDashboard() {
             <ChevronRight className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/60" />
           </div>
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {activeTab === "geral" && <GeralTab artist={artist} albuns={albuns} tourData={tourData} />}
-            {activeTab === "discografia" && <DiscografiaTab nome={artist.nome} albuns={albuns} isOwner={isOwner} />}
+            {activeTab === "geral" && <GeralTab artist={artist} discografia={discografia} tourData={tourData} />}
+            {activeTab === "discografia" && (
+              <DiscografiaTab nome={artist.nome} albuns={albuns} discografia={discografia} isOwner={isOwner} />
+            )}
             {activeTab === "charts" && <ChartsTab nome={artist.nome} />}
             {activeTab === "tours" && <ToursProjetosTab nome={artist.nome} tourData={tourData} isOwner={isOwner} />}
             {activeTab === "social" && <SocialTab nome={artist.nome} />}
@@ -346,7 +415,7 @@ function ArtistDashboard() {
 }
 
 // ---------- Aba: Visão Geral ----------
-function GeralTab({ artist, albuns, tourData }: { artist: Artist; albuns: AlbumPayload[]; tourData: any }) {
+function GeralTab({ artist, discografia, tourData }: { artist: Artist; discografia: DiscoItem[]; tourData: any }) {
   const [hof, setHof] = useState<HOFProfile | null | undefined>(undefined);
   const [biografia, setBiografia] = useState<string | null>(null);
 
@@ -372,7 +441,7 @@ function GeralTab({ artist, albuns, tourData }: { artist: Artist; albuns: AlbumP
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <MiniStat icon={<Disc3 className="size-4" />} label="Álbuns" value={String(albuns.length)} />
+        <MiniStat icon={<Disc3 className="size-4" />} label="Álbuns" value={String(discografia.length)} />
         <MiniStat icon={<Users2 className="size-4" />} label="Seguidores" value={String(artist.seguidores || 0)} />
       </div>
 
@@ -418,27 +487,29 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
 }
 
 // ---------- Aba: Discografia ----------
-function DiscografiaTab({ nome, albuns, isOwner }: { nome: string; albuns: AlbumPayload[]; isOwner: boolean }) {
+function DiscografiaTab({
+  nome,
+  discografia,
+  isOwner,
+}: {
+  nome: string;
+  albuns: AlbumPayload[];
+  discografia: DiscoItem[];
+  isOwner: boolean;
+}) {
   const { playSong, playVideo } = useEmpirePlayer();
   const [musicas, setMusicas] = useState<any[] | null>(null);
   const [videos, setVideos] = useState<any[] | null>(null);
-  const [albunsCatalogo, setAlbunsCatalogo] = useState<any[] | null>(null);
 
   useEffect(() => {
     let alive = true;
-    const normNome = nome.trim().toLowerCase();
     Promise.all([
       fetch(`/api/empire-play/musicas?artist=${encodeURIComponent(nome)}`).then((r) => r.json()).catch(() => null),
       fetch(`/api/empire-play/videos?artist=${encodeURIComponent(nome)}`).then((r) => r.json()).catch(() => null),
-      fetch(`/api/empire-play/albuns`).then((r) => r.json()).catch(() => null),
-    ]).then(([m, v, alb]) => {
+    ]).then(([m, v]) => {
       if (!alive) return;
       setMusicas(Array.isArray(m?.data) ? m.data : []);
       setVideos(Array.isArray(v?.data) ? v.data : []);
-      const albunsList = Array.isArray(alb?.data) ? alb.data : [];
-      setAlbunsCatalogo(
-        albunsList.filter((a: any) => (a.artist || a.artista || "").trim().toLowerCase() === normNome),
-      );
     });
     return () => { alive = false; };
   }, [nome]);
@@ -447,55 +518,49 @@ function DiscografiaTab({ nome, albuns, isOwner }: { nome: string; albuns: Album
     <div className="space-y-8">
       <section>
         <div className="flex items-center justify-between mb-4 px-1">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Discografia Legada</h2>
+          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Discografia</h2>
           {isOwner && (
             <Link to="/acoes/album" search={{ nome }} className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center active:scale-90 transition-transform">
               <Disc3 className="size-4" />
             </Link>
           )}
         </div>
-        {albuns.length === 0 ? (
+        {discografia.length === 0 ? (
           <div className="p-8 rounded-[2.5rem] border border-dashed border-white/5 text-center">
             <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest italic opacity-40">Nenhum álbum registrado ainda</p>
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-4">
-            {albuns.map((a) => (
-              <Link key={a.id} to="/album/$id" params={{ id: a.id! }} className="group">
-                <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5">
-                  {a.capa_url && (
-                    <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 grayscale group-hover:grayscale-0" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-                  )}
-                </div>
-                <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.titulo}</p>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
-          <Disc3 className="size-3.5" /> Álbuns no catálogo (Empire Play)
-        </h2>
-        {albunsCatalogo === null ? (
-          <div className="h-24 rounded-2xl bg-card animate-pulse" />
-        ) : albunsCatalogo.length === 0 ? (
-          <p className="text-[10px] text-muted-foreground italic px-1">Nenhum álbum publicado no catálogo ainda.</p>
-        ) : (
-          <div className="grid grid-cols-3 gap-4">
-            {albunsCatalogo.map((a) => {
-              const cover = driveImg(a.coverUrl || a.cover || a.capa_url || a.capa_do_album || a.capa);
-              return (
-                <Link key={a.id} to="/empire-play/forum" search={{ tab: "albuns", id: a.id }} className="group">
+            {discografia.map((a) => {
+              const inner = (
+                <>
                   <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5 grid place-items-center">
-                    {cover ? (
-                      <img src={cover} alt={a.title || a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" referrerPolicy="no-referrer" />
+                    {a.capa_url ? (
+                      <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
                     ) : (
                       <Disc3 className="size-8 text-muted-foreground" />
                     )}
                   </div>
-                  <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.title || a.titulo}</p>
+                  <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.titulo}</p>
+                </>
+              );
+              if (a.kind === "propria") {
+                return (
+                  <Link key={a.key} to="/album/$id" params={{ id: a.id }} className="group">
+                    {inner}
+                  </Link>
+                );
+              }
+              if (a.kind === "legado") {
+                return (
+                  <Link key={a.key} to="/empire-play/albuns-antigos/$id" params={{ id: a.id }} className="group">
+                    {inner}
+                  </Link>
+                );
+              }
+              return (
+                <Link key={a.key} to="/empire-play/forum" search={{ tab: "albuns", id: a.id }} className="group">
+                  {inner}
                 </Link>
               );
             })}
