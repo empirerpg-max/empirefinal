@@ -21,7 +21,7 @@ import {
   ExternalLink,
   Maximize2,
 } from "lucide-react";
-import { driveImg } from "@/lib/api";
+import { driveImg, driveRawImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { useBackClose } from "@/hooks/use-back-close";
 import { CommentModal } from "./CommentModal";
@@ -637,7 +637,7 @@ export const Forum: React.FC<ForumProps> = ({
                     )}
                     <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors" />
                     {selectedTopic.link ? (
-                      <span className="relative size-16 sm:size-20 rounded-full bg-red-600 group-hover:bg-red-500 text-white flex items-center justify-center shadow-2xl shadow-red-600/30 scale-95 group-hover:scale-100 transition-all">
+                      <span className="relative size-16 sm:size-20 rounded-full bg-red-600/70 group-hover:bg-red-500/85 backdrop-blur-sm text-white flex items-center justify-center shadow-2xl shadow-red-600/20 scale-95 group-hover:scale-100 transition-all">
                         <Play className="size-7 sm:size-9 ml-0.5 sm:ml-1 fill-white" />
                       </span>
                     ) : (
@@ -662,19 +662,17 @@ export const Forum: React.FC<ForumProps> = ({
                     }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  {activeSubmenu === "albuns" && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCoverExpanded(true);
-                      }}
-                      title="Ver capa em tela cheia"
-                      className="absolute top-2 right-2 sm:top-3 sm:right-3 size-8 sm:size-9 rounded-full bg-black/50 backdrop-blur text-white grid place-items-center opacity-100 sm:opacity-0 group-hover:opacity-100 transition hover:bg-black/70 z-10"
-                    >
-                      <Maximize2 className="size-3.5 sm:size-4" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCoverExpanded(true);
+                    }}
+                    title="Ver capa em tela cheia"
+                    className="absolute top-2 right-2 sm:top-3 sm:right-3 size-8 sm:size-9 rounded-full bg-black/50 backdrop-blur text-white grid place-items-center opacity-100 sm:opacity-0 group-hover:opacity-100 transition hover:bg-black/70 z-10"
+                  >
+                    <Maximize2 className="size-3.5 sm:size-4" />
+                  </button>
                   {selectedTopic.link && (
                     <button
                       onClick={() => {
@@ -707,7 +705,7 @@ export const Forum: React.FC<ForumProps> = ({
                           [],
                         );
                       }}
-                      className="absolute inset-0 m-auto size-16 sm:size-20 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black flex items-center justify-center shadow-2xl shadow-emerald-500/30 opacity-95 sm:opacity-0 group-hover:opacity-100 transition scale-90 group-hover:scale-100"
+                      className="absolute inset-0 m-auto size-16 sm:size-20 rounded-full bg-emerald-500/70 hover:bg-emerald-400/85 backdrop-blur-sm text-black flex items-center justify-center shadow-2xl shadow-emerald-500/20 opacity-70 sm:opacity-0 group-hover:opacity-100 transition scale-90 group-hover:scale-100"
                     >
                       <Play className="size-7 sm:size-9 ml-0.5 sm:ml-1 fill-black" />
                     </button>
@@ -1177,7 +1175,7 @@ export const Forum: React.FC<ForumProps> = ({
             <X className="size-5" />
           </button>
           <img
-            src={driveImg(selectedTopic.cover, 1600) || "/placeholder.png"}
+            src={driveRawImg(selectedTopic.cover) || driveImg(selectedTopic.cover, 1600) || "/placeholder.png"}
             alt={selectedTopic.title}
             onClick={(e) => e.stopPropagation()}
             className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
