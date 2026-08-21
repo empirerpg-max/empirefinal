@@ -385,6 +385,20 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/registros-charts-tab" && request.method === "GET") {
+      const { googleSheetsService, listSheetTabs } = await import("../backend/src/services/googleSheetsService");
+      const gid = Number(url.searchParams.get("gid") || "566775107");
+      try {
+        const tabs = await listSheetTabs("registrosCharts");
+        const alvo = tabs.find((t) => t.sheetId === gid);
+        if (!alvo) return Response.json({ tabs, erro: `gid ${gid} não encontrado` });
+        const rows = await googleSheetsService.registrosCharts.readValues(alvo.title, "A1:BZ6").catch(() => []);
+        return Response.json({ tabs, aba: alvo, header: rows[0] || [], amostra: rows.slice(1) });
+      } catch (err: any) {
+        return Response.json({ error: err?.message || String(err) }, { status: 500 });
+      }
+    }
+
     if (url.pathname === "/api/debug/charts-shape" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
       try {
