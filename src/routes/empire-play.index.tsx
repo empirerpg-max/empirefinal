@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X } from "lucide-react";
-import { driveImg } from "@/lib/api";
+import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X, MoreVertical } from "lucide-react";
+import { driveImg, type PlaylistTrack } from "@/lib/api";
+import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 import { DynamicCoverCard } from "@/components/EmpirePlay/DynamicCoverCard";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 import { toPlayableTrack, toPlayableVideo } from "@/components/EmpirePlay/mappers";
@@ -24,6 +25,17 @@ function EmpirePlayInicio() {
     "spotify" | "apple" | "youtube" | "lancamentos" | null
   >(null);
   const [slidingSearchQuery, setSlidingSearchQuery] = useState("");
+  const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
+
+  const toPlaylistTrack = (item: any, idx: number): PlaylistTrack => ({
+    album_id: item.album || "single",
+    faixa_numero: idx + 1,
+    titulo: item.titulo,
+    artistas: item.artista,
+    drive_url: item.audio_url || item.drive_url || "",
+    capa_url: item.capa_url || item.poster_url || item.artista_foto_url || "",
+    letra: item.letra || "",
+  });
 
   // Dados das APIs
   const [topPlaylists, setTopPlaylists] = useState<{
@@ -224,7 +236,9 @@ function EmpirePlayInicio() {
           {(() => {
             const list = getSlidingPlaylistItems();
             const heroCover =
-              (activeSlidingPlaylist !== "lancamentos" && (list[0]?.capa_url || list[0]?.poster_url)) || undefined;
+              (activeSlidingPlaylist !== "lancamentos" &&
+                (list[0]?.capa_url || list[0]?.poster_url || list[0]?.artista_foto_url)) ||
+              undefined;
             const gradient =
               activeSlidingPlaylist === "spotify"
                 ? "from-emerald-800/60"
@@ -346,11 +360,11 @@ function EmpirePlayInicio() {
                         {idx + 1}
                       </span>
 
-                      {/* Capa */}
+                      {/* Capa (com fallback pra foto do artista, quando a faixa não tem capa própria) */}
                       <div className="size-11 rounded-xl bg-neutral-950 border border-white/10 overflow-hidden shrink-0 relative">
-                        {item.capa_url || item.poster_url ? (
+                        {item.capa_url || item.poster_url || item.artista_foto_url ? (
                           <img
-                            src={driveImg(item.capa_url || item.poster_url, 150)}
+                            src={driveImg(item.capa_url || item.poster_url || item.artista_foto_url, 150)}
                             alt={item.titulo}
                             className="size-full object-cover"
                           />
@@ -372,6 +386,20 @@ function EmpirePlayInicio() {
                           className="shrink-0 !text-[10px] !px-2 !py-1"
                         />
                       </div>
+
+                      {/* Salvar / adicionar à playlist (só faixas de áudio) */}
+                      {activeSlidingPlaylist !== "youtube" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuTrack(toPlaylistTrack(item, idx));
+                          }}
+                          className="p-2.5 text-neutral-400 hover:text-white transition-all shrink-0"
+                          title="Salvar / adicionar à playlist"
+                        >
+                          <MoreVertical className="size-4" />
+                        </button>
+                      )}
 
                       {/* Botão de Ação */}
                       <button
@@ -430,6 +458,17 @@ function EmpirePlayInicio() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        setMenuTrack(toPlaylistTrack(item, idx));
+                      }}
+                      className="p-2.5 text-neutral-400 hover:text-white transition-all shrink-0"
+                      title="Salvar / adicionar à playlist"
+                    >
+                      <MoreVertical className="size-4" />
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         playSong(item, getSlidingPlaylistItems());
                       }}
                       className="p-2.5 rounded-xl bg-white/5 hover:bg-purple-500 hover:text-black text-white transition-all shrink-0"
@@ -443,6 +482,8 @@ function EmpirePlayInicio() {
           </div>
         </div>
       )}
+
+      <AddToPlaylistSheet track={menuTrack} onClose={() => setMenuTrack(null)} />
     </div>
   );
 }
