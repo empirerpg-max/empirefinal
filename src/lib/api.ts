@@ -375,29 +375,38 @@ export const api = {
     });
     return res.json();
   },
-  // Saldo/seguidores/etc continuam vindo do Apps Script legado (a aba
-  // ARTISTAS não guarda esses campos prontos), mas a Fortuna (Vendas/
-  // Turnês/Total) SEMPRE sobrescreve com o valor real da aba ARTISTAS via
-  // /api/artistas/listar-todos — o Apps Script tinha sua própria conta
-  // interna pra "fortuna_total" que não batia com o que o dono via na
-  // planilha (chegava a mostrar bilhões que não existiam em lugar nenhum).
+  // A aba ARTISTAS (lida direto via Sheets API, nosso Worker) é a fonte
+  // PRINCIPAL da lista — garante que todo artista criado no app (mesmo
+  // segundos atrás) apareça na busca imediatamente. O Apps Script legado
+  // só complementa campos que a aba ainda não guarda prontos (saldo,
+  // seguidores, bio, gênero, país) quando achar o mesmo nome — nunca é
+  // usado como base, senão artista novo (ex: criado agora) some da busca
+  // até o Apps Script "descobrir" ele, o que podia nunca acontecer.
   async listarTodos(): Promise<Artist[]> {
-    const [data, fortunas] = await Promise.all([
-      call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true }),
-      api.fortunasArtistas(),
+    const [base, extras] = await Promise.all([
+      api.artistasDaAba(),
+      call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true }).catch(() => []),
     ]);
-    const arr = Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
-    const porNome = new Map(fortunas.map((f) => [normalizeNome(f.nome), f]));
-    return arr.map((a) => {
-      const f = porNome.get(normalizeNome(a.nome));
-      return f
-        ? { ...a, fortuna_vendas: f.fortuna_vendas, fortuna_turnes: f.fortuna_turnes, fortuna_total: f.fortuna_total }
-        : a;
+    const porNome = new Map(
+      (Array.isArray(extras) ? extras : []).map((a) => [normalizeNome(String((a as any).nome || "")), a]),
+    );
+    return base.map((a) => {
+      const e = porNome.get(normalizeNome(a.nome)) as Record<string, unknown> | undefined;
+      if (!e) return a;
+      return {
+        ...a,
+        saldo: Number(e.saldo || a.saldo || 0),
+        seguidores: Number(e.seguidores || a.seguidores || 0),
+        vendas_total: Number(e.vendas_total || a.vendas_total || 0),
+        descricao: a.descricao || (e.descricao as string) || "",
+        genero: a.genero || (e.genero as string) || "",
+        pais: a.pais || (e.pais as string) || "",
+      };
     });
   },
-  async fortunasArtistas(): Promise<
-    Pick<Artist, "nome" | "fortuna_vendas" | "fortuna_turnes" | "fortuna_total">[]
-  > {
+  // Lista crua direto da aba ARTISTAS (Sheets API, sem passar pelo Apps
+  // Script) — fonte de verdade de posse e Fortuna.
+  async artistasDaAba(): Promise<Artist[]> {
     try {
       const res = await fetch("/api/artistas/listar-todos", { cache: "no-store" });
       if (!res.ok) return [];
