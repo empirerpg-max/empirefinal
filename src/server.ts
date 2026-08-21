@@ -385,6 +385,21 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/test-upload" && request.method === "GET") {
+      const { uploadFileToDrive, DRIVE_FOLDERS } = await import("../backend/src/services/googleDriveService");
+      const tinyPng =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+      try {
+        const url2 = await uploadFileToDrive("teste-debug.png", DRIVE_FOLDERS.socialPosts, "image/png", tinyPng);
+        return Response.json({ ok: true, url: url2 });
+      } catch (err: any) {
+        return Response.json(
+          { ok: false, error: err?.message || String(err), stack: err?.stack || null },
+          { status: 500 },
+        );
+      }
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
