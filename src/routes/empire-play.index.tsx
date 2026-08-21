@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X, MoreVertical } from "lucide-react";
 import { driveImg, type PlaylistTrack } from "@/lib/api";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
-import { DynamicCoverCard } from "@/components/EmpirePlay/DynamicCoverCard";
+import { DynamicCoverCard, type CoverPlatform } from "@/components/EmpirePlay/DynamicCoverCard";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 import { toPlayableTrack, toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -235,10 +235,20 @@ function EmpirePlayInicio() {
         <div className="fixed inset-0 z-[140] bg-neutral-950 flex flex-col transition-all duration-300 ease-out animate-in slide-in-from-right overflow-hidden">
           {(() => {
             const list = getSlidingPlaylistItems();
-            const heroCover =
-              (activeSlidingPlaylist !== "lancamentos" &&
-                (list[0]?.capa_url || list[0]?.poster_url || list[0]?.artista_foto_url)) ||
-              undefined;
+            const coverPlatform: CoverPlatform =
+              activeSlidingPlaylist === "lancamentos" ? "hot" : activeSlidingPlaylist;
+            const coverProps =
+              activeSlidingPlaylist === "spotify"
+                ? { artistName: topPlaylists.spotify?.[0]?.artista, artistPhotoUrl: topPlaylists.spotify?.[0]?.artista_foto_url }
+                : activeSlidingPlaylist === "apple"
+                  ? {
+                      artistName: topPlaylists.apple?.[0]?.artista,
+                      artistPhotoUrl: topPlaylists.apple?.[0]?.artista_foto_url,
+                      coverUrl: topPlaylists.apple?.[0]?.capa_url,
+                    }
+                  : activeSlidingPlaylist === "youtube"
+                    ? { artistName: topPlaylists.youtube?.[0]?.artista, artistPhotoUrl: topPlaylists.youtube?.[0]?.artista_foto_url }
+                    : { artistName: lancamentos?.[0]?.artista, coverUrl: lancamentos?.[0]?.capa_url };
             const gradient =
               activeSlidingPlaylist === "spotify"
                 ? "from-emerald-800/60"
@@ -274,12 +284,8 @@ function EmpirePlayInicio() {
                     <ChevronLeft className="size-5" />
                   </button>
                   <div className="flex items-end gap-4 sm:gap-5 px-5 sm:px-8 pt-16 pb-5">
-                    <div className="size-28 sm:size-40 rounded-xl shadow-2xl overflow-hidden shrink-0 bg-neutral-800 grid place-items-center">
-                      {heroCover ? (
-                        <img src={driveImg(heroCover, 400)} alt="" className="size-full object-cover" />
-                      ) : (
-                        <PlatformIcon className="size-12 text-white/40" />
-                      )}
+                    <div className="relative size-28 sm:size-40 rounded-xl shadow-2xl overflow-hidden shrink-0 bg-neutral-800">
+                      <DynamicCoverCard platform={coverPlatform} className="absolute inset-0" {...coverProps} />
                     </div>
                     <div className="flex-1 min-w-0 pb-1">
                       <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Playlist</p>
