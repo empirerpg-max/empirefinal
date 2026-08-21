@@ -390,9 +390,12 @@ export async function getArtistInfoController(request: Request): Promise<Respons
 
 /**
  * POST /api/artistas/foto
- * Grava o link do novo upload de foto do artista na coluna F da aba
- * "INFOS ACTS" (nunca sobrescreve a coluna C — essa é editada à mão pelo
- * dono do artista direto na planilha, junto com a biografia). Cria a linha
+ * Grava o link do novo upload de foto do artista na coluna I da aba
+ * "INFOS ACTS" — é literalmente o campo com esse propósito na planilha
+ * ("Caso deseje uma nova capa pro seu act, insira no seu Google Drive >
+ * Clique em Compartilhar > Insira o link aqui"). Nunca sobrescreve a
+ * coluna C (foto "oficial", editada à mão pelo dono/admin direto na
+ * planilha) nem a F/F1 (flags de admin, não é campo de link). Cria a linha
  * se o artista ainda não tiver uma nessa aba.
  */
 export async function setArtistFotoController(request: Request): Promise<Response> {
@@ -412,9 +415,11 @@ export async function setArtistFotoController(request: Request): Promise<Respons
     const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
 
     if (rowIndex !== -1) {
-      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `F${rowIndex + 1}`, [[fotoUrl]]);
+      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `I${rowIndex + 1}`, [[fotoUrl]]);
     } else {
-      await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [nome, "", "", "", "", fotoUrl]);
+      await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
+        nome, "", "", "", "", "", "", "", fotoUrl,
+      ]);
     }
 
     return new Response(JSON.stringify({ success: true }), {

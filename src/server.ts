@@ -385,37 +385,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/registros-charts-tab" && request.method === "GET") {
-      const { googleSheetsService, listSheetTabs } = await import("../backend/src/services/googleSheetsService");
-      const gid = Number(url.searchParams.get("gid") || "566775107");
-      try {
-        const tabs = await listSheetTabs("registrosCharts");
-        const alvo = tabs.find((t) => t.sheetId === gid);
-        if (!alvo) return Response.json({ tabs, erro: `gid ${gid} não encontrado` });
-        const rows = await googleSheetsService.registrosCharts.readValues(alvo.title, "A1:BZ6").catch(() => []);
-        return Response.json({ tabs, aba: alvo, header: rows[0] || [], amostra: rows.slice(1) });
-      } catch (err: any) {
-        return Response.json({ error: err?.message || String(err) }, { status: 500 });
-      }
-    }
-
-    if (url.pathname === "/api/debug/charts-shape" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      try {
-        const tabs = ["SPOTIFY", "APPLE MUSIC", "YOUTUBE", "DIGITAL SALES", "BILLBOARD HOT 100"];
-        const out: Record<string, unknown> = {};
-        for (const tab of tabs) {
-          const rows = await googleSheetsService.chartsBase.readValues(tab).catch(() => []);
-          out[tab] = { total: rows.length, header: rows[0] || [], amostra: rows.slice(1, 4) };
-        }
-        const albumTabs = await googleSheetsService.chartsAlbums.readValues("DADOS ÁLBUNS").catch(() => []);
-        out["DADOS ÁLBUNS"] = { total: albumTabs.length, header: albumTabs[0] || [], amostra: albumTabs.slice(1, 4) };
-        return Response.json(out);
-      } catch (err: any) {
-        return Response.json({ error: err?.message || String(err) }, { status: 500 });
-      }
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
