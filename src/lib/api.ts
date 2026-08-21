@@ -1293,7 +1293,7 @@ export function fmtMoney(n: number) {
   return `$${(n || 0).toLocaleString("pt-BR")}`;
 }
 
-export function driveImg(url: string | undefined | null, size: number = 400): string | undefined {
+export function driveImg(url: string | undefined | null, size: number = 800): string | undefined {
   if (!url) return undefined;
   if (url.includes("lh3.googleusercontent.com")) {
     if (!url.includes("=")) return `${url}=w${size}-h${size}-p`;

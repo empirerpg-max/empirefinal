@@ -12,7 +12,7 @@ import {
   Edit,
   MoreVertical,
 } from "lucide-react";
-import { api, driveImg, driveAudioSrc, type AlbumPayload, type PlaylistTrack } from "@/lib/api";
+import { api, driveImg, driveRawImg, driveAudioSrc, type AlbumPayload, type PlaylistTrack } from "@/lib/api";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 
 export const Route = createFileRoute("/album/$id")({
@@ -92,12 +92,20 @@ function AlbumPage() {
           <ChevronLeft className="size-5" />
         </Link>
         <div className="flex flex-col items-center text-center sm:flex-row sm:text-left sm:items-end gap-4">
-          <img
-            src={driveImg(album.capa_url, 600)}
-            alt={album.titulo}
-            className="size-48 sm:size-56 rounded-lg object-cover shadow-2xl bg-secondary"
-            loading="eager"
-           decoding="async"/>
+          <button
+            type="button"
+            onClick={() => album.capa_url && setShowEncarte(album.capa_url)}
+            className="shrink-0"
+            title="Ver capa em tela cheia"
+          >
+            <img
+              src={driveImg(album.capa_url, 800)}
+              alt={album.titulo}
+              className="size-48 sm:size-56 rounded-lg object-cover shadow-2xl bg-secondary"
+              loading="eager"
+              decoding="async"
+            />
+          </button>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] uppercase font-bold tracking-widest">Álbum</p>
             <h1 className="text-3xl sm:text-5xl font-black leading-tight mt-1">{album.titulo}</h1>
@@ -285,7 +293,7 @@ function AlbumPage() {
           className="fixed inset-0 z-50 bg-black/90 grid place-items-center p-4"
         >
           <img
-            src={driveImg(showEncarte, 1200)}
+            src={driveRawImg(showEncarte) || driveImg(showEncarte, 1600)}
             alt=""
             className="max-w-full max-h-full rounded-lg"
            loading="lazy" decoding="async"/>
