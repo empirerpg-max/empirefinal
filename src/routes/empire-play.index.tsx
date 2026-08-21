@@ -220,78 +220,99 @@ function EmpirePlayInicio() {
 
       {/* TELA DESLIZANTE DE PLAYLIST (ESTILO SPOTIFY) */}
       {activeSlidingPlaylist && (
-        <div className="fixed inset-0 z-[140] bg-neutral-950/98 backdrop-blur-3xl flex flex-col transition-all duration-300 ease-out animate-in slide-in-from-right overflow-hidden">
-          {/* Top Bar / Header */}
-          <div className="p-4 sm:p-6 border-b border-white/10 flex items-center justify-between bg-neutral-900/90 shrink-0">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setActiveSlidingPlaylist(null)}
-                className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition flex items-center gap-1.5 text-xs font-black uppercase tracking-wider"
-              >
-                <ChevronLeft className="size-5" />
-                <span>Voltar</span>
-              </button>
-
-              <div className="flex items-center gap-2">
-                {activeSlidingPlaylist === "spotify" && (
-                  <Flame className="size-6 text-emerald-400 fill-emerald-400" />
-                )}
-                {activeSlidingPlaylist === "apple" && <Music className="size-6 text-rose-400" />}
-                {activeSlidingPlaylist === "youtube" && <Film className="size-6 text-red-500" />}
-                {activeSlidingPlaylist === "lancamentos" && (
-                  <Sparkles className="size-6 text-purple-400" />
-                )}
-
-                <div>
-                  <span className="text-[10px] font-mono font-black uppercase text-neutral-400 block">
-                    {activeSlidingPlaylist === "lancamentos" ? "30 Recentes" : "Top 100"}
-                  </span>
-                  <h2 className="text-base sm:text-xl font-black text-white">
-                    {activeSlidingPlaylist === "spotify" && "Top 100 Spotify Global"}
-                    {activeSlidingPlaylist === "apple" && "Top 100 Apple Music"}
-                    {activeSlidingPlaylist === "youtube" && "Top 100 YouTube Hits"}
-                    {activeSlidingPlaylist === "lancamentos" && "Hot (30 Primeiros)"}
-                  </h2>
+        <div className="fixed inset-0 z-[140] bg-neutral-950 flex flex-col transition-all duration-300 ease-out animate-in slide-in-from-right overflow-hidden">
+          {(() => {
+            const list = getSlidingPlaylistItems();
+            const heroCover =
+              (activeSlidingPlaylist !== "lancamentos" && (list[0]?.capa_url || list[0]?.poster_url)) || undefined;
+            const gradient =
+              activeSlidingPlaylist === "spotify"
+                ? "from-emerald-800/60"
+                : activeSlidingPlaylist === "apple"
+                  ? "from-rose-800/60"
+                  : activeSlidingPlaylist === "youtube"
+                    ? "from-red-900/60"
+                    : "from-purple-800/60";
+            const title =
+              activeSlidingPlaylist === "spotify"
+                ? "Top 100 Spotify Global"
+                : activeSlidingPlaylist === "apple"
+                  ? "Top 100 Apple Music"
+                  : activeSlidingPlaylist === "youtube"
+                    ? "Top 100 YouTube Hits"
+                    : "Hot (30 Primeiros)";
+            const PlatformIcon =
+              activeSlidingPlaylist === "spotify"
+                ? Flame
+                : activeSlidingPlaylist === "apple"
+                  ? Music
+                  : activeSlidingPlaylist === "youtube"
+                    ? Film
+                    : Sparkles;
+            return (
+              <>
+                {/* Hero — capa grande + título, estilo playlist do Spotify */}
+                <div className={`relative shrink-0 overflow-hidden bg-gradient-to-b ${gradient} to-neutral-950`}>
+                  <button
+                    onClick={() => setActiveSlidingPlaylist(null)}
+                    className="absolute top-4 left-4 z-10 p-2.5 rounded-full bg-black/30 hover:bg-black/50 text-white transition"
+                  >
+                    <ChevronLeft className="size-5" />
+                  </button>
+                  <div className="flex items-end gap-4 sm:gap-5 px-5 sm:px-8 pt-16 pb-5">
+                    <div className="size-28 sm:size-40 rounded-xl shadow-2xl overflow-hidden shrink-0 bg-neutral-800 grid place-items-center">
+                      {heroCover ? (
+                        <img src={driveImg(heroCover, 400)} alt="" className="size-full object-cover" />
+                      ) : (
+                        <PlatformIcon className="size-12 text-white/40" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 pb-1">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Playlist</p>
+                      <h1 className="text-2xl sm:text-4xl font-black text-white leading-[1.05] tracking-tight break-words">
+                        {title}
+                      </h1>
+                      <p className="text-[11px] sm:text-xs text-white/60 mt-2 flex items-center gap-1.5">
+                        <PlatformIcon className="size-3.5" /> {list.length} músicas
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              {activeSlidingPlaylist !== "youtube" && (
-                <button
-                  onClick={() => {
-                    const list = getSlidingPlaylistItems();
-                    if (list.length > 0) playSong(list[0], list);
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider transition flex items-center gap-2 shadow-lg shadow-emerald-500/20"
-                >
-                  <Play className="size-4 fill-black" />
-                  <span>Tocar Tudo</span>
-                </button>
-              )}
-              <button
-                onClick={() => setActiveSlidingPlaylist(null)}
-                className="p-2.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white transition ml-2"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Busca na Tela Deslizante */}
-          <div className="px-4 sm:px-6 py-3 bg-neutral-900/60 border-b border-white/5 flex items-center gap-3 shrink-0">
-            <Search className="size-4 text-neutral-500 shrink-0" />
-            <input
-              type="text"
-              placeholder="Pesquisar nesta lista por título..."
-              value={slidingSearchQuery}
-              onChange={(e) => setSlidingSearchQuery(e.target.value)}
-              className="w-full bg-transparent text-xs text-white placeholder-neutral-500 focus:outline-none"
-            />
-          </div>
+                {/* Barra de ações */}
+                <div className="flex items-center gap-3 px-5 sm:px-8 py-4 bg-neutral-950 border-b border-white/5 shrink-0">
+                  <button
+                    onClick={() => {
+                      if (list.length > 0) playSong(list[0], list);
+                    }}
+                    disabled={activeSlidingPlaylist === "youtube" || list.length === 0}
+                    className="size-12 sm:size-14 rounded-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-30 disabled:pointer-events-none text-black grid place-items-center shadow-lg shadow-emerald-500/20 active:scale-95 transition"
+                  >
+                    <Play className="size-5 sm:size-6 fill-black ml-0.5" />
+                  </button>
+                  <div className="flex items-center gap-2 flex-1 min-w-0 bg-white/5 rounded-xl px-3 py-2.5">
+                    <Search className="size-4 text-neutral-500 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Pesquisar nesta lista por título..."
+                      value={slidingSearchQuery}
+                      onChange={(e) => setSlidingSearchQuery(e.target.value)}
+                      className="w-full bg-transparent text-xs text-white placeholder-neutral-500 focus:outline-none min-w-0"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setActiveSlidingPlaylist(null)}
+                    className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition shrink-0"
+                  >
+                    <X className="size-5" />
+                  </button>
+                </div>
+              </>
+            );
+          })()}
 
           {/* Conteúdo de Faixas ou Vídeos */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-2">
+          <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3">
             {getSlidingPlaylistItems().length === 0 ? (
               <div className="text-center py-20 text-neutral-500 font-bold text-xs">
                 Nenhum item encontrado nesta lista.
@@ -316,15 +337,13 @@ function EmpirePlayInicio() {
                           playSong(item, getSlidingPlaylistItems());
                         }
                       }}
-                      className={`flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all cursor-pointer border ${
-                        isPlayingThis
-                          ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
-                          : "bg-neutral-900/60 hover:bg-neutral-800 border-white/5 hover:border-white/15 text-white"
+                      className={`flex items-center gap-4 px-3 sm:px-4 py-3 rounded-xl transition-all cursor-pointer ${
+                        isPlayingThis ? "bg-emerald-500/10 text-emerald-400" : "hover:bg-white/5 text-white"
                       }`}
                     >
                       {/* Posição Rank */}
-                      <span className="font-mono font-black text-xs text-neutral-400 min-w-[32px] text-center">
-                        #{idx + 1}
+                      <span className="font-mono font-black text-xs text-neutral-500 min-w-[28px] text-center">
+                        {idx + 1}
                       </span>
 
                       {/* Capa */}
@@ -377,10 +396,8 @@ function EmpirePlayInicio() {
                   <div
                     key={item.id || idx}
                     onClick={() => playSong(item, getSlidingPlaylistItems())}
-                    className={`flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all cursor-pointer border ${
-                      isPlayingThis
-                        ? "bg-purple-500/10 border-purple-500/40 text-purple-300"
-                        : "bg-neutral-900/60 hover:bg-neutral-800 border-white/5 hover:border-white/15 text-white"
+                    className={`flex items-center gap-4 px-3 sm:px-4 py-3 rounded-xl transition-all cursor-pointer ${
+                      isPlayingThis ? "bg-purple-500/10 text-purple-300" : "hover:bg-white/5 text-white"
                     }`}
                   >
                     <span className="font-mono font-black text-xs text-neutral-500 min-w-[28px] text-center">
