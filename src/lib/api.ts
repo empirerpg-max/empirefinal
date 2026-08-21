@@ -1040,6 +1040,16 @@ export const api = {
     });
     return res.json();
   },
+  // Exclui um post social — só o dono, até 24h depois de publicado (admin
+  // ignora as duas checagens, mesma regra do backend).
+  async deletarPostSocial(postId: string, tgId: string): Promise<CommonResponse> {
+    const res = await fetch("/api/social/posts/deletar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, tgId }),
+    });
+    return res.json();
+  },
   async listarRevistasAcervo(): Promise<any[]> {
     const res = await fetch("/api/acervo/revistas");
     const data = await res.json().catch(() => null);
