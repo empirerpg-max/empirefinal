@@ -245,14 +245,9 @@ function ArtistDashboard() {
       </div>
 
       <div className="px-6 space-y-6 relative z-20 -mt-2">
-        {/* ── Core Stats: Empire Coin + Fortuna + Fadiga (sem prestígio — isso é do jogador, ver card do Responsável) ── */}
+        {/* ── Core Stats: Fortuna + Fadiga (sem prestígio — isso é do jogador, ver card do Responsável) ── */}
+        {/* Empire Coin (E$C) removido daqui por enquanto, a pedido do usuário. */}
         <div className="grid grid-cols-2 gap-2">
-          <StatCardV2
-            label="Empire Coin (E$C)"
-            value={fmtEC(artist.saldo)}
-            icon={<Wallet className="size-3.5" />}
-            accent
-          />
           {artist.fortuna_total !== null && (
             <StatCardV2
               label="Fortuna Total"
