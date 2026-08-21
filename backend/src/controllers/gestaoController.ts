@@ -1373,9 +1373,7 @@ export async function uploadDriveController(request: Request): Promise<Response>
                       : folderType === "playerAvatars"
                         ? DRIVE_FOLDERS.playerAvatars
                         : folderType === "artistPhotos"
-                          // Sem pasta própria ainda — reaproveita a de fotos
-                          // de perfil de jogador até existir uma dedicada.
-                          ? DRIVE_FOLDERS.playerAvatars
+                          ? DRIVE_FOLDERS.artistPhotos
                           : folderType === "playlistTracks"
                           ? DRIVE_FOLDERS.playlistTracks
                           : folderType === "tvChatGifs"

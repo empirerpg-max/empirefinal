@@ -956,6 +956,22 @@ export const api = {
       return { ok: false, erro: "Erro na conexão." };
     }
   },
+  // Upload direto pro Drive (pasta dedicada "artistPhotos") — usado na
+  // criação de artista, pra autonomia total do jogador (sem precisar
+  // colar link manual nem pedir ajuste pra um admin).
+  async uploadArtistPhoto(file: File): Promise<string> {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      formData.append("folderType", "artistPhotos");
+      const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => null);
+      return res.ok && data?.success && data?.data?.fileUrl ? data.data.fileUrl : "";
+    } catch {
+      return "";
+    }
+  },
   async criarArtista(payload: {
     nome: string;
     foto: string;
