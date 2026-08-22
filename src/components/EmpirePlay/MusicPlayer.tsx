@@ -373,6 +373,39 @@ export function MusicPlayer({
     }
   };
 
+  // Media Session API — dá ao navegador/SO os controles de mídia (tela de
+  // bloqueio, notificação, fones bluetooth) e é o que faz o áudio continuar
+  // tocando em segundo plano de forma "oficial" fora do Telegram (dentro do
+  // WebView do Telegram, a suspensão de JS ao minimizar é uma limitação da
+  // própria plataforma, fora do nosso controle).
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (!currentTrack) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: currentTrack.titulo || "Empire Hub",
+      artist: currentTrack.artista || "",
+      artwork: currentTrack.capa_url
+        ? [{ src: currentTrack.capa_url, sizes: "512x512", type: "image/jpeg" }]
+        : [],
+    });
+    navigator.mediaSession.setActionHandler("play", () => togglePlay());
+    navigator.mediaSession.setActionHandler("pause", () => togglePlay());
+    navigator.mediaSession.setActionHandler("previoustrack", () => playPrev());
+    navigator.mediaSession.setActionHandler("nexttrack", () => playNext());
+    return () => {
+      navigator.mediaSession.setActionHandler("play", null);
+      navigator.mediaSession.setActionHandler("pause", null);
+      navigator.mediaSession.setActionHandler("previoustrack", null);
+      navigator.mediaSession.setActionHandler("nexttrack", null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrack?.id, currentTrack?.titulo]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+  }, [isPlaying]);
+
   const formatTime = (secs: number) => {
     if (isNaN(secs) || secs < 0) return "0:00";
     const m = Math.floor(secs / 60);

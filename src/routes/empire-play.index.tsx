@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X, MoreVertical } from "lucide-react";
 import { driveImg, type PlaylistTrack } from "@/lib/api";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
@@ -231,7 +232,9 @@ function EmpirePlayInicio() {
       </div>
 
       {/* TELA DESLIZANTE DE PLAYLIST (ESTILO SPOTIFY) */}
-      {activeSlidingPlaylist && (
+      {activeSlidingPlaylist &&
+        typeof document !== "undefined" &&
+        createPortal(
         <div className="fixed inset-0 z-[140] bg-neutral-950 flex flex-col transition-all duration-300 ease-out animate-in slide-in-from-right overflow-hidden">
           {(() => {
             const list = getSlidingPlaylistItems();
@@ -486,8 +489,9 @@ function EmpirePlayInicio() {
               })
             )}
           </div>
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
 
       <AddToPlaylistSheet track={menuTrack} onClose={() => setMenuTrack(null)} />
     </div>
