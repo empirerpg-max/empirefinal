@@ -385,31 +385,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    if (url.pathname === "/api/debug/capas-musicas" && request.method === "GET") {
-      const { googleSheetsService, listSheetTabs } = await import("../backend/src/services/googleSheetsService");
-      try {
-        const tabs = await listSheetTabs("registrosCharts");
-        const infosMusicasTab = tabs.find((t) => t.title === "INFOS MÚSICAS");
-        const infosMusicas = infosMusicasTab
-          ? await googleSheetsService.registrosCharts.readValues("INFOS MÚSICAS", "A1:Z6").catch(() => [])
-          : [];
-        const edicaoChartsRows = await googleSheetsService.edicaoCharts
-          .readValues("EDIÇÃO CHARTS", "A1:BZ4")
-          .catch(() => []);
-        const musicasRows = await googleSheetsService.principal.readValues("Musicas", "A1:D4").catch(() => []);
-        return Response.json({
-          tabsRegistrosCharts: tabs,
-          infosMusicasHeader: infosMusicas[0] || [],
-          infosMusicasAmostra: infosMusicas.slice(1),
-          edicaoChartsHeader: edicaoChartsRows[0] || [],
-          edicaoChartsAmostra: edicaoChartsRows.slice(1),
-          musicasAmostra: musicasRows,
-        });
-      } catch (err: any) {
-        return Response.json({ error: err?.message || String(err) }, { status: 500 });
-      }
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);

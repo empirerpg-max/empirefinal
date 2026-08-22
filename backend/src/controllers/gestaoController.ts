@@ -74,6 +74,41 @@ async function registrarNaEdicaoCharts(params: {
   }
 }
 
+const INFOS_MUSICAS_SHEET = "INFOS MÚSICAS";
+
+// INFOS MÚSICAS (planilha registrosCharts) é a aba de onde os CHARTS puxam
+// a capa de cada música (via fórmula própria da planilha) — totalmente
+// desconectada de "Musicas!D" (nosso catálogo) até agora. Cria a linha já
+// na criação da música, pra ela nascer pronta pro chart puxar uma capa:
+// D "IMAGEM" (capa oficial) e G "Link da Capa" (efetiva) começam iguais à
+// capa escolhida pelo artista — o ADM pode sobrescrever D à mão quando
+// quiser. F ("nova capa solicitada") fica em branco, reservada pro fluxo
+// de troca de capa (ver propagarCapaParaInfosMusicas em editController.ts).
+async function registrarInfosMusicas(params: {
+  fullTitle: string; // "Artista - Título"
+  capaUrl: string;
+  genero?: string;
+}): Promise<void> {
+  if (!params.capaUrl) return;
+  try {
+    await googleSheetsService.registrosCharts.appendRow(INFOS_MUSICAS_SHEET, [
+      params.fullTitle, // A - MÚSICA
+      "", // B
+      "SIM", // C - CAPA TEM LINK PUBLICADO PELA ADM?
+      params.capaUrl, // D - IMAGEM
+      "", // E
+      "", // F - Caso deseje uma nova capa...
+      params.capaUrl, // G - Link da Capa
+      params.genero || "", // H - GÊNERO DA MÚSICA
+      "", // I
+      "", // J
+      "", // K - Código único (não mexer — formula/curadoria própria)
+    ]);
+  } catch (err) {
+    console.warn("[registrarInfosMusicas] Erro ao gravar em INFOS MÚSICAS:", err);
+  }
+}
+
 export interface CreateSongPayload {
   opcaoChart: string; // "a) Registrar essa música em chart" | "b) Substituir música no chart" | "c) Os comentários desse tópico devem valer para uma música já lançada"
   tituloMusica: string;
@@ -263,6 +298,9 @@ export async function createSongController(request: Request): Promise<Response> 
       artistaPrincipal,
       participantes: participantesLimpos,
     });
+    if (pendente !== "Sim") {
+      await registrarInfosMusicas({ fullTitle, capaUrl });
+    }
 
     // 2. Gravar em REGISTRO DE MÚSICA na planilha de Registros — só as
     // colunas definidas no documento oficial (B, C, D, H, I-L, N, P), na
@@ -760,6 +798,11 @@ async function processarFaixasDoAlbum(
       artistaPrincipal: artistaAlbum,
       participantes: participantesLimpos,
     });
+    // Faixa pendente (sem tópico aberto ainda) não entra em INFOS MÚSICAS —
+    // só quando vira conteúdo publicado de verdade (mesma regra do Fórum).
+    if (pendente !== "Sim") {
+      await registrarInfosMusicas({ fullTitle: songTitle, capaUrl });
+    }
 
     // REGISTRO DE MÚSICA — mesmo mapeamento B:P do createSongController,
     // mas com E = nome do álbum (aqui nunca fica em branco, diferente do
