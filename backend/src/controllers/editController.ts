@@ -22,6 +22,37 @@ export interface ReleaseToEdit {
   fields: Record<string, string>;
 }
 
+const INFOS_MUSICAS_SHEET = "INFOS MÚSICAS";
+
+// Propaga a troca de capa de uma música pra INFOS MÚSICAS (planilha
+// registrosCharts) — de onde os charts puxam a capa via fórmula própria da
+// planilha, totalmente desconectada de Musicas!D até essa correção. Grava
+// em F ("Caso deseje uma nova capa...", o campo de PEDIDO de troca) e G
+// ("Link da Capa", a capa efetiva) — nunca em D ("IMAGEM"), que é a capa
+// oficial publicada à mão pelo ADM. Cria a linha se a música ainda não
+// tiver uma lá.
+async function propagarCapaParaInfosMusicas(fullTitle: string, capaUrl: string): Promise<void> {
+  if (!fullTitle || !capaUrl) return;
+  try {
+    const rows = await googleSheetsService.registrosCharts.readValues(INFOS_MUSICAS_SHEET);
+    const normTitle = normalizeComparison(fullTitle);
+    const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normTitle);
+    if (rowIndex !== -1) {
+      await googleSheetsService.registrosCharts.updateValues(
+        INFOS_MUSICAS_SHEET,
+        `F${rowIndex + 1}:G${rowIndex + 1}`,
+        [[capaUrl, capaUrl]],
+      );
+    } else {
+      await googleSheetsService.registrosCharts.appendRow(INFOS_MUSICAS_SHEET, [
+        fullTitle, "", "SIM", capaUrl, "", "", capaUrl, "", "", "", "",
+      ]);
+    }
+  } catch (err) {
+    console.warn("[propagarCapaParaInfosMusicas] Erro ao gravar em INFOS MÚSICAS:", err);
+  }
+}
+
 // "Videos" não existe mais como aba própria — consolidada em "Music Videos".
 const SHEET_NAMES: Record<EditCategory, string> = {
   musicas: "Musicas",
@@ -213,11 +244,16 @@ export async function updateReleaseController(request: Request): Promise<Respons
         [titulo.trim()],
       ]);
 
-      // Se houver capa nova, atualizar também na Coluna I (Col 9) ou H se aplicável
+      // Capa nova — Coluna D ("Capa da música"), NUNCA a I (essa é "TIPO DE
+      // SINGLE"; escrever a capa ali corrompia esse campo silenciosamente).
+      // Também propaga pra INFOS MÚSICAS (planilha registrosCharts), de
+      // onde os charts puxam a capa via fórmula própria — sem isso, trocar
+      // a capa aqui nunca refletia lá.
       if (finalCapaUrl && finalCapaUrl !== oldCapaUrl) {
-        await googleSheetsService.principal.updateValues(sheetName, `I${rowIndex}`, [
+        await googleSheetsService.principal.updateValues(sheetName, `D${rowIndex}`, [
           [finalCapaUrl],
         ]);
+        await propagarCapaParaInfosMusicas(titulo.trim(), finalCapaUrl);
       }
 
       // Letra (Coluna E) — opcional, só grava quando o campo veio no body
