@@ -14,7 +14,6 @@ type Categoria = { ano: string; segmento: string; categoria: string; preenchido:
 function PremiacoesPage() {
   const navigate = useNavigate();
   const { user } = useTelegramUser();
-  const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
 
   const [awards, setAwards] = useState<string[]>([]);
   const [meusArtistas, setMeusArtistas] = useState<Artist[]>([]);
@@ -31,9 +30,9 @@ function PremiacoesPage() {
   }, []);
 
   useEffect(() => {
-    if (!tgId || tgId === "guest") return;
-    api.meusArtistas(tgId).then(setMeusArtistas).catch(() => {});
-  }, [tgId]);
+    if (!user || user.id === "guest") return;
+    api.meusArtistas(user.id).then(setMeusArtistas).catch(() => {});
+  }, [user]);
 
   useEffect(() => {
     if (!award) {
@@ -172,7 +171,7 @@ function PremiacoesPage() {
               <option value="">Selecione...</option>
               {categoriasDoAno.map((c) => (
                 <option key={`${c.segmento}-${c.categoria}`} value={c.categoria}>
-                  {c.categoria} ({c.segmento})
+                  {c.categoria}
                 </option>
               ))}
             </select>
