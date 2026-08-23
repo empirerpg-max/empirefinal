@@ -385,18 +385,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Leitura pontual da aba de comentarios de turne, pra ver se tem linha
-    // deslocada (mesmo bug do range aberto ja visto em outras abas).
-    if (url.pathname === "/api/debug/turnes-comentarios" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      try {
-        const rows = await googleSheetsService.usuarios.readValues("Turnes_Comentarios");
-        return Response.json({ ok: true, totalRows: rows.length, rows: rows.slice(0, 30) });
-      } catch (err: any) {
-        return Response.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
-      }
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
