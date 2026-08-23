@@ -33,6 +33,7 @@ import { Route as EmpirePlayForumRouteImport } from './routes/empire-play.forum'
 import { Route as EmpirePlayGestaoRouteImport } from './routes/empire-play.gestao'
 import { Route as EmpirePlayMusicasRouteImport } from './routes/empire-play.musicas'
 import { Route as EmpirePlayVideosRouteImport } from './routes/empire-play.videos'
+import { Route as MarketRegrasRouteImport } from './routes/market.regras'
 import { Route as PontoIndexRouteImport } from './routes/ponto.index'
 import { Route as PontoDistribuirRouteImport } from './routes/ponto.distribuir'
 import { Route as PontoPlaylistsRouteImport } from './routes/ponto.playlists'
@@ -173,6 +174,11 @@ const EmpirePlayVideosRoute = EmpirePlayVideosRouteImport.update({
   path: '/videos',
   getParentRoute: () => EmpirePlayRoute,
 } as any)
+const MarketRegrasRoute = MarketRegrasRouteImport.update({
+  id: '/regras',
+  path: '/regras',
+  getParentRoute: () => MarketRoute,
+} as any)
 const PontoIndexRoute = PontoIndexRouteImport.update({
   id: '/ponto/',
   path: '/ponto/',
@@ -281,7 +287,7 @@ export interface FileRoutesByFullPath {
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
-  '/market': typeof MarketRoute
+  '/market': typeof MarketRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
@@ -297,6 +303,7 @@ export interface FileRoutesByFullPath {
   '/empire-play/gestao': typeof EmpirePlayGestaoRouteWithChildren
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
+  '/market/regras': typeof MarketRegrasRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
   '/tours/$nome': typeof ToursNomeRoute
@@ -325,7 +332,7 @@ export interface FileRoutesByTo {
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
-  '/market': typeof MarketRoute
+  '/market': typeof MarketRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
@@ -339,6 +346,7 @@ export interface FileRoutesByTo {
   '/empire-play/forum': typeof EmpirePlayForumRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
+  '/market/regras': typeof MarketRegrasRoute
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas': typeof ArtistasIndexRoute
   '/empire-play': typeof EmpirePlayIndexRoute
@@ -367,7 +375,7 @@ export interface FileRoutesById {
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
-  '/market': typeof MarketRoute
+  '/market': typeof MarketRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
@@ -383,6 +391,7 @@ export interface FileRoutesById {
   '/empire-play/gestao': typeof EmpirePlayGestaoRouteWithChildren
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
+  '/market/regras': typeof MarketRegrasRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
   '/tours/$nome': typeof ToursNomeRoute
@@ -430,6 +439,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao'
     | '/empire-play/musicas'
     | '/empire-play/videos'
+    | '/market/regras'
     | '/ponto/distribuir'
     | '/ponto/playlists'
     | '/tours/$nome'
@@ -472,6 +482,7 @@ export interface FileRouteTypes {
     | '/empire-play/forum'
     | '/empire-play/musicas'
     | '/empire-play/videos'
+    | '/market/regras'
     | '/tours/$nome'
     | '/artistas'
     | '/empire-play'
@@ -515,6 +526,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao'
     | '/empire-play/musicas'
     | '/empire-play/videos'
+    | '/market/regras'
     | '/ponto/distribuir'
     | '/ponto/playlists'
     | '/tours/$nome'
@@ -545,7 +557,7 @@ export interface RootRouteChildren {
   AlbunsRoute: typeof AlbunsRoute
   ChartsRoute: typeof ChartsRoute
   EmpirePlayRoute: typeof EmpirePlayRouteWithChildren
-  MarketRoute: typeof MarketRoute
+  MarketRoute: typeof MarketRouteWithChildren
   PerfilRoute: typeof PerfilRoute
   PremiacoesRoute: typeof PremiacoesRoute
   SocialRoute: typeof SocialRoute
@@ -733,6 +745,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/empire-play/videos'
       preLoaderRoute: typeof EmpirePlayVideosRouteImport
       parentRoute: typeof EmpirePlayRoute
+    }
+    '/market/regras': {
+      id: '/market/regras'
+      path: '/regras'
+      fullPath: '/market/regras'
+      preLoaderRoute: typeof MarketRegrasRouteImport
+      parentRoute: typeof MarketRoute
     }
     '/ponto/': {
       id: '/ponto/'
@@ -942,6 +961,17 @@ const EmpirePlayRouteWithChildren = EmpirePlayRoute._addFileChildren(
   EmpirePlayRouteChildren,
 )
 
+interface MarketRouteChildren {
+  MarketRegrasRoute: typeof MarketRegrasRoute
+}
+
+const MarketRouteChildren: MarketRouteChildren = {
+  MarketRegrasRoute: MarketRegrasRoute,
+}
+
+const MarketRouteWithChildren =
+  MarketRoute._addFileChildren(MarketRouteChildren)
+
 interface AlbumIdRouteChildren {
   AlbumIdEditarRoute: typeof AlbumIdEditarRoute
 }
@@ -988,7 +1018,7 @@ const rootRouteChildren: RootRouteChildren = {
   AlbunsRoute: AlbunsRoute,
   ChartsRoute: ChartsRoute,
   EmpirePlayRoute: EmpirePlayRouteWithChildren,
-  MarketRoute: MarketRoute,
+  MarketRoute: MarketRouteWithChildren,
   PerfilRoute: PerfilRoute,
   PremiacoesRoute: PremiacoesRoute,
   SocialRoute: SocialRoute,

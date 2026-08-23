@@ -88,6 +88,11 @@ import {
   postPremiacoesPreencherController,
 } from "../controllers/premiacoesController";
 import {
+  getMarketProdutosController,
+  getMarketRegrasController,
+  postMarketComprarController,
+} from "../controllers/marketController";
+import {
   getSocialPostsController,
   createSocialPostController,
   curtirSocialPostController,
@@ -242,6 +247,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/awards",
     "/api/premiacoes/categorias",
     "/api/premiacoes/preencher",
+    "/api/market/produtos",
+    "/api/market/regras",
+    "/api/market/comprar",
   ]);
 
   if (
@@ -853,6 +861,18 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await postPremiacoesPreencherController(request);
+  } else if (url.pathname === "/api/market/produtos") {
+    response = await getMarketProdutosController(request);
+  } else if (url.pathname === "/api/market/regras") {
+    response = await getMarketRegrasController();
+  } else if (url.pathname === "/api/market/comprar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/market/comprar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await postMarketComprarController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(

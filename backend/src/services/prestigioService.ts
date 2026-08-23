@@ -139,6 +139,35 @@ export async function somarPrestigio(
   }
 }
 
+/**
+ * Desconta prestígio do usuário (compras no Empire Market). Lança erro se o
+ * usuário não existir ou não tiver saldo suficiente — ao contrário de
+ * somarPrestigio, aqui o erro precisa chegar até o jogador, então não é
+ * silencioso.
+ */
+export async function gastarPrestigio(
+  identificador: { telegramId?: string; usuario?: string },
+  valor: number,
+): Promise<number> {
+  const usuarioRow = await findUsuarioRow(identificador);
+  if (!usuarioRow) throw new Error("Usuário não encontrado.");
+
+  const prestigioColIndex = usuarioRow.headers.indexOf("prestigio");
+  if (prestigioColIndex === -1) throw new Error("Coluna de prestígio não encontrada.");
+
+  const atual = parseInt(usuarioRow.rec["prestigio"] || "0", 10) || 0;
+  if (atual < valor) throw new Error("Prestígio insuficiente.");
+
+  const novo = atual - valor;
+  const colLetter = colIndexToA1Letter(prestigioColIndex);
+  await googleSheetsService.usuarios.updateValues(
+    USUARIOS_SHEET,
+    `${colLetter}${usuarioRow.rowIndex}`,
+    [[novo]],
+  );
+  return novo;
+}
+
 export interface NivelInfo {
   nivel: number;
   fase: string;
