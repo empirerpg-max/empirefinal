@@ -800,11 +800,11 @@ export const Forum: React.FC<ForumProps> = ({
                                 }
                                 className="flex-1 min-w-0 flex items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                <span className="w-5 shrink-0 text-center font-mono text-[11px] text-neutral-500 group-hover:hidden">
+                                <span className="w-5 shrink-0 text-center font-mono text-[11px] text-neutral-500 hidden sm:inline sm:group-hover:hidden">
                                   {faixa.trackOrder || i + 1}
                                 </span>
-                                <Play className="size-3.5 shrink-0 hidden group-hover:block text-emerald-400" />
-                                <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 truncate">
+                                <Play className="size-3.5 shrink-0 sm:hidden sm:group-hover:block text-emerald-400" />
+                                <span className="flex-1 min-w-0 text-xs font-semibold text-neutral-200 break-words">
                                   {faixa.title}
                                 </span>
                                 {!faixa.audioUrl && (

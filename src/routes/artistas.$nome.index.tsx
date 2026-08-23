@@ -589,7 +589,12 @@ function DiscografiaTab({
                   <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
                     {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Music className="size-4 text-muted-foreground" />}
                   </div>
-                  <span className="text-sm font-medium truncate flex-1">{m.title || m.titulo || "—"}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium break-words leading-tight">{m.title || m.titulo || "—"}</p>
+                    {m.displayArtists && (
+                      <p className="text-[11px] text-muted-foreground break-words mt-0.5">{m.displayArtists}</p>
+                    )}
+                  </div>
                   <Play className="size-3.5 text-muted-foreground shrink-0" />
                 </button>
               );
@@ -619,7 +624,12 @@ function DiscografiaTab({
                   <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
                     {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Video className="size-4 text-muted-foreground" />}
                   </div>
-                  <span className="text-sm font-medium truncate flex-1">{v.title || v.titulo || "—"}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium break-words leading-tight">{v.title || v.titulo || "—"}</p>
+                    {v.displayArtists && (
+                      <p className="text-[11px] text-muted-foreground break-words mt-0.5">{v.displayArtists}</p>
+                    )}
+                  </div>
                   <Play className="size-3.5 text-muted-foreground shrink-0" />
                 </button>
               );

@@ -88,8 +88,10 @@ function EmpirePlayVideos() {
                   <Tv className="size-10" />
                 </div>
               )}
-              <span className="absolute inset-0 bg-black/40 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Play className="size-8 text-white fill-white" />
+              <span className="absolute inset-0 bg-black/0 sm:group-hover:bg-black/40 transition-colors grid place-items-center">
+                <span className="size-11 rounded-full bg-red-600/70 sm:group-hover:bg-red-500/85 backdrop-blur-sm text-white grid place-items-center transition-colors">
+                  <Play className="size-5 ml-0.5 fill-white" />
+                </span>
               </span>
               {v.tipo_video && (
                 <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/80 text-[10px] font-black uppercase tracking-wider text-neutral-300 border border-white/10">

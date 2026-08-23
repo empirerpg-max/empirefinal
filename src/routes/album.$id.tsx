@@ -172,21 +172,21 @@ function AlbumPage() {
                     <Pause className="size-4" fill="currentColor" />
                   ) : (
                     <>
-                      <span className="group-hover:hidden text-sm">{f.numero}</span>
-                      <Play className="size-4 hidden group-hover:block" fill="currentColor" />
+                      <span className="hidden sm:inline sm:group-hover:hidden text-sm">{f.numero}</span>
+                      <Play className="size-4 sm:hidden sm:group-hover:block" fill="currentColor" />
                     </>
                   )}
                 </button>
                 <div className="min-w-0">
                   <button
                     onClick={() => f.letra && setShowLyrics(i)}
-                    className={`font-semibold truncate text-sm text-left w-full ${active ? "text-primary" : ""} ${f.letra ? "hover:underline" : ""}`}
+                    className={`font-semibold break-words text-sm text-left w-full leading-tight ${active ? "text-primary" : ""} ${f.letra ? "hover:underline" : ""}`}
                     title={f.letra ? "Ver letra" : ""}
                   >
                     {f.titulo}
                     {f.letra ? " ♪" : ""}
                   </button>
-                  <p className="text-xs text-muted-foreground truncate">{f.artistas}</p>
+                  <p className="text-xs text-muted-foreground break-words">{f.artistas}</p>
                 </div>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {f.duracao || "—"}

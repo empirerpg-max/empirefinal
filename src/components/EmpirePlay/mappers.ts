@@ -13,6 +13,7 @@ export function toPlayableTrack(item: any): PlayableTrack {
       item.titulo,
     titulo: item.title || item.titulo || item.nome_da_musica || item.nome || "Música sem título",
     artista:
+      item.displayArtists ||
       item.artist ||
       item.artista ||
       item.act_principal ||
@@ -51,6 +52,7 @@ export function toPlayableVideo(item: any): PlayableVideo {
     id: item.id || item.nome_do_video || item.id_do_topico,
     titulo: item.title || item.titulo || item.nome_do_video || item.nome || "Vídeo sem título",
     artista:
+      item.displayArtists ||
       item.artist ||
       item.artista ||
       item.act_principal ||

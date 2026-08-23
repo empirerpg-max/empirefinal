@@ -409,11 +409,18 @@ function EmpirePlayInicio() {
                         )}
                       </div>
 
-                      {/* Título + selo de nota/likes quando o item tem avaliação real */}
+                      {/* Título (com feats) + selo de nota/likes quando o item tem avaliação real */}
                       <div className="flex-1 min-w-0 flex items-center gap-2.5">
-                        <h4 className="font-extrabold text-sm text-white break-words leading-tight flex-1 min-w-0">
-                          {item.titulo}
-                        </h4>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-extrabold text-sm text-white break-words leading-tight">
+                            {item.titulo}
+                          </h4>
+                          {item.artista && (
+                            <p className="text-[11px] text-neutral-400 break-words mt-0.5">
+                              {item.artista}
+                            </p>
+                          )}
+                        </div>
                         <ScoreBadge
                           score={item.metacriticAvg}
                           variant={activeSlidingPlaylist === "youtube" ? "likes" : "metacritic"}
