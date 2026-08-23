@@ -385,6 +385,27 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Leitura pontual do cabecalho/amostra das abas de charts pra achar a
+    // coluna de valor total (acumulado), separada do valor semanal.
+    if (url.pathname === "/api/debug/charts-cols" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      try {
+        const [spotify, hot100, albuns] = await Promise.all([
+          googleSheetsService.chartsBase.readValues("SPOTIFY"),
+          googleSheetsService.chartsBase.readValues("BILLBOARD HOT 100"),
+          googleSheetsService.chartsAlbums.readValues("DADOS ÁLBUNS"),
+        ]);
+        return Response.json({
+          ok: true,
+          spotify: { header: spotify[0], sample: spotify[1] },
+          hot100: { header: hot100[0], sample: hot100[1] },
+          albuns: { header: albuns[0], sample: albuns[1] },
+        });
+      } catch (err: any) {
+        return Response.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
+      }
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
