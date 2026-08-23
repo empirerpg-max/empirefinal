@@ -385,6 +385,28 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Corrige a linha "eve/lilith" (Playlists_Albuns) que ficou gravada
+    // deslocada 8 colunas pra direita (dados reais começando em I, não A) —
+    // achada só uma vez, corrige e não precisa mais depois de rodar.
+    if (url.pathname === "/api/debug/fix-eve-lilith" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      try {
+        const rows = await googleSheetsService.usuarios.readValues("Playlists_Albuns");
+        const rowIndex = rows.findIndex((r) => (r[8] || "") === "ALB-353dcb23");
+        if (rowIndex === -1) return Response.json({ ok: false, error: "Linha não encontrada (já corrigida?)." });
+        const r = rows[rowIndex];
+        const corrigida = [r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15], r[16], r[17], r[18]];
+        await googleSheetsService.usuarios.updateValues(
+          "Playlists_Albuns",
+          `A${rowIndex + 1}:S${rowIndex + 1}`,
+          [[...corrigida, "", "", "", "", "", "", "", ""]],
+        );
+        return Response.json({ ok: true, corrigida });
+      } catch (err: any) {
+        return Response.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
+      }
+    }
+
     if (url.pathname === "/api/debug/albuns-legados-raw" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
       try {
