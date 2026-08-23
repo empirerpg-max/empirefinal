@@ -769,6 +769,8 @@ export const api = {
     data?: string;
     descricao?: string;
     capa_url?: string;
+    contracapa_url?: string;
+    telegram_id?: string;
     faixas: {
       numero: number;
       titulo: string;
@@ -782,6 +784,35 @@ export const api = {
     const data = await res.json().catch(() => null);
     if (!data || data.error) return null;
     return data;
+  },
+  // Edita/exclui um álbum legado — só o dono (telegram_id salvo na criação)
+  // ou admin. Edição substitui todas as faixas (lista nova completa).
+  async editarAlbumAntigo(payload: {
+    id: string;
+    tgId: string;
+    artista: string;
+    titulo: string;
+    genero?: string;
+    data?: string;
+    descricao?: string;
+    capa_url?: string;
+    contracapa_url?: string;
+    faixas: { numero: number; titulo: string; artistas: string; duracao?: string; drive_url: string; letra?: string }[];
+  }): Promise<CommonResponse> {
+    const res = await fetch("/api/playlists/albuns/editar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+  async deletarAlbumAntigo(id: string, tgId: string): Promise<CommonResponse> {
+    const res = await fetch("/api/playlists/albuns/deletar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, tgId }),
+    });
+    return res.json();
   },
 
   // ---- Ponto ----

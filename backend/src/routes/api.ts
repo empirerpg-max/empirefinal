@@ -106,6 +106,8 @@ import {
   saveSalvoController,
   removeSalvoController,
   criarAlbumAntigoController,
+  editarAlbumAntigoController,
+  deletarAlbumAntigoController,
   getAlbunsAntigosController,
   getAlbumAntigoByIdController,
 } from "../controllers/playlistsController";
@@ -487,6 +489,22 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         );
       }
       response = await criarAlbumAntigoController(request);
+    } else if (url.pathname === "/api/playlists/albuns/editar") {
+      if (request.method !== "POST") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use POST para /api/playlists/albuns/editar." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await editarAlbumAntigoController(request);
+    } else if (url.pathname === "/api/playlists/albuns/deletar") {
+      if (request.method !== "POST") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use POST para /api/playlists/albuns/deletar." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await deletarAlbumAntigoController(request);
     } else if (url.pathname === "/api/playlists") {
       response =
         request.method === "GET"

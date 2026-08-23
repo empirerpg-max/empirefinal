@@ -18,6 +18,10 @@ import { notify } from "@/lib/notify";
 
 export const Route = createFileRoute("/empire-play/gestao/album-antigo")({
   component: AlbumAntigoPage,
+  validateSearch: (search: Record<string, unknown>): { id?: string } => {
+    const id = search.id as string | undefined;
+    return id ? { id } : {};
+  },
 });
 
 type FaixaAntiga = {
@@ -76,7 +80,10 @@ async function uploadToDrive(file: File, folderType: "playlistTracks" | "album")
 function AlbumAntigoPage() {
   const { user } = useTelegramUser();
   const navigate = useNavigate();
+  const { id: editId } = Route.useSearch();
   const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
+  const [loadingEdit, setLoadingEdit] = useState(!!editId);
+  const [deleting, setDeleting] = useState(false);
 
   const [artista, setArtista] = useState("");
   const [artistas, setArtistas] = useState<Artist[] | null>(null);
@@ -105,6 +112,46 @@ function AlbumAntigoPage() {
   const [uploadingTrack, setUploadingTrack] = useState<number | null>(null);
   const [letraAberta, setLetraAberta] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!editId) return;
+    let alive = true;
+    api.getAlbumAntigo(editId).then((album) => {
+      if (!alive || !album) {
+        if (alive) setLoadingEdit(false);
+        return;
+      }
+      setArtista(album.artista);
+      setTitulo(album.titulo);
+      setGenero(album.genero || "");
+      setData(album.data || "");
+      setDescricao(album.descricao || "");
+      setCapaUrl(album.capa_url || "");
+      setFaixas(
+        album.faixas.map((f) => ({
+          titulo: f.titulo,
+          artistas: f.artistas,
+          duracao: f.duracao || "",
+          drive_url: f.drive_url,
+          letra: f.letra || "",
+        })),
+      );
+      setLoadingEdit(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [editId]);
+
+  async function excluirAlbum() {
+    if (!editId || deleting) return;
+    if (!confirm("Excluir este álbum legado? Não dá pra desfazer.")) return;
+    setDeleting(true);
+    const res = await api.deletarAlbumAntigo(editId, tgId);
+    setDeleting(false);
+    const { ok } = notify(res as Record<string, unknown>, { successFallback: "Álbum excluído." });
+    if (ok) navigate({ to: "/empire-play/gestao" });
+  }
 
   function aplicarQuantidade() {
     const n = Math.max(0, Math.min(200, parseInt(qtdFaixas, 10) || 0));
@@ -159,25 +206,40 @@ function AlbumAntigoPage() {
     const faixasValidas = faixas.filter((f) => f.titulo.trim() && f.drive_url.trim());
     if (!artista.trim() || !titulo.trim() || faixasValidas.length === 0 || submitting) return;
     setSubmitting(true);
-    const res = await api.criarAlbumAntigo({
-      artista: artista.trim(),
-      titulo: titulo.trim(),
-      genero: genero.trim(),
-      data: data || undefined,
-      descricao: descricao.trim(),
-      capa_url: capaUrl,
-      telegram_id: tgId,
-      faixas: faixasValidas.map((f, i) => ({
-        numero: i + 1,
-        titulo: f.titulo.trim(),
-        artistas: f.artistas.trim() || artista.trim(),
-        duracao: f.duracao.trim(),
-        drive_url: f.drive_url.trim(),
-        letra: f.letra.trim() || undefined,
-      })),
-    });
+    const faixasPayload = faixasValidas.map((f, i) => ({
+      numero: i + 1,
+      titulo: f.titulo.trim(),
+      artistas: f.artistas.trim() || artista.trim(),
+      duracao: f.duracao.trim(),
+      drive_url: f.drive_url.trim(),
+      letra: f.letra.trim() || undefined,
+    }));
+    const res = editId
+      ? await api.editarAlbumAntigo({
+          id: editId,
+          tgId,
+          artista: artista.trim(),
+          titulo: titulo.trim(),
+          genero: genero.trim(),
+          data: data || undefined,
+          descricao: descricao.trim(),
+          capa_url: capaUrl,
+          faixas: faixasPayload,
+        })
+      : await api.criarAlbumAntigo({
+          artista: artista.trim(),
+          titulo: titulo.trim(),
+          genero: genero.trim(),
+          data: data || undefined,
+          descricao: descricao.trim(),
+          capa_url: capaUrl,
+          telegram_id: tgId,
+          faixas: faixasPayload,
+        });
     setSubmitting(false);
-    const { ok } = notify(res as Record<string, unknown>, { successFallback: "Álbum cadastrado!" });
+    const { ok } = notify(res as Record<string, unknown>, {
+      successFallback: editId ? "Álbum atualizado!" : "Álbum cadastrado!",
+    });
     if (ok) navigate({ to: "/empire-play/gestao" });
   }
 
@@ -185,18 +247,39 @@ function AlbumAntigoPage() {
     "w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-neutral-500 outline-none focus:border-emerald-500/50";
   const faixasProntas = faixas.filter((f) => f.titulo.trim() && f.drive_url.trim()).length;
 
+  if (loadingEdit) {
+    return (
+      <div className="pb-24 max-w-lg mx-auto flex items-center justify-center py-24">
+        <Loader2 className="size-6 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
+
   return (
     <div className="pb-24 max-w-lg mx-auto">
       <Link to="/empire-play/gestao" className="inline-flex items-center gap-1 text-neutral-400 mb-4">
         <ChevronLeft className="size-4" /> Voltar
       </Link>
 
-      <header className="mb-6 flex items-center gap-3">
-        <Disc3 className="size-7 text-emerald-500" />
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Catálogo</p>
-          <h1 className="text-xl font-black text-white">Cadastrar álbum antigo</h1>
+      <header className="mb-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Disc3 className="size-7 text-emerald-500" />
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Catálogo</p>
+            <h1 className="text-xl font-black text-white">{editId ? "Editar álbum legado" : "Cadastrar álbum antigo"}</h1>
+          </div>
         </div>
+        {editId && (
+          <button
+            type="button"
+            onClick={excluirAlbum}
+            disabled={deleting}
+            className="p-2.5 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 shrink-0"
+            title="Excluir álbum"
+          >
+            {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+          </button>
+        )}
       </header>
 
       <div className="space-y-3 mb-6">
@@ -425,7 +508,7 @@ function AlbumAntigoPage() {
         className="w-full py-3.5 rounded-full bg-emerald-500 text-black font-black uppercase tracking-wider text-sm disabled:opacity-40 inline-flex items-center justify-center gap-2"
       >
         {submitting && <Loader2 className="size-4 animate-spin" />}
-        Cadastrar álbum
+        {editId ? "Salvar alterações" : "Cadastrar álbum"}
       </button>
     </div>
   );

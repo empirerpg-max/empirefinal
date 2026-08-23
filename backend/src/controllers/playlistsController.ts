@@ -270,6 +270,8 @@ export async function getAlbumAntigoByIdController(id: string): Promise<Response
     data: normalizeText(row[4]) || undefined,
     descricao: normalizeText(row[5]) || undefined,
     capa_url: normalizeText(row[6]) || undefined,
+    contracapa_url: normalizeText(row[7]) || undefined,
+    telegram_id: normalizeText(row[9]) || undefined,
     faixas,
   });
 }
@@ -335,6 +337,113 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
   }
 
   return jsonResponse({ ok: true, id: albumId });
+}
+
+// Só o dono (telegram_id da coluna J) ou admin (810141686) pode editar/
+// excluir — mesma regra usada em outros lugares do app (posts sociais,
+// artistas etc).
+function podeEditarAlbumAntigo(row: string[], tgId: string): boolean {
+  if (tgId.trim() === "810141686") return true;
+  const owner = normalizeText(row[9]);
+  return !!owner && owner === tgId.trim();
+}
+
+export async function editarAlbumAntigoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    id?: string;
+    tgId?: string;
+    artista?: string;
+    titulo?: string;
+    genero?: string;
+    data?: string;
+    descricao?: string;
+    capa_url?: string;
+    contracapa_url?: string;
+    faixas?: FaixaAntigaInput[];
+  };
+  const id = (body.id || "").trim();
+  const tgId = (body.tgId || "").trim();
+  if (!id || !tgId || !body.artista?.trim() || !body.titulo?.trim() || !body.faixas?.length) {
+    return jsonResponse({ ok: false, error: "Dados incompletos para editar o álbum." }, 400);
+  }
+  if (body.faixas.some((f) => !f.titulo?.trim() || !f.drive_url?.trim())) {
+    return jsonResponse({ ok: false, error: "Toda faixa precisa de título e link/arquivo." }, 400);
+  }
+
+  const albunsRows = await googleSheetsService.usuarios.readValues(SHEET_ALBUNS);
+  const rowIndex = albunsRows.findIndex((r, i) => i > 0 && normalizeText(r[0]) === id);
+  if (rowIndex === -1) return jsonResponse({ ok: false, error: "Álbum não encontrado." }, 404);
+  if (!podeEditarAlbumAntigo(albunsRows[rowIndex], tgId)) {
+    return jsonResponse({ ok: false, error: "Você só pode editar seus próprios álbuns." }, 403);
+  }
+
+  await googleSheetsService.usuarios.updateValues(SHEET_ALBUNS, `B${rowIndex + 1}:H${rowIndex + 1}`, [
+    [
+      body.artista.trim(),
+      body.titulo.trim(),
+      body.genero?.trim() || "",
+      body.data || normalizeText(albunsRows[rowIndex][4]),
+      body.descricao?.trim() || "",
+      body.capa_url || normalizeText(albunsRows[rowIndex][6]),
+      body.contracapa_url || normalizeText(albunsRows[rowIndex][7]),
+    ],
+  ]);
+
+  // Substitui as faixas: limpa (em branco) todas as linhas atuais desse
+  // álbum e grava a lista nova do zero — mais simples e seguro do que
+  // tentar casar faixa a faixa por posição.
+  const faixasRows = await googleSheetsService.usuarios.readValues(SHEET_FAIXAS);
+  for (let i = 1; i < faixasRows.length; i++) {
+    if (normalizeText(faixasRows[i][0]) === id) {
+      await googleSheetsService.usuarios.updateValues(SHEET_FAIXAS, `A${i + 1}:G${i + 1}`, [
+        ["", "", "", "", "", "", ""],
+      ]);
+    }
+  }
+  for (const f of body.faixas) {
+    await googleSheetsService.usuarios.appendRow(SHEET_FAIXAS, [
+      id,
+      String(f.numero || ""),
+      f.titulo.trim(),
+      f.artistas?.trim() || body.artista.trim(),
+      f.duracao || "",
+      f.drive_url.trim(),
+      f.letra || "",
+    ]);
+  }
+
+  return jsonResponse({ ok: true });
+}
+
+export async function deletarAlbumAntigoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { id?: string; tgId?: string };
+  const id = (body.id || "").trim();
+  const tgId = (body.tgId || "").trim();
+  if (!id || !tgId) {
+    return jsonResponse({ ok: false, error: "id e tgId são obrigatórios." }, 400);
+  }
+
+  const albunsRows = await googleSheetsService.usuarios.readValues(SHEET_ALBUNS);
+  const rowIndex = albunsRows.findIndex((r, i) => i > 0 && normalizeText(r[0]) === id);
+  if (rowIndex === -1) return jsonResponse({ ok: false, error: "Álbum não encontrado." }, 404);
+  if (!podeEditarAlbumAntigo(albunsRows[rowIndex], tgId)) {
+    return jsonResponse({ ok: false, error: "Você só pode excluir seus próprios álbuns." }, 403);
+  }
+
+  await googleSheetsService.usuarios.updateValues(SHEET_ALBUNS, `A${rowIndex + 1}:K${rowIndex + 1}`, [
+    ["", "", "", "", "", "", "", "", "", "", ""],
+  ]);
+
+  const faixasRows = await googleSheetsService.usuarios.readValues(SHEET_FAIXAS);
+  for (let i = 1; i < faixasRows.length; i++) {
+    if (normalizeText(faixasRows[i][0]) === id) {
+      await googleSheetsService.usuarios.updateValues(SHEET_FAIXAS, `A${i + 1}:G${i + 1}`, [
+        ["", "", "", "", "", "", ""],
+      ]);
+    }
+  }
+
+  return jsonResponse({ ok: true });
 }
 
 // -------------------- SALVOS (faixas curtidas) --------------------
