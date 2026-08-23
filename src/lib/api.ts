@@ -844,6 +844,47 @@ export const api = {
     return res.json();
   },
 
+  // ---- Empire Market (prestígio) ----
+  async listarMarketProdutos(
+    telegramId: string,
+  ): Promise<{
+    produtos: {
+      id: string;
+      nome: string;
+      descricao: string;
+      preco: number;
+      icone: string;
+      pedeDetalhe: boolean;
+      detalhePlaceholder?: string;
+    }[];
+    saldo: number;
+  }> {
+    const res = await fetch(`/api/market/produtos?telegramId=${encodeURIComponent(telegramId)}`).then(
+      (r) => r.json(),
+    );
+    return res?.data || { produtos: [], saldo: 0 };
+  },
+  async listarMarketRegras(): Promise<{
+    niveis: { nivel: number; fase: string; nome: string; badge: string; prestigio: number }[];
+    regras: { chave: string; acao: string; valor: number; ativo: boolean }[];
+  }> {
+    const res = await fetch("/api/market/regras").then((r) => r.json());
+    return res?.data || { niveis: [], regras: [] };
+  },
+  async comprarMarketProduto(payload: {
+    produtoId: string;
+    telegramId: string;
+    usuario?: string;
+    detalhe?: string;
+  }): Promise<{ success: boolean; error?: string; data?: { saldo: number } }> {
+    const res = await fetch("/api/market/comprar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
   // ---- Ponto ----
   async listarPontos(telegramId: string): Promise<{
     artistas: string[];
