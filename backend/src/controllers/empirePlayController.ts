@@ -939,13 +939,21 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
     }
 
     const musicaRecords = await sheetsService.readSheetObjects("Musicas");
-    const musicaItems = musicaRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+    const musicaItems = musicaRecords
+      .filter((rec) => (getValue(rec, ["pendente"]) || "").trim().toLowerCase() !== "sim")
+      .map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+
+    // O título em EDIÇÃO CHARTS sempre vem como "Artista - Título" — desde
+    // que buildCleanItem passou a devolver só o título limpo (sem o prefixo
+    // do artista), a comparação direta com match.title nunca mais batia e
+    // essa seção ficava vazia. Compara contra "artista - título" remontado.
+    const matchByTituloCompleto = (m: EmpirePlayCleanItem, tituloCompleto: string) =>
+      normalizeComparison(`${m.artist} - ${m.title}`) === normalizeComparison(tituloCompleto) ||
+      normalizeComparison(tituloCompleto).endsWith(normalizeComparison(m.title));
 
     const lancamentos = top3
       .map(({ dataIso, titulo }) => {
-        const match = musicaItems.find(
-          (m) => normalizeComparison(m.title) === normalizeComparison(titulo),
-        );
+        const match = musicaItems.find((m) => matchByTituloCompleto(m, titulo));
         if (!match) return null;
         return {
           id: match.id,
@@ -955,7 +963,28 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
           dataIso,
         };
       })
-      .filter(Boolean);
+      .filter(Boolean) as { id: string; titulo: string; artista: string; coverUrl: string | null; dataIso: string }[];
+
+    // Nunca deixa a seção vazia: se o cruzamento com EDIÇÃO CHARTS não achou
+    // (planilha desatualizada, título não bateu) ou achou menos que 3,
+    // completa com os lançamentos mais recentes direto do catálogo
+    // (Musicas), que sempre tem dado enquanto houver música publicada.
+    if (lancamentos.length < 3) {
+      const jaIncluidos = new Set(lancamentos.map((l) => normalizeComparison(l.id)));
+      const recentes = musicaItems
+        .filter((m) => m.releaseDateIso && !jaIncluidos.has(normalizeComparison(m.id)))
+        .sort((a, b) => (b.releaseDateIso as string).localeCompare(a.releaseDateIso as string));
+      for (const m of recentes) {
+        if (lancamentos.length >= 3) break;
+        lancamentos.push({
+          id: m.id,
+          titulo: m.title,
+          artista: m.artist,
+          coverUrl: m.coverUrl || null,
+          dataIso: m.releaseDateIso as string,
+        });
+      }
+    }
 
     return new Response(JSON.stringify({ success: true, data: lancamentos }), {
       status: 200,
