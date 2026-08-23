@@ -385,6 +385,30 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Corrige o typo "LoReeina" -> "LoReina" na coluna ALBUM (K) das faixas
+    // do album da Loreena, que impedia o join com a aba Albuns.
+    if (url.pathname === "/api/debug/fix-loreina" && request.method === "GET") {
+      const { googleSheetsService, findRows, updateValues } = await import(
+        "../backend/src/services/googleSheetsService"
+      );
+      try {
+        const rows = await findRows(
+          "principal",
+          "Musicas",
+          (row) => (row[10] || "").trim() === "Loreena - LoReeina",
+          "A:Y",
+        );
+        const corrigidas: number[] = [];
+        for (const { rowIndex } of rows) {
+          await updateValues("principal", "Musicas", `K${rowIndex}`, [["Loreena - LoReina"]]);
+          corrigidas.push(rowIndex);
+        }
+        return Response.json({ ok: true, corrigidas });
+      } catch (err: any) {
+        return Response.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
+      }
+    }
+
     // Leitura pontual pra investigar o sumico das faixas do album LoReina.
     if (url.pathname === "/api/debug/loreina" && request.method === "GET") {
       const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
