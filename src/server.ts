@@ -80,6 +80,7 @@ const RUNTIME_ENV_KEYS = [
   "DRIVE_OAUTH_CLIENT_SECRET",
   "DRIVE_OAUTH_REFRESH_TOKEN",
   "RESEND_API_KEY",
+  "SESSION_TOKEN_SECRET",
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────

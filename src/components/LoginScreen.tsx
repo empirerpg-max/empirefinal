@@ -12,6 +12,10 @@ export interface LoginResult {
 }
 
 const STORAGE_KEY = "empire_login_user";
+// Token de sessão assinado (HMAC) emitido pelo backend no login/heartbeat —
+// guardado à parte do usuário pra facilitar limpar um sem o outro, e porque
+// código legado que já lê STORAGE_KEY não precisa saber que ele existe.
+const TOKEN_STORAGE_KEY = "empire_session_token";
 
 export function getStoredLogin(): LoginResult | null {
   if (typeof window === "undefined") return null;
@@ -25,10 +29,30 @@ export function getStoredLogin(): LoginResult | null {
 
 export function clearStoredLogin() {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
 export function setStoredLogin(user: LoginResult) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+}
+
+export function getStoredSessionToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredSessionToken(token: string | null | undefined) {
+  if (typeof window === "undefined" || !token) return;
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Silencioso — sem token guardado, ações admin caem no fallback de
+    // "não prova identidade" no backend, não quebra o app.
+  }
 }
 
 function TrocarSenhaInicialScreen({
@@ -149,7 +173,9 @@ export function LoginScreen({ onSuccess }: { onSuccess: (user: LoginResult) => v
   // Quando o login usa a senha inicial (definida pelo admin na planilha), o
   // backend exige trocar por uma senha própria antes de entrar — guarda o
   // usuário logado e a senha usada até essa troca ser concluída.
-  const [pendingTroca, setPendingTroca] = useState<{ user: LoginResult; senhaAtual: string } | null>(null);
+  const [pendingTroca, setPendingTroca] = useState<{ user: LoginResult; senhaAtual: string; token?: string } | null>(
+    null,
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,10 +196,11 @@ export function LoginScreen({ onSuccess }: { onSuccess: (user: LoginResult) => v
         throw new Error(json.error || "Não foi possível entrar.");
       }
       if (json.data?.precisaTrocarSenha) {
-        setPendingTroca({ user: json.data as LoginResult, senhaAtual: senha });
+        setPendingTroca({ user: json.data as LoginResult, senhaAtual: senha, token: json.token });
         return;
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(json.data));
+      setStoredSessionToken(json.token);
       onSuccess(json.data as LoginResult);
     } catch (err: any) {
       setErrorMsg(err.message || "Erro de conexão ao entrar.");
@@ -189,6 +216,7 @@ export function LoginScreen({ onSuccess }: { onSuccess: (user: LoginResult) => v
         senhaAtual={pendingTroca.senhaAtual}
         onDone={() => {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingTroca.user));
+          setStoredSessionToken(pendingTroca.token);
           onSuccess(pendingTroca.user);
         }}
       />
