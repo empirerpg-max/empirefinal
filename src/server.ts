@@ -385,6 +385,18 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Leitura pontual pra calibrar preços do Empire Market (prestígio).
+    if (url.pathname === "/api/debug/niveis" && request.method === "GET") {
+      const { getNiveis, getRegrasPrestigio } = await import("../backend/src/services/prestigioService");
+      try {
+        const niveis = await getNiveis();
+        const regras = await getRegrasPrestigio();
+        return Response.json({ ok: true, niveis, regras: Array.from(regras.values()) });
+      } catch (err: any) {
+        return Response.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
+      }
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
