@@ -66,8 +66,10 @@ async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] 
   }
 
   const dates = [...new Set(data.slice(1).map((r) => r[1]).filter(Boolean))].reverse();
+  // ÁLBUNS: coluna de gênero é a L (índice 11) — usar a E (índice 4, valor
+  // semanal) aqui juntava números de pontuação como se fossem "estilos".
   const styles = isA
-    ? [...new Set(data.slice(1).map((r) => r[4]).filter(Boolean))].sort()
+    ? [...new Set(data.slice(1).map((r) => r[11]).filter(Boolean))].sort()
     : [...new Set(data.slice(1).map((r) => r[17]).filter(Boolean))].sort();
   return { dates, styles };
 }
@@ -98,11 +100,29 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
 
   return data
     .slice(1)
-    .filter((r) => r[1] == date && (style ? (isA ? r[4] == style : r[17] == style) : true))
+    .filter((r) => r[1] == date && (style ? (isA ? r[11] == style : r[17] == style) : true))
     .map((r) =>
       isA
-        ? { pos: r[2], tit: r[3], val: fmt(r[4]), st: r[7], capa: fixImg(r[10]), art: r[11], style: r[4] }
-        : { pos: r[2], tit: r[3], val: fmt(r[4]), art: r[6], st: r[13], capa: fixImg(r[15]), style: r[17] },
+        ? {
+            pos: r[2],
+            tit: r[3],
+            val: fmt(r[4]),
+            valTotal: fmt(r[5]),
+            st: r[7],
+            capa: fixImg(r[10]),
+            art: r[12],
+            style: r[11],
+          }
+        : {
+            pos: r[2],
+            tit: r[3],
+            val: fmt(r[4]),
+            valTotal: fmt(r[5]),
+            art: r[7],
+            st: r[13],
+            capa: fixImg(r[15]),
+            style: r[17],
+          },
     );
 }
 

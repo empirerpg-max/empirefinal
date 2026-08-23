@@ -142,15 +142,21 @@ function CoverImg({ src, alt, className }: { src?: string; alt: string; classNam
 }
 
 // ---------- Ao vivo (Real Time) ----------
-const REALTIME_COLS: { key: keyof RealTimeData; label: string; color: string }[] = [
-  { key: "spotify", label: "Spotify", color: "text-emerald-400" },
-  { key: "apple", label: "Apple Music", color: "text-rose-400" },
-  { key: "youtube", label: "YouTube", color: "text-red-500" },
+const REALTIME_COLS: { key: keyof RealTimeData; label: string; color: string; bar: string; icon: typeof Music }[] = [
+  { key: "spotify", label: "Spotify", color: "text-emerald-400", bar: "bg-emerald-400", icon: Music },
+  { key: "apple", label: "Apple Music", color: "text-rose-400", bar: "bg-rose-400", icon: Music },
+  { key: "youtube", label: "YouTube", color: "text-red-500", bar: "bg-red-500", icon: Youtube },
 ];
+
+function parseNum(v: unknown): number {
+  const n = Number(String(v ?? "").replace(/[^\d]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
 
 function ChartsRealTime() {
   const [data, setData] = useState<RealTimeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<keyof RealTimeData | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -167,38 +173,91 @@ function ChartsRealTime() {
 
   if (loading) return <LoadingBlock text="Carregando ao vivo..." />;
 
+  const activeCol = REALTIME_COLS.find((c) => c.key === selected);
+  if (activeCol) {
+    const items = data?.[activeCol.key] || [];
+    const maxVal = Math.max(1, ...items.map((it) => parseNum(it.streams || it.semana || it.val || it.s)));
+    return (
+      <div className="p-4">
+        <button
+          onClick={() => setSelected(null)}
+          className="flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-foreground mb-4"
+        >
+          <ChevronLeft className="size-4" /> Ao vivo
+        </button>
+        <h1 className={`font-['Fjalla_One'] text-2xl uppercase tracking-tight mb-5 flex items-center gap-2 ${activeCol.color}`}>
+          <activeCol.icon className="size-5" /> {activeCol.label}
+        </h1>
+        {items.length === 0 ? (
+          <div className="text-sm text-muted-foreground italic py-10 text-center">Sem dados agora.</div>
+        ) : (
+          <div className="space-y-3">
+            {items.map((it, i) => {
+              const pos = it.posicao || it.pos || it.p || "-";
+              const cover = it.capa || it.c;
+              const title = it.titulo || it.musica || it.tit || it.t || "—";
+              const val = it.streams || it.semana || it.val || it.s || "-";
+              const pct = Math.max(4, (parseNum(val) / maxVal) * 100);
+              return (
+                <div key={i} className="rounded-2xl border border-border/50 bg-card/40 p-3 shadow-sm shadow-black/10">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-6 shrink-0 text-center text-sm font-black text-muted-foreground">{pos}</div>
+                    <CoverImg src={cover} alt={title} className="size-10 rounded-xl object-cover shrink-0" />
+                    <div className="min-w-0 flex-1 text-sm font-semibold line-clamp-2 leading-snug break-words">{title}</div>
+                    <div className={`shrink-0 text-sm font-black ${activeCol.color}`}>{val}</div>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${activeCol.bar} transition-all duration-700`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="p-4">
       <h1 className="font-['Fjalla_One'] text-2xl uppercase tracking-tight mb-4 flex items-center gap-2">
         <Radio className="size-5 text-red-500 animate-pulse" /> Ao vivo
       </h1>
-      <div className="grid gap-5 sm:grid-cols-3">
-        {REALTIME_COLS.map(({ key, label, color }) => {
+      <div className="grid gap-4 sm:grid-cols-3">
+        {REALTIME_COLS.map(({ key, label, color, icon: Icon }) => {
           const items = data?.[key] || [];
+          const top = items[0];
+          const topTitle = top?.titulo || top?.musica || top?.tit || top?.t || "";
+          const topCover = top?.capa || top?.c;
           return (
-            <div key={key}>
-              <h2 className={`text-sm font-bold uppercase tracking-wider mb-2 ${color}`}>{label}</h2>
+            <button
+              key={key}
+              onClick={() => items.length > 0 && setSelected(key)}
+              disabled={items.length === 0}
+              className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/50 p-4 text-left transition-all active:scale-[0.98] hover:border-border disabled:opacity-50"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <Icon className={`size-4 ${color}`} />
+                <span className={`text-xs font-bold uppercase tracking-wider ${color}`}>{label}</span>
+                {items.length > 0 && (
+                  <span className="ml-auto text-[9px] font-bold text-muted-foreground">{items.length} faixas</span>
+                )}
+              </div>
               {items.length === 0 ? (
-                <div className="text-xs text-muted-foreground italic py-6 text-center">Sem dados agora.</div>
+                <div className="text-xs text-muted-foreground italic py-4 text-center">Sem dados agora.</div>
               ) : (
-                <div className="space-y-1.5">
-                  {items.map((it, i) => {
-                    const pos = it.posicao || it.pos || it.p || "-";
-                    const cover = it.capa || it.c;
-                    const title = it.titulo || it.musica || it.tit || it.t || "—";
-                    const val = it.streams || it.semana || it.val || it.s || "-";
-                    return (
-                      <div key={i} className="flex items-center gap-2.5 rounded-2xl border border-border/50 bg-card/40 p-2 shadow-sm shadow-black/10">
-                        <div className="w-6 shrink-0 text-center text-sm font-black text-muted-foreground">{pos}</div>
-                        <CoverImg src={cover} alt={title} className="size-9 rounded-xl object-cover shrink-0" />
-                        <div className="min-w-0 flex-1 text-xs font-semibold line-clamp-2 leading-snug break-words">{title}</div>
-                        <div className={`shrink-0 text-xs font-bold ${color}`}>{val}</div>
-                      </div>
-                    );
-                  })}
+                <div className="flex items-center gap-3">
+                  <CoverImg src={topCover} alt={topTitle} className="size-14 rounded-2xl object-cover shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase">#1 agora</p>
+                    <p className="text-sm font-semibold line-clamp-2 leading-snug break-words">{topTitle}</p>
+                  </div>
                 </div>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -552,6 +611,7 @@ function ChartsGlobalView({ category }: { category: CategoryConfig }) {
             const title = r.musica || r.titulo || r.album || r.tit || r.t || "—";
             const artist = r.artista || r.art || r.a || "";
             const val = r.semana || r.streams || r.pontos || r.vendas || r.val || r.s || "0";
+            const valTotal = r.valTotal || r.total || r.geral || "";
             const st = r.status || r.st || "=";
             const stColor = st === "↑" ? "text-emerald-400" : st === "↓" ? "text-red-400" : st === "NEW" ? "text-primary" : "text-muted-foreground";
             const stLabel = st === "↑" ? "▲" : st === "↓" ? "▼" : st === "NEW" ? "NEW" : "=";
@@ -568,7 +628,15 @@ function ChartsGlobalView({ category }: { category: CategoryConfig }) {
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-sm font-black">{val}</div>
-                  {valueLabel && <div className="text-[9px] text-muted-foreground font-bold">{valueLabel}</div>}
+                  <div className="text-[9px] text-muted-foreground font-bold">
+                    {valueLabel ? `${valueLabel} SEMANA` : "SEMANA"}
+                  </div>
+                  {valTotal && valTotal !== "0" && (
+                    <>
+                      <div className="text-xs font-bold text-primary mt-1">{valTotal}</div>
+                      <div className="text-[9px] text-muted-foreground font-bold">TOTAL</div>
+                    </>
+                  )}
                 </div>
               </div>
             );
