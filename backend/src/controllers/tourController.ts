@@ -777,7 +777,12 @@ export async function comentarTurneController(request: Request): Promise<Respons
       ]);
     }
     const row = [idUnico, showNumero, telegramId, usuario, texto, new Date().toISOString()];
-    await googleSheetsService.usuarios.appendRow(COMENTARIOS_SHEET, row);
+    // Range explícito (A:F) — igual ao fix aplicado nos álbuns legados: um
+    // range aberto (padrão "A:ZZ") pode fazer a API do Sheets deslocar a
+    // linha inteira pra direita em certos casos, e como o filtro de leitura
+    // casa por posição de coluna (id_unico/show_numero), o comentário fica
+    // órfão — parece ter "sumido" mesmo estando na planilha.
+    await googleSheetsService.usuarios.appendRow(COMENTARIOS_SHEET, row, "A:F");
 
     await somarPrestigio({ telegramId, usuario }, "comentario_turne").catch(() => {});
 
