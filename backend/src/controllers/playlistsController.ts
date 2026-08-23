@@ -310,6 +310,9 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
   const albumId = `ALB-${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
   const dataLancamento = body.data || new Date().toISOString().slice(0, 10);
 
+  // Sem try/catch aqui de propósito — se a linha do álbum não gravar, ele
+  // não existe de verdade, então a falha deve propagar e responder
+  // ok:false, nunca fingir sucesso.
   await googleSheetsService.usuarios.appendRow(SHEET_ALBUNS, [
     albumId,
     body.artista.trim(),
@@ -324,19 +327,38 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
     new Date().toISOString(),
   ]);
 
+  // Isolamento por faixa: uma falha no meio da lista não pode travar as
+  // faixas seguintes nem fazer o álbum voltar "ok:true" fingindo que todas
+  // as faixas foram gravadas quando só uma parte foi de verdade.
+  let faixasGravadas = 0;
   for (const f of body.faixas) {
-    await googleSheetsService.usuarios.appendRow(SHEET_FAIXAS, [
-      albumId,
-      String(f.numero || ""),
-      f.titulo.trim(),
-      f.artistas?.trim() || body.artista.trim(),
-      f.duracao || "",
-      f.drive_url.trim(),
-      f.letra || "",
-    ]);
+    try {
+      await googleSheetsService.usuarios.appendRow(SHEET_FAIXAS, [
+        albumId,
+        String(f.numero || ""),
+        f.titulo.trim(),
+        f.artistas?.trim() || body.artista.trim(),
+        f.duracao || "",
+        f.drive_url.trim(),
+        f.letra || "",
+      ]);
+      faixasGravadas++;
+    } catch (err) {
+      console.warn("[criarAlbumAntigoController] Erro ao gravar faixa:", f.titulo, err);
+    }
   }
 
-  return jsonResponse({ ok: true, id: albumId });
+  const faltaram = body.faixas.length - faixasGravadas;
+  return jsonResponse({
+    ok: true,
+    id: albumId,
+    faixasGravadas,
+    faixasEsperadas: body.faixas.length,
+    error:
+      faltaram > 0
+        ? `Álbum registrado, mas ${faltaram} faixa(s) falharam ao gravar — confira e adicione de novo se precisar.`
+        : undefined,
+  });
 }
 
 // Só o dono (telegram_id da coluna J) ou admin (810141686) pode editar/
