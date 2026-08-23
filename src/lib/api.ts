@@ -216,9 +216,16 @@ async function rawCall<T = unknown>(params: Record<string, unknown>, base: strin
 function fetchAndStore<T>(key: string, params: Record<string, unknown>, base: string): Promise<T> {
   const p = rawCall<T>(params, base)
     .then((data) => {
-      cache.set(key, { data, ts: Date.now() });
+      // Não guarda resultado vazio/erro em cache — ver isEmptyish acima.
+      // Preferível refazer a request na próxima montagem a servir "sem
+      // dados" com aparência de definitivo por até 10 minutos.
+      if (!isEmptyish(data)) {
+        cache.set(key, { data, ts: Date.now() });
+        persistCache();
+      } else {
+        cache.delete(key);
+      }
       inflight.delete(key);
-      persistCache();
       return data;
     })
     .catch((e) => {
@@ -235,13 +242,31 @@ async function call<T = unknown>(params: Record<string, unknown>, opts: { cache?
   const key = (opts.tv ? "TV::" : "HUB::") + JSON.stringify(params);
   const hit = cache.get(key);
   const age = hit ? Date.now() - hit.ts : Infinity;
-  if (hit && age < CACHE_FRESH) return hit.data as T;
-  if (hit && age < CACHE_STALE) {
+  // Um resultado vazio guardado em cache (array vazio, objeto de erro) nunca
+  // deve ser servido como se fosse "fresco" — sem essa checagem, uma falha
+  // transitória do backend (ou uma resposta 200 vazia por instabilidade)
+  // ficava até 10 minutos "grudada" em cache/sessionStorage, reaparecendo
+  // vazia toda vez que a tela era remontada (voltar de outra tela), e só um
+  // fechamento completo do app (sessionStorage limpo) resolvia de verdade.
+  const trustworthy = hit && !isEmptyish(hit.data);
+  if (trustworthy && age < CACHE_FRESH) return hit.data as T;
+  if (trustworthy && age < CACHE_STALE) {
     if (!inflight.has(key)) fetchAndStore<T>(key, params, base).catch(() => {});
     return hit.data as T;
   }
   if (inflight.has(key)) return inflight.get(key)! as Promise<T>;
   return fetchAndStore<T>(key, params, base);
+}
+
+function isEmptyish(data: unknown): boolean {
+  if (data == null) return true;
+  if (Array.isArray(data)) return data.length === 0;
+  if (typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    if ("error" in obj || "erro" in obj) return true;
+    if ("success" in obj && obj.success === false) return true;
+  }
+  return false;
 }
 
 export function invalidateCache() {
