@@ -389,6 +389,7 @@ export default {
     // temporário em "Perfil" — dump de todas as abas + cabeçalho + amostra.
     if (url.pathname === "/api/debug/read-planilha" && request.method === "GET") {
       const { listSheetTabs, readValues } = await import("../backend/src/services/googleSheetsService");
+      const { getServiceAccountEmail } = await import("../backend/src/google/service-account");
       const spreadsheetId = "1CMJnKRw6RMRX0IG4EzQQABrSGsLbzeWXfYkF6wgzWlI";
       try {
         const tabs = await listSheetTabs(spreadsheetId);
@@ -407,7 +408,16 @@ export default {
         }
         return Response.json({ ok: true, tabs: tabs.map((t) => t.title), data: result });
       } catch (err: any) {
-        return Response.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
+        let serviceAccountEmail: string | null = null;
+        try {
+          serviceAccountEmail = getServiceAccountEmail();
+        } catch {
+          // ignora — só é diagnóstico extra
+        }
+        return Response.json(
+          { ok: false, error: err?.message || String(err), serviceAccountEmail },
+          { status: 500 },
+        );
       }
     }
 
