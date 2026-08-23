@@ -56,7 +56,6 @@ function ArtistDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("geral");
   const [modal, setModal] = useState<null | "rescisao" | "foto">(null);
-  const [albuns, setAlbuns] = useState<AlbumPayload[]>([]);
   const [discografia, setDiscografia] = useState<DiscoItem[]>([]);
   const [tourData, setTourData] = useState<any>(null);
   const [responsavelNivel, setResponsavelNivel] = useState<NivelJogador | null>(null);
@@ -120,15 +119,13 @@ function ArtistDashboard() {
     Promise.all([
       // Carrega TODOS os artistas para permitir visualizar qualquer perfil
       api.listarTodos().catch(() => []),
-      api.listarAlbuns(nome).catch(() => []),
       api.listTours().catch(() => []),
       // Carrega artistas do usuário para verificar propriedade
       user && user.id !== "guest" ? api.meusArtistas(user.id).catch(() => []) : Promise.resolve([]),
-    ]).then(([allArtists, albunsList, toursList, myArtists]) => {
+    ]).then(([allArtists, toursList, myArtists]) => {
       // Encontra o artista na lista completa
       const art = (allArtists as Artist[]).find((a) => a.nome?.trim().toLowerCase() === safeNome) || null;
       setArtist(art);
-      setAlbuns(albunsList);
 
       // Verifica se o artista pertence ao usuário logado
       const mine = (myArtists as Artist[]).some((a) => a.nome?.trim().toLowerCase() === safeNome);
@@ -367,7 +364,7 @@ function ArtistDashboard() {
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             {activeTab === "geral" && <GeralTab artist={artist} discografia={discografia} tourData={tourData} />}
             {activeTab === "discografia" && (
-              <DiscografiaTab nome={artist.nome} albuns={albuns} discografia={discografia} isOwner={isOwner} />
+              <DiscografiaTab nome={artist.nome} discografia={discografia} isOwner={isOwner} />
             )}
             {activeTab === "charts" && <ChartsTab nome={artist.nome} />}
             {activeTab === "tours" && <ToursProjetosTab nome={artist.nome} tourData={tourData} isOwner={isOwner} />}
@@ -464,7 +461,6 @@ function DiscografiaTab({
   isOwner,
 }: {
   nome: string;
-  albuns: AlbumPayload[];
   discografia: DiscoItem[];
   isOwner: boolean;
 }) {
@@ -491,7 +487,7 @@ function DiscografiaTab({
         <div className="flex items-center justify-between mb-4 px-1">
           <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Discografia</h2>
           {isOwner && (
-            <Link to="/acoes/album" search={{ nome }} className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center active:scale-90 transition-transform">
+            <Link to="/empire-play/gestao" search={{ nome }} className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center active:scale-90 transition-transform">
               <Disc3 className="size-4" />
             </Link>
           )}
