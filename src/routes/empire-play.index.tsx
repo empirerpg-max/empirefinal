@@ -307,7 +307,8 @@ function EmpirePlayInicio() {
                 <div className={`relative shrink-0 overflow-hidden bg-gradient-to-b ${gradient} to-neutral-950`}>
                   <button
                     onClick={closeSlidingPlaylist}
-                    className="absolute top-4 left-4 z-10 p-2.5 rounded-full bg-black/30 hover:bg-black/50 text-white transition"
+                    style={{ top: "max(1rem, calc(env(safe-area-inset-top) + 0.6rem))" }}
+                    className="absolute left-4 z-10 size-10 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white grid place-items-center shadow-lg transition"
                   >
                     <ChevronLeft className="size-5" />
                   </button>
