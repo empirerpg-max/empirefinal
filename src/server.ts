@@ -385,6 +385,24 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Leitura pontual pra investigar o sumico das faixas do album LoReina.
+    if (url.pathname === "/api/debug/loreina" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      try {
+        const albuns = await googleSheetsService.principal.readSheetObjects("Albuns");
+        const musicas = await googleSheetsService.principal.readSheetObjects("Musicas");
+        const albunsMatch = albuns.filter((a) =>
+          Object.values(a).some((v) => String(v).toLowerCase().includes("rein")),
+        );
+        const musicasMatch = musicas.filter((m) =>
+          Object.values(m).some((v) => String(v).toLowerCase().includes("rein")),
+        );
+        return Response.json({ ok: true, albunsMatch, musicasMatch });
+      } catch (err: any) {
+        return Response.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
+      }
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
