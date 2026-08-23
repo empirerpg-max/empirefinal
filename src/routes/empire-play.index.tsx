@@ -38,6 +38,31 @@ function EmpirePlayInicio() {
     letra: item.letra || "",
   });
 
+  // O botão de voltar do Telegram/gesto do Android navega pelo HISTÓRICO do
+  // navegador, não sabe nada do estado local dessa tela — sem empurrar uma
+  // entrada de histórico quando a tela deslizante abre, voltar não fecha
+  // ela (o gesto "vaza" pra rota de trás, deixando a tela presa). Empurra
+  // uma entrada marcada ao abrir; ao voltar (gesto, botão do Telegram ou
+  // botão físico do Android), o popstate fecha a tela em vez de navegar.
+  useEffect(() => {
+    if (!activeSlidingPlaylist) return;
+    window.history.pushState({ empireSlidingPlaylist: true }, "");
+    const onPopState = () => setActiveSlidingPlaylist(null);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [activeSlidingPlaylist]);
+
+  // Fechar pelo X/seta também passa pelo histórico — se não fizer isso, a
+  // entrada empurrada acima fica "órfã" e o próximo voltar do usuário não
+  // faz nada (o SPA nunca navegou de verdade, só o estado local mudou).
+  const closeSlidingPlaylist = () => {
+    if (window.history.state?.empireSlidingPlaylist) {
+      window.history.back();
+    } else {
+      setActiveSlidingPlaylist(null);
+    }
+  };
+
   // Dados das APIs
   const [topPlaylists, setTopPlaylists] = useState<{
     spotify?: any[];
@@ -281,7 +306,7 @@ function EmpirePlayInicio() {
                 {/* Hero — capa grande + título, estilo playlist do Spotify */}
                 <div className={`relative shrink-0 overflow-hidden bg-gradient-to-b ${gradient} to-neutral-950`}>
                   <button
-                    onClick={() => setActiveSlidingPlaylist(null)}
+                    onClick={closeSlidingPlaylist}
                     className="absolute top-4 left-4 z-10 p-2.5 rounded-full bg-black/30 hover:bg-black/50 text-white transition"
                   >
                     <ChevronLeft className="size-5" />
@@ -324,7 +349,7 @@ function EmpirePlayInicio() {
                     />
                   </div>
                   <button
-                    onClick={() => setActiveSlidingPlaylist(null)}
+                    onClick={closeSlidingPlaylist}
                     className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition shrink-0"
                   >
                     <X className="size-5" />

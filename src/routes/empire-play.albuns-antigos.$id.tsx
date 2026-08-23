@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Disc3, Play, FileText, X, MoreVertical } from "lucide-react";
+import { ChevronLeft, Disc3, Play, FileText, X, MoreVertical, Pencil } from "lucide-react";
 import { api, driveImg, type PlaylistTrack } from "@/lib/api";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
+import { useTelegramUser } from "@/lib/telegram";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 
@@ -13,6 +14,8 @@ export const Route = createFileRoute("/empire-play/albuns-antigos/$id")({
 function AlbumAntigoDetail() {
   const { id } = Route.useParams();
   const { playSong, currentTrack } = useEmpirePlayer();
+  const { user } = useTelegramUser();
+  const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
   const [album, setAlbum] = useState<Awaited<ReturnType<typeof api.getAlbumAntigo>> | null | undefined>(undefined);
   const [showLyrics, setShowLyrics] = useState<number | null>(null);
   const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
@@ -48,9 +51,20 @@ function AlbumAntigoDetail() {
         className="px-4 pt-2 pb-6"
         style={{ background: "linear-gradient(180deg, rgba(16,185,129,0.16), transparent)" }}
       >
-        <Link to="/empire-play/albuns-antigos" className="inline-flex items-center gap-1 text-white/80 mb-4">
-          <ChevronLeft className="size-5" />
-        </Link>
+        <div className="flex items-center justify-between mb-4">
+          <Link to="/empire-play/albuns-antigos" className="inline-flex items-center gap-1 text-white/80">
+            <ChevronLeft className="size-5" />
+          </Link>
+          {tgId && (tgId === album.telegram_id || tgId === "810141686") && (
+            <Link
+              to="/empire-play/gestao/album-antigo"
+              search={{ id: album.id }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 text-white/80 hover:bg-white/20 text-xs font-bold"
+            >
+              <Pencil className="size-3.5" /> Editar
+            </Link>
+          )}
+        </div>
         <div className="flex items-end gap-4">
           <div className="size-32 sm:size-40 rounded-2xl bg-neutral-800 overflow-hidden grid place-items-center shadow-2xl shrink-0">
             {album.capa_url ? (
