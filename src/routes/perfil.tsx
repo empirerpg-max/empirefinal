@@ -13,6 +13,7 @@ import {
   Loader2,
   Heart,
   ListMusic,
+  Trophy,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import {
@@ -442,6 +443,15 @@ function Perfil() {
       </section>
 
       <section className="space-y-2">
+        <Link
+          to="/premiacoes"
+          onClick={() => haptic.selection()}
+          className="flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-all"
+        >
+          <Trophy className="size-5 text-primary" />
+          <span className="flex-1 font-black uppercase text-xs tracking-widest">Premiações</span>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </Link>
         <Link
           to="/artistas"
           search={{ filter: "all" }}

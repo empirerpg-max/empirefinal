@@ -26,6 +26,10 @@ export const SPREADSHEETS = {
   chartsRealtime: "1w-3ptf4uZ2lggNCW9PvZmKRZ59r85fkqObleuzTL3U0",
   chartsTop50: "1TMT7apUIA9Dt_yyVzIkXhx5iwQzNH9mjy1OGX8Ojjvk",
   chartsReleases: "1nQKujAE2C23s9gt4zV9eNU1xuAvAHzPXgBUoFIrIY-0",
+  // Categorias de premiações (Grammy, Billboard, VMA, AMA, EMA, BRIT, Latin
+  // Grammy, MAMA, People's Choice) — os jogadores preenchem Título/Artista
+  // de cada categoria que ganharam via botão "Premiações" em Perfil.
+  premiacoes: "1CMJnKRw6RMRX0IG4EzQQABrSGsLbzeWXfYkF6wgzWlI",
 } as const;
 
 export type SpreadsheetKey = keyof typeof SPREADSHEETS;

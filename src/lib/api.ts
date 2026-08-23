@@ -815,6 +815,35 @@ export const api = {
     return res.json();
   },
 
+  // ---- Premiações ----
+  async listarPremiacoesAwards(): Promise<string[]> {
+    const res = await fetch("/api/premiacoes/awards").then((r) => r.json());
+    return res?.data || [];
+  },
+  async listarPremiacoesCategorias(
+    award: string,
+  ): Promise<{ ano: string; segmento: string; categoria: string; preenchido: boolean }[]> {
+    const res = await fetch(`/api/premiacoes/categorias?award=${encodeURIComponent(award)}`).then((r) =>
+      r.json(),
+    );
+    return res?.data || [];
+  },
+  async preencherPremiacao(payload: {
+    award: string;
+    ano: string;
+    segmento: string;
+    categoria: string;
+    artista: string;
+    titulo: string;
+  }): Promise<{ success: boolean; error?: string; data?: { mode: string; linha: number } }> {
+    const res = await fetch("/api/premiacoes/preencher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
   // ---- Ponto ----
   async listarPontos(telegramId: string): Promise<{
     artistas: string[];
