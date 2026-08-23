@@ -88,7 +88,7 @@ function PlaylistView() {
               {pl.owner} • {pl.tracks.length} faixas
             </p>
             {pl.descricao && (
-              <p className="text-xs text-neutral-500 mt-1 line-clamp-2">{pl.descricao}</p>
+              <p className="text-xs text-neutral-500 mt-1 whitespace-pre-wrap break-words">{pl.descricao}</p>
             )}
           </div>
         </div>

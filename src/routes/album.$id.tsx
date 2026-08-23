@@ -110,7 +110,7 @@ function AlbumPage() {
             <p className="text-[10px] uppercase font-bold tracking-widest">Álbum</p>
             <h1 className="text-3xl sm:text-5xl font-black leading-tight mt-1">{album.titulo}</h1>
             {album.descricao && (
-              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{album.descricao}</p>
+              <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap break-words">{album.descricao}</p>
             )}
             <p className="text-xs text-muted-foreground mt-3">
               <span className="font-bold text-foreground">{album.artista}</span>

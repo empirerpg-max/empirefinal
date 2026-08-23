@@ -86,7 +86,9 @@ function AlbumAntigoDetail() {
             <p className="text-xs text-neutral-400 mt-1">
               {album.artista} • {album.faixas.length} faixas
             </p>
-            {album.descricao && <p className="text-xs text-neutral-500 mt-1 line-clamp-2">{album.descricao}</p>}
+            {album.descricao && (
+              <p className="text-xs text-neutral-500 mt-1 whitespace-pre-wrap break-words">{album.descricao}</p>
+            )}
           </div>
         </div>
       </div>
