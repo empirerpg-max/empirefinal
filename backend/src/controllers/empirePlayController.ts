@@ -77,6 +77,11 @@ export interface EmpirePlayCleanItem {
   type: string;
   title: string;
   artist: string;
+  // Artistas participantes/feat (ARTISTA 2-6), além do "artist" principal.
+  featArtists?: string[];
+  // "Artista Principal, Feat 1, Feat 2" já pronto pro padrão de exibição
+  // Spotify — só existe quando há pelo menos um feat.
+  displayArtists?: string;
   album?: string | null;
   coverUrl?: string | null;
   audioUrl?: string | null;
@@ -150,6 +155,11 @@ function getValue(record: SheetRecord, aliases: string[]): string | null {
     }
   }
   return null;
+}
+
+function itemMatchesArtist(item: EmpirePlayCleanItem, filterArtist: string): boolean {
+  if (normalizeComparison(item.artist).includes(filterArtist)) return true;
+  return (item.featArtists || []).some((a) => normalizeComparison(a).includes(filterArtist));
 }
 
 function getValueWithAlias(
@@ -387,6 +397,29 @@ function buildCleanItem(
   title = title || `Item ${index + 1}`;
   artist = artist || "Artista Independente";
 
+  // A coluna "Nome da música"/título do tópico sempre chega como
+  // "Artista - Título" (é o texto digitado pelo jogador). Antes só se fazia
+  // esse split quando "artist" vinha vazio (fallback) — como o act_principal
+  // normalmente já existe, o título nunca era limpo e a UI mostrava
+  // "Artista - Título" inteiro repetido junto do nome do artista. Agora
+  // sempre remove esse prefixo do título, independente de já ter "artist".
+  const cleanDashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
+  if (cleanDashMatch) {
+    title = cleanDashMatch[2].trim();
+  }
+
+  // ARTISTA 2-6 (colunas O-S em Musicas, I-M em faixas de álbum) — artistas
+  // participantes/feat. além do ACT PRINCIPAL. Precisa aparecer no perfil de
+  // TODOS os artistas envolvidos, não só do principal, e formar o
+  // "Artista, Feat 1, Feat 2" padrão Spotify na exibição.
+  const featArtists = [
+    getValue(record, ["artista_2"]),
+    getValue(record, ["artista_3"]),
+    getValue(record, ["artista_4"]),
+    getValue(record, ["artista_5"]),
+    getValue(record, ["artista_6"]),
+  ].filter((v): v is string => !!v && v.trim().length > 0);
+
   const album = getValue(record, ["album", "nome_do_album", "album_nome"]);
   const coverUrl = getValue(record, [
     "capa_da_musica",
@@ -469,6 +502,11 @@ function buildCleanItem(
     title,
     artist,
   };
+
+  if (featArtists.length > 0) {
+    item.featArtists = featArtists;
+    item.displayArtists = [artist, ...featArtists].join(", ");
+  }
 
   if (album) item.album = album;
   if (coverUrl) item.coverUrl = coverUrl;
@@ -758,10 +796,7 @@ export async function getEmpirePlayMusicasController(request: Request): Promise<
       .map((rec, idx) => buildCleanItem("Musicas", rec, idx));
 
     if (filterArtist) {
-      items = items.filter((item) => {
-        const normArt = normalizeComparison(item.artist);
-        return normArt.includes(filterArtist);
-      });
+      items = items.filter((item) => itemMatchesArtist(item, filterArtist));
     }
 
     if (filterMonth) {
@@ -836,7 +871,7 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
     let items = records.map((rec, idx) => buildCleanItem("Videos", rec, idx));
 
     if (filterArtist) {
-      items = items.filter((item) => normalizeComparison(item.artist).includes(filterArtist));
+      items = items.filter((item) => itemMatchesArtist(item, filterArtist));
     }
     if (filterCategory) {
       items = items.filter((item) => normalizeComparison(item.category || "") === filterCategory);

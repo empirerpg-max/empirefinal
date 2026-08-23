@@ -172,9 +172,10 @@ export function AlbumList() {
                     </div>
                   )}
 
-                  {/* Play Hover Overlay */}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity grid place-items-center">
-                    <span className="size-12 rounded-full bg-emerald-500 text-black grid place-items-center shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform">
+                  {/* Play — visível por padrão (essencial no touch); o escurecido
+                      de fundo só reforça no hover do desktop. */}
+                  <div className="absolute inset-0 bg-black/0 sm:group-hover:bg-black/40 transition-colors grid place-items-center">
+                    <span className="size-12 rounded-full bg-emerald-500/90 sm:bg-emerald-500/70 sm:group-hover:bg-emerald-400/90 backdrop-blur-sm text-black grid place-items-center shadow-lg transition-colors">
                       <Play className="size-6 ml-0.5" />
                     </span>
                   </div>
