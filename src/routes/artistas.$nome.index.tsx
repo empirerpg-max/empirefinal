@@ -119,7 +119,7 @@ function ArtistDashboard() {
     Promise.all([
       // Carrega TODOS os artistas para permitir visualizar qualquer perfil
       api.listarTodos().catch(() => []),
-      api.listTours().catch(() => []),
+      api.listTours(safeNome).catch(() => []),
       // Carrega artistas do usuário para verificar propriedade
       user && user.id !== "guest" ? api.meusArtistas(user.id).catch(() => []) : Promise.resolve([]),
     ]).then(([allArtists, toursList, myArtists]) => {

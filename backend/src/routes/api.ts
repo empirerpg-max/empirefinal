@@ -133,6 +133,7 @@ import {
   getMissoesController,
   getFeedGlobalController,
 } from "../controllers/tourController";
+import { getProjetosController } from "../controllers/projetosController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -237,6 +238,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/turnes/locais",
     "/api/turnes/simular",
     "/api/turnes",
+    "/api/projetos",
     "/api/turnes/detalhe",
     "/api/turnes/criar",
     "/api/turnes/acao",
@@ -793,6 +795,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     }
     response = await getTurnesController(request);
+  } else if (url.pathname === "/api/projetos") {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/projetos." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await getProjetosController(request);
   } else if (url.pathname === "/api/turnes/detalhe") {
     if (request.method !== "GET") {
       return new Response(

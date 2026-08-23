@@ -452,10 +452,6 @@ export const api = {
       return [];
     }
   },
-  async radar(): Promise<RadarItem[]> {
-    const data = await call<RadarItem[]>({ acao: "radar" }, { cache: true });
-    return Array.isArray(data) ? data : [];
-  },
   async projetos(nome: string): Promise<Projeto[]> {
     try {
       const res = await fetch(`/api/projetos?artista=${encodeURIComponent(nome)}`);
@@ -510,10 +506,6 @@ export const api = {
     invalidateCache();
     return call<CommonResponse>({ acao: "lance_leilao", ...p });
   },
-  async listarLeiloes(): Promise<unknown[]> {
-    const r = await call<unknown[]>({ acao: "leilao" }, { cache: true });
-    return Array.isArray(r) ? r : [];
-  },
   async payola(p: { nome: string; musica: string; valor: number }): Promise<CommonResponse> {
     invalidateCache();
     return call<CommonResponse>({ acao: "payola", ...p });
@@ -532,26 +524,6 @@ export const api = {
   },
 
   // ---- Empire Market ----
-  async listarCategoriasMarket(): Promise<string[]> {
-    const r = await call<unknown>({ acao: "listar_categorias_market" }, { cache: true });
-    if (Array.isArray(r)) return r.map((x) => String(x || "").trim()).filter(Boolean);
-    return [];
-  },
-  async listarMarket(): Promise<MarketItem[]> {
-    const r = await call<Record<string, unknown>[]>({ acao: "listar_market" }, { cache: true });
-    return Array.isArray(r)
-      ? r.map((x) => ({
-          categoria: String(x.categoria || ""),
-          item: String(x.item || ""),
-          preco: Number(x.preco || 0),
-          efeito: String(x.efeito || ""),
-        }))
-      : [];
-  },
-  async listarMural(): Promise<MuralItem[]> {
-    const r = await call<MuralItem[]>({ acao: "mural" }, { cache: true });
-    return Array.isArray(r) ? r : [];
-  },
   async comprarMarket(p: { nome: string; categoria: string; item: string }): Promise<CommonResponse> {
     invalidateCache();
     return call<CommonResponse>({ acao: "comprar_market", nome: p.nome, categoria: p.categoria, item: p.item });
@@ -559,10 +531,6 @@ export const api = {
   async comprarMural(p: { nome: string; id: string }): Promise<CommonResponse> {
     invalidateCache();
     return call<CommonResponse>({ acao: "comprar_item", nome: p.nome, id: p.id });
-  },
-  async meusBens(nome: string): Promise<BemItem[]> {
-    const r = await call<BemItem[]>({ acao: "meus_bens", nome }, { cache: true });
-    return Array.isArray(r) ? r : [];
   },
   async venderBem(p: { nome: string; id: string }): Promise<CommonResponse> {
     invalidateCache();
@@ -579,25 +547,6 @@ export const api = {
     invalidateCache();
     return call<CommonResponse>({ acao: "fundar_empresa", ...p });
   },
-  async listarEmpresas(): Promise<EmpresaBolsa[]> {
-    const r = await call<EmpresaBolsa[]>({ acao: "listar_empresas" }, { cache: true });
-    return Array.isArray(r) ? r : [];
-  },
-  async minhasEmpresas(telegramId: string): Promise<EmpresaBolsa[]> {
-    const r = await call<EmpresaBolsa[]>(
-      { acao: "minhas_empresas", telegram_id: telegramId },
-      { cache: true },
-    );
-    return Array.isArray(r) ? r : [];
-  },
-  async historicoBolsa(p: { nome?: string; limit?: number } = {}): Promise<BolsaLogItem[]> {
-    const r = await call<BolsaLogItem[]>(
-      { acao: "historico_bolsa", nome: p.nome || "", limit: p.limit || 120 },
-      { cache: true },
-    );
-    return Array.isArray(r) ? r : [];
-  },
-
   // ---- Empire TV ----
   // Migrado do Apps Script (TV_SCRIPT_URL) pro nosso backend — lê direto a
   // aba Programacao_RPG (planilha Agenda_TV) e já calcula "ao vivo agora"
@@ -665,16 +614,6 @@ export const api = {
       json: JSON.stringify(p.mensagens),
     }, { tv: true });
   },
-  async listarArquivoTV(): Promise<Array<{ data: string; hora: string; sala: string; total_msgs: number }>> {
-    const r = await call<any[]>({ acao: "listar_arquivo_tv" }, { cache: true, tv: true });
-    return Array.isArray(r) ? r.map((x) => ({
-      data: String(x.data || ""),
-      hora: String(x.hora || ""),
-      sala: String(x.sala || ""),
-      total_msgs: Number(x.total_msgs || 0),
-    })) : [];
-  },
-
   // ---- Álbuns (migrado do Apps Script pro Worker — reaproveita o mesmo
   // catálogo de "álbuns antigos" já servido por /api/albuns-antigos e
   // /api/playlists/albuns) ----
@@ -1056,14 +995,6 @@ export const api = {
   },
 
   // ---- Bet ----
-  async getMusicasBet(): Promise<{ semana: string; musicas: unknown[] } | null> {
-    const acoes = ["musicas_bet", "get_musicas_bet", "musicas_charts", "get_musicas_charts"];
-    for (const acao of acoes) {
-      const r = await call<{ semana: string; musicas: unknown[]; erro?: string }>({ acao }, { cache: true });
-      if (r && !r.erro && Array.isArray(r.musicas) && r.musicas.length > 0) return r;
-    }
-    return null;
-  },
   async bet(p: { nome: string; valor: number; semana: string; previsoes: string }): Promise<CommonResponse> {
     invalidateCache();
     return call<CommonResponse>({ acao: "bet", ...p });
@@ -1077,14 +1008,6 @@ export const api = {
     } catch {
       return [];
     }
-  },
-  async ranking(): Promise<Artist[]> {
-    const data = await call<Record<string, unknown>[]>({ acao: "ranking" }, { cache: true });
-    return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
-  },
-  async charts(): Promise<Artist[]> {
-    const data = await call<Record<string, unknown>[]>({ acao: "charts" }, { cache: true });
-    return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
   },
   async getAgendaTour(nome: string): Promise<any> {
     return call<any>({ acao: "agenda_tour", nome }, { cache: true });
