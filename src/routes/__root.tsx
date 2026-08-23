@@ -31,6 +31,7 @@ import {
   PlayCircle,
   Plus,
   LogOut,
+  ShoppingBag,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
@@ -765,8 +766,14 @@ function RootInner() {
                   },
                   { to: "/albuns", label: "Discografia", icon: Disc3 },
                   { to: "/empire-play/playlists", label: "Playlists", icon: ListMusic },
-                  { to: "/empire-play", label: "Catálogo", icon: PlayCircle },
                 ]}
+                onClose={() => setIsOpen(false)}
+              />
+
+              <MenuCategory
+                title="Negócios"
+                icon={ShoppingBag}
+                items={[{ to: "/market", label: "Market", icon: ShoppingBag }]}
                 onClose={() => setIsOpen(false)}
               />
 

@@ -8,15 +8,10 @@ import {
   Disc3,
   Wallet,
   Trophy,
-  Zap,
   Briefcase,
-  Flame,
-  HandHeart,
   X,
   Loader2,
   Building2,
-  Gavel,
-  Radio,
   FileX,
   TrendingUp,
   Lock,
@@ -30,7 +25,7 @@ import {
   Play,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
-import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type BemItem, type NivelJogador } from "@/lib/api";
+import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type NivelJogador } from "@/lib/api";
 import { getHOFProfile, type HOFProfile } from "@/lib/charts";
 import { notify } from "@/lib/notify";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -40,7 +35,7 @@ export const Route = createFileRoute("/artistas/$nome/")({
   component: ArtistDashboard,
 });
 
-type TabId = "geral" | "discografia" | "charts" | "tours" | "social" | "bens" | "gestao";
+type TabId = "geral" | "discografia" | "charts" | "tours" | "social" | "gestao";
 
 // Um único item de discografia, seja qual for a fonte (álbum próprio via
 // Gestao, publicado no catálogo Empire Play, ou legado/antigo) — mostrados
@@ -60,9 +55,7 @@ function ArtistDashboard() {
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("geral");
-  const [modal, setModal] = useState<
-    null | "viral" | "filantropia" | "payola" | "leilao" | "rescisao" | "composicao" | "imovel" | "foto"
-  >(null);
+  const [modal, setModal] = useState<null | "rescisao" | "foto">(null);
   const [albuns, setAlbuns] = useState<AlbumPayload[]>([]);
   const [discografia, setDiscografia] = useState<DiscoItem[]>([]);
   const [tourData, setTourData] = useState<any>(null);
@@ -200,7 +193,7 @@ function ArtistDashboard() {
       { id: "social", label: "Social" },
     ];
     if (isOwner) {
-      base.push({ id: "bens", label: "Bens" }, { id: "gestao", label: "Gestão" });
+      base.push({ id: "gestao", label: "Gestão" });
     }
     return base;
   }, [isOwner]);
@@ -322,14 +315,6 @@ function ArtistDashboard() {
               icon={<Briefcase className="size-3.5" />}
             />
           )}
-          <StatCompact
-            label="Fadiga Vocal"
-            value={artist.fadiga}
-            max={100}
-            icon={<Zap className="size-3.5" />}
-            color="text-rose-400"
-            reverse
-          />
           {artist.fortuna_vendas !== null && (
             <StatCardV2
               label="Fortuna Vendas"
@@ -366,7 +351,7 @@ function ArtistDashboard() {
         {isOwner && (
           <div className="grid grid-cols-3 gap-3">
             <QuickAction icon={<Disc3 className="size-6 text-purple-400" />} label="Álbum" id="btn-album" to="/empire-play/gestao" params={{ tab: "album", nome: artist.nome }} />
-            <QuickAction icon={<Mic2 className="size-6 text-emerald-400" />} label="Turnê" id="btn-tour" to="/acoes/tour" params={{ nome: artist.nome }} />
+            <QuickAction icon={<Mic2 className="size-6 text-emerald-400" />} label="Turnê" id="btn-tour" to="/tours" />
             <QuickAction icon={<Film className="size-6 text-blue-400" />} label="Cinema" id="btn-cinema" to="/acoes/cinema" params={{ nome: artist.nome }} />
           </div>
         )}
@@ -394,19 +379,12 @@ function ArtistDashboard() {
             {activeTab === "charts" && <ChartsTab nome={artist.nome} />}
             {activeTab === "tours" && <ToursProjetosTab nome={artist.nome} tourData={tourData} isOwner={isOwner} />}
             {activeTab === "social" && <SocialTab nome={artist.nome} />}
-            {isOwner && activeTab === "bens" && <BensTab nome={artist.nome} onComprar={() => setModal("imovel")} />}
             {isOwner && activeTab === "gestao" && <GestaoTab onAction={setModal} />}
           </div>
         </section>
       </div>
 
-      {isOwner && modal === "viral" && <ViralModal nome={artist.nome} onClose={() => setModal(null)} />}
-      {isOwner && modal === "filantropia" && <FilantropiaModal nome={artist.nome} onClose={() => setModal(null)} />}
-      {isOwner && modal === "payola" && <PayolaModal nome={artist.nome} onClose={() => setModal(null)} />}
-      {isOwner && modal === "leilao" && <LeilaoModal nome={artist.nome} onClose={() => setModal(null)} />}
       {isOwner && modal === "rescisao" && <RescisaoModal nome={artist.nome} onClose={() => setModal(null)} />}
-      {isOwner && modal === "composicao" && <ComposicaoModal nome={artist.nome} onClose={() => setModal(null)} />}
-      {isOwner && modal === "imovel" && <ImovelModal nome={artist.nome} onClose={() => setModal(null)} />}
       {isOwner && modal === "foto" && (
         <FotoModal nome={artist.nome} onClose={() => setModal(null)} onDone={() => window.location.reload()} />
       )}
@@ -870,127 +848,11 @@ function SocialTab({ nome }: { nome: string }) {
   );
 }
 
-// ---------- Aba: Bens (dono) ----------
-function BensTab({ nome, onComprar }: { nome: string; onComprar: () => void }) {
-  const [bens, setBens] = useState<BemItem[] | null>(null);
-  const [selling, setSelling] = useState<string | null>(null);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-
-  const load = () => api.meusBens(nome).then(setBens);
-  useEffect(() => { load(); }, [nome]);
-
-  async function vender(id: string) {
-    setSelling(id);
-    const r = await api.venderBem({ nome, id });
-    notify(r, { successFallback: "Bem vendido." });
-    setSelling(null);
-    setConfirmId(null);
-    load();
-  }
-
-  const total = bens?.reduce((s, b) => s + (b.status === "Vendido" ? 0 : b.valor), 0) || 0;
-  const CAT_ICON: Record<string, React.ReactNode> = {
-    IMOVEIS: <Building2 className="size-5" />,
-    MARKET: <Sparkles className="size-5" />,
-    CARREIRA: <Briefcase className="size-5" />,
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between px-1 mb-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Patrimônio total</p>
-          <p className="text-lg font-black text-primary">{fmtMoney(total)}</p>
-        </div>
-        <button onClick={onComprar} className="text-[10px] font-black text-primary uppercase">+ Comprar</button>
-      </div>
-
-      <div className="space-y-3">
-        {bens === null ? (
-          <div className="rounded-xl bg-card animate-pulse h-32" />
-        ) : bens.length === 0 ? (
-          <div className="p-8 rounded-2xl bg-card text-center">
-            <Building2 className="size-8 text-primary/40 mx-auto mb-3" />
-            <p className="font-extrabold text-sm mb-1">Nenhum bem ainda</p>
-            <p className="text-xs text-muted-foreground">Imóveis, mansões e itens duráveis aparecem aqui como patrimônio.</p>
-          </div>
-        ) : (
-          bens.map((b, i) => {
-            const id = b.id || String(i);
-            const ativo = b.status !== "Vendido";
-            return (
-              <div key={id} className={`p-4 rounded-xl bg-card flex items-center gap-3 ${!ativo ? "opacity-50" : ""}`}>
-                <div className="size-12 rounded-lg bg-primary/15 text-primary grid place-items-center shrink-0">
-                  {CAT_ICON[b.categoria] || <Sparkles className="size-5" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-extrabold text-sm truncate">{b.item}</p>
-                  <p className="text-xs text-muted-foreground">{b.categoria} • {b.data?.split("T")[0] || ""}</p>
-                  <p className="text-sm font-bold text-primary">{fmtEC(b.valor)}</p>
-                </div>
-                {ativo && b.id && (
-                  <button onClick={() => setConfirmId(b.id!)} disabled={selling === b.id} className="px-3 py-2 rounded-full bg-secondary text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50">
-                    {selling === b.id ? <Loader2 className="size-3 animate-spin" /> : null} Vender
-                  </button>
-                )}
-                {!ativo && <span className="text-[10px] uppercase font-bold text-muted-foreground">Vendido</span>}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {confirmId && (
-        <ConfirmSell
-          item={bens?.find((b) => b.id === confirmId)}
-          onCancel={() => setConfirmId(null)}
-          onConfirm={() => vender(confirmId)}
-          loading={selling === confirmId}
-        />
-      )}
-    </div>
-  );
-}
-
-function ConfirmSell({ item, onCancel, onConfirm, loading }: { item?: BemItem; onCancel: () => void; onConfirm: () => void; loading: boolean }) {
-  if (!item) return null;
-  const retorno = Math.floor(item.valor * 0.7);
-  return (
-    <div onClick={onCancel} className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm grid place-items-end sm:place-items-center p-0 sm:p-4">
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md bg-card rounded-t-2xl sm:rounded-2xl p-5 border border-border">
-        <h3 className="text-lg font-extrabold mb-1">Vender este bem?</h3>
-        <p className="text-sm text-muted-foreground mb-4">{item.item}</p>
-        <div className="rounded-xl bg-background p-4 mb-4 space-y-1">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Pagou</span>
-            <span className="font-bold">{fmtEC(item.valor)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Você recebe (70%)</span>
-            <span className="font-black text-primary">{fmtEC(retorno)}</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={onCancel} className="py-3 rounded-full bg-secondary font-bold text-sm uppercase tracking-wider">Cancelar</button>
-          <button onClick={onConfirm} disabled={loading} className="py-3 rounded-full bg-primary text-primary-foreground font-extrabold text-sm uppercase tracking-wider disabled:opacity-50 inline-flex items-center justify-center gap-2">
-            {loading && <Loader2 className="size-4 animate-spin" />} Vender
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ---------- Aba: Gestão (dono) ----------
-function GestaoTab({ onAction }: { onAction: (m: "viral" | "filantropia" | "payola" | "leilao" | "rescisao" | "composicao" | "foto") => void }) {
+function GestaoTab({ onAction }: { onAction: (m: "rescisao" | "foto") => void }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <MiniAction label="Trocar Foto" icon={<User />} onClick={() => onAction("foto")} color="text-sky-400" />
-      <MiniAction label="Viral" icon={<Flame />} onClick={() => onAction("viral")} color="text-rose-500" />
-      <MiniAction label="Payola" icon={<Radio />} onClick={() => onAction("payola")} color="text-primary" />
-      <MiniAction label="Filantropia" icon={<HandHeart />} onClick={() => onAction("filantropia")} color="text-emerald-500" />
-      <MiniAction label="Leilão" icon={<Gavel />} onClick={() => onAction("leilao")} color="text-amber-500" />
-      <MiniAction label="Vender Comp." icon={<Disc3 />} onClick={() => onAction("composicao")} color="text-purple-500" />
       <div className="col-span-2 mt-4 space-y-3">
         <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 px-1">Administrativo</h4>
         <div className="grid grid-cols-2 gap-3">
@@ -1077,54 +939,6 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 function inputCls() { return "w-full bg-background border border-border rounded-xl px-3 py-3 text-sm mb-2"; }
 function btnCls() { return "w-full py-3 rounded-full bg-primary text-primary-foreground font-extrabold uppercase tracking-wider text-sm disabled:opacity-50 inline-flex items-center justify-center gap-2 mt-2"; }
 
-function ViralModal({ nome, onClose }: { nome: string; onClose: () => void }) {
-  const [musica, setMusica] = useState("");
-  const [s, setS] = useState(false);
-  async function go() { if (!musica) return; setS(true); const r = await api.viral(nome, musica); const { ok } = notify(r, { successFallback: "Boost ativado!" }); setS(false); if (ok) onClose(); }
-  return (
-    <Modal title="Viralizar música" onClose={onClose}>
-      <input value={musica} onChange={(e) => setMusica(e.target.value)} placeholder="Nome exato da música" className={inputCls()} />
-      <button onClick={go} disabled={s || !musica} className={btnCls()}>{s && <Loader2 className="size-4 animate-spin" />} Confirmar</button>
-    </Modal>
-  );
-}
-
-function FilantropiaModal({ nome, onClose }: { nome: string; onClose: () => void }) {
-  const [causa, setCausa] = useState(""); const [valor, setValor] = useState(""); const [s, setS] = useState(false);
-  async function go() { if (!causa || !valor) return; setS(true); const r = await api.filantropia(nome, causa, valor); const { ok } = notify(r, { successFallback: "Doação enviada!" }); setS(false); if (ok) onClose(); }
-  return (
-    <Modal title="Filantropia" onClose={onClose}>
-      <input value={causa} onChange={(e) => setCausa(e.target.value)} placeholder="Causa" className={inputCls()} />
-      <input value={valor} onChange={(e) => setValor(e.target.value)} placeholder="Valor em $" className={inputCls()} />
-      <button onClick={go} disabled={s || !causa || !valor} className={btnCls()}>{s && <Loader2 className="size-4 animate-spin" />} Doar</button>
-    </Modal>
-  );
-}
-
-function PayolaModal({ nome, onClose }: { nome: string; onClose: () => void }) {
-  const [musica, setMusica] = useState(""); const [valor, setValor] = useState(""); const [s, setS] = useState(false);
-  async function go() { setS(true); const r = await api.payola({ nome, musica, valor: Number(valor) }); const { ok } = notify(r, { successFallback: "Payola ativada!" }); setS(false); if (ok) onClose(); }
-  return (
-    <Modal title="Payola" onClose={onClose}>
-      <input value={musica} onChange={(e) => setMusica(e.target.value)} placeholder="Nome da música" className={inputCls()} />
-      <input value={valor} onChange={(e) => setValor(e.target.value)} placeholder="Valor em $EC" className={inputCls()} type="number" />
-      <button onClick={go} disabled={s || !musica || !valor} className={btnCls()}>{s && <Loader2 className="size-4 animate-spin" />} Confirmar</button>
-    </Modal>
-  );
-}
-
-function LeilaoModal({ nome, onClose }: { nome: string; onClose: () => void }) {
-  const [descricao, setDescricao] = useState(""); const [lance, setLance] = useState(""); const [s, setS] = useState(false);
-  async function go() { setS(true); const r = await api.publicarLeilao({ nome, descricao, lanceMini: Number(lance) }); const { ok } = notify(r, { successFallback: "Leilão publicado!" }); setS(false); if (ok) onClose(); }
-  return (
-    <Modal title="Publicar Leilão" onClose={onClose}>
-      <input value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="O que está vendendo" className={inputCls()} />
-      <input value={lance} onChange={(e) => setLance(e.target.value)} placeholder="Lance mínimo $EC" className={inputCls()} type="number" />
-      <button onClick={go} disabled={s || !descricao || !lance} className={btnCls()}>{s && <Loader2 className="size-4 animate-spin" />} Publicar</button>
-    </Modal>
-  );
-}
-
 function RescisaoModal({ nome, onClose }: { nome: string; onClose: () => void }) {
   const [destino, setDestino] = useState("Independent"); const [s, setS] = useState(false);
   async function go() { setS(true); const r = await api.rescisao({ nome, destino }); const { ok } = notify(r, { successFallback: "Rescisão processada!" }); setS(false); if (ok) onClose(); }
@@ -1132,35 +946,6 @@ function RescisaoModal({ nome, onClose }: { nome: string; onClose: () => void })
     <Modal title="Rescindir Contrato" onClose={onClose}>
       <input value={destino} onChange={(e) => setDestino(e.target.value)} placeholder="Destino" className={inputCls()} />
       <button onClick={go} disabled={s || !destino} className={btnCls()}>{s && <Loader2 className="size-4 animate-spin" />} Confirmar</button>
-    </Modal>
-  );
-}
-
-function ComposicaoModal({ nome, onClose }: { nome: string; onClose: () => void }) {
-  const [titulo, setTitulo] = useState(""); const [preco, setPreco] = useState(""); const [s, setS] = useState(false);
-  async function go() { setS(true); const r = await api.venderComposicao({ nome, titulo, preco: Number(preco) }); const { ok } = notify(r, { successFallback: "Publicado no Mural!" }); setS(false); if (ok) onClose(); }
-  return (
-    <Modal title="Vender Composição" onClose={onClose}>
-      <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título" className={inputCls()} />
-      <input value={preco} onChange={(e) => setPreco(e.target.value)} placeholder="Preço $EC" className={inputCls()} type="number" />
-      <button onClick={go} disabled={s || !titulo || !preco} className={btnCls()}>{s && <Loader2 className="size-4 animate-spin" />} Publicar</button>
-    </Modal>
-  );
-}
-
-function ImovelModal({ nome, onClose }: { nome: string; onClose: () => void }) {
-  const [tipo, setTipo] = useState("Mansao"); const [cidade, setCidade] = useState(""); const [s, setS] = useState(false);
-  async function go() { setS(true); const r = await api.comprarImovel({ nome, tipo, cidade }); const { ok } = notify(r, { successFallback: "Imóvel adquirido!" }); setS(false); if (ok) onClose(); }
-  return (
-    <Modal title="Comprar Imóvel" onClose={onClose}>
-      <select value={tipo} onChange={(e) => setTipo(e.target.value)} className={inputCls()}>
-        <option value="Casa">Casa — $500k</option>
-        <option value="Apartamento">Apartamento — $1M</option>
-        <option value="Mansao">Mansão — $5M</option>
-        <option value="Penthouse">Penthouse — $10M</option>
-      </select>
-      <input value={cidade} onChange={(e) => setCidade(e.target.value)} placeholder="Cidade" className={inputCls()} />
-      <button onClick={go} disabled={s || !cidade} className={btnCls()}>{s && <Loader2 className="size-4 animate-spin" />} Comprar</button>
     </Modal>
   );
 }

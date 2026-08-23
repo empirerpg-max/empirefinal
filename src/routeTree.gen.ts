@@ -15,6 +15,7 @@ import { Route as AcessoRapidoRouteImport } from './routes/acesso-rapido'
 import { Route as AlbunsRouteImport } from './routes/albuns'
 import { Route as ChartsRouteImport } from './routes/charts'
 import { Route as EmpirePlayRouteImport } from './routes/empire-play'
+import { Route as MarketRouteImport } from './routes/market'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PremiacoesRouteImport } from './routes/premiacoes'
 import { Route as SocialRouteImport } from './routes/social'
@@ -80,6 +81,11 @@ const ChartsRoute = ChartsRouteImport.update({
 const EmpirePlayRoute = EmpirePlayRouteImport.update({
   id: '/empire-play',
   path: '/empire-play',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MarketRoute = MarketRouteImport.update({
+  id: '/market',
+  path: '/market',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PerfilRoute = PerfilRouteImport.update({
@@ -275,6 +281,7 @@ export interface FileRoutesByFullPath {
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
+  '/market': typeof MarketRoute
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
@@ -318,6 +325,7 @@ export interface FileRoutesByTo {
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
+  '/market': typeof MarketRoute
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
@@ -359,6 +367,7 @@ export interface FileRoutesById {
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
+  '/market': typeof MarketRoute
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
@@ -405,6 +414,7 @@ export interface FileRouteTypes {
     | '/albuns'
     | '/charts'
     | '/empire-play'
+    | '/market'
     | '/perfil'
     | '/premiacoes'
     | '/social'
@@ -448,6 +458,7 @@ export interface FileRouteTypes {
     | '/acesso-rapido'
     | '/albuns'
     | '/charts'
+    | '/market'
     | '/perfil'
     | '/premiacoes'
     | '/social'
@@ -488,6 +499,7 @@ export interface FileRouteTypes {
     | '/albuns'
     | '/charts'
     | '/empire-play'
+    | '/market'
     | '/perfil'
     | '/premiacoes'
     | '/social'
@@ -533,6 +545,7 @@ export interface RootRouteChildren {
   AlbunsRoute: typeof AlbunsRoute
   ChartsRoute: typeof ChartsRoute
   EmpirePlayRoute: typeof EmpirePlayRouteWithChildren
+  MarketRoute: typeof MarketRoute
   PerfilRoute: typeof PerfilRoute
   PremiacoesRoute: typeof PremiacoesRoute
   SocialRoute: typeof SocialRoute
@@ -593,6 +606,13 @@ declare module '@tanstack/react-router' {
       path: '/empire-play'
       fullPath: '/empire-play'
       preLoaderRoute: typeof EmpirePlayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/market': {
+      id: '/market'
+      path: '/market'
+      fullPath: '/market'
+      preLoaderRoute: typeof MarketRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/perfil': {
@@ -968,6 +988,7 @@ const rootRouteChildren: RootRouteChildren = {
   AlbunsRoute: AlbunsRoute,
   ChartsRoute: ChartsRoute,
   EmpirePlayRoute: EmpirePlayRouteWithChildren,
+  MarketRoute: MarketRoute,
   PerfilRoute: PerfilRoute,
   PremiacoesRoute: PremiacoesRoute,
   SocialRoute: SocialRoute,
