@@ -501,6 +501,7 @@ function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
               to="/tours/$nome"
               params={{ nome: item.artista }}
               search={{ id: item.idUnico }}
+              hash="central-noticias"
               className="block group"
             >
               <div className="rounded-3xl bg-card border border-white/5 overflow-hidden shadow-xl shadow-black/10 transition hover:scale-[1.01] active:scale-[0.98] hover:border-white/15">

@@ -137,6 +137,17 @@ function TourDetails() {
     return novos[novos.length - 1] || tours[tours.length - 1];
   }, [tours, idUnicoDaBusca]);
 
+  // Ao chegar aqui a partir de um card da Central de Notícias global (ver
+  // tours/index.tsx), leva direto pra seção "Central de notícias" desta
+  // turnê em vez de deixar o jogador no topo (hero + calendário) tendo que
+  // rolar manualmente até achar a novidade que ele clicou.
+  useEffect(() => {
+    if (!tour || typeof window === "undefined") return;
+    if (window.location.hash !== "#central-noticias") return;
+    const el = document.getElementById("central-noticias");
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [tour]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh]">
@@ -289,7 +300,7 @@ function TourDetails() {
               </div>
             </section>
 
-            <section>
+            <section id="central-noticias" className="scroll-mt-6">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1">
                 Central de notícias
               </h3>
