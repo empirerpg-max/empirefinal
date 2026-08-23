@@ -719,6 +719,8 @@ async function processarFaixasDoAlbum(
   dataFormatada: string,
 ) {
   const resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
+  let faixasIneditasEsperadas = 0;
+  let faixasIneditasGravadas = 0;
 
   for (const faixa of faixas) {
     if (!faixa.inedita) {
@@ -755,6 +757,7 @@ async function processarFaixasDoAlbum(
       ? `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${faixa.num}`
       : "";
 
+    faixasIneditasEsperadas++;
     try {
       await googleSheetsService.principal.appendRow("Musicas", [
         dataFormatada, // A - Data de lançamento
@@ -782,8 +785,10 @@ async function processarFaixasDoAlbum(
         "", // W - Média Metacritic
         pendente, // X - Pendente?
       ]);
+      faixasIneditasGravadas++;
     } catch (faixaErr) {
       console.warn("[processarFaixasDoAlbum] Erro ao registrar faixa inédita em Musicas:", faixaErr);
+      continue;
     }
 
     // Registrar em "EDIÇÃO CHARTS" (mesma lógica do createSongController) —
@@ -850,7 +855,7 @@ async function processarFaixasDoAlbum(
     }
   }
 
-  return resultadosFaixasExistentes;
+  return { resultadosFaixasExistentes, faixasIneditasEsperadas, faixasIneditasGravadas };
 }
 
 // Lista os álbuns já lançados na aba Albuns (planilha principal) — usado na
@@ -1160,14 +1165,14 @@ export async function substituirAlbumController(request: Request): Promise<Respo
 
     let resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
     if (novasFaixas.length > 0) {
-      resultadosFaixasExistentes = await processarFaixasDoAlbum(
+      ({ resultadosFaixasExistentes } = await processarFaixasDoAlbum(
         novasFaixas,
         albumFullTitle,
         artistaAlbum,
         novaCapaUrl,
         jogadorId,
         dataFormatada,
-      );
+      ));
 
       // Soma a quantidade de faixas novas ao total já registrado em
       // "EDIÇÃO CHARTS ÁLBUMS" (coluna E), em vez de sobrescrever.
@@ -1275,26 +1280,34 @@ export async function createAlbumController(request: Request): Promise<Response>
     const albumTopicId = `album_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     // 1. Processar cada faixa (existente ou inédita).
-    await processarFaixasDoAlbum(faixas, albumFullTitle, artistaAlbum, capaUrl, jogadorId, dataFormatada);
+    const { faixasIneditasEsperadas, faixasIneditasGravadas } = await processarFaixasDoAlbum(
+      faixas,
+      albumFullTitle,
+      artistaAlbum,
+      capaUrl,
+      jogadorId,
+      dataFormatada,
+    );
 
-    // 2. Gravar Álbum na planilha principal.
-    try {
-      await googleSheetsService.principal.appendRow("Albuns", [
-        dataFormatada, // A - Data de lançamento
-        albumTopicId, // B - ID do tópico
-        capaUrl || "", // C - Capa
-        albumTopicId, // D - Comentários para / Referente ao tópico
-        jogadorId || "", // E - ID do Criador
-        nomeJogador, // F - Nome do criador
-        albumFullTitle, // G - Novo Nome
-        "", // H - Metacritic por jogador
-        "", // I - Média Metacritic
-        encartesStr, // J - Encarte
-        tipoAlbum, // K - Tipo (EP/Álbum/Deluxe)
-      ]);
-    } catch (err) {
-      console.warn("[createAlbumController] Erro ao gravar em Albuns (Principal):", err);
-    }
+    // 2. Gravar Álbum na planilha principal — SEM engolir erro: se isso
+    // falhar, o álbum não existe de verdade no app (some do catálogo/Fórum
+    // mesmo as faixas tendo sido processadas), então precisa propagar pro
+    // catch de fora e responder success:false — antes isso era só um
+    // console.warn e a resposta final sempre dizia "sucesso", mesmo com o
+    // álbum nunca tendo sido de fato registrado.
+    await googleSheetsService.principal.appendRow("Albuns", [
+      dataFormatada, // A - Data de lançamento
+      albumTopicId, // B - ID do tópico
+      capaUrl || "", // C - Capa
+      albumTopicId, // D - Comentários para / Referente ao tópico
+      jogadorId || "", // E - ID do Criador
+      nomeJogador, // F - Nome do criador
+      albumFullTitle, // G - Novo Nome
+      "", // H - Metacritic por jogador
+      "", // I - Média Metacritic
+      encartesStr, // J - Encarte
+      tipoAlbum, // K - Tipo (EP/Álbum/Deluxe)
+    ]);
 
     // 3. Gravar em "EDIÇÃO CHARTS ÁLBUMS" (edicaoCharts) — aba separada da
     // "EDIÇÃO CHARTS" usada pelas faixas, confirmada via dump ao vivo. Já
@@ -1333,6 +1346,11 @@ export async function createAlbumController(request: Request): Promise<Response>
 
     await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
+    // Se alguma faixa inédita falhou ao gravar, o álbum FOI registrado (ele
+    // existe), mas com menos faixas do que o pedido — avisa isso na
+    // resposta em vez de dizer "sucesso" sem ressalva, pra não esconder
+    // faixa que sumiu silenciosamente.
+    const faixasIneditasFalharam = faixasIneditasEsperadas - faixasIneditasGravadas;
     return new Response(
       JSON.stringify({
         success: true,
@@ -1340,7 +1358,12 @@ export async function createAlbumController(request: Request): Promise<Response>
           titulo: albumFullTitle,
           artista: artistaAlbum,
           totalFaixas: faixas.length,
-          mensagem: "Álbum e faixas registrados com sucesso!",
+          faixasIneditasGravadas,
+          faixasIneditasEsperadas,
+          mensagem:
+            faixasIneditasFalharam > 0
+              ? `Álbum registrado, mas ${faixasIneditasFalharam} faixa(s) inédita(s) falharam ao gravar — confira e adicione de novo se precisar.`
+              : "Álbum e faixas registrados com sucesso!",
         },
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
