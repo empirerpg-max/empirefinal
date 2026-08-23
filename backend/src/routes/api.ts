@@ -83,6 +83,11 @@ import {
 } from "../controllers/playlistsInvestimentoController";
 import { listTvChatGifsController } from "../controllers/tvChatGifsController";
 import {
+  getPremiacoesAwardsController,
+  getPremiacoesCategoriasController,
+  postPremiacoesPreencherController,
+} from "../controllers/premiacoesController";
+import {
   getSocialPostsController,
   createSocialPostController,
   curtirSocialPostController,
@@ -234,6 +239,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/turnes/comentar",
     "/api/turnes/missoes",
     "/api/turnes/feed",
+    "/api/premiacoes/awards",
+    "/api/premiacoes/categorias",
+    "/api/premiacoes/preencher",
   ]);
 
   if (
@@ -833,6 +841,18 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     }
     response = await getFeedGlobalController(request);
+  } else if (url.pathname === "/api/premiacoes/awards") {
+    response = await getPremiacoesAwardsController();
+  } else if (url.pathname === "/api/premiacoes/categorias") {
+    response = await getPremiacoesCategoriasController(request);
+  } else if (url.pathname === "/api/premiacoes/preencher") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/preencher." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await postPremiacoesPreencherController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(

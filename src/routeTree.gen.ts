@@ -16,6 +16,7 @@ import { Route as AlbunsRouteImport } from './routes/albuns'
 import { Route as ChartsRouteImport } from './routes/charts'
 import { Route as EmpirePlayRouteImport } from './routes/empire-play'
 import { Route as PerfilRouteImport } from './routes/perfil'
+import { Route as PremiacoesRouteImport } from './routes/premiacoes'
 import { Route as SocialRouteImport } from './routes/social'
 import { Route as TutorialRouteImport } from './routes/tutorial'
 import { Route as TvRouteImport } from './routes/tv'
@@ -84,6 +85,11 @@ const EmpirePlayRoute = EmpirePlayRouteImport.update({
 const PerfilRoute = PerfilRouteImport.update({
   id: '/perfil',
   path: '/perfil',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PremiacoesRoute = PremiacoesRouteImport.update({
+  id: '/premiacoes',
+  path: '/premiacoes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SocialRoute = SocialRouteImport.update({
@@ -270,6 +276,7 @@ export interface FileRoutesByFullPath {
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
   '/perfil': typeof PerfilRoute
+  '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
@@ -312,6 +319,7 @@ export interface FileRoutesByTo {
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
   '/perfil': typeof PerfilRoute
+  '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
@@ -352,6 +360,7 @@ export interface FileRoutesById {
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
   '/perfil': typeof PerfilRoute
+  '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
@@ -397,6 +406,7 @@ export interface FileRouteTypes {
     | '/charts'
     | '/empire-play'
     | '/perfil'
+    | '/premiacoes'
     | '/social'
     | '/tutorial'
     | '/tv'
@@ -439,6 +449,7 @@ export interface FileRouteTypes {
     | '/albuns'
     | '/charts'
     | '/perfil'
+    | '/premiacoes'
     | '/social'
     | '/tutorial'
     | '/tv'
@@ -478,6 +489,7 @@ export interface FileRouteTypes {
     | '/charts'
     | '/empire-play'
     | '/perfil'
+    | '/premiacoes'
     | '/social'
     | '/tutorial'
     | '/tv'
@@ -522,6 +534,7 @@ export interface RootRouteChildren {
   ChartsRoute: typeof ChartsRoute
   EmpirePlayRoute: typeof EmpirePlayRouteWithChildren
   PerfilRoute: typeof PerfilRoute
+  PremiacoesRoute: typeof PremiacoesRoute
   SocialRoute: typeof SocialRoute
   TutorialRoute: typeof TutorialRoute
   TvRoute: typeof TvRoute
@@ -587,6 +600,13 @@ declare module '@tanstack/react-router' {
       path: '/perfil'
       fullPath: '/perfil'
       preLoaderRoute: typeof PerfilRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/premiacoes': {
+      id: '/premiacoes'
+      path: '/premiacoes'
+      fullPath: '/premiacoes'
+      preLoaderRoute: typeof PremiacoesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/social': {
@@ -949,6 +969,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChartsRoute: ChartsRoute,
   EmpirePlayRoute: EmpirePlayRouteWithChildren,
   PerfilRoute: PerfilRoute,
+  PremiacoesRoute: PremiacoesRoute,
   SocialRoute: SocialRoute,
   TutorialRoute: TutorialRoute,
   TvRoute: TvRoute,
