@@ -313,19 +313,29 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
   // Sem try/catch aqui de propósito — se a linha do álbum não gravar, ele
   // não existe de verdade, então a falha deve propagar e responder
   // ok:false, nunca fingir sucesso.
-  await googleSheetsService.usuarios.appendRow(SHEET_ALBUNS, [
-    albumId,
-    body.artista.trim(),
-    body.titulo.trim(),
-    body.genero?.trim() || "",
-    dataLancamento,
-    body.descricao?.trim() || "",
-    body.capa_url || "",
-    body.contracapa_url || "",
-    "[]",
-    body.telegram_id || "",
-    new Date().toISOString(),
-  ]);
+  //
+  // Range travado em "A:K" (não o default "A:ZZ") — com um range aberto, a
+  // API de append do Sheets às vezes "erra" a coluna de início quando tenta
+  // detectar os limites da tabela (bug real já visto: linha inteira
+  // gravada 8 colunas deslocada pra direita, começando em I em vez de A).
+  // Um range fechado do tamanho exato da linha elimina essa ambiguidade.
+  await googleSheetsService.usuarios.appendRow(
+    SHEET_ALBUNS,
+    [
+      albumId,
+      body.artista.trim(),
+      body.titulo.trim(),
+      body.genero?.trim() || "",
+      dataLancamento,
+      body.descricao?.trim() || "",
+      body.capa_url || "",
+      body.contracapa_url || "",
+      "[]",
+      body.telegram_id || "",
+      new Date().toISOString(),
+    ],
+    "A:K",
+  );
 
   // Isolamento por faixa: uma falha no meio da lista não pode travar as
   // faixas seguintes nem fazer o álbum voltar "ok:true" fingindo que todas
@@ -333,15 +343,19 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
   let faixasGravadas = 0;
   for (const f of body.faixas) {
     try {
-      await googleSheetsService.usuarios.appendRow(SHEET_FAIXAS, [
-        albumId,
-        String(f.numero || ""),
-        f.titulo.trim(),
-        f.artistas?.trim() || body.artista.trim(),
-        f.duracao || "",
-        f.drive_url.trim(),
-        f.letra || "",
-      ]);
+      await googleSheetsService.usuarios.appendRow(
+        SHEET_FAIXAS,
+        [
+          albumId,
+          String(f.numero || ""),
+          f.titulo.trim(),
+          f.artistas?.trim() || body.artista.trim(),
+          f.duracao || "",
+          f.drive_url.trim(),
+          f.letra || "",
+        ],
+        "A:G",
+      );
       faixasGravadas++;
     } catch (err) {
       console.warn("[criarAlbumAntigoController] Erro ao gravar faixa:", f.titulo, err);
@@ -423,15 +437,19 @@ export async function editarAlbumAntigoController(request: Request): Promise<Res
     }
   }
   for (const f of body.faixas) {
-    await googleSheetsService.usuarios.appendRow(SHEET_FAIXAS, [
-      id,
-      String(f.numero || ""),
-      f.titulo.trim(),
-      f.artistas?.trim() || body.artista.trim(),
-      f.duracao || "",
-      f.drive_url.trim(),
-      f.letra || "",
-    ]);
+    await googleSheetsService.usuarios.appendRow(
+      SHEET_FAIXAS,
+      [
+        id,
+        String(f.numero || ""),
+        f.titulo.trim(),
+        f.artistas?.trim() || body.artista.trim(),
+        f.duracao || "",
+        f.drive_url.trim(),
+        f.letra || "",
+      ],
+      "A:G",
+    );
   }
 
   return jsonResponse({ ok: true });
