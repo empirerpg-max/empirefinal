@@ -7,12 +7,29 @@
 const CHARTS_API = "/api/charts";
 
 // Cache em memória por URL — evita refetch repetido ao trocar de aba e
-// voltar (mesmo comportamento do app antigo).
+// voltar (mesmo comportamento do app antigo). Nunca guarda um resultado
+// vazio/erro: sem essa checagem, uma resposta vazia por instabilidade
+// transitória do backend ficava presa em cache pro resto da sessão (sem
+// TTL nenhum aqui), e a tela voltava vazia toda vez que era remontada —
+// só um reload completo (perdendo esse Map) resolvia de verdade.
 const cache = new Map<string, Promise<any>>();
+function isEmptyish(data: unknown): boolean {
+  if (data == null) return true;
+  if (Array.isArray(data)) return data.length === 0;
+  if (typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    if ("error" in obj) return true;
+  }
+  return false;
+}
 function fetchCached(url: string): Promise<any> {
   if (!cache.has(url)) {
     const p = fetch(url, { redirect: "follow" })
       .then((r) => r.json())
+      .then((data) => {
+        if (isEmptyish(data)) cache.delete(url);
+        return data;
+      })
       .catch((err) => {
         cache.delete(url);
         throw err;
