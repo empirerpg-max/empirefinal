@@ -764,7 +764,7 @@ function RootInner() {
                     label: "Empire Artists",
                     icon: Library,
                   },
-                  { to: "/albuns", label: "Discografia", icon: Disc3 },
+                  { to: "/empire-play/albuns", label: "Discografia", icon: Disc3 },
                   { to: "/empire-play/playlists", label: "Playlists", icon: ListMusic },
                 ]}
                 onClose={() => setIsOpen(false)}

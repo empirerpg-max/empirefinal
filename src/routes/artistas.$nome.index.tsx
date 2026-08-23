@@ -44,7 +44,7 @@ interface DiscoItem {
   key: string;
   titulo: string;
   capa_url?: string;
-  kind: "propria" | "catalogo" | "legado";
+  kind: "catalogo" | "legado";
   id: string;
 }
 
@@ -70,10 +70,9 @@ function ArtistDashboard() {
     const chave = (t: string) => t.trim().toLowerCase();
 
     Promise.all([
-      api.listarAlbuns(nome).catch(() => []),
       fetch(`/api/empire-play/albuns`).then((r) => r.json()).catch(() => null),
       api.listarAlbunsAntigos().catch(() => []),
-    ]).then(([proprios, catalogoRes, legados]) => {
+    ]).then(([catalogoRes, legados]) => {
       if (!alive) return;
       const catalogo = Array.isArray(catalogoRes?.data) ? catalogoRes.data : [];
       const catalogoDoArtista = catalogo.filter(
@@ -84,12 +83,6 @@ function ArtistDashboard() {
       const vistos = new Set<string>();
       const items: DiscoItem[] = [];
 
-      for (const a of proprios) {
-        const k = chave(a.titulo);
-        if (!a.titulo || vistos.has(k)) continue;
-        vistos.add(k);
-        items.push({ key: `p-${a.id}`, titulo: a.titulo, capa_url: a.capa_url, kind: "propria", id: a.id || "" });
-      }
       for (const a of catalogoDoArtista) {
         const titulo = a.title || a.titulo || "";
         const k = chave(titulo);
@@ -522,13 +515,6 @@ function DiscografiaTab({
                   <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.titulo}</p>
                 </>
               );
-              if (a.kind === "propria") {
-                return (
-                  <Link key={a.key} to="/album/$id" params={{ id: a.id }} className="group">
-                    {inner}
-                  </Link>
-                );
-              }
               if (a.kind === "legado") {
                 return (
                   <Link key={a.key} to="/empire-play/albuns-antigos/$id" params={{ id: a.id }} className="group">
