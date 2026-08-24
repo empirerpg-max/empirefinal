@@ -92,31 +92,6 @@ export interface AlbumPayload {
   telegram_id?: string;
 }
 
-export interface MarketItem {
-  categoria: string; // MARKET, IMOVEIS, CARREIRA, ...
-  item: string; // "Mansao", "Convite Met Gala"...
-  preco: number; // EC
-  efeito: string; // descrição livre
-}
-
-export interface MuralItem {
-  id: string;
-  vendedor: string;
-  titulo: string;
-  teaser: string;
-  preco: number;
-}
-
-export interface BemItem {
-  id?: string;
-  artista: string;
-  categoria: string;
-  item: string;
-  valor: number; // valor de compra ($)
-  data: string; // ISO
-  status?: string; // Ativo / Vendido
-}
-
 // ---- Bolsa de Valores ----
 export interface EmpresaBolsa {
   id: string;
@@ -410,38 +385,12 @@ export const api = {
     });
     return res.json();
   },
-  // A aba ARTISTAS (lida direto via Sheets API, nosso Worker) é a fonte
-  // PRINCIPAL da lista — garante que todo artista criado no app (mesmo
-  // segundos atrás) apareça na busca imediatamente. O Apps Script legado
-  // só complementa campos que a aba ainda não guarda prontos (saldo,
-  // seguidores, bio, gênero, país) quando achar o mesmo nome — nunca é
-  // usado como base, senão artista novo (ex: criado agora) some da busca
-  // até o Apps Script "descobrir" ele, o que podia nunca acontecer.
+  // Migrado do Apps Script legado — a aba ARTISTAS (Worker próprio) já
+  // guarda saldo/seguidores/vendas_total/descricao/genero/pais como colunas
+  // prontas, então uma única chamada a /api/artistas/listar-todos basta
+  // (ver getAllArtistasController). Não há mais fallback pro Apps Script —
+  // artista recém-criado aparece na hora, sem esperar o Apps Script.
   async listarTodos(): Promise<Artist[]> {
-    const [base, extras] = await Promise.all([
-      api.artistasDaAba(),
-      call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true }).catch(() => []),
-    ]);
-    const porNome = new Map(
-      (Array.isArray(extras) ? extras : []).map((a) => [normalizeNome(String((a as any).nome || "")), a]),
-    );
-    return base.map((a) => {
-      const e = porNome.get(normalizeNome(a.nome)) as Record<string, unknown> | undefined;
-      if (!e) return a;
-      return {
-        ...a,
-        saldo: Number(e.saldo || a.saldo || 0),
-        seguidores: Number(e.seguidores || a.seguidores || 0),
-        vendas_total: Number(e.vendas_total || a.vendas_total || 0),
-        descricao: a.descricao || (e.descricao as string) || "",
-        genero: a.genero || (e.genero as string) || "",
-        pais: a.pais || (e.pais as string) || "",
-      };
-    });
-  },
-  // Lista crua direto da aba ARTISTAS (Sheets API, sem passar pelo Apps
-  // Script) — fonte de verdade de posse e Fortuna.
-  async artistasDaAba(): Promise<Artist[]> {
     try {
       const res = await fetch("/api/artistas/listar-todos", { cache: "no-store" });
       if (!res.ok) return [];
@@ -472,81 +421,44 @@ export const api = {
     continente: string;
   }): Promise<CommonResponse> {
     invalidateCache();
-    return call<CommonResponse>({
-      acao: "compra_unificada_tour",
-      nome: p.nome,
-      tipo: p.tipo,
-      titulo: p.titulo,
-      dataInicio: p.dataInicio,
-      qtd: p.qtd,
-      continente: p.continente,
+    const res = await fetch("/api/turnes/comprar-simples", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
     });
-  },
-  async comprarCinema(p: {
-    nome: string;
-    titulo: string;
-    tipo: string;
-    genero: string;
-    dataInicio: string;
-  }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "compra_cinema", ...p });
-  },
-  async viral(nome: string, musica: string): Promise<CommonResponse> {
-    return call<CommonResponse>({ acao: "viral", artista: nome, musica });
-  },
-  async filantropia(nome: string, causa: string, valor: string): Promise<CommonResponse> {
-    return call<CommonResponse>({ acao: "filantropia", artista: nome, causa, valor });
-  },
-  async publicarLeilao(p: { nome: string; descricao: string; lanceMini: number }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "publicar_leilao", ...p });
-  },
-  async darLance(p: { nome: string; itemId: string | number; valor: number }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "lance_leilao", ...p });
-  },
-  async payola(p: { nome: string; musica: string; valor: number }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "payola", ...p });
+    const json = await res.json().catch(() => ({}));
+    return { ok: !!json.success, erro: json.error, message: json.error };
   },
   async rescisao(p: { nome: string; destino: string }): Promise<CommonResponse> {
     invalidateCache();
-    return call<CommonResponse>({ acao: "rescisao", ...p });
+    const res = await fetch("/api/artistas/rescisao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+    });
+    const json = await res.json().catch(() => ({}));
+    return { ok: !!json.ok, erro: json.erro, message: json.erro };
   },
-  async venderComposicao(p: { nome: string; titulo: string; preco: number }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "vender_composicao", ...p });
-  },
-  async comprarImovel(p: { nome: string; tipo: string; cidade: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "comprar_imovel", ...p });
-  },
-
-  // ---- Empire Market ----
-  async comprarMarket(p: { nome: string; categoria: string; item: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "comprar_market", nome: p.nome, categoria: p.categoria, item: p.item });
-  },
-  async comprarMural(p: { nome: string; id: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "comprar_item", nome: p.nome, id: p.id });
-  },
-  async venderBem(p: { nome: string; id: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "vender_bem", nome: p.nome, id: p.id });
-  },
-
   // ---- Bolsa de Valores ----
-  async fundarEmpresa(p: {
-    nome: string;
-    nomeEmpresa: string;
-    segmento: string;
-    investimento: number;
-  }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "fundar_empresa", ...p });
+  async listarEmpresas(): Promise<EmpresaBolsa[]> {
+    const r = await call<EmpresaBolsa[]>({ acao: "listar_empresas" }, { cache: true });
+    return Array.isArray(r) ? r : [];
   },
+  async minhasEmpresas(telegramId: string): Promise<EmpresaBolsa[]> {
+    const r = await call<EmpresaBolsa[]>(
+      { acao: "minhas_empresas", telegram_id: telegramId },
+      { cache: true },
+    );
+    return Array.isArray(r) ? r : [];
+  },
+  async historicoBolsa(p: { nome?: string; limit?: number } = {}): Promise<BolsaLogItem[]> {
+    const r = await call<BolsaLogItem[]>(
+      { acao: "historico_bolsa", nome: p.nome || "", limit: p.limit || 120 },
+      { cache: true },
+    );
+    return Array.isArray(r) ? r : [];
+  },
+
   // ---- Empire TV ----
   // Migrado do Apps Script (TV_SCRIPT_URL) pro nosso backend — lê direto a
   // aba Programacao_RPG (planilha Agenda_TV) e já calcula "ao vivo agora"
@@ -606,14 +518,16 @@ export const api = {
       return [];
     }
   },
-  async salvarChatTV(p: { programa_id: string; mensagens: Array<{ user: string; text: string; ts: number; reply_to?: { id: string; user: string; text: string } }>; total_msgs: number }): Promise<CommonResponse> {
-    return call<CommonResponse>({
-      acao: "salvar_chat_tv",
-      sala: p.programa_id,
-      total_msgs: String(p.total_msgs),
-      json: JSON.stringify(p.mensagens),
-    }, { tv: true });
+  async listarArquivoTV(): Promise<Array<{ data: string; hora: string; sala: string; total_msgs: number }>> {
+    const r = await call<any[]>({ acao: "listar_arquivo_tv" }, { cache: true, tv: true });
+    return Array.isArray(r) ? r.map((x) => ({
+      data: String(x.data || ""),
+      hora: String(x.hora || ""),
+      sala: String(x.sala || ""),
+      total_msgs: Number(x.total_msgs || 0),
+    })) : [];
   },
+
   // ---- Álbuns (migrado do Apps Script pro Worker — reaproveita o mesmo
   // catálogo de "álbuns antigos" já servido por /api/albuns-antigos e
   // /api/playlists/albuns) ----
@@ -648,17 +562,29 @@ export const api = {
       return [];
     }
   },
+  // Reaproveita o mesmo endpoint de edição de "álbuns antigos"
+  // (/api/playlists/albuns/editar) — getAlbum/listarAlbuns/lancarAlbum já
+  // usam esse catálogo (SHEET_ALBUNS), então editar precisa ir pro mesmo
+  // lugar, senão a edição fica invisível pra quem lê o álbum depois.
   async editarAlbum(payload: AlbumPayload): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "editar_album", payload: JSON.stringify(payload) });
-  },
-  async editarFaixaAlbum(payload: { album_id: string; numero: number; [key: string]: any }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "editar_faixa_album", payload: JSON.stringify(payload) });
-  },
-  async excluirAlbum(id: string, telegramId?: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "excluir_album", id, telegram_id: telegramId || "" });
+    const res = await fetch("/api/playlists/albuns/editar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: payload.id || "",
+        tgId: payload.telegram_id || "",
+        artista: payload.artista,
+        titulo: payload.titulo,
+        genero: payload.genero,
+        data: payload.data,
+        descricao: payload.descricao,
+        capa_url: payload.capa_url,
+        contracapa_url: payload.contracapa_url,
+        faixas: payload.faixas,
+      }),
+    });
+    const json = await res.json().catch(() => ({ ok: false }));
+    return { ok: !!json.ok, message: json.error, erro: json.error };
   },
 
   // ---- Playlists (migrado do Apps Script pro Worker) ----
@@ -995,10 +921,6 @@ export const api = {
   },
 
   // ---- Bet ----
-  async bet(p: { nome: string; valor: number; semana: string; previsoes: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "bet", ...p });
-  },
   async listTours(artista?: string): Promise<any[]> {
     try {
       const qs = artista ? `?artista=${encodeURIComponent(artista)}` : "";
@@ -1008,13 +930,6 @@ export const api = {
     } catch {
       return [];
     }
-  },
-  async getAgendaTour(nome: string): Promise<any> {
-    return call<any>({ acao: "agenda_tour", nome }, { cache: true });
-  },
-  async vincularImagemTour(nome: string, url: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "vincular_imagem_tour", nome, url });
   },
   // Artistas livres (sem dono) vêm direto da aba ARTISTAS (Worker próprio) —
   // não mais do Apps Script legado, que ficava desconectado da fonte que
@@ -1244,126 +1159,6 @@ export const api = {
     return Array.isArray(data) ? data : [];
   },
 
-  // ---- Games & Economy ----
-  async syncGameCoins(
-    tgId: string,
-    wager: number,
-    won: number,
-    gameContext?: string,
-    artistName?: string,
-  ): Promise<CommonResponse & { novoSaldo?: number }> {
-    invalidateCache();
-    return call<CommonResponse & { novoSaldo?: number }>({
-      acao: "sync_game_coins",
-      telegram_id: tgId,
-      wager,
-      won,
-      gameContext,
-      artistName,
-    });
-  },
-  async savePetState(tgId: string, payload: string): Promise<CommonResponse> {
-    return call<CommonResponse>({ acao: "save_pet_state", telegram_id: tgId, payload });
-  },
-  async getPetState(tgId: string): Promise<CommonResponse & { payload?: string; lastUpdate?: number }> {
-    return call<CommonResponse & { payload?: string; lastUpdate?: number }>({
-      acao: "get_pet_state",
-      telegram_id: tgId,
-    });
-  },
-
-  // ---- Queridômetro ----
-  async getQueridometroStatus(tgId: string): Promise<
-    CommonResponse & {
-      meuPerfil?: any;
-      artistas?: any[];
-      artistasAlvos?: any[];
-      meusArtistas?: any[];
-      ranking?: any[];
-      votosRestantes?: number;
-      reacoesRecebidas?: any[];
-      reacoesPublicas?: Array<{ para?: string; fotoPara?: string; emoji?: string; data?: string }>;
-      configEmojis?: any[];
-      semana?: string;
-    }
-  > {
-    return call({ acao: "queridometro_status", tgId });
-  },
-  async postQueridometroVoto(
-    tgId: string,
-    de: string,
-    para: string,
-    emoji: string,
-  ): Promise<CommonResponse & { msg?: string }> {
-    return call({ acao: "queridometro_votar", tgId, de, para, emoji });
-  },
-
-  // ---- PONTO (pontos + playlists por planilha externa) ----
-  async getJogador(tgId: string): Promise<{ nomeOff?: string; artistas?: string[]; erro?: string }> {
-    return call({ acao: "ponto_get_jogador", tgId });
-  },
-  async listarPontosJogador(tgId: string): Promise<{
-    colunas?: string[];
-    editaveis?: string[];
-    linhas?: Array<{ linha: number; artista: string; valores: Record<string, any> }>;
-    erro?: string;
-  }> {
-    return call({ acao: "ponto_listar_pontos", tgId });
-  },
-  async salvarCelulaPontos(p: { tgId: string; linha: number; coluna: string; valor: any }): Promise<CommonResponse> {
-    invalidateCache();
-    return call({ acao: "ponto_salvar_celula", tgId: p.tgId, linha: p.linha, coluna: p.coluna, valor: p.valor });
-  },
-  async distribuirPontosAleatorio(tgId: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call({ acao: "ponto_distribuir_aleatorio", tgId });
-  },
-  async listarPlaylistsJogador(tgId: string): Promise<{
-    colunas?: string[];
-    editaveis?: string[];
-    linhas?: Array<{ linha: number; artista: string; valores: Record<string, any> }>;
-    erro?: string;
-  }> {
-    return call({ acao: "ponto_listar_playlists", tgId });
-  },
-  async salvarCelulaPlaylist(p: { tgId: string; linha: number; coluna: string; valor: any }): Promise<CommonResponse> {
-    invalidateCache();
-    return call({
-      acao: "ponto_salvar_playlist_celula",
-      tgId: p.tgId,
-      linha: p.linha,
-      coluna: p.coluna,
-      valor: p.valor,
-    });
-  },
-  async distribuirPlaylistsAuto(tgId: string): Promise<CommonResponse & { resumo?: string }> {
-    invalidateCache();
-    return call({ acao: "ponto_distribuir_playlists_auto", tgId });
-  },
-
-  // ---- PONTO Playlists ECOIN ----
-  async listarMusicasEdicao(tgId: string): Promise<{
-    musicas?: Array<{ linha: number; musica: string; artista: string }>;
-    erro?: string;
-  }> {
-    return call({ acao: "ponto_listar_musicas_edicao", tgId });
-  },
-  async saldoEcoin(tgId: string): Promise<{
-    saldos?: Record<string, any>;
-    erro?: string;
-  }> {
-    return call({ acao: "ponto_saldo_ecoin", tgId });
-  },
-  async salvarPlaylistEcoin(p: {
-    tgId: string;
-    musica: string;
-    artista: string;
-    plataforma: string;
-    playlist: string;
-  }): Promise<CommonResponse & { saldo?: any; linha?: number }> {
-    invalidateCache();
-    return call({ acao: "ponto_salvar_playlist_ecoin", ...p });
-  },
 };
 
 export interface ChartData {

@@ -7,7 +7,7 @@ import {
   ensureSheetTab,
 } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
-import { getArtistNamesForOwner, creditarFortunaTurnes } from "./artistasController";
+import { getArtistNamesForOwner, creditarFortunaTurnes, getOwnerIdForArtist } from "./artistasController";
 
 // Percentual do arrecadado em turnê (tempo real) que vira Fortuna Turnês do
 // artista quando a turnê finaliza — meio-termo entre 60% e 70% acordado.
@@ -483,6 +483,128 @@ export async function criarTurneController(request: Request): Promise<Response> 
   } catch (err) {
     console.error("[criarTurneController] Erro:", err);
     return jsonError("Falha ao criar a turnê.", 500);
+  }
+}
+
+interface ComprarTurneSimplesPayload {
+  nome?: string; // artista
+  tipo?: string; // porte (Indie/Arena/Estádio) — mesma "categoria" de DADOS_TOUR
+  titulo?: string; // nome da turnê
+  dataInicio?: string; // yyyy-mm-dd (vem de <input type="date">)
+  qtd?: number; // total de shows
+  continente?: string;
+}
+
+// POST /api/turnes/comprar-simples — substitui o antigo "compra_unificada_tour"
+// do Apps Script: em vez do jogador escolher local a local (como em
+// criarTurneController/api/turnes/criar), aqui só escolhe porte + continente
+// + quantidade e os locais são preenchidos automaticamente a partir de
+// DADOS_TOUR, ciclando pela lista se qtd > locais disponíveis na combinação.
+export async function comprarTurneSimplesController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as ComprarTurneSimplesPayload;
+    const artista = normalizeText(body.nome);
+    const tipo = normalizeText(body.tipo);
+    const nomeTurne = normalizeText(body.titulo);
+    const continente = normalizeText(body.continente);
+    const qtd = Math.max(1, Math.min(100, Number(body.qtd) || 0));
+
+    if (!artista || !tipo || !nomeTurne || !continente || !qtd) {
+      return jsonError("nome, tipo, titulo, continente e qtd são obrigatórios.");
+    }
+
+    const telegramId = await getOwnerIdForArtist(artista);
+    if (!telegramId) {
+      return jsonError("Artista não encontrado ou sem dono.", 404);
+    }
+
+    const todosLocais = await readLocais();
+    let candidatos = todosLocais.filter(
+      (l) => normalizeComparison(l.categoria) === normalizeComparison(tipo) && normalizeComparison(l.continente) === normalizeComparison(continente),
+    );
+    if (candidatos.length === 0) {
+      candidatos = todosLocais.filter((l) => normalizeComparison(l.categoria) === normalizeComparison(tipo));
+    }
+    if (candidatos.length === 0) {
+      return jsonError("Nenhum local disponível pra esse porte/continente.");
+    }
+
+    // Ciclamos pela lista de candidatos até completar `qtd` shows.
+    const escolhidos: LocalTurne[] = Array.from({ length: qtd }, (_, i) => candidatos[i % candidatos.length]);
+
+    const inicioRaw = body.dataInicio ? new Date(body.dataInicio) : new Date();
+    const inicio = Number.isNaN(inicioRaw.getTime()) ? new Date() : inicioRaw;
+    const intervaloDias = 5;
+
+    const agenda: TourShow[] = escolhidos.map((local, i) => {
+      const data = new Date(inicio);
+      data.setDate(data.getDate() + i * intervaloDias);
+      return {
+        numero: i + 1,
+        data: formatDataBR(data),
+        local: local.local,
+        cidade: local.cidade,
+        categoria: local.categoria,
+        capacidade: local.capacidade,
+        vendidos: 0,
+        precoIngresso: local.precoIngresso,
+        repasseIngresso: local.repasseIngresso,
+        lucroMaximo: local.capacidade * local.repasseIngresso,
+        receita: 0,
+        status: "Agendado",
+        soldOut: false,
+        acoes: [],
+      };
+    });
+
+    const ultimaData = agenda[agenda.length - 1]?.data || formatDataBR(inicio);
+    const idUnico = `${artista}${telegramId}_${Date.now()}`;
+    const lucroMaximoTotal = escolhidos.reduce((s, l) => s + l.capacidade * l.repasseIngresso, 0);
+    const metaLucro = Math.round(lucroMaximoTotal * BASELINE_SELLTHROUGH);
+
+    const row = TOUR_HEADERS.map((key) => {
+      switch (key) {
+        case "id_usuario":
+          return telegramId;
+        case "artista":
+          return artista;
+        case "id_unico":
+          return idUnico;
+        case "nome_da_turne":
+          return nomeTurne;
+        case "porte":
+          return tipo;
+        case "total_de_shows":
+          return agenda.length;
+        case "data_inicio":
+          return formatDataBR(inicio);
+        case "data_termino":
+          return ultimaData;
+        case "agenda":
+          return JSON.stringify(agenda);
+        case "arrecadacao_em_tempo_real":
+          return 0;
+        case "status":
+          return "Planejando";
+        case "show_atual":
+          return "";
+        case "show_anterior":
+          return "";
+        case "capa":
+          return "";
+        case "meta_de_lucro":
+          return metaLucro;
+        default:
+          return "";
+      }
+    });
+
+    await googleSheetsService.usuarios.appendRow(TOURS_SHEET, row);
+
+    return jsonOk({ idUnico, agenda });
+  } catch (err) {
+    console.error("[comprarTurneSimplesController] Erro:", err);
+    return jsonError("Falha ao comprar a turnê.", 500);
   }
 }
 
