@@ -402,6 +402,34 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário, só leitura: investiga por que as capas dos cards de
+    // Charts na Home não aparecem (usuário reportou "lendo posição em vez
+    // de capa"). Dump da linha mais recente crua de BILLBOARD HOT 100 e do
+    // getBannerN1s já processado. Será removido depois.
+    if (url.pathname === "/api/debug/charts-capa" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      const rows = await googleSheetsService.chartsBase.readValues("BILLBOARD HOT 100");
+      const header = rows[0] || [];
+      const body = rows.slice(1).filter((r) => r[1] && r[2]);
+      const parseDateBR = (s: string) => {
+        const p = (s || "").split("/");
+        return p.length === 3 ? new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0])) : new Date(s || 0);
+      };
+      let latestDate = new Date(0);
+      body.forEach((r) => {
+        const d = parseDateBR(r[1]);
+        if (d > latestDate) latestDate = d;
+      });
+      const latest = body.filter((r) => parseDateBR(r[1]).getTime() === latestDate.getTime());
+      latest.sort((a, b) => Number(a[2]) - Number(b[2]));
+      const row = latest[0];
+      return Response.json({
+        header,
+        row,
+        rowIndexed: row ? Object.fromEntries(row.map((v, i) => [i, v])) : null,
+      });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
