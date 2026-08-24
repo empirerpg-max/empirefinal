@@ -557,7 +557,14 @@ export async function processarParticipacaoTV(): Promise<{
 
   for (const grupo of grupos) {
     const key = grupo.chave;
-    if (processados.has(key)) continue;
+    const chaveLegada = `${grupo.data}|${grupo.programa}`;
+    // Linhas gravadas em TV_Participacao_Processada ANTES da mudança pra
+    // chave por sala (Topico_ID) usavam só "data|programa" — sem checar
+    // também esse formato antigo, toda transmissão já processada antes
+    // dessa mudança nunca batia com a chave nova, e o cron reprocessava ela
+    // do zero a cada 10 minutos, gravando um REGISTRO novo mesmo depois do
+    // usuário apagar o anterior.
+    if (processados.has(key) || processados.has(chaveLegada)) continue;
     if (!grupo.endTs || now < grupo.endTs + bufferMs) continue; // ainda não acabou (ou falta a folga de segurança)
     if (!grupo.tipoEvento) {
       console.warn(`[processarParticipacaoTV] "${key}" sem TIPO_EVENTO — pulando.`);
