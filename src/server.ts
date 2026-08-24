@@ -402,35 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: correção pontual do prestígio de "chat_tv" (removido
-    // do código — a pedido do usuário). Idempotente, será removido depois.
-    if (url.pathname === "/api/debug/corrigir-chat-tv" && request.method === "GET") {
-      const { corrigirPrestigioChatTV } = await import("../backend/src/services/prestigioService");
-      const resultado = await corrigirPrestigioChatTV();
-      return Response.json(resultado);
-    }
-
-    // Debug temporário: correção pontual do prestígio duplicado de
-    // "assistir_tv" (lote de linhas de teste na Agenda_TV processadas uma
-    // por ciclo do cron). Idempotente, será removido depois.
-    if (url.pathname === "/api/debug/corrigir-assistir-tv" && request.method === "GET") {
-      const { corrigirPrestigioAssistirTvDuplicado } = await import("../backend/src/services/prestigioService");
-      const resultado = await corrigirPrestigioAssistirTvDuplicado();
-      return Response.json(resultado);
-    }
-
-    // Debug temporário, só leitura: inspeciona o log de prestígio cru e
-    // também TV_Participacao_Processada, pra investigar duplicação de
-    // assistir_tv/chat_tv. Será removido depois.
-    if (url.pathname === "/api/debug/prestigio-log" && request.method === "GET") {
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const [logRows, processadoRows] = await Promise.all([
-        googleSheetsService.usuarios.readValues("Prestigio_Log"),
-        googleSheetsService.agendaTV.readValues("TV_Participacao_Processada"),
-      ]);
-      return Response.json({ log: logRows, processado: processadoRows });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
