@@ -46,11 +46,11 @@ async function registrarNaEdicaoCharts(params: {
   artistaPrincipal: string;
   participantes?: string[]; // até 5 (ARTISTA 2-6)
   albunsExtras?: string[]; // até 4 (ALBUM 2-5) — música em mais de um álbum
-}): Promise<void> {
+}): Promise<number | null> {
   const participantesLimpos = (params.participantes || []).filter(Boolean).slice(0, 5);
   const albunsExtrasLimpos = (params.albunsExtras || []).filter(Boolean).slice(0, 4);
   try {
-    await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
+    return await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
       params.dataFormatada, // A - Data de lançamento
       params.fullTitle, // B - Nome (Artista - Título)
       params.tipoSingle || "", // C - TIPO DE SINGLE
@@ -71,7 +71,30 @@ async function registrarNaEdicaoCharts(params: {
     ]);
   } catch (err) {
     console.warn("[registrarNaEdicaoCharts] Erro ao gravar em EDIÇÃO CHARTS:", err);
+    return null;
   }
+}
+
+// Lê de volta o "Código único" gerado por ARRAYFORMULA (EDIÇÃO CHARTS,
+// coluna BD) logo após o appendRow que disparou a fórmula — o Sheets
+// normalmente já recalcula na mesma escrita, mas por segurança tenta de
+// novo uma vez com um pequeno atraso antes de desistir (nunca bloqueia o
+// fluxo principal: se não achar, quem chama só deixa o código em branco).
+async function lerCodigoUnicoGerado(rowIndex: number): Promise<string> {
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    try {
+      const rows = await googleSheetsService.edicaoCharts.readValues(
+        "EDIÇÃO CHARTS",
+        `BD${rowIndex}:BD${rowIndex}`,
+      );
+      const codigo = (rows?.[0]?.[0] || "").trim();
+      if (codigo) return codigo;
+    } catch (err) {
+      console.warn("[lerCodigoUnicoGerado] Erro ao ler código único:", err);
+    }
+    if (tentativa === 1) await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return "";
 }
 
 const INFOS_MUSICAS_SHEET = "INFOS MÚSICAS";
@@ -253,8 +276,9 @@ export async function createSongController(request: Request): Promise<Response> 
     // ALBUM, WEEKS, WEEKS VIDEO, ACT PRINCIPAL, ARTISTA 2-6, GÊNERO, Ordem,
     // Metacritic por jogador, Média Metacritic, Pendente?, Referência
     // (Substituição/Vínculo) — só preenchida quando opcaoChart é (b) ou (c)).
+    let musicaRowIndexNova: number | null = null;
     try {
-      await googleSheetsService.principal.appendRow("Musicas", [
+      musicaRowIndexNova = await googleSheetsService.principal.appendRow("Musicas", [
         dataFormatada, // A - Data de lançamento
         topicId, // B - ID do tópico
         mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
@@ -290,7 +314,7 @@ export async function createSongController(request: Request): Promise<Response> 
     // entrava nessa aba, então nunca ganhava o "Código único" (EMP00X, que
     // é gerado sozinho por uma ARRAYFORMULA na coluna BD assim que a
     // coluna B é preenchida).
-    await registrarNaEdicaoCharts({
+    const edicaoChartsRowIndex = await registrarNaEdicaoCharts({
       dataFormatada,
       fullTitle,
       tipoSingle: tipoSingle || "LEAD SINGLE",
@@ -298,6 +322,18 @@ export async function createSongController(request: Request): Promise<Response> 
       artistaPrincipal,
       participantes: participantesLimpos,
     });
+    // Leva o Código único (gerado pela fórmula em EDIÇÃO CHARTS!BD) de volta
+    // pro catálogo (Musicas!Z) — é essa cópia que permite achar o conteúdo
+    // certo do chart a partir de um comentário no fórum sem depender de
+    // comparar título como texto (ver registroLogController.ts).
+    if (musicaRowIndexNova && edicaoChartsRowIndex) {
+      const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+      if (codigoGerado) {
+        await googleSheetsService.principal
+          .updateValues("Musicas", `Z${musicaRowIndexNova}`, [[codigoGerado]])
+          .catch((err) => console.warn("[createSongController] Erro ao copiar Código único pra Musicas!Z:", err));
+      }
+    }
     if (pendente !== "Sim") {
       await registrarInfosMusicas({ fullTitle, capaUrl });
     }
@@ -454,8 +490,9 @@ export async function createVideoController(request: Request): Promise<Response>
     // Video" foram unificados numa única aba/formulário de Gestão; a tag
     // ("Tipo de vídeo") vinda do formulário define a categoria exibida no
     // catálogo (incluindo "Music Video" como uma das opções).
+    let videoRowIndexNovo: number | null = null;
     try {
-      await googleSheetsService.principal.appendRow("Music Videos", [
+      videoRowIndexNovo = await googleSheetsService.principal.appendRow("Music Videos", [
         "", // A - ID do usuário
         fullTitle, // B - Título do tópico
         "", // C - ID da mensagem (grupo original)
@@ -479,6 +516,26 @@ export async function createVideoController(request: Request): Promise<Response>
       ]);
     } catch (err) {
       console.warn("[createVideoController] Erro ao gravar em Music Videos:", err);
+    }
+
+    // Music Videos não gera Código único próprio — sempre usa o da música
+    // vinculada em EDIÇÃO CHARTS (coluna P aponta pro título de lá). Acha
+    // essa linha por título (única opção aqui, já que o vínculo em si só
+    // existe como texto) e copia o código pra Music Videos!U.
+    if (videoRowIndexNovo) {
+      try {
+        const nomeNosCharts = normalizeComparison(musicaVinculada || fullTitle);
+        const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
+        const linhaMusica = rows.slice(1).find((r) => normalizeComparison(r[1]) === nomeNosCharts);
+        const codigoDaMusica = linhaMusica ? (linhaMusica[55] || "").trim() : "";
+        if (codigoDaMusica) {
+          await googleSheetsService.principal
+            .updateValues("Music Videos", `U${videoRowIndexNovo}`, [[codigoDaMusica]])
+            .catch((err) => console.warn("[createVideoController] Erro ao copiar Código único pra Music Videos!U:", err));
+        }
+      } catch (err) {
+        console.warn("[createVideoController] Erro ao buscar Código único da música vinculada:", err);
+      }
     }
 
     // 2. Audit Log em REGISTRO
@@ -1295,7 +1352,7 @@ export async function createAlbumController(request: Request): Promise<Response>
     // catch de fora e responder success:false — antes isso era só um
     // console.warn e a resposta final sempre dizia "sucesso", mesmo com o
     // álbum nunca tendo sido de fato registrado.
-    await googleSheetsService.principal.appendRow("Albuns", [
+    const albumRowIndexNovo = await googleSheetsService.principal.appendRow("Albuns", [
       dataFormatada, // A - Data de lançamento
       albumTopicId, // B - ID do tópico
       capaUrl || "", // C - Capa
@@ -1328,6 +1385,14 @@ export async function createAlbumController(request: Request): Promise<Response>
         "", // Q - CÁLCULO 1
         codigoUnico, // R - Código único
       ]);
+      // Como esse código é gerado pelo próprio app (não por fórmula), já
+      // temos o valor em mãos — leva a mesma cópia pro catálogo (Albuns!L),
+      // sem precisar reler nada.
+      if (albumRowIndexNovo) {
+        await googleSheetsService.principal
+          .updateValues("Albuns", `L${albumRowIndexNovo}`, [[codigoUnico]])
+          .catch((err) => console.warn("[createAlbumController] Erro ao copiar Código único pra Albuns!L:", err));
+      }
     } catch (err) {
       console.warn("[createAlbumController] Erro ao gravar em EDIÇÃO CHARTS ÁLBUMS:", err);
     }
