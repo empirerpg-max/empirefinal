@@ -600,12 +600,15 @@ function SocialPage() {
                     setViewMode(tab.id);
                     if (tab.id === "Industry") setSelectedIndustryArtist(null);
                   }}
-                  className={`py-2.5 min-h-11 font-black text-[10px] uppercase rounded-xl transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
-                    active ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground hover:text-foreground"
+                  className={`relative py-2.5 min-h-11 font-black text-[10px] uppercase rounded-xl transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
+                    active
+                      ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+                      : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06] hover:text-foreground"
                   }`}
                 >
-                  <Icon className="size-3.5" />
-                  <span className="truncate">{tab.label}</span>
+                  {active && <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+                  <Icon className="relative z-10 size-3.5" />
+                  <span className="relative z-10 truncate">{tab.label}</span>
                 </button>
               );
             })}

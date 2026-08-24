@@ -129,33 +129,42 @@ function AcervoPage() {
             haptic.selection();
             setTab("revistas");
           }}
-          className={`flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all ${
-            tab === "revistas" ? "bg-primary text-primary-foreground" : "bg-white/5 text-muted-foreground border border-white/10"
+          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+            tab === "revistas"
+              ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+              : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
           }`}
         >
-          <BookOpen className="size-3.5" /> Revistas
+          {tab === "revistas" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+          <BookOpen className="relative z-10 size-3.5" /> <span className="relative z-10">Revistas</span>
         </button>
         <button
           onClick={() => {
             haptic.selection();
             setTab("entrevistas");
           }}
-          className={`flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all ${
-            tab === "entrevistas" ? "bg-primary text-primary-foreground" : "bg-white/5 text-muted-foreground border border-white/10"
+          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+            tab === "entrevistas"
+              ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+              : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
           }`}
         >
-          <MessageSquareText className="size-3.5" /> Entrevistas
+          {tab === "entrevistas" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+          <MessageSquareText className="relative z-10 size-3.5" /> <span className="relative z-10">Entrevistas</span>
         </button>
         <button
           onClick={() => {
             haptic.selection();
             setTab("forbes");
           }}
-          className={`flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all ${
-            tab === "forbes" ? "bg-primary text-primary-foreground" : "bg-white/5 text-muted-foreground border border-white/10"
+          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+            tab === "forbes"
+              ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+              : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
           }`}
         >
-          <Crown className="size-3.5" /> Forbes
+          {tab === "forbes" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+          <Crown className="relative z-10 size-3.5" /> <span className="relative z-10">Forbes</span>
         </button>
       </div>
 
