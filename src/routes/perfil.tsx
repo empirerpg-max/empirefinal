@@ -307,6 +307,10 @@ function Perfil() {
                     alt={a.nome}
                     loading="lazy"
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src =
+                        "https://images.unsplash.com/photo-1514525253361-bee8718a300c?w=400&h=400&fit=crop";
+                    }}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
