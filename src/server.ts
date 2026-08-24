@@ -601,6 +601,39 @@ export default {
       return Response.json(resultado);
     }
 
+    // Debug temporário: isola qual coluna exata (B, C ou D) dispara o erro
+    // de "protected cell", escrevendo em cada uma separadamente numa linha
+    // bem distante do conteúdo real (linha 50), via values.update direto
+    // (não append) — já que OVERWRITE e INSERT_ROWS deram o mesmo erro no
+    // range B:D inteiro, precisa descobrir se é uma coluna específica ou o
+    // range combinado B:D que dispara.
+    if (url.pathname === "/api/debug/isola-coluna-protegida" && request.method === "GET") {
+      const gs = await import("../backend/src/services/googleSheetsService");
+      const { getGoogleAccessToken } = await import("../backend/src/google/service-account");
+      const accessToken = await getGoogleAccessToken(["https://www.googleapis.com/auth/spreadsheets"]);
+      const spreadsheetId = gs.SPREADSHEETS.registrosCharts;
+      const resultado: Record<string, unknown> = {};
+
+      async function testaCelula(col: string, valor: string) {
+        const a1Range = encodeURIComponent(`'REGISTRO'!${col}50`);
+        const res = await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1Range}?valueInputOption=USER_ENTERED`,
+          {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ majorDimension: "ROWS", values: [[valor]] }),
+          },
+        );
+        return { status: res.status, body: await res.text() };
+      }
+
+      resultado.colunaB = await testaCelula("B", "TESTE-CLAUDE-B").catch((e) => String(e));
+      resultado.colunaC = await testaCelula("C", "Rayna - who would i be without you").catch((e) => String(e));
+      resultado.colunaD = await testaCelula("D", "ESPECIAIS (CAPA DE REVISTA, REVIEWS, PHOTOSHOOTS)").catch((e) => String(e));
+
+      return Response.json(resultado);
+    }
+
     // Debug temporário: lê as últimas linhas da planilha de LOGS didáticos,
     // pra ver se a falha de escrita em REGISTRO (testa-registro-real) foi
     // capturada automaticamente com o erro real da API do Google Sheets.
