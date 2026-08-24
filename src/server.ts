@@ -425,6 +425,14 @@ export default {
       });
     }
 
+    // Debug temporário, só leitura: expõe o e-mail da service account (pra
+    // o usuário saber com quem compartilhar as planilhas). Será removido
+    // depois.
+    if (url.pathname === "/api/debug/service-account-email" && request.method === "GET") {
+      const { getServiceAccountEmail } = await import("../backend/src/google/service-account");
+      return Response.json({ email: getServiceAccountEmail() });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
