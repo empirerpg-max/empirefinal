@@ -511,7 +511,28 @@ export async function getAllArtistasController(): Promise<Response> {
         porNome.set(chave, artista);
       }
     }
-    const data = Array.from(porNome.values());
+    let data = Array.from(porNome.values());
+
+    // A coluna "foto" da própria aba ARTISTAS é esparsa — a foto "oficial",
+    // mantida pelo dono do artista, vive em INFOS ACTS (planilha
+    // registrosCharts, ver getArtistInfoController). O antigo Apps Script
+    // legado usava essa fonte mais completa; a migração pro backend Cloudflare
+    // passou a ler só ARTISTAS!foto, deixando vários artistas sem imagem.
+    // Preenche aqui o que faltar, sem sobrescrever quem já tem foto na
+    // própria aba.
+    const semFoto = data.filter((a) => !a.foto.trim());
+    if (semFoto.length > 0) {
+      const infosRows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+      const fotoPorNome = new Map<string, string>();
+      for (const row of infosRows.slice(1)) {
+        const nome = normalizeComparison(row[0]);
+        const foto = normalizeText(row[2]);
+        if (nome && foto && !fotoPorNome.has(nome)) fotoPorNome.set(nome, foto);
+      }
+      data = data.map((a) =>
+        a.foto.trim() ? a : { ...a, foto: fotoPorNome.get(normalizeComparison(a.nome)) || "" },
+      );
+    }
 
     return new Response(JSON.stringify({ success: true, data }), {
       status: 200,
