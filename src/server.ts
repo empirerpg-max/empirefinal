@@ -359,7 +359,23 @@ export default {
 
     injectRuntimeEnv(env);
 
-    const empirePlayResponse = await handleEmpireApiRoutes(request);
+    // Sem esse try/catch, qualquer controller de backend que deixasse uma
+    // exceção escapar (leitura de planilha falhando, etc) virava um erro cru
+    // do Worker em vez de uma resposta JSON — o frontend não tinha como
+    // distinguir isso de "deu tudo certo, só não tem dado", e a tela
+    // mostrava vazio em vez de um erro real pra tentar de novo.
+    let empirePlayResponse: Response | null;
+    try {
+      empirePlayResponse = await handleEmpireApiRoutes(request);
+    } catch (error) {
+      console.error("[handleEmpireApiRoutes] Erro não tratado:", error);
+      empirePlayResponse = url.pathname.startsWith("/api/")
+        ? new Response(JSON.stringify({ success: false, error: "Erro interno no servidor." }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          })
+        : null;
+    }
     if (empirePlayResponse) {
       return empirePlayResponse;
     }

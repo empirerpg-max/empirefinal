@@ -228,7 +228,13 @@ export async function readValues(
     return await fetchGVizCsv(spreadsheetId, sheetName);
   } catch (err) {
     console.error(`[googleSheetsService] Erro ao ler "${sheetName}" via GViz CSV:`, err);
-    return [];
+    // Antes devolvia [] em silêncio aqui — indistinguível de "a aba está
+    // vazia mesmo", fazendo qualquer tela do app parecer "sem dados" quando
+    // na real as duas formas de ler a planilha falharam (ex: pico de
+    // chamadas na API do Sheets ao atualizar/voltar demais em pouco tempo).
+    // Propaga o erro de verdade — quem chama decide se quer .catch(()=>[])
+    // (tolerante) ou deixar subir pra virar um erro real na resposta.
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }
 
