@@ -569,6 +569,38 @@ export default {
       return Response.json(resultado);
     }
 
+    // Debug temporário: mesmo teste de escrita em REGISTRO, mas com
+    // insertDataOption=INSERT_ROWS em vez de OVERWRITE, pra ver se o erro
+    // de "protected cell" some (hipótese: o OVERWRITE escolhe uma linha já
+    // ocupada pela fórmula protegida da coluna E e esbarra nela).
+    if (url.pathname === "/api/debug/raw-write-test-insert" && request.method === "GET") {
+      const gs = await import("../backend/src/services/googleSheetsService");
+      const resultado: Record<string, unknown> = {};
+      try {
+        const spreadsheetId = gs.SPREADSHEETS.registrosCharts;
+        const a1Range = encodeURIComponent(`'REGISTRO'!B:D`);
+        const accessToken = await (await import("../backend/src/google/service-account")).getGoogleAccessToken([
+          "https://www.googleapis.com/auth/spreadsheets",
+        ]);
+        const res = await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              majorDimension: "ROWS",
+              values: [["TESTE-CLAUDE-INSERT", "Rayna - who would i be without you", "ESPECIAIS (CAPA DE REVISTA, REVIEWS, PHOTOSHOOTS)"]],
+            }),
+          },
+        );
+        resultado.registroInsertStatus = res.status;
+        resultado.registroInsertBody = await res.text();
+      } catch (err: any) {
+        resultado.registroInsertErro = String(err?.message || err);
+      }
+      return Response.json(resultado);
+    }
+
     // Debug temporário: lê as últimas linhas da planilha de LOGS didáticos,
     // pra ver se a falha de escrita em REGISTRO (testa-registro-real) foi
     // capturada automaticamente com o erro real da API do Google Sheets.
