@@ -20,7 +20,7 @@ import {
   api,
   driveImg,
   driveRawImg,
-  fmtEC,
+  fmtMoney,
   type Artist,
   type NivelJogador,
   type PlaylistPayload,
@@ -311,7 +311,9 @@ function Perfil() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-black uppercase truncate">{a.nome}</p>
-                  <p className="text-[11px] font-bold text-primary/80">{fmtEC(a.saldo)}</p>
+                  {a.fortuna_total !== null && (
+                    <p className="text-[11px] font-bold text-primary/80">{fmtMoney(a.fortuna_total)}</p>
+                  )}
                 </div>
                 <ChevronRight className="size-4 text-muted-foreground" />
               </Link>

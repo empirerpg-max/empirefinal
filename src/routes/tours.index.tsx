@@ -160,6 +160,7 @@ function ToursIndex() {
   const [minhasTurnes, setMinhasTurnes] = useState<TourCard[] | null>(null);
   const [meusArtistas, setMeusArtistas] = useState<string[]>([]);
   const [publicas, setPublicas] = useState<TourCard[] | null>(null);
+  const [publicasError, setPublicasError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [missoes, setMissoes] = useState<Missao[] | null>(null);
@@ -173,6 +174,22 @@ function ToursIndex() {
       .then((res) => {
         if (res?.success) setMinhasTurnes(res.data || []);
       });
+  }
+
+  // Uma requisição que falha (ex: pico de chamadas na API do Sheets ao
+  // atualizar/voltar demais em pouco tempo) não pode virar "está vazio" pro
+  // jogador — sem isso a tela parece ter perdido tudo quando é só uma falha
+  // passageira, e não tem como saber que precisa tentar de novo.
+  function loadPublicas() {
+    setPublicasError(false);
+    fetch("/api/turnes")
+      .then((r) => r.json())
+      .then((res) => {
+        if (res?.success) setPublicas(res.data || []);
+        else setPublicasError(true);
+      })
+      .catch(() => setPublicasError(true))
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => {
@@ -189,12 +206,7 @@ function ToursIndex() {
   }, [telegramId]);
 
   useEffect(() => {
-    fetch("/api/turnes")
-      .then((r) => r.json())
-      .then((res) => {
-        if (res?.success) setPublicas(res.data || []);
-      })
-      .finally(() => setLoading(false));
+    loadPublicas();
     fetch("/api/turnes/feed?limit=15")
       .then((r) => r.json())
       .then((res) => {
@@ -302,7 +314,19 @@ function ToursIndex() {
             <h2 className="text-[11px] font-black uppercase text-neutral-400 mb-3 pl-1">
               Turnês em Andamento
             </h2>
-            {publicas === null ? (
+            {publicasError ? (
+              <div className="rounded-2xl bg-destructive/5 border border-dashed border-destructive/20 p-6 text-center">
+                <p className="text-sm text-muted-foreground mb-3">
+                  Não conseguimos carregar as turnês agora.
+                </p>
+                <button
+                  onClick={loadPublicas}
+                  className="text-[11px] font-black uppercase tracking-wider text-primary underline"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            ) : publicas === null ? (
               <div className="flex justify-center py-8 opacity-50">
                 <Loader2 className="size-6 animate-spin" />
               </div>

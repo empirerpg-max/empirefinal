@@ -1029,7 +1029,13 @@ export const api = {
   async listarPostsSocial(): Promise<any[]> {
     const res = await fetch("/api/social/posts");
     const data = await res.json().catch(() => null);
-    return Array.isArray(data) ? data : [];
+    // Se o corpo não for um array (ex: {error:...} de uma falha no backend),
+    // não pode virar [] em silêncio — isso faria a home mostrar "nenhuma
+    // publicação ainda" quando na verdade a request falhou. Deixa o erro
+    // propagar pro chamador tratar como falha de verdade.
+    if (!res.ok) throw new Error(`listarPostsSocial: ${res.status}`);
+    if (!Array.isArray(data)) throw new Error("listarPostsSocial: resposta inválida");
+    return data;
   },
   async salvarPostSocial(payload: any, tgId: string): Promise<CommonResponse> {
     const res = await fetch("/api/social/posts", {
