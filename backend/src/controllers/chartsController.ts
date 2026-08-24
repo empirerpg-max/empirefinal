@@ -40,7 +40,11 @@ function fmt(v: unknown): string {
 // qualquer link drive.google.com pelo proxy autenticado (resolveImg).
 function fixImg(u: unknown): string {
   const s = String(u ?? "");
-  if (!s || s === "-") return "https://via.placeholder.com/400";
+  // "" vazio faz o frontend usar o próprio fallback visual (ícone/estrela)
+  // — devolver uma URL fixa aqui (como era antes, "via.placeholder.com",
+  // serviço desativado há tempos) faz o <img> tentar carregar um link morto
+  // e sempre falhar, mesmo quando a capa é legitimamente vazia.
+  if (!s || s === "-") return "";
   const m = s.match(/[-\w]{25,}/);
   return m ? `https://drive.google.com/thumbnail?id=${m[0]}&sz=s1000` : s;
 }
