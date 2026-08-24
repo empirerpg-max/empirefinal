@@ -446,11 +446,15 @@ export async function setArtistFotoController(request: Request): Promise<Respons
 export async function getAllArtistasController(): Promise<Response> {
   try {
     const rows = await readArtistasRows();
+    // A coluna "foto" da aba costuma vir com "-" como placeholder de "vazio"
+    // (em vez de célula em branco) — sem tratar isso como vazio, o fallback
+    // pra INFOS ACTS logo abaixo nunca disparava.
+    const fotoValida = (v: string) => (/^[-—]+$/.test(v.trim()) ? "" : v);
     const mapped = rows
       .filter((r) => r.rec["nome"])
       .map((r) => ({
         nome: r.rec["nome"],
-        foto: r.rec["foto"] || "",
+        foto: fotoValida(r.rec["foto"] || ""),
         status: r.rec["status"] || "Livre",
         saldo: r.rec["saldo"] || "0",
         gravadora: r.rec["gravadora"] || "Independent",
