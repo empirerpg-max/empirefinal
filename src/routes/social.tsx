@@ -699,7 +699,7 @@ function SocialPage() {
                       key={post.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`${card} p-4 sm:p-5 ${isMine ? "border-primary/30 bg-primary/[0.04]" : ""}`}
+                      className={`${card} p-4 sm:p-5 backdrop-blur-xl shadow-[0_10px_40px_-20px_rgba(0,0,0,0.6)] ${isMine ? "border-primary/30 bg-primary/[0.04]" : ""}`}
                     >
                       <div
                         className="cursor-pointer"
@@ -711,7 +711,7 @@ function SocialPage() {
                       >
                         <div className="flex items-center justify-between mb-3.5 gap-2">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="size-10 rounded-full overflow-hidden flex-shrink-0 bg-secondary border border-white/10 flex items-center justify-center font-black">
+                            <div className="size-10 rounded-full overflow-hidden flex-shrink-0 bg-secondary border border-white/10 flex items-center justify-center font-black ring-1 ring-primary/20">
                               {post.avatar ? (
                                 <img
                                   loading="lazy"
@@ -748,7 +748,7 @@ function SocialPage() {
                         </div>
 
                         {post.tipo === "Instagram" && post.subtipo === "Story" ? (
-                          <div className="relative aspect-[9/16] max-h-[26rem] bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10">
+                          <div className="relative aspect-[9/16] max-h-[26rem] bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_50px_-25px_rgba(0,0,0,0.7)]">
                             {post.media_url ? (
                               <PostMedia
                                 url={post.media_url}
@@ -769,7 +769,7 @@ function SocialPage() {
                           </div>
                         ) : (
                           post.media_url && (
-                            <div className="aspect-square bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10">
+                            <div className="aspect-square bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_50px_-25px_rgba(0,0,0,0.7)]">
                               <PostMedia
                                 url={post.media_url}
                                 tipo={post.media_tipo}
@@ -786,7 +786,7 @@ function SocialPage() {
                       <div className="flex items-center gap-5 pt-3 border-t border-white/5">
                         <button
                           onClick={() => handleLike(post.id)}
-                          className="flex items-center gap-1.5 font-black text-xs min-h-9 active:scale-90 transition-transform"
+                          className="flex items-center gap-1.5 font-black text-xs min-h-9 px-2.5 rounded-full active:scale-90 transition-transform hover:bg-white/5"
                         >
                           <motion.span
                             animate={likedPulse === post.id ? { scale: [1, 1.4, 1] } : { scale: 1 }}
@@ -806,11 +806,11 @@ function SocialPage() {
                             loadComments(post.id);
                             setIsCommentModalOpen(true);
                           }}
-                          className="flex items-center gap-1.5 font-black text-xs text-muted-foreground min-h-9 active:scale-90 transition-transform"
+                          className="flex items-center gap-1.5 font-black text-xs text-muted-foreground min-h-9 px-2.5 rounded-full active:scale-90 transition-transform hover:bg-white/5"
                         >
                           <MessageCircle className="size-4" /> {post.analytics.comments}
                         </button>
-                        <button className="flex items-center gap-1.5 font-black text-xs text-muted-foreground min-h-9 active:scale-90 transition-transform">
+                        <button className="flex items-center gap-1.5 font-black text-xs text-muted-foreground min-h-9 px-2.5 rounded-full active:scale-90 transition-transform hover:bg-white/5">
                           <Share2 className="size-4" />
                         </button>
                         {post.telegram_id && String(post.telegram_id) === String(user?.id || "") && (
