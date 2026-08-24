@@ -10,6 +10,11 @@ import {
 } from "@/lib/charts";
 import { resolveImg } from "@/lib/api";
 
+type CategoryId = "hot100" | "spotify" | "apple" | "youtube" | "albums" | "sales";
+type TabId = "home" | "live" | CategoryId;
+
+const VALID_TABS: TabId[] = ["home", "live", "hot100", "spotify", "apple", "youtube", "albums", "sales"];
+
 export const Route = createFileRoute("/charts")({
   head: () => ({
     meta: [
@@ -17,11 +22,11 @@ export const Route = createFileRoute("/charts")({
       { name: "description", content: "Charts oficiais do Empire — Hot 100, Spotify, Apple, YouTube e mais." },
     ],
   }),
+  validateSearch: (s: Record<string, unknown>): { tab?: TabId } => ({
+    tab: VALID_TABS.includes(s.tab as TabId) ? (s.tab as TabId) : undefined,
+  }),
   component: ChartsPage,
 });
-
-type CategoryId = "hot100" | "spotify" | "apple" | "youtube" | "albums" | "sales";
-type TabId = "home" | "live" | CategoryId;
 
 interface CategoryConfig {
   id: CategoryId;
@@ -68,7 +73,8 @@ function ChartsBubbleBackdrop() {
 }
 
 function ChartsPage() {
-  const [tab, setTab] = useState<TabId>("home");
+  const { tab: tabFromUrl } = Route.useSearch();
+  const [tab, setTab] = useState<TabId>(tabFromUrl || "home");
   const category = CATEGORIES.find((c) => c.id === tab) || null;
 
   return (
