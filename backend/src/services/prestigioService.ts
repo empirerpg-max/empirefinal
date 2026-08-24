@@ -266,3 +266,71 @@ export async function getNivelAtual(identificador: {
 
   return { prestigioAtual, nivelAtual, proximoNivel, progresso };
 }
+
+const CORRECAO_CHAT_TV_MARCADOR = "correcao_remove_chat_tv";
+
+export interface CorrecaoChatTVResultado {
+  jaAplicado: boolean;
+  corrigidos: { telegramId: string; usuario: string; valorRevertido: number; saldoAntes: number; saldoDepois: number }[];
+}
+
+/**
+ * Correção pontual, de uso único: reverte todo o prestígio já concedido pela
+ * chave "chat_tv" (removida do código — contava mensagem de chat de
+ * qualquer momento da transmissão, inclusive retroativo/antigo, e não dava
+ * pra impedir spam de comentário por comentário). Usa o Prestigio_Log como
+ * fonte de verdade pra saber exatamente quanto cada jogador ganhou por essa
+ * chave, e desconta isso do saldo atual. Idempotente: se já rodou uma vez
+ * (log tem uma entrada com a chave de correção), não roda de novo.
+ */
+export async function corrigirPrestigioChatTV(): Promise<CorrecaoChatTVResultado> {
+  const logRows = await googleSheetsService.usuarios.readValues(PRESTIGIO_LOG_SHEET).catch(() => []);
+  if (!logRows || logRows.length < 2) return { jaAplicado: false, corrigidos: [] };
+
+  const jaAplicado = logRows.slice(1).some((r) => normalizeText(r[3]) === CORRECAO_CHAT_TV_MARCADOR);
+  if (jaAplicado) return { jaAplicado: true, corrigidos: [] };
+
+  const porUsuario = new Map<string, { telegramId: string; usuario: string; total: number }>();
+  for (const row of logRows.slice(1)) {
+    if (normalizeText(row[3]) !== "chat_tv") continue;
+    const telegramId = normalizeText(row[1]);
+    const usuario = normalizeText(row[2]);
+    const chave = telegramId || usuario;
+    if (!chave) continue;
+    const valor = parseInt(normalizeText(row[4]), 10) || 0;
+    const atual = porUsuario.get(chave) || { telegramId, usuario, total: 0 };
+    atual.total += valor;
+    porUsuario.set(chave, atual);
+  }
+
+  const corrigidos: CorrecaoChatTVResultado["corrigidos"] = [];
+  for (const { telegramId, usuario, total } of porUsuario.values()) {
+    if (total <= 0) continue;
+    const usuarioRow = await findUsuarioRow({
+      telegramId: telegramId || undefined,
+      usuario: usuario || undefined,
+    });
+    if (!usuarioRow) continue;
+    const prestigioColIndex = usuarioRow.headers.indexOf("prestigio");
+    if (prestigioColIndex === -1) continue;
+
+    const saldoAntes = parseInt(usuarioRow.rec["prestigio"] || "0", 10) || 0;
+    const saldoDepois = Math.max(0, saldoAntes - total);
+    const colLetter = colIndexToA1Letter(prestigioColIndex);
+    await googleSheetsService.usuarios.updateValues(
+      USUARIOS_SHEET,
+      `${colLetter}${usuarioRow.rowIndex}`,
+      [[saldoDepois]],
+    );
+    await registrarLogPrestigio(
+      { telegramId, usuario },
+      CORRECAO_CHAT_TV_MARCADOR,
+      -(saldoAntes - saldoDepois),
+      saldoAntes,
+      saldoDepois,
+    );
+    corrigidos.push({ telegramId, usuario, valorRevertido: saldoAntes - saldoDepois, saldoAntes, saldoDepois });
+  }
+
+  return { jaAplicado: false, corrigidos };
+}
