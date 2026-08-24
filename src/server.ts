@@ -402,6 +402,29 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário, só leitura: dump exato (com índice de coluna) das
+    // linhas deslocadas em Playlists_Albuns e Playlists_Faixas, pra
+    // construir o script de correção com precisão (não por estimativa de
+    // print). Será removido depois.
+    if (url.pathname === "/api/debug/legado-raw" && request.method === "GET") {
+      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
+      const [albunsRows, faixasRows] = await Promise.all([
+        googleSheetsService.usuarios.readValues("Playlists_Albuns"),
+        googleSheetsService.usuarios.readValues("Playlists_Faixas"),
+      ]);
+      const dump = (rows: string[][]) =>
+        rows.slice(1).map((r, i) => ({
+          sheetRow: i + 2,
+          firstNonEmptyIdx: r.findIndex((c) => normalizeText(c)),
+          indexed: Object.fromEntries(r.map((v, idx) => [idx, normalizeText(v)])),
+        }));
+      const albunsShifted = dump(albunsRows).filter((r) => r.firstNonEmptyIdx > 0);
+      const faixasShifted = dump(faixasRows).filter(
+        (r) => r.firstNonEmptyIdx > 0 || Object.values(r.indexed).some((v) => /^ALB-/i.test(v)),
+      );
+      return Response.json({ albunsShifted, faixasShifted });
+    }
+
     // Debug temporário, só leitura: os 4 álbuns (MAJOR BEAT, Tekkno Tribal,
     // Too Young To Die, Love$ick) não aparecem na aba "Albuns" (planilha
     // principal, fluxo novo de criação). Hipótese: foram cadastrados pelo
