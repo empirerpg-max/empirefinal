@@ -597,16 +597,14 @@ export async function processarParticipacaoTV(): Promise<{
       await gravarRegistroParticipacaoTV(nomeJogador, tier.label);
       registrosGravados++;
 
-      // Assistir_tv exige presença quase completa (>=90%); chat_tv só
-      // precisa de ao menos 1 mensagem no chat da transmissão — cada
-      // prestígio é somado no máximo uma vez por jogador por transmissão,
-      // já que este loop roda uma única vez por grupo (marcado como
-      // processado logo abaixo).
+      // Assistir_tv exige presença quase completa (>=90%) — prestígio por
+      // chat foi removido: a pedido do usuário, porque contava mensagens de
+      // chat de qualquer ponto no tempo daquela transmissão (incluindo chat
+      // antigo, de dias atrás, quando uma transmissão ficava "perdida" sem
+      // ser marcada como processada e era reprocessada bem depois) e não dá
+      // pra controlar spam de comentário por comentário de forma justa.
       if (presencaPct >= 90) {
         await somarPrestigio({ telegramId }, "assistir_tv").catch(() => {});
-      }
-      if ((c?.count || 0) > 0) {
-        await somarPrestigio({ telegramId }, "chat_tv").catch(() => {});
       }
     }
 
