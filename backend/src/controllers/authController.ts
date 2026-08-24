@@ -6,6 +6,7 @@ import {
   dedupeHeaders,
 } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
+import { issueSessionToken } from "../services/sessionService";
 
 const USUARIOS_SHEET = "Usuários";
 
@@ -125,7 +126,15 @@ export async function authHeartbeatController(request: Request): Promise<Respons
       await concederPrestigioLoginDiario(match, usuario);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    // Reemite o token de sessão a cada heartbeat, renovando a expiração —
+    // assim uma sessão que continua sendo usada nunca "vence" no meio do uso
+    // (o app abre com uma sessão salva e chama isso toda vez, ver comentário
+    // acima).
+    const sessionUsuario = match?.rec["usuario"] || usuario;
+    const sessionId = match?.rec["id"] || telegramId;
+    const token = await issueSessionToken(sessionUsuario, sessionId);
+
+    return new Response(JSON.stringify({ success: true, token }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -219,9 +228,12 @@ export async function loginController(request: Request): Promise<Response> {
 
     await concederPrestigioLoginDiario(match, usuario);
 
+    const token = await issueSessionToken(match.rec["usuario"] || usuario, match.rec["id"] || "");
+
     return new Response(
       JSON.stringify({
         success: true,
+        token,
         data: {
           id: match.rec["id"] || "",
           // Nome exibido no app vem da coluna "Usuário" (C), não da coluna

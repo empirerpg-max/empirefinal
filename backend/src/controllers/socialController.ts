@@ -1,5 +1,6 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
+import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
 
 // Dados sociais (posts, perfis, comentários e news) vivem na planilha
 // "usuarios" (a mesma de Usuários/ARTISTAS), em abas próprias: SOCIAL_POSTS,
@@ -178,7 +179,12 @@ export async function editSocialPostController(request: Request): Promise<Respon
   if (rowIndex === -1) return jsonResponse({ ok: false, error: "Post não encontrado." }, 404);
 
   const ownerId = normalizeText(rows[rowIndex][8]);
-  if (!ownerId || (ownerId !== tgId.trim() && tgId.trim() !== "810141686")) {
+  // Bypass de admin só vale se o token de sessão realmente prova que quem
+  // está chamando autenticou como ADMIN_TG_ID — sem isso, qualquer cliente
+  // que soubesse o ID hardcoded conseguia editar post de qualquer um.
+  const claimsAdmin = tgId.trim() === ADMIN_TG_ID;
+  const isAdmin = claimsAdmin && (await requestProvesAdmin(request));
+  if (!ownerId || (ownerId !== tgId.trim() && !isAdmin)) {
     return jsonResponse({ ok: false, error: "Você só pode editar seus próprios posts." }, 403);
   }
 
@@ -228,7 +234,7 @@ export async function deleteSocialPostController(request: Request): Promise<Resp
   const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === postId);
   if (rowIndex === -1) return jsonResponse({ ok: false, error: "Post não encontrado." }, 404);
 
-  const isAdmin = tgId.trim() === "810141686";
+  const isAdmin = tgId.trim() === ADMIN_TG_ID && (await requestProvesAdmin(request));
   const ownerId = normalizeText(rows[rowIndex][8]);
   if (!isAdmin && (!ownerId || ownerId !== tgId.trim())) {
     return jsonResponse({ ok: false, error: "Você só pode excluir seus próprios posts." }, 403);
@@ -290,7 +296,9 @@ export async function editSocialCommentController(request: Request): Promise<Res
 
   const ownerRows = await googleSheetsService.usuarios.readValues(SHEETS.comments, `E${rowIndex}:E${rowIndex}`);
   const ownerId = normalizeText(ownerRows?.[0]?.[0]);
-  if (!ownerId || (ownerId !== tgId.trim() && tgId.trim() !== "810141686")) {
+  const claimsAdmin = tgId.trim() === ADMIN_TG_ID;
+  const isAdmin = claimsAdmin && (await requestProvesAdmin(request));
+  if (!ownerId || (ownerId !== tgId.trim() && !isAdmin)) {
     return jsonResponse({ ok: false, error: "Você só pode editar seus próprios comentários." }, 403);
   }
 

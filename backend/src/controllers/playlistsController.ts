@@ -1,4 +1,5 @@
 import { googleSheetsService, normalizeText } from "../services/googleSheetsService";
+import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
 
 // Playlists vivem na planilha "usuarios" (a mesma de Usuários/Social), na
 // aba "Playlists" — layout confirmado ao vivo:
@@ -138,7 +139,9 @@ export async function savePlaylistController(request: Request): Promise<Response
   }
   if (isEdit) {
     const ownerTgId = normalizeText(allRows[rowIndex][5]);
-    if (ownerTgId && tgId && ownerTgId !== tgId && tgId !== "810141686") {
+    const claimsAdmin = tgId.trim() === ADMIN_TG_ID;
+    const isAdmin = claimsAdmin && (await requestProvesAdmin(request));
+    if (ownerTgId && tgId && ownerTgId !== tgId && !isAdmin) {
       return jsonResponse({ ok: false, error: "Sem permissão para editar essa playlist." }, 403);
     }
   }
@@ -271,9 +274,19 @@ export async function getAlbumAntigoByIdController(id: string): Promise<Response
     descricao: normalizeText(row[5]) || undefined,
     capa_url: normalizeText(row[6]) || undefined,
     contracapa_url: normalizeText(row[7]) || undefined,
+    encarte: parseEncarte(row[8]),
     telegram_id: normalizeText(row[9]) || undefined,
     faixas,
   });
+}
+
+function parseEncarte(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string" && x) : [];
+  } catch {
+    return [];
+  }
 }
 
 // -------------------- ÁLBUM ANTIGO (cadastro manual em Playlists_Albuns) --------------------
@@ -296,6 +309,7 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
     descricao?: string;
     capa_url?: string;
     contracapa_url?: string;
+    encarte?: string[];
     telegram_id?: string;
     faixas?: FaixaAntigaInput[];
   };
@@ -330,7 +344,7 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
       body.descricao?.trim() || "",
       body.capa_url || "",
       body.contracapa_url || "",
-      "[]",
+      JSON.stringify(body.encarte?.filter(Boolean) || []),
       body.telegram_id || "",
       new Date().toISOString(),
     ],
@@ -378,8 +392,8 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
 // Só o dono (telegram_id da coluna J) ou admin (810141686) pode editar/
 // excluir — mesma regra usada em outros lugares do app (posts sociais,
 // artistas etc).
-function podeEditarAlbumAntigo(row: string[], tgId: string): boolean {
-  if (tgId.trim() === "810141686") return true;
+async function podeEditarAlbumAntigo(row: string[], tgId: string, request: Request): Promise<boolean> {
+  if (tgId.trim() === ADMIN_TG_ID && (await requestProvesAdmin(request))) return true;
   const owner = normalizeText(row[9]);
   return !!owner && owner === tgId.trim();
 }
@@ -409,7 +423,7 @@ export async function editarAlbumAntigoController(request: Request): Promise<Res
   const albunsRows = await googleSheetsService.usuarios.readValues(SHEET_ALBUNS);
   const rowIndex = albunsRows.findIndex((r, i) => i > 0 && normalizeText(r[0]) === id);
   if (rowIndex === -1) return jsonResponse({ ok: false, error: "Álbum não encontrado." }, 404);
-  if (!podeEditarAlbumAntigo(albunsRows[rowIndex], tgId)) {
+  if (!(await podeEditarAlbumAntigo(albunsRows[rowIndex], tgId, request))) {
     return jsonResponse({ ok: false, error: "Você só pode editar seus próprios álbuns." }, 403);
   }
 
@@ -466,7 +480,7 @@ export async function deletarAlbumAntigoController(request: Request): Promise<Re
   const albunsRows = await googleSheetsService.usuarios.readValues(SHEET_ALBUNS);
   const rowIndex = albunsRows.findIndex((r, i) => i > 0 && normalizeText(r[0]) === id);
   if (rowIndex === -1) return jsonResponse({ ok: false, error: "Álbum não encontrado." }, 404);
-  if (!podeEditarAlbumAntigo(albunsRows[rowIndex], tgId)) {
+  if (!(await podeEditarAlbumAntigo(albunsRows[rowIndex], tgId, request))) {
     return jsonResponse({ ok: false, error: "Você só pode excluir seus próprios álbuns." }, 403);
   }
 
@@ -572,7 +586,9 @@ export async function deletePlaylistController(request: Request): Promise<Respon
   if (rowIndex === -1) return jsonResponse({ ok: false, error: "Playlist não encontrada." }, 404);
 
   const ownerTgId = normalizeText(allRows[rowIndex][5]);
-  if (ownerTgId && body.tgId && ownerTgId !== body.tgId && body.tgId !== "810141686") {
+  const claimsAdmin = (body.tgId || "").trim() === ADMIN_TG_ID;
+  const isAdmin = claimsAdmin && (await requestProvesAdmin(request));
+  if (ownerTgId && body.tgId && ownerTgId !== body.tgId && !isAdmin) {
     return jsonResponse({ ok: false, error: "Sem permissão para excluir essa playlist." }, 403);
   }
 

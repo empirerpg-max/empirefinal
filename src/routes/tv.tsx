@@ -945,8 +945,17 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
               const Icon = t.icon;
               const active = tab === t.id;
               return (
-                <button key={t.id} onClick={() => setTab(t.id)} className={`shrink-0 h-8 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition ${active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
-                  <Icon className="size-3.5" /> {t.label}
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`relative shrink-0 h-8 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 ${
+                    active
+                      ? "text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]"
+                      : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {active && <span className="absolute inset-0 rounded-md bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+                  <Icon className="relative z-10 size-3.5" /> <span className="relative z-10">{t.label}</span>
                 </button>
               );
             })}

@@ -526,6 +526,67 @@ export async function getAllArtistasController(): Promise<Response> {
   }
 }
 
+export interface RescisaoBody {
+  nome: string;
+  destino: string;
+}
+
+/**
+ * POST /api/artistas/rescisao
+ * Substitui o `acao: "rescisao"` do Apps Script legado — rescinde o contrato
+ * do artista com a gravadora atual, gravando o "destino" (nova gravadora,
+ * geralmente "Independent") direto na coluna "gravadora" da aba ARTISTAS.
+ */
+export async function rescisaoController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as RescisaoBody;
+    const nome = (body.nome || "").trim();
+    const destino = (body.destino || "").trim();
+
+    if (!nome || !destino) {
+      return new Response(JSON.stringify({ ok: false, erro: "nome e destino são obrigatórios." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const rows = await readArtistasRows();
+    const normNome = normalizeComparison(nome);
+    const match = rows.find((r) => normalizeComparison(r.rec["nome"]) === normNome);
+    if (!match) {
+      return new Response(JSON.stringify({ ok: false, erro: "Artista não encontrado." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const gravadoraCol = match.headers.indexOf("gravadora");
+    if (gravadoraCol === -1) {
+      return new Response(
+        JSON.stringify({ ok: false, erro: "Coluna 'gravadora' não encontrada na aba ARTISTAS." }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    await googleSheetsService.usuarios.updateValues(
+      ARTISTAS_SHEET,
+      `${colIndexToA1Letter(gravadoraCol)}${match.rowIndex}`,
+      [[destino]],
+    );
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[rescisaoController] Erro:", error);
+    return new Response(JSON.stringify({ ok: false, erro: error.message || "Erro ao processar rescisão." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
 export async function getMeusArtistasNomesController(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);

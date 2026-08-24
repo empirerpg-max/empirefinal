@@ -1,6 +1,16 @@
 // Empire Hub — Apps Script API client
 // Mantém Apps Script + Google Sheets como backend.
 
+import { getStoredSessionToken, setStoredSessionToken } from "@/components/LoginScreen";
+
+// Anexa o token de sessão (quando existe) como Authorization: Bearer — só
+// as ações admin-gated no backend (bypass do ID hardcoded) exigem que ele
+// bata; o resto do app continua funcionando normalmente sem ele.
+function authHeaders(): Record<string, string> {
+  const token = getStoredSessionToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export const SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbwxbkUndhZPtFvtK1uIFTkPNN-m6WeiFVMU3IDzuahsC0oQp8Ba2GLQFOAPkWv8eiA3/exec";
 
@@ -80,31 +90,6 @@ export interface AlbumPayload {
   faixas: AlbumFaixa[];
   descricao?: string;
   telegram_id?: string;
-}
-
-export interface MarketItem {
-  categoria: string; // MARKET, IMOVEIS, CARREIRA, ...
-  item: string; // "Mansao", "Convite Met Gala"...
-  preco: number; // EC
-  efeito: string; // descrição livre
-}
-
-export interface MuralItem {
-  id: string;
-  vendedor: string;
-  titulo: string;
-  teaser: string;
-  preco: number;
-}
-
-export interface BemItem {
-  id?: string;
-  artista: string;
-  categoria: string;
-  item: string;
-  valor: number; // valor de compra ($)
-  data: string; // ISO
-  status?: string; // Ativo / Vendido
 }
 
 // ---- Bolsa de Valores ----
@@ -400,38 +385,12 @@ export const api = {
     });
     return res.json();
   },
-  // A aba ARTISTAS (lida direto via Sheets API, nosso Worker) é a fonte
-  // PRINCIPAL da lista — garante que todo artista criado no app (mesmo
-  // segundos atrás) apareça na busca imediatamente. O Apps Script legado
-  // só complementa campos que a aba ainda não guarda prontos (saldo,
-  // seguidores, bio, gênero, país) quando achar o mesmo nome — nunca é
-  // usado como base, senão artista novo (ex: criado agora) some da busca
-  // até o Apps Script "descobrir" ele, o que podia nunca acontecer.
+  // Migrado do Apps Script legado — a aba ARTISTAS (Worker próprio) já
+  // guarda saldo/seguidores/vendas_total/descricao/genero/pais como colunas
+  // prontas, então uma única chamada a /api/artistas/listar-todos basta
+  // (ver getAllArtistasController). Não há mais fallback pro Apps Script —
+  // artista recém-criado aparece na hora, sem esperar o Apps Script.
   async listarTodos(): Promise<Artist[]> {
-    const [base, extras] = await Promise.all([
-      api.artistasDaAba(),
-      call<Record<string, unknown>[]>({ acao: "listar_todos" }, { cache: true }).catch(() => []),
-    ]);
-    const porNome = new Map(
-      (Array.isArray(extras) ? extras : []).map((a) => [normalizeNome(String((a as any).nome || "")), a]),
-    );
-    return base.map((a) => {
-      const e = porNome.get(normalizeNome(a.nome)) as Record<string, unknown> | undefined;
-      if (!e) return a;
-      return {
-        ...a,
-        saldo: Number(e.saldo || a.saldo || 0),
-        seguidores: Number(e.seguidores || a.seguidores || 0),
-        vendas_total: Number(e.vendas_total || a.vendas_total || 0),
-        descricao: a.descricao || (e.descricao as string) || "",
-        genero: a.genero || (e.genero as string) || "",
-        pais: a.pais || (e.pais as string) || "",
-      };
-    });
-  },
-  // Lista crua direto da aba ARTISTAS (Sheets API, sem passar pelo Apps
-  // Script) — fonte de verdade de posse e Fortuna.
-  async artistasDaAba(): Promise<Artist[]> {
     try {
       const res = await fetch("/api/artistas/listar-todos", { cache: "no-store" });
       if (!res.ok) return [];
@@ -442,13 +401,15 @@ export const api = {
       return [];
     }
   },
-  async radar(): Promise<RadarItem[]> {
-    const data = await call<RadarItem[]>({ acao: "radar" }, { cache: true });
-    return Array.isArray(data) ? data : [];
-  },
   async projetos(nome: string): Promise<Projeto[]> {
-    const data = await call<Projeto[]>({ acao: "projetos", nome }, { cache: true });
-    return Array.isArray(data) ? data : [];
+    try {
+      const res = await fetch(`/api/projetos?artista=${encodeURIComponent(nome)}`);
+      const json = await res.json().catch(() => null);
+      const data = Array.isArray(json?.data) ? json.data : [];
+      return data;
+    } catch {
+      return [];
+    }
   },
 
   async comprarTour(p: {
@@ -460,109 +421,25 @@ export const api = {
     continente: string;
   }): Promise<CommonResponse> {
     invalidateCache();
-    return call<CommonResponse>({
-      acao: "compra_unificada_tour",
-      nome: p.nome,
-      tipo: p.tipo,
-      titulo: p.titulo,
-      dataInicio: p.dataInicio,
-      qtd: p.qtd,
-      continente: p.continente,
+    const res = await fetch("/api/turnes/comprar-simples", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
     });
-  },
-  async comprarCinema(p: {
-    nome: string;
-    titulo: string;
-    tipo: string;
-    genero: string;
-    dataInicio: string;
-  }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "compra_cinema", ...p });
-  },
-  async viral(nome: string, musica: string): Promise<CommonResponse> {
-    return call<CommonResponse>({ acao: "viral", artista: nome, musica });
-  },
-  async filantropia(nome: string, causa: string, valor: string): Promise<CommonResponse> {
-    return call<CommonResponse>({ acao: "filantropia", artista: nome, causa, valor });
-  },
-  async publicarLeilao(p: { nome: string; descricao: string; lanceMini: number }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "publicar_leilao", ...p });
-  },
-  async darLance(p: { nome: string; itemId: string | number; valor: number }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "lance_leilao", ...p });
-  },
-  async listarLeiloes(): Promise<unknown[]> {
-    const r = await call<unknown[]>({ acao: "leilao" }, { cache: true });
-    return Array.isArray(r) ? r : [];
-  },
-  async payola(p: { nome: string; musica: string; valor: number }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "payola", ...p });
+    const json = await res.json().catch(() => ({}));
+    return { ok: !!json.success, erro: json.error, message: json.error };
   },
   async rescisao(p: { nome: string; destino: string }): Promise<CommonResponse> {
     invalidateCache();
-    return call<CommonResponse>({ acao: "rescisao", ...p });
+    const res = await fetch("/api/artistas/rescisao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+    });
+    const json = await res.json().catch(() => ({}));
+    return { ok: !!json.ok, erro: json.erro, message: json.erro };
   },
-  async venderComposicao(p: { nome: string; titulo: string; preco: number }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "vender_composicao", ...p });
-  },
-  async comprarImovel(p: { nome: string; tipo: string; cidade: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "comprar_imovel", ...p });
-  },
-
-  // ---- Empire Market ----
-  async listarCategoriasMarket(): Promise<string[]> {
-    const r = await call<unknown>({ acao: "listar_categorias_market" }, { cache: true });
-    if (Array.isArray(r)) return r.map((x) => String(x || "").trim()).filter(Boolean);
-    return [];
-  },
-  async listarMarket(): Promise<MarketItem[]> {
-    const r = await call<Record<string, unknown>[]>({ acao: "listar_market" }, { cache: true });
-    return Array.isArray(r)
-      ? r.map((x) => ({
-          categoria: String(x.categoria || ""),
-          item: String(x.item || ""),
-          preco: Number(x.preco || 0),
-          efeito: String(x.efeito || ""),
-        }))
-      : [];
-  },
-  async listarMural(): Promise<MuralItem[]> {
-    const r = await call<MuralItem[]>({ acao: "mural" }, { cache: true });
-    return Array.isArray(r) ? r : [];
-  },
-  async comprarMarket(p: { nome: string; categoria: string; item: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "comprar_market", nome: p.nome, categoria: p.categoria, item: p.item });
-  },
-  async comprarMural(p: { nome: string; id: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "comprar_item", nome: p.nome, id: p.id });
-  },
-  async meusBens(nome: string): Promise<BemItem[]> {
-    const r = await call<BemItem[]>({ acao: "meus_bens", nome }, { cache: true });
-    return Array.isArray(r) ? r : [];
-  },
-  async venderBem(p: { nome: string; id: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "vender_bem", nome: p.nome, id: p.id });
-  },
-
   // ---- Bolsa de Valores ----
-  async fundarEmpresa(p: {
-    nome: string;
-    nomeEmpresa: string;
-    segmento: string;
-    investimento: number;
-  }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "fundar_empresa", ...p });
-  },
   async listarEmpresas(): Promise<EmpresaBolsa[]> {
     const r = await call<EmpresaBolsa[]>({ acao: "listar_empresas" }, { cache: true });
     return Array.isArray(r) ? r : [];
@@ -641,14 +518,6 @@ export const api = {
       return [];
     }
   },
-  async salvarChatTV(p: { programa_id: string; mensagens: Array<{ user: string; text: string; ts: number; reply_to?: { id: string; user: string; text: string } }>; total_msgs: number }): Promise<CommonResponse> {
-    return call<CommonResponse>({
-      acao: "salvar_chat_tv",
-      sala: p.programa_id,
-      total_msgs: String(p.total_msgs),
-      json: JSON.stringify(p.mensagens),
-    }, { tv: true });
-  },
   async listarArquivoTV(): Promise<Array<{ data: string; hora: string; sala: string; total_msgs: number }>> {
     const r = await call<any[]>({ acao: "listar_arquivo_tv" }, { cache: true, tv: true });
     return Array.isArray(r) ? r.map((x) => ({
@@ -659,31 +528,63 @@ export const api = {
     })) : [];
   },
 
-  // ---- Álbuns ----
+  // ---- Álbuns (migrado do Apps Script pro Worker — reaproveita o mesmo
+  // catálogo de "álbuns antigos" já servido por /api/albuns-antigos e
+  // /api/playlists/albuns) ----
   async lancarAlbum(payload: AlbumPayload): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "lancar_album", payload: JSON.stringify(payload) });
+    const res = await fetch("/api/playlists/albuns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({ ok: false }));
+    return { ok: !!json.ok, id: json.id, message: json.error };
   },
   async getAlbum(id: string): Promise<AlbumPayload | null> {
-    const r = await call<AlbumPayload & { error?: string }>({ acao: "get_album", id }, { cache: true });
-    if (!r || r.error) return null;
-    return r;
+    try {
+      const res = await fetch(`/api/albuns-antigos/${encodeURIComponent(id)}`);
+      const json = await res.json().catch(() => null);
+      if (!json || json.error) return null;
+      return json as AlbumPayload;
+    } catch {
+      return null;
+    }
   },
   async listarAlbuns(nome?: string): Promise<AlbumPayload[]> {
-    const r = await call<AlbumPayload[]>({ acao: "listar_albuns", nome: nome || "" }, { cache: true });
-    return Array.isArray(r) ? r : [];
+    try {
+      const res = await fetch("/api/albuns-antigos");
+      const json = await res.json().catch(() => null);
+      const data: AlbumPayload[] = Array.isArray(json) ? json : [];
+      if (!nome) return data;
+      const alvo = nome.trim().toLowerCase();
+      return data.filter((a) => a.artista?.trim().toLowerCase() === alvo);
+    } catch {
+      return [];
+    }
   },
+  // Reaproveita o mesmo endpoint de edição de "álbuns antigos"
+  // (/api/playlists/albuns/editar) — getAlbum/listarAlbuns/lancarAlbum já
+  // usam esse catálogo (SHEET_ALBUNS), então editar precisa ir pro mesmo
+  // lugar, senão a edição fica invisível pra quem lê o álbum depois.
   async editarAlbum(payload: AlbumPayload): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "editar_album", payload: JSON.stringify(payload) });
-  },
-  async editarFaixaAlbum(payload: { album_id: string; numero: number; [key: string]: any }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "editar_faixa_album", payload: JSON.stringify(payload) });
-  },
-  async excluirAlbum(id: string, telegramId?: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "excluir_album", id, telegram_id: telegramId || "" });
+    const res = await fetch("/api/playlists/albuns/editar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: payload.id || "",
+        tgId: payload.telegram_id || "",
+        artista: payload.artista,
+        titulo: payload.titulo,
+        genero: payload.genero,
+        data: payload.data,
+        descricao: payload.descricao,
+        capa_url: payload.capa_url,
+        contracapa_url: payload.contracapa_url,
+        faixas: payload.faixas,
+      }),
+    });
+    const json = await res.json().catch(() => ({ ok: false }));
+    return { ok: !!json.ok, message: json.error, erro: json.error };
   },
 
   // ---- Playlists (migrado do Apps Script pro Worker) ----
@@ -701,7 +602,7 @@ export const api = {
   async salvarPlaylist(payload: PlaylistPayload, telegramId?: string): Promise<CommonResponse> {
     const res = await fetch("/api/playlists", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ payload: JSON.stringify(payload), tgId: telegramId || payload.telegram_id || "" }),
     });
     return res.json();
@@ -714,7 +615,7 @@ export const api = {
   async excluirPlaylist(id: string, telegramId?: string): Promise<CommonResponse> {
     const res = await fetch("/api/playlists/excluir", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ id, tgId: telegramId || "" }),
     });
     return res.json();
@@ -826,7 +727,7 @@ export const api = {
   }): Promise<CommonResponse> {
     const res = await fetch("/api/playlists/albuns/editar", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(payload),
     });
     return res.json();
@@ -834,7 +735,7 @@ export const api = {
   async deletarAlbumAntigo(id: string, tgId: string): Promise<CommonResponse> {
     const res = await fetch("/api/playlists/albuns/deletar", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ id, tgId }),
     });
     return res.json();
@@ -1020,40 +921,15 @@ export const api = {
   },
 
   // ---- Bet ----
-  async getMusicasBet(): Promise<{ semana: string; musicas: unknown[] } | null> {
-    const acoes = ["musicas_bet", "get_musicas_bet", "musicas_charts", "get_musicas_charts"];
-    for (const acao of acoes) {
-      const r = await call<{ semana: string; musicas: unknown[]; erro?: string }>({ acao }, { cache: true });
-      if (r && !r.erro && Array.isArray(r.musicas) && r.musicas.length > 0) return r;
+  async listTours(artista?: string): Promise<any[]> {
+    try {
+      const qs = artista ? `?artista=${encodeURIComponent(artista)}` : "";
+      const res = await fetch(`/api/turnes${qs}`);
+      const json = await res.json().catch(() => null);
+      return Array.isArray(json?.data) ? json.data : [];
+    } catch {
+      return [];
     }
-    return null;
-  },
-  async bet(p: { nome: string; valor: number; semana: string; previsoes: string }): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "bet", ...p });
-  },
-  async listTours(): Promise<any[]> {
-    const acoes = ["listar_todas_tours", "tours", "controle_tours", "listar_tours"];
-    for (const acao of acoes) {
-      const r = await call<any[]>({ acao }, { cache: true });
-      if (Array.isArray(r) && r.length > 0) return r;
-    }
-    return [];
-  },
-  async ranking(): Promise<Artist[]> {
-    const data = await call<Record<string, unknown>[]>({ acao: "ranking" }, { cache: true });
-    return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
-  },
-  async charts(): Promise<Artist[]> {
-    const data = await call<Record<string, unknown>[]>({ acao: "charts" }, { cache: true });
-    return Array.isArray(data) ? data.map((a) => normalizeArtist(a)) : [];
-  },
-  async getAgendaTour(nome: string): Promise<any> {
-    return call<any>({ acao: "agenda_tour", nome }, { cache: true });
-  },
-  async vincularImagemTour(nome: string, url: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call<CommonResponse>({ acao: "vincular_imagem_tour", nome, url });
   },
   // Artistas livres (sem dono) vêm direto da aba ARTISTAS (Worker próprio) —
   // não mais do Apps Script legado, que ficava desconectado da fonte que
@@ -1122,8 +998,31 @@ export const api = {
     }
   },
   async topCharts(): Promise<Record<string, ChartData>> {
-    const data = await call<Record<string, ChartData>>({ acao: "top_charts" }, { cache: true });
-    return data || {};
+    // Reaproveita /api/charts?action=getBannerN1s (já migrado) — mesmo #1
+    // por plataforma que o /charts usa, só remapeado pro shape que a home
+    // (billboard_hot_100/spotify/apple_music/youtube/billboard_200/digital_sales) espera.
+    const KEY_MAP: Record<string, string> = {
+      hot100: "billboard_hot_100",
+      spotify: "spotify",
+      apple: "apple_music",
+      youtube: "youtube",
+      sales: "digital_sales",
+      bb200: "billboard_200",
+    };
+    try {
+      const res = await fetch("/api/charts?action=getBannerN1s");
+      const json = await res.json().catch(() => null);
+      if (!json || typeof json !== "object") return {};
+      const out: Record<string, ChartData> = {};
+      for (const [key, mapped] of Object.entries(KEY_MAP)) {
+        const item = json[key] as { tit?: string; art?: string; capa?: string } | undefined;
+        if (!item) continue;
+        out[mapped] = { musica: item.tit || "", artista: item.art || "", foto: item.capa || "", data: "", url: "" };
+      }
+      return out;
+    } catch {
+      return {};
+    }
   },
 
   // ---- Social (migrado do Apps Script pro Worker — muito mais rápido) ----
@@ -1142,11 +1041,13 @@ export const api = {
   },
   async authHeartbeat(telegramId: string, usuario: string): Promise<void> {
     try {
-      await fetch("/api/auth/heartbeat", {
+      const res = await fetch("/api/auth/heartbeat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ telegramId, usuario }),
       });
+      const json = await res.json().catch(() => null);
+      if (json?.token) setStoredSessionToken(json.token);
     } catch {
       // Silencioso — não é crítico pro app abrir mesmo se isso falhar.
     }
@@ -1161,7 +1062,7 @@ export const api = {
   ): Promise<CommonResponse> {
     const res = await fetch("/api/social/posts/editar", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ postId, texto, media_url: mediaUrl, tgId, autor, media_tipo: mediaTipo }),
     });
     return res.json();
@@ -1171,7 +1072,7 @@ export const api = {
   async deletarPostSocial(postId: string, tgId: string): Promise<CommonResponse> {
     const res = await fetch("/api/social/posts/deletar", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ postId, tgId }),
     });
     return res.json();
@@ -1239,7 +1140,7 @@ export const api = {
   async editarComentarioSocial(rowIndex: number, texto: string, tgId: string): Promise<CommonResponse> {
     const res = await fetch("/api/social/comentario/editar", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ rowIndex, texto, tgId }),
     });
     return res.json();
@@ -1258,126 +1159,6 @@ export const api = {
     return Array.isArray(data) ? data : [];
   },
 
-  // ---- Games & Economy ----
-  async syncGameCoins(
-    tgId: string,
-    wager: number,
-    won: number,
-    gameContext?: string,
-    artistName?: string,
-  ): Promise<CommonResponse & { novoSaldo?: number }> {
-    invalidateCache();
-    return call<CommonResponse & { novoSaldo?: number }>({
-      acao: "sync_game_coins",
-      telegram_id: tgId,
-      wager,
-      won,
-      gameContext,
-      artistName,
-    });
-  },
-  async savePetState(tgId: string, payload: string): Promise<CommonResponse> {
-    return call<CommonResponse>({ acao: "save_pet_state", telegram_id: tgId, payload });
-  },
-  async getPetState(tgId: string): Promise<CommonResponse & { payload?: string; lastUpdate?: number }> {
-    return call<CommonResponse & { payload?: string; lastUpdate?: number }>({
-      acao: "get_pet_state",
-      telegram_id: tgId,
-    });
-  },
-
-  // ---- Queridômetro ----
-  async getQueridometroStatus(tgId: string): Promise<
-    CommonResponse & {
-      meuPerfil?: any;
-      artistas?: any[];
-      artistasAlvos?: any[];
-      meusArtistas?: any[];
-      ranking?: any[];
-      votosRestantes?: number;
-      reacoesRecebidas?: any[];
-      reacoesPublicas?: Array<{ para?: string; fotoPara?: string; emoji?: string; data?: string }>;
-      configEmojis?: any[];
-      semana?: string;
-    }
-  > {
-    return call({ acao: "queridometro_status", tgId });
-  },
-  async postQueridometroVoto(
-    tgId: string,
-    de: string,
-    para: string,
-    emoji: string,
-  ): Promise<CommonResponse & { msg?: string }> {
-    return call({ acao: "queridometro_votar", tgId, de, para, emoji });
-  },
-
-  // ---- PONTO (pontos + playlists por planilha externa) ----
-  async getJogador(tgId: string): Promise<{ nomeOff?: string; artistas?: string[]; erro?: string }> {
-    return call({ acao: "ponto_get_jogador", tgId });
-  },
-  async listarPontosJogador(tgId: string): Promise<{
-    colunas?: string[];
-    editaveis?: string[];
-    linhas?: Array<{ linha: number; artista: string; valores: Record<string, any> }>;
-    erro?: string;
-  }> {
-    return call({ acao: "ponto_listar_pontos", tgId });
-  },
-  async salvarCelulaPontos(p: { tgId: string; linha: number; coluna: string; valor: any }): Promise<CommonResponse> {
-    invalidateCache();
-    return call({ acao: "ponto_salvar_celula", tgId: p.tgId, linha: p.linha, coluna: p.coluna, valor: p.valor });
-  },
-  async distribuirPontosAleatorio(tgId: string): Promise<CommonResponse> {
-    invalidateCache();
-    return call({ acao: "ponto_distribuir_aleatorio", tgId });
-  },
-  async listarPlaylistsJogador(tgId: string): Promise<{
-    colunas?: string[];
-    editaveis?: string[];
-    linhas?: Array<{ linha: number; artista: string; valores: Record<string, any> }>;
-    erro?: string;
-  }> {
-    return call({ acao: "ponto_listar_playlists", tgId });
-  },
-  async salvarCelulaPlaylist(p: { tgId: string; linha: number; coluna: string; valor: any }): Promise<CommonResponse> {
-    invalidateCache();
-    return call({
-      acao: "ponto_salvar_playlist_celula",
-      tgId: p.tgId,
-      linha: p.linha,
-      coluna: p.coluna,
-      valor: p.valor,
-    });
-  },
-  async distribuirPlaylistsAuto(tgId: string): Promise<CommonResponse & { resumo?: string }> {
-    invalidateCache();
-    return call({ acao: "ponto_distribuir_playlists_auto", tgId });
-  },
-
-  // ---- PONTO Playlists ECOIN ----
-  async listarMusicasEdicao(tgId: string): Promise<{
-    musicas?: Array<{ linha: number; musica: string; artista: string }>;
-    erro?: string;
-  }> {
-    return call({ acao: "ponto_listar_musicas_edicao", tgId });
-  },
-  async saldoEcoin(tgId: string): Promise<{
-    saldos?: Record<string, any>;
-    erro?: string;
-  }> {
-    return call({ acao: "ponto_saldo_ecoin", tgId });
-  },
-  async salvarPlaylistEcoin(p: {
-    tgId: string;
-    musica: string;
-    artista: string;
-    plataforma: string;
-    playlist: string;
-  }): Promise<CommonResponse & { saldo?: any; linha?: number }> {
-    invalidateCache();
-    return call({ acao: "ponto_salvar_playlist_ecoin", ...p });
-  },
 };
 
 export interface ChartData {

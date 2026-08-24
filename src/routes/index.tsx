@@ -16,7 +16,7 @@ import {
   Quote,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useTelegramUser, haptic, openExternal } from "@/lib/telegram";
+import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api, driveImg, invalidateCache, type ChartData } from "@/lib/api";
 import { useHomeConfig } from "@/lib/homeFlags";
 import { getStoredLogin } from "@/components/LoginScreen";
@@ -46,12 +46,17 @@ interface SocialPostResumo {
   data: string;
 }
 
-const PLATFORM_META: Record<string, { label: string; icon: typeof Music2; color: string }> = {
-  spotify: { label: "Spotify", icon: Music2, color: "text-[#1DB954]" },
-  apple_music: { label: "Apple Music", icon: Music, color: "text-[#FC3C44]" },
-  youtube: { label: "YouTube", icon: PlayCircle, color: "text-[#FF0000]" },
-  billboard_200: { label: "Billboard 200", icon: Disc, color: "text-primary" },
-  digital_sales: { label: "Digital Sales", icon: BarChart3, color: "text-blue-500" },
+// chartsTab = aba correspondente em /charts (CategoryId) — os cards da home
+// abrem a parada específica dentro do app, em vez de sair pro site externo.
+const PLATFORM_META: Record<
+  string,
+  { label: string; icon: typeof Music2; color: string; chartsTab: "spotify" | "apple" | "youtube" | "albums" | "sales" }
+> = {
+  spotify: { label: "Spotify", icon: Music2, color: "text-[#1DB954]", chartsTab: "spotify" },
+  apple_music: { label: "Apple Music", icon: Music, color: "text-[#FC3C44]", chartsTab: "apple" },
+  youtube: { label: "YouTube", icon: PlayCircle, color: "text-[#FF0000]", chartsTab: "youtube" },
+  billboard_200: { label: "Billboard 200", icon: Disc, color: "text-primary", chartsTab: "albums" },
+  digital_sales: { label: "Digital Sales", icon: BarChart3, color: "text-blue-500", chartsTab: "sales" },
 };
 
 function Index() {
@@ -217,7 +222,6 @@ function Index() {
 
     billboard: () => {
       const data = topCharts.billboard_hot_100;
-      const finalUrl = data?.url || config.sections.billboard.fallbackUrl;
 
       return (
         <section className="mb-12" aria-labelledby="billboard-h">
@@ -226,12 +230,10 @@ function Index() {
               Billboard Hot 100 #1
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              haptic.light();
-              openExternal(finalUrl);
-            }}
+          <Link
+            to="/charts"
+            search={{ tab: "hot100" }}
+            onClick={() => haptic.light()}
             className="group relative block w-full aspect-[16/10] rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl bg-white/5 text-left"
           >
             {data?.foto ? (
@@ -272,7 +274,7 @@ function Index() {
                 This week
               </span>
             </div>
-          </button>
+          </Link>
         </section>
       );
     },
@@ -283,20 +285,17 @@ function Index() {
           Top por plataforma
         </h2>
         <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x">
-          {Object.entries(config.sections.topPlataformas.links).map(([id, link]) => {
+          {Object.entries(config.sections.topPlataformas.links).map(([id]) => {
             const meta = PLATFORM_META[id];
             if (!meta) return null;
             const data = topCharts[id];
-            const finalUrl = data?.url || link;
             const Icon = meta.icon;
             return (
-              <button
-                type="button"
+              <Link
                 key={id}
-                onClick={() => {
-                  haptic.light();
-                  openExternal(finalUrl);
-                }}
+                to="/charts"
+                search={{ tab: meta.chartsTab }}
+                onClick={() => haptic.light()}
                 aria-label={`Abrir parada ${meta.label}`}
                 className="min-w-[160px] snap-center group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/5 backdrop-blur-md active:scale-95 transition-all shadow-xl text-left"
               >
@@ -330,7 +329,7 @@ function Index() {
                     {data?.artista || "Toque para abrir"}
                   </p>
                 </div>
-              </button>
+              </Link>
             );
           })}
         </div>

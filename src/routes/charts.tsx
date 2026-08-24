@@ -10,6 +10,11 @@ import {
 } from "@/lib/charts";
 import { resolveImg } from "@/lib/api";
 
+type CategoryId = "hot100" | "spotify" | "apple" | "youtube" | "albums" | "sales";
+type TabId = "home" | "live" | CategoryId;
+
+const VALID_TABS: TabId[] = ["home", "live", "hot100", "spotify", "apple", "youtube", "albums", "sales"];
+
 export const Route = createFileRoute("/charts")({
   head: () => ({
     meta: [
@@ -17,11 +22,11 @@ export const Route = createFileRoute("/charts")({
       { name: "description", content: "Charts oficiais do Empire — Hot 100, Spotify, Apple, YouTube e mais." },
     ],
   }),
+  validateSearch: (s: Record<string, unknown>): { tab?: TabId } => ({
+    tab: VALID_TABS.includes(s.tab as TabId) ? (s.tab as TabId) : undefined,
+  }),
   component: ChartsPage,
 });
-
-type CategoryId = "hot100" | "spotify" | "apple" | "youtube" | "albums" | "sales";
-type TabId = "home" | "live" | CategoryId;
 
 interface CategoryConfig {
   id: CategoryId;
@@ -68,7 +73,8 @@ function ChartsBubbleBackdrop() {
 }
 
 function ChartsPage() {
-  const [tab, setTab] = useState<TabId>("home");
+  const { tab: tabFromUrl } = Route.useSearch();
+  const [tab, setTab] = useState<TabId>(tabFromUrl || "home");
   const category = CATEGORIES.find((c) => c.id === tab) || null;
 
   return (
@@ -92,36 +98,60 @@ function ChartsPage() {
 
 // Botão padrão de aba/filtro do Charts — mesmo tratamento visual em todo
 // lugar (tab bar do topo e "caixinhas de escolha" de data/estilo/ano/mês):
-// pílula com borda sutil em repouso, preenche sólido com leve escala e
-// sombra colorida quando ativa, e feedback de toque (active:scale-95).
+// cápsula "glass" com borda translúcida em repouso, e quando ativa ganha um
+// gradiente primary→accent com glow por baixo — mesma linguagem neon/vidro
+// do resto do app, sem depender de nenhuma lib nova.
 function chartsPillClass(active: boolean, withIcon = false) {
-  return `shrink-0 h-8 px-3.5 rounded-full text-xs font-bold transition-all duration-150 active:scale-95 ${
+  return `group relative shrink-0 h-9 px-4 rounded-full text-xs font-bold transition-all duration-200 active:scale-95 ${
     withIcon ? "flex items-center gap-1.5" : ""
   } ${
     active
-      ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 scale-[1.03]"
-      : "bg-muted/60 text-muted-foreground border border-border/60 hover:bg-muted hover:text-foreground"
+      ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)] scale-[1.04]"
+      : "text-muted-foreground border border-white/10 bg-white/[0.04] backdrop-blur-md hover:bg-white/[0.08] hover:text-foreground hover:border-white/20"
   }`;
+}
+
+// Camada de fundo da pílula ativa — separada do texto/ícone (que fica numa
+// camada acima, z-10) pra poder sobrepor um gradiente + brilho sem afetar o
+// contraste do conteúdo.
+function ChartsPillActiveBg() {
+  return (
+    <span
+      className="absolute inset-0 rounded-full bg-gradient-to-br from-primary via-primary to-fuchsia-500/80"
+      aria-hidden="true"
+    />
+  );
 }
 
 function ChartsTabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
   return (
-    <div className="shrink-0 h-12 border-b border-border/60 bg-background/95 backdrop-blur flex items-center gap-1.5 px-3 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-      <button onClick={() => onChange("home")} className={chartsPillClass(active === "home")}>
-        Início
-      </button>
-      <button onClick={() => onChange("live")} className={chartsPillClass(active === "live", true)}>
-        <Radio className={`size-3.5 ${active === "live" ? "text-primary-foreground" : "text-red-500"} animate-pulse`} /> Ao vivo
-      </button>
-      {CATEGORIES.map((c) => {
-        const Icon = c.icon;
-        const isActive = active === c.id;
-        return (
-          <button key={c.id} onClick={() => onChange(c.id)} className={chartsPillClass(isActive, true)}>
-            <Icon className={`size-3.5 ${isActive ? "" : c.color}`} /> {c.label}
-          </button>
-        );
-      })}
+    <div className="relative shrink-0 border-b border-white/10 bg-background/80 backdrop-blur-xl">
+      {/* linha de glow sutil no rodapé da barra — mesma paleta primary/fuchsia usada nos blobs de fundo do Charts */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+      <div className="h-12 flex items-center gap-2 px-3 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <button onClick={() => onChange("home")} className={chartsPillClass(active === "home")}>
+          {active === "home" && <ChartsPillActiveBg />}
+          <span className="relative z-10">Início</span>
+        </button>
+        <button onClick={() => onChange("live")} className={chartsPillClass(active === "live", true)}>
+          {active === "live" && <ChartsPillActiveBg />}
+          <Radio
+            className={`relative z-10 size-3.5 ${active === "live" ? "text-primary-foreground" : "text-red-500"} animate-pulse`}
+          />
+          <span className="relative z-10">Ao vivo</span>
+        </button>
+        {CATEGORIES.map((c) => {
+          const Icon = c.icon;
+          const isActive = active === c.id;
+          return (
+            <button key={c.id} onClick={() => onChange(c.id)} className={chartsPillClass(isActive, true)}>
+              {isActive && <ChartsPillActiveBg />}
+              <Icon className={`relative z-10 size-3.5 ${isActive ? "" : c.color}`} />
+              <span className="relative z-10">{c.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -119,7 +119,7 @@ function ArtistDashboard() {
     Promise.all([
       // Carrega TODOS os artistas para permitir visualizar qualquer perfil
       api.listarTodos().catch(() => []),
-      api.listTours().catch(() => []),
+      api.listTours(safeNome).catch(() => []),
       // Carrega artistas do usuário para verificar propriedade
       user && user.id !== "guest" ? api.meusArtistas(user.id).catch(() => []) : Promise.resolve([]),
     ]).then(([allArtists, toursList, myArtists]) => {
@@ -886,8 +886,16 @@ function QuickAction({ icon, label, to, params, id }: any) {
 
 function TabButton({ active, onClick, children }: any) {
   return (
-    <button onClick={onClick} className={`shrink-0 px-4 py-3 rounded-[1.3rem] text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-500 ${active ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" : "text-muted-foreground hover:bg-white/5 hover:text-white/60"}`}>
-      {children}
+    <button
+      onClick={onClick}
+      className={`relative shrink-0 px-4 py-3 rounded-[1.3rem] text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-300 active:scale-95 ${
+        active
+          ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)] scale-[1.03]"
+          : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06] hover:text-white/60"
+      }`}
+    >
+      {active && <span className="absolute inset-0 rounded-[1.3rem] bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+      <span className="relative z-10">{children}</span>
     </button>
   );
 }

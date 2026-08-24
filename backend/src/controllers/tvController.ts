@@ -20,6 +20,7 @@ interface ProgramaRow {
   cover: string;
   stream_url: string;
   topico_url: string;
+  salaId: string;
   data: string;
   horario: string;
   duracao_seg: number;
@@ -45,6 +46,13 @@ async function readProgramas(): Promise<ProgramaRow[]> {
   // Agenda_TV: Programa, Tipo, Material, Buff, Data, Horario, Capa_URL, Status, Topico_ID, Topico_URL, TIPO_EVENTO
   const headers = rows[0].map((h) => normalizeComparison(h));
   const tipoEventoCol = headers.findIndex((h) => h === "tipo_evento");
+  // Antes essa coluna não existia na aba (por isso ficava sempre 0, o que
+  // quebrava silenciosamente o cálculo de % de presença — a duração total da
+  // transmissão dava 0 e o percentual de presença nunca passava de 0%, mesmo
+  // com o jogador assistindo a live inteira). Procura pelo cabeçalho em vez
+  // de posição fixa, pra funcionar tanto se a coluna já existir hoje quanto
+  // se for adicionada depois em qualquer posição.
+  const duracaoSegCol = headers.findIndex((h) => h === "duracao_seg");
 
   return rows
     .slice(1)
@@ -57,7 +65,12 @@ async function readProgramas(): Promise<ProgramaRow[]> {
       status: normalizeText(r[7]),
       data: normalizeText(r[4]),
       horario: normalizeText(r[5]),
-      duracaoSeg: 0,
+      duracaoSeg: duracaoSegCol >= 0 ? Number(r[duracaoSegCol]) || 0 : 0,
+      // Topico_ID = ID de sala único por transmissão (ex: "empirehits_20260602_2015"),
+      // criado manualmente em Agenda_TV e replicado em Programacao_TV — é o que
+      // realmente identifica "essa transmissão específica" (título+data sozinhos
+      // repetem em reprises/mesmo programa em datas diferentes com mesmo nome).
+      salaId: normalizeText(r[8]),
       topicoUrl: normalizeText(r[9]),
       capaUrl: normalizeText(r[6]),
       tipoEvento: tipoEventoCol >= 0 ? normalizeText(r[tipoEventoCol]) : "",
@@ -72,6 +85,7 @@ async function readProgramas(): Promise<ProgramaRow[]> {
       cover: r.capaUrl,
       stream_url: r.topicoUrl,
       topico_url: r.topicoUrl,
+      salaId: r.salaId,
       data: r.data,
       horario: r.horario,
       duracao_seg: r.duracaoSeg,
@@ -311,6 +325,7 @@ function escolherTier(tiers: RegraTier[] | undefined, percentual: number): Regra
 }
 
 interface BroadcastGroup {
+  chave: string;
   data: string;
   programa: string;
   tipoEvento: string;
@@ -319,13 +334,22 @@ interface BroadcastGroup {
   endTs: number | null;
 }
 
+// Margem aplicada ao último segmento quando a duração precisa ser estimada
+// (coluna Duracao_Seg ainda não existe/está zerada na planilha) — sem isso o
+// último segmento contaria 0s e o total ficaria menor que o real.
+const MINUTOS_ESTIMATIVA_ULTIMO_SEGMENTO = 5;
+
 function agruparTransmissoes(programas: ProgramaRow[]): BroadcastGroup[] {
   const grupos = new Map<string, BroadcastGroup>();
+  const startsPorGrupo = new Map<string, number[]>();
 
   for (const p of programas) {
-    const key = `${p.data}|${p.titulo}`;
+    // Sala única (Topico_ID) é a chave real de uma transmissão — cai pra
+    // data+título só pra linhas antigas gravadas antes da coluna existir.
+    const key = p.salaId || `${p.data}|${p.titulo}`;
     if (!grupos.has(key)) {
       grupos.set(key, {
+        chave: key,
         data: p.data,
         programa: p.titulo,
         tipoEvento: p.tipoEvento,
@@ -341,23 +365,43 @@ function agruparTransmissoes(programas: ProgramaRow[]): BroadcastGroup[] {
 
     const start = parseDataHorario(p.data, p.horario);
     if (start !== null) {
+      if (!startsPorGrupo.has(key)) startsPorGrupo.set(key, []);
+      startsPorGrupo.get(key)!.push(start);
       const end = start + (p.duracao_seg || 0) * 1000;
       if (grupo.endTs === null || end > grupo.endTs) grupo.endTs = end;
     }
+  }
+
+  // Fallback: se Duracao_Seg não existe/está zerada (totalDuracaoSeg = 0), a
+  // duração real é estimada pelo intervalo entre o primeiro e o último
+  // segmento (+ margem pro último), em vez de deixar a transmissão inteira
+  // sem duração — sem isso, % de presença nunca sai de 0% mesmo com o
+  // jogador assistindo a live inteira.
+  for (const grupo of grupos.values()) {
+    if (grupo.totalDuracaoSeg > 0) continue;
+    const starts = startsPorGrupo.get(grupo.chave);
+    if (!starts || starts.length === 0) continue;
+    const minStart = Math.min(...starts);
+    const maxStart = Math.max(...starts);
+    const estimadoSeg = Math.round((maxStart - minStart) / 1000) + MINUTOS_ESTIMATIVA_ULTIMO_SEGMENTO * 60;
+    grupo.totalDuracaoSeg = estimadoSeg;
+    grupo.endTs = maxStart + MINUTOS_ESTIMATIVA_ULTIMO_SEGMENTO * 60 * 1000;
   }
 
   return Array.from(grupos.values());
 }
 
 // Chaves de transmissões já processadas — evita gravar o mesmo evento duas
-// vezes a cada vez que o cron roda.
+// vezes a cada vez que o cron roda. Grava a mesma chave usada em
+// agruparTransmissoes (Topico_ID/sala quando existe, senão data|programa) —
+// senão duas transmissões de sala diferente com mesmo título+data (ex:
+// reprise no mesmo dia) ficariam marcadas como a mesma coisa.
 async function readProcessados(): Promise<Set<string>> {
   const rows = await googleSheetsService.agendaTV.readValues(PROCESSADO_SHEET).catch(() => []);
   const set = new Set<string>();
   for (const row of rows.slice(1)) {
-    const data = normalizeText(row[0]);
-    const programa = normalizeText(row[1]);
-    if (data && programa) set.add(`${data}|${programa}`);
+    const chave = normalizeText(row[0]);
+    if (chave) set.add(chave);
   }
   return set;
 }
@@ -491,7 +535,11 @@ export async function processarParticipacaoTV(): Promise<{
   // TV_Participacao_Processada precisa já existir, criada manualmente.
   const processadoRows = await googleSheetsService.agendaTV.readValues(PROCESSADO_SHEET).catch(() => []);
   if (processadoRows.length === 0) {
-    await googleSheetsService.agendaTV.appendRow(PROCESSADO_SHEET, ["Data", "Programa", "ProcessadoEm"]);
+    await googleSheetsService.agendaTV.appendRow(
+      PROCESSADO_SHEET,
+      ["Chave", "Programa", "ProcessadoEm"],
+      "A:C",
+    );
   }
 
   const [programas, regras, processados] = await Promise.all([
@@ -508,7 +556,7 @@ export async function processarParticipacaoTV(): Promise<{
   let registrosGravados = 0;
 
   for (const grupo of grupos) {
-    const key = `${grupo.data}|${grupo.programa}`;
+    const key = grupo.chave;
     if (processados.has(key)) continue;
     if (!grupo.endTs || now < grupo.endTs + bufferMs) continue; // ainda não acabou (ou falta a folga de segurança)
     if (!grupo.tipoEvento) {
@@ -555,11 +603,11 @@ export async function processarParticipacaoTV(): Promise<{
       }
     }
 
-    await googleSheetsService.agendaTV.appendRow(PROCESSADO_SHEET, [
-      grupo.data,
-      grupo.programa,
-      new Date().toISOString(),
-    ]);
+    await googleSheetsService.agendaTV.appendRow(
+      PROCESSADO_SHEET,
+      [grupo.chave, grupo.programa, new Date().toISOString()],
+      "A:C",
+    );
     transmissoesProcessadas++;
   }
 

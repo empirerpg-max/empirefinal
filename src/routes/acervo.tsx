@@ -113,6 +113,10 @@ function AcervoPage() {
 
   return (
     <div className="flex-1 bg-background min-h-dvh pb-32">
+      {/* max-w trava o conteudo em telas largas (desktop) — sem isso o grid
+          de 2 colunas esticava a ponto da capa da revista ocupar quase a
+          tela inteira, porque nada limitava a largura do container. */}
+      <div className="max-w-3xl mx-auto">
       <div className="px-4 pt-6 pb-4">
         <div className="flex items-center gap-2 mb-1">
           <Archive className="size-5 text-primary" />
@@ -129,33 +133,42 @@ function AcervoPage() {
             haptic.selection();
             setTab("revistas");
           }}
-          className={`flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all ${
-            tab === "revistas" ? "bg-primary text-primary-foreground" : "bg-white/5 text-muted-foreground border border-white/10"
+          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+            tab === "revistas"
+              ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+              : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
           }`}
         >
-          <BookOpen className="size-3.5" /> Revistas
+          {tab === "revistas" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+          <BookOpen className="relative z-10 size-3.5" /> <span className="relative z-10">Revistas</span>
         </button>
         <button
           onClick={() => {
             haptic.selection();
             setTab("entrevistas");
           }}
-          className={`flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all ${
-            tab === "entrevistas" ? "bg-primary text-primary-foreground" : "bg-white/5 text-muted-foreground border border-white/10"
+          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+            tab === "entrevistas"
+              ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+              : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
           }`}
         >
-          <MessageSquareText className="size-3.5" /> Entrevistas
+          {tab === "entrevistas" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+          <MessageSquareText className="relative z-10 size-3.5" /> <span className="relative z-10">Entrevistas</span>
         </button>
         <button
           onClick={() => {
             haptic.selection();
             setTab("forbes");
           }}
-          className={`flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all ${
-            tab === "forbes" ? "bg-primary text-primary-foreground" : "bg-white/5 text-muted-foreground border border-white/10"
+          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+            tab === "forbes"
+              ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+              : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
           }`}
         >
-          <Crown className="size-3.5" /> Forbes
+          {tab === "forbes" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+          <Crown className="relative z-10 size-3.5" /> <span className="relative z-10">Forbes</span>
         </button>
       </div>
 
@@ -200,7 +213,7 @@ function AcervoPage() {
           revistas.length === 0 ? (
             <EmptyState text="Nenhuma revista publicada ainda." />
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {revistas.map((r) => (
                 <motion.button
                   key={r.id}
@@ -260,6 +273,7 @@ function AcervoPage() {
             ))}
           </div>
         )}
+      </div>
       </div>
 
       {tab !== "forbes" && (
@@ -336,15 +350,19 @@ function RevistaViewer({ revista, onClose }: { revista: Revista; onClose: () => 
               <img src={resolveImg(revista.capa)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+            {/* selo editorial no topo — mesma linguagem "número da edição" de capa de revista */}
+            <div className="absolute top-4 left-4 px-3 py-1 rounded-full bg-black/50 border border-white/10 backdrop-blur-md">
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/70">Edição Empire</span>
+            </div>
           </motion.div>
           <motion.div
             initial="hidden"
             animate="visible"
-            className="absolute inset-x-0 bottom-0 p-6"
+            className="absolute inset-x-0 bottom-0 p-6 max-w-xl mx-auto sm:pb-10"
           >
             {[
-              <p key="a" className="text-[11px] font-black uppercase text-primary tracking-wide">{revista.artista}</p>,
-              <h2 key="b" className="text-3xl font-black leading-tight text-white mb-1">{revista.titulo}</h2>,
+              <p key="a" className="text-[11px] font-black uppercase text-primary tracking-[0.2em]">{revista.artista}</p>,
+              <h2 key="b" className="text-3xl sm:text-4xl font-black leading-[0.95] tracking-tight text-white mb-1.5">{revista.titulo}</h2>,
               <p key="c" className="text-xs text-white/60 font-medium mb-5">
                 {total} páginas{revista.musicas?.length ? ` · Sobre: ${revista.musicas.join(", ")}` : ""}
               </p>,
@@ -377,7 +395,7 @@ function RevistaViewer({ revista, onClose }: { revista: Revista; onClose: () => 
           animate={{ opacity: 1 }}
           className="flex-1 flex flex-col overflow-hidden"
         >
-          <div className="flex-1 relative overflow-hidden">
+          <div className="flex-1 relative overflow-hidden mx-auto w-full max-w-2xl">
             <img
               src={resolveImg(revista.paginas[page])}
               className="w-full h-full object-contain"
@@ -400,8 +418,10 @@ function RevistaViewer({ revista, onClose }: { revista: Revista; onClose: () => 
               </button>
             )}
           </div>
-          <div className="p-4 shrink-0 text-center text-xs font-bold text-white/70">
-            Página {page + 1} / {total}
+          <div className="p-4 shrink-0 flex justify-center">
+            <span className="px-4 py-1.5 rounded-full bg-white/[0.06] border border-white/10 backdrop-blur-md text-[11px] font-black uppercase tracking-widest text-white/80">
+              Página <span className="text-primary">{page + 1}</span> / {total}
+            </span>
           </div>
         </motion.div>
       )}

@@ -61,6 +61,7 @@ import {
   getArtistInfoController,
   setArtistFotoController,
   getAllArtistasController,
+  rescisaoController,
 } from "../controllers/artistasController";
 import { calcularFortunaChartsController } from "../controllers/fortunaChartsController";
 import {
@@ -127,12 +128,14 @@ import {
   getTurnesController,
   getTurneDetalheController,
   criarTurneController,
+  comprarTurneSimplesController,
   realizarAcaoDiaController,
   getComentariosTurneController,
   comentarTurneController,
   getMissoesController,
   getFeedGlobalController,
 } from "../controllers/tourController";
+import { getProjetosController } from "../controllers/projetosController";
 import { handleMediaRoutes } from "./mediaRoutes";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -182,6 +185,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/criar",
     "/api/artistas/infos",
     "/api/artistas/foto",
+    "/api/artistas/rescisao",
     "/api/user/me",
     "/api/user/nivel",
     "/api/top-playlists",
@@ -237,8 +241,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/turnes/locais",
     "/api/turnes/simular",
     "/api/turnes",
+    "/api/projetos",
     "/api/turnes/detalhe",
     "/api/turnes/criar",
+    "/api/turnes/comprar-simples",
     "/api/turnes/acao",
     "/api/turnes/comentarios",
     "/api/turnes/comentar",
@@ -664,6 +670,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await setArtistFotoController(request);
+  } else if (url.pathname === "/api/artistas/rescisao") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/artistas/rescisao." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await rescisaoController(request);
   } else if (url.pathname === "/api/tv/presenca") {
     response =
       request.method === "GET"
@@ -793,6 +807,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     }
     response = await getTurnesController(request);
+  } else if (url.pathname === "/api/projetos") {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/projetos." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await getProjetosController(request);
   } else if (url.pathname === "/api/turnes/detalhe") {
     if (request.method !== "GET") {
       return new Response(
@@ -809,6 +831,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await criarTurneController(request);
+  } else if (url.pathname === "/api/turnes/comprar-simples") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/turnes/comprar-simples." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await comprarTurneSimplesController(request);
   } else if (url.pathname === "/api/turnes/acao") {
     if (request.method !== "POST") {
       return new Response(
