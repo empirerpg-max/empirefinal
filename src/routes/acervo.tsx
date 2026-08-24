@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+import { getStoredLogin } from "@/components/LoginScreen";
 
 // Transição de "capa vira detalhe" (mesmo mecanismo do card de notícia no
 // Social — layoutId + AnimatePresence) e o stagger de entrada do conteúdo
@@ -69,6 +70,12 @@ async function uploadToDrive(file: File): Promise<string | null> {
 
 function AcervoPage() {
   const { user } = useTelegramUser();
+  // Login via usuário/senha (fora do Telegram) guarda o telegram_id
+  // histórico em localStorage — sem isso, quem entra pelo navegador (não
+  // pelo Telegram) nunca tinha user?.id preenchido, e a tela achava que o
+  // jogador não tinha nenhum artista vinculado mesmo tendo (mesmo padrão já
+  // usado em /perfil).
+  const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
   const [tab, setTab] = useState<"revistas" | "entrevistas" | "forbes">("revistas");
   const [revistas, setRevistas] = useState<Revista[]>([]);
   const [entrevistas, setEntrevistas] = useState<Entrevista[]>([]);
@@ -106,10 +113,9 @@ function AcervoPage() {
   }, [tab, forbes]);
 
   useEffect(() => {
-    const tgId = user?.id || "";
     if (!tgId || tgId === "guest") return;
     api.meusArtistas(tgId).then(setMyArtists).catch(() => setMyArtists([]));
-  }, [user?.id]);
+  }, [tgId]);
 
   return (
     <div className="flex-1 bg-background min-h-dvh pb-32">
@@ -299,7 +305,7 @@ function AcervoPage() {
           tab={tab}
           myArtists={myArtists}
           inputCls={inputCls}
-          tgId={user?.id || ""}
+          tgId={tgId}
           onClose={() => setIsCreateOpen(false)}
           onCreated={() => {
             setIsCreateOpen(false);
