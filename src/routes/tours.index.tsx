@@ -23,6 +23,7 @@ import {
 import { api, fmtMoney, driveImg } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
 import { CreateTourSheet } from "@/components/Tours/CreateTourSheet";
+import { LoadErrorState } from "@/components/LoadErrorState";
 
 export const Route = createFileRoute("/tours/")({
   component: ToursIndex,
@@ -315,17 +316,7 @@ function ToursIndex() {
               Turnês em Andamento
             </h2>
             {publicasError ? (
-              <div className="rounded-2xl bg-destructive/5 border border-dashed border-destructive/20 p-6 text-center">
-                <p className="text-sm text-muted-foreground mb-3">
-                  Não conseguimos carregar as turnês agora.
-                </p>
-                <button
-                  onClick={loadPublicas}
-                  className="text-[11px] font-black uppercase tracking-wider text-primary underline"
-                >
-                  Tentar novamente
-                </button>
-              </div>
+              <LoadErrorState onRetry={loadPublicas} />
             ) : publicas === null ? (
               <div className="flex justify-center py-8 opacity-50">
                 <Loader2 className="size-6 animate-spin" />
