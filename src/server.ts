@@ -402,69 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Correção pontual, idempotente: repara linhas deslocadas de coluna em
-    // Playlists_Albuns/Playlists_Faixas (planilha usuarios) — bug real já
-    // corrigido no código de escrita (criarAlbumAntigoController já trava
-    // range em "A:K"/"A:G"), mas 4 álbuns antigos (MAJOR BEAT e faixas dele,
-    // Tekkno Tribal, Too Young To Die, Love$ick) ficaram gravados com a
-    // linha inteira deslocada várias colunas pra direita (confirmado por
-    // dump real: 22 linhas afetadas, sempre num bloco consecutivo a partir
-    // de um único índice não-zero, nunca com furo no meio). Detecta
-    // qualquer linha cuja primeira célula não-vazia não esteja na coluna A,
-    // realoca o bloco pra A:K (álbuns, 11 campos) ou A:G (faixas, 7 campos)
-    // e limpa as células antigas. Idempotente: depois de corrigida, a linha
-    // já começa em A e não é mais detectada. Será removido depois.
-    if (url.pathname === "/api/debug/legado-fix" && request.method === "GET") {
-      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
-
-      const colLetter = (idx: number): string => {
-        let n = idx;
-        let s = "";
-        while (n >= 0) {
-          s = String.fromCharCode((n % 26) + 65) + s;
-          n = Math.floor(n / 26) - 1;
-        }
-        return s;
-      };
-
-      async function repararAba(sheetName: string, numCampos: number) {
-        const rows = await googleSheetsService.usuarios.readValues(sheetName);
-        const corrigidas: { sheetRow: number; firstNonEmptyIdx: number; campos: string[] }[] = [];
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          const firstNonEmptyIdx = row.findIndex((c) => normalizeText(c));
-          if (firstNonEmptyIdx <= 0) continue; // já alinhada ou linha vazia
-          const sheetRow = i + 1;
-          const campos = Array.from({ length: numCampos }, (_, k) => normalizeText(row[firstNonEmptyIdx + k] || ""));
-
-          // Limpa TODO o intervalo antigo (do índice deslocado até o fim da
-          // linha) antes de escrever — evita que o clear apague o dado novo
-          // em colunas onde os dois intervalos se sobrepõem (ex: campo
-          // deslocado em H mas o alvo correto também usa colunas até K).
-          const ultimoIdxAntigo = row.length - 1;
-          if (ultimoIdxAntigo >= firstNonEmptyIdx) {
-            const largura = ultimoIdxAntigo - firstNonEmptyIdx + 1;
-            await googleSheetsService.usuarios.updateValues(
-              sheetName,
-              `${colLetter(firstNonEmptyIdx)}${sheetRow}:${colLetter(ultimoIdxAntigo)}${sheetRow}`,
-              [Array(largura).fill("")],
-            );
-          }
-          await googleSheetsService.usuarios.updateValues(
-            sheetName,
-            `A${sheetRow}:${colLetter(numCampos - 1)}${sheetRow}`,
-            [campos],
-          );
-          corrigidas.push({ sheetRow, firstNonEmptyIdx, campos });
-        }
-        return corrigidas;
-      }
-
-      const albunsCorrigidos = await repararAba("Playlists_Albuns", 11);
-      const faixasCorrigidas = await repararAba("Playlists_Faixas", 7);
-      return Response.json({ albunsCorrigidos, faixasCorrigidas });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
