@@ -77,7 +77,12 @@ async function concederPrestigioLoginDiario(match: UsuariosRow, usuarioFallback:
   const ultimoLoginColIndex = colKeys.indexOf("ultimo_login_prestigio");
   if (ultimoLoginColIndex === -1) return;
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  // Horário de Brasília (UTC-3), não UTC puro — sem esse ajuste, depois das
+  // 21h (Brasília) o "hoje" em UTC já vira o dia seguinte, e um jogador que
+  // já tinha logado mais cedo no MESMO dia local ganhava um segundo crédito
+  // de login_diario só por reabrir o app à noite (prestígio "subindo do
+  // nada"). Mesmo ajuste usado no cálculo de horário da Empire TV.
+  const hoje = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const ultimoRegistrado = match.rec["ultimo_login_prestigio"] || "";
   if (ultimoRegistrado === hoje) return;
 
