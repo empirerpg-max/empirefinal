@@ -7,30 +7,61 @@ import { googleSheetsService, normalizeComparison, normalizeText } from "../serv
 // dropdown inválido); D = "TIPO DO REGISTRO" (dropdown); E = "VALOR" é
 // calculado pela própria planilha a partir de D — nunca escrevemos nela.
 //
-// O nome "canônico" (código único) de música/vídeo vem da coluna B de
-// "EDIÇÃO CHARTS"; de álbum vem da coluna D de "EDIÇÃO CHARTS ÁLBUMS"
-// (prefixado com "(ALBUM) - "), na planilha edicaoCharts — confirmado
-// pelo usuário. Buscamos por título normalizado; se não achar (ex: chart
-// ainda não editado com o lançamento), caímos pro título recebido mesmo,
-// pra nunca bloquear o registro por causa de uma busca sem match.
-async function buscarNomeCanonico(tituloOriginal: string, isAlbum: boolean): Promise<string> {
-  const alvo = normalizeComparison(tituloOriginal);
+// Colunas de "Código único" (confirmadas pelo usuário) — é por AQUI que a
+// busca do nome canônico deveria sempre passar, não por texto de título:
+//   EDIÇÃO CHARTS (músicas/vídeos) ......... coluna BD (índice 55)
+//   EDIÇÃO CHARTS ÁLBUMS ................... coluna R  (índice 17)
+//   Musicas ................................ coluna Z  (índice 25)
+//   Music Videos ............................ coluna U  (índice 20) — usa os
+//     mesmos títulos/códigos de EDIÇÃO CHARTS (não tem aba própria de edição)
+//   Albuns .................................. coluna L  (índice 11)
+const COL_CODIGO_EDICAO_CHARTS = 55; // BD
+const COL_CODIGO_EDICAO_CHARTS_ALBUNS = 17; // R
+const COL_TITULO_EDICAO_CHARTS = 1; // B
+const COL_TITULO_EDICAO_CHARTS_ALBUNS = 3; // D
+
+/**
+ * Acha o nome "canônico" (o valor exato que precisa cair no dropdown da
+ * coluna C de REGISTRO) casando pelo Código único — a mesma chave gravada
+ * em Musicas (Z) / Albuns (L) / Music Videos (U) do lado do tópico, e em
+ * EDIÇÃO CHARTS (BD) / EDIÇÃO CHARTS ÁLBUMS (R) do lado do chart. Só cai
+ * pra comparação de título (frágil — duas abas diferentes, qualquer
+ * diferença de espaço/acentuação/"feat." já quebra o match) quando o
+ * código não veio ou não bateu com nenhuma linha, pra nunca bloquear o
+ * registro por causa de uma linha antiga sem código preenchido ainda.
+ */
+async function buscarNomeCanonico(params: {
+  titulo: string;
+  isAlbum: boolean;
+  codigoUnico?: string;
+}): Promise<string> {
+  const { titulo, isAlbum, codigoUnico } = params;
+  const codigoNorm = codigoUnico ? normalizeComparison(codigoUnico) : "";
+  const alvoTitulo = normalizeComparison(titulo);
+
   try {
-    if (isAlbum) {
-      const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS");
+    const sheetName = isAlbum ? "EDIÇÃO CHARTS ÁLBUMS" : "EDIÇÃO CHARTS";
+    const colCodigo = isAlbum ? COL_CODIGO_EDICAO_CHARTS_ALBUNS : COL_CODIGO_EDICAO_CHARTS;
+    const colTitulo = isAlbum ? COL_TITULO_EDICAO_CHARTS_ALBUNS : COL_TITULO_EDICAO_CHARTS;
+    const rows = await googleSheetsService.edicaoCharts.readValues(sheetName);
+
+    if (codigoNorm) {
       for (let i = 1; i < rows.length; i++) {
-        if (normalizeComparison(rows[i]?.[3]) === alvo) return normalizeText(rows[i][3]);
+        if (normalizeComparison(rows[i]?.[colCodigo]) === codigoNorm) {
+          const nome = normalizeText(rows[i][colTitulo]);
+          if (nome) return nome;
+        }
       }
-    } else {
-      const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
-      for (let i = 1; i < rows.length; i++) {
-        if (normalizeComparison(rows[i]?.[1]) === alvo) return normalizeText(rows[i][1]);
-      }
+    }
+
+    // Fallback: comparação por título (comportamento antigo).
+    for (let i = 1; i < rows.length; i++) {
+      if (normalizeComparison(rows[i]?.[colTitulo]) === alvoTitulo) return normalizeText(rows[i][colTitulo]);
     }
   } catch (err) {
     console.warn("[registroLog] Erro ao buscar nome canônico:", err);
   }
-  return tituloOriginal;
+  return titulo;
 }
 
 /**
@@ -53,10 +84,11 @@ export async function registrarAuditLog(params: {
   titulo: string;
   tipo: string;
   isAlbum?: boolean;
+  codigoUnico?: string;
 }): Promise<void> {
-  const { nomeJogador, titulo, tipo, isAlbum } = params;
+  const { nomeJogador, titulo, tipo, isAlbum, codigoUnico } = params;
   try {
-    const nomeCanonico = await buscarNomeCanonico(titulo, !!isAlbum);
+    const nomeCanonico = await buscarNomeCanonico({ titulo, isAlbum: !!isAlbum, codigoUnico });
     const conteudo = isAlbum ? `(ALBUM) - ${nomeCanonico}` : nomeCanonico;
 
     const linha = await googleSheetsService.registrosCharts.appendRow(
