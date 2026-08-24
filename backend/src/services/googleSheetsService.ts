@@ -412,6 +412,29 @@ export async function appendRow(
   return null;
 }
 
+// Debug temporário: mesma chamada de appendRow, mas sem engolir o erro (só
+// 1 tentativa, joga a exceção pra cima) — pra achar a mensagem real de por
+// que uma escrita em REGISTRO está falhando silenciosamente. Será removido
+// depois.
+export async function debugAppendRowRaw(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  values: GoogleSheetRow,
+  range: string,
+  insertDataOption: "INSERT_ROWS" | "OVERWRITE",
+): Promise<number | null> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
+  const result = await sheetsRequest<GoogleSheetsAppendResponse>(
+    `/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=${insertDataOption}`,
+    { method: "POST", body: JSON.stringify({ majorDimension: "ROWS", values: [values] }) },
+    [SHEETS_READWRITE_SCOPE],
+  );
+  const updatedRange = result.updates?.updatedRange || "";
+  const match = updatedRange.match(/![A-Z]+(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
 export const googleSheetsService = {
   SPREADSHEETS,
   readValues,
