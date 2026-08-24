@@ -402,21 +402,23 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário, só leitura: investiga álbuns "sumidos" reportados
-    // pelo usuário (MAJOR BEAT, Tekkno Tribal, Too Young To Die, Love$ick -
-    // artista Jessica Johnson). Dump de todas as linhas da aba Albuns que
-    // batem por artista ou título, mais contagem total de linhas. Será
-    // removido depois.
-    if (url.pathname === "/api/debug/albuns-sumidos" && request.method === "GET") {
+    // Debug temporário, só leitura: os 4 álbuns (MAJOR BEAT, Tekkno Tribal,
+    // Too Young To Die, Love$ick) não aparecem na aba "Albuns" (planilha
+    // principal, fluxo novo de criação). Hipótese: foram cadastrados pelo
+    // fluxo legado (aba "Playlists_Albuns", planilha usuarios) em vez do
+    // fluxo novo. Dump de linhas que batam por artista/título. Será removido
+    // depois.
+    if (url.pathname === "/api/debug/albuns-legado" && request.method === "GET") {
       const { googleSheetsService, normalizeText, normalizeComparison } = await import(
         "../backend/src/services/googleSheetsService"
       );
-      const rows = await googleSheetsService.principal.readValues("Albuns");
+      const rows = await googleSheetsService.usuarios.readValues("Playlists_Albuns");
       const header = rows[0] || [];
       const alvoTitulos = ["major beat", "tekkno tribal", "too young to die", "love$ick"].map(normalizeComparison);
       const encontrados = rows.slice(1).filter((r) => {
-        const label = normalizeComparison(r[6] || ""); // G = "Artista - Título"
-        return alvoTitulos.some((t) => label.includes(t)) || label.includes("jessica");
+        const artista = normalizeComparison(r[1] || ""); // B = artista
+        const titulo = normalizeComparison(r[2] || ""); // C = titulo
+        return alvoTitulos.some((t) => titulo.includes(t)) || artista.includes("jessica");
       });
       return Response.json({
         header,
