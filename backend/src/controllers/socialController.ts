@@ -60,7 +60,17 @@ async function readRows(sheet: string): Promise<string[][]> {
 // -------------------- POSTS --------------------
 
 export async function getSocialPostsController(): Promise<Response> {
-  const [postsRows, perfisRows] = await Promise.all([readRows(SHEETS.posts), readRows(SHEETS.perfis)]);
+  let postsRows: string[][];
+  let perfisRows: string[][];
+  try {
+    [postsRows, perfisRows] = await Promise.all([readRows(SHEETS.posts), readRows(SHEETS.perfis)]);
+  } catch (err) {
+    // Sem isso, uma falha de leitura (ex: pico de chamadas na API do Sheets)
+    // vazava como exceção não tratada até o topo do Worker, e o frontend via
+    // isso como "sem posts" em vez de um erro real pra tentar de novo.
+    console.error("[getSocialPostsController] Erro:", err);
+    return jsonResponse({ error: "Falha ao carregar publicações." }, 500);
+  }
 
   const posts = postsRows
     .map((row) => {

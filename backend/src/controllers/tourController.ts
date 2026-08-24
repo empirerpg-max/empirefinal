@@ -155,7 +155,10 @@ export interface Tour {
 }
 
 async function readToursRaw(): Promise<{ rowIndex: number; row: string[] }[]> {
-  const rows = await googleSheetsService.usuarios.readValues(TOURS_SHEET).catch(() => []);
+  // Sem .catch(()=>[]) aqui de propósito — uma falha real de leitura precisa
+  // subir até o try/catch do controller (getTurnesController) e virar um
+  // erro de verdade na resposta, não um "nenhuma turnê" silencioso.
+  const rows = await googleSheetsService.usuarios.readValues(TOURS_SHEET);
   if (!rows || rows.length < 2) return [];
   return rows.slice(1).map((row, i) => ({ rowIndex: i + 2, row }));
 }
