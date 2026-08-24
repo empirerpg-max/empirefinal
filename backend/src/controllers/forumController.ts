@@ -143,6 +143,7 @@ export async function createCommentController(request: Request): Promise<Respons
     let colTituloIndex = 7; // Coluna H — "Nome da música"
     let colRatingsIndex = 21; // Coluna V (0-based 21)
     let colAvgIndex = 22; // Coluna W (0-based 22)
+    let colCodigoIndex = 25; // Coluna Z — "Código único" (chave pra REGISTRO)
 
     if (tipoMedia === "album") {
       targetSheet = "Albuns";
@@ -151,6 +152,7 @@ export async function createCommentController(request: Request): Promise<Respons
       colTituloIndex = 6; // Coluna G — "Novo Nome"
       colRatingsIndex = 7; // Coluna H
       colAvgIndex = 8; // Coluna I
+      colCodigoIndex = 11; // Coluna L — "Código único"
     } else if (tipoMedia === "video" || tipoMedia === "music-video") {
       // "Videos"/"Comentarios_Videos" não existem mais — Vídeos e Music
       // Videos foram consolidados em "Music Videos"/"Comentarios_MV". A
@@ -163,6 +165,7 @@ export async function createCommentController(request: Request): Promise<Respons
       colTituloIndex = 1; // Coluna B — Título do tópico
       colRatingsIndex = 13; // Coluna N (0-based 13)
       colAvgIndex = 14; // Coluna O (0-based 14)
+      colCodigoIndex = 20; // Coluna U — "Código único" (mesmos códigos de EDIÇÃO CHARTS)
     }
 
     // Título "oficial" pro Audit Log — resolvido pelo ID único (topicId) da
@@ -172,6 +175,11 @@ export async function createCommentController(request: Request): Promise<Respons
     // REGISTRO saía com o título errado. Só cai pro título do cliente se o
     // topicId não bater com nenhuma linha (nunca bloqueia o registro).
     let tituloOficial = titleClean;
+    // Código único (Z/L/U conforme a aba) — chave real pro casamento com
+    // EDIÇÃO CHARTS/EDIÇÃO CHARTS ÁLBUMS em registrarAuditLog. Vazio quando a
+    // linha ainda não tem código preenchido (registrarAuditLog cai pro
+    // fallback por título nesse caso).
+    let codigoUnico = "";
 
     // 1. Atualizar nota/likes e média na planilha principal — isolado num
     // try/catch pra uma falha aqui (ex: título sem match nenhum) nunca
@@ -212,6 +220,7 @@ export async function createCommentController(request: Request): Promise<Respons
           const rowData = rows[foundRowIndex - 1] || [];
           const tituloDaLinha = normalizeText(rowData[colTituloIndex]);
           if (tituloDaLinha) tituloOficial = tituloDaLinha;
+          codigoUnico = normalizeText(rowData[colCodigoIndex]);
 
           const currentRatings = rowData[colRatingsIndex] || "";
 
@@ -272,6 +281,7 @@ export async function createCommentController(request: Request): Promise<Respons
           ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
           : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
       isAlbum: tipoMedia === "album",
+      codigoUnico,
     });
 
     await somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(() => {});
