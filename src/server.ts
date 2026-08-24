@@ -402,6 +402,29 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário, só leitura: investiga álbuns "sumidos" reportados
+    // pelo usuário (MAJOR BEAT, Tekkno Tribal, Too Young To Die, Love$ick -
+    // artista Jessica Johnson). Dump de todas as linhas da aba Albuns que
+    // batem por artista ou título, mais contagem total de linhas. Será
+    // removido depois.
+    if (url.pathname === "/api/debug/albuns-sumidos" && request.method === "GET") {
+      const { googleSheetsService, normalizeText, normalizeComparison } = await import(
+        "../backend/src/services/googleSheetsService"
+      );
+      const rows = await googleSheetsService.principal.readValues("Albuns");
+      const header = rows[0] || [];
+      const alvoTitulos = ["major beat", "tekkno tribal", "too young to die", "love$ick"].map(normalizeComparison);
+      const encontrados = rows.slice(1).filter((r) => {
+        const label = normalizeComparison(r[6] || ""); // G = "Artista - Título"
+        return alvoTitulos.some((t) => label.includes(t)) || label.includes("jessica");
+      });
+      return Response.json({
+        header,
+        totalLinhas: rows.length - 1,
+        encontrados: encontrados.map((r) => Object.fromEntries(r.map((v, i) => [i, normalizeText(v)]))),
+      });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
