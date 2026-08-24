@@ -506,6 +506,16 @@ export default {
       return Response.json({ erro, totalLinhas: rows.length, ultimaLinha: rows[rows.length - 1] || null });
     }
 
+    // Debug temporário: lê as últimas linhas da planilha de LOGS didáticos,
+    // pra ver se a falha de escrita em REGISTRO (testa-registro-real) foi
+    // capturada automaticamente com o erro real da API do Google Sheets.
+    if (url.pathname === "/api/debug/ler-logs-sistema" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      const rows = await googleSheetsService.logsSistema.readValues("LOGS").catch(() => []);
+      const ultimas = rows.slice(-10);
+      return Response.json({ totalLinhas: rows.length, ultimas });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
