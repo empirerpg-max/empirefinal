@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Music, Flame, Youtube, Disc3, DollarSign, Search, X, ChevronLeft, ChevronRight, Loader2, Radio,
 } from "lucide-react";
@@ -437,8 +437,17 @@ function EmptyBlock({ text }: { text: string }) {
   return <div className="py-10 text-center text-sm text-muted-foreground italic px-6">{text}</div>;
 }
 
-function pillClass(active: boolean) {
-  return chartsPillClass(active);
+// Pílula de filtro simples (texto só, sem ícone) — reaproveita o mesmo
+// visual glass/gradiente da tab bar principal, incluindo a camada de fundo
+// (ChartsPillActiveBg): sem ela, o texto ativo ficava "text-primary-foreground"
+// (claro) sem nenhum fundo por trás pra dar contraste, e sumia visualmente.
+function ChartsPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button onClick={onClick} className={chartsPillClass(active)}>
+      {active && <ChartsPillActiveBg />}
+      <span className="relative z-10">{children}</span>
+    </button>
+  );
 }
 
 // ---------- Categoria (Hot 100 / Spotify / Apple / YouTube / Álbuns / Sales) ----------
@@ -453,12 +462,12 @@ function ChartsCategoryView({ category }: { category: CategoryConfig }) {
       {hasSubTabs && (
         <div className="px-4 pt-3">
           <PillScroller>
-            <button onClick={() => setSubView("global")} className={pillClass(subView === "global")}>Global</button>
+            <ChartsPill active={subView === "global"} onClick={() => setSubView("global")}>Global</ChartsPill>
             {category.countryTab && (
-              <button onClick={() => setSubView("country")} className={pillClass(subView === "country")}>Por país</button>
+              <ChartsPill active={subView === "country"} onClick={() => setSubView("country")}>Por país</ChartsPill>
             )}
             {category.monthlyPlatform && (
-              <button onClick={() => setSubView("monthly")} className={pillClass(subView === "monthly")}>Artistas do mês</button>
+              <ChartsPill active={subView === "monthly"} onClick={() => setSubView("monthly")}>Artistas do mês</ChartsPill>
             )}
           </PillScroller>
         </div>
@@ -744,7 +753,7 @@ function ChartsCountryView({ tab }: { tab: string }) {
     <div className="p-4">
       <PillScroller>
         {dates.map((d) => (
-          <button key={d} onClick={() => setDate(d)} className={pillClass(d === date)}>{d}</button>
+          <ChartsPill key={d} active={d === date} onClick={() => setDate(d)}>{d}</ChartsPill>
         ))}
       </PillScroller>
 
@@ -873,7 +882,7 @@ function ChartsMonthlyView({ platform, color }: { platform: string; color: strin
     <div className="p-4 space-y-3">
       <PillScroller>
         {years.map((y) => (
-          <button key={y} onClick={() => pickYear(y)} className={pillClass(y === year)}>{y}</button>
+          <ChartsPill key={y} active={y === year} onClick={() => pickYear(y)}>{y}</ChartsPill>
         ))}
       </PillScroller>
 
@@ -882,7 +891,7 @@ function ChartsMonthlyView({ platform, color }: { platform: string; color: strin
       ) : months.length > 0 ? (
         <PillScroller>
           {months.map((m) => (
-            <button key={m} onClick={() => pickMonth(m)} className={pillClass(m === month)}>{m}</button>
+            <ChartsPill key={m} active={m === month} onClick={() => pickMonth(m)}>{m}</ChartsPill>
           ))}
         </PillScroller>
       ) : null}

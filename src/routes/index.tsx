@@ -20,6 +20,7 @@ import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api, driveImg, invalidateCache, type ChartData } from "@/lib/api";
 import { useHomeConfig } from "@/lib/homeFlags";
 import { getStoredLogin } from "@/components/LoginScreen";
+import { LoadErrorState } from "@/components/LoadErrorState";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -153,15 +154,7 @@ function Index() {
             ))}
           </div>
         ) : ultimasPostagens.status === "error" ? (
-          <div className="p-5 rounded-[1.5rem] bg-destructive/10 border border-destructive/20 text-center">
-            <p className="text-xs font-bold text-destructive mb-2">Não conseguimos carregar as publicações</p>
-            <button
-              onClick={() => fetchData(false)}
-              className="text-[11px] font-black uppercase tracking-wider text-primary underline min-h-11"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <LoadErrorState onRetry={() => fetchData(false)} />
         ) : ultimasPostagens.data.length === 0 ? (
           <div className="w-full p-6 rounded-[1.75rem] bg-card/50 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center text-center min-h-32">
             <p className="text-sm font-black uppercase tracking-tight mb-1">Nenhuma publicação ainda</p>
