@@ -506,6 +506,69 @@ export default {
       return Response.json({ erro, totalLinhas: rows.length, ultimaLinha: rows[rows.length - 1] || null });
     }
 
+    // Debug temporário: chama ensureSheetTab + appendRow DIRETO (sem
+    // engolir erro) tanto na planilha de logs quanto em REGISTRO com o tipo
+    // real de revista, pra capturar o texto exato do erro da API do Google.
+    if (url.pathname === "/api/debug/raw-write-test" && request.method === "GET") {
+      const gs = await import("../backend/src/services/googleSheetsService");
+      const resultado: Record<string, unknown> = {};
+
+      try {
+        await gs.ensureSheetTab("logsSistema", "LOGS");
+        resultado.ensureSheetTabLogs = "ok";
+      } catch (err: any) {
+        resultado.ensureSheetTabLogsErro = String(err?.message || err);
+      }
+
+      try {
+        const spreadsheetId = gs.SPREADSHEETS.logsSistema;
+        const a1Range = encodeURIComponent(`'LOGS'!A:G`);
+        const accessToken = await (await import("../backend/src/google/service-account")).getGoogleAccessToken([
+          "https://www.googleapis.com/auth/spreadsheets",
+        ]);
+        const res = await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              majorDimension: "ROWS",
+              values: [[new Date().toISOString(), "TESTE-RAW", "teste raw write", "/api/debug/raw-write-test", "", "", ""]],
+            }),
+          },
+        );
+        resultado.logsRawStatus = res.status;
+        resultado.logsRawBody = await res.text();
+      } catch (err: any) {
+        resultado.logsRawErro = String(err?.message || err);
+      }
+
+      try {
+        const spreadsheetId = gs.SPREADSHEETS.registrosCharts;
+        const a1Range = encodeURIComponent(`'REGISTRO'!B:D`);
+        const accessToken = await (await import("../backend/src/google/service-account")).getGoogleAccessToken([
+          "https://www.googleapis.com/auth/spreadsheets",
+        ]);
+        const res = await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${a1Range}:append?valueInputOption=USER_ENTERED&insertDataOption=OVERWRITE`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              majorDimension: "ROWS",
+              values: [["TESTE-CLAUDE-RAW", "Rayna - who would i be without you", "ESPECIAIS (CAPA DE REVISTA, REVIEWS, PHOTOSHOOTS)"]],
+            }),
+          },
+        );
+        resultado.registroRawStatus = res.status;
+        resultado.registroRawBody = await res.text();
+      } catch (err: any) {
+        resultado.registroRawErro = String(err?.message || err);
+      }
+
+      return Response.json(resultado);
+    }
+
     // Debug temporário: lê as últimas linhas da planilha de LOGS didáticos,
     // pra ver se a falha de escrita em REGISTRO (testa-registro-real) foi
     // capturada automaticamente com o erro real da API do Google Sheets.
