@@ -447,6 +447,42 @@ export default {
       });
     }
 
+    // Debug temporário: a proteção real da aba REGISTRO cobre só a coluna E
+    // (fórmula), não B:D — então não explica o erro anterior. Testa a
+    // escrita pelo caminho real (registrarAuditLog, o mesmo usado por
+    // revista/entrevista/comentário do fórum) pra ver se funciona agora.
+    // Será removido depois.
+    if (url.pathname === "/api/debug/testa-registro-real" && request.method === "GET") {
+      const { registrarAuditLog } = await import("../backend/src/controllers/registroLogController");
+      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
+
+      let erro: string | null = null;
+      try {
+        await registrarAuditLog({
+          nomeJogador: "TESTE-CLAUDE-2",
+          titulo: "Rayna - who would i be without you",
+          tipo: "ESPECIAIS (CAPA DE REVISTA, REVIEWS, PHOTOSHOOTS)",
+        });
+      } catch (err: any) {
+        erro = String(err?.message || err);
+      }
+
+      const rows = await googleSheetsService.registrosCharts.readValues("REGISTRO");
+      let linhaEncontrada: { linha: number; jogador: string; conteudo: string; tipo: string } | null = null;
+      for (let i = 0; i < rows.length; i++) {
+        if (normalizeText(rows[i]?.[1]) === "TESTE-CLAUDE-2") {
+          linhaEncontrada = {
+            linha: i + 1,
+            jogador: normalizeText(rows[i][1]),
+            conteudo: normalizeText(rows[i][2]),
+            tipo: normalizeText(rows[i][3]),
+          };
+          break;
+        }
+      }
+      return Response.json({ erro, linhaEncontrada });
+    }
+
     // Debug temporário: testa a nova planilha de LOGS didáticos (grava uma
     // linha de teste e lê de volta pra confirmar acesso da service
     // account). Será removido depois.
