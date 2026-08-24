@@ -402,32 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário, só leitura: investiga por que publicar revista não
-    // gerou linha em REGISTRO. Dump das últimas revistas (ACERVO_REVISTAS,
-    // planilha usuarios) com o campo "musicas" cru, mais as últimas linhas
-    // de REGISTRO (planilha registrosCharts) pra comparar. Será removido
-    // depois.
-    if (url.pathname === "/api/debug/revista-registro" && request.method === "GET") {
-      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
-      const [revistasRows, registroRows] = await Promise.all([
-        googleSheetsService.usuarios.readValues("ACERVO_REVISTAS"),
-        googleSheetsService.registrosCharts.readValues("REGISTRO"),
-      ]);
-      const revistas = revistasRows.slice(1).map((r) => ({
-        id: normalizeText(r[0]),
-        artista: normalizeText(r[1]),
-        titulo: normalizeText(r[2]),
-        data: normalizeText(r[5]),
-        telegram_id: normalizeText(r[6]),
-        musicas_raw: normalizeText(r[7]),
-      }));
-      const registroCauda = registroRows.slice(-30).map((r) => ({
-        jogador: normalizeText(r[1]),
-        conteudo: normalizeText(r[2]),
-        tipo: normalizeText(r[3]),
-      }));
-      return Response.json({ ultimasRevistas: revistas.slice(-10), registroCauda });
-    }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
