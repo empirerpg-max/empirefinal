@@ -9,6 +9,37 @@ import {
 const USUARIOS_SHEET = "Usuários";
 const PRESTIGIO_SHEET = "Prestígio";
 const NIVEIS_SHEET = "Níveis";
+const PRESTIGIO_LOG_SHEET = "Prestigio_Log";
+
+// Log de auditoria — sem isso, nenhuma subida de prestígio tem como ser
+// explicada depois ("por que subiu do nada?"), só dá pra adivinhar lendo
+// código. Best-effort: nunca deve travar o crédito real por causa de uma
+// falha ao gravar o log.
+async function registrarLogPrestigio(
+  identificador: { telegramId?: string; usuario?: string },
+  chave: string,
+  valor: number,
+  saldoAntes: number,
+  saldoDepois: number,
+): Promise<void> {
+  try {
+    await googleSheetsService.usuarios.appendRow(
+      PRESTIGIO_LOG_SHEET,
+      [
+        new Date().toISOString(),
+        identificador.telegramId || "",
+        identificador.usuario || "",
+        chave,
+        String(valor),
+        String(saldoAntes),
+        String(saldoDepois),
+      ],
+      "A:G",
+    );
+  } catch (err) {
+    console.warn("[prestigioService] Falha ao gravar log de prestígio:", err);
+  }
+}
 
 function colIndexToA1Letter(colIndex: number): string {
   let temp = colIndex;
@@ -134,6 +165,7 @@ export async function somarPrestigio(
       `${colLetter}${usuarioRow.rowIndex}`,
       [[novo]],
     );
+    await registrarLogPrestigio(identificador, chave, regra.valor, atual, novo);
   } catch (err) {
     console.warn("[prestigioService] Falha ao somar prestígio:", err);
   }

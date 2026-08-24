@@ -30,6 +30,7 @@ interface AnalyticsJson {
   likes: number;
   comments: number;
   shares: number;
+  likedBy?: string[];
 }
 
 function parseAnalytics(raw: string): AnalyticsJson {
@@ -39,6 +40,7 @@ function parseAnalytics(raw: string): AnalyticsJson {
       likes: Number(parsed.likes) || 0,
       comments: Number(parsed.comments) || 0,
       shares: Number(parsed.shares) || 0,
+      likedBy: Array.isArray(parsed.likedBy) ? parsed.likedBy.map((x: unknown) => String(x)) : undefined,
     };
   } catch {
     return { likes: 0, comments: 0, shares: 0 };
@@ -152,12 +154,23 @@ export async function curtirSocialPostController(request: Request): Promise<Resp
   if (rowIndex === -1) return jsonResponse({ ok: false, error: "Post não encontrado." }, 404);
 
   const analytics = parseAnalytics(rows[rowIndex][6]);
-  analytics.likes += 1;
+  const tgId = normalizeText(body.tgId || "");
+  const likedBy = analytics.likedBy || [];
+  // Sem nenhum controle de "quem já curtiu", o botão de curtir clicado
+  // várias vezes somava curtida + prestígio sem limite nenhum — bastava
+  // martelar o coração pra inflar prestígio de graça. Cada jogador só conta
+  // 1x por post agora, guardado dentro do próprio JSON de analytics (sem
+  // precisar de aba/coluna nova).
+  const jaCurtiu = !!tgId && likedBy.includes(tgId);
+  if (!jaCurtiu) {
+    analytics.likes += 1;
+    if (tgId) analytics.likedBy = [...likedBy, tgId];
+  }
 
   await googleSheetsService.usuarios.updateValues(SHEETS.posts, `G${rowIndex + 1}`, [[JSON.stringify(analytics)]]);
 
-  if (body.tgId) {
-    await somarPrestigio({ telegramId: body.tgId }, "curtida").catch(() => {});
+  if (tgId && !jaCurtiu) {
+    await somarPrestigio({ telegramId: tgId }, "curtida").catch(() => {});
   }
 
   return jsonResponse({ ok: true, likes: analytics.likes });
