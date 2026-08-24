@@ -402,6 +402,55 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário, só leitura+escrita de teste: reproduz o mesmo
+    // caminho de registrarAuditLog (usado por revistas/entrevistas), mas
+    // sem engolir erro, pra achar por que publicar revista não gera linha
+    // em REGISTRO. Testa com a música real "Rayna - who would i be without
+    // you" (label completo "Artista - Título", exatamente como é enviado
+    // pelo picker de músicas do Acervo — ver getMusicasEmChartController).
+    // Será removido depois.
+    if (url.pathname === "/api/debug/testa-registro" && request.method === "GET") {
+      const { googleSheetsService, normalizeText, normalizeComparison } = await import(
+        "../backend/src/services/googleSheetsService"
+      );
+      const tituloTeste = "Rayna - who would i be without you";
+      const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
+      const alvoTitulo = normalizeComparison(tituloTeste);
+      let matchExato: string | null = null;
+      for (let i = 1; i < rows.length; i++) {
+        if (normalizeComparison(rows[i]?.[1]) === alvoTitulo) {
+          matchExato = normalizeText(rows[i][1]);
+          break;
+        }
+      }
+      // Amostra de títulos reais da coluna B pra comparar visualmente.
+      const amostraTitulos = rows
+        .slice(1, 400)
+        .map((r) => normalizeText(r[1]))
+        .filter((t) => normalizeComparison(t).includes("without you") || normalizeComparison(t).includes("rayna"));
+
+      let appendResult: number | null = null;
+      let appendError: string | null = null;
+      try {
+        appendResult = await googleSheetsService.registrosCharts.appendRow(
+          "REGISTRO",
+          ["TESTE-DEBUG-CLAUDE", matchExato || tituloTeste, "ESPECIAIS (CAPA DE REVISTA, REVIEWS, PHOTOSHOOTS)"],
+          "B:D",
+          "OVERWRITE",
+        );
+      } catch (err: any) {
+        appendError = String(err?.message || err);
+      }
+
+      return Response.json({
+        tituloTeste,
+        matchExatoEmEdicaoCharts: matchExato,
+        amostraTitulosParecidos: amostraTitulos,
+        appendResult,
+        appendError,
+      });
+    }
+
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
