@@ -2,6 +2,7 @@ import { googleSheetsService, normalizeComparison } from "../services/googleShee
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
 import { registrarAuditLog } from "./registroLogController";
 import { somarPrestigio } from "../services/prestigioService";
+import { registrarLogSistema } from "../services/logSistemaService";
 
 // Gera o próximo "Código único" (padrão EMPALBM001 pra álbum, EMP001 pra
 // música) — acha a coluna "Código único" pelo cabeçalho (não por letra
@@ -404,6 +405,12 @@ export async function createSongController(request: Request): Promise<Response> 
 
     await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Música "${fullTitle}" lançada por ${nomeJogador} (${artistaPrincipal}).`,
+      onde: "createSongController",
+    }).catch(() => {});
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -556,6 +563,12 @@ export async function createVideoController(request: Request): Promise<Response>
     if (tipo.trim().toLowerCase() === "music video" && musicaVinculada) {
       await marcarVideoclipeNaPontos(musicaVinculada, dataFormatada);
     }
+
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Vídeo "${fullTitle}" lançado por ${artistaResponsavel}.`,
+      onde: "createVideoController",
+    }).catch(() => {});
 
     return new Response(
       JSON.stringify({
@@ -1416,6 +1429,13 @@ export async function createAlbumController(request: Request): Promise<Response>
     // resposta em vez de dizer "sucesso" sem ressalva, pra não esconder
     // faixa que sumiu silenciosamente.
     const faixasIneditasFalharam = faixasIneditasEsperadas - faixasIneditasGravadas;
+
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Álbum "${albumFullTitle}" lançado por ${artistaAlbum} (${faixas.length} faixa(s)).`,
+      onde: "createAlbumController",
+    }).catch(() => {});
+
     return new Response(
       JSON.stringify({
         success: true,
