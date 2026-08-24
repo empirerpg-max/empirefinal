@@ -402,6 +402,29 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário: testa a nova planilha de LOGS didáticos (grava uma
+    // linha de teste e lê de volta pra confirmar acesso da service
+    // account). Será removido depois.
+    if (url.pathname === "/api/debug/testa-logs-sistema" && request.method === "GET") {
+      const { registrarLogSistema } = await import("../backend/src/services/logSistemaService");
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      let erro: string | null = null;
+      try {
+        await registrarLogSistema({
+          categoria: "Ação concluída",
+          oQueAconteceu: "Teste de conexão do Claude com a nova planilha de logs.",
+          onde: "/api/debug/testa-logs-sistema",
+        });
+      } catch (err: any) {
+        erro = String(err?.message || err);
+      }
+      const rows = await googleSheetsService.logsSistema.readValues("LOGS").catch((err) => {
+        erro = erro || String(err?.message || err);
+        return [];
+      });
+      return Response.json({ erro, totalLinhas: rows.length, ultimaLinha: rows[rows.length - 1] || null });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);

@@ -1,5 +1,6 @@
 import { googleSheetsService, normalizeText, normalizeComparison, dedupeHeaders, normalizeHeader, ensureSheetTab } from "../services/googleSheetsService";
 import { registrarAuditLog } from "./registroLogController";
+import { registrarLogSistema } from "../services/logSistemaService";
 
 // Menu Acervo — revistas (galeria de páginas) e entrevistas (perguntas e
 // respostas em texto), publicadas pelos próprios jogadores pra seus
@@ -157,6 +158,12 @@ export async function createAcervoRevistaController(request: Request): Promise<R
   // devolvida, e essas linhas em REGISTRO são o motivo inteiro desse pedido.
   await registrarMusicasNoRegistro(musicas, body.tgId || "", artista, REGISTRO_TIPO_REVISTA);
 
+  registrarLogSistema({
+    categoria: "Ação concluída",
+    oQueAconteceu: `Revista "${titulo}" publicada por ${artista}, vinculada a ${musicas.length} música(s) do chart.`,
+    onde: "createAcervoRevistaController",
+  }).catch(() => {});
+
   return jsonResponse({ ok: true, id });
 }
 
@@ -232,6 +239,12 @@ export async function createAcervoEntrevistaController(request: Request): Promis
   ]);
 
   await registrarMusicasNoRegistro(musicas, body.tgId || "", artista, REGISTRO_TIPO_ENTREVISTA);
+
+  registrarLogSistema({
+    categoria: "Ação concluída",
+    oQueAconteceu: `Entrevista "${titulo}" publicada por ${artista}, vinculada a ${musicas.length} música(s) do chart.`,
+    onde: "createAcervoEntrevistaController",
+  }).catch(() => {});
 
   return jsonResponse({ ok: true, id });
 }

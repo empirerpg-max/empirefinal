@@ -30,6 +30,12 @@ export const SPREADSHEETS = {
   // Grammy, MAMA, People's Choice) — os jogadores preenchem Título/Artista
   // de cada categoria que ganharam via botão "Premiações" em Perfil.
   premiacoes: "1CMJnKRw6RMRX0IG4EzQQABrSGsLbzeWXfYkF6wgzWlI",
+  // Log didático do sistema — planilha própria, separada de tudo,
+  // pensada pra ser lida por gente não-técnica: toda falha de escrita
+  // silenciosa em qualquer aba (ex: proteção de intervalo bloqueando a
+  // service account), erro de app e ação importante concluída caem aqui
+  // já traduzidos, com passo a passo de como resolver quando aplicável.
+  logsSistema: "1gvlaU0-8EIX6PWMf5eB2nQGKeh7N8lNHtgsBPwZomZo",
 } as const;
 
 export type SpreadsheetKey = keyof typeof SPREADSHEETS;
@@ -402,10 +408,31 @@ export async function appendRow(
       return match ? parseInt(match[1], 10) : null;
     } catch (err) {
       const isLastAttempt = attempt === attempts;
+      const mensagem = (err as Error).message;
       console.warn(
-        `[googleSheetsService] Falha ao anexar linha em "${sheetName}" (tentativa ${attempt}/${attempts}): ${(err as Error).message}`,
+        `[googleSheetsService] Falha ao anexar linha em "${sheetName}" (tentativa ${attempt}/${attempts}): ${mensagem}`,
       );
-      if (isLastAttempt) return null;
+      if (isLastAttempt) {
+        // Log didático — carregado via import dinâmico pra evitar dependência
+        // circular estática (logSistemaService importa este arquivo). Nunca
+        // grava log de si mesmo (evitaria loop se o log do log também falhar).
+        if (spreadsheetKeyOrId !== "logsSistema") {
+          import("./logSistemaService")
+            .then(({ registrarLogSistema, traduzirErroEscrita }) => {
+              const { causaProvavel, comoResolver } = traduzirErroEscrita(mensagem);
+              return registrarLogSistema({
+                categoria: "Falha de escrita",
+                oQueAconteceu: `Não consegui gravar uma linha na aba "${sheetName}" (planilha "${String(spreadsheetKeyOrId)}") depois de ${attempts} tentativas.`,
+                onde: `googleSheetsService.appendRow("${String(spreadsheetKeyOrId)}", "${sheetName}")`,
+                causaProvavel,
+                comoResolver,
+                detalheTecnico: mensagem,
+              });
+            })
+            .catch(() => {});
+        }
+        return null;
+      }
       await sleep(attempt * 400);
     }
   }
@@ -527,5 +554,10 @@ export const googleSheetsService = {
   },
   chartsReleases: {
     readValues: (sheetName: string, range?: string) => readValues("chartsReleases", sheetName, range),
+  },
+  logsSistema: {
+    readValues: (sheetName: string, range?: string) => readValues("logsSistema", sheetName, range),
+    appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
+      appendRow("logsSistema", sheetName, values, range),
   },
 };
