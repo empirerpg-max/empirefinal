@@ -402,6 +402,51 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário: usuário confirmou que comentar no fórum grava certo
+    // em REGISTRO (mesma função registrarAuditLog que a revista usa), mas
+    // meu teste anterior deu erro de "protected cell". Preciso da verdade
+    // exata: lê os metadados de proteção da planilha registrosCharts
+    // (quais linhas/colunas estão protegidas, quem pode editar apesar da
+    // proteção) via API do Sheets, e também acha a última linha de verdade
+    // preenchida em REGISTRO (não a cauda com padding em branco). Será
+    // removido depois.
+    if (url.pathname === "/api/debug/protecao-registro" && request.method === "GET") {
+      const { googleSheetsService, normalizeText, SPREADSHEETS } = await import(
+        "../backend/src/services/googleSheetsService"
+      );
+      const { getGoogleAccessToken } = await import("../backend/src/google/service-account");
+      const accessToken = await getGoogleAccessToken(["https://www.googleapis.com/auth/spreadsheets"]);
+      const spreadsheetId = SPREADSHEETS.registrosCharts;
+      const metaRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties,sheets.protectedRanges`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const meta = await metaRes.json();
+      const sheetsMeta = (meta.sheets || []) as any[];
+      const registroSheet = sheetsMeta.find((s) => s.properties?.title === "REGISTRO");
+
+      const rows = await googleSheetsService.registrosCharts.readValues("REGISTRO");
+      let ultimaLinhaComConteudo = -1;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (rows[i]?.some((c) => normalizeText(c))) {
+          ultimaLinhaComConteudo = i + 1; // 1-based
+          break;
+        }
+      }
+      const ultimasLinhasReais = rows
+        .map((r, i) => ({ linha: i + 1, jogador: normalizeText(r[1]), conteudo: normalizeText(r[2]), tipo: normalizeText(r[3]) }))
+        .filter((r) => r.jogador || r.conteudo || r.tipo)
+        .slice(-8);
+
+      return Response.json({
+        totalLinhasLidas: rows.length,
+        ultimaLinhaComConteudo,
+        ultimasLinhasReais,
+        protectedRanges: registroSheet?.protectedRanges || [],
+        sheetId: registroSheet?.properties?.sheetId,
+      });
+    }
+
     // Debug temporário: testa a nova planilha de LOGS didáticos (grava uma
     // linha de teste e lê de volta pra confirmar acesso da service
     // account). Será removido depois.
