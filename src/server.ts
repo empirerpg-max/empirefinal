@@ -410,7 +410,7 @@ export default {
     // pelo picker de músicas do Acervo — ver getMusicasEmChartController).
     // Será removido depois.
     if (url.pathname === "/api/debug/testa-registro" && request.method === "GET") {
-      const { googleSheetsService, normalizeText, normalizeComparison } = await import(
+      const { googleSheetsService, normalizeText, normalizeComparison, debugAppendRowRaw } = await import(
         "../backend/src/services/googleSheetsService"
       );
       const tituloTeste = "Rayna - who would i be without you";
@@ -432,7 +432,8 @@ export default {
       let appendResult: number | null = null;
       let appendError: string | null = null;
       try {
-        appendResult = await googleSheetsService.registrosCharts.appendRow(
+        appendResult = await debugAppendRowRaw(
+          "registrosCharts",
           "REGISTRO",
           ["TESTE-DEBUG-CLAUDE", matchExato || tituloTeste, "ESPECIAIS (CAPA DE REVISTA, REVIEWS, PHOTOSHOOTS)"],
           "B:D",
