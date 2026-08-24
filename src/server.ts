@@ -402,29 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário, só leitura: levanta quais linhas de Musicas/Albuns/
-    // Music Videos ainda estão sem Código único preenchido. Será removido
-    // depois.
-    if (url.pathname === "/api/debug/codigo-unico-faltando" && request.method === "GET") {
-      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
-      const [musicas, albuns, videos] = await Promise.all([
-        googleSheetsService.principal.readValues("Musicas"),
-        googleSheetsService.principal.readValues("Albuns"),
-        googleSheetsService.principal.readValues("Music Videos"),
-      ]);
-      const semCodigo = (rows: string[][], colTitulo: number, colCodigo: number) =>
-        rows
-          .slice(1)
-          .map((r) => ({ titulo: normalizeText(r[colTitulo]), codigo: normalizeText(r[colCodigo]) }))
-          .filter((r) => r.titulo && !r.codigo)
-          .map((r) => r.titulo);
-      return Response.json({
-        musicasSemCodigo: semCodigo(musicas, 7, 25), // H titulo, Z codigo
-        albunsSemCodigo: semCodigo(albuns, 6, 11), // G titulo, L codigo
-        musicVideosSemCodigo: semCodigo(videos, 1, 20), // B titulo, U codigo
-      });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
