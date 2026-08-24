@@ -334,3 +334,84 @@ export async function corrigirPrestigioChatTV(): Promise<CorrecaoChatTVResultado
 
   return { jaAplicado: false, corrigidos };
 }
+
+const CORRECAO_ASSISTIR_TV_MARCADOR = "correcao_assistir_tv_duplicado";
+// Cron da Empire TV roda a cada 10 min — créditos do mesmo jogador
+// separados por menos que isso só podem vir de "transmissões" que na
+// prática são a mesma live sendo processada em sequência (linhas de teste
+// na Agenda_TV, cada uma virando um grupo/sala tecnicamente distinto).
+const JANELA_DUPLICATA_MS = 12 * 60 * 1000;
+
+/**
+ * Correção pontual, de uso único: acha créditos de "assistir_tv" pro mesmo
+ * jogador que caíram em sequência, com menos de ~12 min entre um e outro —
+ * padrão batendo com o intervalo do cron (10 min), sinal de que não foram
+ * transmissões de verdade diferentes, e sim um lote de linhas de teste na
+ * Agenda_TV (ex: "empirehits_20260602_2000".."_2015", uma salinha nova a
+ * cada minuto) sendo processadas uma por ciclo do cron. Mantém só o
+ * primeiro crédito de cada sequência e reverte os demais. Idempotente:
+ * não roda de novo se já tiver uma entrada com a chave de correção no log.
+ */
+export async function corrigirPrestigioAssistirTvDuplicado(): Promise<CorrecaoChatTVResultado> {
+  const logRows = await googleSheetsService.usuarios.readValues(PRESTIGIO_LOG_SHEET).catch(() => []);
+  if (!logRows || logRows.length < 2) return { jaAplicado: false, corrigidos: [] };
+
+  const jaAplicado = logRows.slice(1).some((r) => normalizeText(r[3]) === CORRECAO_ASSISTIR_TV_MARCADOR);
+  if (jaAplicado) return { jaAplicado: true, corrigidos: [] };
+
+  const porUsuario = new Map<string, { telegramId: string; usuario: string; entradas: { ts: number; valor: number }[] }>();
+  for (const row of logRows.slice(1)) {
+    if (normalizeText(row[3]) !== "assistir_tv") continue;
+    const telegramId = normalizeText(row[1]);
+    const usuario = normalizeText(row[2]);
+    const chave = telegramId || usuario;
+    if (!chave) continue;
+    const ts = new Date(normalizeText(row[0])).getTime();
+    if (!Number.isFinite(ts)) continue;
+    const valor = parseInt(normalizeText(row[4]), 10) || 0;
+    const atual = porUsuario.get(chave) || { telegramId, usuario, entradas: [] };
+    atual.entradas.push({ ts, valor });
+    porUsuario.set(chave, atual);
+  }
+
+  const corrigidos: CorrecaoChatTVResultado["corrigidos"] = [];
+  for (const { telegramId, usuario, entradas } of porUsuario.values()) {
+    entradas.sort((a, b) => a.ts - b.ts);
+    let excedente = 0;
+    let ultimoTs: number | null = null;
+    for (const e of entradas) {
+      if (ultimoTs !== null && e.ts - ultimoTs <= JANELA_DUPLICATA_MS) {
+        excedente += e.valor;
+      }
+      ultimoTs = e.ts;
+    }
+    if (excedente <= 0) continue;
+
+    const usuarioRow = await findUsuarioRow({
+      telegramId: telegramId || undefined,
+      usuario: usuario || undefined,
+    });
+    if (!usuarioRow) continue;
+    const prestigioColIndex = usuarioRow.headers.indexOf("prestigio");
+    if (prestigioColIndex === -1) continue;
+
+    const saldoAntes = parseInt(usuarioRow.rec["prestigio"] || "0", 10) || 0;
+    const saldoDepois = Math.max(0, saldoAntes - excedente);
+    const colLetter = colIndexToA1Letter(prestigioColIndex);
+    await googleSheetsService.usuarios.updateValues(
+      USUARIOS_SHEET,
+      `${colLetter}${usuarioRow.rowIndex}`,
+      [[saldoDepois]],
+    );
+    await registrarLogPrestigio(
+      { telegramId, usuario },
+      CORRECAO_ASSISTIR_TV_MARCADOR,
+      -(saldoAntes - saldoDepois),
+      saldoAntes,
+      saldoDepois,
+    );
+    corrigidos.push({ telegramId, usuario, valorRevertido: saldoAntes - saldoDepois, saldoAntes, saldoDepois });
+  }
+
+  return { jaAplicado: false, corrigidos };
+}

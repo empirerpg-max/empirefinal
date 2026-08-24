@@ -410,6 +410,15 @@ export default {
       return Response.json(resultado);
     }
 
+    // Debug temporário: correção pontual do prestígio duplicado de
+    // "assistir_tv" (lote de linhas de teste na Agenda_TV processadas uma
+    // por ciclo do cron). Idempotente, será removido depois.
+    if (url.pathname === "/api/debug/corrigir-assistir-tv" && request.method === "GET") {
+      const { corrigirPrestigioAssistirTvDuplicado } = await import("../backend/src/services/prestigioService");
+      const resultado = await corrigirPrestigioAssistirTvDuplicado();
+      return Response.json(resultado);
+    }
+
     // Debug temporário, só leitura: inspeciona o log de prestígio cru e
     // também TV_Participacao_Processada, pra investigar duplicação de
     // assistir_tv/chat_tv. Será removido depois.
