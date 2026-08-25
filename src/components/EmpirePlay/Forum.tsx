@@ -768,6 +768,8 @@ export const Forum: React.FC<ForumProps> = ({
                     <ExtraMaterialButtons
                       codigoUnico={selectedTopic.codigoUnico}
                       tipo={activeSubmenu === "albuns" ? "album" : "musica"}
+                      titulo={selectedTopic.title}
+                      artista={selectedTopic.artist}
                     />
                   </div>
                 )}

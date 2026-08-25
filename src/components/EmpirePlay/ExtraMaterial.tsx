@@ -66,9 +66,16 @@ export async function saveExtraMaterial(
 export function ExtraMaterialButtons({
   codigoUnico,
   tipo,
+  titulo,
+  artista,
 }: {
   codigoUnico?: string | null;
   tipo: "musica" | "album";
+  // Mostrados fixos no topo da tela do Shop/Info/Visual — sem isso, ao
+  // abrir um desses botões a pessoa perdia de vista em qual música/álbum
+  // estava, já que a tela cobre 100% da tela do tópico.
+  titulo?: string;
+  artista?: string;
 }) {
   const [data, setData] = useState<ExtraMaterialData | null>(null);
   const [aberto, setAberto] = useState<"shop" | "info" | "visual" | null>(null);
@@ -115,28 +122,43 @@ export function ExtraMaterialButtons({
       </div>
 
       {aberto && (
-        <div className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-md flex flex-col">
-          <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/10 shrink-0">
-            <h2 className="text-sm font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
-              {aberto === "shop" && (
-                <>
-                  <ShoppingBag className="size-4" /> Shop
-                </>
+        // Cartão tipo popup/bottom-sheet (mesmo padrão dos outros modais do
+        // app) em vez de cobrir 100% da tela — no celular, um `inset-0` liso
+        // parecia ter trocado de tela inteira; assim fica um popup em cima
+        // do tópico tanto no desktop quanto no celular.
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/80 backdrop-blur-sm">
+          <div className="bg-neutral-950 border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[85dvh] flex flex-col shadow-2xl">
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-white/10 shrink-0">
+            <div className="min-w-0">
+              {/* Título/artista fixos — sem isso, a tela cheia do Shop/Info/
+                  Visual não deixava claro de qual música/álbum era. */}
+              {titulo && (
+                <p className="text-sm font-black text-white truncate leading-tight">
+                  {titulo}
+                  {artista ? <span className="text-neutral-400 font-bold"> · {artista}</span> : null}
+                </p>
               )}
-              {aberto === "info" && (
-                <>
-                  <Info className="size-4" /> Info
-                </>
-              )}
-              {aberto === "visual" && (
-                <>
-                  <Sparkles className="size-4" /> Visual
-                </>
-              )}
-            </h2>
+              <h2 className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                {aberto === "shop" && (
+                  <>
+                    <ShoppingBag className="size-3.5" /> Shop
+                  </>
+                )}
+                {aberto === "info" && (
+                  <>
+                    <Info className="size-3.5" /> Info
+                  </>
+                )}
+                {aberto === "visual" && (
+                  <>
+                    <Sparkles className="size-3.5" /> Visual
+                  </>
+                )}
+              </h2>
+            </div>
             <button
               onClick={() => setAberto(null)}
-              className="size-9 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
+              className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
             >
               <X className="size-4" />
             </button>
@@ -191,6 +213,7 @@ export function ExtraMaterialButtons({
                 )}
               </div>
             )}
+          </div>
           </div>
         </div>
       )}
