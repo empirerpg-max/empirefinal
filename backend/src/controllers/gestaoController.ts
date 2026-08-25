@@ -37,7 +37,7 @@ async function gerarProximoCodigoUnico(
 // que já preenche sozinha ("=ARRAYFORMULA(IF(B2:B=\"\";\"\";\"EMP\"&TEXT(ROW(B2:B)-1;\"000\")))")
 // assim que a coluna B (título) é preenchida — escrever nela por cima
 // quebraria a fórmula.
-async function registrarNaEdicaoCharts(params: {
+export async function registrarNaEdicaoCharts(params: {
   dataFormatada: string;
   fullTitle: string; // "Artista - Título"
   tipoSingle: string;
