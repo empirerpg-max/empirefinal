@@ -24,6 +24,7 @@ import {
   Star,
   Sparkles,
   Play,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
 import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type NivelJogador } from "@/lib/api";
@@ -56,10 +57,14 @@ function ArtistDashboard() {
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("geral");
-  const [modal, setModal] = useState<null | "rescisao" | "foto" | "biografia">(null);
+  const [modal, setModal] = useState<null | "rescisao" | "foto" | "biografia" | "capa">(null);
   const [discografia, setDiscografia] = useState<DiscoItem[]>([]);
   const [tourData, setTourData] = useState<any>(null);
   const [responsavelNivel, setResponsavelNivel] = useState<NivelJogador | null>(null);
+  // Capa (banner) do topo do perfil — separada da foto do artista, editável
+  // só pelo dono (ver CapaModal). Cai pra artist.foto quando ainda não foi
+  // definida, pra não ficar sem imagem nenhuma no header.
+  const [capaPerfil, setCapaPerfil] = useState<string>("");
 
   // Discografia unificada — junta álbuns próprios (Gestao), catálogo Empire
   // Play e álbuns legados numa lista só, deduplicada por título, pra contar
@@ -172,6 +177,12 @@ function ArtistDashboard() {
       }
 
       setLoading(false);
+
+      if (art?.nome) {
+        api.getArtistInfo(art.nome).then((info) => {
+          if (info?.capa) setCapaPerfil(info.capa);
+        });
+      }
     });
   }, [ready, user, nome]);
 
@@ -232,14 +243,24 @@ function ArtistDashboard() {
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
-          src={driveImg(artist.foto, 1200) || artist.foto}
+          src={driveImg(capaPerfil || artist.foto, 1600) || capaPerfil || artist.foto}
           onError={(e) => {
             const img = e.currentTarget;
-            if (img.src !== artist.foto) img.src = artist.foto;
+            const fallback = capaPerfil || artist.foto;
+            if (img.src !== fallback) img.src = fallback;
           }}
           className="w-full h-full object-cover object-top scale-105 opacity-60 transition-opacity duration-700"
           alt=""
         />
+        {isOwner && (
+          <button
+            onClick={() => setModal("capa")}
+            className="absolute top-6 right-6 z-30 size-12 rounded-2xl bg-black/40 backdrop-blur-xl border border-white/10 flex items-center justify-center shadow-2xl active:scale-90 transition-transform"
+            title="Trocar capa do perfil"
+          >
+            <ImageIcon className="size-5 text-white" />
+          </button>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
 
         <button
@@ -390,6 +411,13 @@ function ArtistDashboard() {
       )}
       {isOwner && modal === "biografia" && (
         <BiografiaModal nome={artist.nome} onClose={() => setModal(null)} />
+      )}
+      {isOwner && modal === "capa" && (
+        <CapaModal
+          nome={artist.nome}
+          onClose={() => setModal(null)}
+          onDone={(url) => setCapaPerfil(url)}
+        />
       )}
     </main>
   );
@@ -861,11 +889,12 @@ function SocialTab({ nome }: { nome: string }) {
 }
 
 // ---------- Aba: Gestão (dono) ----------
-function GestaoTab({ onAction }: { onAction: (m: "rescisao" | "foto" | "biografia") => void }) {
+function GestaoTab({ onAction }: { onAction: (m: "rescisao" | "foto" | "biografia" | "capa") => void }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <MiniAction label="Trocar Foto" icon={<User />} onClick={() => onAction("foto")} color="text-sky-400" />
       <MiniAction label="Editar Biografia" icon={<FileText />} onClick={() => onAction("biografia")} color="text-emerald-400" />
+      <MiniAction label="Capa do Perfil" icon={<ImageIcon />} onClick={() => onAction("capa")} color="text-fuchsia-400" />
       <div className="col-span-2 mt-4 space-y-3">
         <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 px-1">Administrativo</h4>
         <div className="grid grid-cols-2 gap-3">
@@ -1097,6 +1126,92 @@ function BiografiaModal({ nome, onClose }: { nome: string; onClose: () => void }
       {errorMsg && <p className="text-xs text-destructive mb-2">{errorMsg}</p>}
       <button onClick={go} disabled={s || loading} className={btnCls()}>
         {s && <Loader2 className="size-4 animate-spin" />} Salvar
+      </button>
+    </Modal>
+  );
+}
+
+function CapaModal({
+  nome,
+  onClose,
+  onDone,
+}: {
+  nome: string;
+  onClose: () => void;
+  onDone: (url: string) => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [s, setS] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  function pick(f: File | undefined) {
+    if (!f) return;
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+    setErrorMsg(null);
+  }
+
+  async function go() {
+    if (!file) return;
+    setS(true);
+    setErrorMsg(null);
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/gestao/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type || "image/jpeg",
+          base64Data,
+          folderType: "artistPhotos",
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      const fileUrl = json?.data?.fileUrl;
+      if (!fileUrl) throw new Error("Falha ao subir a capa.");
+      const salvo = await api.setArtistCapa(nome, fileUrl);
+      if (!salvo.success) throw new Error(salvo.error || "Falha ao salvar a capa.");
+      onDone(fileUrl);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Não deu pra trocar a capa agora.");
+    } finally {
+      setS(false);
+    }
+  }
+
+  return (
+    <Modal title="Capa do perfil" onClose={onClose}>
+      <p className="text-xs text-muted-foreground mb-3">
+        Imagem de fundo no topo do perfil. Ideal: <strong className="text-foreground">1600 × 900px</strong>{" "}
+        (paisagem, proporção 16:9) — imagens mais estreitas ficam cortadas nas laterais.
+      </p>
+      <label className="block mb-3">
+        <div className="aspect-video w-full rounded-2xl overflow-hidden bg-secondary border border-white/10 grid place-items-center">
+          {preview ? (
+            <img src={preview} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <ImageIcon className="size-8 text-muted-foreground" />
+          )}
+        </div>
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => pick(e.target.files?.[0])}
+        />
+        <span className="block text-center text-xs font-bold text-primary mt-2 underline">Escolher arquivo</span>
+      </label>
+      {errorMsg && <p className="text-xs text-destructive mb-2">{errorMsg}</p>}
+      <button onClick={go} disabled={s || !file} className={btnCls()}>
+        {s && <Loader2 className="size-4 animate-spin" />} Enviar
       </button>
     </Modal>
   );

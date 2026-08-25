@@ -65,6 +65,7 @@ import {
   getArtistInfoController,
   setArtistFotoController,
   setArtistBiografiaController,
+  setArtistCapaController,
   getAllArtistasController,
   rescisaoController,
 } from "../controllers/artistasController";
@@ -192,6 +193,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/infos",
     "/api/artistas/foto",
     "/api/artistas/biografia",
+    "/api/artistas/capa",
     "/api/artistas/rescisao",
     "/api/user/me",
     "/api/user/nivel",
@@ -698,6 +700,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await setArtistBiografiaController(request);
+  } else if (url.pathname === "/api/artistas/capa") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/artistas/capa." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await setArtistCapaController(request);
   } else if (url.pathname === "/api/artistas/rescisao") {
     if (request.method !== "POST") {
       return new Response(
