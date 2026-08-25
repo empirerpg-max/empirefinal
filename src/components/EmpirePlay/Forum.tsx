@@ -146,7 +146,7 @@ export interface ForumProps {
 
 import { VideoPlayer, PlayableVideo } from "./VideoPlayer";
 import { type PlayableTrack } from "./MusicPlayer";
-import { ExtraMaterialButtons } from "./ExtraMaterial";
+import { ExtraMaterialButtons, useExtraMaterial, VisualBlocosView } from "./ExtraMaterial";
 
 export const Forum: React.FC<ForumProps> = ({
   onPlayTrack,
@@ -200,6 +200,19 @@ export const Forum: React.FC<ForumProps> = ({
   const [coverExpanded, setCoverExpanded] = useState(false);
   useEffect(() => {
     setCoverExpanded(false);
+  }, [selectedTopic?.id]);
+
+  // Modo "Visual" do tópico — em vez de popup, substitui o corpo normal
+  // (faixas/encarte/letra) pelo conteúdo montado em Extra_Musicas/Extra_Albuns,
+  // mantendo sempre a capa e o título/artista fixos. Fecha ao trocar de tópico.
+  const extraMaterialTipo = activeSubmenu === "albuns" ? "album" : "musica";
+  const extraMaterial = useExtraMaterial(
+    activeSubmenu === "musicas" || activeSubmenu === "albuns" ? selectedTopic?.codigoUnico : null,
+    extraMaterialTipo,
+  );
+  const [visualAberto, setVisualAberto] = useState(false);
+  useEffect(() => {
+    setVisualAberto(false);
   }, [selectedTopic?.id]);
 
   // "Voltar" (botão físico Android, swipe do iOS ou o BackButton do app)
@@ -804,14 +817,23 @@ export const Forum: React.FC<ForumProps> = ({
                 {(activeSubmenu === "musicas" || activeSubmenu === "albuns") && (
                   <div className="mt-4">
                     <ExtraMaterialButtons
-                      codigoUnico={selectedTopic.codigoUnico}
-                      tipo={activeSubmenu === "albuns" ? "album" : "musica"}
+                      data={extraMaterial}
                       titulo={selectedTopic.title}
                       artista={selectedTopic.artist}
+                      visualAtivo={visualAberto}
+                      onToggleVisual={() => setVisualAberto((v) => !v)}
                     />
                   </div>
                 )}
               </div>
+
+              {/* MODO VISUAL ATIVO — substitui faixas/encarte/letra pelo
+                  conteúdo montado em Extra_Musicas/Extra_Albuns; capa e
+                  título continuam fixos acima. */}
+              {visualAberto && extraMaterial ? (
+                <VisualBlocosView arte={extraMaterial.arte} />
+              ) : (
+                <>
 
               {/* CASO ÁLBUM: EXIBIR LISTA DE FAIXAS DE VERDADE (com áudio
                   próprio por faixa, ordenadas — igual uma playlist) */}
@@ -952,6 +974,8 @@ export const Forum: React.FC<ForumProps> = ({
                       "Letra oficial em processamento no acervo do Empire Hub."}
                   </div>
                 </div>
+              )}
+                </>
               )}
             </div>
           </div>
