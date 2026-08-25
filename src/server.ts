@@ -406,7 +406,11 @@ export default {
     // Playlists_Faixas (troca de appendRow por updateValues em linha
     // calculada) realmente evita o desvio de coluna.
     if (url.pathname === "/api/debug/teste-album-antigo" && request.method === "GET") {
-      const res = await fetch(new URL("/api/playlists/albuns", request.url), {
+      // Chama o controller direto (não fetch pro próprio Worker — dá
+      // "error code: 1101", o runtime do Workers não segue bem um
+      // self-fetch relativo assim).
+      const { criarAlbumAntigoController } = await import("../backend/src/controllers/playlistsController");
+      const fakeRequest = new Request("https://internal/api/playlists/albuns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -419,7 +423,8 @@ export default {
           ],
         }),
       });
-      const criacao = await res.json();
+      const criacaoRes = await criarAlbumAntigoController(fakeRequest);
+      const criacao = await criacaoRes.json();
 
       const gs = await import("../backend/src/services/googleSheetsService");
       const albunsRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Albuns", "A1:K5000");
