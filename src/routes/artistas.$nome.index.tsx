@@ -48,6 +48,25 @@ interface DiscoItem {
   capa_url?: string;
   kind: "catalogo" | "legado";
   id: string;
+  // ISO (yyyy-mm-dd) quando dá pra resolver a data de lançamento — usado só
+  // pra ordenar a lista (mais recente primeiro). Ausente quando o dado de
+  // origem não tem data confiável.
+  dataIso?: string;
+}
+
+// Aceita tanto "dd/mm/yyyy" (álbuns antigos/legados) quanto um ISO já pronto
+// (yyyy-mm-dd, vindo de /api/empire-play/albuns) — devolve sempre ISO pra
+// comparação direta por string.
+function paraDataIso(value: string | undefined | null): string | undefined {
+  if (!value) return undefined;
+  const v = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const [, d, mo, y] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  return undefined;
 }
 
 function ArtistDashboard() {
@@ -99,14 +118,32 @@ function ArtistDashboard() {
           capa_url: a.coverUrl || a.cover || a.capa_url || a.capa_do_album || a.capa,
           kind: "catalogo",
           id: a.id,
+          dataIso: paraDataIso(a.releaseDateIso || a.releaseDate),
         });
       }
       for (const a of legadosDoArtista) {
         const k = chave(a.titulo);
         if (vistos.has(k)) continue;
         vistos.add(k);
-        items.push({ key: `l-${a.id}`, titulo: a.titulo, capa_url: a.capa_url, kind: "legado", id: a.id });
+        items.push({
+          key: `l-${a.id}`,
+          titulo: a.titulo,
+          capa_url: a.capa_url,
+          kind: "legado",
+          id: a.id,
+          dataIso: paraDataIso(a.data),
+        });
       }
+      // Antes ficava na ordem crua de chegada (catálogo inteiro, depois
+      // todos os legados no final, sem meio-termo) — agora tudo entra numa
+      // única ordem por data de lançamento, mais recente primeiro; sem data
+      // confiável vai pro final, na ordem em que chegou.
+      items.sort((a, b) => {
+        if (a.dataIso && b.dataIso) return b.dataIso.localeCompare(a.dataIso);
+        if (a.dataIso) return -1;
+        if (b.dataIso) return 1;
+        return 0;
+      });
       setDiscografia(items);
     });
     return () => {
