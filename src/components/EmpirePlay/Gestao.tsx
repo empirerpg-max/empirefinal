@@ -7,6 +7,7 @@ import {
   Film,
   Upload,
   Plus,
+  Minus,
   Trash2,
   CheckCircle2,
   AlertCircle,
@@ -1891,20 +1892,44 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             </select>
           </div>
 
-          {/* QUANTIDADE DE FAIXAS */}
+          {/* QUANTIDADE DE FAIXAS — os spinners nativos do input number são
+              minúsculos e difíceis de tocar no celular; um stepper com
+              botões grandes de +/- resolve isso, mantendo o campo digitável
+              pra quem preferir digitar direto. */}
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
               <ListMusic className="size-4 text-emerald-400" />
               Quantidade de Faixas ({totalFaixasCount})
             </label>
-            <input
-              type="number"
-              min={1}
-              max={30}
-              value={totalFaixasCount}
-              onChange={(e) => setTotalFaixasCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
-              className="w-32 bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
-            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTotalFaixasCount((n) => Math.max(1, n - 1))}
+                disabled={totalFaixasCount <= 1}
+                className="size-11 shrink-0 rounded-xl bg-neutral-950 border border-white/10 text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                aria-label="Diminuir quantidade de faixas"
+              >
+                <Minus className="size-4" />
+              </button>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={30}
+                value={totalFaixasCount}
+                onChange={(e) => setTotalFaixasCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className="w-16 text-center bg-neutral-950 border border-white/10 rounded-xl px-2 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setTotalFaixasCount((n) => Math.min(30, n + 1))}
+                disabled={totalFaixasCount >= 30}
+                className="size-11 shrink-0 rounded-xl bg-neutral-950 border border-white/10 text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                aria-label="Aumentar quantidade de faixas"
+              >
+                <Plus className="size-4" />
+              </button>
+            </div>
           </div>
 
           {/* TRACKLIST CONFIG */}
