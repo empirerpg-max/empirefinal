@@ -93,7 +93,13 @@ function Index() {
   const login = getStoredLogin();
   const fotoUsuario = login?.fotoPerfil || user?.photo_url || "";
   const nomeUsuario = login?.nome || user?.name || "Visitante";
-  const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
+  // "empire_tg_id" nunca é gravado em lugar nenhum do app (chave morta) —
+  // quem entrou pela tela de usuário/senha (não pelo Telegram) só tem o ID
+  // real dentro do login salvo por getStoredLogin(). Sem esse fallback, tgId
+  // ficava vazio pra esses jogadores e "Próximos Eventos" nunca achava as
+  // turnês deles (o Empire TV não depende de telegramId, por isso só ele
+  // aparecia).
+  const tgId = login?.id || user?.id || "";
 
   // dd/mm/yyyy [+ HH:MM opcional] → timestamp, pra ordenar shows (só data) e
   // programas de TV (data+horário) juntos na mesma lista.
