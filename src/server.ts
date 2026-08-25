@@ -402,59 +402,58 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: reteste completo depois que o usuário apagou as
-    // linhas de teste anteriores. Testa registrarNaEdicaoCharts (deve cair
-    // logo após a última música real, coluna B) E um append de teste em
-    // EDIÇÃO CHARTS ÁLBUMS (mesmo fix, A:R) — cobre o caminho de faixa
-    // inédita de álbum/substituição também.
-    if (url.pathname === "/api/debug/reteste-edicao-charts" && request.method === "GET") {
+    // Debug temporário: simula o ciclo completo de uma faixa pendente de
+    // álbum — cria a linha em EDIÇÃO CHARTS já na "criação do álbum" (como
+    // processarFaixasDoAlbum faz agora, incondicional) e depois simula a
+    // publicação (como atualizarFaixaNosChartsAoPublicar faz): tem que ser
+    // a MESMA linha, só com tipo/data atualizados — não uma linha nova.
+    if (url.pathname === "/api/debug/reteste-faixa-pendente" && request.method === "GET") {
       const gs = await import("../backend/src/services/googleSheetsService");
-      const { registrarNaEdicaoCharts } = await import("../backend/src/controllers/gestaoController");
+      const mod = await import("../backend/src/controllers/gestaoController");
+      const { registrarNaEdicaoCharts } = mod as any;
 
-      const linhaMusica = await registrarNaEdicaoCharts({
+      const tituloTeste = "TESTE-CLAUDE-PENDENTE - Faixa Pendente";
+      const linhaCriacao = await registrarNaEdicaoCharts({
         dataFormatada: new Date().toLocaleDateString("pt-BR"),
-        fullTitle: "TESTE-CLAUDE-RETESTE - Verificação Range",
-        tipoSingle: "LEAD SINGLE",
+        fullTitle: tituloTeste,
+        tipoSingle: "TRACKLIST ALBUM",
         tipoMusica: "SOLO",
-        artistaPrincipal: "TESTE-CLAUDE-RETESTE",
+        album: "TESTE-CLAUDE-PENDENTE - Álbum",
+        artistaPrincipal: "TESTE-CLAUDE-PENDENTE",
       });
 
-      const linhaAlbum = await gs.googleSheetsService.edicaoCharts.appendRow(
-        "EDIÇÃO CHARTS ÁLBUMS",
-        [
-          "TESTE-CLAUDE-RETESTE", // A - ARTISTA
-          new Date().toLocaleDateString("pt-BR"), // B - DATA
-          "1", // C
-          "TESTE-CLAUDE-RETESTE - Álbum Verificação", // D - NOME
-          "1", // E
-          "2", // F
-          "", "", "", "", "", "", "", "", "", "",
-          "",
-          "TESTE-ALBUM-999",
-        ],
-        "A:R",
+      // Simula a publicação: busca pelo título (coluna B) e atualiza
+      // A (data) e C/D (tipo) — mesma lógica de
+      // atualizarFaixaNosChartsAoPublicar, reimplementada aqui só porque a
+      // função original não é exportada.
+      const rows = await gs.googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "B2:B20000");
+      let linhaPublicacao: number | null = null;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if ((rows[i]?.[0] || "").trim() === tituloTeste) {
+          linhaPublicacao = i + 2;
+          break;
+        }
+      }
+      if (linhaPublicacao) {
+        await gs.googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linhaPublicacao}`, [
+          [new Date().toLocaleDateString("pt-BR")],
+        ]);
+        await gs.googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `C${linhaPublicacao}:D${linhaPublicacao}`, [
+          ["LEAD SINGLE", "SOLO"],
+        ]);
+      }
+
+      const rowAfter = await gs.googleSheetsService.edicaoCharts.readValues(
+        "EDIÇÃO CHARTS",
+        `A${linhaPublicacao}:D${linhaPublicacao}`,
       );
 
-      // Acha a última linha de verdade (coluna B/D preenchida) de cada aba
-      // pra dar contexto de quão perto ficou.
-      const musicasRows = await gs.googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A1:B4000");
-      let ultimaMusicaReal = -1;
-      for (let i = musicasRows.length - 1; i >= 0; i--) {
-        if ((musicasRows[i]?.[1] || "").trim() && !musicasRows[i][1].includes("TESTE-CLAUDE")) {
-          ultimaMusicaReal = i + 1;
-          break;
-        }
-      }
-      const albunsRows = await gs.googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A1:D4000");
-      let ultimoAlbumReal = -1;
-      for (let i = albunsRows.length - 1; i >= 0; i--) {
-        if ((albunsRows[i]?.[3] || "").trim() && !albunsRows[i][3].includes("TESTE-CLAUDE")) {
-          ultimoAlbumReal = i + 1;
-          break;
-        }
-      }
-
-      return Response.json({ linhaMusica, ultimaMusicaReal, linhaAlbum, ultimoAlbumReal });
+      return Response.json({
+        linhaCriacao,
+        linhaPublicacao,
+        mesmaLinha: linhaCriacao === linhaPublicacao,
+        conteudoFinal: rowAfter?.[0],
+      });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
