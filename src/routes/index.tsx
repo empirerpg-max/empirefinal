@@ -167,7 +167,14 @@ function Index() {
           const ordenado = [...postsArr, ...newsComoPost].sort(
             (a, b) => new Date(b.data).getTime() - new Date(a.data).getTime(),
           );
-          setUltimasPostagens({ status: "ok", data: ordenado.slice(0, 8) });
+          // Mesmo artista aparecendo em sequência (postou várias vezes
+          // seguidas) só entra com a publicação mais recente dele — abre
+          // espaço pra outros artistas aparecerem em vez de lotar o
+          // carrossel inteiro com uma pessoa só.
+          const semRepeticaoSucessiva = ordenado.filter(
+            (item, i) => i === 0 || item.autor !== ordenado[i - 1].autor,
+          );
+          setUltimasPostagens({ status: "ok", data: semRepeticaoSucessiva.slice(0, 8) });
         })
         .catch((e: any) => setUltimasPostagens({ status: "error", error: String(e?.message || e) })),
     );
