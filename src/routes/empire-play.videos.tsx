@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Tv, Play, MessageSquare } from "lucide-react";
+import { Tv, Play, MessageSquare, Search } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -22,6 +22,7 @@ function EmpirePlayVideos() {
   // vídeos", sem diferença nenhuma pro jogador.
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   function fetchVideos() {
     let cancelled = false;
@@ -58,7 +59,13 @@ function EmpirePlayVideos() {
     return ["Todos", ...Array.from(set).sort()];
   }, [videos]);
 
-  const filtered = activeTag === "Todos" ? videos : videos.filter((v) => v.tipo_video === activeTag);
+  const porTag = activeTag === "Todos" ? videos : videos.filter((v) => v.tipo_video === activeTag);
+  const filtered = searchQuery.trim()
+    ? porTag.filter((v) => {
+        const q = searchQuery.toLowerCase();
+        return v.titulo?.toLowerCase().includes(q) || v.artista?.toLowerCase().includes(q);
+      })
+    : porTag;
 
   return (
     <div className="space-y-4">
@@ -67,6 +74,19 @@ function EmpirePlayVideos() {
           Vídeos ({filtered.length})
         </h2>
       </div>
+
+      {!loading && !erro && videos.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-neutral-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Pesquisar vídeos ou artistas..."
+            className="w-full pl-10 pr-4 py-2.5 bg-neutral-900/80 border border-white/10 rounded-xl text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-red-500 transition"
+          />
+        </div>
+      )}
 
       {tags.length > 1 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -95,9 +115,13 @@ function EmpirePlayVideos() {
         </div>
       ) : erro ? (
         <LoadErrorState onRetry={fetchVideos} />
-      ) : filtered.length === 0 ? (
+      ) : videos.length === 0 ? (
         <div className="text-center py-12 text-neutral-500 text-xs italic">
           Nenhum vídeo disponível no momento.
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 text-neutral-500 text-xs italic">
+          Nenhum vídeo encontrado pra "{searchQuery}".
         </div>
       ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
