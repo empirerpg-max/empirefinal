@@ -402,30 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: identifica as abas novas (gid 1301568857 e
-    // 569682773) criadas pelo usuário na planilha principal pra Shop/Info/
-    // Visual, e lê a primeira linha (cabeçalho, se existir).
-    if (url.pathname === "/api/debug/abas-novas" && request.method === "GET") {
-      const { getGoogleAccessToken } = await import("../backend/src/google/service-account");
-      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
-      const accessToken = await getGoogleAccessToken(["https://www.googleapis.com/auth/spreadsheets.readonly"]);
-      const spreadsheetId = googleSheetsService.SPREADSHEETS.principal;
-      const metaRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-      );
-      const meta = await metaRes.json();
-      const todasAbas = (meta.sheets || []).map((s: any) => s.properties);
-      const alvoGids = [1301568857, 569682773];
-      const abasAlvo = todasAbas.filter((p: any) => alvoGids.includes(p.sheetId));
-      const cabecalhos: Record<string, unknown> = {};
-      for (const aba of abasAlvo) {
-        const rows = await googleSheetsService.principal.readValues(aba.title, "A1:Z3").catch((e: any) => String(e));
-        cabecalhos[aba.title] = rows;
-      }
-      return Response.json({ todasAbas: todasAbas.map((p: any) => ({ title: p.title, sheetId: p.sheetId })), abasAlvo, cabecalhos });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
