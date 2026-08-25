@@ -402,36 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: limpa as linhas de teste TESTE-CLAUDE deixadas em
-    // Playlists_Albuns/Playlists_Faixas pela verificação do fix de coluna.
-    if (url.pathname === "/api/debug/limpar-teste-album-antigo" && request.method === "GET") {
-      const gs = await import("../backend/src/services/googleSheetsService");
-      const albunsRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Albuns", "A1:K5000");
-      const faixasRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Faixas", "A1:G5000");
-
-      const linhasAlbunsLimpar: number[] = [];
-      albunsRows.forEach((r, i) => {
-        if ((r[1] || "").includes("TESTE-CLAUDE")) linhasAlbunsLimpar.push(i + 1);
-      });
-      for (const linha of linhasAlbunsLimpar) {
-        await gs.googleSheetsService.usuarios.updateValues("Playlists_Albuns", `A${linha}:K${linha}`, [
-          Array(11).fill(""),
-        ]);
-      }
-
-      const linhasFaixasLimpar: number[] = [];
-      faixasRows.forEach((r, i) => {
-        if ((r[2] || "").includes("TESTE-CLAUDE")) linhasFaixasLimpar.push(i + 1);
-      });
-      for (const linha of linhasFaixasLimpar) {
-        await gs.googleSheetsService.usuarios.updateValues("Playlists_Faixas", `A${linha}:G${linha}`, [
-          Array(7).fill(""),
-        ]);
-      }
-
-      return Response.json({ linhasAlbunsLimpas: linhasAlbunsLimpar, linhasFaixasLimpas: linhasFaixasLimpar });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
