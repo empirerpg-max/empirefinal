@@ -211,7 +211,9 @@ export type UploadFolderType =
   | "playlistTracks"
   | "tvChatGifs"
   | "turnes"
-  | "acervo";
+  | "acervo"
+  | "materiaisMusica"
+  | "materiaisAlbum";
 
 export interface UploadPayload {
   fileName: string;
@@ -1544,7 +1546,11 @@ export async function uploadDriveController(request: Request): Promise<Response>
                               ? DRIVE_FOLDERS.socialPosts
                               : folderType === "acervo"
                                 ? DRIVE_FOLDERS.acervo
-                                : DRIVE_FOLDERS.musicas;
+                                : folderType === "materiaisMusica"
+                                  ? DRIVE_FOLDERS.materiaisMusica
+                                  : folderType === "materiaisAlbum"
+                                    ? DRIVE_FOLDERS.materiaisAlbum
+                                    : DRIVE_FOLDERS.musicas;
 
     const fileUrl = base64Data
       ? await uploadFileToDrive(fileName, folderId, mimeType, base64Data)

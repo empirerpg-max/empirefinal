@@ -20,6 +20,12 @@ import {
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
 import { EditModal } from "./EditModal";
+import {
+  ExtraMaterialEditor,
+  emptyExtraMaterialEditorValue,
+  saveExtraMaterial,
+  type ExtraMaterialEditorValue,
+} from "./ExtraMaterial";
 
 export type TabType = "musica" | "video" | "album";
 
@@ -348,6 +354,11 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [capaPreview, setCapaPreview] = useState<string | null>(null);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaUrlInput, setMediaUrlInput] = useState<string>("");
+
+  // Material extra (botões Shop/Info/Visual do tópico) — um estado por tipo
+  // porque música e álbum são formulários/submits separados nesta mesma tela.
+  const [extraMusica, setExtraMusica] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
+  const [extraAlbum, setExtraAlbum] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
 
   // Form Música
   const [opcaoChart, setOpcaoChart] = useState<string>(OPCOES_CHART[0].value);
@@ -703,6 +714,18 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         throw new Error(data.error || "Erro ao registrar música.");
       }
 
+      // Só salva o material extra (Shop/Info/Visual) se o jogador ativou
+      // alguma das 3 seções — e só é possível AGORA, depois de criada,
+      // porque só aqui a gente sabe o Código único de verdade.
+      const codigoUnicoNovo = data.data?.codigoUnico || "";
+      if (codigoUnicoNovo && (extraMusica.shopAtivo || extraMusica.infoAtivo || extraMusica.visualAtivo)) {
+        await saveExtraMaterial(codigoUnicoNovo, "musica", {
+          shop: extraMusica.shopAtivo ? extraMusica.shop : [],
+          info: extraMusica.infoAtivo ? extraMusica.info : "",
+          arte: extraMusica.visualAtivo ? extraMusica.arte : [],
+        }).catch(() => {});
+      }
+
       setSuccessMsg("Lançamento de Música publicado com sucesso!");
       setNomeMusica("");
       setCapaFile(null);
@@ -712,6 +735,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setMusicaReferenciaQuery("");
       setMusicaReferencia(null);
       setOpcaoChart(OPCOES_CHART[0].value);
+      setExtraMusica(emptyExtraMaterialEditorValue());
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro inesperado ao publicar música.");
@@ -910,11 +934,21 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         throw new Error(data.error || "Erro ao registrar álbum.");
       }
 
+      const codigoUnicoNovo = data.data?.codigoUnico || "";
+      if (codigoUnicoNovo && (extraAlbum.shopAtivo || extraAlbum.infoAtivo || extraAlbum.visualAtivo)) {
+        await saveExtraMaterial(codigoUnicoNovo, "album", {
+          shop: extraAlbum.shopAtivo ? extraAlbum.shop : [],
+          info: extraAlbum.infoAtivo ? extraAlbum.info : "",
+          arte: extraAlbum.visualAtivo ? extraAlbum.arte : [],
+        }).catch(() => {});
+      }
+
       setSuccessMsg("Álbum e faixas publicados com sucesso!");
       setTituloAlbum("");
       setCapaFile(null);
       setCapaPreview(null);
       setEncartesFiles([]);
+      setExtraAlbum(emptyExtraMaterialEditorValue());
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro inesperado ao publicar álbum.");
@@ -1435,6 +1469,15 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             />
           </div>
 
+          {/* SHOP / INFO / VISUAL — opcional, ativado aqui já na criação */}
+          <div>
+            <label className="text-xs font-black uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
+              <Sparkles className="size-4 text-emerald-400" />
+              Botões do Tópico (Opcional)
+            </label>
+            <ExtraMaterialEditor value={extraMusica} onChange={setExtraMusica} folderType="materiaisMusica" />
+          </div>
+
           {/* BOTÃO PRINCIPAL DE ENVIO */}
           <button
             type="submit"
@@ -1940,6 +1983,14 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 </p>
               )}
             </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-black uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
+              <Sparkles className="size-4 text-emerald-400" />
+              Botões do Tópico (Opcional)
+            </label>
+            <ExtraMaterialEditor value={extraAlbum} onChange={setExtraAlbum} folderType="materiaisAlbum" />
           </div>
 
           <button
