@@ -442,6 +442,7 @@ function SocialPage() {
         to: "/tours/$nome",
         params: { nome: newsItem.autor },
         search: { id: newsItem.origemId } as any,
+        hash: newsItem.origemShow ? `show-comentar-${newsItem.origemShow}` : undefined,
       });
       return;
     }
