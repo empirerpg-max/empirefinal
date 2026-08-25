@@ -410,13 +410,25 @@ export default {
       const albunsRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Albuns", "A1:Z5000");
       const faixasRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Faixas", "A1:Z5000");
       const alvo = "sa5m";
+      const idAlvo = "alb-8b2a9a28";
       const albunsAchados = albunsRows
         .map((r, i) => ({ linha: i + 1, valores: r }))
-        .filter(({ valores }) => valores.some((v) => (v || "").toString().toLowerCase().includes(alvo)));
+        .filter(
+          ({ valores }) =>
+            valores.some((v) => (v || "").toString().toLowerCase().includes(alvo)) ||
+            valores.some((v) => (v || "").toString().toLowerCase().includes(idAlvo)),
+        );
       const faixasAchadas = faixasRows
         .map((r, i) => ({ linha: i + 1, valores: r }))
         .filter(({ valores }) => valores.some((v) => (v || "").toString().toLowerCase().includes(alvo)));
-      return Response.json({ albunsAchados, faixasAchadas });
+      // Últimas 15 linhas de verdade de Playlists_Albuns (ignorando linhas
+      // totalmente vazias) — pra achar visualmente a linha do álbum caso ela
+      // exista deslocada/corrompida sem conter literalmente "sa5m" em nenhuma célula.
+      const albunsComConteudo = albunsRows
+        .map((r, i) => ({ linha: i + 1, valores: r }))
+        .filter(({ valores }) => valores.some((v) => (v || "").toString().trim()));
+      const ultimasLinhasAlbuns = albunsComConteudo.slice(-15);
+      return Response.json({ albunsAchados, faixasAchadas, ultimasLinhasAlbuns });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
