@@ -1206,15 +1206,30 @@ export function fmtMoney(n: number) {
   return `$${(n || 0).toLocaleString("pt-BR")}`;
 }
 
+// `size` é sempre em pixels CSS — mas a tela pode ter densidade 2x/3x
+// (praticamente todo celular moderno), então pedir exatamente o tamanho da
+// caixa fazia a imagem sair borrada nesses aparelhos. Multiplica pela
+// densidade real da tela (com teto de 3x — acima disso o ganho visual não
+// compensa o peso extra) antes de montar a URL do thumbnail.
+function tamanhoEfetivo(size: number): number {
+  const dpr = typeof window !== "undefined" && window.devicePixelRatio ? window.devicePixelRatio : 1;
+  return Math.round(size * Math.min(dpr, 3));
+}
+
 export function driveImg(url: string | undefined | null, size: number = 800): string | undefined {
   if (!url) return undefined;
+  const alvo = tamanhoEfetivo(size);
   if (url.includes("lh3.googleusercontent.com")) {
-    if (!url.includes("=")) return `${url}=w${size}-h${size}-p`;
-    return url;
+    // Antes, uma URL que já viesse com "=wN-hN-p" (de uma chamada anterior
+    // com outro tamanho) era devolvida sem alteração, ignorando o `size`
+    // pedido agora — por isso pedir uma resolução maior não tinha efeito
+    // nenhum em alguns casos. Sempre reconstrói com o tamanho atual.
+    const base = url.split("=")[0];
+    return `${base}=w${alvo}-h${alvo}-p`;
   }
   const m = String(url).match(/[-\w]{25,}/);
   if (!m) return url;
-  return `https://lh3.googleusercontent.com/d/${m[0]}=w${size}-h${size}-p`;
+  return `https://lh3.googleusercontent.com/d/${m[0]}=w${alvo}-h${alvo}-p`;
 }
 
 // Badges de nível são SVG com fundo transparente — o proxy de thumbnail

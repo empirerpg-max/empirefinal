@@ -11,9 +11,16 @@ function AlbunsAntigosPage() {
   const [albuns, setAlbuns] = useState<
     Awaited<ReturnType<typeof api.listarAlbunsAntigos>> | null
   >(null);
+  // Sem o .catch, uma falha na chamada deixava `albuns` null pra sempre —
+  // o skeleton de carregamento ficava girando indefinidamente em vez de
+  // cair pra um estado vazio/erro.
+  const [erro, setErro] = useState(false);
 
   useEffect(() => {
-    api.listarAlbunsAntigos().then(setAlbuns);
+    api
+      .listarAlbunsAntigos()
+      .then(setAlbuns)
+      .catch(() => setErro(true));
   }, []);
 
   return (
@@ -30,7 +37,11 @@ function AlbunsAntigosPage() {
         </div>
       </header>
 
-      {albuns === null ? (
+      {erro ? (
+        <div className="text-center py-12 text-neutral-500 text-xs italic">
+          Falha ao carregar os álbuns legados. Tente novamente em instantes.
+        </div>
+      ) : albuns === null ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="aspect-square rounded-2xl bg-neutral-900/60 animate-pulse border border-white/5" />

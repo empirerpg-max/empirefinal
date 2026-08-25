@@ -7,6 +7,7 @@ import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
+import { LoadErrorState } from "@/components/LoadErrorState";
 
 export const Route = createFileRoute("/empire-play/musicas")({
   component: EmpirePlayMusicas,
@@ -16,6 +17,7 @@ function EmpirePlayMusicas() {
   const { playSong } = useEmpirePlayer();
   const [musicas, setMusicas] = useState<PlayableTrack[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(false);
   const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
 
   function toPlaylistTrack(m: PlayableTrack): PlaylistTrack {
@@ -29,10 +31,11 @@ function EmpirePlayMusicas() {
     };
   }
 
-  useEffect(() => {
+  function fetchMusicas() {
     let cancelled = false;
-    async function fetchMusicas() {
+    (async () => {
       setLoading(true);
+      setErro(false);
       try {
         const res = await fetch("/api/empire-play/musicas")
           .then((r) => r.json())
@@ -43,17 +46,25 @@ function EmpirePlayMusicas() {
           const fallback = await fetch("/api/musicas")
             .then((r) => r.json())
             .catch(() => null);
-          if (fallback && fallback.success && !cancelled)
-            setMusicas((fallback.data || []).map(toPlayableTrack));
+          if (fallback && fallback.success) {
+            if (!cancelled) setMusicas((fallback.data || []).map(toPlayableTrack));
+          } else if (!cancelled) {
+            // Antes, as duas rotas falhando resultava só numa lista vazia —
+            // indistinguível de "realmente não tem música nenhuma".
+            setErro(true);
+          }
         }
-      } catch {}
+      } catch {
+        if (!cancelled) setErro(true);
+      }
       if (!cancelled) setLoading(false);
-    }
-    fetchMusicas();
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }
+
+  useEffect(() => fetchMusicas(), []);
 
   return (
     <div className="space-y-4">
@@ -71,13 +82,18 @@ function EmpirePlayMusicas() {
             />
           ))}
         </div>
+      ) : erro ? (
+        <LoadErrorState onRetry={fetchMusicas} />
       ) : musicas.length === 0 ? (
         <div className="text-center py-12 text-neutral-500 text-xs italic">
           Nenhuma música disponível no momento.
         </div>
       ) : (
         <div className="space-y-2">
-          {musicas.slice(0, 100).map((m, idx) => (
+          {/* Antes cortava em 100 silenciosamente — o cabeçalho mostrava o
+              total real (ex: 342) mas só 100 apareciam na lista, sem
+              nenhum aviso de que tinha mais música. */}
+          {musicas.map((m, idx) => (
             <div
               key={m.id || idx}
               onClick={() => playSong(m, musicas)}

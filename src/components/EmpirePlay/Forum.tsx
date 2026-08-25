@@ -117,6 +117,24 @@ function initialsFor(name: string): string {
   return (first + second).toUpperCase();
 }
 
+// Thumbnail com fallback pra ícone neutro quando a capa falha ao carregar —
+// antes trocava por uma foto de banco de imagens (Unsplash) sem nenhuma
+// relação com o conteúdo, o que enganava o jogador fazendo parecer que
+// aquela era a capa de verdade.
+function TopicThumbImg({ src, alt, className }: { src?: string; alt: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <div className={`${className || ""} grid place-items-center bg-neutral-900`}>
+        <Music className="size-8 text-neutral-700" />
+      </div>
+    );
+  }
+  return (
+    <img src={src} alt={alt} className={className} onError={() => setFailed(true)} />
+  );
+}
+
 export interface ForumProps {
   onPlayTrack?: (track: PlayableTrack, playlist: PlayableTrack[]) => void;
   onPlayVideo?: (video: PlayableVideo) => void;
@@ -148,6 +166,10 @@ export const Forum: React.FC<ForumProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedTopic, setSelectedTopic] = useState<ForumTopicItem | null>(null);
+  // Capa quebrada/sem link do tópico aberto — mostra um ícone neutro em vez
+  // de trocar por uma foto de banco de imagens (Unsplash) que não tem nada
+  // a ver com o conteúdo real, além de vazar dado do visitante pro Unsplash.
+  const [heroCoverFailed, setHeroCoverFailed] = useState(false);
   // Evita reabrir o deep link se o jogador voltar pra lista manualmente.
   const [pendingDeepLinkId, setPendingDeepLinkId] = useState<string | undefined>(initialItemId);
   // Filtro de tag do submenu Vídeos (Music Video, Live, Video, etc).
@@ -184,6 +206,10 @@ export const Forum: React.FC<ForumProps> = ({
   // fecha o tópico aberto e volta pra lista do fórum, em vez de sair da
   // rota do fórum inteira — ver src/hooks/use-back-close.ts.
   useBackClose(!!selectedTopic, () => setSelectedTopic(null));
+
+  useEffect(() => {
+    setHeroCoverFailed(false);
+  }, [selectedTopic?.id]);
 
   const handleVideoPlay = (topic: ForumTopicItem) => {
     // Drive e Telegram nunca são tocáveis pelo link/id cru — precisam passar
@@ -316,7 +342,14 @@ export const Forum: React.FC<ForumProps> = ({
   }, [pendingDeepLinkId, loading, items]);
 
   // 2. Carregar comentários quando um tópico é selecionado
+  // Troca rápida de tópico (ex: clicar em "Ver tópico" dentro de outro
+  // tópico já aberto) podia disparar duas buscas em paralelo — se a mais
+  // antiga respondesse depois da mais nova, ela sobrescrevia os comentários
+  // certos com os do tópico errado. O token abaixo garante que só a busca
+  // mais recente é aplicada.
+  const commentsFetchToken = React.useRef(0);
   const fetchTopicComments = async (topicOrTitle: ForumTopicItem | string) => {
+    const myToken = ++commentsFetchToken.current;
     setLoadingComments(true);
     const topic: ForumTopicItem =
       typeof topicOrTitle === "string"
@@ -333,6 +366,7 @@ export const Forum: React.FC<ForumProps> = ({
 
       let commentsFromApi: CommentItem[] = [];
 
+      if (myToken !== commentsFetchToken.current) return;
       setResolvedTopicId(resForum?.data?.media?.topicId || resForum?.data?.media?.id || topic.id || "");
 
       if (resForum && resForum.success && resForum.data && Array.isArray(resForum.data.comments)) {
@@ -380,12 +414,13 @@ export const Forum: React.FC<ForumProps> = ({
         }
       }
 
+      if (myToken !== commentsFetchToken.current) return;
       setTopicComments(commentsFromApi);
     } catch (err) {
       console.error("Erro ao carregar comentários:", err);
-      setTopicComments([]);
+      if (myToken === commentsFetchToken.current) setTopicComments([]);
     } finally {
-      setLoadingComments(false);
+      if (myToken === commentsFetchToken.current) setLoadingComments(false);
     }
   };
 
@@ -400,7 +435,7 @@ export const Forum: React.FC<ForumProps> = ({
   // Alterna reação de emoji num comentário — atualiza local (otimista) e
   // reconcilia com a resposta real do servidor.
   const handleToggleReaction = async (comment: CommentItem, emoji: string) => {
-    if (!comment.rowIndex || !comment.sheetComments || !myId) return;
+    if (comment.rowIndex == null || !comment.sheetComments || !myId) return;
     haptic.selection();
 
     const mineNow = (comment.reactedBy[emoji] || []).includes(myId);
@@ -458,7 +493,7 @@ export const Forum: React.FC<ForumProps> = ({
   }
 
   async function saveEditComment(comment: CommentItem) {
-    if (!comment.rowIndex || !comment.sheetComments || !myId || !editText.trim()) return;
+    if (comment.rowIndex == null || !comment.sheetComments || !myId || !editText.trim()) return;
     setSavingEdit(true);
     try {
       const res = await fetch("/api/forum/comment-edit", {
@@ -657,15 +692,18 @@ export const Forum: React.FC<ForumProps> = ({
               ) : (
                 /* CAPA DE MÚSICA / ÁLBUM — em destaque, estilo capa de disco */
                 <div className="relative aspect-square w-full max-w-[280px] sm:max-w-[340px] md:max-w-[400px] mx-auto rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 bg-neutral-950 group">
-                  <img
-                    src={driveImg(selectedTopic.cover, 800) || "/placeholder.png"}
-                    alt={selectedTopic.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src =
-                        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80";
-                    }}
-                  />
+                  {selectedTopic.cover && !heroCoverFailed ? (
+                    <img
+                      src={driveImg(selectedTopic.cover, 800)}
+                      alt={selectedTopic.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                      onError={() => setHeroCoverFailed(true)}
+                    />
+                  ) : (
+                    <div className="w-full h-full grid place-items-center bg-neutral-900">
+                      <Music className="size-16 text-neutral-700" />
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <button
                     type="button"
@@ -1021,9 +1059,9 @@ export const Forum: React.FC<ForumProps> = ({
                           </div>
                         )}
 
-                        {editingCommentId !== c.id && (c.rowIndex || (c.jogadorId && c.jogadorId === myId)) && (
+                        {editingCommentId !== c.id && (c.rowIndex != null || (c.jogadorId && c.jogadorId === myId)) && (
                           <div className="mt-1 pl-1 flex items-center gap-2">
-                            {c.rowIndex && (
+                            {c.rowIndex != null && (
                               <ReactionBar
                                 reactions={c.reactions}
                                 reactedBy={c.reactedBy}
@@ -1032,7 +1070,7 @@ export const Forum: React.FC<ForumProps> = ({
                                 onToggle={(emoji) => handleToggleReaction(c, emoji)}
                               />
                             )}
-                            {c.rowIndex && c.jogadorId && c.jogadorId === myId && (
+                            {c.rowIndex != null && c.jogadorId && c.jogadorId === myId && (
                               <button
                                 onClick={() => startEditComment(c)}
                                 className="text-[10px] text-neutral-500 hover:text-neutral-300 inline-flex items-center gap-1"
@@ -1106,14 +1144,10 @@ export const Forum: React.FC<ForumProps> = ({
                   <div className="space-y-2">
                     {/* THUMBNAIL / CAPA REDUZIDA */}
                     <div className="aspect-square w-full max-h-36 sm:max-h-44 rounded-lg sm:rounded-xl overflow-hidden bg-neutral-950 relative border border-white/5 group-hover:border-emerald-500/30 transition">
-                      <img
-                        src={driveImg(item.cover, 250) || "/placeholder.png"}
+                      <TopicThumbImg
+                        src={driveImg(item.cover, 400)}
                         alt={item.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src =
-                            "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80";
-                        }}
                       />
 
                       {/* Botão de Play de Vídeo Acessível e Moderno */}
