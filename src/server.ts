@@ -402,6 +402,20 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário: acha a linha da SA5M em chartsBase!HALL_OF_FAME_DB
+    // (se existir) e o cabeçalho da linha 1, pra confirmar a coluna N
+    // "Dados legados" que o usuário adicionou antes de escrever nela.
+    if (url.pathname === "/api/debug/achar-sa5m-hof" && request.method === "GET") {
+      const gs = await import("../backend/src/services/googleSheetsService");
+      const rows = await gs.googleSheetsService.chartsBase.readValues("HALL_OF_FAME_DB", "A1:P2000");
+      const header = rows[0] || [];
+      const alvo = "sa5m";
+      const linhaSa5m = rows
+        .map((r, i) => ({ linha: i + 1, valores: r }))
+        .find(({ linha, valores }) => linha > 1 && (valores[0] || "").toString().toLowerCase() === alvo);
+      return Response.json({ header, linhaSa5m: linhaSa5m || null, totalLinhas: rows.length });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
