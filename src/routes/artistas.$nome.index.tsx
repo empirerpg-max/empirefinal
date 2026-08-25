@@ -35,7 +35,7 @@ export const Route = createFileRoute("/artistas/$nome/")({
   component: ArtistDashboard,
 });
 
-type TabId = "geral" | "discografia" | "charts" | "tours" | "social" | "gestao";
+type TabId = "geral" | "discografia" | "musicas" | "videos" | "charts" | "tours" | "social" | "gestao";
 
 // Um único item de discografia, seja qual for a fonte (álbum próprio via
 // Gestao, publicado no catálogo Empire Play, ou legado/antigo) — mostrados
@@ -178,6 +178,8 @@ function ArtistDashboard() {
     const base: { id: TabId; label: string }[] = [
       { id: "geral", label: "Visão Geral" },
       { id: "discografia", label: "Discografia" },
+      { id: "musicas", label: "Músicas" },
+      { id: "videos", label: "Vídeos" },
       { id: "charts", label: "Charts" },
       { id: "tours", label: "Turnês & Projetos" },
       { id: "social", label: "Social" },
@@ -217,7 +219,12 @@ function ArtistDashboard() {
   }
 
   return (
-    <main className="flex-1 pb-24 bg-background">
+    // Sem isso, em telas largas de desktop o perfil ocupava a largura toda
+    // da viewport (sem o max-w-5xl mx-auto que o resto do app usa, ex.
+    // empire-play.tsx) — tudo esticado além da resolução buscada, deixando
+    // header, avatar e capas de álbum borrados mesmo com driveImg já
+    // pedindo alta resolução.
+    <main className="flex-1 pb-24 bg-background max-w-5xl mx-auto">
       {/* Visual Header */}
       <div className="relative h-[30vh] min-h-[240px] overflow-hidden">
         <img
@@ -366,6 +373,8 @@ function ArtistDashboard() {
             {activeTab === "discografia" && (
               <DiscografiaTab nome={artist.nome} discografia={discografia} isOwner={isOwner} />
             )}
+            {activeTab === "musicas" && <MusicasTab nome={artist.nome} />}
+            {activeTab === "videos" && <VideosTab nome={artist.nome} />}
             {activeTab === "charts" && <ChartsTab nome={artist.nome} />}
             {activeTab === "tours" && <ToursProjetosTab nome={artist.nome} tourData={tourData} isOwner={isOwner} />}
             {activeTab === "social" && <SocialTab nome={artist.nome} />}
@@ -454,7 +463,7 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
-// ---------- Aba: Discografia ----------
+// ---------- Aba: Discografia (só álbuns) ----------
 function DiscografiaTab({
   nome,
   discografia,
@@ -464,140 +473,157 @@ function DiscografiaTab({
   discografia: DiscoItem[];
   isOwner: boolean;
 }) {
-  const { playSong, playVideo } = useEmpirePlayer();
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-4 px-1">
+        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Discografia</h2>
+        {isOwner && (
+          <Link to="/empire-play/gestao" search={{ nome }} className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center active:scale-90 transition-transform">
+            <Disc3 className="size-4" />
+          </Link>
+        )}
+      </div>
+      {discografia.length === 0 ? (
+        <div className="p-8 rounded-[2.5rem] border border-dashed border-white/5 text-center">
+          <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest italic opacity-40">Nenhum álbum registrado ainda</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          {discografia.map((a) => {
+            const inner = (
+              <>
+                <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5 grid place-items-center">
+                  {a.capa_url ? (
+                    <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+                  ) : (
+                    <Disc3 className="size-8 text-muted-foreground" />
+                  )}
+                </div>
+                <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.titulo}</p>
+              </>
+            );
+            if (a.kind === "legado") {
+              return (
+                <Link key={a.key} to="/empire-play/albuns-antigos/$id" params={{ id: a.id }} className="group">
+                  {inner}
+                </Link>
+              );
+            }
+            return (
+              <Link key={a.key} to="/empire-play/forum" search={{ tab: "albuns", id: a.id }} className="group">
+                {inner}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ---------- Aba: Músicas ----------
+function MusicasTab({ nome }: { nome: string }) {
+  const { playSong } = useEmpirePlayer();
   const [musicas, setMusicas] = useState<any[] | null>(null);
-  const [videos, setVideos] = useState<any[] | null>(null);
 
   useEffect(() => {
     let alive = true;
-    Promise.all([
-      fetch(`/api/empire-play/musicas?artist=${encodeURIComponent(nome)}`).then((r) => r.json()).catch(() => null),
-      fetch(`/api/empire-play/videos?artist=${encodeURIComponent(nome)}`).then((r) => r.json()).catch(() => null),
-    ]).then(([m, v]) => {
-      if (!alive) return;
-      setMusicas(Array.isArray(m?.data) ? m.data : []);
-      setVideos(Array.isArray(v?.data) ? v.data : []);
-    });
+    setMusicas(null);
+    fetch(`/api/empire-play/musicas?artist=${encodeURIComponent(nome)}`)
+      .then((r) => r.json())
+      .catch(() => null)
+      .then((m) => alive && setMusicas(Array.isArray(m?.data) ? m.data : []));
     return () => { alive = false; };
   }, [nome]);
 
   return (
-    <div className="space-y-8">
-      <section>
-        <div className="flex items-center justify-between mb-4 px-1">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Discografia</h2>
-          {isOwner && (
-            <Link to="/empire-play/gestao" search={{ nome }} className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center active:scale-90 transition-transform">
-              <Disc3 className="size-4" />
-            </Link>
-          )}
+    <section>
+      <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
+        <Music className="size-3.5" /> Músicas no catálogo
+      </h2>
+      {musicas === null ? (
+        <div className="h-14 rounded-2xl bg-card animate-pulse" />
+      ) : musicas.length === 0 ? (
+        <p className="text-[10px] text-muted-foreground italic px-1">Nenhuma música no catálogo ainda.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {musicas.map((m, i) => {
+            const cover = driveImg(m.coverUrl);
+            return (
+              <button
+                key={i}
+                onClick={() => playSong(toPlayableTrack(m), musicas.map(toPlayableTrack))}
+                className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors text-left"
+              >
+                <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
+                  {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Music className="size-4 text-muted-foreground" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium break-words leading-tight">{m.title || m.titulo || "—"}</p>
+                  {m.displayArtists && (
+                    <p className="text-[11px] text-muted-foreground break-words mt-0.5">{m.displayArtists}</p>
+                  )}
+                </div>
+                <Play className="size-3.5 text-muted-foreground shrink-0" />
+              </button>
+            );
+          })}
         </div>
-        {discografia.length === 0 ? (
-          <div className="p-8 rounded-[2.5rem] border border-dashed border-white/5 text-center">
-            <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest italic opacity-40">Nenhum álbum registrado ainda</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-4">
-            {discografia.map((a) => {
-              const inner = (
-                <>
-                  <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5 grid place-items-center">
-                    {a.capa_url ? (
-                      <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-                    ) : (
-                      <Disc3 className="size-8 text-muted-foreground" />
-                    )}
-                  </div>
-                  <p className="mt-2 text-[10px] font-black uppercase tracking-tight text-center truncate">{a.titulo}</p>
-                </>
-              );
-              if (a.kind === "legado") {
-                return (
-                  <Link key={a.key} to="/empire-play/albuns-antigos/$id" params={{ id: a.id }} className="group">
-                    {inner}
-                  </Link>
-                );
-              }
-              return (
-                <Link key={a.key} to="/empire-play/forum" search={{ tab: "albuns", id: a.id }} className="group">
-                  {inner}
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      )}
+    </section>
+  );
+}
 
-      <section>
-        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
-          <Music className="size-3.5" /> Músicas no catálogo
-        </h2>
-        {musicas === null ? (
-          <div className="h-14 rounded-2xl bg-card animate-pulse" />
-        ) : musicas.length === 0 ? (
-          <p className="text-[10px] text-muted-foreground italic px-1">Nenhuma música no catálogo ainda.</p>
-        ) : (
-          <div className="space-y-1.5">
-            {musicas.slice(0, 10).map((m, i) => {
-              const cover = driveImg(m.coverUrl);
-              return (
-                <button
-                  key={i}
-                  onClick={() => playSong(toPlayableTrack(m), musicas.map(toPlayableTrack))}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors text-left"
-                >
-                  <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
-                    {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Music className="size-4 text-muted-foreground" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium break-words leading-tight">{m.title || m.titulo || "—"}</p>
-                    {m.displayArtists && (
-                      <p className="text-[11px] text-muted-foreground break-words mt-0.5">{m.displayArtists}</p>
-                    )}
-                  </div>
-                  <Play className="size-3.5 text-muted-foreground shrink-0" />
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </section>
+// ---------- Aba: Vídeos ----------
+function VideosTab({ nome }: { nome: string }) {
+  const { playVideo } = useEmpirePlayer();
+  const [videos, setVideos] = useState<any[] | null>(null);
 
-      <section>
-        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
-          <Video className="size-3.5" /> Vídeos no catálogo
-        </h2>
-        {videos === null ? (
-          <div className="h-14 rounded-2xl bg-card animate-pulse" />
-        ) : videos.length === 0 ? (
-          <p className="text-[10px] text-muted-foreground italic px-1">Nenhum vídeo no catálogo ainda.</p>
-        ) : (
-          <div className="space-y-1.5">
-            {videos.slice(0, 10).map((v, i) => {
-              const cover = driveImg(v.coverUrl);
-              return (
-                <button
-                  key={i}
-                  onClick={() => playVideo(toPlayableVideo(v))}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors text-left"
-                >
-                  <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
-                    {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Video className="size-4 text-muted-foreground" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium break-words leading-tight">{v.title || v.titulo || "—"}</p>
-                    {v.displayArtists && (
-                      <p className="text-[11px] text-muted-foreground break-words mt-0.5">{v.displayArtists}</p>
-                    )}
-                  </div>
-                  <Play className="size-3.5 text-muted-foreground shrink-0" />
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </section>
-    </div>
+  useEffect(() => {
+    let alive = true;
+    setVideos(null);
+    fetch(`/api/empire-play/videos?artist=${encodeURIComponent(nome)}`)
+      .then((r) => r.json())
+      .catch(() => null)
+      .then((v) => alive && setVideos(Array.isArray(v?.data) ? v.data : []));
+    return () => { alive = false; };
+  }, [nome]);
+
+  return (
+    <section>
+      <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
+        <Video className="size-3.5" /> Vídeos no catálogo
+      </h2>
+      {videos === null ? (
+        <div className="h-14 rounded-2xl bg-card animate-pulse" />
+      ) : videos.length === 0 ? (
+        <p className="text-[10px] text-muted-foreground italic px-1">Nenhum vídeo no catálogo ainda.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {videos.map((v, i) => {
+            const cover = driveImg(v.coverUrl);
+            return (
+              <button
+                key={i}
+                onClick={() => playVideo(toPlayableVideo(v))}
+                className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors text-left"
+              >
+                <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
+                  {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Video className="size-4 text-muted-foreground" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium break-words leading-tight">{v.title || v.titulo || "—"}</p>
+                  {v.displayArtists && (
+                    <p className="text-[11px] text-muted-foreground break-words mt-0.5">{v.displayArtists}</p>
+                  )}
+                </div>
+                <Play className="size-3.5 text-muted-foreground shrink-0" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
