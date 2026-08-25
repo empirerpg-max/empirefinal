@@ -402,20 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: descobre nome/gid das abas de edicaoCharts, pra
-    // achar a aba "Banco de Dados Artistas" (gid=1673522921) e seus headers.
-    if (url.pathname === "/api/debug/abas-edicao-charts" && request.method === "GET") {
-      const gs = await import("../backend/src/services/googleSheetsService");
-      const tabs = await gs.listSheetTabs("edicaoCharts");
-      const alvo = tabs.find((t) => t.sheetId === 1673522921);
-      let headers: string[] = [];
-      if (alvo) {
-        const rows = await gs.googleSheetsService.edicaoCharts.readValues(alvo.title, "A1:Z1");
-        headers = rows?.[0] || [];
-      }
-      return Response.json({ tabs, alvo, headers });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);

@@ -330,6 +330,7 @@ export async function criarArtistaController(request: Request): Promise<Response
     const row = headers.map((h) => values[h] ?? "");
 
     await googleSheetsService.usuarios.appendRow(ARTISTAS_SHEET, row);
+    await registrarGravadoraNoBancoDeDados(nome, gravadora);
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -341,6 +342,49 @@ export async function criarArtistaController(request: Request): Promise<Response
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
+  }
+}
+
+const BANCO_DADOS_ARTISTAS_SHEET = "Banco de Dados Artistas";
+
+// Além da aba ARTISTAS (planilha de usuários, dono do vínculo com o
+// jogador), a gravadora escolhida na criação também precisa aparecer em
+// "Banco de Dados Artistas" (planilha edicaoCharts) — coluna A = nome do
+// artista, coluna B = gravadora. Atualiza a linha se o artista já existir
+// lá, senão cria uma nova.
+async function registrarGravadoraNoBancoDeDados(nome: string, gravadora: string): Promise<void> {
+  try {
+    const rows = await googleSheetsService.edicaoCharts.readValues(BANCO_DADOS_ARTISTAS_SHEET, "A2:A5000");
+    const normNome = normalizeComparison(nome);
+    let linhaExistente = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (normalizeComparison(rows[i]?.[0]) === normNome) {
+        linhaExistente = i + 2;
+        break;
+      }
+    }
+    if (linhaExistente !== -1) {
+      await googleSheetsService.edicaoCharts.updateValues(
+        BANCO_DADOS_ARTISTAS_SHEET,
+        `B${linhaExistente}`,
+        [[gravadora]],
+      );
+      return;
+    }
+    // Mesmo padrão de "computar a próxima linha vazia via coluna-âncora e
+    // gravar com updateValues" usado em EDIÇÃO CHARTS — :append nessa
+    // planilha (edicaoCharts) já se mostrou pouco confiável pra achar a
+    // linha real quando há colunas distantes preenchidas por fórmula.
+    let ultimaLinhaComNome = 1; // linha 1 = cabeçalho
+    for (let i = 0; i < rows.length; i++) {
+      if ((rows[i]?.[0] || "").trim()) ultimaLinhaComNome = i + 2;
+    }
+    const linhaAlvo = ultimaLinhaComNome + 1;
+    await googleSheetsService.edicaoCharts.updateValues(BANCO_DADOS_ARTISTAS_SHEET, `A${linhaAlvo}:B${linhaAlvo}`, [
+      [nome, gravadora],
+    ]);
+  } catch (err) {
+    console.warn("[registrarGravadoraNoBancoDeDados] Erro ao gravar em Banco de Dados Artistas:", err);
   }
 }
 
