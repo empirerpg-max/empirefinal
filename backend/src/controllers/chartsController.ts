@@ -162,16 +162,33 @@ function parseHOFList(str: string | undefined): { t: string; v: string }[] {
   });
 }
 
+function contarNumero1(items: { t: string; v: string }[]): number {
+  return items.filter((item) => {
+    const positions = String(item.v)
+      .split("-")
+      .map((s) => Number(s.trim()))
+      .filter((n) => !isNaN(n) && n > 0);
+    return positions.length > 0 && Math.min(...positions) === 1;
+  }).length;
+}
+
 async function fetchHOFProfile(artist: string): Promise<unknown> {
   const data = await readSheet("chartsBase", "HALL_OF_FAME_DB");
   const r = data.find((row) => (row[0] || "").trim().toUpperCase() === artist.trim().toUpperCase());
   if (!r) return {};
+  const runsBase = parseHOFList(r[12]);
+  const runsLegado = parseHOFList(r[13]);
+  const runsCombinados = [...runsBase, ...runsLegado];
+  const n1BaseNumerico = Number(r[4]);
+  const n1Hot100 = !isNaN(n1BaseNumerico)
+    ? String(n1BaseNumerico + contarNumero1(runsLegado))
+    : r[4];
   return {
     name: r[0],
     img: fixImg(r[1]),
     country: r[2],
     style: r[3],
-    n1_hot100: r[4],
+    n1_hot100: n1Hot100,
     n1_spotify: r[5],
     n1_youtube: r[6],
     n1_bb200: r[7],
@@ -179,7 +196,7 @@ async function fetchHOFProfile(artist: string): Promise<unknown> {
     sp: parseHOFList(r[9]),
     am: parseHOFList(r[10]),
     alb: parseHOFList(r[11]),
-    runs: parseHOFList(r[12]),
+    runs: runsCombinados,
   };
 }
 
