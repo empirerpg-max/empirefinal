@@ -385,8 +385,11 @@ function HomeTabView({
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-muted" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/20" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/80 to-transparent" />
+        {/* Antes essas duas camadas se somavam (blend de opacidade) e no
+            canto inferior esquerdo — onde fica todo o texto — ficava quase
+            opaco, escondendo o banner quase inteiro. Uma só, mais suave,
+            ainda garante legibilidade do texto sem tapar a imagem. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/35 to-transparent" />
         <div className="relative h-full flex flex-col justify-end p-6 max-w-2xl">
           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold w-fit mb-2 ${badge.cls}`}>
             {badge.icon} {badge.label}
@@ -855,8 +858,11 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
             mobileSheet ? "h-[30dvh]" : "flex-1 min-h-0"
           }`}
         >
-          <div className="flex items-center gap-3 px-4 h-12 shrink-0 bg-gradient-to-b from-black/70 to-transparent absolute top-0 inset-x-0 z-10">
-            <button onClick={onBack} className="size-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white" aria-label="Voltar">
+          <div
+            className="flex items-center gap-3 px-4 shrink-0 bg-gradient-to-b from-black/70 to-transparent absolute top-0 inset-x-0 z-10"
+            style={{ paddingTop: "env(safe-area-inset-top)", height: "calc(3rem + env(safe-area-inset-top))" }}
+          >
+            <button onClick={onBack} className="size-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white shrink-0" aria-label="Voltar">
               <ArrowLeft className="size-4" />
             </button>
             <div className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{programa.titulo}</div>
