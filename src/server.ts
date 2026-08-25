@@ -402,38 +402,14 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: investiga por que uma música criada não apareceu
-    // em EDIÇÃO CHARTS. Lê as últimas linhas reais (ignorando padding em
-    // branco) pra ver se o registro sumiu de verdade ou foi gravado
-    // deslocado de coluna (mesma classe de bug já confirmada em REGISTRO).
-    if (url.pathname === "/api/debug/edicao-charts-tail" && request.method === "GET") {
-      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
-      // Colunas de cálculo semanal (streams/vendas etc, a partir de S) têm
-      // fórmula em MILHARES de linhas — "última linha com qualquer
-      // conteúdo" sempre bate nelas, não numa música real. O que importa é
-      // a última linha com TÍTULO de verdade na coluna B.
-      const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A1:BE8000");
-      const comTitulo = rows
-        .map((r, i) => ({ linha: i + 1, colB: r[1] || "", primeiraColunaComValor: r.findIndex((c) => normalizeText(c)) }))
-        .filter((r) => normalizeText(r.colB));
-      const ultimasComTitulo = comTitulo.slice(-10);
-      return Response.json({ totalLinhasLidas: rows.length, totalComTitulo: comTitulo.length, ultimasComTitulo });
-    }
-
-    // Debug temporário: verifica ao vivo se o fix do range explícito
-    // (A:Q) resolveu o bug — chama a função real com dado de teste e
-    // confirma que a linha devolvida fica perto da última música real,
-    // não lá longe (milhares de linhas) como antes.
-    if (url.pathname === "/api/debug/testa-edicao-charts-fix" && request.method === "GET") {
-      const { registrarNaEdicaoCharts } = await import("../backend/src/controllers/gestaoController");
-      const linha = await registrarNaEdicaoCharts({
-        dataFormatada: new Date().toLocaleDateString("pt-BR"),
-        fullTitle: "TESTE-CLAUDE-FIX - Verificação Range",
-        tipoSingle: "LEAD SINGLE",
-        tipoMusica: "SOLO",
-        artistaPrincipal: "TESTE-CLAUDE-FIX",
-      });
-      return Response.json({ linha });
+    // Debug temporário: apaga as linhas de teste (3254 "Purple Sheeps -
+    // Teste Shop, Info e Visual" e 3255 "TESTE-CLAUDE-FIX") deixadas em
+    // EDIÇÃO CHARTS durante a investigação do bug de range no appendRow.
+    if (url.pathname === "/api/debug/limpa-teste-edicao-charts" && request.method === "GET") {
+      const { googleSheetsService } = await import("../backend/src/services/googleSheetsService");
+      const vazio = Array.from({ length: 17 }, () => "");
+      await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", "A3254:Q3255", [vazio, vazio]);
+      return Response.json({ ok: true });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
