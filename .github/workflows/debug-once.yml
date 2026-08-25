@@ -6,4 +6,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/kick/status" | tee /tmp/out.json
+        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/charts?action=getHOFProfile&artist=SA5M" | tee /tmp/out.json
