@@ -4,15 +4,17 @@ export type HomeConfig = {
   order: string[];
   sections: {
     meusArtistas: { enabled: boolean };
+    acervoRecente: { enabled: boolean };
     billboard: { enabled: boolean; fallbackUrl: string };
     topPlataformas: { enabled: boolean; links: Record<string, string> };
   };
 };
 
 export const DEFAULT_HOME_CONFIG: HomeConfig = {
-  order: ["meusArtistas", "billboard", "topPlataformas"],
+  order: ["meusArtistas", "acervoRecente", "billboard", "topPlataformas"],
   sections: {
     meusArtistas: { enabled: true },
+    acervoRecente: { enabled: true },
     billboard: {
       enabled: true,
       fallbackUrl: "https://empirerpg-max.github.io/central/charts.html?tab=BILLBOARD%20HOT%20100",
@@ -41,10 +43,22 @@ export function useHomeConfig(): HomeConfig {
       .then((r) => (r.ok ? r.json() : null))
       .then((data: Partial<HomeConfig> | null) => {
         if (cancelled || !data) return;
+        // Config salva no Empire Admin pode ser de antes dessa seção
+        // existir — sem isso, "Revistas & Entrevistas" some assim que o
+        // painel salvar um `order` antigo (sem essa chave).
+        const orderRemoto = data.order || DEFAULT_HOME_CONFIG.order;
+        const order = orderRemoto.includes("acervoRecente")
+          ? orderRemoto
+          : [
+              ...orderRemoto.slice(0, orderRemoto.indexOf("meusArtistas") + 1),
+              "acervoRecente",
+              ...orderRemoto.slice(orderRemoto.indexOf("meusArtistas") + 1),
+            ];
         setConfig({
-          order: data.order || DEFAULT_HOME_CONFIG.order,
+          order,
           sections: {
             meusArtistas: { ...DEFAULT_HOME_CONFIG.sections.meusArtistas, ...data.sections?.meusArtistas },
+            acervoRecente: { ...DEFAULT_HOME_CONFIG.sections.acervoRecente, ...data.sections?.acervoRecente },
             billboard: { ...DEFAULT_HOME_CONFIG.sections.billboard, ...data.sections?.billboard },
             topPlataformas: {
               ...DEFAULT_HOME_CONFIG.sections.topPlataformas,

@@ -17,6 +17,9 @@ import {
   Calendar,
   Clock,
   Tv,
+  Newspaper,
+  BookOpen,
+  MessageSquareText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -64,6 +67,15 @@ interface SocialPostResumo {
   data: string;
 }
 
+interface AcervoItem {
+  id: string;
+  tipo: "revista" | "entrevista";
+  titulo: string;
+  artista: string;
+  capa?: string;
+  data: string;
+}
+
 // chartsTab = aba correspondente em /charts (CategoryId) — os cards da home
 // abrem a parada específica dentro do app, em vez de sair pro site externo.
 const PLATFORM_META: Record<
@@ -83,6 +95,9 @@ function Index() {
     status: "loading",
   });
   const [ultimasPostagens, setUltimasPostagens] = useState<LoadState<SocialPostResumo[]>>({
+    status: "loading",
+  });
+  const [acervoRecente, setAcervoRecente] = useState<LoadState<AcervoItem[]>>({
     status: "loading",
   });
   const [proximosEventos, setProximosEventos] = useState<LoadState<ProximoEvento[]>>({
@@ -127,17 +142,64 @@ function Index() {
         .catch((e) => setLancamentosRecentes({ status: "error", error: String(e?.message || e) })),
     );
 
+    // "Últimas Publicações" mistura posts do Social com matérias de News —
+    // os dois têm o mesmo formato (autor, texto curto, imagem opcional) e
+    // já vivem dentro do módulo Social, então cabem no mesmo carrossel.
+    // Revistas/Entrevistas ficam de fora (seção própria, ver abaixo) —
+    // conteúdo mais denso (capa, múltiplas páginas, pergunta-e-resposta),
+    // não cabe no mesmo card pequeno.
     tasks.push(
-      (api as any)
-        .listarPostsSocial()
-        .then((data: SocialPostResumo[]) => {
-          if (!Array.isArray(data)) throw new Error("Formato inválido");
-          const ordenado = [...data].sort(
+      Promise.all([
+        (api as any).listarPostsSocial().catch(() => []),
+        (api as any).listarNewsSocial().catch(() => []),
+      ])
+        .then(([posts, news]: [SocialPostResumo[], any[]]) => {
+          const postsArr = Array.isArray(posts) ? posts : [];
+          const newsArr = Array.isArray(news) ? news : [];
+          const newsComoPost: SocialPostResumo[] = newsArr.map((n) => ({
+            id: n.id,
+            tipo: "News",
+            autor: n.autor,
+            texto: n.titulo,
+            media_url: n.imagem || undefined,
+            data: n.data,
+          }));
+          const ordenado = [...postsArr, ...newsComoPost].sort(
             (a, b) => new Date(b.data).getTime() - new Date(a.data).getTime(),
           );
-          setUltimasPostagens({ status: "ok", data: ordenado.slice(0, 6) });
+          setUltimasPostagens({ status: "ok", data: ordenado.slice(0, 8) });
         })
         .catch((e: any) => setUltimasPostagens({ status: "error", error: String(e?.message || e) })),
+    );
+
+    tasks.push(
+      Promise.all([
+        api.listarRevistasAcervo().catch(() => []),
+        api.listarEntrevistasAcervo().catch(() => []),
+      ])
+        .then(([revistas, entrevistas]) => {
+          const revistasArr = (Array.isArray(revistas) ? revistas : []).map((r: any) => ({
+            id: r.id,
+            tipo: "revista" as const,
+            titulo: r.titulo,
+            artista: r.artista,
+            capa: r.capa,
+            data: r.data,
+          }));
+          const entrevistasArr = (Array.isArray(entrevistas) ? entrevistas : []).map((e: any) => ({
+            id: e.id,
+            tipo: "entrevista" as const,
+            titulo: e.titulo,
+            artista: e.artista,
+            capa: e.capa,
+            data: e.data,
+          }));
+          const ordenado = [...revistasArr, ...entrevistasArr].sort(
+            (a, b) => new Date(b.data).getTime() - new Date(a.data).getTime(),
+          );
+          setAcervoRecente({ status: "ok", data: ordenado.slice(0, 8) });
+        })
+        .catch((e: any) => setAcervoRecente({ status: "error", error: String(e?.message || e) })),
     );
 
     // Próximos Eventos mistura os shows de turnê de TODOS os jogadores (não
@@ -284,7 +346,14 @@ function Index() {
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x">
             {ultimasPostagens.data.map((p) => {
-              const PlatformIcon = p.tipo === "Instagram" ? Instagram : p.tipo === "TikTok" ? Video : Twitter;
+              const isNews = p.tipo === "News";
+              const PlatformIcon = isNews
+                ? Newspaper
+                : p.tipo === "Instagram"
+                  ? Instagram
+                  : p.tipo === "TikTok"
+                    ? Video
+                    : Twitter;
               return p.media_url ? (
                 <Link
                   key={p.id}
@@ -293,7 +362,7 @@ function Index() {
                   onClick={() => haptic.selection()}
                   className="min-w-[150px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all flex flex-col"
                 >
-                  <div className="aspect-square bg-secondary overflow-hidden">
+                  <div className="aspect-square bg-secondary overflow-hidden relative">
                     <img
                       src={driveImg(p.media_url, 300)}
                       className="w-full h-full object-cover"
@@ -302,10 +371,19 @@ function Index() {
                       decoding="async"
                       referrerPolicy="no-referrer"
                     />
+                    {isNews && (
+                      <span className="absolute top-2 left-2 size-6 rounded-full bg-black/60 backdrop-blur-md grid place-items-center border border-white/10">
+                        <Newspaper className="size-3 text-primary" aria-hidden="true" />
+                      </span>
+                    )}
                   </div>
                   <div className="p-2.5">
-                    <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">{p.autor}</h3>
-                    <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">{p.tipo}</p>
+                    <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">
+                      {isNews ? p.texto : p.autor}
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">
+                      {isNews ? p.autor : p.tipo}
+                    </p>
                   </div>
                 </Link>
               ) : (
@@ -323,6 +401,78 @@ function Index() {
                   <div className="flex-1 flex items-start gap-1.5">
                     <Quote className="size-3 text-primary/50 shrink-0 mt-0.5" aria-hidden="true" />
                     <p className="text-[12px] font-medium leading-snug line-clamp-4">{p.texto}</p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    ),
+
+    acervoRecente: () => (
+      <section className="mb-10" aria-labelledby="acervo-recente-h">
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="acervo-recente-h" className="text-xs font-black uppercase tracking-[0.2em]">
+            Revistas &amp; Entrevistas
+          </h2>
+          <Link
+            to="/acervo"
+            onClick={() => haptic.selection()}
+            className="text-[11px] font-bold uppercase text-primary tracking-wider hover:underline min-h-11 grid place-items-center"
+          >
+            Ver tudo
+          </Link>
+        </div>
+
+        {acervoRecente.status === "loading" ? (
+          <div className="flex gap-3 overflow-x-hidden">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="min-w-[130px] h-[10rem] rounded-[1.5rem] bg-white/5 animate-pulse" />
+            ))}
+          </div>
+        ) : acervoRecente.status === "error" ? (
+          <LoadErrorState onRetry={() => fetchData(false)} />
+        ) : acervoRecente.data.length === 0 ? (
+          <div className="w-full p-6 rounded-[1.75rem] bg-card/50 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center text-center min-h-32">
+            <p className="text-sm font-black uppercase tracking-tight mb-1">Nada publicado ainda</p>
+            <p className="text-[11px] font-medium text-muted-foreground leading-snug max-w-[18rem]">
+              Publique uma revista ou entrevista no Acervo pra aparecer aqui.
+            </p>
+          </div>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x">
+            {acervoRecente.data.map((item) => {
+              const TipoIcon = item.tipo === "revista" ? BookOpen : MessageSquareText;
+              return (
+                <Link
+                  key={item.id}
+                  to="/acervo"
+                  onClick={() => haptic.selection()}
+                  className="min-w-[130px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all flex flex-col"
+                >
+                  <div className="aspect-[3/4] bg-secondary overflow-hidden relative">
+                    {item.capa ? (
+                      <img
+                        src={driveImg(item.capa, 300)}
+                        className="w-full h-full object-cover"
+                        alt={item.titulo}
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-full h-full grid place-items-center opacity-20">
+                        <TipoIcon className="size-8" aria-hidden="true" />
+                      </div>
+                    )}
+                    <span className="absolute top-2 left-2 size-6 rounded-full bg-black/60 backdrop-blur-md grid place-items-center border border-white/10">
+                      <TipoIcon className="size-3 text-primary" aria-hidden="true" />
+                    </span>
+                  </div>
+                  <div className="p-2.5">
+                    <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">{item.titulo}</h3>
+                    <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">{item.artista}</p>
                   </div>
                 </Link>
               );

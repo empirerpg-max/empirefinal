@@ -286,9 +286,14 @@ function SocialPage() {
       setSelectedPost(found);
       loadComments(found.id);
       setIsCommentModalOpen(true);
+      return;
     }
+    // Não achou nos posts — pode ser uma News (deep-link vindo do card
+    // unificado de "Últimas Publicações" na home, que mistura os dois).
+    const foundNews = news.find((n) => n.id === postId);
+    if (foundNews) handleComentarNews(foundNews);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [postId, loading]);
+  }, [postId, loading, news]);
 
   // Deep-link "/social?artist=Nome" (usado pelo mega perfil do artista) —
   // já abre direto na aba Perfis (Industry), no artista certo.
