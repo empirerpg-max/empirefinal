@@ -402,38 +402,59 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: investiga por que uma música criada não apareceu
-    // em EDIÇÃO CHARTS. Lê as últimas linhas reais (ignorando padding em
-    // branco) pra ver se o registro sumiu de verdade ou foi gravado
-    // deslocado de coluna (mesma classe de bug já confirmada em REGISTRO).
-    if (url.pathname === "/api/debug/edicao-charts-tail" && request.method === "GET") {
-      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
-      // Colunas de cálculo semanal (streams/vendas etc, a partir de S) têm
-      // fórmula em MILHARES de linhas — "última linha com qualquer
-      // conteúdo" sempre bate nelas, não numa música real. O que importa é
-      // a última linha com TÍTULO de verdade na coluna B.
-      const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A1:BE8000");
-      const comTitulo = rows
-        .map((r, i) => ({ linha: i + 1, colB: r[1] || "", primeiraColunaComValor: r.findIndex((c) => normalizeText(c)) }))
-        .filter((r) => normalizeText(r.colB));
-      const ultimasComTitulo = comTitulo.slice(-10);
-      return Response.json({ totalLinhasLidas: rows.length, totalComTitulo: comTitulo.length, ultimasComTitulo });
-    }
-
-    // Debug temporário: verifica ao vivo se o fix do range explícito
-    // (A:Q) resolveu o bug — chama a função real com dado de teste e
-    // confirma que a linha devolvida fica perto da última música real,
-    // não lá longe (milhares de linhas) como antes.
-    if (url.pathname === "/api/debug/testa-edicao-charts-fix" && request.method === "GET") {
+    // Debug temporário: reteste completo depois que o usuário apagou as
+    // linhas de teste anteriores. Testa registrarNaEdicaoCharts (deve cair
+    // logo após a última música real, coluna B) E um append de teste em
+    // EDIÇÃO CHARTS ÁLBUMS (mesmo fix, A:R) — cobre o caminho de faixa
+    // inédita de álbum/substituição também.
+    if (url.pathname === "/api/debug/reteste-edicao-charts" && request.method === "GET") {
+      const gs = await import("../backend/src/services/googleSheetsService");
       const { registrarNaEdicaoCharts } = await import("../backend/src/controllers/gestaoController");
-      const linha = await registrarNaEdicaoCharts({
+
+      const linhaMusica = await registrarNaEdicaoCharts({
         dataFormatada: new Date().toLocaleDateString("pt-BR"),
-        fullTitle: "TESTE-CLAUDE-FIX - Verificação Range",
+        fullTitle: "TESTE-CLAUDE-RETESTE - Verificação Range",
         tipoSingle: "LEAD SINGLE",
         tipoMusica: "SOLO",
-        artistaPrincipal: "TESTE-CLAUDE-FIX",
+        artistaPrincipal: "TESTE-CLAUDE-RETESTE",
       });
-      return Response.json({ linha });
+
+      const linhaAlbum = await gs.googleSheetsService.edicaoCharts.appendRow(
+        "EDIÇÃO CHARTS ÁLBUMS",
+        [
+          "TESTE-CLAUDE-RETESTE", // A - ARTISTA
+          new Date().toLocaleDateString("pt-BR"), // B - DATA
+          "1", // C
+          "TESTE-CLAUDE-RETESTE - Álbum Verificação", // D - NOME
+          "1", // E
+          "2", // F
+          "", "", "", "", "", "", "", "", "", "",
+          "",
+          "TESTE-ALBUM-999",
+        ],
+        "A:R",
+      );
+
+      // Acha a última linha de verdade (coluna B/D preenchida) de cada aba
+      // pra dar contexto de quão perto ficou.
+      const musicasRows = await gs.googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A1:B4000");
+      let ultimaMusicaReal = -1;
+      for (let i = musicasRows.length - 1; i >= 0; i--) {
+        if ((musicasRows[i]?.[1] || "").trim() && !musicasRows[i][1].includes("TESTE-CLAUDE")) {
+          ultimaMusicaReal = i + 1;
+          break;
+        }
+      }
+      const albunsRows = await gs.googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A1:D4000");
+      let ultimoAlbumReal = -1;
+      for (let i = albunsRows.length - 1; i >= 0; i--) {
+        if ((albunsRows[i]?.[3] || "").trim() && !albunsRows[i][3].includes("TESTE-CLAUDE")) {
+          ultimoAlbumReal = i + 1;
+          break;
+        }
+      }
+
+      return Response.json({ linhaMusica, ultimaMusicaReal, linhaAlbum, ultimoAlbumReal });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
