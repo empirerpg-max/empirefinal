@@ -402,58 +402,23 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: simula o ciclo completo de uma faixa pendente de
-    // álbum — cria a linha em EDIÇÃO CHARTS já na "criação do álbum" (como
-    // processarFaixasDoAlbum faz agora, incondicional) e depois simula a
-    // publicação (como atualizarFaixaNosChartsAoPublicar faz): tem que ser
-    // a MESMA linha, só com tipo/data atualizados — não uma linha nova.
-    if (url.pathname === "/api/debug/reteste-faixa-pendente" && request.method === "GET") {
+    // Debug temporário: limpa a linha de teste TESTE-CLAUDE-PENDENTE deixada
+    // em EDIÇÃO CHARTS pela verificação do fix de faixa pendente de álbum.
+    if (url.pathname === "/api/debug/limpar-teste-pendente" && request.method === "GET") {
       const gs = await import("../backend/src/services/googleSheetsService");
-      const mod = await import("../backend/src/controllers/gestaoController");
-      const { registrarNaEdicaoCharts } = mod as any;
-
-      const tituloTeste = "TESTE-CLAUDE-PENDENTE - Faixa Pendente";
-      const linhaCriacao = await registrarNaEdicaoCharts({
-        dataFormatada: new Date().toLocaleDateString("pt-BR"),
-        fullTitle: tituloTeste,
-        tipoSingle: "TRACKLIST ALBUM",
-        tipoMusica: "SOLO",
-        album: "TESTE-CLAUDE-PENDENTE - Álbum",
-        artistaPrincipal: "TESTE-CLAUDE-PENDENTE",
-      });
-
-      // Simula a publicação: busca pelo título (coluna B) e atualiza
-      // A (data) e C/D (tipo) — mesma lógica de
-      // atualizarFaixaNosChartsAoPublicar, reimplementada aqui só porque a
-      // função original não é exportada.
       const rows = await gs.googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "B2:B20000");
-      let linhaPublicacao: number | null = null;
-      for (let i = rows.length - 1; i >= 0; i--) {
-        if ((rows[i]?.[0] || "").trim() === tituloTeste) {
-          linhaPublicacao = i + 2;
-          break;
-        }
+      const linhasLimpar: number[] = [];
+      for (let i = 0; i < rows.length; i++) {
+        if ((rows[i]?.[0] || "").includes("TESTE-CLAUDE")) linhasLimpar.push(i + 2);
       }
-      if (linhaPublicacao) {
-        await gs.googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linhaPublicacao}`, [
-          [new Date().toLocaleDateString("pt-BR")],
-        ]);
-        await gs.googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `C${linhaPublicacao}:D${linhaPublicacao}`, [
-          ["LEAD SINGLE", "SOLO"],
-        ]);
+      for (const linha of linhasLimpar) {
+        await gs.googleSheetsService.edicaoCharts.updateValues(
+          "EDIÇÃO CHARTS",
+          `A${linha}:Q${linha}`,
+          [Array(17).fill("")],
+        );
       }
-
-      const rowAfter = await gs.googleSheetsService.edicaoCharts.readValues(
-        "EDIÇÃO CHARTS",
-        `A${linhaPublicacao}:D${linhaPublicacao}`,
-      );
-
-      return Response.json({
-        linhaCriacao,
-        linhaPublicacao,
-        mesmaLinha: linhaCriacao === linhaPublicacao,
-        conteudoFinal: rowAfter?.[0],
-      });
+      return Response.json({ linhasLimpas: linhasLimpar });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
