@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+import { getStoredLogin } from "@/components/LoginScreen";
 
 // Alternativa ao upload: colar direto o link de uma imagem já hospedada em
 // outro lugar (.png/.jpg/.jpeg/.webp). Só aplica se o link for válido —
@@ -245,8 +246,10 @@ function SocialPage() {
   const [uploadingNews, setUploadingNews] = useState(false);
   const { user, ready } = useTelegramUser();
   const navigate = useNavigate();
-  const myTgId =
-    (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
+  // "empire_tg_id" nunca é gravado em lugar nenhum do app — quem entrou pela
+  // tela de usuário/senha só tem o ID real dentro do login salvo por
+  // getStoredLogin(), não nessa chave morta.
+  const myTgId = getStoredLogin()?.id || user?.id || "";
 
   type SocialFolderType = "socialPosts" | "socialStories" | "socialAvatars" | "socialNews";
 
