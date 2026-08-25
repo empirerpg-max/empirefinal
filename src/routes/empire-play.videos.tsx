@@ -6,6 +6,7 @@ import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableVideo } from "@/components/EmpirePlay/VideoPlayer";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
+import { LoadErrorState } from "@/components/LoadErrorState";
 
 export const Route = createFileRoute("/empire-play/videos")({
   component: EmpirePlayVideos,
@@ -15,19 +16,36 @@ function EmpirePlayVideos() {
   const { playVideo } = useEmpirePlayer();
   const [videos, setVideos] = useState<PlayableVideo[]>([]);
   const [activeTag, setActiveTag] = useState<string>("Todos");
+  // Antes não existia loading/erro nenhum aqui — a tela renderizava o grid
+  // vazio desde o primeiro instante (parecendo "sem vídeos" por um
+  // instante) e uma falha real de rede também virava silenciosamente "sem
+  // vídeos", sem diferença nenhuma pro jogador.
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(false);
 
-  useEffect(() => {
+  function fetchVideos() {
     let cancelled = false;
+    setLoading(true);
+    setErro(false);
     fetch("/api/empire-play/videos")
       .then((r) => r.json())
       .then((res) => {
-        if (res && res.success && !cancelled) setVideos((res.data || []).map(toPlayableVideo));
+        if (cancelled) return;
+        if (res && res.success) setVideos((res.data || []).map(toPlayableVideo));
+        else setErro(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setErro(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }
+
+  useEffect(() => fetchVideos(), []);
 
   // Tags derivadas dos próprios dados (coluna "Tipo de vídeo") — Vídeos e
   // Music Videos foram consolidados num catálogo único, filtrável por tag
@@ -69,6 +87,19 @@ function EmpirePlayVideos() {
         </div>
       )}
 
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="aspect-video rounded-2xl bg-neutral-900/60 animate-pulse border border-white/5" />
+          ))}
+        </div>
+      ) : erro ? (
+        <LoadErrorState onRetry={fetchVideos} />
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 text-neutral-500 text-xs italic">
+          Nenhum vídeo disponível no momento.
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {filtered.map((v, idx) => (
           <div
@@ -124,6 +155,7 @@ function EmpirePlayVideos() {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
