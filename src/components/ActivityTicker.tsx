@@ -54,7 +54,7 @@ export function ActivityTicker() {
   );
 
   return (
-    <div className="mt-3 -mx-4 px-4 overflow-hidden">
+    <div className="mt-3 mb-8 -mx-4 px-4 overflow-hidden">
       <div className="flex items-center gap-2 mb-2">
         <MessageCircle className="size-3 text-muted-foreground/50" aria-hidden="true" />
         <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/50">
