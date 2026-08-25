@@ -402,6 +402,23 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário: acha a(s) linha(s) do álbum "Sa5m" em Playlists_Albuns
+    // e Playlists_Faixas, com o range bem largo (A:Z) pra ver se caiu
+    // deslocado de coluna (bug já corrigido, mas essa entrada é anterior).
+    if (url.pathname === "/api/debug/achar-album-sa5m" && request.method === "GET") {
+      const gs = await import("../backend/src/services/googleSheetsService");
+      const albunsRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Albuns", "A1:Z5000");
+      const faixasRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Faixas", "A1:Z5000");
+      const alvo = "sa5m";
+      const albunsAchados = albunsRows
+        .map((r, i) => ({ linha: i + 1, valores: r }))
+        .filter(({ valores }) => valores.some((v) => (v || "").toString().toLowerCase().includes(alvo)));
+      const faixasAchadas = faixasRows
+        .map((r, i) => ({ linha: i + 1, valores: r }))
+        .filter(({ valores }) => valores.some((v) => (v || "").toString().toLowerCase().includes(alvo)));
+      return Response.json({ albunsAchados, faixasAchadas });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
