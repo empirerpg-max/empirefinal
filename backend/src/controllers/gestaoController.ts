@@ -782,6 +782,78 @@ async function vincularFaixaExistenteAoAlbum(
   return { musicasOk, edicaoChartsOk, criada };
 }
 
+// Registra uma faixa (avulsa ou de álbum) nos 3 lugares que fazem ela
+// "entrar nos charts de verdade": EDIÇÃO CHARTS, INFOS MÚSICAS (capa pro
+// chart puxar) e REGISTRO DE MÚSICA. Só deve ser chamada quando a faixa JÁ
+// TEM tópico — uma faixa pendente (sem tópico ainda) não é lançamento de
+// verdade, e só passa a valer nos charts quando o jogador decide publicar
+// (ver publicarFaixaPendenteController). Extraído de processarFaixasDoAlbum
+// pra ser reaproveitado ali (quando a faixa já nasce com tópico) e no
+// publish de uma faixa que ficou pendente.
+async function registrarFaixaNosCharts(params: {
+  dataFormatada: string;
+  songTitle: string;
+  tipoSingle: string;
+  tipoMusica: string;
+  album: string;
+  artistaPrincipal: string;
+  participantes: string[];
+  capaUrl: string;
+}): Promise<number | null> {
+  const { dataFormatada, songTitle, tipoSingle, tipoMusica, album, artistaPrincipal, participantes, capaUrl } = params;
+
+  const edicaoChartsRowIndex = await registrarNaEdicaoCharts({
+    dataFormatada,
+    fullTitle: songTitle,
+    tipoSingle,
+    tipoMusica,
+    album,
+    artistaPrincipal,
+    participantes,
+  });
+
+  await registrarInfosMusicas({ fullTitle: songTitle, capaUrl });
+
+  try {
+    const registroRows = await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
+    let targetRow = (registroRows?.length || 0) + 1;
+    if (registroRows && registroRows.length > 1) {
+      for (let i = 1; i < registroRows.length; i++) {
+        if (!(registroRows[i][1] || "").trim()) {
+          targetRow = i + 1;
+          break;
+        }
+      }
+    } else if (!registroRows || registroRows.length === 0) {
+      targetRow = 2;
+    }
+
+    await googleSheetsService.registrosCharts.updateValues("REGISTRO DE MÚSICA", `B${targetRow}:P${targetRow}`, [
+      [
+        songTitle, // B - Título
+        tipoSingle, // C - Tipo de Single
+        tipoMusica, // D - Tipo de Música
+        album, // E - ÁLBUM
+        "", // F
+        "", // G
+        artistaPrincipal, // H - ACT PRINCIPAL
+        participantes[0] || "", // I - Artista 2
+        participantes[1] || "", // J - Artista 3
+        participantes[2] || "", // K - Artista 4
+        participantes[3] || "", // L - Artista 5
+        participantes[4] || "", // M - Artista 6
+        "Não", // N - SUBSTITUIR NOS CHARTS?
+        "", // O - Por qual música?
+        "OK", // P - ENVIAR
+      ],
+    ]);
+  } catch (err) {
+    console.warn("[registrarFaixaNosCharts] Erro ao gravar em REGISTRO DE MÚSICA:", err);
+  }
+
+  return edicaoChartsRowIndex;
+}
+
 // Processa a lista de faixas de um álbum (criação ou substituição): faixa
 // existente vincula na aba Musicas/EDIÇÃO CHARTS; faixa inédita registra do
 // zero em Musicas + REGISTRO DE MÚSICA, pendente até virar tópico próprio.
@@ -833,8 +905,9 @@ async function processarFaixasDoAlbum(
       : "";
 
     faixasIneditasEsperadas++;
+    let faixaRowIndex: number | null = null;
     try {
-      await googleSheetsService.principal.appendRow("Musicas", [
+      faixaRowIndex = await googleSheetsService.principal.appendRow("Musicas", [
         dataFormatada, // A - Data de lançamento
         trackTopicId, // B - ID do tópico (só se abrir tópico próprio)
         faixa.mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
@@ -866,67 +939,35 @@ async function processarFaixasDoAlbum(
       continue;
     }
 
-    // Registrar em "EDIÇÃO CHARTS" (mesma lógica do createSongController) —
-    // aqui a coluna E (ALBUM) já sai preenchida, porque essa faixa nasce
-    // dentro de um álbum.
-    await registrarNaEdicaoCharts({
-      dataFormatada,
-      fullTitle: songTitle,
-      tipoSingle: faixa.tipoSingle || "TRACKLIST ALBUM",
-      tipoMusica: faixa.tipoMusica || "SOLO",
-      album: albumFullTitle,
-      artistaPrincipal: artistaAlbum,
-      participantes: participantesLimpos,
-    });
-    // Faixa pendente (sem tópico aberto ainda) não entra em INFOS MÚSICAS —
-    // só quando vira conteúdo publicado de verdade (mesma regra do Fórum).
+    // Faixa pendente (sem tópico aberto ainda) NÃO entra nos charts —
+    // "lançar nos charts" só acontece quando o jogador de fato opta por
+    // criar o tópico, seja agora (abrirTopico=true) ou depois, publicando
+    // a pendência (ver publicarFaixaPendenteController). Antes isso entrava
+    // em EDIÇÃO CHARTS/REGISTRO DE MÚSICA imediatamente na criação do
+    // álbum mesmo pendente, o que deixava uma faixa "invisível" pro
+    // jogador já contando nos charts antes de existir de verdade.
     if (pendente !== "Sim") {
-      await registrarInfosMusicas({ fullTitle: songTitle, capaUrl });
-    }
-
-    // REGISTRO DE MÚSICA — mesmo mapeamento B:P do createSongController,
-    // mas com E = nome do álbum (aqui nunca fica em branco, diferente do
-    // registro de música avulsa).
-    try {
-      const registroRows =
-        await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
-      let targetRow = (registroRows?.length || 0) + 1;
-      if (registroRows && registroRows.length > 1) {
-        for (let i = 1; i < registroRows.length; i++) {
-          if (!(registroRows[i][1] || "").trim()) {
-            targetRow = i + 1;
-            break;
-          }
+      const edicaoChartsRowIndex = await registrarFaixaNosCharts({
+        dataFormatada,
+        songTitle,
+        tipoSingle: faixa.tipoSingle || "TRACKLIST ALBUM",
+        tipoMusica: faixa.tipoMusica || "SOLO",
+        album: albumFullTitle,
+        artistaPrincipal: artistaAlbum,
+        participantes: participantesLimpos,
+        capaUrl,
+      });
+      // Mesma cópia de Código único feita em createSongController — sem
+      // isso, faixa inédita de álbum (já com tópico) nunca tinha o código
+      // pra cruzar com comentários/REGISTRO/Shop-Info-Visual.
+      if (faixaRowIndex && edicaoChartsRowIndex) {
+        const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+        if (codigoGerado) {
+          await googleSheetsService.principal
+            .updateValues("Musicas", `Z${faixaRowIndex}`, [[codigoGerado]])
+            .catch((err) => console.warn("[processarFaixasDoAlbum] Erro ao copiar Código único:", err));
         }
-      } else if (!registroRows || registroRows.length === 0) {
-        targetRow = 2;
       }
-
-      await googleSheetsService.registrosCharts.updateValues(
-        "REGISTRO DE MÚSICA",
-        `B${targetRow}:P${targetRow}`,
-        [
-          [
-            songTitle, // B - Título
-            faixa.tipoSingle || "TRACKLIST ALBUM", // C - Tipo de Single
-            faixa.tipoMusica || "SOLO", // D - Tipo de Música
-            albumFullTitle, // E - ÁLBUM
-            "", // F
-            "", // G
-            artistaAlbum, // H - ACT PRINCIPAL
-            participantesLimpos[0] || "", // I - Artista 2
-            participantesLimpos[1] || "", // J - Artista 3
-            participantesLimpos[2] || "", // K - Artista 4
-            participantesLimpos[3] || "", // L - Artista 5
-            participantesLimpos[4] || "", // M - Artista 6
-            "Não", // N - SUBSTITUIR NOS CHARTS?
-            "", // O - Por qual música?
-            "OK", // P - ENVIAR
-          ],
-        ],
-      );
-    } catch (err) {
-      console.warn("[processarFaixasDoAlbum] Erro ao gravar em REGISTRO DE MÚSICA:", err);
     }
   }
 
@@ -1098,6 +1139,35 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     await googleSheetsService.principal.updateValues("Musicas", `B${musicaRowIndex}`, [[topicId]]);
     await googleSheetsService.principal.updateValues("Musicas", `F${musicaRowIndex}`, [[topicId]]);
     await googleSheetsService.principal.updateValues("Musicas", `X${musicaRowIndex}`, [["Não"]]);
+
+    // É AGORA que a faixa vira lançamento de verdade — publicar o tópico é
+    // exatamente o gatilho descrito pelo usuário ("se o jogador opta por
+    // criar tópico, ele lança nos charts"). Antes, uma faixa pendente já
+    // tinha entrado em EDIÇÃO CHARTS/REGISTRO DE MÚSICA lá na criação do
+    // álbum, e publicar não fazia nada além de abrir o tópico.
+    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const participantesDaFaixa = [row[14], row[15], row[16], row[17], row[18]].filter((p) => (p || "").trim());
+    const edicaoChartsRowIndex = await registrarFaixaNosCharts({
+      dataFormatada,
+      songTitle: fullTitle,
+      tipoSingle: row[8] || "TRACKLIST ALBUM",
+      tipoMusica: row[9] || "SOLO",
+      album: row[10] || "",
+      artistaPrincipal: row[13] || "",
+      participantes: participantesDaFaixa,
+      capaUrl: row[3] || "",
+    });
+    // Mesma cópia de Código único feita na criação normal (createSongController)
+    // — sem isso, uma faixa que nasceu pendente nunca teria o código pra
+    // cruzar com comentários/REGISTRO/Shop-Info-Visual depois de publicada.
+    if (edicaoChartsRowIndex) {
+      const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+      if (codigoGerado) {
+        await googleSheetsService.principal
+          .updateValues("Musicas", `Z${musicaRowIndex}`, [[codigoGerado]])
+          .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao copiar Código único:", err));
+      }
+    }
 
     // REGISTRO é só pra comentários de OUTROS jogadores (ver
     // forumController.ts) — publicar a própria faixa não é comentário.
