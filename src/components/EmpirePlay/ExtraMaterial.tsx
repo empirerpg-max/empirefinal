@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ShoppingBag, Info, Sparkles, X, Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, Loader2 } from "lucide-react";
+import DOMPurify from "dompurify";
 import { driveImg } from "@/lib/api";
 import { uploadToDrive } from "@/lib/driveUpload";
 
@@ -212,11 +213,17 @@ export function ExtraMaterialButtons({
                     );
                   }
                   if (bloco.tipo === "html") {
-                    // Renderizado como veio — quem edita o material já é
-                    // dono/gestor do lançamento, é o mesmo nível de confiança
-                    // de quem sobe as imagens. Sem isso, HTML customizado
-                    // (embeds, layout próprio) não tinha como funcionar.
-                    return <div key={i} className="p-4 sm:p-6" dangerouslySetInnerHTML={{ __html: bloco.conteudo }} />;
+                    // Sanitizado com DOMPurify antes de ir pro DOM — remove
+                    // <script>, atributos on*/javascript:, <iframe> etc.,
+                    // mas mantém tags normais (div, img, a, b...) pra ainda
+                    // dar pra fazer embed/layout customizado como pedido.
+                    return (
+                      <div
+                        key={i}
+                        className="p-4 sm:p-6"
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bloco.conteudo) }}
+                      />
+                    );
                   }
                   return (
                     <p key={i} className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap p-4 sm:p-6">
