@@ -531,10 +531,13 @@ function Index() {
                   )}
                 </div>
                 <div className="p-2.5">
-                  <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">
+                  {/* Sem line-clamp/truncate — título completo sempre visível,
+                      quebrando em mais linhas quando precisar, em vez de
+                      cortar com reticências. */}
+                  <h3 className="text-[11px] font-black uppercase leading-tight">
                     {l.titulo}
                   </h3>
-                  <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">
+                  <p className="text-[10px] text-muted-foreground font-bold mt-0.5">
                     {l.artista}
                   </p>
                 </div>

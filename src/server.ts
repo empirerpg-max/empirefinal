@@ -402,6 +402,15 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário (rodado uma vez, depois removido): joga em News as
+    // ações de turnê que já aconteceram antes do hook existir — inclui as
+    // ações antigas do Marco e de qualquer outro jogador.
+    if (url.pathname === "/api/debug/backfill-news-turne" && request.method === "GET") {
+      const { backfillNewsRetroativoTurne } = await import("../backend/src/controllers/tourController");
+      const resultado = await backfillNewsRetroativoTurne();
+      return Response.json(resultado);
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
