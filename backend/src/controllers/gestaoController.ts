@@ -1153,10 +1153,12 @@ export async function publicarFaixaPendenteController(request: Request): Promise
       musicaRowIndex?: number;
       nomeJogador?: string;
       jogadorId?: string;
+      tipoSingle?: string;
     };
     const musicaRowIndex = Number(body.musicaRowIndex);
     const nomeJogador = (body.nomeJogador || "").trim();
     const jogadorId = (body.jogadorId || "").trim();
+    const tipoSingleEscolhido = (body.tipoSingle || "").trim();
 
     if (!musicaRowIndex || musicaRowIndex < 2 || !nomeJogador) {
       return new Response(
@@ -1192,8 +1194,17 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     // que é quando a faixa de fato passa a valer como lançamento, e libera
     // INFOS MÚSICAS (capa pro chart puxar), que até aqui ficava de fora.
     const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const tipoSingle = row[8] || "TRACKLIST ALBUM";
+    // Tipo escolhido na hora de publicar (ex: virou "LEAD SINGLE") tem
+    // prioridade — sem isso, publicar sempre reescrevia o mesmo tipo que a
+    // faixa já tinha desde a criação do álbum ("TRACKLIST ALBUM"), o que não
+    // refletia a intenção real de lançar aquela faixa como single.
+    const tipoSingle = tipoSingleEscolhido || row[8] || "TRACKLIST ALBUM";
     const tipoMusica = row[9] || "SOLO";
+    if (tipoSingleEscolhido && tipoSingleEscolhido !== row[8]) {
+      await googleSheetsService.principal
+        .updateValues("Musicas", `I${musicaRowIndex}`, [[tipoSingle]])
+        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar tipo em Musicas:", err));
+    }
     const edicaoChartsRowIndex = await atualizarFaixaNosChartsAoPublicar({
       fullTitle,
       tipoSingle,
