@@ -402,33 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: escreve os #1 do Hot 100 legados da SA5M (confirmados
-    // com o usuário) na coluna N "Dados legados" — mesmo padrão de
-    // formatação da coluna M (Chart Run Hot 100), sem mexer nela (é
-    // alimentada por fórmula/importação automática, não tem esses hits
-    // antigos e não deve ser sobrescrita).
-    if (url.pathname === "/api/debug/escrever-sa5m-hof-legado" && request.method === "GET") {
-      const gs = await import("../backend/src/services/googleSheetsService");
-      const legados = [
-        ["SA5M - Darkness", "1 - 1"],
-        ["SA5M - Loserboy", "1"],
-        ["SA5M - How You Love Me Now", "1"],
-        ["SA5M - Merry Go Round", "1 - 1"],
-        ["SA5M - Holy Grail", "1"],
-        ["SA5M - PUSH POP", "1 - 1"],
-        ["SA5M - GARBO", "1"],
-        ["SA5M - ATILA MINOR", "1"],
-        ["SA5M - PICKY PICKY", "1"],
-        ["SA5M - Mamba Negra", "1 - 1"],
-      ]
-        .map(([t, v]) => `${t}|${v}`)
-        .join(",");
-
-      await gs.updateValues("chartsBase", "HALL_OF_FAME_DB", "N84", [[legados]]);
-      const conferencia = await gs.googleSheetsService.chartsBase.readValues("HALL_OF_FAME_DB", "N84:N84");
-      return Response.json({ escrito: legados, conferencia });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
