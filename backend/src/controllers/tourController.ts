@@ -8,6 +8,7 @@ import {
 } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
 import { getArtistNamesForOwner, creditarFortunaTurnes, getOwnerIdForArtist } from "./artistasController";
+import { publicarNewsSocial } from "./socialController";
 
 // Percentual do arrecadado em turnê (tempo real) que vira Fortuna Turnês do
 // artista quando a turnê finaliza — meio-termo entre 60% e 70% acordado.
@@ -805,6 +806,22 @@ export async function realizarAcaoDiaController(request: Request): Promise<Respo
     if (show.soldOut) {
       await somarPrestigio({ telegramId }, "turne_sold_out").catch(() => {});
     }
+
+    // Além da central de notícias da própria turnê, joga a mesma ação
+    // também na aba News do Social — mais gente vê o que tá rolando na
+    // turnê sem precisar entrar na tela de turnês. "Comentar" nessa notícia
+    // (origem_tipo="tour") leva direto pra tela de comentários da turnê
+    // original, não abre um comentário genérico de News.
+    await publicarNewsSocial({
+      titulo: `${tour.artista} — Show #${show.numero} em ${show.cidade}`,
+      conteudo: texto,
+      imagem: show.acoes[show.acoes.length - 1]?.fotoUrl || "",
+      autor: tour.artista,
+      telegramId,
+      origemTipo: "tour",
+      origemId: tour.idUnico,
+      origemShow: show.numero,
+    }).catch((err) => console.warn("[realizarAcaoDiaController] Falha ao publicar em News:", err));
 
     const novaArrecadacao = tour.agenda.reduce((s, x) => s + x.receita, 0);
     return jsonOk({ show, arrecadacaoTempoReal: novaArrecadacao });

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -158,7 +158,7 @@ type Post = {
   texto: string;
   media_url?: string;
   media_tipo?: "imagem" | "video" | string;
-  analytics: { likes: number; comments: number; shares: number };
+  analytics: { likes: number; comments: number; shares: number; likedBy?: string[] };
   data: string;
   telegram_id?: string;
 };
@@ -182,6 +182,12 @@ type News = {
   imagem: string;
   autor: string;
   data: string;
+  // Quando a notícia veio de uma ação de turnê (ver tourController.ts,
+  // realizarAcaoDiaController): "comentar" nela deve levar direto pra tela
+  // de comentários daquela turnê, não abrir o comentário genérico de News.
+  origemTipo?: string;
+  origemId?: string;
+  origemShow?: string;
 };
 
 function SocialPage() {
@@ -238,6 +244,9 @@ function SocialPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingNews, setUploadingNews] = useState(false);
   const { user, ready } = useTelegramUser();
+  const navigate = useNavigate();
+  const myTgId =
+    (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
 
   type SocialFolderType = "socialPosts" | "socialStories" | "socialAvatars" | "socialNews";
 
@@ -364,11 +373,23 @@ function SocialPage() {
     haptic.light();
     setLikedPulse(postId);
     window.setTimeout(() => setLikedPulse((cur) => (cur === postId ? null : cur)), 350);
-    const tgId = user?.id || "";
-    const res = await (api as any).curtirPostSocial(postId, tgId);
+    const res = await (api as any).curtirPostSocial(postId, myTgId);
     if (res.ok) {
       setPosts((prev) =>
-        prev.map((p) => (p.id === postId ? { ...p, analytics: { ...p.analytics, likes: res.likes } } : p)),
+        prev.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                analytics: {
+                  ...p.analytics,
+                  likes: res.likes,
+                  likedBy: p.analytics.likedBy?.includes(myTgId)
+                    ? p.analytics.likedBy
+                    : [...(p.analytics.likedBy || []), myTgId],
+                },
+              }
+            : p,
+        ),
       );
     }
   }
@@ -377,13 +398,19 @@ function SocialPage() {
     if (!selectedPost || !newComment.trim() || !activeArtist || submitting) return;
     setSubmitting(true);
     try {
+      // Autor do comentário segue o perfil configurado do meu artista NA REDE
+      // da publicação (ex: handle do Instagram, se o post é do Instagram) —
+      // não o nome global do artista. Só cai pro nome puro se não existir
+      // perfil configurado pra essa rede.
+      const perfilNaRede = profiles.find(
+        (p) => p.artista === activeArtist.nome && p.rede === selectedPost.tipo,
+      );
       const payload = {
         postId: selectedPost.id,
-        autor: activeArtist.nome,
+        autor: perfilNaRede?.handle || activeArtist.nome,
         texto: newComment,
       };
-      const tgId = user?.id || "";
-      const res = await (api as any).comentarPostSocial(payload, tgId);
+      const res = await (api as any).comentarPostSocial(payload, myTgId);
       if (res.ok) {
         haptic.success();
         setNewComment("");
@@ -397,6 +424,34 @@ function SocialPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Comentar numa notícia de News: se ela veio de uma ação de turnê
+  // (origemTipo="tour"), não abre comentário aqui — manda direto pra tela
+  // de comentários da turnê original, que é a "central de notícias"
+  // verdadeira daquele show. Senão, abre o mesmo modal de comentário
+  // genérico usado pelos posts, com prestígio igual a qualquer comentário.
+  function handleComentarNews(newsItem: News) {
+    if (newsItem.origemTipo === "tour" && newsItem.origemId) {
+      setSelectedNews(null);
+      navigate({
+        to: "/tours/$nome",
+        params: { nome: newsItem.autor },
+        search: { id: newsItem.origemId } as any,
+      });
+      return;
+    }
+    setSelectedPost({
+      id: newsItem.id,
+      tipo: "News" as any,
+      autor: newsItem.autor,
+      handle: "",
+      texto: newsItem.titulo,
+      analytics: { likes: 0, comments: 0, shares: 0 },
+      data: newsItem.data,
+    });
+    loadComments(newsItem.id);
+    setIsCommentModalOpen(true);
   }
 
   async function handleSaveProfile() {
@@ -792,11 +847,14 @@ function SocialPage() {
                             animate={likedPulse === post.id ? { scale: [1, 1.4, 1] } : { scale: 1 }}
                             transition={{ duration: 0.35 }}
                           >
+                            {/* O coração só vem marcado se EU curti (meu telegram_id em
+                                likedBy) — antes ele marcava sempre que o post tinha
+                                qualquer curtida, dando a entender que fui eu. */}
                             <Heart
-                              className={`size-4 ${post.analytics.likes > 0 ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                              className={`size-4 ${post.analytics.likedBy?.includes(myTgId) ? "fill-primary text-primary" : "text-muted-foreground"}`}
                             />
                           </motion.span>
-                          <span className={post.analytics.likes > 0 ? "text-primary" : "text-muted-foreground"}>
+                          <span className={post.analytics.likedBy?.includes(myTgId) ? "text-primary" : "text-muted-foreground"}>
                             {post.analytics.likes}
                           </span>
                         </button>
@@ -1998,7 +2056,14 @@ function SocialPage() {
                 </div>
               </div>
 
-              <div className="p-5 border-t border-white/5 flex justify-center shrink-0">
+              <div className="p-5 border-t border-white/5 flex justify-center gap-3 shrink-0">
+                <button
+                  onClick={() => handleComentarNews(selectedNews)}
+                  className="px-6 py-3 min-h-11 bg-white/5 border border-white/10 rounded-full font-black uppercase text-sm tracking-wide active:scale-95 transition-transform flex items-center gap-2"
+                >
+                  <MessageCircle className="size-4" />
+                  Comentar
+                </button>
                 <button
                   onClick={() => setSelectedNews(null)}
                   className="px-8 py-3 min-h-11 bg-primary text-primary-foreground rounded-full font-black uppercase text-sm tracking-wide active:scale-95 transition-transform"
