@@ -37,6 +37,23 @@ function genId(): string {
   return `PL-${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 }
 
+// A API de :append do Sheets, quando o range é aberto ou até quando é
+// travado numa aba com muita coisa gravada, pode "errar" a linha/coluna de
+// início ao tentar detectar os limites reais da tabela — já visto ao vivo
+// travando o range em A:K e mesmo assim a linha inteira caindo deslocada
+// (efeito relatado aqui: álbum legado gravado em colunas diferentes do
+// esperado, faixas também). O único jeito confiável já confirmado nesta
+// planilha é nunca usar :append — ler a coluna-âncora, achar a última linha
+// com conteúdo de verdade e escrever direto nessa linha via updateValues.
+async function proximaLinhaLivre(sheetName: string, colunaAncora: string): Promise<number> {
+  const rows = await googleSheetsService.usuarios.readValues(sheetName, `${colunaAncora}2:${colunaAncora}20000`);
+  let ultimaComConteudo = 1; // linha 1 = cabeçalho
+  for (let i = 0; i < rows.length; i++) {
+    if ((rows[i]?.[0] || "").toString().trim()) ultimaComConteudo = i + 2;
+  }
+  return ultimaComConteudo + 1;
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -327,14 +344,8 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
   // Sem try/catch aqui de propósito — se a linha do álbum não gravar, ele
   // não existe de verdade, então a falha deve propagar e responder
   // ok:false, nunca fingir sucesso.
-  //
-  // Range travado em "A:K" (não o default "A:ZZ") — com um range aberto, a
-  // API de append do Sheets às vezes "erra" a coluna de início quando tenta
-  // detectar os limites da tabela (bug real já visto: linha inteira
-  // gravada 8 colunas deslocada pra direita, começando em I em vez de A).
-  // Um range fechado do tamanho exato da linha elimina essa ambiguidade.
-  await googleSheetsService.usuarios.appendRow(
-    SHEET_ALBUNS,
+  const linhaAlbum = await proximaLinhaLivre(SHEET_ALBUNS, "A");
+  await googleSheetsService.usuarios.updateValues(SHEET_ALBUNS, `A${linhaAlbum}:K${linhaAlbum}`, [
     [
       albumId,
       body.artista.trim(),
@@ -348,17 +359,18 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
       body.telegram_id || "",
       new Date().toISOString(),
     ],
-    "A:K",
-  );
+  ]);
 
   // Isolamento por faixa: uma falha no meio da lista não pode travar as
   // faixas seguintes nem fazer o álbum voltar "ok:true" fingindo que todas
-  // as faixas foram gravadas quando só uma parte foi de verdade.
+  // as faixas foram gravadas quando só uma parte foi de verdade. A linha
+  // alvo é calculada uma vez e incrementada localmente — computar de novo
+  // pra cada faixa reabriria a mesma corrida que causa o desvio de coluna.
+  let proximaLinhaFaixa = await proximaLinhaLivre(SHEET_FAIXAS, "A");
   let faixasGravadas = 0;
   for (const f of body.faixas) {
     try {
-      await googleSheetsService.usuarios.appendRow(
-        SHEET_FAIXAS,
+      await googleSheetsService.usuarios.updateValues(SHEET_FAIXAS, `A${proximaLinhaFaixa}:G${proximaLinhaFaixa}`, [
         [
           albumId,
           String(f.numero || ""),
@@ -368,8 +380,8 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
           f.drive_url.trim(),
           f.letra || "",
         ],
-        "A:G",
-      );
+      ]);
+      proximaLinhaFaixa++;
       faixasGravadas++;
     } catch (err) {
       console.warn("[criarAlbumAntigoController] Erro ao gravar faixa:", f.titulo, err);
@@ -450,9 +462,19 @@ export async function editarAlbumAntigoController(request: Request): Promise<Res
       ]);
     }
   }
+
+  // Nunca :append aqui (ver proximaLinhaLivre) — calcula a linha alvo a
+  // partir do que já foi lido acima, tratando como "em branco" as linhas
+  // deste álbum que acabaram de ser limpas.
+  let ultimaComConteudo = 1;
+  for (let i = 1; i < faixasRows.length; i++) {
+    if (normalizeText(faixasRows[i][0]) !== id && (faixasRows[i][0] || "").toString().trim()) {
+      ultimaComConteudo = i + 1;
+    }
+  }
+  let proximaLinhaFaixa = ultimaComConteudo + 1;
   for (const f of body.faixas) {
-    await googleSheetsService.usuarios.appendRow(
-      SHEET_FAIXAS,
+    await googleSheetsService.usuarios.updateValues(SHEET_FAIXAS, `A${proximaLinhaFaixa}:G${proximaLinhaFaixa}`, [
       [
         id,
         String(f.numero || ""),
@@ -462,8 +484,8 @@ export async function editarAlbumAntigoController(request: Request): Promise<Res
         f.drive_url.trim(),
         f.letra || "",
       ],
-      "A:G",
-    );
+    ]);
+    proximaLinhaFaixa++;
   }
 
   return jsonResponse({ ok: true });
