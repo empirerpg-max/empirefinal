@@ -63,33 +63,93 @@ export async function saveExtraMaterial(
   return !!json?.ok;
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// VIEWER — botões no tópico + modais de Shop/Info/Visual
-// ─────────────────────────────────────────────────────────────────────────
-
-export function ExtraMaterialButtons({
-  codigoUnico,
-  tipo,
-  titulo,
-  artista,
-}: {
-  codigoUnico?: string | null;
-  tipo: "musica" | "album";
-  // Mostrados fixos no topo da tela do Shop/Info/Visual — sem isso, ao
-  // abrir um desses botões a pessoa perdia de vista em qual música/álbum
-  // estava, já que a tela cobre 100% da tela do tópico.
-  titulo?: string;
-  artista?: string;
-}) {
+// Busca o material extra do tópico atual — usado pelo Forum.tsx tanto pra
+// decidir quais botões mostrar quanto pro conteúdo inline do "Visual" (ver
+// abaixo), então precisa viver fora do componente dos botões.
+export function useExtraMaterial(
+  codigoUnico: string | null | undefined,
+  tipo: "musica" | "album",
+): ExtraMaterialData | null {
   const [data, setData] = useState<ExtraMaterialData | null>(null);
-  const [aberto, setAberto] = useState<"shop" | "info" | "visual" | null>(null);
 
   useEffect(() => {
+    setData(null);
     if (!codigoUnico) return;
     fetchExtraMaterial(codigoUnico, tipo).then(setData);
   }, [codigoUnico, tipo]);
 
-  if (!codigoUnico || !data) return null;
+  return data;
+}
+
+// Renderização dos blocos de Visual (imagem/texto/HTML) — extraída pra ser
+// reaproveitada tanto no popup do Shop/Info quanto no modo inline do Visual
+// no corpo do tópico (ver Forum.tsx).
+export function VisualBlocosView({ arte }: { arte: VisualBloco[] }) {
+  return (
+    <div className="max-w-2xl mx-auto">
+      {arte.map((bloco, i) => {
+        if (bloco.tipo === "imagem") {
+          return (
+            <img
+              key={i}
+              src={driveImg(bloco.url, 1600)}
+              alt=""
+              className="w-full h-auto block"
+              loading="lazy"
+            />
+          );
+        }
+        if (bloco.tipo === "html") {
+          // Sanitizado com DOMPurify antes de ir pro DOM — remove <script>,
+          // atributos on*/javascript:, <iframe> etc., mas mantém tags
+          // normais (div, img, a, b...) pra ainda dar pra fazer
+          // embed/layout customizado como pedido.
+          return (
+            <div
+              key={i}
+              className="p-4 sm:p-6"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bloco.conteudo) }}
+            />
+          );
+        }
+        return (
+          <p key={i} className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap p-4 sm:p-6">
+            {bloco.conteudo}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// VIEWER — botões no tópico + modais de Shop/Info
+// ─────────────────────────────────────────────────────────────────────────
+//
+// O botão "Visual" não abre popup — ele troca o próprio conteúdo do tópico
+// (ver Forum.tsx), mantendo sempre visíveis a capa e o título/artista. Por
+// isso ele é controlado de fora (visualAtivo/onToggleVisual) em vez de ter
+// um estado "aberto" próprio como Shop/Info.
+
+export function ExtraMaterialButtons({
+  data,
+  titulo,
+  artista,
+  visualAtivo,
+  onToggleVisual,
+}: {
+  data: ExtraMaterialData | null;
+  // Mostrados fixos no topo da tela do Shop/Info — sem isso, ao abrir um
+  // desses botões a pessoa perdia de vista em qual música/álbum estava, já
+  // que a tela cobre 100% da tela do tópico.
+  titulo?: string;
+  artista?: string;
+  visualAtivo?: boolean;
+  onToggleVisual?: () => void;
+}) {
+  const [aberto, setAberto] = useState<"shop" | "info" | null>(null);
+
+  if (!data) return null;
 
   const temShop = data.shop.length > 0;
   const temInfo = !!data.info.trim();
@@ -117,10 +177,14 @@ export function ExtraMaterialButtons({
         )}
         {temVisual && (
           <button
-            onClick={() => setAberto("visual")}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-neutral-950/80 border border-white/10 text-neutral-300 hover:text-emerald-400 hover:border-emerald-500/30 transition-colors"
+            onClick={onToggleVisual}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-colors ${
+              visualAtivo
+                ? "bg-emerald-500 text-black border-emerald-500"
+                : "bg-neutral-950/80 border-white/10 text-neutral-300 hover:text-emerald-400 hover:border-emerald-500/30"
+            }`}
           >
-            <Sparkles className="size-3.5" /> Visual
+            <Sparkles className="size-3.5" /> {visualAtivo ? "Voltar ao normal" : "Visual"}
           </button>
         )}
       </div>
@@ -134,8 +198,8 @@ export function ExtraMaterialButtons({
           <div className="bg-neutral-950 border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[85dvh] flex flex-col shadow-2xl">
           <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-white/10 shrink-0">
             <div className="min-w-0">
-              {/* Título/artista fixos — sem isso, a tela cheia do Shop/Info/
-                  Visual não deixava claro de qual música/álbum era. */}
+              {/* Título/artista fixos — sem isso, a tela cheia do Shop/Info
+                  não deixava claro de qual música/álbum era. */}
               {titulo && (
                 <p className="text-sm font-black text-white truncate leading-tight">
                   {titulo}
@@ -151,11 +215,6 @@ export function ExtraMaterialButtons({
                 {aberto === "info" && (
                   <>
                     <Info className="size-3.5" /> Info
-                  </>
-                )}
-                {aberto === "visual" && (
-                  <>
-                    <Sparkles className="size-3.5" /> Visual
                   </>
                 )}
               </h2>
@@ -195,42 +254,6 @@ export function ExtraMaterialButtons({
             {aberto === "info" && (
               <div className="max-w-2xl mx-auto p-4 sm:p-6">
                 <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{data.info}</p>
-              </div>
-            )}
-
-            {aberto === "visual" && (
-              <div className="max-w-2xl mx-auto">
-                {data.arte.map((bloco, i) => {
-                  if (bloco.tipo === "imagem") {
-                    return (
-                      <img
-                        key={i}
-                        src={driveImg(bloco.url, 1600)}
-                        alt=""
-                        className="w-full h-auto block"
-                        loading="lazy"
-                      />
-                    );
-                  }
-                  if (bloco.tipo === "html") {
-                    // Sanitizado com DOMPurify antes de ir pro DOM — remove
-                    // <script>, atributos on*/javascript:, <iframe> etc.,
-                    // mas mantém tags normais (div, img, a, b...) pra ainda
-                    // dar pra fazer embed/layout customizado como pedido.
-                    return (
-                      <div
-                        key={i}
-                        className="p-4 sm:p-6"
-                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bloco.conteudo) }}
-                      />
-                    );
-                  }
-                  return (
-                    <p key={i} className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap p-4 sm:p-6">
-                      {bloco.conteudo}
-                    </p>
-                  );
-                })}
               </div>
             )}
           </div>
