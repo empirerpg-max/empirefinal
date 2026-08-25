@@ -908,34 +908,107 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
 
 /**
  * GET /api/empire-play/lancamentos-recentes
- * Usado no widget "Lançamentos Recentes" do Início: pega as músicas com a
- * data de lançamento (releaseDateIso, catálogo Musicas) mais recente.
+ * Usado no widget "Lançamentos Recentes" do Início: lê a coluna A (Data de
+ * lançamento) da aba "EDIÇÃO CHARTS" (músicas) e a coluna B da aba "EDIÇÃO
+ * CHARTS ÁLBUMS" (álbuns) — as duas fontes confirmadas pelo usuário como a
+ * data real de lançamento nos charts — e junta as mais recentes das duas,
+ * cruzando cada título com o catálogo (Musicas/Albuns) pra pegar capa e id.
  *
- * ANTES lia a aba "EDIÇÃO CHARTS" (coluna A = data), mas essa data é de
- * quando a linha foi editada/atualizada nos charts — não de quando a
- * música foi lançada. Uma música antiga que só teve algum dado corrigido
- * aparecia como "lançamento recente" mesmo sem ter sido lançada agora.
- * releaseDateIso vem direto do campo de data de lançamento da própria
- * música, então é a fonte confiável do que realmente é recente.
+ * Existia um bug de verdade que corrompia essa data: editar o título de uma
+ * música gravava o texto do novo título por cima da coluna A de EDIÇÃO
+ * CHARTS (era pra ser a coluna B — ver o fix em editController.ts), fazendo
+ * a data de lançamento virar lixo. Corrigido; esta função volta a confiar
+ * na coluna A/B como fonte real de "quando foi lançado".
  */
 export async function getEmpirePlayLancamentosRecentesController(): Promise<Response> {
   try {
-    const musicaRecords = await sheetsService.readSheetObjects("Musicas");
+    const [edicaoMusicasRows, edicaoAlbunsRows, musicaRecords, albumRecords, musicasRawRows, albunsRawRows] =
+      await Promise.all([
+        // BD = coluna 56 (índice 55) — "Código único" gerado por fórmula.
+        googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD5000"),
+        // R = coluna 18 (índice 17) — "Código único".
+        googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000"),
+        sheetsService.readSheetObjects("Musicas"),
+        sheetsService.readSheetObjects("Albuns"),
+        googleSheetsService.principal.readValues("Musicas"),
+        googleSheetsService.principal.readValues("Albuns"),
+      ]);
+
     const musicaItems = musicaRecords
       .filter((rec) => (getValue(rec, ["pendente"]) || "").trim().toLowerCase() !== "sim")
       .map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+    const albumItems = albumRecords.map((rec, idx) => buildCleanItem("Albuns", rec, idx));
 
-    const lancamentos = musicaItems
-      .filter((m) => m.releaseDateIso)
-      .sort((a, b) => (b.releaseDateIso as string).localeCompare(a.releaseDateIso as string))
-      .slice(0, 3)
-      .map((m) => ({
-        id: m.id,
-        titulo: m.title,
-        artista: m.artist,
-        coverUrl: m.coverUrl || null,
-        dataIso: m.releaseDateIso as string,
-      }));
+    // Código único é a chave real de cruzamento entre EDIÇÃO CHARTS/EDIÇÃO
+    // CHARTS ÁLBUMS e o catálogo — mesma lógica de buscarNomeCanonico em
+    // registroLogController.ts. Muito mais confiável que casar por texto de
+    // título (que quebra com qualquer diferença de acento/"feat."/espaço).
+    // Musicas!Z (índice 25) e Albuns!L (índice 11) — alinhados por posição
+    // com musicaItems/albumItems porque vêm da mesma leitura em ordem.
+    const codigoParaMusica = new Map<string, EmpirePlayCleanItem>();
+    musicasRawRows.slice(1).forEach((row, i) => {
+      const codigo = normalizeComparison(row[25] || "");
+      if (codigo && musicaItems[i]) codigoParaMusica.set(codigo, musicaItems[i]);
+    });
+    const codigoParaAlbum = new Map<string, EmpirePlayCleanItem>();
+    albunsRawRows.slice(1).forEach((row, i) => {
+      const codigo = normalizeComparison(row[11] || "");
+      if (codigo && albumItems[i]) codigoParaAlbum.set(codigo, albumItems[i]);
+    });
+
+    type Candidato = { dataIso: string; titulo: string; codigoUnico: string; isAlbum: boolean };
+
+    const candidatosMusicas: Candidato[] = edicaoMusicasRows
+      .map((row) => ({
+        dataIso: parseDateToIso(row[0] || null),
+        titulo: (row[1] || "").trim(),
+        codigoUnico: normalizeComparison(row[55] || ""),
+        isAlbum: false,
+      }))
+      .filter((c): c is Candidato => !!c.dataIso && !!c.titulo);
+
+    // EDIÇÃO CHARTS ÁLBUMS: A = artista, B = data de lançamento, D = nome do
+    // álbum — remonta "Artista - Álbum" pra casar com o mesmo formato usado
+    // em EDIÇÃO CHARTS e no catálogo (só usado no fallback por título).
+    const candidatosAlbuns: Candidato[] = edicaoAlbunsRows
+      .map((row) => {
+        const artista = (row[0] || "").trim();
+        const nomeAlbum = (row[3] || "").trim();
+        const titulo = artista && nomeAlbum && !nomeAlbum.includes(" - ") ? `${artista} - ${nomeAlbum}` : nomeAlbum;
+        return {
+          dataIso: parseDateToIso(row[1] || null),
+          titulo,
+          codigoUnico: normalizeComparison(row[17] || ""),
+          isAlbum: true,
+        };
+      })
+      .filter((c): c is Candidato => !!c.dataIso && !!c.titulo);
+
+    const candidatos = [...candidatosMusicas, ...candidatosAlbuns].sort((a, b) => b.dataIso.localeCompare(a.dataIso));
+
+    const matchByTituloCompleto = (m: EmpirePlayCleanItem, tituloCompleto: string) =>
+      normalizeComparison(`${m.artist} - ${m.title}`) === normalizeComparison(tituloCompleto) ||
+      normalizeComparison(tituloCompleto).endsWith(normalizeComparison(m.title));
+
+    const titulosVistos = new Set<string>();
+    const lancamentos: { id: string; titulo: string; artista: string; coverUrl: string | null; dataIso: string }[] = [];
+    for (const c of candidatos) {
+      if (lancamentos.length >= 3) break;
+      const norm = normalizeComparison(c.titulo);
+      if (titulosVistos.has(norm)) continue;
+      const catalogo = c.isAlbum ? albumItems : musicaItems;
+      const mapaCodigo = c.isAlbum ? codigoParaAlbum : codigoParaMusica;
+      const match = (c.codigoUnico && mapaCodigo.get(c.codigoUnico)) || catalogo.find((m) => matchByTituloCompleto(m, c.titulo));
+      if (!match) continue;
+      titulosVistos.add(norm);
+      lancamentos.push({
+        id: match.id,
+        titulo: match.title,
+        artista: match.artist,
+        coverUrl: match.coverUrl || null,
+        dataIso: c.dataIso,
+      });
+    }
 
     return new Response(JSON.stringify({ success: true, data: lancamentos }), {
       status: 200,

@@ -262,19 +262,32 @@ export async function updateReleaseController(request: Request): Promise<Respons
         await googleSheetsService.principal.updateValues(sheetName, `E${rowIndex}`, [[letra]]);
       }
 
-      // Atualizar o novo título na planilha Edição Charts (1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8), aba EDIÇÃO CHARTS, Coluna A (MÚSICA)
+      // Atualizar o novo título na planilha Edição Charts (1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8), aba EDIÇÃO CHARTS.
+      //
+      // BUG CORRIGIDO: isso escrevia na coluna A — que na real é "Data de
+      // lançamento" (confirmado em registrarNaEdicaoCharts, gestaoController.ts),
+      // não o título. Editar o título de uma música sobrescrevia a data de
+      // lançamento real com o texto do título, corrompendo a coluna que
+      // "Lançamentos Recentes" usa pra saber o que é realmente recente. A
+      // coluna certa do título é a B. Também trocado o match de "a linha
+      // inteira contém esse texto" (podia acertar a linha errada por coincidência
+      // em qualquer coluna) por comparação exata só contra a coluna B.
       try {
         const edicaoRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
         if (edicaoRows.length > 1) {
           const normTarget = normalizeComparison(oldTitulo || titulo);
           for (let eIdx = 1; eIdx < edicaoRows.length; eIdx++) {
-            const eRowStr = normalizeComparison(edicaoRows[eIdx].join(" "));
-            if (eRowStr.includes(normTarget)) {
+            if (normalizeComparison(edicaoRows[eIdx][1] || "") === normTarget) {
               const eRowNumber = eIdx + 1;
+              // Mantém o formato "Artista - Título" já usado na coluna B —
+              // sem o artista aqui, o valor gravado ficaria inconsistente
+              // com o resto da aba e quebraria o cruzamento por título feito
+              // em getEmpirePlayLancamentosRecentesController.
+              const novoValor = artista ? `${artista.trim()} - ${titulo.trim()}` : titulo.trim();
               await googleSheetsService.edicaoCharts.updateValues(
                 "EDIÇÃO CHARTS",
-                `A${eRowNumber}`,
-                [[titulo.trim()]],
+                `B${eRowNumber}`,
+                [[novoValor]],
               );
               break;
             }
