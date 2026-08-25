@@ -12,7 +12,7 @@ import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
 // SOCIAL_POSTS:   A id | B tipo | C subtipo | D autor | E texto | F media_url | G analytics(json) | H data | I telegram_id | J media_tipo ("imagem"/"video", coluna nova — linhas antigas ficam vazias e continuam tratadas como imagem)
 // SOCIAL_PERFIS:  A artista | B rede | C handle | D bio | E avatar_url | F telegram_id | G seguidores | H seguindo
 // SOCIAL_COMMENTS:A postid | B autor | C texto | D data | E telegram_id
-// SOCIAL_NEWS:    A id | B titulo | C conteudo | D imagem | E autor | F data | G telegram_id
+// SOCIAL_NEWS:    A id | B titulo | C conteudo | D imagem | E autor | F data | G telegram_id | H origem_tipo ("tour" quando a notícia veio de uma ação de turnê, vazio quando é matéria normal) | I origem_id (id_unico da turnê) | J origem_show (número do show)
 
 const SHEETS = {
   posts: "SOCIAL_POSTS",
@@ -443,6 +443,9 @@ export async function getSocialNewsController(): Promise<Response> {
       imagem: normalizeText(row[3]),
       autor: normalizeText(row[4]),
       data: normalizeText(row[5]),
+      origemTipo: normalizeText(row[7]) || undefined,
+      origemId: normalizeText(row[8]) || undefined,
+      origemShow: normalizeText(row[9]) || undefined,
     }))
     .filter((n) => n.id);
 
@@ -464,16 +467,51 @@ export async function saveSocialNewsController(request: Request): Promise<Respon
     return jsonResponse({ ok: false, error: "Dados incompletos para a matéria." }, 400);
   }
 
-  const id = genId("NEWS");
-  await googleSheetsService.usuarios.appendRow(SHEETS.news, [
-    id,
-    payload.titulo,
-    payload.conteudo,
-    payload.imagem || "",
-    payload.autor,
-    new Date().toISOString(),
-    body.tgId || "",
-  ]);
+  const id = await publicarNewsSocial({
+    titulo: payload.titulo,
+    conteudo: payload.conteudo,
+    imagem: payload.imagem || "",
+    autor: payload.autor,
+    telegramId: body.tgId || "",
+  });
 
   return jsonResponse({ ok: true, id });
+}
+
+/**
+ * Publica uma notícia em SOCIAL_NEWS — usada tanto pelo formulário normal de
+ * matéria (saveSocialNewsController) quanto por outros módulos que precisam
+ * jogar um evento pra lá automaticamente (ex: ações de turnê, ver
+ * tourController.ts). Quando `origemTipo`/`origemId` vêm preenchidos, o
+ * frontend sabe que "comentar" nessa notícia deve levar pra tela original
+ * (ex: comentários da turnê), em vez do comentário genérico de News.
+ */
+export async function publicarNewsSocial(params: {
+  titulo: string;
+  conteudo: string;
+  imagem?: string;
+  autor: string;
+  telegramId?: string;
+  origemTipo?: string;
+  origemId?: string;
+  origemShow?: string | number;
+}): Promise<string> {
+  const id = genId("NEWS");
+  await googleSheetsService.usuarios.appendRow(
+    SHEETS.news,
+    [
+      id,
+      params.titulo,
+      params.conteudo,
+      params.imagem || "",
+      params.autor,
+      new Date().toISOString(),
+      params.telegramId || "",
+      params.origemTipo || "",
+      params.origemId || "",
+      params.origemShow != null ? String(params.origemShow) : "",
+    ],
+    "A:J",
+  );
+  return id;
 }

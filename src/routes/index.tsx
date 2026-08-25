@@ -14,6 +14,9 @@ import {
   Twitter,
   Video,
   Quote,
+  Calendar,
+  Clock,
+  Tv,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -34,6 +37,19 @@ interface LancamentoRecente {
   artista: string;
   coverUrl: string | null;
   dataIso: string;
+}
+
+interface ProximoEvento {
+  id: string;
+  tipo: "show" | "tv";
+  titulo: string;
+  subtitulo: string;
+  data: string; // dd/mm/yyyy
+  horario?: string; // HH:MM, só quando existe (TV)
+  timestamp: number; // pra ordenar
+  linkTo: string;
+  linkParams?: Record<string, string>;
+  linkSearch?: Record<string, string>;
 }
 
 interface SocialPostResumo {
@@ -68,12 +84,28 @@ function Index() {
   const [ultimasPostagens, setUltimasPostagens] = useState<LoadState<SocialPostResumo[]>>({
     status: "loading",
   });
+  const [proximosEventos, setProximosEventos] = useState<LoadState<ProximoEvento[]>>({
+    status: "loading",
+  });
   const [syncing, setSyncing] = useState(false);
   const { user, ready } = useTelegramUser();
   const config = useHomeConfig();
   const login = getStoredLogin();
   const fotoUsuario = login?.fotoPerfil || user?.photo_url || "";
   const nomeUsuario = login?.nome || user?.name || "Visitante";
+  const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
+
+  // dd/mm/yyyy [+ HH:MM opcional] → timestamp, pra ordenar shows (só data) e
+  // programas de TV (data+horário) juntos na mesma lista.
+  function parseDataHorarioBR(data: string, horario?: string): number {
+    const m = data.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return Number.MAX_SAFE_INTEGER;
+    const [, dd, mm, yyyy] = m;
+    const h = horario?.match(/^(\d{1,2}):(\d{2})$/);
+    const hh = h ? Number(h[1]) : 0;
+    const min = h ? Number(h[2]) : 0;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), hh, min).getTime();
+  }
 
   const fetchData = async (silent = false) => {
     if (!silent) setSyncing(true);
@@ -107,6 +139,56 @@ function Index() {
         })
         .catch((e: any) => setUltimasPostagens({ status: "error", error: String(e?.message || e) })),
     );
+
+    if (tgId && tgId !== "guest") {
+      tasks.push(
+        Promise.all([
+          fetch(`/api/turnes/missoes?telegramId=${encodeURIComponent(tgId)}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch("/api/tv/programas")
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ]).then(([missoesRes, tvRes]) => {
+          const eventos: ProximoEvento[] = [];
+
+          const missoes = missoesRes?.success && Array.isArray(missoesRes.data) ? missoesRes.data : [];
+          for (const m of missoes) {
+            eventos.push({
+              id: `show-${m.idUnico}-${m.showNumero}`,
+              tipo: "show",
+              titulo: `${m.artista} — Show #${m.showNumero}`,
+              subtitulo: `${m.local}, ${m.cidade}`,
+              data: m.data,
+              timestamp: parseDataHorarioBR(m.data),
+              linkTo: "/tours/$nome",
+              linkParams: { nome: m.artista },
+              linkSearch: { id: m.idUnico },
+            });
+          }
+
+          const programas = tvRes?.success && Array.isArray(tvRes.data) ? tvRes.data : [];
+          for (const p of programas) {
+            if (p.finalizado) continue;
+            eventos.push({
+              id: `tv-${p.id}`,
+              tipo: "tv",
+              titulo: p.titulo,
+              subtitulo: p.categoria || "Empire TV",
+              data: p.data,
+              horario: p.horario,
+              timestamp: parseDataHorarioBR(p.data, p.horario),
+              linkTo: "/tv",
+            });
+          }
+
+          eventos.sort((a, b) => a.timestamp - b.timestamp);
+          setProximosEventos({ status: "ok", data: eventos.slice(0, 10) });
+        }).catch((e: any) => setProximosEventos({ status: "error", error: String(e?.message || e) })),
+      );
+    } else {
+      setProximosEventos({ status: "ok", data: [] });
+    }
 
     await Promise.allSettled(tasks);
     if (!silent) setSyncing(false);
@@ -426,6 +508,64 @@ function Index() {
         ) : (
           <p className="text-xs text-muted-foreground/60 font-medium">
             Nenhum lançamento recente encontrado nos charts.
+          </p>
+        )}
+      </section>
+
+      <section className="mb-10" aria-labelledby="proximos-eventos-h">
+        <h2
+          id="proximos-eventos-h"
+          className="text-xs font-black uppercase tracking-[0.2em] mb-4"
+        >
+          Próximos Eventos
+        </h2>
+
+        {proximosEventos.status === "loading" ? (
+          <div className="flex flex-col gap-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-14 rounded-xl bg-white/5 animate-pulse" />
+            ))}
+          </div>
+        ) : proximosEventos.status === "ok" && proximosEventos.data.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {proximosEventos.data.map((ev) => (
+              <Link
+                key={ev.id}
+                to={ev.linkTo as any}
+                params={ev.linkParams as any}
+                search={ev.linkSearch as any}
+                onClick={() => haptic.selection()}
+                className="flex items-center gap-3 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 active:scale-[0.98] transition-all"
+              >
+                <div className="shrink-0 size-9 rounded-lg bg-white/5 border border-white/10 grid place-items-center">
+                  {ev.tipo === "show" ? (
+                    <Music2 className="size-4 text-primary" aria-hidden="true" />
+                  ) : (
+                    <Tv className="size-4 text-primary" aria-hidden="true" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-[11px] font-black uppercase leading-tight">{ev.titulo}</h3>
+                  <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">{ev.subtitulo}</p>
+                </div>
+                <div className="shrink-0 flex flex-col items-end gap-0.5 text-right">
+                  <span className="flex items-center gap-1 text-[10px] font-black text-foreground/80">
+                    <Calendar className="size-3" aria-hidden="true" />
+                    {ev.data}
+                  </span>
+                  {ev.horario ? (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+                      <Clock className="size-3" aria-hidden="true" />
+                      {ev.horario}
+                    </span>
+                  ) : null}
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground/60 font-medium">
+            Nenhum evento agendado no momento.
           </p>
         )}
       </section>
