@@ -408,19 +408,16 @@ export default {
     // deslocado de coluna (mesma classe de bug já confirmada em REGISTRO).
     if (url.pathname === "/api/debug/edicao-charts-tail" && request.method === "GET") {
       const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
-      const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A1:BE2000");
-      let ultimaLinhaComConteudo = -1;
-      for (let i = rows.length - 1; i >= 0; i--) {
-        if (rows[i]?.some((c) => normalizeText(c))) {
-          ultimaLinhaComConteudo = i + 1;
-          break;
-        }
-      }
-      const ultimasLinhas = rows
-        .map((r, i) => ({ linha: i + 1, primeiraColunaComValor: r.findIndex((c) => normalizeText(c)), row: r }))
-        .filter((r) => r.primeiraColunaComValor !== -1)
-        .slice(-8);
-      return Response.json({ totalLinhasLidas: rows.length, ultimaLinhaComConteudo, ultimasLinhas });
+      // Colunas de cálculo semanal (streams/vendas etc, a partir de S) têm
+      // fórmula em MILHARES de linhas — "última linha com qualquer
+      // conteúdo" sempre bate nelas, não numa música real. O que importa é
+      // a última linha com TÍTULO de verdade na coluna B.
+      const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A1:BE8000");
+      const comTitulo = rows
+        .map((r, i) => ({ linha: i + 1, colB: r[1] || "", primeiraColunaComValor: r.findIndex((c) => normalizeText(c)) }))
+        .filter((r) => normalizeText(r.colB));
+      const ultimasComTitulo = comTitulo.slice(-10);
+      return Response.json({ totalLinhasLidas: rows.length, totalComTitulo: comTitulo.length, ultimasComTitulo });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
