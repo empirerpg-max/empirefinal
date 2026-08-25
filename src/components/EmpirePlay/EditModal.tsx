@@ -127,6 +127,10 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [savingOrdem, setSavingOrdem] = useState<boolean>(false);
   const [musicasEmChart, setMusicasEmChart] = useState<MusicaEmChart[]>([]);
   const [publicandoFaixaIdx, setPublicandoFaixaIdx] = useState<number | null>(null);
+  // Tipo escolhido pra cada faixa pendente na hora de publicar — por padrão
+  // "LEAD SINGLE", já que publicar uma faixa pendente costuma ser justamente
+  // lançá-la como single durante a era do álbum.
+  const [publicarTipoSingle, setPublicarTipoSingle] = useState<Record<number, string>>({});
 
   // Formulário de "adicionar faixa nova"
   const [addingFaixa, setAddingFaixa] = useState<boolean>(false);
@@ -448,6 +452,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         body: JSON.stringify({
           musicaRowIndex: faixa.musicaRowIndex,
           nomeJogador: selectedArtist || "Jogador",
+          tipoSingle: publicarTipoSingle[faixa.musicaRowIndex] || "LEAD SINGLE",
         }),
       });
       const json = await res.json();
@@ -759,6 +764,26 @@ export const EditModal: React.FC<EditModalProps> = ({
                               <span className="px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 text-[10px] font-black uppercase tracking-wide">
                                 Pendente
                               </span>
+                            )}
+                            {faixa.pendente && (
+                              <select
+                                value={publicarTipoSingle[faixa.musicaRowIndex] || "LEAD SINGLE"}
+                                onChange={(e) =>
+                                  setPublicarTipoSingle((prev) => ({
+                                    ...prev,
+                                    [faixa.musicaRowIndex]: e.target.value,
+                                  }))
+                                }
+                                disabled={publicandoFaixaIdx === idx}
+                                title="Tipo do lançamento ao publicar"
+                                className="text-[10px] font-bold bg-neutral-900 border border-white/10 rounded-md py-1 px-1.5 text-neutral-300 outline-none focus:border-amber-500"
+                              >
+                                {TIPOS_SINGLE_FAIXA.map((tipo) => (
+                                  <option key={tipo} value={tipo}>
+                                    {tipo}
+                                  </option>
+                                ))}
+                              </select>
                             )}
                             {faixa.pendente && (
                               <button
