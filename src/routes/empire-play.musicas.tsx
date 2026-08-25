@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Music, Play, MessageSquare, MoreVertical } from "lucide-react";
+import { Music, Play, MessageSquare, MoreVertical, Search } from "lucide-react";
 import { driveImg, type PlaylistTrack } from "@/lib/api";
-import { toPlayableTrack } from "@/components/EmpirePlay/mappers";
+import { toPlayableTrack, toPlaylistTrack } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
@@ -19,17 +19,7 @@ function EmpirePlayMusicas() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(false);
   const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
-
-  function toPlaylistTrack(m: PlayableTrack): PlaylistTrack {
-    return {
-      album_id: "",
-      faixa_numero: 0,
-      titulo: m.titulo,
-      artistas: m.artista,
-      drive_url: m.drive_url || m.stream_url || m.audio_url || m.url || m.link || "",
-      capa_url: m.capa_url || "",
-    };
-  }
+  const [searchQuery, setSearchQuery] = useState("");
 
   function fetchMusicas() {
     let cancelled = false;
@@ -66,13 +56,32 @@ function EmpirePlayMusicas() {
 
   useEffect(() => fetchMusicas(), []);
 
+  const filtered = searchQuery.trim()
+    ? musicas.filter((m) => {
+        const q = searchQuery.toLowerCase();
+        return m.titulo?.toLowerCase().includes(q) || m.artista?.toLowerCase().includes(q);
+      })
+    : musicas;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-black text-white uppercase tracking-tight">
-          Catálogo de Músicas ({musicas.length})
+          Catálogo de Músicas ({filtered.length})
         </h2>
       </div>
+      {!loading && !erro && musicas.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-neutral-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Pesquisar músicas ou artistas..."
+            className="w-full pl-10 pr-4 py-2.5 bg-neutral-900/80 border border-white/10 rounded-xl text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition"
+          />
+        </div>
+      )}
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -88,12 +97,16 @@ function EmpirePlayMusicas() {
         <div className="text-center py-12 text-neutral-500 text-xs italic">
           Nenhuma música disponível no momento.
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 text-neutral-500 text-xs italic">
+          Nenhuma música encontrada pra "{searchQuery}".
+        </div>
       ) : (
         <div className="space-y-2">
           {/* Antes cortava em 100 silenciosamente — o cabeçalho mostrava o
               total real (ex: 342) mas só 100 apareciam na lista, sem
               nenhum aviso de que tinha mais música. */}
-          {musicas.map((m, idx) => (
+          {filtered.map((m, idx) => (
             <div
               key={m.id || idx}
               onClick={() => playSong(m, musicas)}
