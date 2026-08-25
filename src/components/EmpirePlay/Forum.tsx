@@ -79,6 +79,9 @@ interface ForumTopicItem {
   // Só pra álbuns: faixas de verdade (com áudio próprio) e encarte.
   tracks?: ForumAlbumTrack[];
   encarte?: string[];
+  // Código único (Musicas!Z / Albuns!L) — chave dos botões Shop/Info/Visual
+  // (ver ExtraMaterial.tsx). Ausente em conteúdo legado sem código gerado.
+  codigoUnico?: string | null;
 }
 
 const FORUM_SUBMENUS: ForumSubmenu[] = ["musicas", "videos", "albuns"];
@@ -125,6 +128,7 @@ export interface ForumProps {
 
 import { VideoPlayer, PlayableVideo } from "./VideoPlayer";
 import { type PlayableTrack } from "./MusicPlayer";
+import { ExtraMaterialButtons } from "./ExtraMaterial";
 
 export const Forum: React.FC<ForumProps> = ({
   onPlayTrack,
@@ -283,6 +287,7 @@ export const Forum: React.FC<ForumProps> = ({
               }))
             : undefined,
           encarte: Array.isArray(item.encarte) ? item.encarte : undefined,
+          codigoUnico: item.codigoUnico || null,
         }));
         setItems(normalized);
       })
@@ -756,6 +761,14 @@ export const Forum: React.FC<ForumProps> = ({
                   <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400 mt-3">
                     <Calendar className="size-3.5" />
                     <span>Lançamento: {selectedTopic.releaseDate}</span>
+                  </div>
+                )}
+                {(activeSubmenu === "musicas" || activeSubmenu === "albuns") && (
+                  <div className="mt-4">
+                    <ExtraMaterialButtons
+                      codigoUnico={selectedTopic.codigoUnico}
+                      tipo={activeSubmenu === "albuns" ? "album" : "musica"}
+                    />
                   </div>
                 )}
               </div>

@@ -2,6 +2,13 @@ import React, { useState, useEffect } from "react";
 import { driveImg } from "@/lib/api";
 import { useBackClose } from "@/hooks/use-back-close";
 import {
+  ExtraMaterialEditor,
+  emptyExtraMaterialEditorValue,
+  fetchExtraMaterial,
+  saveExtraMaterial,
+  type ExtraMaterialEditorValue,
+} from "./ExtraMaterial";
+import {
   X,
   Pencil,
   Music,
@@ -36,6 +43,7 @@ export interface ReleaseItem {
   descricao?: string;
   capaUrl?: string;
   fields?: Record<string, string>;
+  codigoUnico?: string;
 }
 
 interface AlbumFaixa {
@@ -104,6 +112,7 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [editTitulo, setEditTitulo] = useState<string>("");
   const [editDescricao, setEditDescricao] = useState<string>("");
   const [editLetra, setEditLetra] = useState<string>("");
+  const [extraEdit, setExtraEdit] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
   const [capaFile, setCapaFile] = useState<File | null>(null);
   const [capaPreview, setCapaPreview] = useState<string | null>(null);
 
@@ -238,6 +247,19 @@ export const EditModal: React.FC<EditModalProps> = ({
     setFaixaLetraText("");
     if (item.tipo === "albuns" && item.fields?.topicId) {
       fetchAlbumFaixas(item.fields.topicId);
+    }
+    setExtraEdit(emptyExtraMaterialEditorValue());
+    if (item.codigoUnico && item.tipo !== "videos") {
+      fetchExtraMaterial(item.codigoUnico, item.tipo === "albuns" ? "album" : "musica").then((data) =>
+        setExtraEdit({
+          shopAtivo: data.shop.length > 0,
+          shop: data.shop,
+          infoAtivo: !!data.info.trim(),
+          info: data.info,
+          visualAtivo: data.arte.length > 0,
+          arte: data.arte,
+        }),
+      );
     }
   };
 
@@ -536,6 +558,14 @@ export const EditModal: React.FC<EditModalProps> = ({
       const json = await res.json();
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Erro ao salvar edições.");
+      }
+
+      if (editingItem.codigoUnico && category !== "videos") {
+        await saveExtraMaterial(editingItem.codigoUnico, category === "albuns" ? "album" : "musica", {
+          shop: extraEdit.shopAtivo ? extraEdit.shop : [],
+          info: extraEdit.infoAtivo ? extraEdit.info : "",
+          arte: extraEdit.visualAtivo ? extraEdit.arte : [],
+        }).catch(() => {});
       }
 
       setSuccessMsg("Lançamento atualizado com sucesso!");
@@ -1080,6 +1110,28 @@ export const EditModal: React.FC<EditModalProps> = ({
                     </div>
                   </div>
               </div>
+
+              {/* SHOP / INFO / VISUAL — retrofit em lançamento já existente */}
+              {category !== "videos" && (
+                <div>
+                  <label className="text-xs font-black uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2">
+                    <Sparkles className="size-4 text-amber-400" />
+                    Botões do Tópico (Opcional)
+                  </label>
+                  {editingItem?.codigoUnico ? (
+                    <ExtraMaterialEditor
+                      value={extraEdit}
+                      onChange={setExtraEdit}
+                      folderType={category === "albuns" ? "materiaisAlbum" : "materiaisMusica"}
+                    />
+                  ) : (
+                    <p className="text-[11px] text-neutral-500 italic">
+                      Esse lançamento ainda não tem Código único gerado nos charts — os botões Shop/Info/Visual
+                      ficam disponíveis assim que ele aparecer em EDIÇÃO CHARTS.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* ALERTAS */}
               {successMsg && (

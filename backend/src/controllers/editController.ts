@@ -20,6 +20,9 @@ export interface ReleaseToEdit {
   descricao?: string;
   capaUrl?: string;
   fields: Record<string, string>;
+  // Código único (Musicas!Z / Albuns!L) — chave dos botões Shop/Info/Visual
+  // (ver extraMaterialController.ts). Ausente em lançamentos legados.
+  codigoUnico?: string;
 }
 
 const INFOS_MUSICAS_SHEET = "INFOS MÚSICAS";
@@ -164,6 +167,12 @@ export async function getReleasesForEditController(request: Request): Promise<Re
               : tipoParam === "musicas"
                 ? { letra: normalizeText(row[4]) }
                 : {},
+          codigoUnico:
+            tipoParam === "musicas"
+              ? normalizeText(row[25])
+              : tipoParam === "albuns"
+                ? normalizeText(row[11])
+                : "",
         });
       }
     }

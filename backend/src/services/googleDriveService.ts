@@ -25,6 +25,10 @@ export const DRIVE_FOLDERS = {
   // pasta pros dois tipos (o usuário não pediu uma pasta própria só pra
   // entrevista).
   acervo: "1KC5YjWmWJcgIQHHY9iZtDdDO8lB9eXaM",
+  // Material extra dos tópicos (botões Shop/Info/Visual) — fotos de
+  // produto do Shop e imagens do Visual, uma pasta por tipo de conteúdo.
+  materiaisMusica: "1VSWydVuADr-ULSQQsdxwdDE2Z5MnEE_8",
+  materiaisAlbum: "1oAFRAlQL3rGx9EhM37L7gsF7pw4Qh7xD",
 } as const;
 
 export interface DriveFolderFile {
