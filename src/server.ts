@@ -414,12 +414,26 @@ export default {
       const faixasLegadasRows = faixasLegadas.filter((r) => (r[0] || "").trim() === "ALB-75b4581a");
       const albumAtualRow = albuns.find((r) => (r[11] || "").trim() === "EMPALBM049");
       const albumAtualTitulo = albumAtualRow ? (albumAtualRow[6] || "").trim() : "";
+      // Busca ampla — a coluna ALBUM (K) das faixas pode ter sido gravada
+      // com o título prefixado pelo artista ("Artista - Título"), não só o
+      // título puro salvo em Albuns!G.
       const musicasDoAlbumAtual = albumAtualTitulo
-        ? musicas.filter((r) => (r[10] || "").trim() === albumAtualTitulo)
+        ? musicas.filter((r) => (r[10] || "").toLowerCase().includes(albumAtualTitulo.toLowerCase()))
         : [];
+      // Também busca cada faixa do legado por título em TODA a aba Musicas
+      // (não só as do álbum), pra saber se já existe em qualquer lugar,
+      // mesmo vinculada a um álbum/nome diferente.
+      const faixasLegadasComOcorrencia = faixasLegadasRows.map((f) => {
+        const titulo = (f[2] || "").trim();
+        const ocorrencias = musicas
+          .filter((r) => (r[7] || "").toLowerCase().includes(titulo.toLowerCase()))
+          .map((r) => ({ titulo: r[7], album: r[10], data: r[0], artista: r[13] }));
+        return { tituloLegado: titulo, ocorrencias };
+      });
       return Response.json({
         albumLegadoRow,
         faixasLegadasRows,
+        faixasLegadasComOcorrencia,
         albumAtualRow,
         albumAtualTitulo,
         musicasDoAlbumAtual,
