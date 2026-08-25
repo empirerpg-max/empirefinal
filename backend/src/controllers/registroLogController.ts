@@ -68,16 +68,26 @@ async function buscarNomeCanonico(params: {
  * Grava uma linha de audit log na aba REGISTRO — só em B (jogador), C
  * (conteúdo, nome canônico do chart) e D (tipo). Nunca escreve em A ou E.
  *
- * Usa `appendRow` com o range restrito a "B:D" e insertDataOption=OVERWRITE
- * (não INSERT_ROWS): a própria API do Sheets acha e ocupa a próxima linha
- * vazia OLHANDO SÓ pras colunas B:D, de forma atômica do lado do Google —
- * ao contrário do jeito antigo (ler a coluna B, calcular a linha aqui, e só
- * depois escrever), que tinha uma condição de corrida real: dois
- * comentários publicados perto um do outro liam a MESMA "próxima linha
- * vazia" antes de qualquer um escrever, e o segundo `updateValues` sobrescrevia
- * silenciosamente o primeiro — sem erro nenhum, só um registro "sumido". Como
- * o range aqui nunca inclui a coluna E (protegida, calculada por fórmula), a
- * gravação não esbarra na proteção mesmo com OVERWRITE.
+ * IMPORTANTE (achado via debug ao vivo): o endpoint `:append` do Sheets (usado
+ * por `appendRow`, com OVERWRITE ou INSERT_ROWS, tanto faz — os dois foram
+ * testados e falham igual) calcula sozinho a "próxima linha livre" olhando
+ * pra planilha inteira, não só pro range B:D pedido. A coluna E é protegida
+ * (fórmula "VALOR"), e a partir de uma certa linha (quando E já tem fórmula
+ * ocupando aquela linha, mesmo com B:D vazios) o `:append` esbarra nela e
+ * devolve 400 "You are trying to edit a protected cell or object" — mesmo a
+ * gente nunca mandando valor pra coluna E. Testado e confirmado: escrever
+ * direto numa célula específica de B, C ou D com `values.update` (PUT)
+ * funciona sempre, em qualquer linha — só o cálculo automático do `:append`
+ * que quebra. Por isso aqui a gente mesmo acha a próxima linha livre (lendo
+ * B:D e pegando a última linha com conteúdo + 1) e escreve com
+ * `updateValues`/PUT numa célula explícita, contornando o bug do `:append`.
+ *
+ * Isso reintroduz, em teoria, a mesma condição de corrida que o comentário
+ * antigo deste arquivo descrevia (dois registros quase simultâneos podem ler
+ * a mesma "próxima linha vazia" e um sobrescrever o outro) — mas é a única
+ * forma confirmada de gravar em REGISTRO sem cair no erro de proteção, e o
+ * volume de gravações aqui (revista/entrevista/comentário publicados) é baixo
+ * o bastante pra colisão exata na mesma linha ser rara.
  */
 export async function registrarAuditLog(params: {
   nomeJogador: string;
@@ -91,15 +101,16 @@ export async function registrarAuditLog(params: {
     const nomeCanonico = await buscarNomeCanonico({ titulo, isAlbum: !!isAlbum, codigoUnico });
     const conteudo = isAlbum ? `(ALBUM) - ${nomeCanonico}` : nomeCanonico;
 
-    const linha = await googleSheetsService.registrosCharts.appendRow(
-      "REGISTRO",
-      [nomeJogador, conteudo, tipo],
-      "B:D",
-      "OVERWRITE",
-    );
-    if (linha === null) {
-      console.warn("[registroLog] Gravação em REGISTRO falhou após todas as tentativas.");
+    const rows = await googleSheetsService.registrosCharts.readValues("REGISTRO");
+    let ultimaLinhaComConteudo = 1; // linha 1 = cabeçalho, nunca escrevemos nela
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i]?.some((c) => normalizeText(c))) ultimaLinhaComConteudo = i + 1;
     }
+    const proximaLinha = ultimaLinhaComConteudo + 1;
+
+    await googleSheetsService.registrosCharts.updateValues("REGISTRO", `B${proximaLinha}:D${proximaLinha}`, [
+      [nomeJogador, conteudo, tipo],
+    ]);
   } catch (err) {
     console.warn("[registroLog] Erro ao gravar em REGISTRO:", err);
   }
