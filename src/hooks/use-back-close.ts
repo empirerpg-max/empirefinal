@@ -31,8 +31,16 @@ export function useBackClose(isOpen: boolean, onClose: () => void) {
       window.removeEventListener("popstate", onPopState);
       // Se o overlay foi fechado pela UI (botão "X", clique fora etc.) e
       // não pelo próprio "voltar", consome a entrada fantasma que empurramos
-      // — senão sobra um "voltar" extra que não faz nada visível.
-      if (pushedRef.current && !closingViaBackRef.current) {
+      // — senão sobra um "voltar" extra que não faz nada visível. MAS só faz
+      // sentido chamar history.back() se ainda estivermos sentados em cima
+      // dessa entrada fantasma (topo da pilha === __backClose). Se o
+      // jogador clicou num link pra OUTRO menu enquanto o tópico estava
+      // aberto, a navegação normal já empurrou uma entrada nova por cima —
+      // nesse caso um history.back() aqui desfazia essa navegação e jogava
+      // o navegador de volta pro tópico (parecia "travado" naquele tópico
+      // até clicar em "Voltar para lista" de novo).
+      const aindaNaEntradaFantasma = (window.history.state as any)?.__backClose === true;
+      if (pushedRef.current && !closingViaBackRef.current && aindaNaEntradaFantasma) {
         window.history.back();
       }
       pushedRef.current = false;
