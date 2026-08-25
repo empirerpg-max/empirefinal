@@ -402,6 +402,30 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/investigar-alb-75b4581a" && request.method === "GET") {
+      const gs = await import("../backend/src/services/googleSheetsService");
+      const [albunsLegados, faixasLegadas, albuns, musicas] = await Promise.all([
+        gs.googleSheetsService.usuarios.readValues("Playlists_Albuns"),
+        gs.googleSheetsService.usuarios.readValues("Playlists_Faixas"),
+        gs.googleSheetsService.principal.readValues("Albuns"),
+        gs.googleSheetsService.principal.readValues("Musicas"),
+      ]);
+      const albumLegadoRow = albunsLegados.find((r) => (r[0] || "").trim() === "ALB-75b4581a");
+      const faixasLegadasRows = faixasLegadas.filter((r) => (r[0] || "").trim() === "ALB-75b4581a");
+      const albumAtualRow = albuns.find((r) => (r[11] || "").trim() === "EMPALBM049");
+      const albumAtualTitulo = albumAtualRow ? (albumAtualRow[6] || "").trim() : "";
+      const musicasDoAlbumAtual = albumAtualTitulo
+        ? musicas.filter((r) => (r[10] || "").trim() === albumAtualTitulo)
+        : [];
+      return Response.json({
+        albumLegadoRow,
+        faixasLegadasRows,
+        albumAtualRow,
+        albumAtualTitulo,
+        musicasDoAlbumAtual,
+      });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
