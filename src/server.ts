@@ -402,67 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: corrige de vez o álbum "Underwooding" (SA5M) que
-    // tinha sido upado com o bug de desvio de coluna, antes do fix. Reescreve
-    // a linha do álbum (Playlists_Albuns!17) e as 12 faixas (Playlists_Faixas!
-    // 204-215) na disposição correta, limpando qualquer sobra deslocada.
-    if (url.pathname === "/api/debug/corrigir-album-sa5m" && request.method === "GET") {
-      const gs = await import("../backend/src/services/googleSheetsService");
-
-      // Álbum — dados recuperados da linha 17 deslocada (gênero, data, capa,
-      // encarte, telegram_id, created_at) + id/artista (achados nas faixas)
-      // + título (confirmado com o usuário, não estava gravado em lugar
-      // nenhum).
-      await gs.googleSheetsService.usuarios.updateValues("Playlists_Albuns", "A17:S17", [
-        [
-          "ALB-8b2a9a28",
-          "SA5M",
-          "Underwooding",
-          "Pop/Dance",
-          "2009-11-25",
-          "",
-          "https://drive.google.com/file/d/1AVt962A4RGecQl_Ayu-6BeRJnbRm3d0M/view?usp=drivesdk",
-          "",
-          "[]",
-          "5031494795",
-          "2026-08-25T17:48:28.220Z",
-          "", "", "", "", "", "", "", "",
-        ],
-      ]);
-
-      const faixasReais = [
-        { linha: 204, numero: 1, titulo: "Darkness", url: "https://youtu.be/EDS52OGoH1g?is=mu0NLMOX1zsW876a" },
-        { linha: 205, numero: 2, titulo: "How You Love Me Now", url: "https://youtu.be/0oekuvLEKFY?is=xCH9IKZuRRBOzhHO" },
-        { linha: 206, numero: 3, titulo: "Loserboy", url: "https://youtu.be/cazmO9ZvgUI?is=CyBvw6l6J3SXI_WO" },
-        { linha: 207, numero: 4, titulo: "After Dark", url: "https://youtu.be/Q0SKBXfVXww?is=3_oiGZfkuP1ROC5W" },
-        { linha: 208, numero: 5, titulo: "Pleasure Holic (feat. Prince Spears)", url: "https://youtu.be/IjEUs54tevw?is=wWF5cojW_CVbHPHF" },
-        { linha: 209, numero: 6, titulo: "Tonight", url: "https://youtu.be/1rMF565C7XY?is=QoQhmXG8scg3AAYM" },
-        { linha: 210, numero: 7, titulo: "Play Me Like A Toy", url: "https://youtu.be/6n7v_j85FXg?is=V1cwzg0VGUQKS2ev" },
-        { linha: 211, numero: 8, titulo: "Somebody New", url: "https://youtu.be/Ctssms_PKLw?is=jQWFaeC_YTqLrztH" },
-        { linha: 212, numero: 9, titulo: "Myself Travel", url: "https://youtu.be/xvkC8Q09xmQ?is=lx3Ersbxkv1I67_e" },
-        { linha: 213, numero: 10, titulo: "Kiss", url: "https://youtu.be/INH5D7VmCe8?is=_yG3d1EwMWlBmRmn" },
-        { linha: 214, numero: 11, titulo: "Put In My Heart", url: "https://youtu.be/Lp4WGcfLw6Y?is=tFBvLhusHg8UecT9" },
-        { linha: 215, numero: 12, titulo: "Monopoly", url: "https://youtu.be/Vr49lhwcqbY?is=e3PeJFUivgQ4JvPW" },
-      ];
-      for (const f of faixasReais) {
-        // Limpa a linha inteira (A:K, cobre a área que tinha dado shifted)
-        // antes de escrever A:G corretos — sem isso, a sobra deslocada
-        // (ex: drive_url antigo em K) ficava duplicada.
-        await gs.googleSheetsService.usuarios.updateValues(
-          "Playlists_Faixas",
-          `A${f.linha}:K${f.linha}`,
-          [Array(11).fill("")],
-        );
-        await gs.googleSheetsService.usuarios.updateValues("Playlists_Faixas", `A${f.linha}:G${f.linha}`, [
-          ["ALB-8b2a9a28", String(f.numero), f.titulo, "SA5M", "", f.url, ""],
-        ]);
-      }
-
-      const albumRow = await gs.googleSheetsService.usuarios.readValues("Playlists_Albuns", "A17:K17");
-      const faixasRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Faixas", "A204:G215");
-      return Response.json({ albumRow, faixasRows });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
