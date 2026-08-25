@@ -402,23 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário (será removido logo em seguida): apaga as células de
-    // teste deixadas em REGISTRO (B50:D51) e a linha "TESTE-RAW" em LOGS
-    // durante a investigação do bug de gravação em REGISTRO.
-    if (url.pathname === "/api/debug/limpa-testes-registro" && request.method === "GET") {
-      const gs = await import("../backend/src/services/googleSheetsService");
-      await gs.updateValues("registrosCharts", "REGISTRO", "B50:D51", [
-        ["", "", ""],
-        ["", "", ""],
-      ]);
-      const rows = await gs.googleSheetsService.logsSistema.readValues("LOGS").catch(() => []);
-      const idx = rows.findIndex((r) => r[1] === "TESTE-RAW");
-      if (idx > 0) {
-        await gs.updateValues("logsSistema", "LOGS", `A${idx + 1}:G${idx + 1}`, [["", "", "", "", "", "", ""]]);
-      }
-      return Response.json({ ok: true, linhaLogsLimpa: idx > 0 ? idx + 1 : null });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
