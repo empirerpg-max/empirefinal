@@ -333,37 +333,56 @@ export async function createSongController(request: Request): Promise<Response> 
       console.warn("[createSongController] Erro ao gravar em Musicas (Principal):", err);
     }
 
-    // 1.5 Registrar em "EDIÇÃO CHARTS" (edicaoCharts) — aba real de cálculo
-    // semanal dos charts. Antes disso nenhuma música lançada pelo app
-    // entrava nessa aba, então nunca ganhava o "Código único" (EMP00X, que
-    // é gerado sozinho por uma ARRAYFORMULA na coluna BD assim que a
-    // coluna B é preenchida).
-    const edicaoChartsRowIndex = await registrarNaEdicaoCharts({
-      dataFormatada,
-      fullTitle,
-      tipoSingle: tipoSingle || "LEAD SINGLE",
-      tipoMusica: tipoMusica || "SOLO",
-      artistaPrincipal,
-      participantes: participantesLimpos,
-    });
-    // Leva o Código único (gerado pela fórmula em EDIÇÃO CHARTS!BD) de volta
-    // pro catálogo (Musicas!Z) — é essa cópia que permite achar o conteúdo
-    // certo do chart a partir de um comentário no fórum sem depender de
-    // comparar título como texto (ver registroLogController.ts). Também
-    // devolvido na resposta — o front usa pra já poder salvar Shop/Info/
-    // Visual (extraMaterialController.ts) na hora da criação, se o jogador
-    // ativar algum desses botões no formulário.
+    // Opção (c): essa música NÃO é um lançamento próprio nos charts — os
+    // comentários dela devem contar pra uma música já lançada. Nesse caso
+    // não registra em EDIÇÃO CHARTS/INFOS MÚSICAS (senão contaria em
+    // dobro); em vez disso, busca o Código único da música referenciada e
+    // copia direto pra Musicas!Z — mesmo padrão já usado por vídeos
+    // vinculados (ver createVideoController). É esse código, resolvido de
+    // volta pro título em forumController.ts, que faz um comentário nessa
+    // música cair no REGISTRO com o nome exato da música referenciada.
+    const optionIsC = (opcaoChart || "").trim().startsWith("c)");
     let codigoUnicoGerado = "";
-    if (musicaRowIndexNova && edicaoChartsRowIndex) {
-      codigoUnicoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
-      if (codigoUnicoGerado) {
-        await googleSheetsService.principal
-          .updateValues("Musicas", `Z${musicaRowIndexNova}`, [[codigoUnicoGerado]])
-          .catch((err) => console.warn("[createSongController] Erro ao copiar Código único pra Musicas!Z:", err));
+    if (optionIsC && musicaReferencia) {
+      try {
+        const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
+        const alvo = normalizeComparison(musicaReferencia);
+        const linhaReferencia = rows.slice(1).find((r) => normalizeComparison(r[1]) === alvo);
+        codigoUnicoGerado = linhaReferencia ? (linhaReferencia[55] || "").trim() : "";
+      } catch (err) {
+        console.warn("[createSongController] Erro ao buscar Código único da música referenciada:", err);
+      }
+    } else {
+      // 1.5 Registrar em "EDIÇÃO CHARTS" (edicaoCharts) — aba real de cálculo
+      // semanal dos charts. Antes disso nenhuma música lançada pelo app
+      // entrava nessa aba, então nunca ganhava o "Código único" (EMP00X, que
+      // é gerado sozinho por uma ARRAYFORMULA na coluna BD assim que a
+      // coluna B é preenchida).
+      const edicaoChartsRowIndex = await registrarNaEdicaoCharts({
+        dataFormatada,
+        fullTitle,
+        tipoSingle: tipoSingle || "LEAD SINGLE",
+        tipoMusica: tipoMusica || "SOLO",
+        artistaPrincipal,
+        participantes: participantesLimpos,
+      });
+      if (musicaRowIndexNova && edicaoChartsRowIndex) {
+        codigoUnicoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+      }
+      if (pendente !== "Sim") {
+        await registrarInfosMusicas({ fullTitle, capaUrl });
       }
     }
-    if (pendente !== "Sim") {
-      await registrarInfosMusicas({ fullTitle, capaUrl });
+    // Leva o Código único de volta pro catálogo (Musicas!Z) — é essa cópia
+    // que permite achar o conteúdo certo do chart a partir de um comentário
+    // no fórum sem depender de comparar título como texto (ver
+    // registroLogController.ts). Também devolvido na resposta — o front usa
+    // pra já poder salvar Shop/Info/Visual (extraMaterialController.ts) na
+    // hora da criação, se o jogador ativar algum desses botões no formulário.
+    if (musicaRowIndexNova && codigoUnicoGerado) {
+      await googleSheetsService.principal
+        .updateValues("Musicas", `Z${musicaRowIndexNova}`, [[codigoUnicoGerado]])
+        .catch((err) => console.warn("[createSongController] Erro ao copiar Código único pra Musicas!Z:", err));
     }
 
     // 2. Gravar em REGISTRO DE MÚSICA na planilha de Registros — só as

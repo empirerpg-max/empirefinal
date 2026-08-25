@@ -49,6 +49,29 @@ async function resolveNomeOficial(jogadorId: string, fallback: string): Promise<
   }
 }
 
+/**
+ * Resolve o título "canônico" de uma música a partir do Código único —
+ * fazendo o caminho inverso do que EDIÇÃO CHARTS!BD faz (título → código).
+ * É essa busca que faz "conta pra outra música" (opção c na criação) e
+ * vídeos vinculados a uma música (musicaVinculada) carregarem o título
+ * exato da música referenciada no REGISTRO, em vez do título da própria
+ * linha — sem depender de comparação de texto, que quebra com qualquer
+ * diferença mínima (acento, espaço, feat. adicionado depois etc.).
+ */
+async function resolverTituloPorCodigoUnico(codigoUnico: string): Promise<string | null> {
+  if (!codigoUnico) return null;
+  try {
+    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
+    const alvo = normalizeComparison(codigoUnico);
+    const linha = rows.slice(1).find((r) => normalizeComparison(r[55]) === alvo); // BD
+    const titulo = linha ? normalizeText(linha[1]) : ""; // B
+    return titulo || null;
+  } catch (err) {
+    console.warn("[forumController] Falha ao resolver título por Código único:", err);
+    return null;
+  }
+}
+
 export interface CreateCommentBody {
   tipoMedia: "musica" | "music-video" | "video" | "album";
   tituloMedia: string;
@@ -221,6 +244,15 @@ export async function createCommentController(request: Request): Promise<Respons
           const tituloDaLinha = normalizeText(rowData[colTituloIndex]);
           if (tituloDaLinha) tituloOficial = tituloDaLinha;
           codigoUnico = normalizeText(rowData[colCodigoIndex]);
+
+          // Se essa linha carrega o Código único de OUTRA música (ex: um
+          // vídeo vinculado, ou uma faixa criada com "conta pra uma música
+          // já lançada"), o título de verdade pro REGISTRO é o da música
+          // dona desse código, não o título da própria linha (topic/vídeo).
+          if (tipoMedia !== "album" && codigoUnico) {
+            const tituloReal = await resolverTituloPorCodigoUnico(codigoUnico);
+            if (tituloReal) tituloOficial = tituloReal;
+          }
 
           const currentRatings = rowData[colRatingsIndex] || "";
 
