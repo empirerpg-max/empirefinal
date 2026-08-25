@@ -6,4 +6,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/testa-registro-real" | tee /tmp/out.json
+        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/limpa-testes-registro" | tee /tmp/out.json
