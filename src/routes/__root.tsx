@@ -45,6 +45,8 @@ import { EmpirePlayerProvider, useEmpirePlayer } from "@/components/EmpirePlay/P
 import { MusicPlayer } from "@/components/EmpirePlay/MusicPlayer";
 import { VideoPlayer } from "@/components/EmpirePlay/VideoPlayer";
 
+const GRAVADORAS = ["King & Queen", "Crown", "Independent"] as const;
+
 function GlobalLinkModal({ onClose }: { onClose: () => void }) {
   const { user } = useTelegramUser();
   const [tab, setTab] = useState<"link" | "create">("link");
@@ -299,12 +301,20 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
               <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5 block">
                 Gravadora *
               </label>
-              <input
+              <select
                 value={novoGravadora}
                 onChange={(e) => setNovoGravadora(e.target.value)}
-                placeholder="Ex: Independent, Empire Records..."
-                className="w-full h-12 bg-white/5 border border-white/10 rounded-2xl px-4 text-sm font-bold outline-none focus:border-primary/40"
-              />
+                className="w-full h-12 bg-white/5 border border-white/10 rounded-2xl px-4 text-sm font-bold outline-none focus:border-primary/40 appearance-none"
+              >
+                <option value="" disabled>
+                  Selecione a gravadora
+                </option>
+                {GRAVADORAS.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
             </div>
             <button
               disabled={creating || !novoNome.trim() || !novoGravadora.trim()}
