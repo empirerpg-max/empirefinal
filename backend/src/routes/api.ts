@@ -37,6 +37,10 @@ import {
   updateReleaseController,
 } from "../controllers/editController";
 import {
+  getExtraMaterialController,
+  saveExtraMaterialController,
+} from "../controllers/extraMaterialController";
+import {
   getEmpirePlayHomeController,
   getEmpirePlayMusicasController,
   getEmpirePlayVideosController,
@@ -211,6 +215,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/gestao/faixa/publicar",
     "/api/gestao/meus-albuns",
     "/api/gestao/upload",
+    "/api/gestao/extra",
     "/api/editar",
     "/api/empire-play/home",
     "/api/empire-play/user",
@@ -333,6 +338,17 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     } else {
       return new Response(
         JSON.stringify({ success: false, error: "Use GET, PUT ou POST para /api/editar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+  } else if (url.pathname === "/api/gestao/extra") {
+    if (request.method === "GET") {
+      response = await getExtraMaterialController(request);
+    } else if (request.method === "POST") {
+      response = await saveExtraMaterialController(request);
+    } else {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET ou POST para /api/gestao/extra." }),
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }

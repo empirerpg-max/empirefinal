@@ -109,6 +109,9 @@ export interface EmpirePlayCleanItem {
   // de coverUrl, que é a capa da música/vídeo. Usada nas capas dinâmicas de
   // Catálogo > Início (nº1 de cada chart com o rosto do artista).
   artistPhotoUrl?: string | null;
+  // Código único (Musicas!Z / Albuns!L) — usado pros botões Shop/Info/Visual
+  // (ver extraMaterialController.ts). Ausente em conteúdo legado sem código.
+  codigoUnico?: string | null;
 }
 
 export interface EmpirePlayCleanAlbumTrack {
@@ -134,6 +137,9 @@ export interface EmpirePlayCleanAlbum {
   // Imagens do encarte (coluna "Encarte" da aba Albuns, URLs separadas por
   // ", " no cadastro) — exibidas na página do álbum junto com as faixas.
   encarte: string[];
+  // Código único (Albuns!L) — usado pros botões Shop/Info/Visual (ver
+  // extraMaterialController.ts). Ausente em álbuns legados sem código.
+  codigoUnico?: string | null;
   tracks: EmpirePlayCleanAlbumTrack[];
 }
 
@@ -527,6 +533,12 @@ function buildCleanItem(
   if (description) item.description = description;
   if (category) item.category = category;
   if (trackOrder !== null) item.trackOrder = trackOrder;
+
+  // Código único (Musicas!Z / Albuns!L) — chave de cruzamento com
+  // EDIÇÃO CHARTS/EDIÇÃO CHARTS ÁLBUMS e agora também com Extra_Musicas/
+  // Extra_Albuns (botões Shop/Info/Visual, ver extraMaterialController.ts).
+  const codigoUnico = getValue(record, ["codigo_unico"]);
+  if (codigoUnico) item.codigoUnico = codigoUnico;
 
   return item;
 }
@@ -1063,6 +1075,7 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
             .map((u) => u.trim())
             .filter(Boolean)
         : [];
+      const codigoUnico = getValue(rec, ["codigo_unico"]);
 
       // Junção com a aba Musicas
       const matchingSongs = songs.filter((s) => {
@@ -1099,6 +1112,7 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         releaseDateIso,
         metacriticAvg,
         encarte,
+        codigoUnico: codigoUnico || null,
         tracks,
       };
     });

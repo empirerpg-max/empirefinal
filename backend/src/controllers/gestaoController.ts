@@ -326,12 +326,16 @@ export async function createSongController(request: Request): Promise<Response> 
     // Leva o Código único (gerado pela fórmula em EDIÇÃO CHARTS!BD) de volta
     // pro catálogo (Musicas!Z) — é essa cópia que permite achar o conteúdo
     // certo do chart a partir de um comentário no fórum sem depender de
-    // comparar título como texto (ver registroLogController.ts).
+    // comparar título como texto (ver registroLogController.ts). Também
+    // devolvido na resposta — o front usa pra já poder salvar Shop/Info/
+    // Visual (extraMaterialController.ts) na hora da criação, se o jogador
+    // ativar algum desses botões no formulário.
+    let codigoUnicoGerado = "";
     if (musicaRowIndexNova && edicaoChartsRowIndex) {
-      const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
-      if (codigoGerado) {
+      codigoUnicoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+      if (codigoUnicoGerado) {
         await googleSheetsService.principal
-          .updateValues("Musicas", `Z${musicaRowIndexNova}`, [[codigoGerado]])
+          .updateValues("Musicas", `Z${musicaRowIndexNova}`, [[codigoUnicoGerado]])
           .catch((err) => console.warn("[createSongController] Erro ao copiar Código único pra Musicas!Z:", err));
       }
     }
@@ -418,6 +422,7 @@ export async function createSongController(request: Request): Promise<Response> 
           titulo: fullTitle,
           artistaPrincipal,
           nomeJogador,
+          codigoUnico: codigoUnicoGerado,
           mensagem: "Música registrada com sucesso nos charts e banco de dados!",
         },
       }),
@@ -1384,9 +1389,11 @@ export async function createAlbumController(request: Request): Promise<Response>
     // inclui o "Código único" (coluna R, padrão EMPALBM001, EMPALBM002...)
     // — antes essa coluna ficava sempre em branco pra álbum lançado pelo
     // app, só os legados/manuais tinham código.
+    let codigoUnicoAlbum = "";
     try {
       const tipoNum = tipoAlbum.trim().toUpperCase() === "EP" ? "1" : "2";
       const codigoUnico = await gerarProximoCodigoUnico("EDIÇÃO CHARTS ÁLBUMS", "EMPALBM", 3);
+      codigoUnicoAlbum = codigoUnico;
       await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS ÁLBUMS", [
         artistaAlbum, // A - ARTISTA
         dataFormatada, // B - DATA DE LANÇAMENTO
@@ -1445,6 +1452,7 @@ export async function createAlbumController(request: Request): Promise<Response>
           totalFaixas: faixas.length,
           faixasIneditasGravadas,
           faixasIneditasEsperadas,
+          codigoUnico: codigoUnicoAlbum,
           mensagem:
             faixasIneditasFalharam > 0
               ? `Álbum registrado, mas ${faixasIneditasFalharam} faixa(s) inédita(s) falharam ao gravar — confira e adicione de novo se precisar.`
