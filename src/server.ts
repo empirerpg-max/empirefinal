@@ -402,18 +402,31 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: acha a linha da SA5M em chartsBase!HALL_OF_FAME_DB
-    // (se existir) e o cabeçalho da linha 1, pra confirmar a coluna N
-    // "Dados legados" que o usuário adicionou antes de escrever nela.
-    if (url.pathname === "/api/debug/achar-sa5m-hof" && request.method === "GET") {
+    // Debug temporário: escreve os #1 do Hot 100 legados da SA5M (confirmados
+    // com o usuário) na coluna N "Dados legados" — mesmo padrão de
+    // formatação da coluna M (Chart Run Hot 100), sem mexer nela (é
+    // alimentada por fórmula/importação automática, não tem esses hits
+    // antigos e não deve ser sobrescrita).
+    if (url.pathname === "/api/debug/escrever-sa5m-hof-legado" && request.method === "GET") {
       const gs = await import("../backend/src/services/googleSheetsService");
-      const rows = await gs.googleSheetsService.chartsBase.readValues("HALL_OF_FAME_DB", "A1:P2000");
-      const header = rows[0] || [];
-      const alvo = "sa5m";
-      const linhaSa5m = rows
-        .map((r, i) => ({ linha: i + 1, valores: r }))
-        .find(({ linha, valores }) => linha > 1 && (valores[0] || "").toString().toLowerCase() === alvo);
-      return Response.json({ header, linhaSa5m: linhaSa5m || null, totalLinhas: rows.length });
+      const legados = [
+        ["SA5M - Darkness", "1 - 1"],
+        ["SA5M - Loserboy", "1"],
+        ["SA5M - How You Love Me Now", "1"],
+        ["SA5M - Merry Go Round", "1 - 1"],
+        ["SA5M - Holy Grail", "1"],
+        ["SA5M - PUSH POP", "1 - 1"],
+        ["SA5M - GARBO", "1"],
+        ["SA5M - ATILA MINOR", "1"],
+        ["SA5M - PICKY PICKY", "1"],
+        ["SA5M - Mamba Negra", "1 - 1"],
+      ]
+        .map(([t, v]) => `${t}|${v}`)
+        .join(",");
+
+      await gs.updateValues("chartsBase", "HALL_OF_FAME_DB", "N84", [[legados]]);
+      const conferencia = await gs.googleSheetsService.chartsBase.readValues("HALL_OF_FAME_DB", "N84:N84");
+      return Response.json({ escrito: legados, conferencia });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
