@@ -138,14 +138,27 @@ function TourDetails() {
   }, [tours, idUnicoDaBusca]);
 
   // Ao chegar aqui a partir de um card da Central de Notícias global (ver
-  // tours/index.tsx), leva direto pra seção "Central de notícias" desta
-  // turnê em vez de deixar o jogador no topo (hero + calendário) tendo que
-  // rolar manualmente até achar a novidade que ele clicou.
+  // tours/index.tsx) ou de uma notícia de turnê em Social > News (ver
+  // handleComentarNews em social.tsx), leva direto pro show específico em
+  // vez de deixar o jogador no topo (hero + calendário) tendo que rolar
+  // manualmente até achar a novidade que ele clicou — e quando o hash aponta
+  // pra um show específico (#show-comentar-N), já foca no campo de
+  // comentário daquele show, pronto pra digitar.
   useEffect(() => {
     if (!tour || typeof window === "undefined") return;
-    if (window.location.hash !== "#central-noticias") return;
-    const el = document.getElementById("central-noticias");
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const hash = window.location.hash;
+    if (hash === "#central-noticias") {
+      document.getElementById("central-noticias")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const showMatch = hash.match(/^#show-comentar-(\d+)$/);
+    if (showMatch) {
+      const el = document.getElementById(`show-comentar-${showMatch[1]}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.setTimeout(() => {
+        el?.querySelector<HTMLInputElement>('input[type="text"]')?.focus();
+      }, 400);
+    }
   }, [tour]);
 
   if (loading) {
@@ -472,7 +485,10 @@ function ShowFeedPost({
   }
 
   return (
-    <div className="rounded-[2rem] bg-card border border-white/5 overflow-hidden">
+    <div
+      id={`show-comentar-${show.numero}`}
+      className="rounded-[2rem] bg-card border border-white/5 overflow-hidden scroll-mt-6"
+    >
       {ultimaAcao?.fotoUrl && (
         <img src={driveImg(ultimaAcao.fotoUrl, 800)} alt="" className="w-full aspect-video object-cover" />
       )}
