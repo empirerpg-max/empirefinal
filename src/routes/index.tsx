@@ -24,6 +24,7 @@ import { api, driveImg, invalidateCache, type ChartData } from "@/lib/api";
 import { useHomeConfig } from "@/lib/homeFlags";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { LoadErrorState } from "@/components/LoadErrorState";
+import { ActivityTicker } from "@/components/ActivityTicker";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -408,12 +409,12 @@ function Index() {
                 search={{ tab: meta.chartsTab }}
                 onClick={() => haptic.light()}
                 aria-label={`Abrir parada ${meta.label}`}
-                className="min-w-[160px] snap-center group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/5 backdrop-blur-md active:scale-95 transition-all shadow-xl text-left"
+                className="min-w-[104px] snap-center group relative overflow-hidden rounded-[1.25rem] border border-white/10 bg-white/5 backdrop-blur-md active:scale-95 transition-all shadow-xl text-left"
               >
                 <div className="aspect-square overflow-hidden relative">
                   {data?.foto ? (
                     <img
-                      src={driveImg(data.foto, 400)}
+                      src={driveImg(data.foto, 250)}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       alt={`${meta.label} #1`}
                       loading="lazy"
@@ -421,22 +422,22 @@ function Index() {
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-full h-full bg-secondary flex flex-col items-center justify-center p-4">
-                      <Icon className={`size-12 ${meta.color} opacity-30 mb-2`} aria-hidden="true" />
-                      <span className="text-[11px] font-bold uppercase opacity-50 text-center">Abrir parada</span>
+                    <div className="w-full h-full bg-secondary flex flex-col items-center justify-center p-2">
+                      <Icon className={`size-7 ${meta.color} opacity-30 mb-1`} aria-hidden="true" />
+                      <span className="text-[9px] font-bold uppercase opacity-50 text-center">Abrir</span>
                     </div>
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                  <div className="absolute top-3 left-3 size-9 rounded-full bg-black/60 backdrop-blur-md grid place-items-center border border-white/10">
-                    <Icon className={`size-5 ${meta.color}`} aria-hidden="true" />
+                  <div className="absolute top-2 left-2 size-6 rounded-full bg-black/60 backdrop-blur-md grid place-items-center border border-white/10">
+                    <Icon className={`size-3.5 ${meta.color}`} aria-hidden="true" />
                   </div>
                 </div>
-                <div className="p-3.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary mb-1 block">{meta.label}</span>
-                  <h4 className="text-[13px] font-black uppercase leading-tight line-clamp-1">
+                <div className="p-2">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-primary mb-0.5 block truncate">{meta.label}</span>
+                  <h4 className="text-[11px] font-black uppercase leading-tight line-clamp-1">
                     {data?.musica || "Ver parada"}
                   </h4>
-                  <p className="text-[11px] text-muted-foreground font-medium truncate mt-0.5">
+                  <p className="text-[10px] text-muted-foreground font-medium truncate">
                     {data?.artista || "Toque para abrir"}
                   </p>
                 </div>
@@ -444,6 +445,7 @@ function Index() {
             );
           })}
         </div>
+        <ActivityTicker />
       </section>
     ),
   };

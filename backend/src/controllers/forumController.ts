@@ -559,3 +559,72 @@ export async function toggleCommentReactionController(request: Request): Promise
     );
   }
 }
+
+/**
+ * GET /api/forum/atividade-recente
+ * Últimos comentários feitos no Fórum (música/vídeo/álbum), pro ticker de
+ * "fulano comentou em tal coisa" na home. Lê direto de Comentarios_Musicas/
+ * Comentarios_MV/Comentarios_Albuns (nunca são resetadas) em vez de REGISTRO
+ * (aba zerada toda semana pro recálculo dos charts — não serviria como
+ * histórico). As abas de comentário só guardam o ID do tópico, então
+ * resolve o título de volta consultando a aba de catálogo correspondente
+ * (mesmas colunas já usadas em createCommentController).
+ */
+export async function getAtividadeRecenteController(): Promise<Response> {
+  try {
+    const [musicaComments, mvComments, albumComments, musicasRows, mvRows, albunsRows] = await Promise.all([
+      googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
+      googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
+      googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
+      googleSheetsService.principal.readValues("Musicas").catch(() => []),
+      googleSheetsService.principal.readValues("Music Videos").catch(() => []),
+      googleSheetsService.principal.readValues("Albuns").catch(() => []),
+    ]);
+
+    // topicId → título, uma vez por catálogo (evita varrer a aba de novo
+    // pra cada comentário).
+    const mapaTitulos = (rows: string[][], colId: number, colTitulo: number) => {
+      const mapa = new Map<string, string>();
+      for (let i = 1; i < rows.length; i++) {
+        const id = normalizeComparison(rows[i]?.[colId]);
+        const titulo = normalizeText(rows[i]?.[colTitulo]);
+        if (id && titulo) mapa.set(id, titulo);
+      }
+      return mapa;
+    };
+    const titulosMusicas = mapaTitulos(musicasRows, 1, 7); // B ID do tópico, H Nome
+    const titulosVideos = mapaTitulos(mvRows, 5, 1); // F message_thread_id, B Título
+    const titulosAlbuns = mapaTitulos(albunsRows, 1, 6); // B ID do tópico, G Novo Nome
+
+    const ultimos = (rows: string[][], tipo: "musica" | "video" | "album", mapa: Map<string, string>, n: number) => {
+      if (!rows || rows.length <= 1) return [];
+      return rows
+        .slice(1)
+        .slice(-n)
+        .reverse()
+        .map((r) => ({
+          jogador: normalizeText(r[2]),
+          titulo: mapa.get(normalizeComparison(r[0])) || "",
+          tipo,
+        }))
+        .filter((c) => c.jogador && c.titulo);
+    };
+
+    const atividades = [
+      ...ultimos(musicaComments, "musica", titulosMusicas, 8),
+      ...ultimos(mvComments, "video", titulosVideos, 8),
+      ...ultimos(albumComments, "album", titulosAlbuns, 8),
+    ].slice(0, 20);
+
+    return new Response(JSON.stringify({ success: true, data: atividades }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[getAtividadeRecenteController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao buscar atividade recente." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}

@@ -5,6 +5,21 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Ticker de atividade recente (home) — desloca o conteúdo duplicado em
+   -50% num loop contínuo; como as duas metades são idênticas, o "reset"
+   do loop fica invisível. */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee {
+  animation: marquee-scroll 30s linear infinite;
+}
+
 /*
  * Design system definition.
  *
