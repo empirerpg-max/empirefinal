@@ -997,6 +997,50 @@ export async function getMissoesController(request: Request): Promise<Response> 
   }
 }
 
+// GET /api/turnes/proximas-globais — próximos shows (não esgotados) de
+// TODOS os jogadores, não só os meus — usado na home ("Próximos Eventos")
+// pra estimular a galera a acompanhar/comentar as turnês uns dos outros,
+// igual já acontece com a Central de Notícias dentro do menu Tour.
+export async function getProximasGlobaisController(): Promise<Response> {
+  try {
+    const raw = await readToursRaw();
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const missoes: MissaoProxima[] = [];
+    for (const { row } of raw) {
+      const tour = rowToTour(row);
+      if (!tour.sistemaNovo) continue;
+
+      for (const show of tour.agenda) {
+        if (show.soldOut) continue;
+        const data = parseDataBR(show.data);
+        if (!data) continue;
+        const diffMs = data.getTime() - hoje.getTime();
+        const diasRestantes = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        if (diasRestantes < 0) continue;
+        missoes.push({
+          idUnico: tour.idUnico,
+          artista: tour.artista,
+          nomeTurne: tour.nomeTurne,
+          showNumero: show.numero,
+          local: show.local,
+          cidade: show.cidade,
+          data: show.data,
+          diasRestantes,
+          hoje: diasRestantes === 0,
+        });
+      }
+    }
+
+    missoes.sort((a, b) => a.diasRestantes - b.diasRestantes);
+    return jsonOk(missoes.slice(0, 20));
+  } catch (err) {
+    console.error("[getProximasGlobaisController] Erro:", err);
+    return jsonError("Falha ao carregar as próximas turnês.", 500);
+  }
+}
+
 export interface FeedItem {
   idUnico: string;
   artista: string;
