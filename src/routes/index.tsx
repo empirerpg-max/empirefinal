@@ -153,13 +153,11 @@ function Index() {
           .catch(() => null),
       ])
         .then(([missoesRes, tvRes]) => {
-          const eventos: ProximoEvento[] = [];
-
           const missoes = missoesRes?.success && Array.isArray(missoesRes.data) ? missoesRes.data : [];
-          for (const m of missoes) {
-            eventos.push({
+          const showEventos: (ProximoEvento & { _artista: string })[] = missoes
+            .map((m: any) => ({
               id: `show-${m.idUnico}-${m.showNumero}`,
-              tipo: "show",
+              tipo: "show" as const,
               titulo: `${m.artista} — Show #${m.showNumero}`,
               subtitulo: `${m.local}, ${m.cidade}`,
               data: m.data,
@@ -167,26 +165,63 @@ function Index() {
               linkTo: "/tours/$nome",
               linkParams: { nome: m.artista },
               linkSearch: { id: m.idUnico },
-            });
+              _artista: m.artista as string,
+            }))
+            .sort((a: ProximoEvento, b: ProximoEvento) => a.timestamp - b.timestamp);
+
+          // Prioridade pedida: se só tem 1 artista em turnê, mostra até 3
+          // shows dele. Com mais de 1 artista, intercala 1 por artista (o
+          // mais próximo de cada), até no máximo 5 — senão fica poluído.
+          const artistasEmTurne = [...new Set(showEventos.map((e) => e._artista))];
+          let tourEventos: ProximoEvento[];
+          if (artistasEmTurne.length <= 1) {
+            tourEventos = showEventos.slice(0, 3);
+          } else {
+            const porArtista = new Map<string, ProximoEvento[]>();
+            for (const ev of showEventos) {
+              if (!porArtista.has(ev._artista)) porArtista.set(ev._artista, []);
+              porArtista.get(ev._artista)!.push(ev);
+            }
+            const intercalado: ProximoEvento[] = [];
+            let rodada = 0;
+            while (intercalado.length < 5) {
+              let adicionouAlgum = false;
+              for (const lista of porArtista.values()) {
+                if (lista[rodada]) {
+                  intercalado.push(lista[rodada]);
+                  adicionouAlgum = true;
+                  if (intercalado.length >= 5) break;
+                }
+              }
+              if (!adicionouAlgum) break;
+              rodada += 1;
+            }
+            tourEventos = intercalado.sort((a, b) => a.timestamp - b.timestamp);
           }
 
           const programas = tvRes?.success && Array.isArray(tvRes.data) ? tvRes.data : [];
-          for (const p of programas) {
-            if (p.finalizado) continue;
-            eventos.push({
+          const tvEventosTodos: ProximoEvento[] = programas
+            .filter((p: any) => !p.finalizado)
+            .map((p: any) => ({
               id: `tv-${p.id}`,
-              tipo: "tv",
+              tipo: "tv" as const,
               titulo: p.titulo,
               subtitulo: p.categoria || "Empire TV",
               data: p.data,
               horario: p.horario,
               timestamp: parseDataHorarioBR(p.data, p.horario),
               linkTo: "/tv",
-            });
-          }
+            }))
+            .sort((a: ProximoEvento, b: ProximoEvento) => a.timestamp - b.timestamp);
 
-          eventos.sort((a, b) => a.timestamp - b.timestamp);
-          setProximosEventos({ status: "ok", data: eventos.slice(0, 10) });
+          // 1 evento de TV normalmente; se não tem nenhuma turnê rolando,
+          // mostra mais TV pra não deixar o card praticamente vazio.
+          const tvEventos = tvEventosTodos.slice(0, tourEventos.length === 0 ? 5 : 1);
+
+          const eventos = [...tourEventos, ...tvEventos]
+            .map(({ _artista, ...ev }: any) => ev as ProximoEvento)
+            .sort((a: ProximoEvento, b: ProximoEvento) => a.timestamp - b.timestamp);
+          setProximosEventos({ status: "ok", data: eventos });
         })
         .catch((e: any) => setProximosEventos({ status: "error", error: String(e?.message || e) })),
     );

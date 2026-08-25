@@ -405,8 +405,9 @@ function SocialPage() {
       // da publicação (ex: handle do Instagram, se o post é do Instagram) —
       // não o nome global do artista. Só cai pro nome puro se não existir
       // perfil configurado pra essa rede.
+      const norm = (s: string) => (s || "").trim().toLowerCase();
       const perfilNaRede = profiles.find(
-        (p) => p.artista === activeArtist.nome && p.rede === selectedPost.tipo,
+        (p) => norm(p.artista) === norm(activeArtist.nome) && norm(p.rede) === norm(selectedPost.tipo),
       );
       const payload = {
         postId: selectedPost.id,
@@ -898,6 +899,15 @@ function SocialPage() {
                           </div>
                         )}
                       </div>
+                      {post.analytics.likes > 0 && (
+                        <p className="mt-1.5 text-[10.5px] font-bold text-muted-foreground">
+                          {post.analytics.likedBy?.includes(myTgId)
+                            ? post.analytics.likes === 1
+                              ? "Curtido por você"
+                              : `Curtido por você e mais ${post.analytics.likes - 1} pessoa${post.analytics.likes - 1 === 1 ? "" : "s"}`
+                            : `Curtido por ${post.analytics.likes} pessoa${post.analytics.likes === 1 ? "" : "s"}`}
+                        </p>
+                      )}
                     </motion.div>
                   );
                 })}
