@@ -394,9 +394,9 @@ const INFOS_ACTS_SHEET = "INFOS ACTS";
  * GET /api/artistas/infos?nome=<nome>
  * Biografia (e foto "de origem") do artista — vive numa aba própria
  * ("INFOS ACTS", planilha registrosCharts): A nome | C foto | E biografia.
- * O dono do artista edita a biografia direto nessa aba (não tem tela de
- * edição no app pra isso — só leitura aqui). O upload de foto novo (quando
- * existir essa feature) deve gravar em F, não em C.
+ * O dono do artista edita a biografia pelo app (ver setArtistBiografiaController)
+ * — antes só dava direto na planilha. O upload de foto novo grava em I, não em C
+ * (ver setArtistFotoController).
  */
 export async function getArtistInfoController(request: Request): Promise<Response> {
   try {
@@ -474,6 +474,48 @@ export async function setArtistFotoController(request: Request): Promise<Respons
     console.error("[setArtistFotoController] Erro:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message || "Erro ao gravar foto do artista." }),
+      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
+  }
+}
+
+/**
+ * POST /api/artistas/biografia
+ * Grava o texto novo direto na coluna E ("biografia") da aba "INFOS ACTS" —
+ * antes só dava pra editar essa coluna direto na planilha; agora o dono do
+ * artista consegue editar pelo app. Cria a linha se o artista ainda não
+ * tiver uma nessa aba (mesmo padrão de setArtistFotoController).
+ */
+export async function setArtistBiografiaController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as { nome?: string; biografia?: string };
+    const nome = (body.nome || "").trim();
+    const biografia = (body.biografia || "").trim();
+    if (!nome) {
+      return new Response(JSON.stringify({ success: false, error: "nome é obrigatório." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+
+    const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+    const normNome = normalizeComparison(nome);
+    const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
+
+    if (rowIndex !== -1) {
+      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `E${rowIndex + 1}`, [[biografia]]);
+    } else {
+      await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [nome, "", "", "", biografia]);
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (error: any) {
+    console.error("[setArtistBiografiaController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao gravar biografia do artista." }),
       { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );
   }

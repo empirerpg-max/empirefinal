@@ -13,6 +13,7 @@ import {
   Loader2,
   Building2,
   FileX,
+  FileText,
   TrendingUp,
   Lock,
   User,
@@ -55,7 +56,7 @@ function ArtistDashboard() {
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("geral");
-  const [modal, setModal] = useState<null | "rescisao" | "foto">(null);
+  const [modal, setModal] = useState<null | "rescisao" | "foto" | "biografia">(null);
   const [discografia, setDiscografia] = useState<DiscoItem[]>([]);
   const [tourData, setTourData] = useState<any>(null);
   const [responsavelNivel, setResponsavelNivel] = useState<NivelJogador | null>(null);
@@ -386,6 +387,9 @@ function ArtistDashboard() {
       {isOwner && modal === "rescisao" && <RescisaoModal nome={artist.nome} onClose={() => setModal(null)} />}
       {isOwner && modal === "foto" && (
         <FotoModal nome={artist.nome} onClose={() => setModal(null)} onDone={() => window.location.reload()} />
+      )}
+      {isOwner && modal === "biografia" && (
+        <BiografiaModal nome={artist.nome} onClose={() => setModal(null)} />
       )}
     </main>
   );
@@ -857,10 +861,11 @@ function SocialTab({ nome }: { nome: string }) {
 }
 
 // ---------- Aba: Gestão (dono) ----------
-function GestaoTab({ onAction }: { onAction: (m: "rescisao" | "foto") => void }) {
+function GestaoTab({ onAction }: { onAction: (m: "rescisao" | "foto" | "biografia") => void }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <MiniAction label="Trocar Foto" icon={<User />} onClick={() => onAction("foto")} color="text-sky-400" />
+      <MiniAction label="Editar Biografia" icon={<FileText />} onClick={() => onAction("biografia")} color="text-emerald-400" />
       <div className="col-span-2 mt-4 space-y-3">
         <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 px-1">Administrativo</h4>
         <div className="grid grid-cols-2 gap-3">
@@ -1016,8 +1021,8 @@ function FotoModal({ nome, onClose, onDone }: { nome: string; onClose: () => voi
   return (
     <Modal title="Trocar foto do artista" onClose={onClose}>
       <p className="text-xs text-muted-foreground mb-3">
-        Isso envia uma foto nova pra revisão — não substitui a foto oficial na hora. Pra biografia e foto definitiva,
-        edite direto na planilha INFOS ACTS.
+        Isso envia uma foto nova pra revisão — não substitui a foto oficial na hora. Pra foto definitiva, edite
+        direto na planilha INFOS ACTS.
       </p>
       <label className="block mb-3">
         <div className="aspect-square w-32 mx-auto rounded-2xl overflow-hidden bg-secondary border border-white/10 grid place-items-center">
@@ -1038,6 +1043,60 @@ function FotoModal({ nome, onClose, onDone }: { nome: string; onClose: () => voi
       {errorMsg && <p className="text-xs text-destructive mb-2">{errorMsg}</p>}
       <button onClick={go} disabled={s || !file} className={btnCls()}>
         {s && <Loader2 className="size-4 animate-spin" />} Enviar
+      </button>
+    </Modal>
+  );
+}
+
+function BiografiaModal({ nome, onClose }: { nome: string; onClose: () => void }) {
+  const [texto, setTexto] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [s, setS] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.getArtistInfo(nome).then((info) => {
+      if (alive) {
+        setTexto(info?.biografia || "");
+        setLoading(false);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [nome]);
+
+  async function go() {
+    setS(true);
+    setErrorMsg(null);
+    try {
+      const res = await api.setArtistBiografia(nome, texto.trim());
+      if (!res.success) throw new Error(res.error || "Falha ao salvar biografia.");
+      onClose();
+      window.location.reload();
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Não deu pra salvar a biografia agora.");
+    } finally {
+      setS(false);
+    }
+  }
+
+  return (
+    <Modal title="Editar biografia" onClose={onClose}>
+      {loading ? (
+        <div className="h-28 rounded-xl bg-secondary animate-pulse" />
+      ) : (
+        <textarea
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder="Conte a história desse artista..."
+          className="w-full h-40 bg-background border border-border rounded-xl p-3 text-sm resize-none mb-2 focus:outline-none focus:border-primary/50"
+        />
+      )}
+      {errorMsg && <p className="text-xs text-destructive mb-2">{errorMsg}</p>}
+      <button onClick={go} disabled={s || loading} className={btnCls()}>
+        {s && <Loader2 className="size-4 animate-spin" />} Salvar
       </button>
     </Modal>
   );

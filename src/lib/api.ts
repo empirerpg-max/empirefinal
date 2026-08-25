@@ -385,6 +385,16 @@ export const api = {
     });
     return res.json();
   },
+  // Grava o texto novo na coluna E ("biografia") da aba INFOS ACTS — antes
+  // só dava pra editar direto na planilha.
+  async setArtistBiografia(nome: string, biografia: string): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/artistas/biografia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome, biografia }),
+    });
+    return res.json();
+  },
   // Migrado do Apps Script legado — a aba ARTISTAS (Worker próprio) já
   // guarda saldo/seguidores/vendas_total/descricao/genero/pais como colunas
   // prontas, então uma única chamada a /api/artistas/listar-todos basta
