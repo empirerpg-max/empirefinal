@@ -1,6 +1,5 @@
 import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
-import { registrarAuditLog } from "./registroLogController";
 import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
 
@@ -398,16 +397,9 @@ export async function createSongController(request: Request): Promise<Response> 
       console.warn("[createSongController] Erro ao gravar em REGISTRO DE MÚSICA:", err);
     }
 
-    // 3. Gravar Audit Log na aba REGISTRO
-    try {
-      await registrarAuditLog({
-        nomeJogador,
-        titulo: fullTitle,
-        tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-      });
-    } catch (err) {
-      console.warn("[createSongController] Erro ao gravar no Audit Log REGISTRO:", err);
-    }
+    // REGISTRO é só pra comentários de OUTROS jogadores nesse conteúdo (ver
+    // forumController.ts) — lançar a própria música não é um comentário, e
+    // registrar isso aqui como se fosse um inflava indevidamente a aba.
 
     await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
@@ -552,16 +544,8 @@ export async function createVideoController(request: Request): Promise<Response>
       }
     }
 
-    // 2. Audit Log em REGISTRO
-    try {
-      await registrarAuditLog({
-        nomeJogador,
-        titulo: fullTitle,
-        tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-      });
-    } catch (err) {
-      console.warn("[createVideoController] Erro no audit log:", err);
-    }
+    // REGISTRO é só pra comentários de OUTROS jogadores (ver
+    // forumController.ts) — lançar o próprio vídeo não é comentário.
 
     await somarPrestigio({ usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
@@ -1101,15 +1085,8 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     await googleSheetsService.principal.updateValues("Musicas", `F${musicaRowIndex}`, [[topicId]]);
     await googleSheetsService.principal.updateValues("Musicas", `X${musicaRowIndex}`, [["Não"]]);
 
-    try {
-      await registrarAuditLog({
-        nomeJogador,
-        titulo: fullTitle,
-        tipo: "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-      });
-    } catch (err) {
-      console.warn("[publicarFaixaPendenteController] Erro ao gravar Audit Log:", err);
-    }
+    // REGISTRO é só pra comentários de OUTROS jogadores (ver
+    // forumController.ts) — publicar a própria faixa não é comentário.
 
     await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
@@ -1271,23 +1248,10 @@ export async function substituirAlbumController(request: Request): Promise<Respo
       }
     }
 
-    // Só grava em REGISTRO quando pelo menos uma faixa INÉDITA foi
-    // publicada — isso sim é um lançamento de conteúdo novo. Editar o
-    // álbum (trocar capa/encarte) ou só vincular uma faixa que já existia
-    // no chart não é lançamento nenhum, e não deve gerar registro.
-    const temFaixaInedita = novasFaixas.some((f) => f.inedita);
-    if (temFaixaInedita) {
-      try {
-        await registrarAuditLog({
-          nomeJogador,
-          titulo: albumFullTitle,
-          tipo: "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)",
-          isAlbum: true,
-        });
-      } catch (err) {
-        console.warn("[substituirAlbumController] Erro ao gravar Audit Log:", err);
-      }
-    }
+    // REGISTRO é só pra comentários de OUTROS jogadores (ver
+    // forumController.ts) — adicionar faixa/lançar conteúdo não é
+    // comentário, então não gera mais registro aqui (correção de um
+    // desenho anterior que tratava lançamento como se fosse comentário).
 
     const faixasCriadas = resultadosFaixasExistentes.filter((f) => f.criada).map((f) => f.titulo);
     const faixasFalhas = resultadosFaixasExistentes.filter((f) => !f.ok).map((f) => f.titulo);
@@ -1419,17 +1383,8 @@ export async function createAlbumController(request: Request): Promise<Response>
       console.warn("[createAlbumController] Erro ao gravar em EDIÇÃO CHARTS ÁLBUMS:", err);
     }
 
-    // 4. Gravar Audit Log na planilha de Registros
-    try {
-      await registrarAuditLog({
-        nomeJogador,
-        titulo: albumFullTitle,
-        tipo: "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)",
-        isAlbum: true,
-      });
-    } catch (err) {
-      console.warn("[createAlbumController] Erro ao gravar Audit Log de Álbum:", err);
-    }
+    // REGISTRO é só pra comentários de OUTROS jogadores (ver
+    // forumController.ts) — lançar o próprio álbum não é comentário.
 
     await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
