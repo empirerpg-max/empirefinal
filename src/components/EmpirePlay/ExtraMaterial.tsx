@@ -14,7 +14,10 @@ export interface ShopItem {
   titulo: string;
 }
 
-export type VisualBloco = { tipo: "imagem"; url: string } | { tipo: "texto"; conteudo: string };
+export type VisualBloco =
+  | { tipo: "imagem"; url: string }
+  | { tipo: "texto"; conteudo: string }
+  | { tipo: "html"; conteudo: string };
 
 export interface ExtraMaterialData {
   shop: ShopItem[];
@@ -196,21 +199,31 @@ export function ExtraMaterialButtons({
 
             {aberto === "visual" && (
               <div className="max-w-2xl mx-auto">
-                {data.arte.map((bloco, i) =>
-                  bloco.tipo === "imagem" ? (
-                    <img
-                      key={i}
-                      src={driveImg(bloco.url, 1600)}
-                      alt=""
-                      className="w-full h-auto block"
-                      loading="lazy"
-                    />
-                  ) : (
+                {data.arte.map((bloco, i) => {
+                  if (bloco.tipo === "imagem") {
+                    return (
+                      <img
+                        key={i}
+                        src={driveImg(bloco.url, 1600)}
+                        alt=""
+                        className="w-full h-auto block"
+                        loading="lazy"
+                      />
+                    );
+                  }
+                  if (bloco.tipo === "html") {
+                    // Renderizado como veio — quem edita o material já é
+                    // dono/gestor do lançamento, é o mesmo nível de confiança
+                    // de quem sobe as imagens. Sem isso, HTML customizado
+                    // (embeds, layout próprio) não tinha como funcionar.
+                    return <div key={i} className="p-4 sm:p-6" dangerouslySetInnerHTML={{ __html: bloco.conteudo }} />;
+                  }
+                  return (
                     <p key={i} className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap p-4 sm:p-6">
                       {bloco.conteudo}
                     </p>
-                  ),
-                )}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -379,13 +392,13 @@ export function ExtraMaterialEditor({
         {value.visualAtivo && (
           <div className="space-y-3 pt-1">
             <p className="text-[11px] text-neutral-400">
-              Monte uma página livre pro material — encartes, arte, o que quiser — empilhando blocos de imagem e texto na ordem que quiser. Imagens em até 1600px de largura pra manter qualidade alta sem pesar.
+              Monte uma página livre pro material — encartes, arte, o que quiser — empilhando blocos de imagem, texto ou HTML na ordem que quiser. Imagens em até 1600px de largura pra manter qualidade alta sem pesar. O bloco de HTML é renderizado como veio, sem edição visual — use pra embeds ou layout customizado.
             </p>
             {value.arte.map((bloco, i) => (
               <div key={i} className="bg-neutral-900/60 rounded-xl p-2.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black uppercase text-neutral-500">
-                    Bloco {i + 1} · {bloco.tipo === "imagem" ? "Imagem" : "Texto"}
+                    Bloco {i + 1} · {bloco.tipo === "imagem" ? "Imagem" : bloco.tipo === "html" ? "HTML" : "Texto"}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
@@ -432,6 +445,18 @@ export function ExtraMaterialEditor({
                       set({ arte });
                     }}
                   />
+                ) : bloco.tipo === "html" ? (
+                  <textarea
+                    value={bloco.conteudo}
+                    onChange={(e) => {
+                      const arte = [...value.arte];
+                      arte[i] = { tipo: "html", conteudo: e.target.value };
+                      set({ arte });
+                    }}
+                    placeholder="<div>Cole ou escreva seu HTML aqui...</div>"
+                    spellCheck={false}
+                    className="w-full h-32 bg-neutral-950/60 border border-white/10 rounded-lg p-2.5 text-xs font-mono resize-none focus:outline-none focus:border-emerald-500/50"
+                  />
                 ) : (
                   <textarea
                     value={bloco.conteudo}
@@ -446,7 +471,7 @@ export function ExtraMaterialEditor({
                 )}
               </div>
             ))}
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               <button
                 type="button"
                 onClick={() => set({ arte: [...value.arte, { tipo: "imagem", url: "" }] })}
@@ -460,6 +485,13 @@ export function ExtraMaterialEditor({
                 className="flex items-center gap-1.5 text-xs font-bold text-emerald-400"
               >
                 <Plus className="size-3.5" /> Bloco de texto
+              </button>
+              <button
+                type="button"
+                onClick={() => set({ arte: [...value.arte, { tipo: "html", conteudo: "" }] })}
+                className="flex items-center gap-1.5 text-xs font-bold text-emerald-400"
+              >
+                <Plus className="size-3.5" /> Bloco de HTML
               </button>
             </div>
           </div>

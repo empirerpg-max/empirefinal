@@ -23,7 +23,10 @@ export interface ShopItem {
   titulo: string;
 }
 
-export type VisualBloco = { tipo: "imagem"; url: string } | { tipo: "texto"; conteudo: string };
+export type VisualBloco =
+  | { tipo: "imagem"; url: string }
+  | { tipo: "texto"; conteudo: string }
+  | { tipo: "html"; conteudo: string };
 
 export interface ExtraMaterial {
   codigoUnico: string;
