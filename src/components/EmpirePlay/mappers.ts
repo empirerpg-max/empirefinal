@@ -1,5 +1,26 @@
 import type { PlayableTrack } from "./MusicPlayer";
 import type { PlayableVideo } from "./VideoPlayer";
+import type { PlaylistTrack } from "@/lib/api";
+
+/**
+ * Normaliza uma PlayableTrack (já tocável) pro formato que o seletor
+ * "Adicionar à Playlist" espera. Existiam DUAS versões copiadas desse
+ * mapeamento (empire-play.index.tsx e empire-play.musicas.tsx), cada uma
+ * com uma cadeia de fallback de URL diferente — uma corrigia a outra
+ * silenciosamente já tinha divergido. Uma versão só, usada nos dois
+ * lugares (e em qualquer tela nova que precisar).
+ */
+export function toPlaylistTrack(item: PlayableTrack, idx = 0): PlaylistTrack {
+  return {
+    album_id: item.album || "single",
+    faixa_numero: idx + 1,
+    titulo: item.titulo,
+    artistas: item.artista,
+    drive_url: item.drive_url || item.stream_url || item.audio_url || item.url || item.link || "",
+    capa_url: item.capa_url || item.artista_foto_url || "",
+    letra: item.letra || "",
+  };
+}
 
 /** Normaliza um item bruto da API em uma faixa de áudio tocável. */
 export function toPlayableTrack(item: any): PlayableTrack {

@@ -6,7 +6,7 @@ import { driveImg, type PlaylistTrack } from "@/lib/api";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 import { DynamicCoverCard, type CoverPlatform } from "@/components/EmpirePlay/DynamicCoverCard";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
-import { toPlayableTrack, toPlayableVideo } from "@/components/EmpirePlay/mappers";
+import { toPlayableTrack, toPlayableVideo, toPlaylistTrack as toPlaylistTrackBase } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
 import { type PlayableVideo } from "@/components/EmpirePlay/VideoPlayer";
@@ -28,15 +28,12 @@ function EmpirePlayInicio() {
   const [slidingSearchQuery, setSlidingSearchQuery] = useState("");
   const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
 
-  const toPlaylistTrack = (item: any, idx: number): PlaylistTrack => ({
-    album_id: item.album || "single",
-    faixa_numero: idx + 1,
-    titulo: item.titulo,
-    artistas: item.artista,
-    drive_url: item.audio_url || item.drive_url || "",
-    capa_url: item.capa_url || item.poster_url || item.artista_foto_url || "",
-    letra: item.letra || "",
-  });
+  // Mapeamento canônico vive em mappers.ts (compartilhado com
+  // empire-play.musicas.tsx, que antes tinha uma versão levemente
+  // diferente/desatualizada) — só resolve aqui o fallback de capa pra foto
+  // do artista/poster, que é específico dos itens desta tela.
+  const toPlaylistTrack = (item: any, idx: number): PlaylistTrack =>
+    toPlaylistTrackBase({ ...item, capa_url: item.capa_url || item.poster_url || item.artista_foto_url }, idx);
 
   // O botão de voltar do Telegram/gesto do Android navega pelo HISTÓRICO do
   // navegador, não sabe nada do estado local dessa tela — sem empurrar uma
