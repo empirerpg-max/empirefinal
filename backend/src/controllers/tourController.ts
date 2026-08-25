@@ -1099,3 +1099,52 @@ export async function getFeedGlobalController(request: Request): Promise<Respons
     return jsonError("Falha ao carregar a central de notícias.", 500);
   }
 }
+
+// Debug/backfill temporário (chamado uma vez via endpoint em src/server.ts,
+// depois removido): joga em Social > News as ações de turnê que já
+// aconteceram ANTES do hook em realizarAcaoDiaController existir — sem
+// isso, ações antigas (ex: as do Marco) nunca apareceriam em News, só as
+// novas a partir de agora.
+export async function backfillNewsRetroativoTurne(): Promise<{ criados: number; jaExistiam: number; total: number }> {
+  const [raw, newsRows] = await Promise.all([
+    readToursRaw(),
+    googleSheetsService.usuarios.readValues("SOCIAL_NEWS").catch(() => []),
+  ]);
+
+  const jaPublicados = new Set(
+    newsRows.slice(1).map((r) => `${normalizeText(r[8])}|${normalizeText(r[9])}`),
+  );
+
+  let criados = 0;
+  let jaExistiam = 0;
+  let total = 0;
+
+  for (const { row } of raw) {
+    const tour = rowToTour(row);
+    if (!tour.sistemaNovo) continue;
+    for (const show of tour.agenda) {
+      if (!show.acoes.length) continue;
+      total += 1;
+      const chave = `${tour.idUnico}|${show.numero}`;
+      if (jaPublicados.has(chave)) {
+        jaExistiam += 1;
+        continue;
+      }
+      const acao = show.acoes[0];
+      await publicarNewsSocial({
+        titulo: `${tour.artista} — Show #${show.numero} em ${show.cidade}`,
+        conteudo: acao.texto,
+        imagem: acao.fotoUrl || "",
+        autor: tour.artista,
+        telegramId: tour.idUsuario,
+        origemTipo: "tour",
+        origemId: tour.idUnico,
+        origemShow: show.numero,
+      });
+      jaPublicados.add(chave);
+      criados += 1;
+    }
+  }
+
+  return { criados, jaExistiam, total };
+}
