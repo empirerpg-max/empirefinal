@@ -86,7 +86,7 @@ export function useExtraMaterial(
 // no corpo do tópico (ver Forum.tsx).
 export function VisualBlocosView({ arte }: { arte: VisualBloco[] }) {
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-full">
       {arte.map((bloco, i) => {
         if (bloco.tipo === "imagem") {
           return (

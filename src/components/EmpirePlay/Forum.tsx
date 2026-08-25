@@ -666,8 +666,9 @@ export const Forum: React.FC<ForumProps> = ({
 
             {/* DADOS DO TÓPICO DEPENDENDO DA MÍDIA */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10 items-start">
-              {/* CAPA OU PLAYER */}
-              <div className="lg:col-span-5 space-y-3 sm:space-y-4">
+              {/* CAPA OU PLAYER — encolhe no modo Visual pra sobrar mais
+                  espaço pro conteúdo customizado (ver mais abaixo). */}
+              <div className={visualAberto ? "lg:col-span-3 space-y-3 sm:space-y-4" : "lg:col-span-5 space-y-3 sm:space-y-4"}>
                 {activeSubmenu === "videos" ? (
                   /* CAPA DE VÍDEO — abre no mesmo player nativo do app usado
                      no catálogo (nunca um iframe cru do Drive/YouTube aqui;
@@ -703,8 +704,13 @@ export const Forum: React.FC<ForumProps> = ({
                     )}
                   </button>
               ) : (
-                /* CAPA DE MÚSICA / ÁLBUM — em destaque, estilo capa de disco */
-                <div className="relative aspect-square w-full max-w-[280px] sm:max-w-[340px] md:max-w-[400px] mx-auto rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 bg-neutral-950 group">
+                /* CAPA DE MÚSICA / ÁLBUM — em destaque, estilo capa de disco.
+                   Menor no modo Visual (só pra situar, sem tomar espaço). */
+                <div
+                  className={`relative aspect-square w-full mx-auto rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 bg-neutral-950 group ${
+                    visualAberto ? "max-w-[120px] sm:max-w-[150px]" : "max-w-[280px] sm:max-w-[340px] md:max-w-[400px]"
+                  }`}
+                >
                   {selectedTopic.cover && !heroCoverFailed ? (
                     <img
                       src={driveImg(selectedTopic.cover, 800)}
@@ -769,8 +775,9 @@ export const Forum: React.FC<ForumProps> = ({
                 </div>
               )}
 
-              {/* CARD DE AVALIAÇÃO OFICIAL — só aparece com nota/likes real */}
-              {getItemScore(selectedTopic) && (
+              {/* CARD DE AVALIAÇÃO OFICIAL — só aparece com nota/likes real,
+                  e escondido no modo Visual (coluna fica estreita demais). */}
+              {!visualAberto && getItemScore(selectedTopic) && (
                 <div className="bg-neutral-800/60 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex items-center justify-between">
                   <div>
                     <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">
@@ -794,21 +801,28 @@ export const Forum: React.FC<ForumProps> = ({
               )}
             </div>
 
-            {/* INFORMAÇÕES DO TÓPICO / LETRA / FAIXAS */}
-            <div className="lg:col-span-7 space-y-4 sm:space-y-6">
+            {/* INFORMAÇÕES DO TÓPICO / LETRA / FAIXAS — texto encolhe no modo
+                Visual, junto com a capa, pra sobrar mais espaço embaixo. */}
+            <div className={visualAberto ? "lg:col-span-9 space-y-4 sm:space-y-6" : "lg:col-span-7 space-y-4 sm:space-y-6"}>
               <div>
                 <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-emerald-400/80">
                   {activeSubmenu === "musicas" && "Música"}
                   {activeSubmenu === "videos" && (selectedTopic.tipoVideo || "Vídeo")}
                   {activeSubmenu === "albuns" && "Álbum"}
                 </span>
-                <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-[1.05] mt-1">
+                <h1
+                  className={
+                    visualAberto
+                      ? "text-lg sm:text-2xl font-black text-white tracking-tight leading-[1.05] mt-1"
+                      : "text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-[1.05] mt-1"
+                  }
+                >
                   {selectedTopic.title}
                 </h1>
-                <p className="text-base sm:text-xl font-bold text-emerald-400 mt-2">
+                <p className={visualAberto ? "text-sm font-bold text-emerald-400 mt-1" : "text-base sm:text-xl font-bold text-emerald-400 mt-2"}>
                   {selectedTopic.artist}
                 </p>
-                {selectedTopic.releaseDate && (
+                {selectedTopic.releaseDate && !visualAberto && (
                   <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400 mt-3">
                     <Calendar className="size-3.5" />
                     <span>Lançamento: {selectedTopic.releaseDate}</span>
@@ -827,12 +841,7 @@ export const Forum: React.FC<ForumProps> = ({
                 )}
               </div>
 
-              {/* MODO VISUAL ATIVO — substitui faixas/encarte/letra pelo
-                  conteúdo montado em Extra_Musicas/Extra_Albuns; capa e
-                  título continuam fixos acima. */}
-              {visualAberto && extraMaterial ? (
-                <VisualBlocosView arte={extraMaterial.arte} />
-              ) : (
+              {!visualAberto && (
                 <>
 
               {/* CASO ÁLBUM: EXIBIR LISTA DE FAIXAS DE VERDADE (com áudio
@@ -979,6 +988,13 @@ export const Forum: React.FC<ForumProps> = ({
               )}
             </div>
           </div>
+
+          {/* MODO VISUAL ATIVO — ocupa toda a largura abaixo da capa/título
+              (que ficaram compactos acima), dando o máximo de espaço pra
+              pessoa montar o layout dela (inclusive espaçamento em HTML). */}
+          {visualAberto && extraMaterial && (
+            <VisualBlocosView arte={extraMaterial.arte} />
+          )}
 
           {/* SEÇÃO DE COMENTÁRIOS E AVALIAÇÃO */}
           <div className="border-t border-white/10 pt-6 sm:pt-8 space-y-4 sm:space-y-6">
