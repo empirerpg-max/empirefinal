@@ -402,25 +402,6 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: limpa a linha de teste TESTE-CLAUDE-PENDENTE deixada
-    // em EDIÇÃO CHARTS pela verificação do fix de faixa pendente de álbum.
-    if (url.pathname === "/api/debug/limpar-teste-pendente" && request.method === "GET") {
-      const gs = await import("../backend/src/services/googleSheetsService");
-      const rows = await gs.googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "B2:B20000");
-      const linhasLimpar: number[] = [];
-      for (let i = 0; i < rows.length; i++) {
-        if ((rows[i]?.[0] || "").includes("TESTE-CLAUDE")) linhasLimpar.push(i + 2);
-      }
-      for (const linha of linhasLimpar) {
-        await gs.googleSheetsService.edicaoCharts.updateValues(
-          "EDIÇÃO CHARTS",
-          `A${linha}:Q${linha}`,
-          [Array(17).fill("")],
-        );
-      }
-      return Response.json({ linhasLimpas: linhasLimpar });
-    }
-
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
