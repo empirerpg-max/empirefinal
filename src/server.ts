@@ -402,43 +402,34 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
-    // Debug temporário: verifica ao vivo se o fix de Playlists_Albuns/
-    // Playlists_Faixas (troca de appendRow por updateValues em linha
-    // calculada) realmente evita o desvio de coluna.
-    if (url.pathname === "/api/debug/teste-album-antigo" && request.method === "GET") {
-      // Chama o controller direto (não fetch pro próprio Worker — dá
-      // "error code: 1101", o runtime do Workers não segue bem um
-      // self-fetch relativo assim).
-      const { criarAlbumAntigoController } = await import("../backend/src/controllers/playlistsController");
-      const fakeRequest = new Request("https://internal/api/playlists/albuns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          artista: "TESTE-CLAUDE",
-          titulo: "TESTE-CLAUDE - Álbum Verificação Coluna",
-          telegram_id: "0",
-          faixas: [
-            { numero: 1, titulo: "TESTE-CLAUDE Faixa 1", drive_url: "https://drive.google.com/x" },
-            { numero: 2, titulo: "TESTE-CLAUDE Faixa 2", drive_url: "https://drive.google.com/x" },
-          ],
-        }),
-      });
-      const criacaoRes = await criarAlbumAntigoController(fakeRequest);
-      const criacao = await criacaoRes.json();
-
+    // Debug temporário: limpa as linhas de teste TESTE-CLAUDE deixadas em
+    // Playlists_Albuns/Playlists_Faixas pela verificação do fix de coluna.
+    if (url.pathname === "/api/debug/limpar-teste-album-antigo" && request.method === "GET") {
       const gs = await import("../backend/src/services/googleSheetsService");
       const albunsRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Albuns", "A1:K5000");
       const faixasRows = await gs.googleSheetsService.usuarios.readValues("Playlists_Faixas", "A1:G5000");
-      const linhaAlbum = albunsRows.findIndex((r) => r[0] === criacao?.id);
-      const linhasFaixas = faixasRows
-        .map((r, i) => ({ r, i }))
-        .filter(({ r }) => r[0] === criacao?.id);
 
-      return Response.json({
-        criacao,
-        albumEncontrado: linhaAlbum >= 0 ? { linha: linhaAlbum + 1, valores: albunsRows[linhaAlbum] } : null,
-        faixasEncontradas: linhasFaixas.map(({ r, i }) => ({ linha: i + 1, valores: r })),
+      const linhasAlbunsLimpar: number[] = [];
+      albunsRows.forEach((r, i) => {
+        if ((r[1] || "").includes("TESTE-CLAUDE")) linhasAlbunsLimpar.push(i + 1);
       });
+      for (const linha of linhasAlbunsLimpar) {
+        await gs.googleSheetsService.usuarios.updateValues("Playlists_Albuns", `A${linha}:K${linha}`, [
+          Array(11).fill(""),
+        ]);
+      }
+
+      const linhasFaixasLimpar: number[] = [];
+      faixasRows.forEach((r, i) => {
+        if ((r[2] || "").includes("TESTE-CLAUDE")) linhasFaixasLimpar.push(i + 1);
+      });
+      for (const linha of linhasFaixasLimpar) {
+        await gs.googleSheetsService.usuarios.updateValues("Playlists_Faixas", `A${linha}:G${linha}`, [
+          Array(7).fill(""),
+        ]);
+      }
+
+      return Response.json({ linhasAlbunsLimpas: linhasAlbunsLimpar, linhasFaixasLimpas: linhasFaixasLimpar });
     }
 
     // Proxy de vídeos grandes do Telegram (Music Videos).
