@@ -402,6 +402,27 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    // Debug temporário: investiga por que uma música criada não apareceu
+    // em EDIÇÃO CHARTS. Lê as últimas linhas reais (ignorando padding em
+    // branco) pra ver se o registro sumiu de verdade ou foi gravado
+    // deslocado de coluna (mesma classe de bug já confirmada em REGISTRO).
+    if (url.pathname === "/api/debug/edicao-charts-tail" && request.method === "GET") {
+      const { googleSheetsService, normalizeText } = await import("../backend/src/services/googleSheetsService");
+      const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A1:BE2000");
+      let ultimaLinhaComConteudo = -1;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (rows[i]?.some((c) => normalizeText(c))) {
+          ultimaLinhaComConteudo = i + 1;
+          break;
+        }
+      }
+      const ultimasLinhas = rows
+        .map((r, i) => ({ linha: i + 1, primeiraColunaComValor: r.findIndex((c) => normalizeText(c)), row: r }))
+        .filter((r) => r.primeiraColunaComValor !== -1)
+        .slice(-8);
+      return Response.json({ totalLinhasLidas: rows.length, ultimaLinhaComConteudo, ultimasLinhas });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
