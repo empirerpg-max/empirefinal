@@ -50,18 +50,26 @@ export async function registrarNaEdicaoCharts(params: {
   const participantesLimpos = (params.participantes || []).filter(Boolean).slice(0, 5);
   const albunsExtrasLimpos = (params.albunsExtras || []).filter(Boolean).slice(0, 4);
   try {
-    // Range explícito (A:Q) — sem isso, o :append do Sheets escaneia a
-    // planilha inteira (padrão "A:ZZ") pra achar a "próxima linha livre", e
-    // as colunas de cálculo semanal (streams/vendas etc, bem mais à
-    // direita) têm valor em milhares de linhas de fórmula. Isso fazia o
-    // Sheets achar que a próxima linha livre era lá longe (ex: linha 3254,
-    // quando a última música de verdade estava na 655) — a música até era
-    // gravada, mas fora do alcance de qualquer fórmula/cálculo de chart
-    // que dependa de um intervalo de linhas limitado, então nunca aparecia
-    // nos charts de verdade. Mesma classe de bug já corrigida em REGISTRO,
-    // Comentarios_Turnes e nos álbuns legados.
-    return await googleSheetsService.edicaoCharts.appendRow(
-      "EDIÇÃO CHARTS",
+    // NÃO usa appendRow/:append aqui — mesmo com faixa explícita (A:Q),
+    // confirmado ao vivo que o Sheets continua achando a "próxima linha
+    // livre" olhando a linha mais alta ocupada em QUALQUER coluna da
+    // planilha inteira, não só nas colunas pedidas. Como as colunas de
+    // cálculo semanal (streams/vendas, bem à direita) têm fórmula
+    // preenchida em milhares de linhas, isso sempre jogava a música pra
+    // longe da faixa de dados real (ex: linha 3254 quando a última música
+    // de verdade estava na 655) — fora do alcance de qualquer
+    // fórmula/cálculo de chart limitado a um intervalo de linhas comum.
+    // Em vez disso, acha a última linha com título de verdade na coluna B
+    // e escreve direto na linha seguinte via updateValues — mesmo padrão
+    // já usado (e confirmado funcionando) pra corrigir REGISTRO.
+    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:B20000");
+    let ultimaLinhaComTitulo = 1; // linha 1 = cabeçalho
+    for (let i = 0; i < rows.length; i++) {
+      if ((rows[i]?.[1] || "").trim()) ultimaLinhaComTitulo = i + 2;
+    }
+    const linhaAlvo = ultimaLinhaComTitulo + 1;
+
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linhaAlvo}:Q${linhaAlvo}`, [
       [
         params.dataFormatada, // A - Data de lançamento
         params.fullTitle, // B - Nome (Artista - Título)
@@ -81,8 +89,8 @@ export async function registrarNaEdicaoCharts(params: {
         albunsExtrasLimpos[2] || "", // P - ALBUM 4
         albunsExtrasLimpos[3] || "", // Q - ALBUM 5
       ],
-      "A:Q",
-    );
+    ]);
+    return linhaAlvo;
   } catch (err) {
     console.warn("[registrarNaEdicaoCharts] Erro ao gravar em EDIÇÃO CHARTS:", err);
     return null;
@@ -782,6 +790,119 @@ async function vincularFaixaExistenteAoAlbum(
   return { musicasOk, edicaoChartsOk, criada };
 }
 
+// Registra uma faixa (avulsa ou de álbum) em EDIÇÃO CHARTS + REGISTRO DE
+// MÚSICA — essas duas entram SEMPRE, mesmo faixa pendente sem tópico ainda,
+// porque são os dados que alimentam a fórmula de vendas do álbum. Já INFOS
+// MÚSICAS (capa pro chart puxar) só entra quando a faixa já é lançamento de
+// verdade (tem tópico) — controlado por `pendente`. Extraído de
+// processarFaixasDoAlbum pra ser reaproveitado ali (na criação do álbum,
+// pra toda faixa inédita) e em publicarFaixaPendenteController (que agora
+// só precisa acionar a parte de INFOS MÚSICAS, ver
+// atualizarFaixaNosChartsAoPublicar).
+async function registrarFaixaNosCharts(params: {
+  dataFormatada: string;
+  songTitle: string;
+  tipoSingle: string;
+  tipoMusica: string;
+  album: string;
+  artistaPrincipal: string;
+  participantes: string[];
+  capaUrl: string;
+  pendente?: boolean;
+}): Promise<number | null> {
+  const { dataFormatada, songTitle, tipoSingle, tipoMusica, album, artistaPrincipal, participantes, capaUrl, pendente } = params;
+
+  const edicaoChartsRowIndex = await registrarNaEdicaoCharts({
+    dataFormatada,
+    fullTitle: songTitle,
+    tipoSingle,
+    tipoMusica,
+    album,
+    artistaPrincipal,
+    participantes,
+  });
+
+  if (!pendente) {
+    await registrarInfosMusicas({ fullTitle: songTitle, capaUrl });
+  }
+
+  try {
+    const registroRows = await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
+    let targetRow = (registroRows?.length || 0) + 1;
+    if (registroRows && registroRows.length > 1) {
+      for (let i = 1; i < registroRows.length; i++) {
+        if (!(registroRows[i][1] || "").trim()) {
+          targetRow = i + 1;
+          break;
+        }
+      }
+    } else if (!registroRows || registroRows.length === 0) {
+      targetRow = 2;
+    }
+
+    await googleSheetsService.registrosCharts.updateValues("REGISTRO DE MÚSICA", `B${targetRow}:P${targetRow}`, [
+      [
+        songTitle, // B - Título
+        tipoSingle, // C - Tipo de Single
+        tipoMusica, // D - Tipo de Música
+        album, // E - ÁLBUM
+        "", // F
+        "", // G
+        artistaPrincipal, // H - ACT PRINCIPAL
+        participantes[0] || "", // I - Artista 2
+        participantes[1] || "", // J - Artista 3
+        participantes[2] || "", // K - Artista 4
+        participantes[3] || "", // L - Artista 5
+        participantes[4] || "", // M - Artista 6
+        "Não", // N - SUBSTITUIR NOS CHARTS?
+        "", // O - Por qual música?
+        "OK", // P - ENVIAR
+      ],
+    ]);
+  } catch (err) {
+    console.warn("[registrarFaixaNosCharts] Erro ao gravar em REGISTRO DE MÚSICA:", err);
+  }
+
+  return edicaoChartsRowIndex;
+}
+
+// Faixa de álbum que nasceu pendente já tem uma linha em EDIÇÃO CHARTS
+// (gravada na criação do álbum, ver processarFaixasDoAlbum) — publicar não
+// cria uma linha nova, só acha essa linha (pelo título, coluna B) e
+// atualiza tipo (C/D) e data (A) pra agora, que é quando ela de fato passa
+// a valer como lançamento. Varre de baixo pra cima pra pegar a ocorrência
+// mais recente em caso de título repetido.
+async function atualizarFaixaNosChartsAoPublicar(params: {
+  fullTitle: string;
+  tipoSingle: string;
+  tipoMusica: string;
+  dataFormatada: string;
+}): Promise<number | null> {
+  const { fullTitle, tipoSingle, tipoMusica, dataFormatada } = params;
+  try {
+    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "B2:B20000");
+    let linhaAlvo: number | null = null;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if ((rows[i]?.[0] || "").trim() === fullTitle.trim()) {
+        linhaAlvo = i + 2;
+        break;
+      }
+    }
+    if (!linhaAlvo) {
+      console.warn("[atualizarFaixaNosChartsAoPublicar] Linha não encontrada em EDIÇÃO CHARTS pra:", fullTitle);
+      return null;
+    }
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linhaAlvo}`, [[dataFormatada]]);
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `C${linhaAlvo}:D${linhaAlvo}`, [
+      [tipoSingle, tipoMusica],
+    ]);
+    return linhaAlvo;
+  } catch (err) {
+    console.warn("[atualizarFaixaNosChartsAoPublicar] Erro ao atualizar EDIÇÃO CHARTS:", err);
+    return null;
+  }
+}
+
 // Processa a lista de faixas de um álbum (criação ou substituição): faixa
 // existente vincula na aba Musicas/EDIÇÃO CHARTS; faixa inédita registra do
 // zero em Musicas + REGISTRO DE MÚSICA, pendente até virar tópico próprio.
@@ -833,8 +954,9 @@ async function processarFaixasDoAlbum(
       : "";
 
     faixasIneditasEsperadas++;
+    let faixaRowIndex: number | null = null;
     try {
-      await googleSheetsService.principal.appendRow("Musicas", [
+      faixaRowIndex = await googleSheetsService.principal.appendRow("Musicas", [
         dataFormatada, // A - Data de lançamento
         trackTopicId, // B - ID do tópico (só se abrir tópico próprio)
         faixa.mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
@@ -866,67 +988,33 @@ async function processarFaixasDoAlbum(
       continue;
     }
 
-    // Registrar em "EDIÇÃO CHARTS" (mesma lógica do createSongController) —
-    // aqui a coluna E (ALBUM) já sai preenchida, porque essa faixa nasce
-    // dentro de um álbum.
-    await registrarNaEdicaoCharts({
+    // Toda faixa inédita de álbum entra em EDIÇÃO CHARTS já na criação do
+    // álbum, pendente ou não — são esses dados que alimentam a fórmula de
+    // vendas do álbum. O que muda quando a faixa está pendente é só que
+    // INFOS MÚSICAS (capa pro chart puxar) fica de fora até ela virar
+    // lançamento de verdade (ver publicarFaixaPendenteController, que
+    // atualiza tipo e data na MESMA linha em vez de criar uma nova).
+    const edicaoChartsRowIndex = await registrarFaixaNosCharts({
       dataFormatada,
-      fullTitle: songTitle,
+      songTitle,
       tipoSingle: faixa.tipoSingle || "TRACKLIST ALBUM",
       tipoMusica: faixa.tipoMusica || "SOLO",
       album: albumFullTitle,
       artistaPrincipal: artistaAlbum,
       participantes: participantesLimpos,
+      capaUrl,
+      pendente: pendente === "Sim",
     });
-    // Faixa pendente (sem tópico aberto ainda) não entra em INFOS MÚSICAS —
-    // só quando vira conteúdo publicado de verdade (mesma regra do Fórum).
-    if (pendente !== "Sim") {
-      await registrarInfosMusicas({ fullTitle: songTitle, capaUrl });
-    }
-
-    // REGISTRO DE MÚSICA — mesmo mapeamento B:P do createSongController,
-    // mas com E = nome do álbum (aqui nunca fica em branco, diferente do
-    // registro de música avulsa).
-    try {
-      const registroRows =
-        await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
-      let targetRow = (registroRows?.length || 0) + 1;
-      if (registroRows && registroRows.length > 1) {
-        for (let i = 1; i < registroRows.length; i++) {
-          if (!(registroRows[i][1] || "").trim()) {
-            targetRow = i + 1;
-            break;
-          }
-        }
-      } else if (!registroRows || registroRows.length === 0) {
-        targetRow = 2;
+    // Mesma cópia de Código único feita em createSongController — sem
+    // isso, faixa inédita de álbum nunca tinha o código pra cruzar com
+    // comentários/REGISTRO/Shop-Info-Visual.
+    if (faixaRowIndex && edicaoChartsRowIndex) {
+      const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+      if (codigoGerado) {
+        await googleSheetsService.principal
+          .updateValues("Musicas", `Z${faixaRowIndex}`, [[codigoGerado]])
+          .catch((err) => console.warn("[processarFaixasDoAlbum] Erro ao copiar Código único:", err));
       }
-
-      await googleSheetsService.registrosCharts.updateValues(
-        "REGISTRO DE MÚSICA",
-        `B${targetRow}:P${targetRow}`,
-        [
-          [
-            songTitle, // B - Título
-            faixa.tipoSingle || "TRACKLIST ALBUM", // C - Tipo de Single
-            faixa.tipoMusica || "SOLO", // D - Tipo de Música
-            albumFullTitle, // E - ÁLBUM
-            "", // F
-            "", // G
-            artistaAlbum, // H - ACT PRINCIPAL
-            participantesLimpos[0] || "", // I - Artista 2
-            participantesLimpos[1] || "", // J - Artista 3
-            participantesLimpos[2] || "", // K - Artista 4
-            participantesLimpos[3] || "", // L - Artista 5
-            participantesLimpos[4] || "", // M - Artista 6
-            "Não", // N - SUBSTITUIR NOS CHARTS?
-            "", // O - Por qual música?
-            "OK", // P - ENVIAR
-          ],
-        ],
-      );
-    } catch (err) {
-      console.warn("[processarFaixasDoAlbum] Erro ao gravar em REGISTRO DE MÚSICA:", err);
     }
   }
 
@@ -1098,6 +1186,32 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     await googleSheetsService.principal.updateValues("Musicas", `B${musicaRowIndex}`, [[topicId]]);
     await googleSheetsService.principal.updateValues("Musicas", `F${musicaRowIndex}`, [[topicId]]);
     await googleSheetsService.principal.updateValues("Musicas", `X${musicaRowIndex}`, [["Não"]]);
+
+    // A linha em EDIÇÃO CHARTS já existe desde a criação do álbum (ver
+    // processarFaixasDoAlbum) — publicar só atualiza tipo e data pra agora,
+    // que é quando a faixa de fato passa a valer como lançamento, e libera
+    // INFOS MÚSICAS (capa pro chart puxar), que até aqui ficava de fora.
+    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const tipoSingle = row[8] || "TRACKLIST ALBUM";
+    const tipoMusica = row[9] || "SOLO";
+    const edicaoChartsRowIndex = await atualizarFaixaNosChartsAoPublicar({
+      fullTitle,
+      tipoSingle,
+      tipoMusica,
+      dataFormatada,
+    });
+    await registrarInfosMusicas({ fullTitle, capaUrl: row[3] || "" });
+    // Mesma cópia de Código único feita na criação normal (createSongController)
+    // — sem isso, uma faixa que nasceu pendente nunca teria o código pra
+    // cruzar com comentários/REGISTRO/Shop-Info-Visual depois de publicada.
+    if (edicaoChartsRowIndex) {
+      const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+      if (codigoGerado) {
+        await googleSheetsService.principal
+          .updateValues("Musicas", `Z${musicaRowIndex}`, [[codigoGerado]])
+          .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao copiar Código único:", err));
+      }
+    }
 
     // REGISTRO é só pra comentários de OUTROS jogadores (ver
     // forumController.ts) — publicar a própria faixa não é comentário.
@@ -1380,10 +1494,18 @@ export async function createAlbumController(request: Request): Promise<Response>
       const tipoNum = tipoAlbum.trim().toUpperCase() === "EP" ? "1" : "2";
       const codigoUnico = await gerarProximoCodigoUnico("EDIÇÃO CHARTS ÁLBUMS", "EMPALBM", 3);
       codigoUnicoAlbum = codigoUnico;
-      // Range explícito (A:R) — mesma classe de bug de "próxima linha
-      // livre" corrigida em registrarNaEdicaoCharts acima.
-      await googleSheetsService.edicaoCharts.appendRow(
-        "EDIÇÃO CHARTS ÁLBUMS",
+      // NÃO usa appendRow/:append — mesmo motivo de registrarNaEdicaoCharts
+      // acima (confirmado ao vivo: faixa de coluna explícita não impede o
+      // Sheets de pular pra longe por causa das colunas de cálculo à
+      // direita). Acha a última linha com NOME DO ALBUM de verdade
+      // (coluna D) e escreve direto na seguinte via updateValues.
+      const albunsRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D20000");
+      let ultimaLinhaComAlbum = 1;
+      for (let i = 0; i < albunsRows.length; i++) {
+        if ((albunsRows[i]?.[3] || "").trim()) ultimaLinhaComAlbum = i + 2;
+      }
+      const linhaAlvoAlbum = ultimaLinhaComAlbum + 1;
+      await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `A${linhaAlvoAlbum}:R${linhaAlvoAlbum}`, [
         [
           artistaAlbum, // A - ARTISTA
           dataFormatada, // B - DATA DE LANÇAMENTO
@@ -1395,8 +1517,7 @@ export async function createAlbumController(request: Request): Promise<Response>
           "", // Q - CÁLCULO 1
           codigoUnico, // R - Código único
         ],
-        "A:R",
-      );
+      ]);
       // Como esse código é gerado pelo próprio app (não por fórmula), já
       // temos o valor em mãos — leva a mesma cópia pro catálogo (Albuns!L),
       // sem precisar reler nada.
