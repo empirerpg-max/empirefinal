@@ -420,6 +420,22 @@ export default {
       return Response.json({ totalLinhasLidas: rows.length, totalComTitulo: comTitulo.length, ultimasComTitulo });
     }
 
+    // Debug temporário: verifica ao vivo se o fix do range explícito
+    // (A:Q) resolveu o bug — chama a função real com dado de teste e
+    // confirma que a linha devolvida fica perto da última música real,
+    // não lá longe (milhares de linhas) como antes.
+    if (url.pathname === "/api/debug/testa-edicao-charts-fix" && request.method === "GET") {
+      const { registrarNaEdicaoCharts } = await import("../backend/src/controllers/gestaoController");
+      const linha = await registrarNaEdicaoCharts({
+        dataFormatada: new Date().toLocaleDateString("pt-BR"),
+        fullTitle: "TESTE-CLAUDE-FIX - Verificação Range",
+        tipoSingle: "LEAD SINGLE",
+        tipoMusica: "SOLO",
+        artistaPrincipal: "TESTE-CLAUDE-FIX",
+      });
+      return Response.json({ linha });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
