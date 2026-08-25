@@ -426,9 +426,9 @@ function Index() {
         </div>
 
         {acervoRecente.status === "loading" ? (
-          <div className="flex gap-3 overflow-x-hidden">
+          <div className="flex gap-2 overflow-x-hidden">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="min-w-[130px] h-[10rem] rounded-[1.5rem] bg-white/5 animate-pulse" />
+              <div key={i} className="min-w-[150px] h-12 rounded-xl bg-white/5 animate-pulse" />
             ))}
           </div>
         ) : acervoRecente.status === "error" ? (
@@ -441,7 +441,7 @@ function Index() {
             </p>
           </div>
         ) : (
-          <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x">
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 snap-x">
             {acervoRecente.data.map((item) => {
               const TipoIcon = item.tipo === "revista" ? BookOpen : MessageSquareText;
               return (
@@ -449,12 +449,12 @@ function Index() {
                   key={item.id}
                   to="/acervo"
                   onClick={() => haptic.selection()}
-                  className="min-w-[130px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all flex flex-col"
+                  className="min-w-[150px] max-w-[150px] snap-center rounded-xl bg-white/5 border border-white/10 active:scale-95 transition-all flex items-center gap-2 p-2"
                 >
-                  <div className="aspect-[3/4] bg-secondary overflow-hidden relative">
+                  <div className="size-8 shrink-0 rounded-md bg-secondary overflow-hidden relative">
                     {item.capa ? (
                       <img
-                        src={driveImg(item.capa, 300)}
+                        src={driveImg(item.capa, 80)}
                         className="w-full h-full object-cover"
                         alt={item.titulo}
                         loading="lazy"
@@ -462,17 +462,14 @@ function Index() {
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className="w-full h-full grid place-items-center opacity-20">
-                        <TipoIcon className="size-8" aria-hidden="true" />
+                      <div className="w-full h-full grid place-items-center opacity-30">
+                        <TipoIcon className="size-3.5" aria-hidden="true" />
                       </div>
                     )}
-                    <span className="absolute top-2 left-2 size-6 rounded-full bg-black/60 backdrop-blur-md grid place-items-center border border-white/10">
-                      <TipoIcon className="size-3 text-primary" aria-hidden="true" />
-                    </span>
                   </div>
-                  <div className="p-2.5">
-                    <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">{item.titulo}</h3>
-                    <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">{item.artista}</p>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[10px] font-black uppercase leading-tight line-clamp-1">{item.titulo}</h3>
+                    <p className="text-[9px] text-muted-foreground font-bold truncate">{item.artista}</p>
                   </div>
                 </Link>
               );
