@@ -61,7 +61,15 @@ export function ActivityTicker() {
           Atividade recente
         </span>
       </div>
-      <div className="flex w-max animate-marquee">
+      <div
+        className="flex w-max animate-marquee"
+        // Duração proporcional à quantidade de itens — fixa em segundos
+        // (ex: 30s pra sempre), a passagem ficava rápida demais quando
+        // tinha poucos comentários e lenta demais quando tinha muitos,
+        // porque a distância percorrida muda mas o tempo não. 6s por item
+        // mantém a velocidade de leitura sempre parecida.
+        style={{ animationDuration: `${Math.max(itens.length * 6, 20)}s` }}
+      >
         {linha}
         {linha}
       </div>

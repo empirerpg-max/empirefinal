@@ -445,7 +445,6 @@ function Index() {
             );
           })}
         </div>
-        <ActivityTicker />
       </section>
     ),
   };
@@ -491,6 +490,8 @@ function Index() {
           <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
         </button>
       </header>
+
+      <ActivityTicker />
 
       <section className="mb-10" aria-labelledby="lancamentos-recentes-h">
         <h2
