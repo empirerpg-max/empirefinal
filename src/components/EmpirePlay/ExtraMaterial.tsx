@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ShoppingBag, Info, Sparkles, X, Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, Loader2 } from "lucide-react";
 import DOMPurify from "dompurify";
-import { driveImg } from "@/lib/api";
+import { driveImg, driveImgWide } from "@/lib/api";
 import { uploadToDrive } from "@/lib/driveUpload";
 
 // Botões "Shop", "Info" e "Visual" nos tópicos de Música/Álbum — material
@@ -84,15 +84,27 @@ export function useExtraMaterial(
 // Renderização dos blocos de Visual (imagem/texto/HTML) — extraída pra ser
 // reaproveitada tanto no popup do Shop/Info quanto no modo inline do Visual
 // no corpo do tópico (ver Forum.tsx).
+//
+// Largura: sem bloco de HTML, o conteúdo fica centralizado numa coluna de
+// leitura (max-w-2xl) — sem isso, um post só com imagem/texto ficava
+// esticado feio na largura total do modo Visual. Com pelo menos um bloco de
+// HTML, assume-se que a pessoa quer controlar o próprio layout, então usa
+// 100% da largura disponível (ver Forum.tsx pra saber qual é o máximo).
 export function VisualBlocosView({ arte }: { arte: VisualBloco[] }) {
+  const temHtml = arte.some((b) => b.tipo === "html");
   return (
-    <div className="w-full">
+    <div className={temHtml ? "w-full" : "w-full max-w-2xl mx-auto"}>
       {arte.map((bloco, i) => {
         if (bloco.tipo === "imagem") {
           return (
             <img
               key={i}
-              src={driveImg(bloco.url, 1600)}
+              // driveImgWide (sem recorte quadrado) em vez de driveImg —
+              // preserva a proporção original da arte (banners, pôsteres),
+              // que antes saía cortada/distorcida pelo recorte "-p" do
+              // driveImg. 1600px de largura pedida (ajustado por DPR) —
+              // qualidade alta mesmo em telas retina, sem pesar demais.
+              src={driveImgWide(bloco.url, 1600)}
               alt=""
               className="w-full h-auto block"
               loading="lazy"
@@ -422,7 +434,7 @@ export function ExtraMaterialEditor({
         {value.visualAtivo && (
           <div className="space-y-3 pt-1">
             <p className="text-[11px] text-neutral-400">
-              Monte uma página livre pro material — encartes, arte, o que quiser — empilhando blocos de imagem, texto ou HTML na ordem que quiser. Imagens em até 1600px de largura pra manter qualidade alta sem pesar. O bloco de HTML é renderizado como veio, sem edição visual — use pra embeds ou layout customizado.
+              Monte uma página livre pro material — encartes, arte, o que quiser — empilhando blocos de imagem, texto ou HTML na ordem que quiser. Imagens são exibidas em alta resolução sem cortar/distorcer a proporção original. Se usar só blocos de imagem e texto (sem HTML), o conteúdo fica centralizado automaticamente pra não esticar feio na tela. Ao adicionar um bloco de HTML, o material passa a ocupar a largura toda disponível no modo Visual — hoje até ~900px em telas grandes (menos em celular) — então prefira medidas relativas (%, max-width) a pixels fixos pro seu HTML se ajustar em qualquer tamanho de tela. O bloco de HTML é renderizado como veio, sem edição visual — use pra embeds ou layout customizado.
             </p>
             {value.arte.map((bloco, i) => (
               <div key={i} className="bg-neutral-900/60 rounded-xl p-2.5 space-y-2">

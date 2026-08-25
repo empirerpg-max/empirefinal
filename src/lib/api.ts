@@ -1252,6 +1252,24 @@ export function driveImg(url: string | undefined | null, size: number = 800): st
   return `https://lh3.googleusercontent.com/d/${m[0]}=w${alvo}-h${alvo}-p`;
 }
 
+// Mesmo proxy do driveImg, mas SEM o "-h{size}-p" (que força recorte
+// quadrado) — só limita a largura (ajustada por DPR, igual driveImg),
+// preservando a proporção original da imagem. Usado onde a imagem NÃO é uma
+// capa/thumbnail quadrada por natureza (ex.: blocos de imagem do "Visual"
+// nos tópicos — banners, pôsteres, prints —, que ficavam cortados/
+// distorcidos com o recorte quadrado do driveImg).
+export function driveImgWide(url: string | undefined | null, width: number = 1600): string | undefined {
+  if (!url) return undefined;
+  const alvo = tamanhoEfetivo(width);
+  if (url.includes("lh3.googleusercontent.com")) {
+    const base = url.split("=")[0];
+    return `${base}=w${alvo}`;
+  }
+  const m = String(url).match(/[-\w]{25,}/);
+  if (!m) return url;
+  return `https://lh3.googleusercontent.com/d/${m[0]}=w${alvo}`;
+}
+
 // Badges de nível são SVG com fundo transparente — o proxy de thumbnail
 // lh3.googleusercontent.com (usado em driveImg) rasteriza pra PNG e acaba
 // preenchendo a transparência com branco, e o link público direto do Drive
