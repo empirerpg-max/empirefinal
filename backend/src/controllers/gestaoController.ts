@@ -50,25 +50,39 @@ async function registrarNaEdicaoCharts(params: {
   const participantesLimpos = (params.participantes || []).filter(Boolean).slice(0, 5);
   const albunsExtrasLimpos = (params.albunsExtras || []).filter(Boolean).slice(0, 4);
   try {
-    return await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS", [
-      params.dataFormatada, // A - Data de lançamento
-      params.fullTitle, // B - Nome (Artista - Título)
-      params.tipoSingle || "", // C - TIPO DE SINGLE
-      params.tipoMusica || "", // D - TIPO DE MÚSICA
-      params.album || "", // E - ALBUM
-      "1", // F - WEEKS
-      "", // G - não mexer
-      params.artistaPrincipal, // H - ACT PRINCIPAL
-      participantesLimpos[0] || "", // I - ARTISTA 2
-      participantesLimpos[1] || "", // J - ARTISTA 3
-      participantesLimpos[2] || "", // K - ARTISTA 4
-      participantesLimpos[3] || "", // L - ARTISTA 5
-      participantesLimpos[4] || "", // M - ARTISTA 6
-      albunsExtrasLimpos[0] || "", // N - ALBUM 2
-      albunsExtrasLimpos[1] || "", // O - ALBUM 3
-      albunsExtrasLimpos[2] || "", // P - ALBUM 4
-      albunsExtrasLimpos[3] || "", // Q - ALBUM 5
-    ]);
+    // Range explícito (A:Q) — sem isso, o :append do Sheets escaneia a
+    // planilha inteira (padrão "A:ZZ") pra achar a "próxima linha livre", e
+    // as colunas de cálculo semanal (streams/vendas etc, bem mais à
+    // direita) têm valor em milhares de linhas de fórmula. Isso fazia o
+    // Sheets achar que a próxima linha livre era lá longe (ex: linha 3254,
+    // quando a última música de verdade estava na 655) — a música até era
+    // gravada, mas fora do alcance de qualquer fórmula/cálculo de chart
+    // que dependa de um intervalo de linhas limitado, então nunca aparecia
+    // nos charts de verdade. Mesma classe de bug já corrigida em REGISTRO,
+    // Comentarios_Turnes e nos álbuns legados.
+    return await googleSheetsService.edicaoCharts.appendRow(
+      "EDIÇÃO CHARTS",
+      [
+        params.dataFormatada, // A - Data de lançamento
+        params.fullTitle, // B - Nome (Artista - Título)
+        params.tipoSingle || "", // C - TIPO DE SINGLE
+        params.tipoMusica || "", // D - TIPO DE MÚSICA
+        params.album || "", // E - ALBUM
+        "1", // F - WEEKS
+        "", // G - não mexer
+        params.artistaPrincipal, // H - ACT PRINCIPAL
+        participantesLimpos[0] || "", // I - ARTISTA 2
+        participantesLimpos[1] || "", // J - ARTISTA 3
+        participantesLimpos[2] || "", // K - ARTISTA 4
+        participantesLimpos[3] || "", // L - ARTISTA 5
+        participantesLimpos[4] || "", // M - ARTISTA 6
+        albunsExtrasLimpos[0] || "", // N - ALBUM 2
+        albunsExtrasLimpos[1] || "", // O - ALBUM 3
+        albunsExtrasLimpos[2] || "", // P - ALBUM 4
+        albunsExtrasLimpos[3] || "", // Q - ALBUM 5
+      ],
+      "A:Q",
+    );
   } catch (err) {
     console.warn("[registrarNaEdicaoCharts] Erro ao gravar em EDIÇÃO CHARTS:", err);
     return null;
@@ -1336,19 +1350,25 @@ export async function createAlbumController(request: Request): Promise<Response>
     // catch de fora e responder success:false — antes isso era só um
     // console.warn e a resposta final sempre dizia "sucesso", mesmo com o
     // álbum nunca tendo sido de fato registrado.
-    const albumRowIndexNovo = await googleSheetsService.principal.appendRow("Albuns", [
-      dataFormatada, // A - Data de lançamento
-      albumTopicId, // B - ID do tópico
-      capaUrl || "", // C - Capa
-      albumTopicId, // D - Comentários para / Referente ao tópico
-      jogadorId || "", // E - ID do Criador
-      nomeJogador, // F - Nome do criador
-      albumFullTitle, // G - Novo Nome
-      "", // H - Metacritic por jogador
-      "", // I - Média Metacritic
-      encartesStr, // J - Encarte
-      tipoAlbum, // K - Tipo (EP/Álbum/Deluxe)
-    ]);
+    // Range explícito (A:K) — mesma classe de bug de "próxima linha livre"
+    // corrigida em registrarNaEdicaoCharts logo abaixo.
+    const albumRowIndexNovo = await googleSheetsService.principal.appendRow(
+      "Albuns",
+      [
+        dataFormatada, // A - Data de lançamento
+        albumTopicId, // B - ID do tópico
+        capaUrl || "", // C - Capa
+        albumTopicId, // D - Comentários para / Referente ao tópico
+        jogadorId || "", // E - ID do Criador
+        nomeJogador, // F - Nome do criador
+        albumFullTitle, // G - Novo Nome
+        "", // H - Metacritic por jogador
+        "", // I - Média Metacritic
+        encartesStr, // J - Encarte
+        tipoAlbum, // K - Tipo (EP/Álbum/Deluxe)
+      ],
+      "A:K",
+    );
 
     // 3. Gravar em "EDIÇÃO CHARTS ÁLBUMS" (edicaoCharts) — aba separada da
     // "EDIÇÃO CHARTS" usada pelas faixas, confirmada via dump ao vivo. Já
@@ -1360,17 +1380,23 @@ export async function createAlbumController(request: Request): Promise<Response>
       const tipoNum = tipoAlbum.trim().toUpperCase() === "EP" ? "1" : "2";
       const codigoUnico = await gerarProximoCodigoUnico("EDIÇÃO CHARTS ÁLBUMS", "EMPALBM", 3);
       codigoUnicoAlbum = codigoUnico;
-      await googleSheetsService.edicaoCharts.appendRow("EDIÇÃO CHARTS ÁLBUMS", [
-        artistaAlbum, // A - ARTISTA
-        dataFormatada, // B - DATA DE LANÇAMENTO
-        "1", // C - NÚMERO DE SEMANAS
-        albumFullTitle, // D - NOME DO ALBUM
-        String(faixas.length), // E - NÚMERO DE FAIXAS
-        tipoNum, // F - TIPO DE ÁLBUM (2 = Álbum/Deluxe, 1 = EP)
-        "", "", "", "", "", "", "", "", "", "", // G-P (streams/vendas/certificação/multiplicador — calculados à parte)
-        "", // Q - CÁLCULO 1
-        codigoUnico, // R - Código único
-      ]);
+      // Range explícito (A:R) — mesma classe de bug de "próxima linha
+      // livre" corrigida em registrarNaEdicaoCharts acima.
+      await googleSheetsService.edicaoCharts.appendRow(
+        "EDIÇÃO CHARTS ÁLBUMS",
+        [
+          artistaAlbum, // A - ARTISTA
+          dataFormatada, // B - DATA DE LANÇAMENTO
+          "1", // C - NÚMERO DE SEMANAS
+          albumFullTitle, // D - NOME DO ALBUM
+          String(faixas.length), // E - NÚMERO DE FAIXAS
+          tipoNum, // F - TIPO DE ÁLBUM (2 = Álbum/Deluxe, 1 = EP)
+          "", "", "", "", "", "", "", "", "", "", // G-P (streams/vendas/certificação/multiplicador — calculados à parte)
+          "", // Q - CÁLCULO 1
+          codigoUnico, // R - Código único
+        ],
+        "A:R",
+      );
       // Como esse código é gerado pelo próprio app (não por fórmula), já
       // temos o valor em mãos — leva a mesma cópia pro catálogo (Albuns!L),
       // sem precisar reler nada.
