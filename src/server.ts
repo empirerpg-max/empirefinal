@@ -447,31 +447,14 @@ export default {
         gs.googleSheetsService.principal.readValues("Musicas"),
       ]);
       const titulosAlvo = ["Emancipated", "Supercombo", "Catholic Guilty"].map((t) => t.toLowerCase());
-      const edicaoChartsMatches = edicaoChartsRows
-        .filter((r) => titulosAlvo.some((t) => (r[1] || "").toLowerCase().includes(t)))
-        .map((r) => ({
-          titulo: r[1],
-          E_album1: r[4],
-          N_album2: r[13],
-          O_album3: r[14],
-          P_album4: r[15],
-          Q_album5: r[16],
-        }));
-      const musicasMatches = musicasRows
-        .filter((r) => titulosAlvo.some((t) => (r[7] || "").toLowerCase().includes(t)))
-        .map((r) => ({
-          titulo: r[7],
-          K_album1: r[10],
-          AA_album2: r[26],
-          AB_album3: r[27],
-          AC_album4: r[28],
-          AD_album5: r[29],
-        }));
+      const edicaoChartsMatchesCompletas = edicaoChartsRows.filter((r) =>
+        titulosAlvo.some((t) => (r[1] || "").toLowerCase().includes(t)),
+      );
+      const albunsRows = await gs.googleSheetsService.principal.readValues("Albuns");
+      const albumEP = albunsRows.find((r) => (r[11] || "").trim() === "EMPALBM049");
       return Response.json({
-        edicaoChartsHeader: edicaoChartsRows[0],
-        musicasHeader: musicasRows[0],
-        edicaoChartsMatches,
-        musicasMatches,
+        edicaoChartsMatchesCompletas,
+        albumEP,
       });
     }
 
