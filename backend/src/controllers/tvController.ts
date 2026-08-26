@@ -77,7 +77,20 @@ async function readProgramas(): Promise<ProgramaRow[]> {
     }))
     .filter((r) => r.programa)
     .map((r) => ({
-      id: `row_${r.rowIndex}`,
+      // Antes o "id" era sempre `row_${rowIndex}` — a posição da linha na
+      // planilha. Como o Topico_ID (salaId) já é preenchido manualmente
+      // pelo usuário exatamente pra ser "o identificador estável dessa
+      // transmissão específica" (ver comentário no tipo acima), usar a
+      // posição da linha em vez dele quebrava tudo que depende de um id
+      // ESTÁVEL entre uma leitura e outra: assim que alguém edita a Agenda_TV
+      // (adiciona/reordena uma linha) durante o dia, toda transmissão abaixo
+      // da edição muda de "id" no meio do evento — o chat resseta pra quem
+      // já estava vendo, a presença registrada até ali vira outro id, e duas
+      // pessoas que carregaram a tela em momentos diferentes (antes/depois
+      // da edição) acabam em salas de chat diferentes falando do mesmo
+      // programa ao vivo. Usar o salaId (quando preenchido) resolve tudo
+      // isso de uma vez, porque ele não muda com a posição da linha.
+      id: r.salaId || `row_${r.rowIndex}`,
       rowIndex: r.rowIndex,
       titulo: r.programa,
       categoria: r.tipo,
@@ -128,12 +141,24 @@ export async function getProgramasTVController(): Promise<Response> {
       // era sempre ignorado. Por isso nada aparecia como ao vivo mesmo com
       // o status certo na planilha.
       const statusDizAoVivo = statusLower === "transmitindo" || statusLower === "ao vivo" || statusLower === "ao_vivo";
+      const statusDizFinalizado =
+        statusLower === "finalizado" || statusLower === "concluido" || statusLower === "concluído";
       const start = parseDataHorario(p.data, p.horario);
-      const end = start !== null ? start + p.duracao_seg * 1000 : null;
-      const aoVivoPorHorario = start !== null && end !== null && now >= start && now <= end;
-      const aoVivo = statusDizAoVivo || aoVivoPorHorario;
-      const finalizado =
-        !aoVivo && (statusLower === "finalizado" || statusLower === "concluido" || statusLower === "concluído");
+      // "duracao_seg" quase nunca vem preenchido (a aba real, Agenda_TV, não
+      // tem essa coluna) — usar só ele fazia a "janela" de transmissão durar
+      // 0 segundos, então NUNCA batia com o horário atual e a live nunca
+      // começava sozinha (só ativando manualmente o status). Com duração
+      // desconhecida, assume uma janela padrão generosa (6h) a partir do
+      // horário agendado — a transmissão entra ao vivo sozinha no horário
+      // marcado e sai sozinha depois de um tempo razoável se ninguém
+      // finalizar manualmente. "Finalizado" na planilha sempre corta a
+      // transmissão na hora, mesmo se ainda estiver dentro dessa janela.
+      const JANELA_PADRAO_MS = 6 * 60 * 60 * 1000;
+      const duracaoMs = p.duracao_seg > 0 ? p.duracao_seg * 1000 : JANELA_PADRAO_MS;
+      const end = start !== null ? start + duracaoMs : null;
+      const aoVivoPorHorario = start !== null && end !== null && now >= start && now <= end && !statusDizFinalizado;
+      const aoVivo = !statusDizFinalizado && (statusDizAoVivo || aoVivoPorHorario);
+      const finalizado = !aoVivo && statusDizFinalizado;
       return {
         id: p.id,
         titulo: p.titulo,
