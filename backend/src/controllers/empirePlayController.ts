@@ -1,5 +1,6 @@
 import { sheetsService } from "../services/sheetsService";
 import { findFileByName } from "../services/googleDriveService";
+import { cachedRead } from "../services/shortCache";
 import {
   googleSheetsService,
   normalizeComparison,
@@ -606,15 +607,29 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
       artistRecords,
       fallbackPhotoFile,
     ] = await Promise.all([
-      sheetsService.readSheetObjects("Top_50_Spotify").catch(() => []),
-      sheetsService.readSheetObjects("Top_Songs_Apple_Music").catch(() => []),
-      sheetsService.readSheetObjects("Top_Videos_YT").catch(() => []),
+      // Cache curto (2min) nas 4 leituras mais repetidas dessa tela — eram
+      // as que apareciam batendo no limite de requisições/minuto da API do
+      // Sheets no log real (logsSistema!LOGS), e cachedRead também serve o
+      // último dado bom em vez de vazio quando a leitura falha mesmo assim.
+      cachedRead("home:Top_50_Spotify", 120_000, () => sheetsService.readSheetObjects("Top_50_Spotify")).catch(
+        () => [],
+      ),
+      cachedRead("home:Top_Songs_Apple_Music", 120_000, () =>
+        sheetsService.readSheetObjects("Top_Songs_Apple_Music"),
+      ).catch(() => []),
+      cachedRead("home:Top_Videos_YT", 120_000, () => sheetsService.readSheetObjects("Top_Videos_YT")).catch(
+        () => [],
+      ),
       sheetsService.readSheetObjects("Musicas").catch(() => []),
       sheetsService.readSheetObjects("Music Videos").catch(() => []),
       // ARTISTAS vive na planilha "usuarios" (diferente da "principal" usada
       // acima) — é de lá que vem a foto de perfil de verdade do artista,
-      // pra distinguir da capa da música/vídeo.
-      googleSheetsService.usuarios.readSheetObjects("ARTISTAS").catch(() => []),
+      // pra distinguir da capa da música/vídeo. Era a leitura que mais
+      // aparecia falhando por limite de API nos logs — o cache aqui é o que
+      // resolve o "abro a tela e a foto do artista virou a padrão".
+      cachedRead("home:ARTISTAS", 120_000, () => googleSheetsService.usuarios.readSheetObjects("ARTISTAS")).catch(
+        () => [],
+      ),
       findFileByName(CAPA_PLAYLIST_FOLDER_ID, "substituta").catch(() => null),
     ]);
     const fallbackPhotoUrl = fallbackPhotoFile
