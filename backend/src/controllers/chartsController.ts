@@ -132,11 +132,27 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
 
 // ---- REAL TIME ----
 async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtube: unknown[] }> {
-  const data = await readSheet("chartsRealtime", "EM Alta");
+  const [data, musicas] = await Promise.all([
+    readSheet("chartsRealtime", "EM Alta"),
+    // A aba "EM Alta" quase nunca vem com a própria coluna de capa (G)
+    // preenchida — cruza por título com o catálogo real (Musicas, planilha
+    // principal) pra herdar a capa de verdade, mesmo padrão já usado pros
+    // cards de Apple Music/YouTube do Catálogo (ver empirePlayController).
+    readSheet("principal", "Musicas").catch(() => [] as Row[]),
+  ]);
+  const capaPorTitulo = new Map<string, string>();
+  musicas.slice(1).forEach((r) => {
+    const titulo = (r[7] || "").trim().toLowerCase();
+    const capa = (r[3] || "").trim();
+    if (titulo && capa && !capaPorTitulo.has(titulo)) capaPorTitulo.set(titulo, capa);
+  });
+
   const out: { spotify: unknown[]; apple: unknown[]; youtube: unknown[] } = { spotify: [], apple: [], youtube: [] };
   data.slice(1).forEach((r) => {
     if (!r[1]) return;
-    const item = { t: r[1], s: fmt(r[3]), p: r[5], c: fixImg(r[6]) };
+    const capaPlanilha = fixImg(r[6]);
+    const capaCatalogo = capaPorTitulo.get((r[1] || "").trim().toLowerCase());
+    const item = { t: r[1], s: fmt(r[3]), p: r[5], c: capaPlanilha || fixImg(capaCatalogo) };
     const plat = (r[4] || "").toLowerCase();
     if (plat.includes("spotify")) out.spotify.push(item);
     else if (plat.includes("apple")) out.apple.push(item);
