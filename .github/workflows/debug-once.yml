@@ -6,18 +6,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: |
-          echo "=== /api/social/posts ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/social/posts" | head -c 2000
-          echo ""
-          echo "=== /api/social/news ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/social/news" | head -c 2000
-          echo ""
-          echo "=== /api/empire-play/albuns ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/albuns" | head -c 1000
-          echo ""
-          echo "=== /api/flags ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/flags" | head -c 1000
-          echo ""
-          echo "=== /api/kick/status ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/kick/status"
+        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/investigar-capas-catalogo" | tee /tmp/out.json

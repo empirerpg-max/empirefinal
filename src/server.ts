@@ -402,6 +402,28 @@ export default {
       return Response.json({ raw: raw ? JSON.parse(raw) : [] });
     }
 
+    if (url.pathname === "/api/debug/investigar-capas-catalogo" && request.method === "GET") {
+      const gs = await import("../backend/src/services/googleSheetsService");
+      const [emAlta, logs, spotifyObjs, appleObjs, youtubeObjs, artistasRows] = await Promise.all([
+        gs.googleSheetsService.chartsRealtime.readValues("EM Alta").catch((e) => [["ERRO", String(e)]]),
+        gs.googleSheetsService.logsSistema.readValues("LOGS").catch((e) => [["ERRO", String(e)]]),
+        gs.googleSheetsService.principal.readSheetObjects("Top_50_Spotify").catch((e) => [{ erro: String(e) }]),
+        gs.googleSheetsService.principal.readSheetObjects("Top_Songs_Apple_Music").catch((e) => [{ erro: String(e) }]),
+        gs.googleSheetsService.principal.readSheetObjects("Top_Videos_YT").catch((e) => [{ erro: String(e) }]),
+        gs.googleSheetsService.usuarios.readValues("ARTISTAS").catch((e) => [["ERRO", String(e)]]),
+      ]);
+      return Response.json({
+        emAltaHeader: emAlta[0],
+        emAltaAmostra: emAlta.slice(1, 6),
+        logsRecentes: logs.slice(-15),
+        spotifyAmostra: spotifyObjs.slice(0, 3),
+        appleAmostra: appleObjs.slice(0, 3),
+        youtubeAmostra: youtubeObjs.slice(0, 3),
+        artistasHeader: artistasRows[0],
+        artistasAmostra: artistasRows.slice(1, 8),
+      });
+    }
+
     if (url.pathname === "/api/debug/investigar-alb-75b4581a" && request.method === "GET") {
       const gs = await import("../backend/src/services/googleSheetsService");
       const [albunsLegados, faixasLegadas, albuns, musicas] = await Promise.all([
