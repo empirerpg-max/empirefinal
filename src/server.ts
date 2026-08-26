@@ -440,70 +440,51 @@ export default {
       });
     }
 
-    if (url.pathname === "/api/debug/criar-faixas-ep-sa5m" && request.method === "GET") {
+    if (url.pathname === "/api/debug/apagar-alb-75b4581a" && request.method === "GET") {
       const gs = await import("../backend/src/services/googleSheetsService");
-      const albumTitulo = "SA5M & Moon Girls - Coming Of Age Ceremony: The EP";
-      const capaAlbum = "https://drive.google.com/file/d/1-M82GRIIC1hfyMtN_FQTvKhkkFeeg4WV/view?usp=sharing";
-      const idCriador = "5031494795";
-      const faixas: Array<{ nome: string; media: string; ordem: string; codigoUnico: string }> = [
-        {
-          nome: "SA5M & Moon Girls - Emancipated",
-          media: "https://youtu.be/wC7j2M22yrQ",
-          ordem: "2",
-          codigoUnico: "EMP499",
-        },
-        {
-          nome: "SA5M & Moon Girls - Supercombo",
-          media: "https://youtu.be/bax4vZdc8nI",
-          ordem: "4",
-          codigoUnico: "EMP500",
-        },
-        {
-          nome: "SA5M & Moon Girls - Catholic Guilty",
-          media: "https://youtu.be/0sFFvghflng",
-          ordem: "5",
-          codigoUnico: "EMP501",
-        },
-      ];
+      const ID_LEGADO = "ALB-75b4581a";
 
-      const resultados = [];
-      for (const f of faixas) {
-        const rowIndex = await gs.googleSheetsService.principal.appendRow("Musicas", [
-          "08/09/2025", // A - Data de lançamento
-          "", // B - ID do tópico
-          f.media, // C - ID do arquivo
-          capaAlbum, // D - Capa da música
-          "", // E - Letra
-          "", // F - Comentários para
-          idCriador, // G - ID do Criador
-          f.nome, // H - Nome da música
-          "TRACKLIST ALBUM", // I - TIPO DE SINGLE
-          "CONJUNTO", // J - TIPO DE MÚSICA
-          albumTitulo, // K - ALBUM
-          "48", // L - WEEKS
-          "", // M - WEEKS VIDEO
-          "SA5M", // N - ACT PRINCIPAL
-          "MOON GIRLS", // O - ARTISTA 2
-          "", "", "", "", // P-S - ARTISTA 3-6
-          "", // T - GÊNERO
-          f.ordem, // U - Ordem
-          "", // V - Metacritic por jogador
-          "", // W - Média Metacritic
-          "", // X - Pendente?
-          "", // Y - Reportado como incorreto
-          f.codigoUnico, // Z - Código único
-          "", "", "", "", // AA-AD - ALBUM 2-5
-        ]);
-        resultados.push({ nome: f.nome, rowIndex });
+      const [albunsRows, faixasRows] = await Promise.all([
+        gs.googleSheetsService.usuarios.readValues("Playlists_Albuns"),
+        gs.googleSheetsService.usuarios.readValues("Playlists_Faixas"),
+      ]);
+
+      const albumRowIndex = albunsRows.findIndex((r) => (r[0] || "").trim() === ID_LEGADO) + 1; // 1-based
+      const faixasRowIndexes = faixasRows
+        .map((r, i) => ({ r, i: i + 1 }))
+        .filter(({ r }) => (r[0] || "").trim() === ID_LEGADO)
+        .map(({ i }) => i);
+
+      // Limpa (não deleta a linha/reflui outras) — só apaga o conteúdo das
+      // células, igual pedido: o registro fica em branco, sem deslocar
+      // nenhuma outra linha da planilha.
+      if (albumRowIndex > 0) {
+        await gs.googleSheetsService.usuarios.updateValues(
+          "Playlists_Albuns",
+          `A${albumRowIndex}:K${albumRowIndex}`,
+          [["", "", "", "", "", "", "", "", "", "", ""]],
+        );
+      }
+      for (const idx of faixasRowIndexes) {
+        await gs.googleSheetsService.usuarios.updateValues(
+          "Playlists_Faixas",
+          `A${idx}:G${idx}`,
+          [["", "", "", "", "", "", ""]],
+        );
       }
 
-      // Confere ao vivo o que foi gravado de fato.
-      const musicasAtualizadas = await gs.googleSheetsService.principal.readValues("Musicas");
-      const conferencia = resultados.map((r) =>
-        r.rowIndex ? musicasAtualizadas[r.rowIndex - 1] : null,
-      );
+      // Confere ao vivo que ficou tudo em branco.
+      const [albunsDepois, faixasDepois] = await Promise.all([
+        gs.googleSheetsService.usuarios.readValues("Playlists_Albuns"),
+        gs.googleSheetsService.usuarios.readValues("Playlists_Faixas"),
+      ]);
 
-      return Response.json({ resultados, conferencia });
+      return Response.json({
+        albumRowIndex,
+        faixasRowIndexes,
+        albumLinhaDepois: albumRowIndex > 0 ? albunsDepois[albumRowIndex - 1] : null,
+        faixasLinhasDepois: faixasRowIndexes.map((idx) => faixasDepois[idx - 1]),
+      });
     }
 
     if (url.pathname === "/api/debug/investigar-multialbum" && request.method === "GET") {
