@@ -6,4 +6,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/kick/status" | tee /tmp/out.json
+        run: |
+          echo "=== agora (UTC) ==="
+          date -u
+          echo "=== /api/tv/programas ==="
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/tv/programas" | tee /tmp/out.json
