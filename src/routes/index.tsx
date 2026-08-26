@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  RefreshCw,
+  Trophy,
   TrendingUp,
   User,
   Music2,
@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { api, driveImg, invalidateCache, type ChartData } from "@/lib/api";
+import { api, driveImg, type ChartData, type NivelJogador } from "@/lib/api";
 import { useHomeConfig } from "@/lib/homeFlags";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -109,6 +109,17 @@ function Index() {
   const login = getStoredLogin();
   const fotoUsuario = login?.fotoPerfil || user?.photo_url || "";
   const nomeUsuario = login?.nome || user?.name || "Visitante";
+
+  // Prestígio/nível do jogador logado — mostrado no lugar do antigo botão de
+  // recarregar do cabeçalho (redundante com o botão fixo na barra do topo,
+  // ver __root.tsx).
+  const [meuNivel, setMeuNivel] = useState<NivelJogador | null>(null);
+  useEffect(() => {
+    const usuario = login?.usuario;
+    const telegramId = user?.id && user.id !== "guest" ? user.id : undefined;
+    if (!usuario && !telegramId) return;
+    api.meuNivel({ usuario, telegramId }).then(setMeuNivel).catch(() => setMeuNivel(null));
+  }, [login?.usuario, user?.id]);
 
   // dd/mm/yyyy [+ HH:MM opcional] → timestamp, pra ordenar shows (só data) e
   // programas de TV (data+horário) juntos na mesma lista.
@@ -305,15 +316,6 @@ function Index() {
     fetchData(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, user]);
-
-  const handleSync = async () => {
-    if (syncing) return;
-    haptic.medium();
-    invalidateCache();
-    await fetchData(false);
-    haptic.success();
-    toast.success("Empire Sincronizado", { description: "Dados imperiais atualizados." });
-  };
 
   const sections: Record<string, () => ReactNode> = {
     meusArtistas: () => (
@@ -625,8 +627,10 @@ function Index() {
               <User className="size-5 text-primary" aria-hidden="true" />
             )}
           </div>
-          <div className="min-w-0">
-            <p className="text-base font-black leading-none truncate">
+          <div className="min-w-0 flex-1">
+            {/* Sem truncate — quebra a linha em vez de cortar com "...",
+                mas continua no mesmo tamanho/espaçamento de sempre. */}
+            <p className="text-base font-black leading-tight break-words">
               Olá, {nomeUsuario}
             </p>
             <p className="text-[11px] uppercase font-bold text-muted-foreground tracking-[0.15em] mt-1">
@@ -634,15 +638,19 @@ function Index() {
             </p>
           </div>
         </div>
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          aria-label={syncing ? "Sincronizando" : "Sincronizar dados"}
-          aria-busy={syncing}
-          className="size-11 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform hover:bg-primary/10 hover:text-primary disabled:opacity-60"
-        >
-          <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
-        </button>
+        {/* Prestígio/nível do jogador — no lugar do antigo botão de
+            recarregar, redundante com o botão fixo na barra do topo. */}
+        {meuNivel?.nivelAtual && (
+          <div className="flex flex-col items-end gap-1 shrink-0 max-w-[112px]">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/15 border border-amber-500/25 text-amber-400 text-[10px] font-black uppercase tracking-wide whitespace-nowrap">
+              <Trophy className="size-3" aria-hidden="true" />
+              Nv {meuNivel.nivelAtual.nivel}
+            </span>
+            <span className="text-[9px] font-bold text-muted-foreground text-right leading-tight break-words">
+              {meuNivel.nivelAtual.nome}
+            </span>
+          </div>
+        )}
       </header>
 
       <ActivityTicker />
