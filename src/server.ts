@@ -440,6 +440,41 @@ export default {
       });
     }
 
+    if (url.pathname === "/api/debug/investigar-multialbum" && request.method === "GET") {
+      const gs = await import("../backend/src/services/googleSheetsService");
+      const [edicaoChartsRows, musicasRows] = await Promise.all([
+        gs.googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS"),
+        gs.googleSheetsService.principal.readValues("Musicas"),
+      ]);
+      const titulosAlvo = ["Emancipated", "Supercombo", "Catholic Guilty"].map((t) => t.toLowerCase());
+      const edicaoChartsMatches = edicaoChartsRows
+        .filter((r) => titulosAlvo.some((t) => (r[1] || "").toLowerCase().includes(t)))
+        .map((r) => ({
+          titulo: r[1],
+          E_album1: r[4],
+          N_album2: r[13],
+          O_album3: r[14],
+          P_album4: r[15],
+          Q_album5: r[16],
+        }));
+      const musicasMatches = musicasRows
+        .filter((r) => titulosAlvo.some((t) => (r[7] || "").toLowerCase().includes(t)))
+        .map((r) => ({
+          titulo: r[7],
+          K_album1: r[10],
+          AA_album2: r[26],
+          AB_album3: r[27],
+          AC_album4: r[28],
+          AD_album5: r[29],
+        }));
+      return Response.json({
+        edicaoChartsHeader: edicaoChartsRows[0],
+        musicasHeader: musicasRows[0],
+        edicaoChartsMatches,
+        musicasMatches,
+      });
+    }
+
     // Proxy de vídeos grandes do Telegram (Music Videos).
     if (url.pathname.startsWith("/api/telegram-video/") && request.method === "GET") {
       const messageId = url.pathname.slice("/api/telegram-video/".length);
