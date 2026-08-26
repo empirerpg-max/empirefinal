@@ -19,13 +19,19 @@ function reloadOnStaleChunk() {
 
 window.addEventListener("vite:preloadError", reloadOnStaleChunk);
 window.addEventListener("error", (event) => {
-  if (/importing a module script failed|dynamically imported module/i.test(event.message || "")) {
+  // "Load failed" é a mensagem genérica do WebKit (Safari/iOS — inclusive
+  // a WebView do Telegram Mini App em iPhone) pra fetch/import que falhou;
+  // sem isso, só o Chrome ("Importing a module script failed"/"dynamically
+  // imported module") se recuperava sozinho, e usuários de iPhone ficavam
+  // com a tela quebrada (parecendo "sumiram meus dados") até fechar e abrir
+  // o app de novo manualmente.
+  if (/importing a module script failed|dynamically imported module|^load failed$/i.test(event.message || "")) {
     reloadOnStaleChunk();
   }
 });
 window.addEventListener("unhandledrejection", (event) => {
   const msg = event.reason?.message || String(event.reason || "");
-  if (/importing a module script failed|dynamically imported module|failed to fetch dynamically/i.test(msg)) {
+  if (/importing a module script failed|dynamically imported module|failed to fetch dynamically|^load failed$/i.test(msg)) {
     reloadOnStaleChunk();
   }
 });
