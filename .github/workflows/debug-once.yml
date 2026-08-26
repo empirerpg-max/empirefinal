@@ -6,4 +6,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Curl debug endpoint
-        run: curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/kick/status" | tee /tmp/out.json
+        run: |
+          echo "=== GViz CSV export da planilha usuarios (aba ARTISTAS) ==="
+          curl -sS -o /dev/null -w "HTTP %{http_code}\n" "https://docs.google.com/spreadsheets/d/1lFw9l76tYZYCDXhZsoiftIEzCvKcjCrI_oBpvUdwAlo/gviz/tq?tqx=out:csv&sheet=ARTISTAS"
+          echo "=== Primeiras linhas (se der certo) ==="
+          curl -sS "https://docs.google.com/spreadsheets/d/1lFw9l76tYZYCDXhZsoiftIEzCvKcjCrI_oBpvUdwAlo/gviz/tq?tqx=out:csv&sheet=ARTISTAS" | head -c 500
