@@ -214,18 +214,38 @@ export async function readValues(
 ): Promise<string[][]> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
 
-  // Tenta primeiramente a Google Sheets API v4
-  try {
-    const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
-    const response = await sheetsRequest<GoogleSheetsValuesResponse>(
-      `/${spreadsheetId}/values/${a1Range}?majorDimension=ROWS`,
-      { method: "GET" },
-      [SHEETS_READONLY_SCOPE],
-    );
-    if (response.values) return response.values;
-  } catch (err) {
+  // Tenta a Google Sheets API v4, com retry curto em erro de limite de
+  // requisição (429/quota) — sem isso, um pico passageiro de tráfego (vários
+  // jogadores abrindo o app ao mesmo tempo, cada um disparando várias
+  // leituras em paralelo) derrubava a leitura na hora, e a maioria dos
+  // controllers engole esse erro (.catch(() => [])), fazendo a tela parecer
+  // "sem dados" pro jogador mesmo os dados existindo. Escritas já tinham
+  // esse retry (appendRow); leituras não tinham nenhum.
+  const attempts = 3;
+  let ultimoErroV4: Error | null = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
+      const response = await sheetsRequest<GoogleSheetsValuesResponse>(
+        `/${spreadsheetId}/values/${a1Range}?majorDimension=ROWS`,
+        { method: "GET" },
+        [SHEETS_READONLY_SCOPE],
+      );
+      return response.values || [];
+    } catch (err) {
+      ultimoErroV4 = err instanceof Error ? err : new Error(String(err));
+      const ehLimiteDeRequisicao = /quota|rate limit|429|resource_exhausted/i.test(ultimoErroV4.message);
+      const isLastAttempt = attempt === attempts;
+      // Só vale a pena tentar de novo em erro de limite passageiro — um 404
+      // (aba não existe) ou 403 (sem permissão) nunca vai se resolver
+      // tentando de novo, é desperdício de tempo antes do fallback GViz.
+      if (!ehLimiteDeRequisicao || isLastAttempt) break;
+      await sleep(attempt * 400);
+    }
+  }
+  if (ultimoErroV4) {
     console.warn(
-      `[googleSheetsService] Falha na API v4 (${(err as Error).message}). Usando fallback GViz CSV para "${sheetName}"...`,
+      `[googleSheetsService] Falha na API v4 (${ultimoErroV4.message}). Usando fallback GViz CSV para "${sheetName}"...`,
     );
   }
 
@@ -233,14 +253,37 @@ export async function readValues(
   try {
     return await fetchGVizCsv(spreadsheetId, sheetName);
   } catch (err) {
-    console.error(`[googleSheetsService] Erro ao ler "${sheetName}" via GViz CSV:`, err);
+    const erroFinal = err instanceof Error ? err : new Error(String(err));
+    console.error(`[googleSheetsService] Erro ao ler "${sheetName}" via GViz CSV:`, erroFinal);
+    // Registra no log didático (mesmo mecanismo já usado por appendRow) —
+    // sem isso, uma leitura falhando de vez em quando não deixava rastro
+    // nenhum além de um console.warn perdido nos logs do Worker, tornando
+    // impossível confirmar se o problema é mesmo limite de API ou outra
+    // coisa. Import dinâmico pra evitar dependência circular estática
+    // (logSistemaService importa este arquivo).
+    if (spreadsheetKeyOrId !== "logsSistema") {
+      import("./logSistemaService")
+        .then(({ registrarLogSistema, traduzirErroEscrita }) => {
+          const mensagem = `API v4: ${ultimoErroV4?.message || "?"} | GViz: ${erroFinal.message}`;
+          const { causaProvavel, comoResolver } = traduzirErroEscrita(mensagem);
+          return registrarLogSistema({
+            categoria: "Erro do app",
+            oQueAconteceu: `Não consegui ler a aba "${sheetName}" (planilha "${String(spreadsheetKeyOrId)}") — falhou tanto pela API oficial quanto pelo fallback público.`,
+            onde: `googleSheetsService.readValues("${String(spreadsheetKeyOrId)}", "${sheetName}")`,
+            causaProvavel,
+            comoResolver,
+            detalheTecnico: mensagem,
+          });
+        })
+        .catch(() => {});
+    }
     // Antes devolvia [] em silêncio aqui — indistinguível de "a aba está
     // vazia mesmo", fazendo qualquer tela do app parecer "sem dados" quando
     // na real as duas formas de ler a planilha falharam (ex: pico de
     // chamadas na API do Sheets ao atualizar/voltar demais em pouco tempo).
     // Propaga o erro de verdade — quem chama decide se quer .catch(()=>[])
     // (tolerante) ou deixar subir pra virar um erro real na resposta.
-    throw err instanceof Error ? err : new Error(String(err));
+    throw erroFinal;
   }
 }
 
