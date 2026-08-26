@@ -32,6 +32,7 @@ import {
   Plus,
   LogOut,
   ShoppingBag,
+  RefreshCw,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
@@ -455,6 +456,30 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Botão fixo na barra do topo, em toda tela do app — recarrega a página
+// inteira (dados frescos garantidos), pra quem cair numa tela "vazia" (chunk
+// desatualizado depois de deploy, engasgo passageiro na leitura da planilha
+// etc.) não precisar fechar e abrir o app de novo pra resolver.
+function RefreshButton() {
+  const [refreshing, setRefreshing] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        if (refreshing) return;
+        haptic.light();
+        setRefreshing(true);
+        window.location.reload();
+      }}
+      aria-label="Recarregar tela"
+      title="Recarregar tela"
+      className="relative size-11 grid place-items-center rounded-full border border-white/10 bg-white/[0.04] text-foreground active:scale-95 transition-all hover:bg-white/[0.08] hover:border-primary/30 disabled:opacity-60"
+      disabled={refreshing}
+    >
+      <RefreshCw className={`size-[18px] ${refreshing ? "animate-spin" : ""}`} />
+    </button>
+  );
+}
+
 // Menu fixo do app: Início, Catálogo (ex-Empire Play), Tour, Empire TV,
 // Charts, Ponto, Social, Acervo, Perfil, e o botão de Criar (acesso rápido
 // à Gestão de lançamentos).
@@ -721,17 +746,20 @@ function RootInner() {
             <span className="text-primary"> Hub</span>
           </span>
         </Link>
-        <button
-          onClick={() => {
-            haptic.light();
-            setIsOpen(!isOpen);
-          }}
-          aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
-          aria-expanded={isOpen}
-          className="relative size-11 -mr-1 grid place-items-center rounded-full border border-white/10 bg-white/[0.04] text-foreground active:scale-95 transition-all hover:bg-white/[0.08] hover:border-primary/30"
-        >
-          {isOpen ? <X className="size-5 text-primary" /> : <Menu className="size-5" />}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <RefreshButton />
+          <button
+            onClick={() => {
+              haptic.light();
+              setIsOpen(!isOpen);
+            }}
+            aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={isOpen}
+            className="relative size-11 grid place-items-center rounded-full border border-white/10 bg-white/[0.04] text-foreground active:scale-95 transition-all hover:bg-white/[0.08] hover:border-primary/30"
+          >
+            {isOpen ? <X className="size-5 text-primary" /> : <Menu className="size-5" />}
+          </button>
+        </div>
       </nav>
 
       {/* Hamburger Overlay Menu */}
