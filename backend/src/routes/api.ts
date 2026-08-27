@@ -142,7 +142,6 @@ import {
   getMissoesController,
   getFeedGlobalController,
   getProximasGlobaisController,
-  debugReverterShowAutomaticoController,
 } from "../controllers/tourController";
 import { getProjetosController } from "../controllers/projetosController";
 import { handleMediaRoutes } from "./mediaRoutes";
@@ -264,7 +263,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/turnes/missoes",
     "/api/turnes/proximas-globais",
     "/api/turnes/feed",
-    "/api/debug/tour-reverter-automatico",
     "/api/premiacoes/awards",
     "/api/premiacoes/categorias",
     "/api/premiacoes/preencher",
@@ -929,14 +927,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await getProximasGlobaisController();
-  } else if (url.pathname === "/api/debug/tour-reverter-automatico") {
-    if (request.method !== "GET") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use GET para /api/debug/tour-reverter-automatico." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
-    response = await debugReverterShowAutomaticoController(request);
   } else if (url.pathname === "/api/turnes/feed") {
     if (request.method !== "GET") {
       return new Response(JSON.stringify({ success: false, error: "Use GET para /api/turnes/feed." }), {

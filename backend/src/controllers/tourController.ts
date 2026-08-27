@@ -698,52 +698,6 @@ function resolverShowsAutomaticos(tour: Tour): boolean {
   return mudou;
 }
 
-// GET /api/debug/tour-reverter-automatico — correção pontual: antes do fix
-// de fuso (agoraBrasilia), resolverShowsAutomaticos rodou com "hoje" já
-// adiantado incorretamente pra 27/08 (era ainda 26/08 em Brasília) e marcou
-// como "Realizado automaticamente" um show que ainda estava no dia certo,
-// sem o jogador ter feito a ação. Reverte esse show específico (zera
-// ações/vendidos/receita, volta status "Agendado") pra o jogador poder agir
-// de verdade ainda hoje. Endpoint temporário, remover após o uso.
-export async function debugReverterShowAutomaticoController(request: Request): Promise<Response> {
-  try {
-    const url = new URL(request.url);
-    const idUnico = normalizeComparison(url.searchParams.get("idUnico") || "");
-    const showNumero = Number(url.searchParams.get("showNumero"));
-    if (!idUnico || !showNumero) {
-      return jsonError("idUnico e showNumero (query) são obrigatórios.");
-    }
-
-    const raw = await readToursRaw();
-    const idUnicoCol = TOUR_HEADERS.indexOf("id_unico");
-    const found = raw.find(
-      ({ row }) => normalizeComparison(row[idUnicoCol]) === idUnico,
-    );
-    if (!found) return jsonError("Turnê não encontrada.", 404);
-
-    const tour = rowToTour(found.row);
-    const show = tour.agenda.find((s) => s.numero === showNumero);
-    if (!show) return jsonError("Show não encontrado.", 404);
-
-    const antes = JSON.parse(JSON.stringify(show));
-    if (!show.acoes.some((a) => a.automatica)) {
-      return jsonOk({ ok: false, motivo: "Show não tem ação automática — nada revertido.", show });
-    }
-
-    show.acoes = [];
-    show.vendidos = 0;
-    show.receita = 0;
-    show.soldOut = false;
-    show.status = "Agendado";
-
-    await persistAgenda(found.rowIndex, tour);
-    return jsonOk({ ok: true, antes, depois: show });
-  } catch (err) {
-    console.error("[debugReverterShowAutomaticoController] Erro:", err);
-    return jsonError("Falha ao reverter show.", 500);
-  }
-}
-
 const STATUS_EM_ANDAMENTO = "Em andamento";
 const STATUS_PLANEJANDO = "Planejando";
 const STATUS_FINALIZADA = "Finalizada";

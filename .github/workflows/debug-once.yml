@@ -9,6 +9,5 @@ jobs:
         run: |
           echo "=== agora (UTC) ==="
           date -u
-          echo "=== /api/turnes (buscando show Paradiso #7) ==="
-          echo "=== reverter show automatico (Marco, show 7) ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/tour-reverter-automatico?idUnico=Marco1065444507_1787131362340&showNumero=7"
+          echo "=== /api/flags ==="
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/flags" | tee /tmp/out.json
