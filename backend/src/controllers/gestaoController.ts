@@ -185,7 +185,16 @@ export interface CreateVideoPayload {
   participantes?: string[];
   capaUrl: string;
   mediaUrl?: string;
+  // Música(s) vinculada(s) — sempre obrigatório pelo menos uma, pra nunca
+  // mais cair no caso WISDOM/CURSED BLESSED (vídeo cadastrado sem vínculo
+  // nenhum com a música, código único e caixinha de PONTOS ficando soltos).
+  // "Music Video" só aceita 1 (é o clipe oficial de uma música só); outros
+  // tipos (Live, Behind the Scenes etc) aceitam até 3, já que podem cobrir
+  // mais de uma faixa. Mantém `musicaVinculada` (string única) por
+  // compatibilidade com chamadores antigos — o controller aceita qualquer
+  // um dos dois.
   musicaVinculada?: string;
+  musicasVinculadas?: string[];
   nomeJogador: string;
 }
 
@@ -518,6 +527,7 @@ export async function createVideoController(request: Request): Promise<Response>
       tipoVideo,
       categoriaVideo,
       musicaVinculada = "",
+      musicasVinculadas: musicasVinculadasRaw,
       capaUrl = "",
       mediaUrl = "",
       nomeJogador,
@@ -533,13 +543,49 @@ export async function createVideoController(request: Request): Promise<Response>
       );
     }
 
+    const tipo = tipoVideo || categoriaVideo || "Video";
+    const isMusicVideoTipo = tipo.trim().toLowerCase() === "music video";
+
+    // Música vinculada agora é sempre obrigatória — foi cadastrar um vídeo
+    // sem vínculo nenhum (WISDOM) que deixou o código único e a caixinha de
+    // PONTOS soltos, sem nenhum aviso. "Music Video" só aceita 1 música (é o
+    // clipe oficial dela); outros tipos aceitam até 3 (podem cobrir mais de
+    // uma faixa, ex: um Behind the Scenes de um EP inteiro).
+    const musicasVinculadas = (
+      musicasVinculadasRaw && musicasVinculadasRaw.length > 0
+        ? musicasVinculadasRaw
+        : musicaVinculada
+          ? [musicaVinculada]
+          : []
+    )
+      .map((m) => m.trim())
+      .filter(Boolean);
+
+    if (musicasVinculadas.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Selecione pelo menos uma música vinculada ao vídeo." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (isMusicVideoTipo && musicasVinculadas.length > 1) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Music Video só pode vincular uma única música." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (musicasVinculadas.length > 3) {
+      return new Response(
+        JSON.stringify({ success: false, error: "No máximo 3 músicas vinculadas por vídeo." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const fullTitle = tituloVideo.includes(" - ")
       ? tituloVideo
       : `${artistaResponsavel} - ${tituloVideo}`;
     const topicId = `video_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const tipo = tipoVideo || categoriaVideo || "Video";
 
     // 1. Gravar em Music Videos na planilha principal — "Videos" e "Music
     // Video" foram unificados numa única aba/formulário de Gestão; a tag
@@ -570,7 +616,7 @@ export async function createVideoController(request: Request): Promise<Response>
       mediaUrl || "", // M - Link do vídeo
       "", // N - Likes por jogador
       "", // O - Média Likes
-      musicaVinculada || fullTitle, // P - Nome original nos charts
+      musicasVinculadas.join("; "), // P - Nome original nos charts (múltiplas, separadas por "; ")
       "", // Q - ID da mensagem (reconvertido)
       "", // R - Status da reconversão
       "", // S - Reportado em
@@ -591,17 +637,18 @@ export async function createVideoController(request: Request): Promise<Response>
 
     const warnings: string[] = [];
 
-    // Music Videos não gera Código único próprio — sempre usa o da música
-    // vinculada em EDIÇÃO CHARTS (coluna P aponta pro título de lá). Acha
-    // essa linha por título (única opção aqui, já que o vínculo em si só
-    // existe como texto) e copia o código pra Music Videos!U. Sem
-    // musicaVinculada preenchida, cai pro título do próprio vídeo — que só
-    // bate por acaso quando o título do vídeo é idêntico ao da música nos
-    // charts (ex: WISDOM x "WISDOM TOOTH" nos charts não batiam, então o
-    // código único ficou vazio, sem nenhum aviso até agora).
+    // Music Videos não gera Código único próprio — sempre usa o da (primeira)
+    // música vinculada em EDIÇÃO CHARTS (coluna P aponta pro título de lá).
+    // Acha essa linha por título e copia o código pra Music Videos!U. Antes
+    // disso, sem música vinculada preenchida, caía pro título do próprio
+    // vídeo — que só batia por acaso quando o título do vídeo era idêntico
+    // ao da música nos charts (ex: WISDOM x "WISDOM TOOTH" nos charts não
+    // batiam, então o código único ficava vazio, sem nenhum aviso). Agora
+    // música vinculada é sempre obrigatória, então isso não deve mais
+    // acontecer — mas o aviso continua aqui como rede de segurança.
     if (videoRowIndexNovo) {
       try {
-        const nomeNosCharts = normalizeComparison(musicaVinculada || fullTitle);
+        const nomeNosCharts = normalizeComparison(musicasVinculadas[0]);
         const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
         const linhaMusica = rows.slice(1).find((r) => normalizeComparison(r[1]) === nomeNosCharts);
         const codigoDaMusica = linhaMusica ? (linhaMusica[55] || "").trim() : "";
@@ -611,7 +658,7 @@ export async function createVideoController(request: Request): Promise<Response>
             .catch((err) => console.warn("[createVideoController] Erro ao copiar Código único pra Music Videos!U:", err));
         } else {
           warnings.push(
-            `Vídeo cadastrado, mas não achei "${musicaVinculada || fullTitle}" em EDIÇÃO CHARTS — o Código único não foi copiado pra Music Videos, confira o vínculo com a música.`,
+            `Vídeo cadastrado, mas não achei "${musicasVinculadas[0]}" em EDIÇÃO CHARTS — o Código único não foi copiado pra Music Videos, confira o vínculo com a música.`,
           );
         }
       } catch (err) {
@@ -626,19 +673,13 @@ export async function createVideoController(request: Request): Promise<Response>
 
     // 3. Quando o tipo selecionado for "Music Video", marcar o lançamento
     // do videoclipe na aba "Pontos" (coluna N) com a data de envio (coluna O).
-    // Quando não é (ou não tem música vinculada), a caixinha nunca é tocada —
-    // isso é o comportamento certo pra vídeo que não é clipe oficial (Live,
-    // Behind the Scenes, Trailer etc), mas fica sem nenhum aviso pra quem
-    // esqueceu de marcar "Music Video" num lançamento que devia contar. Os
-    // `warnings` abaixo cobrem esse caso sem travar o cadastro do vídeo.
-    const isMusicVideo = tipo.trim().toLowerCase() === "music video";
-    if (isMusicVideo && musicaVinculada) {
-      const marcou = await marcarVideoclipeNaPontos(musicaVinculada, dataFormatada);
+    // Music Video só aceita 1 música vinculada (validado lá em cima), então
+    // sempre existe exatamente uma pra marcar aqui.
+    if (isMusicVideoTipo) {
+      const marcou = await marcarVideoclipeNaPontos(musicasVinculadas[0], dataFormatada);
       if (!marcou) {
-        warnings.push(`Vídeo cadastrado, mas não achei "${musicaVinculada}" na aba Pontos — a caixinha de lançamento não foi marcada, confira o vínculo.`);
+        warnings.push(`Vídeo cadastrado, mas não achei "${musicasVinculadas[0]}" na aba Pontos — a caixinha de lançamento não foi marcada, confira o vínculo.`);
       }
-    } else if (isMusicVideo && !musicaVinculada) {
-      warnings.push('Vídeo cadastrado como "Music Video" sem música vinculada — a caixinha de lançamento em Pontos não foi marcada.');
     }
     const warning = warnings.length > 0 ? warnings.join(" ") : undefined;
 
@@ -719,6 +760,33 @@ export async function debugRetagMusicVideoController(request: Request): Promise<
     JSON.stringify({ success: true, data: { linha, titulo: tituloAtual, tipoAnterior: tipoAtual } }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
+}
+
+// GET /api/debug/musicvideos-buscar?q=... — acha a linha real de WISDOM/
+// CURSED BLESSED em "Music Videos" (pela coluna B) antes de retaggear pra
+// "Music Video". Endpoint temporário, remover após o uso.
+export async function debugBuscarMusicVideosController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const q = normalizeComparison(url.searchParams.get("q") || "");
+  if (!q) {
+    return new Response(JSON.stringify({ success: false, error: "q é obrigatório." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const rows = await googleSheetsService.principal.readValues("Music Videos");
+  const matches: { linha: number; titulo: string; tipo: string }[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (row && normalizeComparison(row[1] || "").includes(q)) {
+      matches.push({ linha: i + 1, titulo: (row[1] || "").trim(), tipo: (row[7] || "").trim() });
+    }
+  }
+  return new Response(JSON.stringify({ success: true, data: matches }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 // Lista as músicas disponíveis nos charts pra busca por faixa no cadastro de

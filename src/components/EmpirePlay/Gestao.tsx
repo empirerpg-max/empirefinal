@@ -376,9 +376,13 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [tituloVideo, setTituloVideo] = useState<string>("");
   const [categoriaVideo, setCategoriaVideo] = useState<string>("Video");
   const [musicaVinculadaQuery, setMusicaVinculadaQuery] = useState<string>("");
-  const [musicaVinculadaSelecionada, setMusicaVinculadaSelecionada] = useState<ExistingTrack | null>(
-    null,
-  );
+  // "Music Video" só aceita 1 música vinculada (é o clipe oficial dela);
+  // outros tipos (Live, Behind the Scenes etc) aceitam até 3. Sempre
+  // obrigatório pelo menos 1 — foi cadastrar um vídeo sem nenhuma música
+  // vinculada que deixou o código único e a caixinha de PONTOS soltos, sem
+  // nenhum aviso (ver PR de correção do caso WISDOM/CURSED BLESSED).
+  const [musicasVinculadas, setMusicasVinculadas] = useState<ExistingTrack[]>([]);
+  const maxMusicasVinculadas = categoriaVideo === "Music Video" ? 1 : 3;
   const [descricaoInput, setDescricaoInput] = useState<string>("");
 
   // Form Álbum
@@ -411,7 +415,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     setLetraInput("");
     setDescricaoInput("");
     setMusicaVinculadaQuery("");
-    setMusicaVinculadaSelecionada(null);
+    setMusicasVinculadas([]);
     setEncartesFiles([]);
     setParticipantes([""]);
     setMusicaReferenciaQuery("");
@@ -760,8 +764,12 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setErrorMsg("Informe o Título do Vídeo.");
       return;
     }
-    if (categoriaVideo === "Music Video" && !musicaVinculadaSelecionada) {
-      setErrorMsg("Selecione a Música Vinculada para um Music Video.");
+    if (musicasVinculadas.length === 0) {
+      setErrorMsg("Selecione pelo menos uma Música Vinculada.");
+      return;
+    }
+    if (categoriaVideo === "Music Video" && musicasVinculadas.length > 1) {
+      setErrorMsg("Music Video só pode ter uma única Música Vinculada.");
       return;
     }
 
@@ -790,15 +798,11 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 
       setUploadProgress("Cadastrando vídeo...");
 
-      const musicaVinculada = musicaVinculadaSelecionada
-        ? `${musicaVinculadaSelecionada.artist} - ${musicaVinculadaSelecionada.title}`
-        : "";
-
       const payload = {
         tituloVideo,
         artistaResponsavel,
         categoriaVideo,
-        musicaVinculada,
+        musicasVinculadas: musicasVinculadas.map((s) => `${s.artist} - ${s.title}`),
         descricao: descricaoInput.trim(),
         participantes: participantes.filter((p) => p.trim().length > 0),
         capaUrl,
@@ -824,7 +828,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setSuccessMsg(data.data?.warning ? `${mensagemBase} ⚠️ ${data.data.warning}` : mensagemBase);
       setTituloVideo("");
       setMusicaVinculadaQuery("");
-      setMusicaVinculadaSelecionada(null);
+      setMusicasVinculadas([]);
       setCapaFile(null);
       setCapaPreview(null);
       setMediaFile(null);
@@ -1553,7 +1557,15 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             </label>
             <select
               value={categoriaVideo}
-              onChange={(e) => setCategoriaVideo(e.target.value)}
+              onChange={(e) => {
+                const novaCategoria = e.target.value;
+                setCategoriaVideo(novaCategoria);
+                // Music Video só aceita 1 música — se já tinha mais de uma
+                // selecionada num outro tipo, mantém só a primeira.
+                if (novaCategoria === "Music Video") {
+                  setMusicasVinculadas((prev) => prev.slice(0, 1));
+                }
+              }}
               className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
             >
               {CATEGORIAS_VIDEO.map((cat) => (
@@ -1567,25 +1579,33 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
               <Music className="size-4 text-emerald-400" />
-              Música Vinculada / Referente {categoriaVideo === "Music Video" ? "" : "(Opcional)"}
+              Música(s) Vinculada(s){" "}
+              {categoriaVideo === "Music Video" ? "(1 obrigatória)" : `(1 a ${maxMusicasVinculadas} obrigatórias)`}
             </label>
-            {musicaVinculadaSelecionada ? (
-              <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
-                <span className="text-sm text-white font-bold truncate">
-                  {musicaVinculadaSelecionada.artist} - {musicaVinculadaSelecionada.title}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMusicaVinculadaSelecionada(null);
-                    setMusicaVinculadaQuery("");
-                  }}
-                  className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
-                >
-                  Trocar
-                </button>
+            {musicasVinculadas.length > 0 && (
+              <div className="space-y-1.5">
+                {musicasVinculadas.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3"
+                  >
+                    <span className="text-sm text-white font-bold truncate">
+                      {s.artist} - {s.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMusicasVinculadas((prev) => prev.filter((m) => m.id !== s.id))
+                      }
+                      className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
               </div>
-            ) : (
+            )}
+            {musicasVinculadas.length < maxMusicasVinculadas && (
               <div className="relative">
                 <input
                   type="text"
@@ -1599,8 +1619,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                     {myCatalogSongs
                       .filter((s) => {
                         const q = musicaVinculadaQuery.trim().toLowerCase();
+                        const jaSelecionada = musicasVinculadas.some((m) => m.id === s.id);
                         return (
-                          s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q)
+                          !jaSelecionada &&
+                          (s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q))
                         );
                       })
                       .slice(0, 20)
@@ -1609,7 +1631,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                           key={s.id}
                           type="button"
                           onClick={() => {
-                            setMusicaVinculadaSelecionada(s);
+                            setMusicasVinculadas((prev) => [...prev, s]);
                             setMusicaVinculadaQuery("");
                           }}
                           className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
@@ -1619,8 +1641,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                       ))}
                     {myCatalogSongs.filter((s) => {
                       const q = musicaVinculadaQuery.trim().toLowerCase();
+                      const jaSelecionada = musicasVinculadas.some((m) => m.id === s.id);
                       return (
-                        s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q)
+                        !jaSelecionada &&
+                        (s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q))
                       );
                     }).length === 0 && (
                       <p className="px-4 py-3 text-xs text-neutral-500 italic">
