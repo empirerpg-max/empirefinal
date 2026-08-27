@@ -480,8 +480,14 @@ export async function createSongController(request: Request): Promise<Response> 
 // registrosCharts (colunas confirmadas via dump ao vivo: D = "MÚSICA" no
 // formato "Artista - Título", N = checkbox "VIDEOCLIPE", O = "DATA DE
 // LANÇAMENTO" no formato DD/MM/AAAA). Busca a linha por igualdade exata em D.
-async function marcarVideoclipeNaPontos(musicaVinculada: string, dataFormatada: string) {
-  if (!musicaVinculada.trim()) return;
+// Devolve false quando a caixinha NÃO foi marcada (música não encontrada em
+// Pontos, ou erro na escrita) — o chamador usa isso pra avisar quem lançou o
+// vídeo em vez de deixar a falha 100% silenciosa (foi assim que WISDOM e
+// CURSED BLESSED passaram batido: o tipo selecionado não era "Music Video",
+// então essa função nem chegava a rodar, e o formulário dizia "sucesso"
+// mesmo assim).
+async function marcarVideoclipeNaPontos(musicaVinculada: string, dataFormatada: string): Promise<boolean> {
+  if (!musicaVinculada.trim()) return false;
   try {
     const matches = await googleSheetsService.registrosCharts.findRows(
       "Pontos",
@@ -489,15 +495,17 @@ async function marcarVideoclipeNaPontos(musicaVinculada: string, dataFormatada: 
     );
     if (matches.length === 0) {
       console.warn(`[marcarVideoclipeNaPontos] Música não encontrada na aba Pontos: ${musicaVinculada}`);
-      return;
+      return false;
     }
     for (const { rowIndex } of matches) {
       await googleSheetsService.registrosCharts.updateValues("Pontos", `N${rowIndex}:O${rowIndex}`, [
         ["TRUE", dataFormatada],
       ]);
     }
+    return true;
   } catch (err) {
     console.warn("[marcarVideoclipeNaPontos] Erro ao atualizar aba Pontos:", err);
+    return false;
   }
 }
 
@@ -592,8 +600,20 @@ export async function createVideoController(request: Request): Promise<Response>
 
     // 3. Quando o tipo selecionado for "Music Video", marcar o lançamento
     // do videoclipe na aba "Pontos" (coluna N) com a data de envio (coluna O).
-    if (tipo.trim().toLowerCase() === "music video" && musicaVinculada) {
-      await marcarVideoclipeNaPontos(musicaVinculada, dataFormatada);
+    // Quando não é (ou não tem música vinculada), a caixinha nunca é tocada —
+    // isso é o comportamento certo pra vídeo que não é clipe oficial (Live,
+    // Behind the Scenes, Trailer etc), mas fica sem nenhum aviso pra quem
+    // esqueceu de marcar "Music Video" num lançamento que devia contar. O
+    // `warning` abaixo cobre esse caso sem travar o cadastro do vídeo.
+    let warning: string | undefined;
+    const isMusicVideo = tipo.trim().toLowerCase() === "music video";
+    if (isMusicVideo && musicaVinculada) {
+      const marcou = await marcarVideoclipeNaPontos(musicaVinculada, dataFormatada);
+      if (!marcou) {
+        warning = `Vídeo cadastrado, mas não achei "${musicaVinculada}" na aba Pontos — a caixinha de lançamento não foi marcada, confira o vínculo.`;
+      }
+    } else if (isMusicVideo && !musicaVinculada) {
+      warning = 'Vídeo cadastrado como "Music Video" sem música vinculada — a caixinha de lançamento em Pontos não foi marcada.';
     }
 
     registrarLogSistema({
@@ -609,6 +629,7 @@ export async function createVideoController(request: Request): Promise<Response>
           titulo: fullTitle,
           artistaResponsavel,
           mensagem: "Vídeo cadastrado com sucesso!",
+          warning,
         },
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
