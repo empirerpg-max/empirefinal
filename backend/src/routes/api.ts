@@ -113,6 +113,7 @@ import {
   saveSocialPerfilController,
   getSocialNewsController,
   saveSocialNewsController,
+  editSocialNewsController,
 } from "../controllers/socialController";
 import {
   getPlaylistsController,
@@ -249,6 +250,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/posts/deletar",
     "/api/social/perfis",
     "/api/social/news",
+    "/api/social/news/editar",
     "/api/empire-tv/gifs",
     "/api/turnes/locais",
     "/api/turnes/simular",
@@ -757,6 +759,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
               JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/news." }),
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
+  } else if (url.pathname === "/api/social/news/editar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/news/editar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await editSocialNewsController(request);
   } else if (url.pathname === "/api/auth/login") {
     if (request.method !== "POST") {
       return new Response(

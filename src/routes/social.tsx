@@ -183,6 +183,7 @@ type News = {
   imagem: string;
   autor: string;
   data: string;
+  telegramId?: string;
   // Quando a notícia veio de uma ação de turnê (ver tourController.ts,
   // realizarAcaoDiaController): "comentar" nela deve levar direto pra tela
   // de comentários daquela turnê, não abrir o comentário genérico de News.
@@ -218,6 +219,7 @@ function SocialPage() {
   const [industryViewTab, setIndustryViewTab] = useState<"Instagram" | "Twitter" | "TikTok" | null>(null);
   const [news, setNews] = useState<News[]>([]);
   const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
+  const [editingNews, setEditingNews] = useState<News | null>(null);
 
   // News form
   const [newsTitle, setNewsTitle] = useState("");
@@ -591,24 +593,49 @@ function SocialPage() {
     }
   }
 
+  function closeNewsModal() {
+    setIsNewsModalOpen(false);
+    setEditingNews(null);
+    setNewsTitle("");
+    setNewsContent("");
+    setNewsImage("");
+  }
+
+  function openEditNews(item: News) {
+    setEditingNews(item);
+    setNewsTitle(item.titulo);
+    setNewsContent(item.conteudo);
+    setNewsImage(item.imagem);
+    setSelectedNews(null);
+    setIsNewsModalOpen(true);
+  }
+
   async function handleSaveNews() {
-    if (!newsTitle.trim() || !newsContent.trim() || !activeArtist || submitting) return;
+    if (!newsTitle.trim() || !newsContent.trim() || submitting) return;
+    const tgId = user?.id || "";
     setSubmitting(true);
     try {
+      if (editingNews) {
+        const res = await (api as any).editarNewsSocial(editingNews.id, newsTitle, newsContent, newsImage, tgId);
+        if (res.ok) {
+          haptic.success();
+          closeNewsModal();
+          loadNews();
+        }
+        return;
+      }
+
+      if (!activeArtist) return;
       const payload = {
         titulo: newsTitle,
         conteudo: newsContent,
         imagem: newsImage,
         autor: activeArtist.nome,
       };
-      const tgId = user?.id || "";
       const res = await (api as any).salvarNewsSocial(payload, tgId);
       if (res.ok) {
         haptic.success();
-        setIsNewsModalOpen(false);
-        setNewsTitle("");
-        setNewsContent("");
-        setNewsImage("");
+        closeNewsModal();
         loadNews();
       }
     } catch (err) {
@@ -1804,9 +1831,9 @@ function SocialPage() {
               className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90dvh] overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black uppercase">Nova Matéria</h2>
+                <h2 className="text-xl font-black uppercase">{editingNews ? "Editar Matéria" : "Nova Matéria"}</h2>
                 <button
-                  onClick={() => setIsNewsModalOpen(false)}
+                  onClick={closeNewsModal}
                   className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
                 >
                   <X className="size-4" />
@@ -1868,31 +1895,33 @@ function SocialPage() {
                   <PasteImageLinkInput onApply={setNewsImage} className={inputCls} />
                 </div>
 
-                <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl flex items-center gap-2.5">
-                  <div className="size-7 rounded-full bg-white/10 overflow-hidden shrink-0">
-                    {activeArtist?.foto ? (
-                      <img
-                        src={driveImg(activeArtist.foto)}
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <UserCircle className="size-full text-muted-foreground/40" />
-                    )}
+                {!editingNews && (
+                  <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl flex items-center gap-2.5">
+                    <div className="size-7 rounded-full bg-white/10 overflow-hidden shrink-0">
+                      {activeArtist?.foto ? (
+                        <img
+                          src={driveImg(activeArtist.foto)}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <UserCircle className="size-full text-muted-foreground/40" />
+                      )}
+                    </div>
+                    <p className="text-[10px] font-black uppercase text-muted-foreground truncate">
+                      Publicar como <span className="text-foreground">{activeArtist?.nome}</span>
+                    </p>
                   </div>
-                  <p className="text-[10px] font-black uppercase text-muted-foreground truncate">
-                    Publicar como <span className="text-foreground">{activeArtist?.nome}</span>
-                  </p>
-                </div>
+                )}
 
                 <button
                   onClick={handleSaveNews}
-                  disabled={submitting || !newsTitle.trim() || !activeArtist}
+                  disabled={submitting || !newsTitle.trim() || !newsContent.trim() || (!editingNews && !activeArtist)}
                   className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
                 >
-                  {submitting ? "Publicando..." : "Publicar News"} <Send className="size-4" />
+                  {submitting ? "Salvando..." : editingNews ? "Salvar alterações" : "Publicar News"} <Send className="size-4" />
                 </button>
               </div>
             </motion.div>
@@ -2075,7 +2104,7 @@ function SocialPage() {
                 </div>
               </div>
 
-              <div className="p-5 border-t border-white/5 flex justify-center gap-3 shrink-0">
+              <div className="p-5 border-t border-white/5 flex items-center justify-center gap-3 shrink-0">
                 <button
                   onClick={() => handleComentarNews(selectedNews)}
                   className="px-6 py-3 min-h-11 bg-white/5 border border-white/10 rounded-full font-black uppercase text-sm tracking-wide active:scale-95 transition-transform flex items-center gap-2"
@@ -2083,6 +2112,14 @@ function SocialPage() {
                   <MessageCircle className="size-4" />
                   Comentar
                 </button>
+                {selectedNews.telegramId && String(selectedNews.telegramId) === String(user?.id || "") && (
+                  <button
+                    onClick={() => openEditNews(selectedNews)}
+                    className="flex items-center gap-1.5 px-5 py-3 min-h-11 bg-white/5 border border-white/10 rounded-full font-black uppercase text-sm tracking-wide active:scale-95 transition-transform"
+                  >
+                    <Edit className="size-4" /> Editar
+                  </button>
+                )}
                 <button
                   onClick={() => setSelectedNews(null)}
                   className="px-8 py-3 min-h-11 bg-primary text-primary-foreground rounded-full font-black uppercase text-sm tracking-wide active:scale-95 transition-transform"
