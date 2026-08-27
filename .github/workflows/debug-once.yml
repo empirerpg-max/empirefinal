@@ -11,4 +11,9 @@ jobs:
           date -u
           echo "=== /api/empire-play/videos (procurando WISDOM / CURSED BLESSED) ==="
           curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/videos" > /tmp/out.json
-          jq -c '(.data // .)[] | select((.titulo // "" | ascii_downcase | contains("wisdom")) or (.titulo // "" | ascii_downcase | contains("cursed")))' /tmp/out.json
+          echo "total de itens:"
+          jq '(.data // .) | length' /tmp/out.json
+          echo "matches:"
+          jq -c '(.data // .)[] | select(((.title // "") + " " + (.artist // "")) | ascii_downcase | (contains("wisdom") or contains("cursed")))' /tmp/out.json
+          echo "amostra (3 primeiros, pra conferir formato dos campos):"
+          jq -c '(.data // .)[0:3]' /tmp/out.json
