@@ -545,38 +545,60 @@ export async function createVideoController(request: Request): Promise<Response>
     // Video" foram unificados numa única aba/formulário de Gestão; a tag
     // ("Tipo de vídeo") vinda do formulário define a categoria exibida no
     // catálogo (incluindo "Music Video" como uma das opções).
+    //
+    // NÃO usa appendRow aqui de propósito: o append nativo do Sheets decide
+    // onde encaixar a linha olhando a última linha com QUALQUER célula
+    // preenchida no range inteiro (A:ZZ) — e a coluna T (Thumb) já vem
+    // pré-preenchida com uma imagem padrão em várias linhas "vazias" mais
+    // acima (pra quando ninguém envia thumb própria). Isso fazia o append
+    // pular todo esse bloco de linhas realmente livres e cair bem mais
+    // embaixo do que devia. A linha livre de verdade é sempre a primeira em
+    // que a coluna B (Título) está vazia — é isso que acha e escreve abaixo.
+    const rowValues = [
+      "", // A - ID do usuário
+      fullTitle, // B - Título do tópico
+      "", // C - ID da mensagem (grupo original)
+      "", // D - chat_id
+      "", // E - chat_id_interno
+      topicId, // F - message_thread_id
+      "", // G - Link direto (t.me)
+      tipo, // H - Tipo de vídeo
+      "", // I - Descrição
+      dataFormatada, // J - Data do envio
+      "drive", // K - fonte
+      "", // L - ID da mensagem (grupo de arquivo — não aplicável a upload via Drive)
+      mediaUrl || "", // M - Link do vídeo
+      "", // N - Likes por jogador
+      "", // O - Média Likes
+      musicaVinculada || fullTitle, // P - Nome original nos charts
+      "", // Q - ID da mensagem (reconvertido)
+      "", // R - Status da reconversão
+      "", // S - Reportado em
+      capaUrl || "", // T - Thumb (vira a capa/fundo do vídeo no catálogo)
+    ];
     let videoRowIndexNovo: number | null = null;
     try {
-      videoRowIndexNovo = await googleSheetsService.principal.appendRow("Music Videos", [
-        "", // A - ID do usuário
-        fullTitle, // B - Título do tópico
-        "", // C - ID da mensagem (grupo original)
-        "", // D - chat_id
-        "", // E - chat_id_interno
-        topicId, // F - message_thread_id
-        "", // G - Link direto (t.me)
-        tipo, // H - Tipo de vídeo
-        "", // I - Descrição
-        dataFormatada, // J - Data do envio
-        "drive", // K - fonte
-        "", // L - ID da mensagem (grupo de arquivo — não aplicável a upload via Drive)
-        mediaUrl || "", // M - Link do vídeo
-        "", // N - Likes por jogador
-        "", // O - Média Likes
-        musicaVinculada || fullTitle, // P - Nome original nos charts
-        "", // Q - ID da mensagem (reconvertido)
-        "", // R - Status da reconversão
-        "", // S - Reportado em
-        capaUrl || "", // T - Thumb (vira a capa/fundo do vídeo no catálogo)
+      const colunaB = await googleSheetsService.principal.readValues("Music Videos", "B2:B5000");
+      const idxVazio = colunaB.findIndex((r) => !(r[0] || "").trim());
+      const linhaLivre = idxVazio >= 0 ? idxVazio + 2 : colunaB.length + 2;
+      await googleSheetsService.principal.updateValues("Music Videos", `A${linhaLivre}:T${linhaLivre}`, [
+        rowValues,
       ]);
+      videoRowIndexNovo = linhaLivre;
     } catch (err) {
       console.warn("[createVideoController] Erro ao gravar em Music Videos:", err);
     }
 
+    const warnings: string[] = [];
+
     // Music Videos não gera Código único próprio — sempre usa o da música
     // vinculada em EDIÇÃO CHARTS (coluna P aponta pro título de lá). Acha
     // essa linha por título (única opção aqui, já que o vínculo em si só
-    // existe como texto) e copia o código pra Music Videos!U.
+    // existe como texto) e copia o código pra Music Videos!U. Sem
+    // musicaVinculada preenchida, cai pro título do próprio vídeo — que só
+    // bate por acaso quando o título do vídeo é idêntico ao da música nos
+    // charts (ex: WISDOM x "WISDOM TOOTH" nos charts não batiam, então o
+    // código único ficou vazio, sem nenhum aviso até agora).
     if (videoRowIndexNovo) {
       try {
         const nomeNosCharts = normalizeComparison(musicaVinculada || fullTitle);
@@ -587,6 +609,10 @@ export async function createVideoController(request: Request): Promise<Response>
           await googleSheetsService.principal
             .updateValues("Music Videos", `U${videoRowIndexNovo}`, [[codigoDaMusica]])
             .catch((err) => console.warn("[createVideoController] Erro ao copiar Código único pra Music Videos!U:", err));
+        } else {
+          warnings.push(
+            `Vídeo cadastrado, mas não achei "${musicaVinculada || fullTitle}" em EDIÇÃO CHARTS — o Código único não foi copiado pra Music Videos, confira o vínculo com a música.`,
+          );
         }
       } catch (err) {
         console.warn("[createVideoController] Erro ao buscar Código único da música vinculada:", err);
@@ -603,18 +629,18 @@ export async function createVideoController(request: Request): Promise<Response>
     // Quando não é (ou não tem música vinculada), a caixinha nunca é tocada —
     // isso é o comportamento certo pra vídeo que não é clipe oficial (Live,
     // Behind the Scenes, Trailer etc), mas fica sem nenhum aviso pra quem
-    // esqueceu de marcar "Music Video" num lançamento que devia contar. O
-    // `warning` abaixo cobre esse caso sem travar o cadastro do vídeo.
-    let warning: string | undefined;
+    // esqueceu de marcar "Music Video" num lançamento que devia contar. Os
+    // `warnings` abaixo cobrem esse caso sem travar o cadastro do vídeo.
     const isMusicVideo = tipo.trim().toLowerCase() === "music video";
     if (isMusicVideo && musicaVinculada) {
       const marcou = await marcarVideoclipeNaPontos(musicaVinculada, dataFormatada);
       if (!marcou) {
-        warning = `Vídeo cadastrado, mas não achei "${musicaVinculada}" na aba Pontos — a caixinha de lançamento não foi marcada, confira o vínculo.`;
+        warnings.push(`Vídeo cadastrado, mas não achei "${musicaVinculada}" na aba Pontos — a caixinha de lançamento não foi marcada, confira o vínculo.`);
       }
     } else if (isMusicVideo && !musicaVinculada) {
-      warning = 'Vídeo cadastrado como "Music Video" sem música vinculada — a caixinha de lançamento em Pontos não foi marcada.';
+      warnings.push('Vídeo cadastrado como "Music Video" sem música vinculada — a caixinha de lançamento em Pontos não foi marcada.');
     }
+    const warning = warnings.length > 0 ? warnings.join(" ") : undefined;
 
     registrarLogSistema({
       categoria: "Ação concluída",
@@ -644,6 +670,55 @@ export async function createVideoController(request: Request): Promise<Response>
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
+}
+
+// POST /api/debug/musicvideos-retag — correção pontual: WISDOM e CURSED
+// BLESSED foram cadastrados com "Tipo de vídeo" = "Video" (o jogador
+// esqueceu de marcar "Music Video"). Muda a coluna H (Tipo de vídeo) pra
+// "Music Video" numa linha específica de "Music Videos", só se a coluna B
+// (Título) bater exatamente com o esperado — nunca busca por texto, pra não
+// arriscar escrever na linha errada. Endpoint temporário, remover após o
+// uso.
+export async function debugRetagMusicVideoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    linha?: number;
+    tituloEsperado?: string;
+  };
+  const { linha, tituloEsperado } = body;
+
+  if (!linha || !tituloEsperado) {
+    return new Response(
+      JSON.stringify({ success: false, error: "linha e tituloEsperado são obrigatórios." }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  const cells = await googleSheetsService.principal.readValues("Music Videos", `B${linha}:H${linha}`);
+  const row = cells?.[0] || [];
+  const tituloAtual = (row[0] || "").trim();
+  if (normalizeComparison(tituloAtual) !== normalizeComparison(tituloEsperado)) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: `Linha ${linha} não bate: esperado "${tituloEsperado}", achado "${tituloAtual}".`,
+      }),
+      { status: 409, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  const tipoAtual = (row[6] || "").trim(); // H, sétima coluna do range B:H
+  if (tipoAtual.toLowerCase() === "music video") {
+    return new Response(
+      JSON.stringify({ success: false, error: `Linha ${linha} já estava como "Music Video" — nada feito.` }),
+      { status: 409, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  await googleSheetsService.principal.updateValues("Music Videos", `H${linha}`, [["Music Video"]]);
+
+  return new Response(
+    JSON.stringify({ success: true, data: { linha, titulo: tituloAtual, tipoAnterior: tipoAtual } }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
 }
 
 // Lista as músicas disponíveis nos charts pra busca por faixa no cadastro de
