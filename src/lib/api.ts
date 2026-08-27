@@ -1184,6 +1184,20 @@ export const api = {
     const data = await res.json().catch(() => null);
     return Array.isArray(data) ? data : [];
   },
+  async editarNewsSocial(
+    id: string,
+    titulo: string,
+    conteudo: string,
+    imagem: string,
+    tgId: string,
+  ): Promise<CommonResponse> {
+    const res = await fetch("/api/social/news/editar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, titulo, conteudo, imagem, tgId }),
+    });
+    return res.json();
+  },
 
 };
 

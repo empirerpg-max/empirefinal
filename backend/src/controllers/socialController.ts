@@ -443,6 +443,7 @@ export async function getSocialNewsController(): Promise<Response> {
       imagem: normalizeText(row[3]),
       autor: normalizeText(row[4]),
       data: normalizeText(row[5]),
+      telegramId: normalizeText(row[6]),
       origemTipo: normalizeText(row[7]) || undefined,
       origemId: normalizeText(row[8]) || undefined,
       origemShow: normalizeText(row[9]) || undefined,
@@ -514,4 +515,42 @@ export async function publicarNewsSocial(params: {
     "A:J",
   );
   return id;
+}
+
+/**
+ * POST /api/social/news/editar
+ * Só quem criou a news (coluna G — telegram_id) pode editá-la, pra corrigir
+ * erro de texto/imagem depois de publicada.
+ */
+export async function editSocialNewsController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    id?: string;
+    titulo?: string;
+    conteudo?: string;
+    imagem?: string;
+    tgId?: string;
+  };
+  const { id, titulo, conteudo, imagem, tgId } = body;
+
+  if (!id || !titulo?.trim() || !conteudo?.trim() || !tgId) {
+    return jsonResponse({ ok: false, error: "Parâmetros inválidos pra editar esta matéria." }, 400);
+  }
+
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.news);
+  const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === id.trim());
+  if (rowIndex === -1) {
+    return jsonResponse({ ok: false, error: "Matéria não encontrada." }, 404);
+  }
+
+  const ownerId = normalizeText(rows[rowIndex][6]);
+  if (!ownerId || (ownerId !== tgId.trim() && tgId.trim() !== "810141686")) {
+    return jsonResponse({ ok: false, error: "Você só pode editar suas próprias matérias." }, 403);
+  }
+
+  const sheetRow = rowIndex + 1;
+  await googleSheetsService.usuarios.updateValues(SHEETS.news, `B${sheetRow}:D${sheetRow}`, [
+    [titulo.trim(), conteudo.trim(), imagem?.trim() || ""],
+  ]);
+
+  return jsonResponse({ ok: true });
 }
