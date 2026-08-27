@@ -9,5 +9,14 @@ jobs:
         run: |
           echo "=== agora (UTC) ==="
           date -u
-          echo "=== /api/tv/programas ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/tv/programas" | tee /tmp/out.json
+          echo "=== /api/turnes (buscando show Paradiso #7) ==="
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/turnes" | tee /tmp/out.json | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+tours = d.get('data', d) if isinstance(d, dict) else d
+for t in tours:
+    for s in t.get('agenda', []):
+        if s.get('local')=='Paradiso' and s.get('numero')==7:
+            print('idUnico=', t.get('idUnico'), 'artista=', t.get('artista'))
+            print(json.dumps(s, indent=2, ensure_ascii=False))
+"
