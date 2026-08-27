@@ -49,8 +49,12 @@ function renderFormattedText(text: string) {
 }
 
 // Mensagens de GIF/sticker guardam só um marcador + a URL do Drive no
-// campo de texto (sem mudar o schema da tabela de novo).
+// campo de texto (sem mudar o schema da tabela de novo). Celulares muitas
+// vezes salvam "GIFs" na galeria como vídeo de verdade (mp4/mov) em vez de
+// .gif — por isso existe também o prefixo de vídeo (renderiza <video> em
+// loop mudo em vez de <img>).
 const GIF_PREFIX = "GIF::";
+const VIDEO_GIF_PREFIX = "VIDGIF::";
 
 type HomeTab = "home" | "arquivo" | "grade";
 type WatchTab = "chat" | "participantes" | "sobre";
@@ -985,7 +989,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [sending, setSending] = useState(false);
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
-  const [gifs, setGifs] = useState<Array<{ id: string; name: string; url: string }> | null>(null);
+  const [gifs, setGifs] = useState<Array<{ id: string; name: string; url: string; isVideo?: boolean }> | null>(null);
   const [uploadingGif, setUploadingGif] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1139,11 +1143,11 @@ function ChatPanel({ programaId }: { programaId: string }) {
     }
   };
 
-  const sendGif = async (url: string) => {
+  const sendGif = async (url: string, isVideo?: boolean) => {
     setGifPickerOpen(false);
     setSending(true);
     try {
-      await sendRaw(`${GIF_PREFIX}${url}`);
+      await sendRaw(`${isVideo ? VIDEO_GIF_PREFIX : GIF_PREFIX}${url}`);
     } finally {
       setSending(false);
     }
@@ -1153,6 +1157,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
     if (uploadingGif) return;
     setUploadingGif(true);
     try {
+      const isVideo = file.type.startsWith("video/");
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result));
@@ -1170,17 +1175,24 @@ function ChatPanel({ programaId }: { programaId: string }) {
         }),
       });
       const json = await res.json().catch(() => null);
+      if (!res.ok || json?.success === false) {
+        console.error("[uploadGif] Falha no upload:", json?.error || res.status);
+        return;
+      }
       const driveUrl = json?.data?.fileUrl;
       const match = typeof driveUrl === "string" ? driveUrl.match(/\/d\/([\w-]+)/) : null;
       // Proxy autenticado (não o link direto do Drive, que não é hotlinkável
       // e faz o GIF aparecer como link quebrado pra alguns jogadores).
       const thumbUrl = match ? `/api/media/image?id=${match[1]}` : driveUrl;
       if (thumbUrl) {
-        setGifs((prev) => [{ id: match?.[1] || String(Date.now()), name: file.name, url: thumbUrl }, ...(prev || [])]);
-        await sendGif(thumbUrl);
+        setGifs((prev) => [
+          { id: match?.[1] || String(Date.now()), name: file.name, url: thumbUrl, isVideo },
+          ...(prev || []),
+        ]);
+        await sendGif(thumbUrl, isVideo);
       }
-    } catch {
-      // silencioso — o jogador pode tentar de novo
+    } catch (err) {
+      console.error("[uploadGif] Erro:", err);
     } finally {
       setUploadingGif(false);
     }
@@ -1254,21 +1266,32 @@ function ChatPanel({ programaId }: { programaId: string }) {
                       className={`block w-full text-left mb-1 pl-2 py-1 border-l-2 border-primary/60 text-[11px] rounded-r bg-black/10 hover:bg-black/20 transition-colors ${own ? "text-right border-l-0 border-r-2 pr-2 pl-0" : ""}`}
                     >
                       <span className="font-semibold text-primary/80">{m.reply_to.user}</span>
-                      <span className="text-muted-foreground">: {m.reply_to.text.startsWith(GIF_PREFIX) ? "GIF/figurinha" : m.reply_to.text}</span>
+                      <span className="text-muted-foreground">: {m.reply_to.text.startsWith(GIF_PREFIX) || m.reply_to.text.startsWith(VIDEO_GIF_PREFIX) ? "GIF/figurinha" : m.reply_to.text}</span>
                     </button>
                   )}
-                  {m.text.startsWith(GIF_PREFIX) ? (
+                  {m.text.startsWith(GIF_PREFIX) || m.text.startsWith(VIDEO_GIF_PREFIX) ? (
                     <div className={`rounded-2xl overflow-hidden ${own ? "rounded-br-sm" : "rounded-bl-sm"} max-w-[180px]`}>
                       {!own && (
                         <span className={`block text-[11px] font-bold px-2 pt-1 bg-muted ${m.color}`}>{m.user}</span>
                       )}
-                      <img
-                        src={m.text.slice(GIF_PREFIX.length)}
-                        alt="GIF"
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        className="w-full h-auto block"
-                      />
+                      {m.text.startsWith(VIDEO_GIF_PREFIX) ? (
+                        <video
+                          src={m.text.slice(VIDEO_GIF_PREFIX.length)}
+                          autoPlay
+                          muted
+                          loop
+                          playsInline
+                          className="w-full h-auto block"
+                        />
+                      ) : (
+                        <img
+                          src={m.text.slice(GIF_PREFIX.length)}
+                          alt="GIF"
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          className="w-full h-auto block"
+                        />
+                      )}
                     </div>
                   ) : (
                     <div
@@ -1307,7 +1330,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
           <Reply className="size-3 mt-0.5 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-muted-foreground">Respondendo a <span className={`font-semibold ${colorFor(replyTo.user)}`}>{replyTo.user}</span></div>
-            <div className="truncate text-foreground/80">{replyTo.text.startsWith(GIF_PREFIX) ? "GIF/figurinha" : replyTo.text}</div>
+            <div className="truncate text-foreground/80">{replyTo.text.startsWith(GIF_PREFIX) || replyTo.text.startsWith(VIDEO_GIF_PREFIX) ? "GIF/figurinha" : replyTo.text}</div>
           </div>
           <button type="button" onClick={() => setReplyTo(null)} className="shrink-0 hover:text-foreground text-muted-foreground" aria-label="Cancelar resposta">
             <X className="size-3.5" />
@@ -1339,7 +1362,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
             <input
               ref={gifFileRef}
               type="file"
-              accept="image/gif,image/png,image/jpeg,image/webp"
+              accept="image/gif,image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -1360,11 +1383,15 @@ function ChatPanel({ programaId }: { programaId: string }) {
                 <button
                   key={g.id}
                   type="button"
-                  onClick={() => sendGif(g.url)}
+                  onClick={() => sendGif(g.url, g.isVideo)}
                   className="aspect-square rounded-md overflow-hidden bg-muted hover:ring-2 hover:ring-primary transition"
                   title={g.name}
                 >
-                  <img src={g.url} alt={g.name} loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                  {g.isVideo ? (
+                    <video src={g.url} muted loop playsInline className="w-full h-full object-cover" />
+                  ) : (
+                    <img src={g.url} alt={g.name} loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                  )}
                 </button>
               ))
             )}

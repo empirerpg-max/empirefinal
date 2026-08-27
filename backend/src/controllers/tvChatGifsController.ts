@@ -6,8 +6,12 @@ import { DRIVE_FOLDERS, listFilesInFolder } from "../services/googleDriveService
 export async function listTvChatGifsController(): Promise<Response> {
   try {
     const files = await listFilesInFolder(DRIVE_FOLDERS.tvChatGifs, 100);
+    // Celulares costumam salvar "GIFs" na galeria como vídeo de verdade
+    // (mp4/mov) em vez de .gif — filtrar só "image/" escondia esses arquivos
+    // da lista (e do próprio picker de upload, via accept="image/*"),
+    // fazendo o jogador não conseguir nem selecionar o próprio GIF.
     const items = files
-      .filter((f) => f.mimeType.startsWith("image/"))
+      .filter((f) => f.mimeType.startsWith("image/") || f.mimeType.startsWith("video/"))
       .map((f) => ({
         id: f.id,
         name: f.name,
@@ -17,6 +21,7 @@ export async function listTvChatGifsController(): Promise<Response> {
         // pra alguns jogadores. Usa o proxy autenticado (mesmo já usado pra
         // fotos de perfil/badge) que sempre devolve os bytes reais do arquivo.
         url: `/api/media/image?id=${f.id}`,
+        isVideo: f.mimeType.startsWith("video/"),
       }));
     return new Response(JSON.stringify({ success: true, data: items }), {
       status: 200,
