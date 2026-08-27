@@ -385,6 +385,15 @@ function parseDataBR(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+// Empire roda em horário de Brasília (UTC-3, sem horário de verão), mas o
+// Cloudflare Workers roda em UTC — os getters locais de Date (getDate,
+// getMonth, getFullYear) equivalem aos getters UTC nesse runtime. Por isso
+// "hoje" precisa ser calculado a partir do relógio compensado em -3h, senão
+// vira o dia seguinte entre 21h e 23h59 de Brasília (00h-02h59 UTC).
+function agoraBrasilia(): Date {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000);
+}
+
 // POST /api/turnes/criar — cria a turnê, gerando a agenda automaticamente a
 // partir dos locais escolhidos.
 export async function criarTurneController(request: Request): Promise<Response> {
@@ -413,7 +422,7 @@ export async function criarTurneController(request: Request): Promise<Response> 
       return jsonError("Nenhum dos locais escolhidos foi encontrado.");
     }
 
-    const inicio = parseDataBR(body.dataInicio || "") || new Date();
+    const inicio = parseDataBR(body.dataInicio || "") || agoraBrasilia();
     const lucroMaximoTotal = escolhidos.reduce((s, l) => s + l.capacidade * l.repasseIngresso, 0);
     const lucroMinimoTotal = Math.round(lucroMaximoTotal * BASELINE_SELLTHROUGH);
     const metaLucroRaw = Number(body.metaLucro) || lucroMinimoTotal;
@@ -536,8 +545,8 @@ export async function comprarTurneSimplesController(request: Request): Promise<R
     // Ciclamos pela lista de candidatos até completar `qtd` shows.
     const escolhidos: LocalTurne[] = Array.from({ length: qtd }, (_, i) => candidatos[i % candidatos.length]);
 
-    const inicioRaw = body.dataInicio ? new Date(body.dataInicio) : new Date();
-    const inicio = Number.isNaN(inicioRaw.getTime()) ? new Date() : inicioRaw;
+    const inicioRaw = body.dataInicio ? new Date(body.dataInicio) : agoraBrasilia();
+    const inicio = Number.isNaN(inicioRaw.getTime()) ? agoraBrasilia() : inicioRaw;
     const intervaloDias = 5;
 
     const agenda: TourShow[] = escolhidos.map((local, i) => {
@@ -663,7 +672,7 @@ async function persistAgenda(rowIndex: number, tour: Tour): Promise<void> {
 // AUTOMATICO_PCT_*, em vez de deixar a arrecadação zerada pra sempre.
 // Devolve true se algo mudou (pra saber se precisa persistir).
 function resolverShowsAutomaticos(tour: Tour): boolean {
-  const hoje = formatDataBR(new Date());
+  const hoje = formatDataBR(agoraBrasilia());
   const hojeDate = parseDataBR(hoje);
   let mudou = false;
   for (const show of tour.agenda) {
@@ -703,7 +712,7 @@ const STATUS_FINALIZADA = "Finalizada";
 // já acabaram, então sempre contam como finalizadas.
 function statusDinamico(tour: Tour): string {
   if (!tour.sistemaNovo) return STATUS_FINALIZADA;
-  const hoje = parseDataBR(formatDataBR(new Date()));
+  const hoje = parseDataBR(formatDataBR(agoraBrasilia()));
   const inicio = parseDataBR(tour.dataInicio);
   const termino = parseDataBR(tour.dataTermino);
   if (!hoje || !inicio || !termino) return tour.status || STATUS_PLANEJANDO;
@@ -775,7 +784,7 @@ export async function realizarAcaoDiaController(request: Request): Promise<Respo
       return jsonError("Esse show já teve a ação do dia registrada.");
     }
 
-    const hoje = formatDataBR(new Date());
+    const hoje = formatDataBR(agoraBrasilia());
     if (show.data !== hoje) {
       return jsonError(`Ações só podem ser feitas no dia do show (${show.data}).`);
     }
@@ -959,7 +968,7 @@ export async function getMissoesController(request: Request): Promise<Response> 
     const meusArtistasNorm = new Set(meusArtistas.map((a) => normalizeComparison(a)));
 
     const raw = await readToursRaw();
-    const hoje = new Date();
+    const hoje = agoraBrasilia();
     hoje.setHours(0, 0, 0, 0);
 
     const missoes: MissaoProxima[] = [];
@@ -1004,7 +1013,7 @@ export async function getMissoesController(request: Request): Promise<Response> 
 export async function getProximasGlobaisController(): Promise<Response> {
   try {
     const raw = await readToursRaw();
-    const hoje = new Date();
+    const hoje = agoraBrasilia();
     hoje.setHours(0, 0, 0, 0);
 
     const missoes: MissaoProxima[] = [];
