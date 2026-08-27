@@ -114,6 +114,7 @@ import {
   getSocialNewsController,
   saveSocialNewsController,
   editSocialNewsController,
+  deleteSocialNewsController,
 } from "../controllers/socialController";
 import {
   getPlaylistsController,
@@ -251,6 +252,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/perfis",
     "/api/social/news",
     "/api/social/news/editar",
+    "/api/social/news/deletar",
     "/api/empire-tv/gifs",
     "/api/turnes/locais",
     "/api/turnes/simular",
@@ -767,6 +769,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await editSocialNewsController(request);
+  } else if (url.pathname === "/api/social/news/deletar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/news/deletar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await deleteSocialNewsController(request);
   } else if (url.pathname === "/api/auth/login") {
     if (request.method !== "POST") {
       return new Response(
