@@ -9,8 +9,18 @@ jobs:
         run: |
           echo "=== agora (UTC) ==="
           date -u
-          echo "=== Music Videos: wisdom ==="
+          echo "=== retag WISDOM (linha 301) ==="
+          curl -sS -X POST "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/musicvideos-retag" \
+            -H "Content-Type: application/json" \
+            -d '{"linha":301,"tituloEsperado":"SA5M - WISDOM"}'
+          echo
+          echo "=== retag CURSED BLESSED (linha 302) ==="
+          curl -sS -X POST "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/musicvideos-retag" \
+            -H "Content-Type: application/json" \
+            -d '{"linha":302,"tituloEsperado":"Samantha Cooper - CURSED BLESSED"}'
+          echo
+          echo "=== verificacao: wisdom ==="
           curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/musicvideos-buscar?q=wisdom"
           echo
-          echo "=== Music Videos: cursed ==="
+          echo "=== verificacao: cursed ==="
           curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/musicvideos-buscar?q=cursed"
