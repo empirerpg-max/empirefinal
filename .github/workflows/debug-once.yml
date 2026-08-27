@@ -10,5 +10,5 @@ jobs:
           echo "=== agora (UTC) ==="
           date -u
           echo "=== /api/turnes (buscando show Paradiso #7) ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/turnes" > /tmp/out.json
-          jq -c '(.data // .)[] | {idUnico, artista, show: (.agenda[] | select(.local=="Paradiso" and .numero==7))}' /tmp/out.json
+          echo "=== reverter show automatico (Marco, show 7) ==="
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/tour-reverter-automatico?idUnico=Marco1065444507_1787131362340&showNumero=7"
