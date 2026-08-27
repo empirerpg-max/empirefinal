@@ -9,5 +9,6 @@ jobs:
         run: |
           echo "=== agora (UTC) ==="
           date -u
-          echo "=== /api/flags ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/flags" | tee /tmp/out.json
+          echo "=== /api/empire-play/videos (procurando WISDOM / CURSED BLESSED) ==="
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/videos" > /tmp/out.json
+          jq -c '(.data // .)[] | select((.titulo // "" | ascii_downcase | contains("wisdom")) or (.titulo // "" | ascii_downcase | contains("cursed")))' /tmp/out.json
