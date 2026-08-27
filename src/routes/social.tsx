@@ -610,6 +610,19 @@ function SocialPage() {
     setIsNewsModalOpen(true);
   }
 
+  async function handleDeleteNews(item: News) {
+    haptic.selection();
+    if (!confirm("Excluir esta matéria? Não dá pra desfazer.")) return;
+    const res = await (api as any).excluirNewsSocial(item.id, user?.id || "");
+    if (res.ok) {
+      haptic.success();
+      setSelectedNews(null);
+      loadNews();
+    } else {
+      alert((res as any).error || res.erro || "Não deu pra excluir a matéria.");
+    }
+  }
+
   async function handleSaveNews() {
     if (!newsTitle.trim() || !newsContent.trim() || submitting) return;
     const tgId = user?.id || "";
@@ -2113,12 +2126,20 @@ function SocialPage() {
                   Comentar
                 </button>
                 {selectedNews.telegramId && String(selectedNews.telegramId) === String(user?.id || "") && (
-                  <button
-                    onClick={() => openEditNews(selectedNews)}
-                    className="flex items-center gap-1.5 px-5 py-3 min-h-11 bg-white/5 border border-white/10 rounded-full font-black uppercase text-sm tracking-wide active:scale-95 transition-transform"
-                  >
-                    <Edit className="size-4" /> Editar
-                  </button>
+                  <>
+                    <button
+                      onClick={() => openEditNews(selectedNews)}
+                      className="flex items-center gap-1.5 px-5 py-3 min-h-11 bg-white/5 border border-white/10 rounded-full font-black uppercase text-sm tracking-wide active:scale-95 transition-transform"
+                    >
+                      <Edit className="size-4" /> Editar
+                    </button>
+                    <button
+                      onClick={() => handleDeleteNews(selectedNews)}
+                      className="flex items-center gap-1.5 px-5 py-3 min-h-11 bg-destructive/10 border border-destructive/30 text-destructive rounded-full font-black uppercase text-sm tracking-wide active:scale-95 transition-transform"
+                    >
+                      <Trash2 className="size-4" /> Excluir
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={() => setSelectedNews(null)}

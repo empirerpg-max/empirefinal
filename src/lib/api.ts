@@ -1193,8 +1193,16 @@ export const api = {
   ): Promise<CommonResponse> {
     const res = await fetch("/api/social/news/editar", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ id, titulo, conteudo, imagem, tgId }),
+    });
+    return res.json();
+  },
+  async excluirNewsSocial(id: string, tgId: string): Promise<CommonResponse> {
+    const res = await fetch("/api/social/news/deletar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ id, tgId }),
     });
     return res.json();
   },

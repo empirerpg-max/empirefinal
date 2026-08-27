@@ -542,14 +542,49 @@ export async function editSocialNewsController(request: Request): Promise<Respon
     return jsonResponse({ ok: false, error: "Matéria não encontrada." }, 404);
   }
 
+  const isAdmin = tgId.trim() === ADMIN_TG_ID && (await requestProvesAdmin(request));
   const ownerId = normalizeText(rows[rowIndex][6]);
-  if (!ownerId || (ownerId !== tgId.trim() && tgId.trim() !== "810141686")) {
+  if (!isAdmin && (!ownerId || ownerId !== tgId.trim())) {
     return jsonResponse({ ok: false, error: "Você só pode editar suas próprias matérias." }, 403);
   }
 
   const sheetRow = rowIndex + 1;
   await googleSheetsService.usuarios.updateValues(SHEETS.news, `B${sheetRow}:D${sheetRow}`, [
     [titulo.trim(), conteudo.trim(), imagem?.trim() || ""],
+  ]);
+
+  return jsonResponse({ ok: true });
+}
+
+/**
+ * POST /api/social/news/deletar
+ * Só quem criou a news (coluna G — telegram_id) pode excluí-la. Segue o
+ * mesmo padrão de "soft delete" de deleteSocialPostController: limpa a
+ * linha inteira em vez de removê-la (evita reindexar linhas), e as leituras
+ * já ignoram linha com id vazio.
+ */
+export async function deleteSocialNewsController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { id?: string; tgId?: string };
+  const { id, tgId } = body;
+
+  if (!id || !tgId) {
+    return jsonResponse({ ok: false, error: "Dados incompletos pra excluir esta matéria." }, 400);
+  }
+
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.news);
+  const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === id.trim());
+  if (rowIndex === -1) {
+    return jsonResponse({ ok: false, error: "Matéria não encontrada." }, 404);
+  }
+
+  const isAdmin = tgId.trim() === ADMIN_TG_ID && (await requestProvesAdmin(request));
+  const ownerId = normalizeText(rows[rowIndex][6]);
+  if (!isAdmin && (!ownerId || ownerId !== tgId.trim())) {
+    return jsonResponse({ ok: false, error: "Você só pode excluir suas próprias matérias." }, 403);
+  }
+
+  await googleSheetsService.usuarios.updateValues(SHEETS.news, `A${rowIndex + 1}:J${rowIndex + 1}`, [
+    ["", "", "", "", "", "", "", "", "", ""],
   ]);
 
   return jsonResponse({ ok: true });
