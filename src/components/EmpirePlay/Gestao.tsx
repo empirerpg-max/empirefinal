@@ -817,11 +817,11 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         throw new Error(data.error || "Erro ao registrar vídeo.");
       }
 
-      setSuccessMsg(
+      const mensagemBase =
         categoriaVideo === "Music Video"
           ? "Music Video publicado com sucesso!"
-          : "Vídeo publicado com sucesso!",
-      );
+          : "Vídeo publicado com sucesso!";
+      setSuccessMsg(data.data?.warning ? `${mensagemBase} ⚠️ ${data.data.warning}` : mensagemBase);
       setTituloVideo("");
       setMusicaVinculadaQuery("");
       setMusicaVinculadaSelecionada(null);
