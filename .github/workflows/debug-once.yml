@@ -9,5 +9,7 @@ jobs:
         run: |
           echo "=== agora (UTC) ==="
           date -u
-          echo "=== /api/flags ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/flags" | tee /tmp/out.json
+          echo "=== teste upload GIF (tvChatGifs) ==="
+          curl -sS -X POST "https://tanstack-start-app.empirerpg-forum.workers.dev/api/gestao/upload" \
+            -H "Content-Type: application/json" \
+            -d '{"fileName":"teste-debug.gif","mimeType":"image/gif","folderType":"tvChatGifs","base64Data":"R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="}'
