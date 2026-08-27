@@ -312,3 +312,24 @@ export async function limparPontoCelulaController(request: Request): Promise<Res
 
   return jsonResponse({ ok: true });
 }
+
+// GET /api/debug/pontos-buscar?q=... — investigação pontual: dump de linhas
+// cruas da aba PONTOS cujo texto (qualquer coluna) contenha `q`, pra
+// confirmar o layout real de colunas antes de corrigir o registro de
+// videoclipe (WISDOM/CURSED BLESSED não marcaram a caixinha). Endpoint
+// temporário, remover após o uso.
+export async function debugBuscarPontosController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const q = normalizeComparison(url.searchParams.get("q") || "");
+  if (!q) return jsonResponse({ ok: false, error: "q é obrigatório." }, 400);
+
+  const rows = await googleSheetsService.registrosCharts.readValues(SHEET);
+  const matches: { linha: number; row: string[] }[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (row && row.some((cell) => normalizeComparison(cell).includes(q))) {
+      matches.push({ linha: i + 1, row });
+    }
+  }
+  return jsonResponse({ ok: true, matches });
+}
