@@ -9,18 +9,5 @@ jobs:
         run: |
           echo "=== agora (UTC) ==="
           date -u
-          echo "=== marcar WISDOM (linha 658) ==="
-          curl -sS -X POST "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/pontos-marcar-videoclipe" \
-            -H "Content-Type: application/json" \
-            -d '{"linha":658,"musicaEsperada":"SA5M - WISDOM TOOTH","dataFormatada":"26/08/2026"}'
-          echo
-          echo "=== marcar CURSED BLESSED (linha 659) ==="
-          curl -sS -X POST "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/pontos-marcar-videoclipe" \
-            -H "Content-Type: application/json" \
-            -d '{"linha":659,"musicaEsperada":"Samantha Cooper - CURSED BLESSED","dataFormatada":"26/08/2026"}'
-          echo
-          echo "=== verificacao: wisdom ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/pontos-buscar?q=wisdom"
-          echo
-          echo "=== verificacao: cursed ==="
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/debug/pontos-buscar?q=cursed"
+          echo "=== /api/flags ==="
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/flags" | tee /tmp/out.json

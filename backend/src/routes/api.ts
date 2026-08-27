@@ -82,8 +82,6 @@ import {
   salvarPontoCelulaController,
   distribuirPontosAleatorioController,
   limparPontoCelulaController,
-  debugBuscarPontosController,
-  debugMarcarVideoclipeController,
 } from "../controllers/pontoController";
 import {
   getInvestimentosController,
@@ -245,8 +243,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/ponto/salvar",
     "/api/ponto/distribuir-aleatorio",
     "/api/ponto/limpar",
-    "/api/debug/pontos-buscar",
-    "/api/debug/pontos-marcar-videoclipe",
     "/api/ponto/playlists",
     "/api/ponto/playlists/iniciar",
     "/api/ponto/playlists/investir",
@@ -668,22 +664,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     }
     response = await limparPontoCelulaController(request);
-  } else if (url.pathname === "/api/debug/pontos-buscar") {
-    if (request.method !== "GET") {
-      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/debug/pontos-buscar." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
-    response = await debugBuscarPontosController(request);
-  } else if (url.pathname === "/api/debug/pontos-marcar-videoclipe") {
-    if (request.method !== "POST") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/debug/pontos-marcar-videoclipe." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
-    response = await debugMarcarVideoclipeController(request);
   } else if (url.pathname === "/api/ponto/playlists/limpar") {
     if (request.method !== "POST") {
       return new Response(
