@@ -24,6 +24,7 @@ import {
   createSongController,
   createVideoController,
   debugRetagMusicVideoController,
+  debugBuscarMusicVideosController,
   getAlbumFaixasController,
   getMeusAlbunsController,
   getMusicasEmChartController,
@@ -215,6 +216,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/gestao/musica",
     "/api/gestao/video",
     "/api/debug/musicvideos-retag",
+    "/api/debug/musicvideos-buscar",
     "/api/gestao/album",
     "/api/gestao/album/substituir",
     "/api/gestao/album-faixas",
@@ -388,6 +390,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await debugRetagMusicVideoController(request);
+  } else if (url.pathname === "/api/debug/musicvideos-buscar") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/debug/musicvideos-buscar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await debugBuscarMusicVideosController(request);
   } else if (url.pathname === "/api/gestao/album") {
     if (request.method !== "POST") {
       return new Response(
