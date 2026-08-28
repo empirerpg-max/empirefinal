@@ -19,7 +19,6 @@ import {
   editCommentController,
   getAtividadeRecenteController,
   getMeusComentariosController,
-  debugCompararRegistroController,
 } from "../controllers/forumController";
 import {
   getNotificacoesController,
@@ -218,7 +217,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/forum/atividade-recente",
     "/api/forum/comment-edit",
     "/api/forum/meus-comentarios",
-    "/api/debug/comparar-registro",
     "/api/notificacoes",
     "/api/notificacoes/marcar-lidas",
     "/api/gestao/musica",
@@ -869,14 +867,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await getMeusComentariosController(request);
-  } else if (url.pathname === "/api/debug/comparar-registro") {
-    if (request.method !== "GET") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use GET para /api/debug/comparar-registro." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
-    response = await debugCompararRegistroController(request);
   } else if (url.pathname === "/api/notificacoes") {
     if (request.method !== "GET") {
       return new Response(

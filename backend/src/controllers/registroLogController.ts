@@ -85,9 +85,15 @@ async function buscarNomeCanonico(params: {
  * Isso reintroduz, em teoria, a mesma condição de corrida que o comentário
  * antigo deste arquivo descrevia (dois registros quase simultâneos podem ler
  * a mesma "próxima linha vazia" e um sobrescrever o outro) — mas é a única
- * forma confirmada de gravar em REGISTRO sem cair no erro de proteção, e o
- * volume de gravações aqui (revista/entrevista/comentário publicados) é baixo
- * o bastante pra colisão exata na mesma linha ser rara.
+ * forma confirmada de gravar em REGISTRO sem cair no erro de proteção.
+ *
+ * CONFIRMADO ao vivo (comentários do jogador Lucas B., 28/08/2026): a grande
+ * maioria dos comentários dele nunca gerou linha em REGISTRO — gap grande
+ * demais pra ser só colisão ocasional. Pra fechar a lacuna, cada escrita
+ * agora RELÊ a própria linha logo depois de escrever; se o conteúdo não bate
+ * com o que acabou de mandar (outra chamada colidiu na mesma linha), recalcula
+ * a próxima linha livre e tenta de novo, até 3 vezes — nunca lança, o audit
+ * log continua best-effort e jamais pode derrubar o comentário em si.
  */
 export async function registrarAuditLog(params: {
   nomeJogador: string;
@@ -97,25 +103,52 @@ export async function registrarAuditLog(params: {
   codigoUnico?: string;
 }): Promise<void> {
   const { nomeJogador, titulo, tipo, isAlbum, codigoUnico } = params;
+  const MAX_TENTATIVAS = 3;
   try {
     // As duas leituras não dependem uma da outra até a escrita final — rodar
     // em paralelo em vez de sequencial corta uma ida inteira à API do Sheets
     // do tempo total.
-    const [nomeCanonico, rows] = await Promise.all([
+    const [nomeCanonico, rowsIniciais] = await Promise.all([
       buscarNomeCanonico({ titulo, isAlbum: !!isAlbum, codigoUnico }),
       googleSheetsService.registrosCharts.readValues("REGISTRO"),
     ]);
     const conteudo = isAlbum ? `(ALBUM) - ${nomeCanonico}` : nomeCanonico;
+    const valoresGravados = [nomeJogador, conteudo, tipo];
 
-    let ultimaLinhaComConteudo = 1; // linha 1 = cabeçalho, nunca escrevemos nela
-    for (let i = 0; i < rows.length; i++) {
-      if (rows[i]?.some((c) => normalizeText(c))) ultimaLinhaComConteudo = i + 1;
+    const acharProximaLinhaLivre = (rows: string[][]): number => {
+      let ultimaLinhaComConteudo = 1; // linha 1 = cabeçalho, nunca escrevemos nela
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i]?.some((c) => normalizeText(c))) ultimaLinhaComConteudo = i + 1;
+      }
+      return ultimaLinhaComConteudo + 1;
+    };
+
+    let rows = rowsIniciais;
+    for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+      const proximaLinha = acharProximaLinhaLivre(rows);
+      await googleSheetsService.registrosCharts.updateValues(
+        "REGISTRO",
+        `B${proximaLinha}:D${proximaLinha}`,
+        [valoresGravados],
+      );
+
+      // Relê a mesma linha pra confirmar que ninguém colidiu escrevendo nela
+      // entre a leitura e a escrita (a condição de corrida documentada acima).
+      const confirmacao = await googleSheetsService.registrosCharts.readValues(
+        "REGISTRO",
+        `B${proximaLinha}:D${proximaLinha}`,
+      );
+      const linhaConfirmada = confirmacao?.[0] || [];
+      const bateu = valoresGravados.every((v, i) => normalizeText(linhaConfirmada[i]) === normalizeText(v));
+      if (bateu) return;
+
+      console.warn(
+        `[registroLog] Colisão detectada na linha ${proximaLinha} (tentativa ${tentativa}/${MAX_TENTATIVAS}) — recalculando e tentando de novo.`,
+      );
+      rows = await googleSheetsService.registrosCharts.readValues("REGISTRO");
     }
-    const proximaLinha = ultimaLinhaComConteudo + 1;
 
-    await googleSheetsService.registrosCharts.updateValues("REGISTRO", `B${proximaLinha}:D${proximaLinha}`, [
-      [nomeJogador, conteudo, tipo],
-    ]);
+    console.warn("[registroLog] Não foi possível gravar em REGISTRO após retries — colisão persistente.");
   } catch (err) {
     console.warn("[registroLog] Erro ao gravar em REGISTRO:", err);
   }
