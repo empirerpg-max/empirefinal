@@ -506,6 +506,82 @@ export async function getMeusComentariosController(request: Request): Promise<Re
   }
 }
 
+/**
+ * GET /api/debug/comparar-registro?nome=... — endpoint temporário: lista os
+ * comentários do jogador (por nome, substring) nas 3 abas de Comentarios_*
+ * lado a lado com as linhas dele em REGISTRO, pra investigar relato de
+ * comentário sem audit log. Remover após o uso.
+ */
+export async function debugCompararRegistroController(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const nomeParam = normalizeComparison(url.searchParams.get("nome") || "");
+    if (!nomeParam) {
+      return new Response(JSON.stringify({ success: false, error: "nome é obrigatório." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const [musicaComments, mvComments, albumComments, registroRows] = await Promise.all([
+      googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
+      googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
+      googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
+      googleSheetsService.registrosCharts.readValues("REGISTRO").catch(() => []),
+    ]);
+
+    const extractComments = (rows: string[][], tipo: string, hasData: boolean) =>
+      rows
+        .slice(1)
+        .map((r, idx) => ({
+          linhaPlanilha: idx + 2,
+          tipo,
+          topicId: r[0] || "",
+          jogadorId: r[1] || "",
+          jogador: r[2] || "",
+          comentario: (r[3] || "").slice(0, 60),
+          data: hasData ? r[4] || "" : "",
+        }))
+        .filter((c) => normalizeComparison(c.jogador).includes(nomeParam));
+
+    const meusComentarios = [
+      ...extractComments(musicaComments, "musica", false),
+      ...extractComments(mvComments, "video", true),
+      ...extractComments(albumComments, "album", true),
+    ];
+
+    const meusRegistros = registroRows
+      .slice(1)
+      .map((r, idx) => ({
+        linha: idx + 2,
+        nomeJogador: r[1] || "", // B
+        conteudo: r[2] || "", // C
+        tipo: r[3] || "", // D
+      }))
+      .filter((r) => normalizeComparison(r.nomeJogador).includes(nomeParam));
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          totalComentarios: meusComentarios.length,
+          totalRegistros: meusRegistros.length,
+          meusComentarios,
+          meusRegistros,
+          totalLinhasRegistro: registroRows.length,
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  } catch (error: any) {
+    console.error("[debugCompararRegistroController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao comparar registro." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
 export interface EditCommentBody {
   sheetComments: string;
   rowIndex: number;
