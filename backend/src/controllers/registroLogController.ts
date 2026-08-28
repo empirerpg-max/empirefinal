@@ -98,10 +98,15 @@ export async function registrarAuditLog(params: {
 }): Promise<void> {
   const { nomeJogador, titulo, tipo, isAlbum, codigoUnico } = params;
   try {
-    const nomeCanonico = await buscarNomeCanonico({ titulo, isAlbum: !!isAlbum, codigoUnico });
+    // As duas leituras não dependem uma da outra até a escrita final — rodar
+    // em paralelo em vez de sequencial corta uma ida inteira à API do Sheets
+    // do tempo total.
+    const [nomeCanonico, rows] = await Promise.all([
+      buscarNomeCanonico({ titulo, isAlbum: !!isAlbum, codigoUnico }),
+      googleSheetsService.registrosCharts.readValues("REGISTRO"),
+    ]);
     const conteudo = isAlbum ? `(ALBUM) - ${nomeCanonico}` : nomeCanonico;
 
-    const rows = await googleSheetsService.registrosCharts.readValues("REGISTRO");
     let ultimaLinhaComConteudo = 1; // linha 1 = cabeçalho, nunca escrevemos nela
     for (let i = 0; i < rows.length; i++) {
       if (rows[i]?.some((c) => normalizeText(c))) ultimaLinhaComConteudo = i + 1;
