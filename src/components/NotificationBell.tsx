@@ -105,7 +105,10 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[19rem] max-h-[70vh] overflow-y-auto rounded-2xl bg-secondary border border-white/10 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+        <div
+          className="fixed left-3 right-3 sm:left-auto sm:right-4 sm:w-[22rem] z-[70] max-h-[70vh] overflow-y-auto rounded-2xl bg-secondary border border-white/10 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200"
+          style={{ top: "calc(4rem + env(safe-area-inset-top) + 0.5rem)" }}
+        >
           <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
             <p className="text-sm font-black">Notificações</p>
             {loading && <span className="text-[10px] text-muted-foreground">marcando como lidas…</span>}
@@ -133,12 +136,12 @@ export function NotificationBell() {
                       !n.lida ? "bg-primary/5" : ""
                     }`}
                   >
-                    <p className="text-xs leading-snug">
+                    <p className="text-xs leading-snug break-words">
                       <span className="font-bold">{n.autorNome}</span> comentou{" "}
                       <span className="font-bold text-primary">{n.tituloMedia}</span>
                     </p>
                     {n.comentario && (
-                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">
+                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 break-words">
                         "{n.comentario}"
                       </p>
                     )}
