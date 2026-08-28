@@ -174,6 +174,9 @@ export const Forum: React.FC<ForumProps> = ({
   const [pendingDeepLinkId, setPendingDeepLinkId] = useState<string | undefined>(initialItemId);
   // Filtro de tag do submenu Vídeos (Music Video, Live, Video, etc).
   const [activeVideoTag, setActiveVideoTag] = useState<string>("Todos");
+  // IDs de tópico (telegramTopicId) em que EU já comentei — pra marcar um
+  // "✓ você comentou" na listagem, sem precisar abrir cada tópico.
+  const [commentedTopicIds, setCommentedTopicIds] = useState<Set<string>>(new Set());
 
   // State para comentários do tópico selecionado
   const [topicComments, setTopicComments] = useState<CommentItem[]>([]);
@@ -343,11 +346,34 @@ export const Forum: React.FC<ForumProps> = ({
     };
   }, [activeSubmenu]);
 
+  // 1.2 Carrega os tópicos que eu já comentei, pra marcar o "✓" na listagem.
+  useEffect(() => {
+    if (!myId) return;
+    let isMounted = true;
+    fetch(`/api/forum/meus-comentarios?tgId=${encodeURIComponent(myId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (isMounted && json?.success && Array.isArray(json.data)) {
+          setCommentedTopicIds(new Set(json.data));
+        }
+      })
+      .catch((err) => console.error("Erro ao carregar meus comentários:", err));
+    return () => {
+      isMounted = false;
+    };
+  }, [myId]);
+
   // 1.1 Deep link (player/catálogo → fórum): assim que os itens da aba
   // inicial carregam, abre direto o tópico pedido.
   useEffect(() => {
     if (!pendingDeepLinkId || loading) return;
-    const match = items.find((item) => item.id === pendingDeepLinkId);
+    // Notificações (e outros deep links vindos de fora do fórum) mandam o ID
+    // REAL do tópico (mesmo valor gravado nas abas Comentarios_*), não o id
+    // sintético que os endpoints de listagem geram — por isso também casa
+    // por telegramTopicId, não só por item.id.
+    const match = items.find(
+      (item) => item.id === pendingDeepLinkId || item.telegramTopicId === pendingDeepLinkId,
+    );
     if (match) {
       setSelectedTopic(match);
       setPendingDeepLinkId(undefined);
@@ -1216,6 +1242,15 @@ export const Forum: React.FC<ForumProps> = ({
                           className="!px-2 !py-0.5 sm:!px-3 sm:!py-1 !text-[10px] sm:!text-xs"
                         />
                       </div>
+
+                      {item.telegramTopicId && commentedTopicIds.has(item.telegramTopicId) && (
+                        <div
+                          className="absolute top-2 left-2 sm:top-3 sm:left-3 pointer-events-none size-5 sm:size-6 rounded-full bg-emerald-500 border border-emerald-300/50 shadow-lg grid place-items-center"
+                          title="Você comentou este tópico"
+                        >
+                          <Check className="size-3 sm:size-3.5 text-black" strokeWidth={3} aria-hidden="true" />
+                        </div>
+                      )}
                     </div>
 
                     {/* METADADOS */}
@@ -1281,7 +1316,13 @@ export const Forum: React.FC<ForumProps> = ({
           tituloMedia={selectedTopic.title}
           topicId={resolvedTopicId || selectedTopic.id}
           onCommentSubmitted={() => {
-            if (selectedTopic) fetchTopicComments(selectedTopic);
+            if (selectedTopic) {
+              fetchTopicComments(selectedTopic);
+              const topicKey = resolvedTopicId || selectedTopic.telegramTopicId || selectedTopic.id;
+              if (topicKey) {
+                setCommentedTopicIds((prev) => new Set(prev).add(topicKey));
+              }
+            }
           }}
         />
       )}

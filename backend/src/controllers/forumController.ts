@@ -7,6 +7,8 @@ import {
 } from "../services/googleSheetsService";
 import { registrarAuditLog } from "./registroLogController";
 import { somarPrestigio } from "../services/prestigioService";
+import { getOwnerIdForArtist } from "./artistasController";
+import { registrarNotificacaoComentario } from "./notificacoesController";
 
 const USUARIOS_SHEET = "Usuários";
 
@@ -277,6 +279,37 @@ export async function createCommentController(request: Request): Promise<Respons
             `${avgColLetter}${foundRowIndex}`,
             [[String(newAvg)]],
           );
+
+          // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
+          // Monroe de Rose Thompson" pra quem é dono de Rose Thompson) — nunca
+          // a si mesmo. Pra "musica" o nome do artista vem da coluna N (ACT
+          // PRINCIPAL); álbum/vídeo usam o título "Artista - Título" (mesmo
+          // formato confirmado em Music Videos/Albuns).
+          try {
+            const artistaNome =
+              tipoMedia === "musica"
+                ? normalizeText(rowData[13])
+                : (() => {
+                    const sep = tituloOficial.indexOf(" - ");
+                    return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
+                  })();
+            if (artistaNome) {
+              const ownerId = await getOwnerIdForArtist(artistaNome);
+              if (ownerId) {
+                await registrarNotificacaoComentario({
+                  ownerId,
+                  autorId: jogadorIdClean,
+                  autorNome: playerClean,
+                  tipoMedia,
+                  tituloMedia: tituloOficial,
+                  topicId: topicIdClean,
+                  comentario: comentario.trim(),
+                });
+              }
+            }
+          } catch (err) {
+            console.warn("[ForumController] Erro ao notificar dono do artista:", err);
+          }
         }
       }
     } catch (err) {
@@ -398,6 +431,55 @@ export async function getCommentsController(request: Request): Promise<Response>
   } catch (err: any) {
     return new Response(
       JSON.stringify({ success: false, error: err.message || "Erro ao buscar comentários." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+/**
+ * GET /api/forum/meus-comentarios?tgId=...
+ * Devolve só os IDs de tópico (coluna "ID do tópico"/message_thread_id, o
+ * mesmo valor exposto como `telegramTopicId` pelos endpoints de listagem do
+ * fórum) em que o jogador já comentou — usado pra marcar um "✓ você
+ * comentou" na listagem, sem precisar carregar o comentário inteiro de cada
+ * tópico.
+ */
+export async function getMeusComentariosController(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const tgId = (url.searchParams.get("tgId") || "").trim();
+    if (!tgId) {
+      return new Response(JSON.stringify({ success: false, error: "tgId é obrigatório." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const [musicaComments, mvComments, albumComments] = await Promise.all([
+      googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
+      googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
+      googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
+    ]);
+
+    const normTg = normalizeComparison(tgId);
+    const topicIds = new Set<string>();
+    for (const rows of [musicaComments, mvComments, albumComments]) {
+      if (!rows || rows.length <= 1) continue;
+      for (const r of rows.slice(1)) {
+        const topicId = (r[0] || "").trim();
+        const jogadorId = (r[1] || "").trim();
+        if (topicId && normalizeComparison(jogadorId) === normTg) topicIds.add(topicId);
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true, data: Array.from(topicIds) }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[getMeusComentariosController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao buscar seus comentários." }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }

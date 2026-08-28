@@ -41,6 +41,7 @@ import { useTelegramUser, haptic, useTelegramBackButton } from "@/lib/telegram";
 import { api, driveImg, type Artist } from "@/lib/api";
 import { useServiceWorkerUpdate } from "@/lib/pwa";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { NotificationBell } from "@/components/NotificationBell";
 import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
 import { EmpirePlayerProvider, useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { MusicPlayer } from "@/components/EmpirePlay/MusicPlayer";
@@ -747,6 +748,7 @@ function RootInner() {
           </span>
         </Link>
         <div className="flex items-center gap-1.5">
+          <NotificationBell />
           <RefreshButton />
           <button
             onClick={() => {
