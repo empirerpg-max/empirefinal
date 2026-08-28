@@ -32,6 +32,9 @@ interface ChatMessage {
   ts: number;
   color: string;
   reply_to?: { id: string; user: string; text: string };
+  // Mensagem exibida localmente antes de confirmar no servidor — some/vira
+  // definitiva assim que o insert responde (ver sendRaw).
+  pending?: boolean;
 }
 
 // *negrito* e _itálico_ (estilo Telegram) — renderiza em partes, sem HTML cru.
@@ -1013,24 +1016,32 @@ function ChatPanel({ programaId }: { programaId: string }) {
 
     const fetchHistory = async () => {
       const { supabase } = await import("@/integrations/supabase/client");
+      // `order(ascending: true).limit(300)` pegava sempre as 300 mensagens
+      // MAIS ANTIGAS do programa — depois que um show ao vivo passava desse
+      // total, toda mensagem nova sumia de quem recarregava/voltava pro chat
+      // (fetchHistory roda de novo a cada visibilitychange). Busca as 300
+      // mais RECENTES (ordem decrescente) e desfaz a ordem só na exibição.
       const { data } = await supabase
         .from("tv_chat_messages")
         .select("id,user_name,user_id,user_photo,text,reply_to,created_at")
         .eq("programa_id", programaId)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(300);
       if (!alive || !data) return;
       setMessages(
-        data.map((r: any) => ({
-          id: r.id,
-          user: r.user_name,
-          userId: r.user_id || undefined,
-          userPhoto: r.user_photo || undefined,
-          text: r.text,
-          ts: new Date(r.created_at).getTime(),
-          color: colorFor(r.user_name),
-          reply_to: r.reply_to || undefined,
-        }))
+        data
+          .slice()
+          .reverse()
+          .map((r: any) => ({
+            id: r.id,
+            user: r.user_name,
+            userId: r.user_id || undefined,
+            userPhoto: r.user_photo || undefined,
+            text: r.text,
+            ts: new Date(r.created_at).getTime(),
+            color: colorFor(r.user_name),
+            reply_to: r.reply_to || undefined,
+          }))
       );
     };
 
@@ -1112,8 +1123,50 @@ function ChatPanel({ programaId }: { programaId: string }) {
       reply_to: replyTo ? { id: replyTo.id, user: replyTo.user, text: replyTo.text.slice(0, 80) } : null,
     };
     setReplyTo(null);
+
+    // Mostra a mensagem na hora (otimista), sem esperar o round-trip do
+    // realtime — antes disso, se o canal tivesse caído em silêncio (ex:
+    // celular em segundo plano durante o show), o remetente nunca via a
+    // própria mensagem aparecer, achava que não tinha ido e digitava tudo
+    // de novo (causa raiz do "mensagem sumiu"/"travou" relatado ontem).
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        user: payload.user_name,
+        userId: payload.user_id || undefined,
+        userPhoto: payload.user_photo || undefined,
+        text: payload.text,
+        ts: Date.now(),
+        color: colorFor(payload.user_name),
+        reply_to: payload.reply_to || undefined,
+        pending: true,
+      },
+    ]);
+
     const { supabase } = await import("@/integrations/supabase/client");
-    await supabase.from("tv_chat_messages").insert(payload);
+    const { data, error } = await supabase
+      .from("tv_chat_messages")
+      .insert(payload)
+      .select("id,created_at")
+      .single();
+
+    if (error || !data) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      throw error || new Error("Falha ao enviar mensagem.");
+    }
+
+    // Troca o id temporário pelo definitivo assim que o servidor confirma —
+    // se o evento realtime da própria mensagem já tiver chegado antes (com
+    // o id real), só descarta a bolha otimista em vez de duplicar.
+    setMessages((prev) => {
+      const jaChegouPeloRealtime = prev.some((m) => m.id === data.id && m.id !== tempId);
+      if (jaChegouPeloRealtime) return prev.filter((m) => m.id !== tempId);
+      return prev.map((m) =>
+        m.id === tempId ? { ...m, id: data.id, ts: new Date(data.created_at).getTime(), pending: false } : m,
+      );
+    });
   };
 
   const send = async () => {
@@ -1246,7 +1299,7 @@ function ChatPanel({ programaId }: { programaId: string }) {
               <div
                 key={m.id}
                 id={`tvmsg-${m.id}`}
-                className={`group flex items-end gap-2 rounded-lg px-1 py-0.5 -mx-1 ${own ? "flex-row-reverse" : ""}`}
+                className={`group flex items-end gap-2 rounded-lg px-1 py-0.5 -mx-1 ${own ? "flex-row-reverse" : ""} ${m.pending ? "opacity-50" : ""}`}
               >
                 {!own && (
                   <div className="size-7 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mb-0.5">

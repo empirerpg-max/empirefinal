@@ -23,12 +23,21 @@ const NOTIF_HEADER = [
   "Lida",
 ];
 
+// Memoiza "a aba já existe/tem cabeçalho" por isolate do Worker — sem isso,
+// TODO comentário do app inteiro (música, vídeo, álbum) pagava 2 idas extra
+// à API do Sheets (listSheetTabs + leitura do cabeçalho) só pra confirmar
+// algo que, depois da primeira vez, nunca muda. Contribuía sozinho pra
+// deixar o comentário em vídeo mais lento (~5-6s medidos ao vivo).
+let notifSheetReady = false;
+
 async function ensureNotifSheet(): Promise<void> {
+  if (notifSheetReady) return;
   await ensureSheetTab("principal", NOTIF_SHEET);
   const first = await googleSheetsService.principal.readValues(NOTIF_SHEET, "A1:A1");
   if (!first?.[0]?.[0]?.trim()) {
     await googleSheetsService.principal.updateValues(NOTIF_SHEET, "A1:J1", [NOTIF_HEADER]);
   }
+  notifSheetReady = true;
 }
 
 export interface RegistrarNotificacaoComentarioParams {
