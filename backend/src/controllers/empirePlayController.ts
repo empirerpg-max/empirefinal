@@ -606,6 +606,9 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
       videoRecords,
       artistRecords,
       fallbackPhotoFile,
+      spotifyChartRows,
+      appleChartRows,
+      youtubeChartRows,
     ] = await Promise.all([
       // Cache curto (2min) nas 4 leituras mais repetidas dessa tela — eram
       // as que apareciam batendo no limite de requisições/minuto da API do
@@ -631,10 +634,81 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
         () => [],
       ),
       findFileByName(CAPA_PLAYLIST_FOLDER_ID, "substituta").catch(() => null),
+      // As abas Top_50_Spotify/Top_Songs_Apple_Music/Top_Videos_YT guardam a
+      // posição MANUALMENTE (sem qualquer lógica de data/semana) — quando
+      // alguém esquece de atualizar, o #1 mostrado aqui destoa do chart real
+      // (chartsBase, o mesmo usado no banner do Início principal). Lê as
+      // 3 abas de chart pra pegar a posição real da semana mais recente e
+      // usar ela pra reordenar as listas acima, em vez de confiar cegamente
+      // na coluna "posição" dessas abas manuais.
+      cachedRead("home:chartsBase:SPOTIFY", 120_000, () =>
+        googleSheetsService.chartsBase.readValues("SPOTIFY"),
+      ).catch(() => []),
+      cachedRead("home:chartsBase:APPLE MUSIC", 120_000, () =>
+        googleSheetsService.chartsBase.readValues("APPLE MUSIC"),
+      ).catch(() => []),
+      cachedRead("home:chartsBase:YOUTUBE", 120_000, () =>
+        googleSheetsService.chartsBase.readValues("YOUTUBE"),
+      ).catch(() => []),
     ]);
     const fallbackPhotoUrl = fallbackPhotoFile
       ? `https://drive.google.com/uc?export=view&id=${fallbackPhotoFile.id}`
       : null;
+
+    // Constrói {artista::título -> posição} a partir da semana mais recente
+    // de uma aba da chartsBase (colunas: B=data, C=posição, D=título,
+    // H=artista — mesmo layout usado em chartsController.ts).
+    const buildChartsBasePositionIndex = (rows: unknown[]): Map<string, number> => {
+      const map = new Map<string, number>();
+      const asStr = (v: unknown) => (v === null || v === undefined ? "" : String(v));
+      const body = (rows as unknown[][]).slice(1).filter((r) => asStr(r[1]) && asStr(r[2]));
+      if (body.length === 0) return map;
+      let latestDate = new Date(0);
+      let latestDateStr = "";
+      for (const r of body) {
+        const dataStr = asStr(r[1]);
+        const d = new Date(dataStr.split("/").reverse().join("-"));
+        if (!Number.isNaN(d.getTime()) && d > latestDate) {
+          latestDate = d;
+          latestDateStr = dataStr;
+        }
+      }
+      for (const r of body) {
+        if (asStr(r[1]) !== latestDateStr) continue;
+        const pos = Number(r[2]);
+        const titulo = normalizeComparison(asStr(r[3]));
+        const artista = normalizeComparison(asStr(r[7]));
+        if (!titulo || Number.isNaN(pos)) continue;
+        const key = `${artista}::${titulo}`;
+        if (!map.has(key)) map.set(key, pos);
+      }
+      return map;
+    };
+    const spotifyPositionIndex = buildChartsBasePositionIndex(spotifyChartRows);
+    const applePositionIndex = buildChartsBasePositionIndex(appleChartRows);
+    const youtubePositionIndex = buildChartsBasePositionIndex(youtubeChartRows);
+
+    // Reordena os itens de uma playlist top usando a posição real da chartsBase
+    // (quando encontrada por artista+título) no lugar da coluna manual —
+    // itens sem correspondência mantêm a posição/ordem original, mas sempre
+    // depois dos que bateram com o chart real.
+    const reorderByChartsBasePosition = (
+      items: EmpirePlayCleanItem[],
+      positionIndex: Map<string, number>,
+    ): EmpirePlayCleanItem[] => {
+      if (positionIndex.size === 0) return items;
+      const withRank = items.map((item, idx) => {
+        const key = `${normalizeComparison(item.artist)}::${normalizeComparison(item.title)}`;
+        const realPosition = positionIndex.get(key);
+        return {
+          item: realPosition ? { ...item, position: realPosition } : item,
+          rank: realPosition ?? Number.POSITIVE_INFINITY,
+          idx,
+        };
+      });
+      withRank.sort((a, b) => a.rank - b.rank || a.idx - b.idx);
+      return withRank.map((w) => w.item);
+    };
 
     // Nunca mostra faixa Pendente (sem tópico ainda) na playlist Hot — ela
     // não é conteúdo publicado de verdade, só existe internamente até
@@ -743,32 +817,41 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
       });
 
     const topSpotify = enrichWithArtistPhoto(
-      enrichWithCover(
-        enrichWithScore(
-          correctArtistNames(spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx))),
-          musicaScoreIndex,
+      reorderByChartsBasePosition(
+        enrichWithCover(
+          enrichWithScore(
+            correctArtistNames(spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx))),
+            musicaScoreIndex,
+          ),
+          musicaCoverIndex,
         ),
-        musicaCoverIndex,
+        spotifyPositionIndex,
       ),
     );
     const topAppleMusic = enrichWithArtistPhoto(
-      enrichWithCover(
-        enrichWithScore(
-          correctArtistNames(
-            appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
+      reorderByChartsBasePosition(
+        enrichWithCover(
+          enrichWithScore(
+            correctArtistNames(
+              appleRecords.map((rec, idx) => buildCleanItem("Top_Songs_Apple_Music", rec, idx)),
+            ),
+            musicaScoreIndex,
           ),
-          musicaScoreIndex,
+          musicaCoverIndex,
         ),
-        musicaCoverIndex,
+        applePositionIndex,
       ),
     );
     const topYoutube = enrichWithArtistPhoto(
-      enrichWithCover(
-        enrichWithScore(
-          correctArtistNames(youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx))),
-          videoScoreIndex,
+      reorderByChartsBasePosition(
+        enrichWithCover(
+          enrichWithScore(
+            correctArtistNames(youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx))),
+            videoScoreIndex,
+          ),
+          videoCoverIndex,
         ),
-        videoCoverIndex,
+        youtubePositionIndex,
       ),
     );
     const recentMusicasWithPhoto = enrichWithArtistPhoto(recentMusicas);
