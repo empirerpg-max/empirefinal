@@ -7,8 +7,4 @@ jobs:
     steps:
       - name: Curl debug endpoint
         run: |
-          echo "=== teste comentario em video (REIGN - Jessica Johnson) ==="
-          time curl -sS -w "\nHTTP_CODE:%{http_code} TIME:%{time_total}s\n" -X POST "https://tanstack-start-app.empirerpg-forum.workers.dev/api/forum/comment" \
-            -H "Content-Type: application/json" \
-            -d '{"tipoMedia":"video","tituloMedia":"Jessica Johnson - REIGN","topicId":"","jogadorId":"999999999DEBUGTESTE","nomeJogador":"TesteDebug","comentario":"teste de diagnostico do bug, ignorar","intervalo":"76 - 90"}' \
-            --max-time 60
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/flags"
