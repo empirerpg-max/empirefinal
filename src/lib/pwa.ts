@@ -43,6 +43,14 @@ export function useServiceWorkerUpdate() {
       if (document.visibilityState === "visible") registration?.update().catch(() => {});
     };
     document.addEventListener("visibilitychange", onVisible);
+    // Uma aba/PWA aberta e em primeiro plano o tempo todo (ex: durante uma
+    // transmissão ao vivo da Empire TV) nunca dispara visibilitychange —
+    // sem essa checagem periódica, quem não sai da tela fica preso na
+    // versão antiga (viu isso causar GIF aparecendo como link cru pra quem
+    // ficou o show inteiro com o chat aberto).
+    const updateInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") registration?.update().catch(() => {});
+    }, 3 * 60 * 1000);
 
     let reloading = false;
     const onControllerChange = () => {
@@ -54,6 +62,7 @@ export function useServiceWorkerUpdate() {
 
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(updateInterval);
       navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
     };
   }, []);

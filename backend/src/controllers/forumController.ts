@@ -205,6 +205,14 @@ export async function createCommentController(request: Request): Promise<Respons
     // linha ainda não tem código preenchido (registrarAuditLog cai pro
     // fallback por título nesse caso).
     let codigoUnico = "";
+    // Notificação do dono do artista — disparada (não esperada) ainda
+    // dentro do passo 1, pra rodar em paralelo com o passo 2 (salvar o
+    // comentário) em vez de mais uma chamada sequencial à API do Sheets.
+    // Isso, mais o combine de rating+média numa única updateValues abaixo,
+    // foi o que trouxe o comentário em vídeo de ~5.7s medidos ao vivo pra
+    // bem menos — cada chamada sequencial extra à API do Sheets custava
+    // ~1s+ isolada.
+    let notifyPromise: Promise<void> = Promise.resolve();
 
     // 1. Atualizar nota/likes e média na planilha principal — isolado num
     // try/catch pra uma falha aqui (ex: título sem match nenhum) nunca
@@ -267,48 +275,47 @@ export async function createCommentController(request: Request): Promise<Respons
           const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
           const avgColLetter = colIndexToA1Letter(colAvgIndex);
 
-          // Atualiza a coluna de ratings por jogador e coluna de média
+          // Rating por jogador e média sempre ficam em colunas adjacentes
+          // (N/O, H/I, V/W conforme a aba) — uma updateValues só cobrindo o
+          // intervalo, em vez de duas chamadas sequenciais.
           await googleSheetsService.principal.updateValues(
             targetSheet,
-            `${ratingColLetter}${foundRowIndex}`,
-            [[updatedRatings]],
-          );
-
-          await googleSheetsService.principal.updateValues(
-            targetSheet,
-            `${avgColLetter}${foundRowIndex}`,
-            [[String(newAvg)]],
+            `${ratingColLetter}${foundRowIndex}:${avgColLetter}${foundRowIndex}`,
+            [[updatedRatings, String(newAvg)]],
           );
 
           // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
           // Monroe de Rose Thompson" pra quem é dono de Rose Thompson) — nunca
           // a si mesmo. Pra "musica" o nome do artista vem da coluna N (ACT
           // PRINCIPAL); álbum/vídeo usam o título "Artista - Título" (mesmo
-          // formato confirmado em Music Videos/Albuns).
-          try {
-            const artistaNome =
-              tipoMedia === "musica"
-                ? normalizeText(rowData[13])
-                : (() => {
-                    const sep = tituloOficial.indexOf(" - ");
-                    return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
-                  })();
-            if (artistaNome) {
-              const ownerId = await getOwnerIdForArtist(artistaNome);
-              if (ownerId) {
-                await registrarNotificacaoComentario({
-                  ownerId,
-                  autorId: jogadorIdClean,
-                  autorNome: playerClean,
-                  tipoMedia,
-                  tituloMedia: tituloOficial,
-                  topicId: topicIdClean,
-                  comentario: comentario.trim(),
-                });
-              }
-            }
-          } catch (err) {
-            console.warn("[ForumController] Erro ao notificar dono do artista:", err);
+          // formato confirmado em Music Videos/Albuns). Só DISPARA aqui —
+          // quem chama espera o resultado lá embaixo, em paralelo com o
+          // passo 2.
+          const artistaNome =
+            tipoMedia === "musica"
+              ? normalizeText(rowData[13])
+              : (() => {
+                  const sep = tituloOficial.indexOf(" - ");
+                  return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
+                })();
+          if (artistaNome) {
+            notifyPromise = getOwnerIdForArtist(artistaNome)
+              .then((ownerId) =>
+                ownerId
+                  ? registrarNotificacaoComentario({
+                      ownerId,
+                      autorId: jogadorIdClean,
+                      autorNome: playerClean,
+                      tipoMedia,
+                      tituloMedia: tituloOficial,
+                      topicId: topicIdClean,
+                      comentario: comentario.trim(),
+                    })
+                  : undefined,
+              )
+              .catch((err) => {
+                console.warn("[ForumController] Erro ao notificar dono do artista:", err);
+              });
           }
         }
       }
@@ -316,26 +323,32 @@ export async function createCommentController(request: Request): Promise<Respons
       console.warn("[ForumController] Erro ao atualizar nota/média:", err);
     }
 
-    // 2. Salvar comentário na aba de comentários correspondente
+    // 2. Salvar comentário na aba de comentários correspondente — em
+    // paralelo com a notificação disparada no passo 1 (não depende dela).
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
     // Linha real onde o comentário caiu — permite reagir com emoji
     // imediatamente após publicar, direto no fluxo do comentário, sem
     // precisar reler a aba pra descobrir a linha depois.
     let newRowIndex: number | null = null;
-    try {
-      newRowIndex = await googleSheetsService.principal.appendRow(
-        commentSheet,
-        buildCommentRow(tipoMedia, {
-          topicId: topicIdClean,
-          jogadorId: jogadorIdClean,
-          playerClean,
-          comentario: comentario.trim(),
-          nowStr,
+    const [, appendResult] = await Promise.all([
+      notifyPromise,
+      googleSheetsService.principal
+        .appendRow(
+          commentSheet,
+          buildCommentRow(tipoMedia, {
+            topicId: topicIdClean,
+            jogadorId: jogadorIdClean,
+            playerClean,
+            comentario: comentario.trim(),
+            nowStr,
+          }),
+        )
+        .catch((err) => {
+          console.warn(`[ForumController] Não foi possível salvar em ${commentSheet}:`, err);
+          return null;
         }),
-      );
-    } catch (err) {
-      console.warn(`[ForumController] Não foi possível salvar em ${commentSheet}:`, err);
-    }
+    ]);
+    newRowIndex = appendResult;
 
     // 3. Registrar Audit Log na Planilha REGISTRO (1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg)
     await registrarAuditLog({
