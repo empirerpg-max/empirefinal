@@ -404,42 +404,6 @@ export async function chartsApiController(request: Request): Promise<Response> {
         return jsonOk(await fetchHOFProfile(p.get("artist") || ""));
       case "getBannerN1s":
         return jsonOk(await fetchBannerN1s());
-      case "debugTailN1": {
-        // Endpoint temporário: pra cada aba, acha a data mais recente e
-        // devolve TODAS as linhas com posição 1-5 daquela semana (não a
-        // cauda física da planilha — isso só mostrava as últimas posições,
-        // 86-100, inútil pra conferir o #1), lado a lado com o resultado
-        // computado por fetchBannerN1s.
-        const tabs = [
-          { key: "hot100", tab: "BILLBOARD HOT 100" },
-          { key: "spotify", tab: "SPOTIFY" },
-          { key: "apple", tab: "APPLE MUSIC" },
-          { key: "youtube", tab: "YOUTUBE" },
-          { key: "sales", tab: "DIGITAL SALES" },
-        ];
-        const dumps: Record<string, unknown> = {};
-        for (const { key, tab } of tabs) {
-          const data = await readSheet("chartsBase", tab);
-          const body = data.slice(1);
-          let latestDate = new Date(0);
-          let latestDateStr = "";
-          for (const r of body) {
-            if (!r[1] || !r[2]) continue;
-            const d = parseDateBR(r[1]);
-            if (d > latestDate) {
-              latestDate = d;
-              latestDateStr = r[1];
-            }
-          }
-          const top5DaSemana = body
-            .filter((r) => r[1] === latestDateStr && Number(r[2]) >= 1 && Number(r[2]) <= 5)
-            .map((r) => ({ data: r[1], pos: r[2], tit: r[3], art: r[7] }))
-            .sort((a, b) => Number(a.pos) - Number(b.pos));
-          dumps[key] = { totalLinhas: data.length, dataMaisRecente: latestDateStr, top5DaSemana };
-        }
-        const banner = await fetchBannerN1s();
-        return jsonOk({ dumps, banner });
-      }
       case "getTopArtistCover":
         return jsonOk(await fetchTopArtistCover());
       case "getReleases":
