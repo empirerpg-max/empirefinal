@@ -18,7 +18,12 @@ import {
   toggleCommentReactionController,
   editCommentController,
   getAtividadeRecenteController,
+  getMeusComentariosController,
 } from "../controllers/forumController";
+import {
+  getNotificacoesController,
+  marcarNotificacoesLidasController,
+} from "../controllers/notificacoesController";
 import {
   createAlbumController,
   createSongController,
@@ -211,6 +216,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/forum/comment-reaction",
     "/api/forum/atividade-recente",
     "/api/forum/comment-edit",
+    "/api/forum/meus-comentarios",
+    "/api/notificacoes",
+    "/api/notificacoes/marcar-lidas",
     "/api/gestao/musica",
     "/api/gestao/video",
     "/api/gestao/album",
@@ -851,6 +859,30 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await editCommentController(request);
+  } else if (url.pathname === "/api/forum/meus-comentarios") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/forum/meus-comentarios." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getMeusComentariosController(request);
+  } else if (url.pathname === "/api/notificacoes") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/notificacoes." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await getNotificacoesController(request);
+  } else if (url.pathname === "/api/notificacoes/marcar-lidas") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/notificacoes/marcar-lidas." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await marcarNotificacoesLidasController(request);
   } else if (url.pathname === "/api/turnes/locais") {
     if (request.method !== "GET") {
       return new Response(
