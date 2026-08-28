@@ -208,17 +208,19 @@ export async function createCommentController(request: Request): Promise<Respons
     // Notificação do dono do artista — disparada (não esperada) ainda
     // dentro do passo 1, pra rodar em paralelo com o passo 2 (salvar o
     // comentário) em vez de mais uma chamada sequencial à API do Sheets.
-    // Isso, mais o combine de rating+média numa única updateValues abaixo,
-    // foi o que trouxe o comentário em vídeo de ~5.7s medidos ao vivo pra
-    // bem menos — cada chamada sequencial extra à API do Sheets custava
-    // ~1s+ isolada.
     let notifyPromise: Promise<void> = Promise.resolve();
 
     // 1. Atualizar nota/likes e média na planilha principal — isolado num
     // try/catch pra uma falha aqui (ex: título sem match nenhum) nunca
     // impedir os passos 2 e 3 (salvar o comentário e o audit log).
     try {
-      const rows = await googleSheetsService.principal.readValues(targetSheet);
+      // O maior índice de coluna usado por qualquer tipo de mídia é 25 (Z,
+      // "Código único" de música) — o range default (A:ZZ, 702 colunas) lia
+      // MUITO mais do que qualquer código aqui usa. Medido ao vivo: o
+      // comentário em vídeo (aba "Music Videos", 764+ linhas) levava ~5.7s,
+      // e essa única leitura era o maior custo isolado da requisição.
+      // Restringir pra A:AA corta o volume de dados da resposta em ~26x.
+      const rows = await googleSheetsService.principal.readValues(targetSheet, "A:AA");
 
       if (rows && rows.length > 0) {
         // Busca pela coluna de ID do tópico certa pra essa aba (ver acima —
