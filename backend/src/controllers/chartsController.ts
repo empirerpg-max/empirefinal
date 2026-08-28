@@ -404,6 +404,26 @@ export async function chartsApiController(request: Request): Promise<Response> {
         return jsonOk(await fetchHOFProfile(p.get("artist") || ""));
       case "getBannerN1s":
         return jsonOk(await fetchBannerN1s());
+      case "debugTailN1": {
+        // Endpoint temporário: dump das últimas linhas de cada aba de charts
+        // (data/posição/título/artista) + o resultado computado por
+        // fetchBannerN1s, lado a lado, pra investigar #1 incoerente.
+        const tabs = [
+          { key: "hot100", tab: "BILLBOARD HOT 100" },
+          { key: "spotify", tab: "SPOTIFY" },
+          { key: "apple", tab: "APPLE MUSIC" },
+          { key: "youtube", tab: "YOUTUBE" },
+          { key: "sales", tab: "DIGITAL SALES" },
+        ];
+        const dumps: Record<string, unknown> = {};
+        for (const { key, tab } of tabs) {
+          const data = await readSheet("chartsBase", tab);
+          const tail = data.slice(-15).map((r) => ({ data: r[1], pos: r[2], tit: r[3], art: r[7] }));
+          dumps[key] = { totalLinhas: data.length, ultimasLinhas: tail };
+        }
+        const banner = await fetchBannerN1s();
+        return jsonOk({ dumps, banner });
+      }
       case "getTopArtistCover":
         return jsonOk(await fetchTopArtistCover());
       case "getReleases":
