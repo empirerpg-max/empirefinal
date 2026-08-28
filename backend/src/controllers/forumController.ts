@@ -353,18 +353,24 @@ export async function createCommentController(request: Request): Promise<Respons
     newRowIndex = appendResult;
 
     // 3. Registrar Audit Log na Planilha REGISTRO (1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg)
-    await registrarAuditLog({
-      nomeJogador: playerClean,
-      titulo: tituloOficial,
-      tipo:
-        tipoMedia === "album"
-          ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
-          : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-      isAlbum: tipoMedia === "album",
-      codigoUnico,
-    });
-
-    await somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(() => {});
+    // e somar prestígio — independentes entre si (cada um faz suas próprias
+    // idas ao Sheets: registrarAuditLog lê EDIÇÃO CHARTS + REGISTRO inteiros
+    // pra achar a próxima linha livre; somarPrestigio lê regras + usuário).
+    // Rodar em paralelo em vez de sequencial foi o que finalmente tirou o
+    // comentário em vídeo da casa dos 5-7s medidos ao vivo.
+    await Promise.all([
+      registrarAuditLog({
+        nomeJogador: playerClean,
+        titulo: tituloOficial,
+        tipo:
+          tipoMedia === "album"
+            ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
+            : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+        isAlbum: tipoMedia === "album",
+        codigoUnico,
+      }),
+      somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(() => {}),
+    ]);
 
     return new Response(
       JSON.stringify({
