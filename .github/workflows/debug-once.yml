@@ -7,4 +7,10 @@ jobs:
     steps:
       - name: Curl debug endpoint
         run: |
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/flags"
+          echo "--- /api/charts?action=getFilters&tab=SPOTIFY ---"
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/charts?action=getFilters&tab=SPOTIFY"
+          echo ""
+          echo "--- GViz publico chartsBase (SPOTIFY) ---"
+          curl -sS -o /dev/null -w "HTTP %{http_code}\n" "https://docs.google.com/spreadsheets/d/1ThRhljmAS41JmVBPkPtYwe0JQHRx9Pih2PQAPT2ebyA/gviz/tq?tqx=out:csv&sheet=SPOTIFY"
+          echo "--- GViz publico chartsRealtime (EM Alta) ---"
+          curl -sS -o /dev/null -w "HTTP %{http_code}\n" "https://docs.google.com/spreadsheets/d/1w-3ptf4uZ2lggNCW9PvZmKRZ59r85fkqObleuzTL3U0/gviz/tq?tqx=out:csv&sheet=EM%20Alta"
