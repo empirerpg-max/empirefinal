@@ -175,6 +175,7 @@ function EmpirePlayInicio() {
             platform="spotify"
             artistName={topPlaylists.spotify?.[0]?.artista}
             artistPhotoUrl={topPlaylists.spotify?.[0]?.artista_foto_url}
+            coverUrl={topPlaylists.spotify?.[0]?.capa_url}
             className="absolute inset-0"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
@@ -220,6 +221,7 @@ function EmpirePlayInicio() {
             platform="youtube"
             artistName={topPlaylists.youtube?.[0]?.artista}
             artistPhotoUrl={topPlaylists.youtube?.[0]?.artista_foto_url}
+            coverUrl={topPlaylists.youtube?.[0]?.capa_url}
             className="absolute inset-0"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/20" />
