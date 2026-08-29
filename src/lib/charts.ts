@@ -19,6 +19,18 @@ function isEmptyish(data: unknown): boolean {
   if (typeof data === "object") {
     const obj = data as Record<string, unknown>;
     if ("error" in obj) return true;
+    // Vários endpoints devolvem um objeto-saco em vez de array direto (ex:
+    // getFilters -> {dates:[], styles:[]}, getRealTime -> {spotify:[],
+    // apple:[], youtube:[]}) — o check acima só cobria array/"error" solto,
+    // então uma resposta vazia por instabilidade passageira nesse formato
+    // NUNCA era reconhecida como vazia e ficava presa em cache pro resto da
+    // sessão (a aba "Ao Vivo" não passa por aqui pra tudo, então parecia
+    // que só ela continuava atualizando). Todo valor vazio (array vazio ou
+    // falsy) conta como objeto vazio.
+    const values = Object.values(obj);
+    if (values.length > 0 && values.every((v) => (Array.isArray(v) ? v.length === 0 : !v))) {
+      return true;
+    }
   }
   return false;
 }

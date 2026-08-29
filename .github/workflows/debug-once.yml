@@ -7,13 +7,4 @@ jobs:
     steps:
       - name: Curl debug endpoint
         run: |
-          BASE="https://tanstack-start-app.empirerpg-forum.workers.dev/api/charts"
-          for tab in "SPOTIFY" "APPLE MUSIC" "YOUTUBE" "BILLBOARD HOT 100" "DIGITAL SALES" "DADOS ÁLBUNS"; do
-            echo "=== getFilters tab=$tab ==="
-            curl -sS -G "$BASE" --data-urlencode "action=getFilters" --data-urlencode "tab=$tab" | head -c 300
-            echo ""
-          done &
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            curl -sS -G "$BASE" --data-urlencode "action=getFilters" --data-urlencode "tab=SPOTIFY" -o /dev/null -w "burst $i: HTTP %{http_code} time=%{time_total}s\n" &
-          done
-          wait
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/flags"
