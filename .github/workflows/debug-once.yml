@@ -7,10 +7,13 @@ jobs:
     steps:
       - name: Curl debug endpoint
         run: |
-          echo "--- /api/charts?action=getFilters&tab=SPOTIFY ---"
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/charts?action=getFilters&tab=SPOTIFY"
-          echo ""
-          echo "--- GViz publico chartsBase (SPOTIFY) ---"
-          curl -sS -o /dev/null -w "HTTP %{http_code}\n" "https://docs.google.com/spreadsheets/d/1ThRhljmAS41JmVBPkPtYwe0JQHRx9Pih2PQAPT2ebyA/gviz/tq?tqx=out:csv&sheet=SPOTIFY"
-          echo "--- GViz publico chartsRealtime (EM Alta) ---"
-          curl -sS -o /dev/null -w "HTTP %{http_code}\n" "https://docs.google.com/spreadsheets/d/1w-3ptf4uZ2lggNCW9PvZmKRZ59r85fkqObleuzTL3U0/gviz/tq?tqx=out:csv&sheet=EM%20Alta"
+          BASE="https://tanstack-start-app.empirerpg-forum.workers.dev/api/charts"
+          for tab in "SPOTIFY" "APPLE MUSIC" "YOUTUBE" "BILLBOARD HOT 100" "DIGITAL SALES" "DADOS ÁLBUNS"; do
+            echo "=== getFilters tab=$tab ==="
+            curl -sS -G "$BASE" --data-urlencode "action=getFilters" --data-urlencode "tab=$tab" | head -c 300
+            echo ""
+          done &
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            curl -sS -G "$BASE" --data-urlencode "action=getFilters" --data-urlencode "tab=SPOTIFY" -o /dev/null -w "burst $i: HTTP %{http_code} time=%{time_total}s\n" &
+          done
+          wait
