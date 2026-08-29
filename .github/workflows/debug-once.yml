@@ -7,4 +7,7 @@ jobs:
     steps:
       - name: Curl debug endpoint
         run: |
-          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/flags"
+          echo "--- chartsBase Apple Music #1 (tit) ---"
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/charts?action=getBannerN1s" | jq -c '.apple | {tit, art}'
+          echo "--- Musicas catalog: Loreena tracks (raw title + codepoints) ---"
+          curl -sS "https://tanstack-start-app.empirerpg-forum.workers.dev/api/empire-play/musicas" | jq -c '.data[] | select(.artist | ascii_downcase | contains("loreena")) | {title, len: (.title | length), codepoints: (.title | explode)}'
