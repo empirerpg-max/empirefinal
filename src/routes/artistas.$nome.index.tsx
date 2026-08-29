@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -32,6 +32,8 @@ import { getHOFProfile, type HOFProfile } from "@/lib/charts";
 import { notify } from "@/lib/notify";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { toPlayableTrack, toPlayableVideo } from "@/components/EmpirePlay/mappers";
+import { renderRichText } from "@/lib/richText";
+import { RichTextToolbar } from "@/components/EmpirePlay/RichTextToolbar";
 
 export const Route = createFileRoute("/artistas/$nome/")({
   component: ArtistDashboard,
@@ -482,7 +484,9 @@ function GeralTab({ artist, discografia, tourData }: { artist: Artist; discograf
     <div className="space-y-4">
       {biografia && (
         <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
-          <p className="text-sm text-muted-foreground leading-relaxed">{biografia}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
+            {renderRichText(biografia)}
+          </p>
         </div>
       )}
 
@@ -1119,6 +1123,7 @@ function BiografiaModal({ nome, onClose }: { nome: string; onClose: () => void }
   const [loading, setLoading] = useState(true);
   const [s, setS] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -1153,12 +1158,16 @@ function BiografiaModal({ nome, onClose }: { nome: string; onClose: () => void }
       {loading ? (
         <div className="h-28 rounded-xl bg-secondary animate-pulse" />
       ) : (
-        <textarea
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder="Conte a história desse artista..."
-          className="w-full h-40 bg-background border border-border rounded-xl p-3 text-sm resize-none mb-2 focus:outline-none focus:border-primary/50"
-        />
+        <>
+          <RichTextToolbar textareaRef={textareaRef} value={texto} onChange={setTexto} />
+          <textarea
+            ref={textareaRef}
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder="Conte a história desse artista... (dá pra usar **negrito**, *itálico* e quebras de parágrafo)"
+            className="w-full h-40 bg-background border border-border rounded-xl p-3 text-sm resize-none mb-2 focus:outline-none focus:border-primary/50"
+          />
+        </>
       )}
       {errorMsg && <p className="text-xs text-destructive mb-2">{errorMsg}</p>}
       <button onClick={go} disabled={s || loading} className={btnCls()}>

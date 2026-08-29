@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Instagram,
@@ -37,6 +37,8 @@ import {
 import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
+import { renderRichText } from "@/lib/richText";
+import { RichTextToolbar } from "@/components/EmpirePlay/RichTextToolbar";
 
 // Alternativa ao upload: colar direto o link de uma imagem já hospedada em
 // outro lugar (.png/.jpg/.jpeg/.webp). Só aplica se o link for válido —
@@ -201,6 +203,7 @@ function SocialPage() {
   const [selectedType, setSelectedType] = useState<"Instagram" | "Twitter" | "TikTok" | null>(null);
   const [igMode, setIgMode] = useState<"Feed" | "Story">("Feed");
   const [postText, setPostText] = useState("");
+  const postTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [mediaTipo, setMediaTipo] = useState<"imagem" | "video">("imagem");
   const [editingPost, setEditingPost] = useState<any | null>(null);
@@ -885,7 +888,9 @@ function SocialPage() {
                           )
                         )}
 
-                        <p className="font-medium text-sm leading-snug mb-3.5 text-pretty">{post.texto}</p>
+                        <p className="font-medium text-sm leading-snug mb-3.5 text-pretty whitespace-pre-wrap break-words">
+                          {renderRichText(post.texto, { hashtags: true })}
+                        </p>
                       </div>
 
                       <div className="flex items-center gap-5 pt-3 border-t border-white/5">
@@ -1404,7 +1409,9 @@ function SocialPage() {
                                     {new Date(p.data).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                                   </span>
                                 </div>
-                                <p className="text-[14px] mt-0.5 leading-snug whitespace-pre-line">{p.texto}</p>
+                                <p className="text-[14px] mt-0.5 leading-snug whitespace-pre-line break-words">
+                                  {renderRichText(p.texto, { hashtags: true })}
+                                </p>
                                 {p.media_url && (
                                   <div className="mt-2 rounded-2xl overflow-hidden border border-zinc-800 aspect-video bg-zinc-900">
                                     <PostMedia
@@ -1762,10 +1769,12 @@ function SocialPage() {
                     </div>
                   )}
 
+                  <RichTextToolbar textareaRef={postTextareaRef} value={postText} onChange={setPostText} />
                   <textarea
+                    ref={postTextareaRef}
                     value={postText}
                     onChange={(e) => setPostText(e.target.value)}
-                    placeholder="Escreva algo f*** aqui..."
+                    placeholder="Escreva algo f*** aqui... (use #hashtag, **negrito**, *itálico*)"
                     className={inputCls + " h-24 resize-none"}
                   />
 
@@ -2175,7 +2184,9 @@ function SocialPage() {
               <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-1">
                 <div className="p-3 bg-white/[0.03] rounded-xl border border-white/10">
                   <p className="text-[10px] font-black uppercase text-muted-foreground mb-1 truncate">{selectedPost.autor}</p>
-                  <p className="text-sm font-medium">{selectedPost.texto}</p>
+                  <p className="text-sm font-medium whitespace-pre-wrap break-words">
+                    {renderRichText(selectedPost.texto, { hashtags: true })}
+                  </p>
                 </div>
 
                 <div className="space-y-4">

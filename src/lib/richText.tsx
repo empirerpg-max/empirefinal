@@ -6,10 +6,15 @@ import React from "react";
 // <em>/<u> de verdade. Emoji não precisa de tratamento — é unicode puro,
 // já renderiza nativo dentro do texto.
 const TOKEN_REGEX = /(\*\*[^*\n]+?\*\*|__[^_\n]+?__|\*[^*\n]+?\*)/g;
+// Mesmos tokens de formatação + #hashtag (letras/números/underline unicode,
+// cobre acentos) — usado nos posts das redes sociais.
+const TOKEN_REGEX_WITH_HASHTAGS =
+  /(\*\*[^*\n]+?\*\*|__[^_\n]+?__|\*[^*\n]+?\*|#[\p{L}\p{N}_]+)/gu;
 
-export function renderRichText(text: string): React.ReactNode {
+export function renderRichText(text: string, options?: { hashtags?: boolean }): React.ReactNode {
   if (!text) return text;
-  const parts = text.split(TOKEN_REGEX);
+  const regex = options?.hashtags ? TOKEN_REGEX_WITH_HASHTAGS : TOKEN_REGEX;
+  const parts = text.split(regex);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
       return <strong key={i}>{part.slice(2, -2)}</strong>;
@@ -19,6 +24,13 @@ export function renderRichText(text: string): React.ReactNode {
     }
     if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
       return <em key={i}>{part.slice(1, -1)}</em>;
+    }
+    if (options?.hashtags && part.startsWith("#") && part.length > 1) {
+      return (
+        <span key={i} className="text-primary font-semibold">
+          {part}
+        </span>
+      );
     }
     return part ? <React.Fragment key={i}>{part}</React.Fragment> : null;
   });
