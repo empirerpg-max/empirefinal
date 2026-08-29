@@ -41,14 +41,17 @@ export function DynamicCoverCard({
   const cover = coverUrl ? driveRawImg(coverUrl) : undefined;
 
   if (platform === "spotify") {
-    const hasPhoto = !!photo;
+    // Prioriza a capa da própria música — só cai pra foto do artista quando
+    // a faixa não tem capa cadastrada.
+    const img = cover || photo;
+    const hasImg = !!img;
     return (
       <div className={`overflow-hidden ${className}`}>
-        {hasPhoto && (
-          <img src={photo} alt="" className="absolute inset-0 size-full object-cover" />
+        {hasImg && (
+          <img src={img} alt="" className="absolute inset-0 size-full object-cover" />
         )}
         <img
-          src={driveRawImg(hasPhoto ? TEMPLATES.spotifyBase : TEMPLATES.spotifySub)}
+          src={driveRawImg(hasImg ? TEMPLATES.spotifyBase : TEMPLATES.spotifySub)}
           alt=""
           className="absolute inset-0 size-full object-cover"
         />
@@ -65,8 +68,10 @@ export function DynamicCoverCard({
   }
 
   if (platform === "apple") {
-    const squareCover = cover;
-    const middlePhoto = photo || cover;
+    // Mesma prioridade das outras plataformas: capa da música nos 3
+    // quadrados, caindo pra foto do artista quando a faixa não tem capa
+    // (antes, sem capa nenhum quadrado aparecia — nem a foto).
+    const squareImg = cover || photo;
     return (
       <div className={`overflow-hidden bg-black ${className}`}>
         <img
@@ -74,25 +79,25 @@ export function DynamicCoverCard({
           alt=""
           className="absolute inset-0 size-full object-cover"
         />
-        {squareCover && (
+        {squareImg && (
           <>
             <div
               className="absolute overflow-hidden"
               style={{ top: "50.03%", height: "36.47%", left: "-6.55%", width: "36.47%" }}
             >
-              <img src={squareCover} alt="" className="size-full object-cover" />
+              <img src={squareImg} alt="" className="size-full object-cover" />
             </div>
             <div
               className="absolute overflow-hidden"
               style={{ top: "50.03%", height: "36.47%", left: "33.09%", width: "36.47%" }}
             >
-              <img src={middlePhoto} alt="" className="size-full object-cover" />
+              <img src={squareImg} alt="" className="size-full object-cover" />
             </div>
             <div
               className="absolute overflow-hidden"
               style={{ top: "50.03%", height: "36.47%", left: "72.73%", width: "36.47%" }}
             >
-              <img src={squareCover} alt="" className="size-full object-cover" />
+              <img src={squareImg} alt="" className="size-full object-cover" />
             </div>
           </>
         )}
@@ -114,12 +119,15 @@ export function DynamicCoverCard({
   }
 
   if (platform === "youtube") {
-    const hasPhoto = !!photo;
+    // Capa do vídeo primeiro, foto do artista como fallback — mesma regra
+    // das outras plataformas.
+    const img = cover || photo;
+    const hasImg = !!img;
     return (
       <div className={`overflow-hidden ${className}`}>
-        {hasPhoto ? (
+        {hasImg ? (
           <>
-            <img src={photo} alt="" className="absolute inset-0 size-full object-cover" />
+            <img src={img} alt="" className="absolute inset-0 size-full object-cover" />
             <img
               src={driveRawImg(TEMPLATES.youtubeBase)}
               alt=""
