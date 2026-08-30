@@ -547,9 +547,9 @@ export function MusicPlayer({
           </div>
 
           {/* Arte de Capa, Vídeo ou Letra */}
-          <div className="flex-1 flex flex-col items-center justify-center my-6 max-w-sm mx-auto w-full">
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center my-6 max-w-sm mx-auto w-full">
             {showLyrics ? (
-              <div className="size-full bg-white/5 border border-white/10 rounded-3xl p-6 overflow-y-auto text-neutral-200 text-sm leading-relaxed text-center font-medium shadow-2xl">
+              <div className="w-full h-full min-h-0 bg-white/5 border border-white/10 rounded-3xl p-6 overflow-y-auto text-neutral-200 text-sm leading-relaxed text-center font-medium shadow-2xl">
                 <h4 className="text-xs font-black uppercase tracking-widest text-emerald-400 mb-4">
                   Letra de {currentTrack.titulo}
                 </h4>
