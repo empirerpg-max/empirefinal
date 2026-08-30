@@ -159,6 +159,25 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
     previewLineRefs.current[previewCurrentIndex]?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [mode, previewCurrentIndex]);
 
+  // Linha marcada correspondente à posição atual do áudio — também no modo
+  // de edição, não só na prévia. Sem isso, arrastar a timeline pra trás
+  // pra reouvir um trecho não mostrava qual linha já marcada era aquela: a
+  // lista só destacava o alvo da PRÓXIMA marcação, nunca "onde eu estou".
+  const playbackLineIndex = useMemo(() => {
+    let idx = -1;
+    for (let i = 0; i < times.length; i++) {
+      const t = times[i];
+      if (t != null && t <= currentTime) idx = i;
+      else if (t != null) break;
+    }
+    return idx;
+  }, [times, currentTime]);
+  const lineRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  useEffect(() => {
+    if (mode !== "edit" || playbackLineIndex < 0) return;
+    lineRefs.current[playbackLineIndex]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [mode, playbackLineIndex]);
+
   async function handleSave() {
     if (!user || user.id === "guest") {
       toast.error("Não foi possível identificar você.");
@@ -234,9 +253,13 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
           {lines.map((text, i) => {
             const marked = times[i] != null;
             const isActive = i === activeIndex;
+            const isPlayingHere = i === playbackLineIndex;
             return (
               <button
                 key={i}
+                ref={(el) => {
+                  lineRefs.current[i] = el;
+                }}
                 onClick={() => {
                   setSelectedIndex(i);
                   const t = times[i];
@@ -245,14 +268,19 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
                 className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
                   isActive
                     ? "bg-emerald-500/15 border-emerald-500/50"
-                    : marked
-                      ? "border-white/5 bg-white/[0.02]"
-                      : "border-transparent"
+                    : isPlayingHere
+                      ? "bg-white/[0.06] border-white/20"
+                      : marked
+                        ? "border-white/5 bg-white/[0.02]"
+                        : "border-transparent"
                 }`}
               >
                 <span
-                  className={`text-sm ${isActive ? "text-white font-bold" : marked ? "text-neutral-400" : "text-neutral-600"}`}
+                  className={`text-sm flex items-center gap-2 ${isActive ? "text-white font-bold" : marked ? "text-neutral-400" : "text-neutral-600"}`}
                 >
+                  {isPlayingHere && !isActive && (
+                    <Play className="size-3 shrink-0 text-white fill-white" />
+                  )}
                   {text}
                 </span>
                 <span className="shrink-0 flex items-center gap-1.5">
