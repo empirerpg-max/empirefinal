@@ -21,6 +21,7 @@ import { haptic, useTelegramUser } from "@/lib/telegram";
 import { ScoreBadge } from "./ScoreBadge";
 import { LyricSyncModal } from "./LyricSyncModal";
 import { parseLrc, findCurrentLrcLineIndex } from "@/lib/lrc";
+import { useEmpirePlayer } from "./PlayerContext";
 
 export interface PlayableTrack {
   id?: string;
@@ -130,6 +131,15 @@ export function MusicPlayer({
   const [wrongReported, setWrongReported] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const { user } = useTelegramUser();
+  // Espelha posição/estado no contexto global pra outras telas (Fórum)
+  // conseguirem renderizar karaoke sem precisar remontar o player.
+  const { setPlaybackTime, setPlaybackPlaying } = useEmpirePlayer();
+  useEffect(() => {
+    setPlaybackTime(currentTime);
+  }, [currentTime, setPlaybackTime]);
+  useEffect(() => {
+    setPlaybackPlaying(isPlaying);
+  }, [isPlaying, setPlaybackPlaying]);
   // Só o dono do artista da faixa pode sincronizar a letra — confere contra
   // a lista de artistas do próprio jogador (mesmo padrão usado no perfil do
   // artista e nos posts de Social).
@@ -498,24 +508,30 @@ export function MusicPlayer({
 
       {/* MODAL EXPANDIDO DE REPRODUÇÃO */}
       {isExpanded && (
-        <div className="fixed inset-0 z-[120] bg-neutral-950/95 backdrop-blur-2xl flex flex-col justify-between p-6 animate-in fade-in duration-300">
-          {/* Top Bar Modal */}
-          <div className="flex items-center justify-between">
+        <div
+          className="fixed inset-0 z-[120] bg-neutral-950/95 backdrop-blur-2xl flex flex-col justify-between px-6 pb-6 animate-in fade-in duration-300"
+          style={{ paddingTop: "calc(env(safe-area-inset-top) + 24px)" }}
+        >
+          {/* Top Bar Modal — empurrado abaixo do notch/status bar (padding
+              acima) pra nunca ficar sob a área do sistema, onde os botões
+              renderizavam mas ficavam inclicáveis (relato: "cliquei e nada
+              aconteceu"). */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <button
               onClick={() => setIsExpanded(false)}
-              className="p-3 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10"
+              className="p-3 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10 shrink-0"
             >
               <Minimize2 className="size-5" />
             </button>
-            <div className="text-center">
+            <div className="text-center min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">
                 Tocando Agora
               </p>
-              <p className="text-xs font-bold text-neutral-400 truncate max-w-[200px]">
+              <p className="text-xs font-bold text-neutral-400 truncate max-w-[160px] sm:max-w-[200px]">
                 {currentTrack.album || "Empire Play Studio"}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 shrink-0">
               {currentTrack.id && (
                 <Link
                   to="/empire-play/forum"
