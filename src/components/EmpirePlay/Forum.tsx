@@ -156,6 +156,41 @@ import { ExtraMaterialButtons, useExtraMaterial, VisualBlocosView } from "./Extr
 import { useEmpirePlayer } from "./PlayerContext";
 import { parseLrc, findCurrentLrcLineIndex } from "@/lib/lrc";
 
+// Lista de letra sincronizada com auto-scroll até a linha atual — sem isso,
+// quando a linha destacada saía da área visível, era preciso arrastar a
+// barra de rolagem manualmente pra achar onde a música estava.
+function KaraokeLines({
+  lines,
+  activeIndex,
+  lineClassName,
+}: {
+  lines: { time: number; text: string }[];
+  activeIndex: number;
+  lineClassName: (index: number) => string;
+}) {
+  const lineRefs = React.useRef<(HTMLParagraphElement | null)[]>([]);
+  useEffect(() => {
+    if (activeIndex < 0) return;
+    lineRefs.current[activeIndex]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeIndex]);
+
+  return (
+    <>
+      {lines.map((line, i) => (
+        <p
+          key={i}
+          ref={(el) => {
+            lineRefs.current[i] = el;
+          }}
+          className={lineClassName(i)}
+        >
+          {line.text}
+        </p>
+      ))}
+    </>
+  );
+}
+
 export const Forum: React.FC<ForumProps> = ({
   onPlayTrack,
   onPlayVideo,
@@ -986,20 +1021,17 @@ export const Forum: React.FC<ForumProps> = ({
                                   </div>
                                   {isThisTrackPlaying && syncedLines.length > 0 ? (
                                     <div className="max-h-60 overflow-y-auto bg-neutral-950/60 p-3 rounded-xl border border-emerald-500/20 space-y-1.5">
-                                      {syncedLines.map((line, li) => (
-                                        <p
-                                          key={li}
-                                          className={
-                                            li === activeIdx
-                                              ? "text-emerald-400 font-black text-xs transition-colors"
-                                              : li < activeIdx
-                                                ? "text-neutral-600 text-[11px] transition-colors"
-                                                : "text-neutral-400 text-[11px] transition-colors"
-                                          }
-                                        >
-                                          {line.text}
-                                        </p>
-                                      ))}
+                                      <KaraokeLines
+                                        lines={syncedLines}
+                                        activeIndex={activeIdx}
+                                        lineClassName={(li) =>
+                                          li === activeIdx
+                                            ? "text-emerald-400 font-black text-xs transition-colors"
+                                            : li < activeIdx
+                                              ? "text-neutral-600 text-[11px] transition-colors"
+                                              : "text-neutral-400 text-[11px] transition-colors"
+                                        }
+                                      />
                                     </div>
                                   ) : (
                                     <div className="text-xs text-neutral-300 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto bg-neutral-950/60 p-3 rounded-xl border border-white/5">
@@ -1070,20 +1102,17 @@ export const Forum: React.FC<ForumProps> = ({
                         Letra Sincronizada
                       </h3>
                       <div className="max-h-60 sm:max-h-72 overflow-y-auto bg-neutral-950/60 p-3 sm:p-4 rounded-xl border border-white/5 space-y-2">
-                        {syncedLines.map((line, i) => (
-                          <p
-                            key={i}
-                            className={
-                              i === activeIdx
-                                ? "text-emerald-400 font-black text-sm transition-colors"
-                                : i < activeIdx
-                                  ? "text-neutral-600 text-xs transition-colors"
-                                  : "text-neutral-400 text-xs transition-colors"
-                            }
-                          >
-                            {line.text}
-                          </p>
-                        ))}
+                        <KaraokeLines
+                          lines={syncedLines}
+                          activeIndex={activeIdx}
+                          lineClassName={(i) =>
+                            i === activeIdx
+                              ? "text-emerald-400 font-black text-sm transition-colors"
+                              : i < activeIdx
+                                ? "text-neutral-600 text-xs transition-colors"
+                                : "text-neutral-400 text-xs transition-colors"
+                          }
+                        />
                       </div>
                     </div>
                   );
