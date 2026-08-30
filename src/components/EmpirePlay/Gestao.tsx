@@ -1093,7 +1093,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           className="px-4 py-2.5 rounded-2xl bg-neutral-800 hover:bg-neutral-700 border border-white/10 text-xs font-bold text-neutral-200 transition flex items-center gap-2"
         >
           <Pencil className="size-3.5 text-emerald-400" />
-          <span>Editar Meus Materiais</span>
+          <span>Editar meus materiais</span>
         </button>
       </div>
 
