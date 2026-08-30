@@ -1108,6 +1108,20 @@ export const api = {
     const data = await res.json().catch(() => null);
     return Array.isArray(data) ? data : [];
   },
+  // Letra sincronizada (formato LRC) — só o dono do artista da faixa
+  // consegue gravar; o backend confere isso de novo antes de escrever.
+  async salvarLetraSincronizada(
+    topicId: string,
+    telegramId: string,
+    lrc: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/gestao/faixa-letra-sincronizada", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topicId, telegramId, lrc }),
+    });
+    return res.json();
+  },
   async criarRevistaAcervo(payload: any, tgId: string): Promise<{ ok: boolean; id?: string; error?: string }> {
     const res = await fetch("/api/acervo/revistas", {
       method: "POST",

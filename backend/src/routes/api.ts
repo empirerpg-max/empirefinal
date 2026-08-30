@@ -36,6 +36,7 @@ import {
   substituirAlbumController,
   uploadDriveController,
   updateFaixaLetraController,
+  updateFaixaLetraSincronizadaController,
   publicarFaixaPendenteController,
 } from "../controllers/gestaoController";
 import {
@@ -226,6 +227,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/gestao/album-faixas",
     "/api/gestao/album-faixas/reordenar",
     "/api/gestao/faixa-letra",
+    "/api/gestao/faixa-letra-sincronizada",
     "/api/gestao/musicas-em-chart",
     "/api/gestao/faixas-sem-album",
     "/api/gestao/faixa/publicar",
@@ -418,6 +420,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await updateFaixaLetraController(request);
+  } else if (url.pathname === "/api/gestao/faixa-letra-sincronizada") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/gestao/faixa-letra-sincronizada." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await updateFaixaLetraSincronizadaController(request);
   } else if (url.pathname === "/api/gestao/faixa/publicar") {
     if (request.method !== "POST") {
       return new Response(
