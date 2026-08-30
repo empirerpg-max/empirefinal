@@ -717,8 +717,11 @@ export function MusicPlayer({
         </div>
       )}
 
-      {/* MINI PLAYER FLUTUANTE (BOTTOM BAR) */}
-      {!isExpanded && (
+      {/* MINI PLAYER FLUTUANTE (BOTTOM BAR) — nunca junto com o Estúdio de
+          Sincronização: se o modal ficar aberto e o player minimizar, as
+          duas barras fixas no rodapé sobrepunham (seek bar do estúdio por
+          cima do mini player). */}
+      {!isExpanded && !showSyncModal && (
         <div className="fixed bottom-20 inset-x-3 z-[100] max-w-xl mx-auto rounded-2xl bg-neutral-900/90 border border-white/15 p-3 backdrop-blur-xl shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex items-center justify-between gap-3 animate-in slide-in-from-bottom-5 duration-300">
           {/* Arte + Infos */}
           <button
