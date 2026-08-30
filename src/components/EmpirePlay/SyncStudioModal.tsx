@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Play, Pause, Check, Loader2, Pencil, XCircle, Eye, Mic2, Trash2, Plus } from "lucide-react";
+import { X, Play, Pause, Check, Loader2, Pencil, XCircle, Eye, Mic2, Trash2, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { api, driveImg } from "@/lib/api";
 import { haptic, useTelegramUser } from "@/lib/telegram";
@@ -59,6 +59,29 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
     if (!audioRef.current) return;
     if (isPlaying) audioRef.current.pause();
     else audioRef.current.play().catch(() => {});
+  }
+
+  // Move o áudio de verdade (contador incluído) pra um instante — usado ao
+  // escolher uma linha já marcada, pra ouvir exatamente aquele trecho antes
+  // de decidir se corrige. Sem isso, selecionar a linha só mudava o alvo da
+  // marcação, mas a música seguia tocando de onde estava, "sem sinergia".
+  function seekTo(time: number) {
+    const clamped = Math.max(0, time);
+    setCurrentTime(clamped);
+    if (audioRef.current) audioRef.current.currentTime = clamped;
+  }
+
+  // Ajuste fino (±0.2s) do tempo já marcado de uma linha, sem precisar
+  // remarcar do zero — junto com o seek ao selecionar, é o que faz esse
+  // editor funcionar de verdade pra corrigir um tempo levemente errado.
+  function nudgeLine(index: number, delta: number) {
+    setTimes((prev) => {
+      const current = prev[index];
+      if (current == null) return prev;
+      const next = [...prev];
+      next[index] = Math.max(0, current + delta);
+      return next;
+    });
   }
 
   function markLine(index: number) {
@@ -196,7 +219,7 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
             </p>
           )}
           <p className="text-[11px] text-neutral-500 text-center pb-1">
-            Toque numa linha pra escolher ela como alvo da próxima marcação — dá pra corrigir qualquer uma.
+            Toque numa linha pra escolher o alvo da próxima marcação — se ela já tem tempo marcado, a música pula pra lá.
           </p>
           {lines.map((text, i) => {
             const marked = times[i] != null;
@@ -204,7 +227,11 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
             return (
               <button
                 key={i}
-                onClick={() => setSelectedIndex(i)}
+                onClick={() => {
+                  setSelectedIndex(i);
+                  const t = times[i];
+                  if (t != null) seekTo(Math.max(0, t - 0.15));
+                }}
                 className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
                   isActive
                     ? "bg-emerald-500/15 border-emerald-500/50"
@@ -218,12 +245,34 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
                 >
                   {text}
                 </span>
-                <span className="shrink-0 flex items-center gap-2">
+                <span className="shrink-0 flex items-center gap-1.5">
                   {marked && (
                     <>
-                      <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400">
+                      <span
+                        role="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          nudgeLine(i, -0.2);
+                        }}
+                        title="Atrasar 0,2s"
+                        className="text-neutral-500 hover:text-white p-0.5"
+                      >
+                        <Minus className="size-3" />
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 tabular-nums">
                         <Check className="size-3" />
                         {formatLrcTimestamp(times[i] as number)}
+                      </span>
+                      <span
+                        role="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          nudgeLine(i, 0.2);
+                        }}
+                        title="Adiantar 0,2s"
+                        className="text-neutral-500 hover:text-white p-0.5"
+                      >
+                        <Plus className="size-3" />
                       </span>
                       <span
                         role="button"
@@ -287,12 +336,13 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
               ref={(el) => {
                 previewLineRefs.current[i] = el;
               }}
+              onClick={() => seekTo(Math.max(0, line.time - 0.15))}
               className={
                 i === previewCurrentIndex
-                  ? "text-white font-black text-lg transition-colors"
+                  ? "text-white font-black text-lg transition-colors cursor-pointer"
                   : i < previewCurrentIndex
-                    ? "text-neutral-600 text-sm transition-colors"
-                    : "text-neutral-400 text-sm transition-colors"
+                    ? "text-neutral-600 text-sm transition-colors cursor-pointer"
+                    : "text-neutral-400 text-sm transition-colors cursor-pointer"
               }
             >
               {line.text}
@@ -341,7 +391,7 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
                 disabled={activeIndex < 0 || lines.length === 0}
                 className="flex-1 h-12 rounded-2xl bg-emerald-500 text-black font-black text-sm uppercase tracking-wide disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center gap-2"
               >
-                {selectedIndex != null ? "Corrigir linha" : "Marcar linha atual"}
+                Marcar Linha
                 <span className="text-[10px] font-mono font-bold bg-black/15 px-1.5 py-0.5 rounded">espaço</span>
               </button>
 
