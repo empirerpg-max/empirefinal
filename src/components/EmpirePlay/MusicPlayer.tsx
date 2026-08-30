@@ -13,13 +13,11 @@ import {
   Loader2,
   Disc,
   MessageSquare,
-  Mic2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { api, driveImg } from "@/lib/api";
-import { haptic, useTelegramUser } from "@/lib/telegram";
+import { driveImg } from "@/lib/api";
+import { haptic } from "@/lib/telegram";
 import { ScoreBadge } from "./ScoreBadge";
-import { LyricSyncModal } from "./LyricSyncModal";
 import { parseLrc, findCurrentLrcLineIndex } from "@/lib/lrc";
 import { useEmpirePlayer } from "./PlayerContext";
 
@@ -35,8 +33,8 @@ export interface PlayableTrack {
   // LRC ("[mm:ss.cc]texto" por linha) — quando presente, a tela de letra
   // vira sincronizada (acompanha o áudio) em vez de texto estático.
   letraSincronizada?: string | null;
-  // ID do tópico no Telegram — usado pra localizar a linha certa em Musicas
-  // na hora de gravar a sincronização (ver LyricSyncModal).
+  // ID do tópico no Telegram — usado pra casar essa faixa com o tópico do
+  // Fórum na hora de exibir karaoke sincronizado por lá.
   telegramTopicId?: string | null;
   duracao?: string;
   album?: string;
@@ -129,8 +127,6 @@ export function MusicPlayer({
   const [audioError, setAudioError] = useState(false);
   const [reportingWrong, setReportingWrong] = useState(false);
   const [wrongReported, setWrongReported] = useState(false);
-  const [showSyncModal, setShowSyncModal] = useState(false);
-  const { user } = useTelegramUser();
   // Espelha posição/estado no contexto global pra outras telas (Fórum)
   // conseguirem renderizar karaoke sem precisar remontar o player.
   const { setPlaybackTime, setPlaybackPlaying } = useEmpirePlayer();
@@ -140,34 +136,14 @@ export function MusicPlayer({
   useEffect(() => {
     setPlaybackPlaying(isPlaying);
   }, [isPlaying, setPlaybackPlaying]);
-  // Só o dono do artista da faixa pode sincronizar a letra — confere contra
-  // a lista de artistas do próprio jogador (mesmo padrão usado no perfil do
-  // artista e nos posts de Social).
-  const [ownedArtists, setOwnedArtists] = useState<string[]>([]);
-  useEffect(() => {
-    if (!user || user.id === "guest") {
-      setOwnedArtists([]);
-      return;
-    }
-    let alive = true;
-    api
-      .meusArtistas(user.id)
-      .then((arts) => alive && setOwnedArtists(arts.map((a) => a.nome?.trim().toLowerCase()).filter(Boolean)))
-      .catch(() => alive && setOwnedArtists([]));
-    return () => {
-      alive = false;
-    };
-  }, [user]);
-  const isOwnerOfTrack = !!currentTrack && ownedArtists.includes(currentTrack.artista?.trim().toLowerCase());
 
-  // Sobrepõe o LRC gravado na hora, sem esperar o catálogo recarregar do
-  // zero — currentTrack é controlado por quem chama o player, então não dá
-  // pra mutar a prop diretamente depois de salvar.
-  const [justSyncedLrc, setJustSyncedLrc] = useState<string | null>(null);
-  useEffect(() => setJustSyncedLrc(null), [currentTrack?.id]);
+  // O player é só pra ACOMPANHAR a letra sincronizada (igual Spotify) — quem
+  // edita é o dono do artista, direto no Estúdio de Sincronização da
+  // Gestão. Sem botão de editar aqui de propósito: informação demais nesse
+  // player pra quem só quer ouvir.
   const syncedLines = useMemo(
-    () => parseLrc(justSyncedLrc ?? currentTrack?.letraSincronizada),
-    [justSyncedLrc, currentTrack?.letraSincronizada],
+    () => parseLrc(currentTrack?.letraSincronizada),
+    [currentTrack?.letraSincronizada],
   );
   const currentSyncedLineIndex = useMemo(
     () => findCurrentLrcLineIndex(syncedLines, currentTime),
@@ -181,11 +157,6 @@ export function MusicPlayer({
       block: "center",
     });
   }, [currentSyncedLineIndex]);
-  // Pode sincronizar quando já tem áudio (a tela precisa tocar) e letra
-  // normal cadastrada (é o que vira linha por linha na tela de sincronia).
-  const canSyncLyrics =
-    !!currentTrack?.letra &&
-    !!(currentTrack?.audio_url || currentTrack?.stream_url || currentTrack?.drive_url);
 
   async function handleReportWrongContent() {
     if (!currentTrack?.id || reportingWrong || wrongReported) return;
@@ -665,15 +636,6 @@ export function MusicPlayer({
                   <FileText className="size-5" />
                 </button>
               )}
-              {isOwnerOfTrack && canSyncLyrics && (
-                <button
-                  onClick={() => setShowSyncModal(true)}
-                  className="p-3 rounded-2xl border bg-white/5 border-white/10 text-neutral-300 hover:text-white transition-all"
-                  title={currentTrack.letraSincronizada ? "Editar sincronização" : "Sincronizar Letra"}
-                >
-                  <Mic2 className="size-5" />
-                </button>
-              )}
             </div>
 
             {/* Seek Bar */}
@@ -717,11 +679,8 @@ export function MusicPlayer({
         </div>
       )}
 
-      {/* MINI PLAYER FLUTUANTE (BOTTOM BAR) — nunca junto com o Estúdio de
-          Sincronização: se o modal ficar aberto e o player minimizar, as
-          duas barras fixas no rodapé sobrepunham (seek bar do estúdio por
-          cima do mini player). */}
-      {!isExpanded && !showSyncModal && (
+      {/* MINI PLAYER FLUTUANTE (BOTTOM BAR) */}
+      {!isExpanded && (
         <div className="fixed bottom-20 inset-x-3 z-[100] max-w-xl mx-auto rounded-2xl bg-neutral-900/90 border border-white/15 p-3 backdrop-blur-xl shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex items-center justify-between gap-3 animate-in slide-in-from-bottom-5 duration-300">
           {/* Arte + Infos */}
           <button
@@ -790,24 +749,6 @@ export function MusicPlayer({
         </div>
       )}
 
-      {showSyncModal && currentTrack && (
-        <LyricSyncModal
-          track={currentTrack}
-          isPlaying={isPlaying}
-          currentTime={currentTime}
-          duration={duration}
-          onTogglePlay={togglePlay}
-          onSeek={(time) => {
-            setCurrentTime(time);
-            if (audioRef.current) audioRef.current.currentTime = time;
-          }}
-          onClose={() => setShowSyncModal(false)}
-          onSaved={(lrc) => {
-            setJustSyncedLrc(lrc);
-            setShowSyncModal(false);
-          }}
-        />
-      )}
     </>
   );
 }

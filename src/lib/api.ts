@@ -1111,14 +1111,15 @@ export const api = {
   // Letra sincronizada (formato LRC) — só o dono do artista da faixa
   // consegue gravar; o backend confere isso de novo antes de escrever.
   async salvarLetraSincronizada(
-    topicId: string,
+    topicId: string | null | undefined,
     telegramId: string,
     lrc: string,
+    musicaRowIndex?: number,
   ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/gestao/faixa-letra-sincronizada", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topicId, telegramId, lrc }),
+      body: JSON.stringify({ topicId, telegramId, lrc, musicaRowIndex }),
     });
     return res.json();
   },

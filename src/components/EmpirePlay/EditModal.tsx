@@ -28,7 +28,9 @@ import {
   ArrowDown,
   FileText,
   Check,
+  Mic2,
 } from "lucide-react";
+import { SyncStudioModal, type SyncStudioTrack } from "./SyncStudioModal";
 
 // "music-videos" foi consolidado dentro de "videos" — vivem na mesma aba
 // da planilha ("Music Videos"), diferenciados por tag, não mais categoria.
@@ -52,6 +54,7 @@ interface AlbumFaixa {
   ordem: number;
   audioUrl: string;
   letra?: string;
+  letraSincronizada?: string;
   pendente?: boolean;
 }
 
@@ -150,6 +153,10 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [editingFaixaLetraIndex, setEditingFaixaLetraIndex] = useState<number | null>(null);
   const [faixaLetraText, setFaixaLetraText] = useState<string>("");
   const [savingFaixaLetra, setSavingFaixaLetra] = useState<boolean>(false);
+
+  // Estúdio de Sincronização — aberto direto da Gestão, tanto pra música
+  // avulsa quanto pra faixa de álbum (mesmo sem tópico publicado ainda).
+  const [syncStudioTrack, setSyncStudioTrack] = useState<SyncStudioTrack | null>(null);
 
   // Atualizar artista quando props mudam
   useEffect(() => {
@@ -813,6 +820,25 @@ export const EditModal: React.FC<EditModalProps> = ({
                             >
                               <FileText className="size-3.5" />
                             </button>
+                            {faixa.audioUrl && faixa.letra?.trim() && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSyncStudioTrack({
+                                    musicaRowIndex: faixa.musicaRowIndex,
+                                    titulo: faixa.titulo,
+                                    artista: editingItem?.artista || selectedArtist,
+                                    audioUrl: faixa.audioUrl,
+                                    letra: faixa.letra || "",
+                                    letraSincronizada: faixa.letraSincronizada || null,
+                                  })
+                                }
+                                className="size-7 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 grid place-items-center transition"
+                                title="Estúdio de Sincronização — funciona mesmo sem tópico publicado"
+                              >
+                                <Mic2 className="size-3.5" />
+                              </button>
+                            )}
                             <button
                               type="button"
                               disabled={idx === 0 || savingOrdem}
@@ -1083,6 +1109,32 @@ export const EditModal: React.FC<EditModalProps> = ({
                     placeholder="Cole ou digite a letra completa..."
                     className="w-full px-4 py-3 bg-neutral-800 border border-white/10 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 resize-y"
                   />
+                  {editingItem.fields?.audioUrl && editLetra.trim() ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSyncStudioTrack({
+                          musicaRowIndex: editingItem.rowIndex,
+                          titulo: editingItem.titulo,
+                          artista: editingItem.artista,
+                          audioUrl: editingItem.fields!.audioUrl,
+                          letra: editLetra,
+                          letraSincronizada: editingItem.fields?.letraSincronizada || null,
+                          capaUrl: capaPreview || editingItem.capaUrl,
+                        })
+                      }
+                      className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 font-black text-xs uppercase tracking-wide transition"
+                    >
+                      <Mic2 className="size-4" />
+                      {editingItem.fields?.letraSincronizada
+                        ? "Editar Sincronização (Estúdio)"
+                        : "Sincronizar Letra (Estúdio)"}
+                    </button>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-neutral-500 italic">
+                      Pra sincronizar a letra estilo Spotify, cadastre o áudio e a letra completa primeiro.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1277,6 +1329,29 @@ export const EditModal: React.FC<EditModalProps> = ({
           )}
         </div>
       </div>
+
+      {syncStudioTrack && (
+        <SyncStudioModal
+          track={syncStudioTrack}
+          onClose={() => setSyncStudioTrack(null)}
+          onSaved={(lrc) => {
+            setSyncStudioTrack(null);
+            // Reflete localmente sem esperar um novo GET — tanto pro campo
+            // da música avulsa (fields.letraSincronizada) quanto pra faixa
+            // correspondente na lista do álbum, se for o caso.
+            setEditingItem((prev) =>
+              prev && prev.rowIndex === syncStudioTrack.musicaRowIndex
+                ? { ...prev, fields: { ...prev.fields, letraSincronizada: lrc } }
+                : prev,
+            );
+            setAlbumFaixas((prev) =>
+              prev.map((f) =>
+                f.musicaRowIndex === syncStudioTrack.musicaRowIndex ? { ...f, letraSincronizada: lrc } : f,
+              ),
+            );
+          }}
+        />
+      )}
     </div>
   );
 };
