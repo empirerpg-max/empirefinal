@@ -83,9 +83,12 @@ function ArtistDashboard() {
   const [tourData, setTourData] = useState<any>(null);
   const [responsavelNivel, setResponsavelNivel] = useState<NivelJogador | null>(null);
   // Capa (banner) do topo do perfil — separada da foto do artista, editável
-  // só pelo dono (ver CapaModal). Cai pra artist.foto quando ainda não foi
-  // definida, pra não ficar sem imagem nenhuma no header.
-  const [capaPerfil, setCapaPerfil] = useState<string>("");
+  // só pelo dono (ver CapaModal). Cai pra artist.foto quando nenhuma das
+  // duas foi definida, pra não ficar sem imagem nenhuma no header. Duas
+  // versões porque a área do topo é bem mais larga (~banner) no desktop do
+  // que no celular — uma imagem só ficava cortada/esticada numa das duas.
+  const [capaPerfilDesktop, setCapaPerfilDesktop] = useState<string>("");
+  const [capaPerfilMobile, setCapaPerfilMobile] = useState<string>("");
 
   // Discografia unificada — junta álbuns próprios (Gestao), catálogo Empire
   // Play e álbuns legados numa lista só, deduplicada por título, pra contar
@@ -219,7 +222,8 @@ function ArtistDashboard() {
 
       if (art?.nome) {
         api.getArtistInfo(art.nome).then((info) => {
-          if (info?.capa) setCapaPerfil(info.capa);
+          if (info?.capa) setCapaPerfilDesktop(info.capa);
+          if (info?.capaMobile) setCapaPerfilMobile(info.capaMobile);
         });
       }
     });
@@ -278,19 +282,50 @@ function ArtistDashboard() {
     <main className="flex-1 pb-24 bg-background max-w-5xl mx-auto">
       {/* Visual Header */}
       <div className="relative h-[30vh] min-h-[240px] overflow-hidden">
-        <img
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          src={driveImg(capaPerfil || artist.foto, 1600) || capaPerfil || artist.foto}
-          onError={(e) => {
-            const img = e.currentTarget;
-            const fallback = capaPerfil || artist.foto;
-            if (img.src !== fallback) img.src = fallback;
-          }}
-          className="w-full h-full object-cover object-top scale-105 opacity-60 transition-opacity duration-700"
-          alt=""
-        />
+        {capaPerfilDesktop || capaPerfilMobile ? (
+          <>
+            {/* Capa própria do artista: sem object-top/scale/opacity da foto
+                padrão — é uma imagem já pensada pra essa área, não precisa
+                de correção nenhuma, só encaixar. Versão certa por tamanho de
+                tela (a área do topo é bem mais larga no desktop). */}
+            <img
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              src={driveImg(capaPerfilDesktop || capaPerfilMobile, 1600) || capaPerfilDesktop || capaPerfilMobile}
+              className="hidden sm:block w-full h-full object-cover"
+              alt=""
+            />
+            <img
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              src={driveImg(capaPerfilMobile || capaPerfilDesktop, 1200) || capaPerfilMobile || capaPerfilDesktop}
+              className="sm:hidden w-full h-full object-cover"
+              alt=""
+            />
+            {/* Faixa escura só embaixo, o suficiente pra manter nome/badges
+                legíveis por cima de qualquer imagem — sem escurecer a capa
+                inteira como no fallback com a foto do artista. */}
+            <div className="absolute inset-x-0 bottom-0 h-[45%] bg-gradient-to-t from-background to-transparent" />
+          </>
+        ) : (
+          <>
+            <img
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              src={driveImg(artist.foto, 1600) || artist.foto}
+              onError={(e) => {
+                const img = e.currentTarget;
+                if (img.src !== artist.foto) img.src = artist.foto;
+              }}
+              className="w-full h-full object-cover object-top scale-105 opacity-60 transition-opacity duration-700"
+              alt=""
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+          </>
+        )}
         {isOwner && (
           <button
             onClick={() => setModal("capa")}
@@ -300,7 +335,6 @@ function ArtistDashboard() {
             <ImageIcon className="size-5 text-white" />
           </button>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
 
         <button
           onClick={() => window.history.back()}
@@ -455,7 +489,10 @@ function ArtistDashboard() {
         <CapaModal
           nome={artist.nome}
           onClose={() => setModal(null)}
-          onDone={(url) => setCapaPerfil(url)}
+          onDone={(urls) => {
+            if (urls.capaUrl) setCapaPerfilDesktop(urls.capaUrl);
+            if (urls.capaMobileUrl) setCapaPerfilMobile(urls.capaMobileUrl);
+          }}
         />
       )}
     </main>
@@ -1177,6 +1214,42 @@ function BiografiaModal({ nome, onClose }: { nome: string; onClose: () => void }
   );
 }
 
+// Um slot de upload (desktop OU mobile) dentro do CapaModal — o topo do
+// perfil é bem mais largo no desktop do que no celular, então uma imagem só
+// não encaixa direito nos dois; cada slot mostra o tamanho ideal exato da
+// própria versão.
+function CapaUploadSlot({
+  label,
+  dimensions,
+  aspectClass,
+  preview,
+  onPick,
+}: {
+  label: string;
+  dimensions: string;
+  aspectClass: string;
+  preview: string | null;
+  onPick: (f: File | undefined) => void;
+}) {
+  return (
+    <label className="block">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-bold text-foreground">{label}</span>
+        <span className="text-[10px] text-muted-foreground">Ideal: {dimensions}</span>
+      </div>
+      <div className={`w-full ${aspectClass} rounded-2xl overflow-hidden bg-secondary border border-white/10 grid place-items-center`}>
+        {preview ? (
+          <img src={preview} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <ImageIcon className="size-6 text-muted-foreground" />
+        )}
+      </div>
+      <input type="file" accept="image/*" className="hidden" onChange={(e) => onPick(e.target.files?.[0])} />
+      <span className="block text-center text-xs font-bold text-primary mt-2 underline">Escolher arquivo</span>
+    </label>
+  );
+}
+
 function CapaModal({
   nome,
   onClose,
@@ -1184,47 +1257,50 @@ function CapaModal({
 }: {
   nome: string;
   onClose: () => void;
-  onDone: (url: string) => void;
+  onDone: (urls: { capaUrl?: string; capaMobileUrl?: string }) => void;
 }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [desktopFile, setDesktopFile] = useState<File | null>(null);
+  const [desktopPreview, setDesktopPreview] = useState<string | null>(null);
+  const [mobileFile, setMobileFile] = useState<File | null>(null);
+  const [mobilePreview, setMobilePreview] = useState<string | null>(null);
   const [s, setS] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  function pick(f: File | undefined) {
-    if (!f) return;
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
-    setErrorMsg(null);
+  async function uploadOne(file: File): Promise<string> {
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const res = await fetch("/api/gestao/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type || "image/jpeg",
+        base64Data,
+        folderType: "artistPhotos",
+      }),
+    });
+    const json = await res.json().catch(() => null);
+    const fileUrl = json?.data?.fileUrl;
+    if (!fileUrl) throw new Error("Falha ao subir a imagem.");
+    return fileUrl;
   }
 
   async function go() {
-    if (!file) return;
+    if (!desktopFile && !mobileFile) return;
     setS(true);
     setErrorMsg(null);
     try {
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const res = await fetch("/api/gestao/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          mimeType: file.type || "image/jpeg",
-          base64Data,
-          folderType: "artistPhotos",
-        }),
-      });
-      const json = await res.json().catch(() => null);
-      const fileUrl = json?.data?.fileUrl;
-      if (!fileUrl) throw new Error("Falha ao subir a capa.");
-      const salvo = await api.setArtistCapa(nome, fileUrl);
+      const [capaUrl, capaMobileUrl] = await Promise.all([
+        desktopFile ? uploadOne(desktopFile) : Promise.resolve(undefined),
+        mobileFile ? uploadOne(mobileFile) : Promise.resolve(undefined),
+      ]);
+      const salvo = await api.setArtistCapa(nome, capaUrl, capaMobileUrl);
       if (!salvo.success) throw new Error(salvo.error || "Falha ao salvar a capa.");
-      onDone(fileUrl);
+      onDone({ capaUrl, capaMobileUrl });
       onClose();
     } catch (err: any) {
       setErrorMsg(err?.message || "Não deu pra trocar a capa agora.");
@@ -1235,28 +1311,39 @@ function CapaModal({
 
   return (
     <Modal title="Capa do perfil" onClose={onClose}>
-      <p className="text-xs text-muted-foreground mb-3">
-        Imagem de fundo no topo do perfil. Ideal: <strong className="text-foreground">1600 × 900px</strong>{" "}
-        (paisagem, proporção 16:9) — imagens mais estreitas ficam cortadas nas laterais.
+      <p className="text-xs text-muted-foreground mb-4">
+        Imagem de fundo no topo do perfil. Manda as duas versões — o celular e o computador mostram essa área com
+        proporções bem diferentes — pra ela encaixar certinho nos dois. Sem elas, o topo continua mostrando a foto
+        do artista, como hoje.
       </p>
-      <label className="block mb-3">
-        <div className="aspect-video w-full rounded-2xl overflow-hidden bg-secondary border border-white/10 grid place-items-center">
-          {preview ? (
-            <img src={preview} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <ImageIcon className="size-8 text-muted-foreground" />
-          )}
-        </div>
-        <input
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => pick(e.target.files?.[0])}
+      <div className="space-y-4 mb-4">
+        <CapaUploadSlot
+          label="Versão celular"
+          dimensions="1200×750px"
+          aspectClass="aspect-[1200/750]"
+          preview={mobilePreview}
+          onPick={(f) => {
+            if (!f) return;
+            setMobileFile(f);
+            setMobilePreview(URL.createObjectURL(f));
+            setErrorMsg(null);
+          }}
         />
-        <span className="block text-center text-xs font-bold text-primary mt-2 underline">Escolher arquivo</span>
-      </label>
+        <CapaUploadSlot
+          label="Versão computador"
+          dimensions="1920×480px"
+          aspectClass="aspect-[1920/480]"
+          preview={desktopPreview}
+          onPick={(f) => {
+            if (!f) return;
+            setDesktopFile(f);
+            setDesktopPreview(URL.createObjectURL(f));
+            setErrorMsg(null);
+          }}
+        />
+      </div>
       {errorMsg && <p className="text-xs text-destructive mb-2">{errorMsg}</p>}
-      <button onClick={go} disabled={s || !file} className={btnCls()}>
+      <button onClick={go} disabled={s || (!desktopFile && !mobileFile)} className={btnCls()}>
         {s && <Loader2 className="size-4 animate-spin" />} Enviar
       </button>
     </Modal>
