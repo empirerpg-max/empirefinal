@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { X, Play, Pause, Check, Loader2, Pencil, XCircle, Eye, Mic2, Trash2, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { api, driveImg } from "@/lib/api";
@@ -55,6 +55,9 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
     return raw.map((_, i) => existing[i]?.time ?? null);
   });
   const [newLineText, setNewLineText] = useState("");
+  // Posição (índice) onde o "+" entre versos está aberto pra digitar uma
+  // linha nova; null = nenhum aberto.
+  const [insertingAt, setInsertingAt] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   const firstPendingIndex = times.findIndex((t) => t == null);
@@ -119,13 +122,28 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
     setSelectedIndex(null);
   }
 
-  function addLine() {
+  // Insere uma linha nova numa posição específica (entre duas linhas
+  // existentes, ou no fim) — o "+" que aparece entre versos guarda qual
+  // posição está editando via insertingAt.
+  function insertLineAt(index: number) {
     const text = newLineText.trim();
-    if (!text) return;
+    if (!text) {
+      setInsertingAt(null);
+      return;
+    }
     haptic.light();
-    setLines((prev) => [...prev, text]);
-    setTimes((prev) => [...prev, null]);
+    setLines((prev) => {
+      const next = [...prev];
+      next.splice(index, 0, text);
+      return next;
+    });
+    setTimes((prev) => {
+      const next = [...prev];
+      next.splice(index, 0, null);
+      return next;
+    });
     setNewLineText("");
+    setInsertingAt(null);
   }
 
   function undoLastMark() {
@@ -138,7 +156,14 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
   useEffect(() => {
     if (mode !== "edit") return;
     function onKey(e: KeyboardEvent) {
-      if (e.code === "Space" && document.activeElement?.tagName !== "BUTTON") {
+      const tag = document.activeElement?.tagName;
+      // O atalho de espaço só vale fora de campos de texto — senão nem dava
+      // pra digitar espaço numa linha nova (o "j" virava alvo de marcação
+      // global e o espaço nunca chegava no input, engolindo as palavras).
+      if (tag === "INPUT" || tag === "TEXTAREA" || (document.activeElement as HTMLElement)?.isContentEditable) {
+        return;
+      }
+      if (e.code === "Space" && tag !== "BUTTON") {
         e.preventDefault();
         markLine(activeIndex);
       }
@@ -250,13 +275,25 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
           <p className="text-[11px] text-neutral-500 text-center pb-1">
             Toque numa linha pra escolher o alvo da próxima marcação — se ela já tem tempo marcado, a música pula pra lá.
           </p>
+          <LineInsertSlot
+            index={0}
+            open={insertingAt === 0}
+            value={newLineText}
+            onOpen={() => setInsertingAt(0)}
+            onChange={setNewLineText}
+            onConfirm={() => insertLineAt(0)}
+            onCancel={() => {
+              setInsertingAt(null);
+              setNewLineText("");
+            }}
+          />
           {lines.map((text, i) => {
             const marked = times[i] != null;
             const isActive = i === activeIndex;
             const isPlayingHere = i === playbackLineIndex;
             return (
+              <Fragment key={i}>
               <button
-                key={i}
                 ref={(el) => {
                   lineRefs.current[i] = el;
                 }}
@@ -339,32 +376,21 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
                   </span>
                 </span>
               </button>
+              <LineInsertSlot
+                index={i + 1}
+                open={insertingAt === i + 1}
+                value={newLineText}
+                onOpen={() => setInsertingAt(i + 1)}
+                onChange={setNewLineText}
+                onConfirm={() => insertLineAt(i + 1)}
+                onCancel={() => {
+                  setInsertingAt(null);
+                  setNewLineText("");
+                }}
+              />
+              </Fragment>
             );
           })}
-
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="text"
-              value={newLineText}
-              onChange={(e) => setNewLineText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addLine();
-                }
-              }}
-              placeholder="Adicionar linha (ex.: um trecho que faltou na letra)..."
-              className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-neutral-900 border border-white/10 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-emerald-500"
-            />
-            <button
-              onClick={addLine}
-              disabled={!newLineText.trim()}
-              className="size-10 shrink-0 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 grid place-items-center disabled:opacity-30 disabled:pointer-events-none"
-              title="Adicionar linha"
-            >
-              <Plus className="size-4" />
-            </button>
-          </div>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto px-6 py-8 flex flex-col items-center justify-center text-center gap-4">
@@ -537,6 +563,79 @@ function TimelineScrubber({
         className="absolute top-1/2 -translate-y-1/2 size-3.5 rounded-full bg-white shadow"
         style={{ left: `calc(${progressPct}% - 7px)` }}
       />
+    </div>
+  );
+}
+
+// "+" discreto entre versos — fechado, é só uma linha fina que ganha um
+// círculo com "+" no hover/toque; aberto, vira um campo de texto inline
+// pra digitar a linha nova bem onde ela vai entrar na letra.
+function LineInsertSlot({
+  index,
+  open,
+  value,
+  onOpen,
+  onChange,
+  onConfirm,
+  onCancel,
+}: {
+  index: number;
+  open: boolean;
+  value: string;
+  onOpen: () => void;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  if (open) {
+    return (
+      <div className="flex items-center gap-2 py-1 px-1">
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onConfirm();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
+          onBlur={() => {
+            if (!value.trim()) onCancel();
+          }}
+          placeholder="Nova linha..."
+          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-neutral-900 border border-emerald-500/40 text-sm text-white placeholder-neutral-600 focus:outline-none"
+        />
+        <button
+          onClick={onConfirm}
+          disabled={!value.trim()}
+          className="size-8 shrink-0 rounded-lg bg-emerald-500/20 text-emerald-400 grid place-items-center disabled:opacity-30 disabled:pointer-events-none"
+          title="Adicionar"
+        >
+          <Check className="size-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group/slot relative h-3 flex items-center justify-center" data-index={index}>
+      <button
+        onClick={onOpen}
+        title="Adicionar linha aqui"
+        className="size-4 rounded-full bg-neutral-800/80 border border-white/10 text-neutral-600 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-neutral-800 active:scale-90 grid place-items-center transition-colors"
+      >
+        <Plus className="size-2.5" />
+      </button>
     </div>
   );
 }
