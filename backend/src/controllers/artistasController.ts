@@ -394,10 +394,11 @@ const INFOS_ACTS_SHEET = "INFOS ACTS";
  * GET /api/artistas/infos?nome=<nome>
  * Biografia, foto "de origem" e capa do perfil do artista — vive numa aba
  * própria ("INFOS ACTS", planilha registrosCharts): A nome | C foto |
- * E biografia | R capa do perfil. O dono do artista edita biografia e
- * capa pelo app (ver setArtistBiografiaController/setArtistCapaController)
- * — antes só dava direto na planilha. O upload de foto novo grava em I,
- * não em C (ver setArtistFotoController).
+ * E biografia | R capa do perfil (desktop) | S capa do perfil (mobile).
+ * O dono do artista edita biografia e capa pelo app (ver
+ * setArtistBiografiaController/setArtistCapaController) — antes só dava
+ * direto na planilha. O upload de foto novo grava em I, não em C (ver
+ * setArtistFotoController).
  */
 export async function getArtistInfoController(request: Request): Promise<Response> {
   try {
@@ -421,6 +422,7 @@ export async function getArtistInfoController(request: Request): Promise<Respons
           foto: row ? normalizeText(row[2]) : "",
           biografia: row ? normalizeText(row[4]) : "",
           capa: row ? normalizeText(row[17]) : "",
+          capaMobile: row ? normalizeText(row[18]) : "",
         },
       }),
       { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
@@ -525,20 +527,29 @@ export async function setArtistBiografiaController(request: Request): Promise<Re
 
 /**
  * POST /api/artistas/capa
- * Grava o link da capa (banner) do perfil na coluna R da aba "INFOS ACTS"
- * — imagem de fundo do topo do perfil, diferente da foto do artista
- * (coluna C/I). Mesmo padrão de setArtistBiografiaController.
+ * Grava o link da capa (banner) do perfil nas colunas R (versão desktop) e
+ * S (versão mobile) da aba "INFOS ACTS" — imagem de fundo do topo do
+ * perfil, diferente da foto do artista (coluna C/I). Celular e desktop
+ * mostram essa área com proporções bem diferentes (larga e baixa no
+ * celular, banner bem mais largo no desktop), por isso duas versões — sem
+ * a versão certa, a imagem enviada pra uma tela ficava cortada/esticada na
+ * outra. Mesmo padrão de setArtistBiografiaController.
  */
 export async function setArtistCapaController(request: Request): Promise<Response> {
   try {
-    const body = (await request.json().catch(() => ({}))) as { nome?: string; capaUrl?: string };
+    const body = (await request.json().catch(() => ({}))) as {
+      nome?: string;
+      capaUrl?: string;
+      capaMobileUrl?: string;
+    };
     const nome = (body.nome || "").trim();
     const capaUrl = (body.capaUrl || "").trim();
-    if (!nome || !capaUrl) {
-      return new Response(JSON.stringify({ success: false, error: "nome e capaUrl são obrigatórios." }), {
-        status: 400,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
+    const capaMobileUrl = (body.capaMobileUrl || "").trim();
+    if (!nome || (!capaUrl && !capaMobileUrl)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "nome e ao menos uma capa (desktop ou mobile) são obrigatórios." }),
+        { status: 400, headers: { "Content-Type": "application/json; charset=utf-8" } },
+      );
     }
 
     const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
@@ -546,10 +557,15 @@ export async function setArtistCapaController(request: Request): Promise<Respons
     const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
 
     if (rowIndex !== -1) {
-      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `R${rowIndex + 1}`, [[capaUrl]]);
+      if (capaUrl) {
+        await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `R${rowIndex + 1}`, [[capaUrl]]);
+      }
+      if (capaMobileUrl) {
+        await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `S${rowIndex + 1}`, [[capaMobileUrl]]);
+      }
     } else {
       await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
-        nome, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", capaUrl,
+        nome, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", capaUrl, capaMobileUrl,
       ]);
     }
 

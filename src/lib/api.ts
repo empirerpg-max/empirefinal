@@ -365,7 +365,9 @@ export const api = {
   // tem tela de edição no app pra isso). Fonte real da biografia — o campo
   // "descricao" que vinha do Apps Script legado às vezes trazia lixo (até
   // uma data crua) em vez de texto de verdade.
-  async getArtistInfo(nome: string): Promise<{ foto: string; biografia: string; capa: string } | null> {
+  async getArtistInfo(
+    nome: string,
+  ): Promise<{ foto: string; biografia: string; capa: string; capaMobile: string } | null> {
     try {
       const res = await fetch(`/api/artistas/infos?nome=${encodeURIComponent(nome)}`);
       if (!res.ok) return null;
@@ -395,13 +397,17 @@ export const api = {
     });
     return res.json();
   },
-  // Grava o link da capa (banner) do perfil na coluna R da aba INFOS ACTS —
-  // diferente da foto do artista (coluna C/I).
-  async setArtistCapa(nome: string, capaUrl: string): Promise<{ success: boolean; error?: string }> {
+  // Grava o link da capa (banner) do perfil nas colunas R (desktop) e S
+  // (mobile) da aba INFOS ACTS — diferente da foto do artista (coluna C/I).
+  async setArtistCapa(
+    nome: string,
+    capaUrl?: string,
+    capaMobileUrl?: string,
+  ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/artistas/capa", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, capaUrl }),
+      body: JSON.stringify({ nome, capaUrl, capaMobileUrl }),
     });
     return res.json();
   },
