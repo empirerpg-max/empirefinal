@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { X, Play, Pause, Check, Loader2, Pencil, XCircle, Eye, Mic2, Trash2, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { api, driveImg } from "@/lib/api";
 import { haptic, useTelegramUser } from "@/lib/telegram";
 import { formatLrc, formatLrcTimestamp, parseLrc, findCurrentLrcLineIndex, type LrcLine } from "@/lib/lrc";
+import { extractDriveFileId } from "./MusicPlayer";
 
 export interface SyncStudioTrack {
   musicaRowIndex: number;
@@ -34,6 +35,13 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
+  // Áudio do Drive precisa passar pelo proxy do backend (/api/media/audio) —
+  // um fetch direto do navegador pra drive.google.com é bloqueado por CORS
+  // na maioria dos casos, o que fazia o Play não fazer nada (mesmo ajuste já
+  // usado no MusicPlayer).
+  const driveFileId = extractDriveFileId(track.audioUrl);
+  const effectiveAudioSrc = driveFileId ? `/api/media/audio?id=${driveFileId}` : track.audioUrl;
 
   // Linhas editáveis — não só os tempos, mas o texto em si. Dá pra remover
   // uma frase que não devia estar ali ou adicionar uma que a letra estática
@@ -178,12 +186,14 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
     <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex flex-col">
       <audio
         ref={audioRef}
-        src={track.audioUrl}
+        src={effectiveAudioSrc}
+        preload="metadata"
         onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
         onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration || 0)}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
+        onError={() => toast.error("Não foi possível carregar o áudio dessa faixa.")}
       />
 
       <div className="flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+16px)] pb-3 border-b border-white/10">
@@ -353,26 +363,17 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
 
       <div className="border-t border-white/10 px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+18px)] bg-neutral-950 space-y-3">
         {duration > 0 && (
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-mono text-neutral-500 w-10 text-right">
-              {formatLrcTimestamp(currentTime)}
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={duration}
-              step={0.1}
-              value={currentTime}
-              onChange={(e) => {
-                const time = parseFloat(e.target.value);
-                setCurrentTime(time);
-                if (audioRef.current) audioRef.current.currentTime = time;
-              }}
-              className="flex-1 accent-emerald-500"
+          <div className="space-y-1">
+            <TimelineScrubber
+              duration={duration}
+              currentTime={currentTime}
+              markers={times.filter((t): t is number => t != null)}
+              onSeek={seekTo}
             />
-            <span className="text-[10px] font-mono text-neutral-500 w-10">
-              {formatLrcTimestamp(duration)}
-            </span>
+            <div className="flex justify-between text-[10px] font-mono text-neutral-500">
+              <span>{formatLrcTimestamp(currentTime)}</span>
+              <span>{formatLrcTimestamp(duration)}</span>
+            </div>
           </div>
         )}
 
@@ -435,6 +436,79 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// Timeline estilo linha do tempo de editor de vídeo (CapCut e afins): barra
+// inteira representa a faixa, ticks marcam onde cada linha já tem tempo
+// definido, e o traço branco (playhead) pode ser arrastado direto — dá pra
+// "sentir" a organização da letra no tempo, não só ver um número contando.
+function TimelineScrubber({
+  duration,
+  currentTime,
+  markers,
+  onSeek,
+}: {
+  duration: number;
+  currentTime: number;
+  markers: number[];
+  onSeek: (time: number) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  function timeFromClientX(clientX: number): number {
+    const el = trackRef.current;
+    if (!el || duration <= 0) return 0;
+    const rect = el.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return ratio * duration;
+  }
+
+  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    setDragging(true);
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    onSeek(timeFromClientX(e.clientX));
+  }
+  function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragging) return;
+    onSeek(timeFromClientX(e.clientX));
+  }
+  function handlePointerUp() {
+    setDragging(false);
+  }
+
+  const progressPct = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+
+  return (
+    <div
+      ref={trackRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      className="relative h-11 rounded-xl bg-neutral-900 border border-white/10 cursor-pointer touch-none select-none overflow-hidden"
+    >
+      <div
+        className="absolute inset-y-0 left-0 bg-emerald-500/15"
+        style={{ width: `${progressPct}%` }}
+      />
+      {markers.map((t, i) => (
+        <div
+          key={i}
+          className="absolute top-1.5 bottom-1.5 w-[3px] rounded-full bg-emerald-400/80"
+          style={{ left: `calc(${duration > 0 ? (t / duration) * 100 : 0}% - 1.5px)` }}
+        />
+      ))}
+      <div
+        className="absolute top-0 bottom-0 w-0.5 bg-white shadow-[0_0_6px_rgba(255,255,255,0.6)]"
+        style={{ left: `calc(${progressPct}% - 1px)` }}
+      />
+      <div
+        className="absolute top-1/2 -translate-y-1/2 size-3.5 rounded-full bg-white shadow"
+        style={{ left: `calc(${progressPct}% - 7px)` }}
+      />
     </div>
   );
 }
