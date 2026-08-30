@@ -12,6 +12,13 @@ interface EmpirePlayerContextValue {
   closeTrack: () => void;
   closeVideo: () => void;
   setCurrentTrack: (track: PlayableTrack) => void;
+  // Posição/estado de reprodução, espelhados pelo MusicPlayer a cada tick —
+  // permite que outras telas (ex.: Fórum) renderizem karaoke sincronizado
+  // com o áudio tocando em segundo plano, sem precisar do player montado ali.
+  currentTime: number;
+  isPlaying: boolean;
+  setPlaybackTime: (time: number) => void;
+  setPlaybackPlaying: (playing: boolean) => void;
 }
 
 const EmpirePlayerContext = createContext<EmpirePlayerContextValue | null>(null);
@@ -26,6 +33,8 @@ export function EmpirePlayerProvider({ children }: { children: ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<PlayableTrack | null>(null);
   const [activePlaylist, setActivePlaylist] = useState<PlayableTrack[]>([]);
   const [currentVideo, setCurrentVideo] = useState<PlayableVideo | null>(null);
+  const [currentTime, setPlaybackTime] = useState(0);
+  const [isPlaying, setPlaybackPlaying] = useState(false);
 
   const playSong = (track: PlayableTrack, list: PlayableTrack[]) => {
     haptic.selection();
@@ -49,6 +58,10 @@ export function EmpirePlayerProvider({ children }: { children: ReactNode }) {
         closeTrack: () => setCurrentTrack(null),
         closeVideo: () => setCurrentVideo(null),
         setCurrentTrack,
+        currentTime,
+        isPlaying,
+        setPlaybackTime,
+        setPlaybackPlaying,
       }}
     >
       {children}

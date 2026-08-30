@@ -82,6 +82,10 @@ interface ForumTopicItem {
   // Código único (Musicas!Z / Albuns!L) — chave dos botões Shop/Info/Visual
   // (ver ExtraMaterial.tsx). Ausente em conteúdo legado sem código gerado.
   codigoUnico?: string | null;
+  // Letra estática e sincronizada (LRC) da faixa — usadas pro bloco de
+  // letra/karaoke exibido no tópico da música.
+  lyrics?: string | null;
+  letraSincronizada?: string | null;
 }
 
 const FORUM_SUBMENUS: ForumSubmenu[] = ["musicas", "videos", "albuns"];
@@ -147,6 +151,8 @@ export interface ForumProps {
 import { VideoPlayer, PlayableVideo } from "./VideoPlayer";
 import { type PlayableTrack } from "./MusicPlayer";
 import { ExtraMaterialButtons, useExtraMaterial, VisualBlocosView } from "./ExtraMaterial";
+import { useEmpirePlayer } from "./PlayerContext";
+import { parseLrc, findCurrentLrcLineIndex } from "@/lib/lrc";
 
 export const Forum: React.FC<ForumProps> = ({
   onPlayTrack,
@@ -312,6 +318,7 @@ export const Forum: React.FC<ForumProps> = ({
           telegramTopicId: item.telegramTopicId || null,
           tipoVideo: item.category || item.tipo_video || null,
           lyrics: item.lyrics || item.letra || item.fields?.letra || null,
+          letraSincronizada: item.syncedLyrics || item.letra_sincronizada || null,
           fields: item.fields || {
             letra: item.lyrics || item.letra,
             metacritic: item.metacriticAvg || item.metacritic || item.nota,
@@ -608,8 +615,10 @@ export const Forum: React.FC<ForumProps> = ({
     return ["Todos", ...Array.from(set).sort()];
   }, [items, activeSubmenu]);
 
+  const { currentTrack: playingTrack, currentTime: playingTime } = useEmpirePlayer();
+
   return (
-    <div className="space-y-6 text-white">
+    <div className={`space-y-6 text-white ${playingTrack ? "pb-24" : ""}`}>
       {/* HEADER DO FÓRUM */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 bg-neutral-900/80 border border-white/10 p-4 sm:p-6 rounded-2xl sm:rounded-3xl backdrop-blur-md">
         <div>
@@ -785,10 +794,14 @@ export const Forum: React.FC<ForumProps> = ({
                         }
                         onPlayTrack?.(
                           {
+                            id: selectedTopic.id,
                             titulo: selectedTopic.title,
                             artista: selectedTopic.artist,
                             capa_url: selectedTopic.cover || undefined,
                             url: selectedTopic.link || undefined,
+                            telegramTopicId: selectedTopic.telegramTopicId || selectedTopic.id,
+                            letra: selectedTopic.lyrics || undefined,
+                            letraSincronizada: selectedTopic.letraSincronizada || null,
                           },
                           [],
                         );
@@ -995,21 +1008,60 @@ export const Forum: React.FC<ForumProps> = ({
                   </div>
                 )}
 
-              {/* CASO MÚSICA: EXIBIR LETRA COMPLETA */}
-              {activeSubmenu === "musicas" && (
-                <div className="bg-neutral-800/40 border border-white/10 rounded-2xl p-4 sm:p-5 space-y-2">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
-                    <FileText className="size-4" />
-                    Letra da Música
-                  </h3>
-                  <div className="text-xs text-neutral-300 font-mono leading-relaxed whitespace-pre-wrap max-h-60 sm:max-h-72 overflow-y-auto bg-neutral-950/60 p-3 sm:p-4 rounded-xl border border-white/5">
-                    {selectedTopic.fields?.letra ||
-                      selectedTopic.fields?.letra_da_musica ||
-                      selectedTopic.fields?.lyrics ||
-                      "Letra oficial em processamento no acervo do Empire Hub."}
+              {/* CASO MÚSICA: EXIBIR LETRA COMPLETA (ou karaoke, se essa é a
+                  faixa tocando agora e o dono do artista sincronizou) */}
+              {activeSubmenu === "musicas" && (() => {
+                const isThisTrackPlaying =
+                  !!playingTrack &&
+                  (playingTrack.id === selectedTopic.id ||
+                    playingTrack.telegramTopicId === selectedTopic.telegramTopicId);
+                const syncedLines = isThisTrackPlaying
+                  ? parseLrc(playingTrack.letraSincronizada || selectedTopic.letraSincronizada)
+                  : [];
+
+                if (isThisTrackPlaying && syncedLines.length > 0) {
+                  const activeIdx = findCurrentLrcLineIndex(syncedLines, playingTime);
+                  return (
+                    <div className="bg-neutral-800/40 border border-emerald-500/20 rounded-2xl p-4 sm:p-5 space-y-2">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                        <FileText className="size-4" />
+                        Letra Sincronizada
+                      </h3>
+                      <div className="max-h-60 sm:max-h-72 overflow-y-auto bg-neutral-950/60 p-3 sm:p-4 rounded-xl border border-white/5 space-y-2">
+                        {syncedLines.map((line, i) => (
+                          <p
+                            key={i}
+                            className={
+                              i === activeIdx
+                                ? "text-emerald-400 font-black text-sm transition-colors"
+                                : i < activeIdx
+                                  ? "text-neutral-600 text-xs transition-colors"
+                                  : "text-neutral-400 text-xs transition-colors"
+                            }
+                          >
+                            {line.text}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="bg-neutral-800/40 border border-white/10 rounded-2xl p-4 sm:p-5 space-y-2">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                      <FileText className="size-4" />
+                      Letra da Música
+                    </h3>
+                    <div className="text-xs text-neutral-300 font-mono leading-relaxed whitespace-pre-wrap max-h-60 sm:max-h-72 overflow-y-auto bg-neutral-950/60 p-3 sm:p-4 rounded-xl border border-white/5">
+                      {selectedTopic.fields?.letra ||
+                        selectedTopic.fields?.letra_da_musica ||
+                        selectedTopic.fields?.lyrics ||
+                        "Letra oficial em processamento no acervo do Empire Hub."}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
                 </>
               )}
             </div>
