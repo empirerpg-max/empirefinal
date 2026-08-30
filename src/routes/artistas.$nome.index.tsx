@@ -284,16 +284,37 @@ function ArtistDashboard() {
       <div className="relative h-[30vh] min-h-[240px] overflow-hidden">
         {capaPerfilDesktop || capaPerfilMobile ? (
           <>
-            {/* Capa própria do artista: sem object-top/scale/opacity da foto
-                padrão — é uma imagem já pensada pra essa área, não precisa
-                de correção nenhuma, só encaixar. Versão certa por tamanho de
-                tela (a área do topo é bem mais larga no desktop). */}
+            {/* Capa própria do artista — técnica de "letterbox" (igual
+                Spotify/Apple Music no artwork): fundo desfocado da própria
+                imagem preenche a área toda, e a imagem inteira aparece por
+                cima sem cortar nada. Sem isso, um object-cover puro cortava
+                a composição inteira quando a imagem enviada não batia
+                exatamente com a proporção (bem mais larga que alta) da
+                área do topo — cortava até o motivo principal da arte. */}
+            <img
+              aria-hidden
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              src={driveImg(capaPerfilDesktop || capaPerfilMobile, 800) || capaPerfilDesktop || capaPerfilMobile}
+              className="hidden sm:block absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-70"
+              alt=""
+            />
             <img
               loading="lazy"
               decoding="async"
               referrerPolicy="no-referrer"
               src={driveImg(capaPerfilDesktop || capaPerfilMobile, 1600) || capaPerfilDesktop || capaPerfilMobile}
-              className="hidden sm:block w-full h-full object-cover"
+              className="hidden sm:block relative w-full h-full object-contain"
+              alt=""
+            />
+            <img
+              aria-hidden
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              src={driveImg(capaPerfilMobile || capaPerfilDesktop, 800) || capaPerfilMobile || capaPerfilDesktop}
+              className="sm:hidden absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-70"
               alt=""
             />
             <img
@@ -301,7 +322,7 @@ function ArtistDashboard() {
               decoding="async"
               referrerPolicy="no-referrer"
               src={driveImg(capaPerfilMobile || capaPerfilDesktop, 1200) || capaPerfilMobile || capaPerfilDesktop}
-              className="sm:hidden w-full h-full object-cover"
+              className="sm:hidden relative w-full h-full object-contain"
               alt=""
             />
             {/* Faixa escura só embaixo, o suficiente pra manter nome/badges
