@@ -1304,6 +1304,12 @@ export async function updateFaixaLetraSincronizadaController(request: Request): 
     await googleSheetsService.principal.updateValues("Musicas", `AE${rowIndex}`, [
       [body.lrc || ""],
     ]);
+    // +2 de prestígio pra quem sincroniza a letra da própria música — só na
+    // gravação de verdade (LRC não vazio), pra não premiar quem só limpou a
+    // sincronização.
+    if (body.lrc) {
+      await somarPrestigio({ telegramId }, "sincronizar_letra").catch(() => {});
+    }
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
