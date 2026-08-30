@@ -1202,6 +1202,7 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
         ordem: parseInt(row[20] || "999", 10) || 999,
         audioUrl: row[2] || "",
         letra: row[4] || "",
+        letraSincronizada: row[30] || "",
         pendente: !(row[1] || "").trim(), // sem tópico (coluna B vazia) = pendente
       }))
       .sort((a, b) => a.ordem - b.ordem);
@@ -1257,20 +1258,31 @@ export async function updateFaixaLetraSincronizadaController(request: Request): 
   try {
     const body = (await request.json()) as {
       topicId?: string;
+      musicaRowIndex?: number;
       telegramId?: string;
       lrc?: string;
     };
     const topicId = normalizeText(body.topicId);
     const telegramId = normalizeText(body.telegramId);
-    if (!topicId || !telegramId) {
+    const rowIndexFromBody = Number(body.musicaRowIndex) || 0;
+    if ((!topicId && rowIndexFromBody < 2) || !telegramId) {
       return new Response(
-        JSON.stringify({ success: false, error: "topicId e telegramId são obrigatórios." }),
+        JSON.stringify({
+          success: false,
+          error: "musicaRowIndex ou topicId, e telegramId, são obrigatórios.",
+        }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
 
     const rows = await googleSheetsService.principal.readValues("Musicas");
-    const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeText(r[1]) === topicId) + 1;
+    // Preferimos o rowIndex direto quando informado (Estúdio de Sincronização
+    // na Gestão) — funciona mesmo pra faixa de álbum sem tópico publicado
+    // ainda (coluna B vazia), onde não existe topicId pra buscar por ele.
+    const rowIndex =
+      rowIndexFromBody >= 2
+        ? rowIndexFromBody
+        : rows.findIndex((r, i) => i > 0 && normalizeText(r[1]) === topicId) + 1;
     if (rowIndex < 2) {
       return new Response(JSON.stringify({ success: false, error: "Faixa não encontrada." }), {
         status: 404,

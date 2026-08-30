@@ -60,6 +60,8 @@ interface ForumAlbumTrack {
   coverUrl?: string | null;
   audioUrl?: string | null;
   lyrics?: string | null;
+  letraSincronizada?: string | null;
+  telegramTopicId?: string | null;
 }
 
 interface ForumTopicItem {
@@ -333,6 +335,8 @@ export const Forum: React.FC<ForumProps> = ({
                 coverUrl: t.coverUrl,
                 audioUrl: t.audioUrl,
                 lyrics: t.lyrics,
+                letraSincronizada: t.syncedLyrics || t.letra_sincronizada || null,
+                telegramTopicId: t.telegramTopicId || t.id_do_topico || null,
               }))
             : undefined,
           encarte: Array.isArray(item.encarte) ? item.encarte : undefined,
@@ -911,6 +915,9 @@ export const Forum: React.FC<ForumProps> = ({
                                       artista: faixa.artist || selectedTopic.artist,
                                       capa_url: faixa.coverUrl || selectedTopic.cover || undefined,
                                       url: faixa.audioUrl || undefined,
+                                      telegramTopicId: faixa.telegramTopicId || trackKey,
+                                      letra: faixa.lyrics || undefined,
+                                      letraSincronizada: faixa.letraSincronizada || null,
                                     },
                                     selectedTopic.tracks!.map((t, ti) => ({
                                       id: t.id || String(ti),
@@ -918,6 +925,9 @@ export const Forum: React.FC<ForumProps> = ({
                                       artista: t.artist || selectedTopic.artist,
                                       capa_url: t.coverUrl || selectedTopic.cover || undefined,
                                       url: t.audioUrl || undefined,
+                                      telegramTopicId: t.telegramTopicId || t.id || String(ti),
+                                      letra: t.lyrics || undefined,
+                                      letraSincronizada: t.letraSincronizada || null,
                                     })),
                                   )
                                 }
@@ -945,28 +955,60 @@ export const Forum: React.FC<ForumProps> = ({
                                 <ChevronDown className={`size-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                               </button>
                             </div>
-                            {isExpanded && (
-                              <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400/80">Letra</span>
-                                  {faixa.id && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveSubmenu("musicas");
-                                        setPendingDeepLinkId(faixa.id);
-                                      }}
-                                      className="flex items-center gap-1 text-[10px] font-bold text-neutral-400 hover:text-emerald-400 transition"
-                                    >
-                                      Ver tópico <ExternalLink className="size-3" />
-                                    </button>
+                            {isExpanded && (() => {
+                              const isThisTrackPlaying =
+                                !!playingTrack &&
+                                (playingTrack.id === trackKey ||
+                                  (faixa.telegramTopicId &&
+                                    playingTrack.telegramTopicId === faixa.telegramTopicId));
+                              const syncedLines = isThisTrackPlaying
+                                ? parseLrc(playingTrack.letraSincronizada || faixa.letraSincronizada)
+                                : [];
+                              const activeIdx = findCurrentLrcLineIndex(syncedLines, playingTime);
+                              return (
+                                <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400/80">
+                                      {isThisTrackPlaying && syncedLines.length > 0 ? "Letra (acompanhando)" : "Letra"}
+                                    </span>
+                                    {faixa.id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveSubmenu("musicas");
+                                          setPendingDeepLinkId(faixa.id);
+                                        }}
+                                        className="flex items-center gap-1 text-[10px] font-bold text-neutral-400 hover:text-emerald-400 transition"
+                                      >
+                                        Ver tópico <ExternalLink className="size-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  {isThisTrackPlaying && syncedLines.length > 0 ? (
+                                    <div className="max-h-60 overflow-y-auto bg-neutral-950/60 p-3 rounded-xl border border-emerald-500/20 space-y-1.5">
+                                      {syncedLines.map((line, li) => (
+                                        <p
+                                          key={li}
+                                          className={
+                                            li === activeIdx
+                                              ? "text-emerald-400 font-black text-xs transition-colors"
+                                              : li < activeIdx
+                                                ? "text-neutral-600 text-[11px] transition-colors"
+                                                : "text-neutral-400 text-[11px] transition-colors"
+                                          }
+                                        >
+                                          {line.text}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-neutral-300 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto bg-neutral-950/60 p-3 rounded-xl border border-white/5">
+                                      {letra || "Letra oficial em processamento no acervo do Empire Hub."}
+                                    </div>
                                   )}
                                 </div>
-                                <div className="text-xs text-neutral-300 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto bg-neutral-950/60 p-3 rounded-xl border border-white/5">
-                                  {letra || "Letra oficial em processamento no acervo do Empire Hub."}
-                                </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                           </div>
                         );
                       })

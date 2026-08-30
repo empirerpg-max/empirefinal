@@ -129,6 +129,8 @@ export interface EmpirePlayCleanAlbumTrack {
   audioUrl?: string | null;
   releaseDate?: string | null;
   lyrics?: string | null;
+  syncedLyrics?: string | null;
+  telegramTopicId?: string | null;
 }
 
 export interface EmpirePlayCleanAlbum {
@@ -1122,6 +1124,8 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         audioUrl: s.audioUrl,
         releaseDate: s.releaseDate,
         lyrics: s.lyrics,
+        syncedLyrics: s.syncedLyrics,
+        telegramTopicId: s.telegramTopicId,
       }));
 
       return {

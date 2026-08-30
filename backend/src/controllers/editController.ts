@@ -165,7 +165,12 @@ export async function getReleasesForEditController(request: Request): Promise<Re
             tipoParam === "albuns"
               ? { topicId: normalizeText(row[1]) }
               : tipoParam === "musicas"
-                ? { letra: normalizeText(row[4]) }
+                ? {
+                    letra: normalizeText(row[4]),
+                    topicId: normalizeText(row[1]),
+                    audioUrl: normalizeText(row[2]),
+                    letraSincronizada: normalizeText(row[30] || ""),
+                  }
                 : {},
           codigoUnico:
             tipoParam === "musicas"

@@ -1,74 +1,74 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Play, Pause, Check, Loader2, Pencil, XCircle, Eye } from "lucide-react";
+import { X, Play, Pause, Check, Loader2, Pencil, XCircle, Eye, Mic2, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, driveImg } from "@/lib/api";
 import { haptic, useTelegramUser } from "@/lib/telegram";
 import { formatLrc, formatLrcTimestamp, parseLrc, findCurrentLrcLineIndex, type LrcLine } from "@/lib/lrc";
-import type { PlayableTrack } from "./MusicPlayer";
 
-interface LyricSyncModalProps {
-  track: PlayableTrack;
-  isPlaying: boolean;
-  currentTime: number;
-  duration: number;
-  onTogglePlay: () => void;
-  onSeek: (time: number) => void;
+export interface SyncStudioTrack {
+  musicaRowIndex: number;
+  titulo: string;
+  artista: string;
+  audioUrl: string;
+  letra: string;
+  letraSincronizada?: string | null;
+  capaUrl?: string;
+}
+
+interface SyncStudioModalProps {
+  track: SyncStudioTrack;
   onClose: () => void;
   onSaved: (lrc: string) => void;
 }
 
-// Tela de sincronização — só o dono do artista chega aqui (MusicPlayer já
-// filtra). A letra normal (currentTrack.letra) vira uma linha por linha; ao
-// tocar "Marcar" (ou apertar espaço), a linha selecionada recebe o
-// currentTime do áudio, que já está tocando no player por trás. Qualquer
-// linha (já marcada ou não) pode virar a linha selecionada de novo — dá pra
-// corrigir uma marcação errada sem refazer tudo. Antes de salvar de
-// verdade, uma prévia mostra a letra "andando" igual vai aparecer pra quem
-// ouvir, pra pegar erro de tempo antes de confirmar.
-export function LyricSyncModal({
-  track,
-  isPlaying,
-  currentTime,
-  duration,
-  onTogglePlay,
-  onSeek,
-  onClose,
-  onSaved,
-}: LyricSyncModalProps) {
+// Versão da tela de sincronização usada direto do "Estúdio" em Gestão —
+// mesmo fluxo de marcação/prévia do LyricSyncModal (aberto de dentro do
+// player), mas com áudio próprio (o dono edita sem precisar estar ouvindo a
+// faixa pelo player) e identificando a linha da planilha por
+// musicaRowIndex, o que funciona mesmo pra faixa de álbum sem tópico
+// publicado ainda (sem isso, só dava pra sincronizar depois de lançada).
+export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProps) {
   const { user } = useTelegramUser();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
-  const rawLines = useMemo(
-    () => (track.letra || "").split("\n").map((l) => l.trim()).filter(Boolean),
-    [track.letra],
+  // Linhas editáveis — não só os tempos, mas o texto em si. Dá pra remover
+  // uma frase que não devia estar ali ou adicionar uma que a letra estática
+  // não tinha (ex.: um "uh-uh" de fundo só perceptível ouvindo o áudio).
+  const [lines, setLines] = useState<string[]>(() =>
+    (track.letra || "").split("\n").map((l) => l.trim()).filter(Boolean),
   );
-
-  // Pré-preenche com os tempos já salvos, casando por ordem — se a letra
-  // mudou de tamanho desde a última sincronização, o excedente fica pendente.
   const [times, setTimes] = useState<(number | null)[]>(() => {
     const existing = parseLrc(track.letraSincronizada);
-    return rawLines.map((_, i) => existing[i]?.time ?? null);
+    const raw = (track.letra || "").split("\n").map((l) => l.trim()).filter(Boolean);
+    return raw.map((_, i) => existing[i]?.time ?? null);
   });
+  const [newLineText, setNewLineText] = useState("");
   const [saving, setSaving] = useState(false);
 
   const firstPendingIndex = times.findIndex((t) => t == null);
   const allMarked = firstPendingIndex === -1;
 
-  // Linha alvo da próxima marcação — some do controle automático assim que
-  // o jogador clica numa linha específica pra corrigir ela.
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const activeIndex = selectedIndex ?? firstPendingIndex;
 
+  function togglePlay() {
+    if (!audioRef.current) return;
+    if (isPlaying) audioRef.current.pause();
+    else audioRef.current.play().catch(() => {});
+  }
+
   function markLine(index: number) {
-    if (index < 0 || index >= rawLines.length) return;
+    if (index < 0 || index >= lines.length) return;
     haptic.light();
     setTimes((prev) => {
       const next = [...prev];
       next[index] = currentTime;
       return next;
     });
-    // Depois de corrigir uma linha específica, volta o alvo automático pra
-    // próxima pendente em vez de travar nessa mesma linha.
     setSelectedIndex(null);
   }
 
@@ -81,6 +81,22 @@ export function LyricSyncModal({
     setSelectedIndex(index);
   }
 
+  function removeLine(index: number) {
+    haptic.light();
+    setLines((prev) => prev.filter((_, i) => i !== index));
+    setTimes((prev) => prev.filter((_, i) => i !== index));
+    setSelectedIndex(null);
+  }
+
+  function addLine() {
+    const text = newLineText.trim();
+    if (!text) return;
+    haptic.light();
+    setLines((prev) => [...prev, text]);
+    setTimes((prev) => [...prev, null]);
+    setNewLineText("");
+  }
+
   function undoLastMark() {
     const lastMarked = [...times].reverse().findIndex((t) => t != null);
     if (lastMarked === -1) return;
@@ -88,7 +104,6 @@ export function LyricSyncModal({
     clearLine(idx);
   }
 
-  // Espaço marca a linha atual — só no modo de edição.
   useEffect(() => {
     if (mode !== "edit") return;
     function onKey(e: KeyboardEvent) {
@@ -103,8 +118,8 @@ export function LyricSyncModal({
   }, [mode, activeIndex, currentTime]);
 
   const previewLines: LrcLine[] = useMemo(
-    () => rawLines.map((text, i) => ({ time: times[i] ?? 0, text })),
-    [rawLines, times],
+    () => lines.map((text, i) => ({ time: times[i] ?? 0, text })),
+    [lines, times],
   );
   const previewCurrentIndex = findCurrentLrcLineIndex(previewLines, currentTime);
   const previewLineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
@@ -114,14 +129,14 @@ export function LyricSyncModal({
   }, [mode, previewCurrentIndex]);
 
   async function handleSave() {
-    if (!user || user.id === "guest" || !track.telegramTopicId) {
-      toast.error("Não foi possível identificar você ou a faixa.");
+    if (!user || user.id === "guest") {
+      toast.error("Não foi possível identificar você.");
       return;
     }
     setSaving(true);
     try {
       const lrc = formatLrc(previewLines);
-      const res = await api.salvarLetraSincronizada(track.telegramTopicId, user.id, lrc);
+      const res = await api.salvarLetraSincronizada(null, user.id, lrc, track.musicaRowIndex);
       if (res.success) {
         haptic.success();
         toast.success("Letra sincronizada!", { description: "Já aparece pra quem ouvir essa faixa." });
@@ -137,13 +152,33 @@ export function LyricSyncModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-sm flex flex-col">
+    <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex flex-col">
+      <audio
+        ref={audioRef}
+        src={track.audioUrl}
+        onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
+        onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration || 0)}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+      />
+
       <div className="flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+16px)] pb-3 border-b border-white/10">
-        <div className="min-w-0">
-          <h2 className="text-sm font-black uppercase tracking-wide truncate">
-            {mode === "preview" ? "Prévia" : "Sincronizar Letra"}
-          </h2>
-          <p className="text-xs text-neutral-400 truncate">{track.titulo}</p>
+        <div className="min-w-0 flex items-center gap-3">
+          {track.capaUrl && (
+            <img
+              src={driveImg(track.capaUrl)}
+              alt=""
+              className="size-9 rounded-lg object-cover border border-white/10 shrink-0"
+            />
+          )}
+          <div className="min-w-0">
+            <h2 className="text-sm font-black uppercase tracking-wide truncate flex items-center gap-1.5">
+              <Mic2 className="size-3.5 text-emerald-400 shrink-0" />
+              {mode === "preview" ? "Prévia" : "Estúdio de Sincronização"}
+            </h2>
+            <p className="text-xs text-neutral-400 truncate">{track.titulo} — {track.artista}</p>
+          </div>
         </div>
         <button
           onClick={onClose}
@@ -155,7 +190,7 @@ export function LyricSyncModal({
 
       {mode === "edit" ? (
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-          {rawLines.length === 0 && (
+          {lines.length === 0 && (
             <p className="text-center text-sm text-neutral-500 italic py-12">
               Essa faixa não tem letra cadastrada.
             </p>
@@ -163,7 +198,7 @@ export function LyricSyncModal({
           <p className="text-[11px] text-neutral-500 text-center pb-1">
             Toque numa linha pra escolher ela como alvo da próxima marcação — dá pra corrigir qualquer uma.
           </p>
-          {rawLines.map((text, i) => {
+          {lines.map((text, i) => {
             const marked = times[i] != null;
             const isActive = i === activeIndex;
             return (
@@ -204,10 +239,45 @@ export function LyricSyncModal({
                     </>
                   )}
                   {isActive && !marked && <Pencil className="size-3.5 text-emerald-400" />}
+                  <span
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeLine(i);
+                    }}
+                    title="Remover linha"
+                    className="text-neutral-600 hover:text-red-400"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </span>
                 </span>
               </button>
             );
           })}
+
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="text"
+              value={newLineText}
+              onChange={(e) => setNewLineText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addLine();
+                }
+              }}
+              placeholder="Adicionar linha (ex.: um trecho que faltou na letra)..."
+              className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-neutral-900 border border-white/10 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-emerald-500"
+            />
+            <button
+              onClick={addLine}
+              disabled={!newLineText.trim()}
+              className="size-10 shrink-0 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 grid place-items-center disabled:opacity-30 disabled:pointer-events-none"
+              title="Adicionar linha"
+            >
+              <Plus className="size-4" />
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto px-6 py-8 flex flex-col items-center justify-center text-center gap-4">
@@ -243,7 +313,11 @@ export function LyricSyncModal({
               max={duration}
               step={0.1}
               value={currentTime}
-              onChange={(e) => onSeek(parseFloat(e.target.value))}
+              onChange={(e) => {
+                const time = parseFloat(e.target.value);
+                setCurrentTime(time);
+                if (audioRef.current) audioRef.current.currentTime = time;
+              }}
               className="flex-1 accent-emerald-500"
             />
             <span className="text-[10px] font-mono text-neutral-500 w-10">
@@ -254,7 +328,7 @@ export function LyricSyncModal({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={onTogglePlay}
+            onClick={togglePlay}
             className="size-12 shrink-0 rounded-2xl bg-white/5 border border-white/10 grid place-items-center text-white"
           >
             {isPlaying ? <Pause className="size-5" /> : <Play className="size-5 ml-0.5" />}
@@ -264,7 +338,7 @@ export function LyricSyncModal({
             <>
               <button
                 onClick={() => markLine(activeIndex)}
-                disabled={activeIndex < 0 || rawLines.length === 0}
+                disabled={activeIndex < 0 || lines.length === 0}
                 className="flex-1 h-12 rounded-2xl bg-emerald-500 text-black font-black text-sm uppercase tracking-wide disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center gap-2"
               >
                 {selectedIndex != null ? "Corrigir linha" : "Marcar linha atual"}
@@ -294,7 +368,7 @@ export function LyricSyncModal({
         {mode === "edit" ? (
           <button
             onClick={() => setMode("preview")}
-            disabled={!allMarked || rawLines.length === 0}
+            disabled={!allMarked || lines.length === 0}
             className="w-full h-12 rounded-2xl bg-white text-black font-black text-sm uppercase tracking-wide disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center gap-2"
           >
             <Eye className="size-4" />
