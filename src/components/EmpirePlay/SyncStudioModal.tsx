@@ -408,9 +408,9 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
         <div className="flex items-center gap-2">
           <button
             onClick={togglePlay}
-            className="size-12 shrink-0 rounded-2xl bg-white/5 border border-white/10 grid place-items-center text-white"
+            className="size-11 shrink-0 rounded-xl bg-white/5 border border-white/10 grid place-items-center text-white"
           >
-            {isPlaying ? <Pause className="size-5" /> : <Play className="size-5 ml-0.5" />}
+            {isPlaying ? <Pause className="size-4" /> : <Play className="size-4 ml-0.5" />}
           </button>
 
           {mode === "edit" ? (
@@ -418,17 +418,17 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
               <button
                 onClick={() => markLine(activeIndex)}
                 disabled={activeIndex < 0 || lines.length === 0}
-                className="flex-1 h-12 rounded-2xl bg-emerald-500 text-black font-black text-sm uppercase tracking-wide disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center gap-2"
+                className="flex-1 h-11 rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold text-sm disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center gap-2 transition-colors"
               >
-                Marcar Linha
-                <span className="text-[10px] font-mono font-bold bg-black/15 px-1.5 py-0.5 rounded">espaço</span>
+                Marcar linha
+                <span className="text-[10px] font-mono text-black/60 bg-black/10 px-1.5 py-0.5 rounded-md">espaço</span>
               </button>
 
               <button
                 onClick={undoLastMark}
                 disabled={times.every((t) => t == null)}
                 title="Desfazer última marcação"
-                className="size-12 shrink-0 rounded-2xl bg-white/5 border border-white/10 grid place-items-center text-neutral-300 hover:text-white disabled:opacity-30 disabled:pointer-events-none"
+                className="size-11 shrink-0 rounded-xl bg-white/5 border border-white/10 grid place-items-center text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none text-sm"
               >
                 ↺
               </button>
@@ -436,9 +436,9 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
           ) : (
             <button
               onClick={() => setMode("edit")}
-              className="flex-1 h-12 rounded-2xl bg-white/5 border border-white/10 text-white font-black text-sm uppercase tracking-wide flex items-center justify-center gap-2"
+              className="flex-1 h-11 rounded-xl bg-white/5 border border-white/10 text-neutral-200 hover:text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
             >
-              <Pencil className="size-4" />
+              <Pencil className="size-3.5" />
               Voltar e ajustar
             </button>
           )}
@@ -448,18 +448,18 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
           <button
             onClick={() => setMode("preview")}
             disabled={!allMarked || lines.length === 0}
-            className="w-full h-12 rounded-2xl bg-white text-black font-black text-sm uppercase tracking-wide disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center gap-2"
+            className="w-full h-11 rounded-xl bg-white/90 hover:bg-white text-black font-semibold text-sm disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2 transition-colors"
           >
-            <Eye className="size-4" />
+            <Eye className="size-3.5" />
             {allMarked ? "Pré-visualizar" : `Faltam ${times.filter((t) => t == null).length} linhas`}
           </button>
         ) : (
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full h-12 rounded-2xl bg-emerald-500 text-black font-black text-sm uppercase tracking-wide disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center gap-2"
+            className="w-full h-11 rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold text-sm disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2 transition-colors"
           >
-            {saving && <Loader2 className="size-4 animate-spin" />}
+            {saving && <Loader2 className="size-3.5 animate-spin" />}
             Confirmar e salvar
           </button>
         )}
