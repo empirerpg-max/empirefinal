@@ -1,7 +1,8 @@
-import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeComparison, normalizeText } from "../services/googleSheetsService";
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
 import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
+import { getOwnerIdForArtist } from "./artistasController";
 
 // Gera o próximo "Código único" (padrão EMPALBM001 pra álbum, EMP001 pra
 // música) — acha a coluna "Código único" pelo cabeçalho (não por letra
@@ -1242,6 +1243,63 @@ export async function updateFaixaLetraController(request: Request): Promise<Resp
     console.error("[updateFaixaLetraController] Erro:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message || "Erro ao gravar letra." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+// Grava a letra SINCRONIZADA (Musicas!AE, formato LRC "[mm:ss.cc]texto" por
+// linha) de uma faixa — só o dono do artista da faixa pode fazer isso.
+// Localiza a linha pelo ID do tópico (Musicas!B) em vez de exigir rowIndex
+// do chamador, porque a tela de sincronização só tem acesso ao item do
+// catálogo (que carrega telegramTopicId), não ao índice bruto da planilha.
+export async function updateFaixaLetraSincronizadaController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as {
+      topicId?: string;
+      telegramId?: string;
+      lrc?: string;
+    };
+    const topicId = normalizeText(body.topicId);
+    const telegramId = normalizeText(body.telegramId);
+    if (!topicId || !telegramId) {
+      return new Response(
+        JSON.stringify({ success: false, error: "topicId e telegramId são obrigatórios." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const rows = await googleSheetsService.principal.readValues("Musicas");
+    const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeText(r[1]) === topicId) + 1;
+    if (rowIndex < 2) {
+      return new Response(JSON.stringify({ success: false, error: "Faixa não encontrada." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Coluna N (index 13) = ACT PRINCIPAL — mesmo mapeamento usado no resto
+    // do arquivo pra achar o dono do artista da faixa.
+    const artista = normalizeText(rows[rowIndex - 1][13]);
+    const donoId = artista ? await getOwnerIdForArtist(artista) : "";
+    if (!donoId || donoId !== telegramId) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Só o dono do artista pode sincronizar a letra." }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    await googleSheetsService.principal.updateValues("Musicas", `AE${rowIndex}`, [
+      [body.lrc || ""],
+    ]);
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[updateFaixaLetraSincronizadaController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao gravar letra sincronizada." }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }

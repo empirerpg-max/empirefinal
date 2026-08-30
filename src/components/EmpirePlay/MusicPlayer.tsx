@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Play,
@@ -13,11 +13,14 @@ import {
   Loader2,
   Disc,
   MessageSquare,
+  Mic2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { driveImg } from "@/lib/api";
-import { haptic } from "@/lib/telegram";
+import { api, driveImg } from "@/lib/api";
+import { haptic, useTelegramUser } from "@/lib/telegram";
 import { ScoreBadge } from "./ScoreBadge";
+import { LyricSyncModal } from "./LyricSyncModal";
+import { parseLrc, findCurrentLrcLineIndex } from "@/lib/lrc";
 
 export interface PlayableTrack {
   id?: string;
@@ -28,6 +31,12 @@ export interface PlayableTrack {
   stream_url?: string;
   audio_url?: string;
   letra?: string;
+  // LRC ("[mm:ss.cc]texto" por linha) — quando presente, a tela de letra
+  // vira sincronizada (acompanha o áudio) em vez de texto estático.
+  letraSincronizada?: string | null;
+  // ID do tópico no Telegram — usado pra localizar a linha certa em Musicas
+  // na hora de gravar a sincronização (ver LyricSyncModal).
+  telegramTopicId?: string | null;
   duracao?: string;
   album?: string;
   url?: string;
@@ -119,6 +128,54 @@ export function MusicPlayer({
   const [audioError, setAudioError] = useState(false);
   const [reportingWrong, setReportingWrong] = useState(false);
   const [wrongReported, setWrongReported] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const { user } = useTelegramUser();
+  // Só o dono do artista da faixa pode sincronizar a letra — confere contra
+  // a lista de artistas do próprio jogador (mesmo padrão usado no perfil do
+  // artista e nos posts de Social).
+  const [ownedArtists, setOwnedArtists] = useState<string[]>([]);
+  useEffect(() => {
+    if (!user || user.id === "guest") {
+      setOwnedArtists([]);
+      return;
+    }
+    let alive = true;
+    api
+      .meusArtistas(user.id)
+      .then((arts) => alive && setOwnedArtists(arts.map((a) => a.nome?.trim().toLowerCase()).filter(Boolean)))
+      .catch(() => alive && setOwnedArtists([]));
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+  const isOwnerOfTrack = !!currentTrack && ownedArtists.includes(currentTrack.artista?.trim().toLowerCase());
+
+  // Sobrepõe o LRC gravado na hora, sem esperar o catálogo recarregar do
+  // zero — currentTrack é controlado por quem chama o player, então não dá
+  // pra mutar a prop diretamente depois de salvar.
+  const [justSyncedLrc, setJustSyncedLrc] = useState<string | null>(null);
+  useEffect(() => setJustSyncedLrc(null), [currentTrack?.id]);
+  const syncedLines = useMemo(
+    () => parseLrc(justSyncedLrc ?? currentTrack?.letraSincronizada),
+    [justSyncedLrc, currentTrack?.letraSincronizada],
+  );
+  const currentSyncedLineIndex = useMemo(
+    () => findCurrentLrcLineIndex(syncedLines, currentTime),
+    [syncedLines, currentTime],
+  );
+  const syncedLineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  useEffect(() => {
+    if (currentSyncedLineIndex < 0) return;
+    syncedLineRefs.current[currentSyncedLineIndex]?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [currentSyncedLineIndex]);
+  // Pode sincronizar quando já tem áudio (a tela precisa tocar) e letra
+  // normal cadastrada (é o que vira linha por linha na tela de sincronia).
+  const canSyncLyrics =
+    !!currentTrack?.letra &&
+    !!(currentTrack?.audio_url || currentTrack?.stream_url || currentTrack?.drive_url);
 
   async function handleReportWrongContent() {
     if (!currentTrack?.id || reportingWrong || wrongReported) return;
@@ -509,7 +566,27 @@ export function MusicPlayer({
                 <h4 className="text-xs font-black uppercase tracking-widest text-emerald-400 mb-4">
                   Letra de {currentTrack.titulo}
                 </h4>
-                {currentTrack.letra ? (
+                {syncedLines.length > 0 ? (
+                  <div className="space-y-3">
+                    {syncedLines.map((line, i) => (
+                      <p
+                        key={i}
+                        ref={(el) => {
+                          syncedLineRefs.current[i] = el;
+                        }}
+                        className={
+                          i === currentSyncedLineIndex
+                            ? "text-white font-black text-base transition-colors"
+                            : i < currentSyncedLineIndex
+                              ? "text-neutral-600 transition-colors"
+                              : "text-neutral-400 transition-colors"
+                        }
+                      >
+                        {line.text}
+                      </p>
+                    ))}
+                  </div>
+                ) : currentTrack.letra ? (
                   <p className="whitespace-pre-line">{currentTrack.letra}</p>
                 ) : (
                   <p className="text-neutral-500 italic py-12">
@@ -570,6 +647,15 @@ export function MusicPlayer({
                   title="Ver Letra"
                 >
                   <FileText className="size-5" />
+                </button>
+              )}
+              {isOwnerOfTrack && canSyncLyrics && (
+                <button
+                  onClick={() => setShowSyncModal(true)}
+                  className="p-3 rounded-2xl border bg-white/5 border-white/10 text-neutral-300 hover:text-white transition-all"
+                  title={currentTrack.letraSincronizada ? "Editar sincronização" : "Sincronizar Letra"}
+                >
+                  <Mic2 className="size-5" />
                 </button>
               )}
             </div>
@@ -683,6 +769,25 @@ export function MusicPlayer({
             </button>
           </div>
         </div>
+      )}
+
+      {showSyncModal && currentTrack && (
+        <LyricSyncModal
+          track={currentTrack}
+          isPlaying={isPlaying}
+          currentTime={currentTime}
+          duration={duration}
+          onTogglePlay={togglePlay}
+          onSeek={(time) => {
+            setCurrentTime(time);
+            if (audioRef.current) audioRef.current.currentTime = time;
+          }}
+          onClose={() => setShowSyncModal(false)}
+          onSaved={(lrc) => {
+            setJustSyncedLrc(lrc);
+            setShowSyncModal(false);
+          }}
+        />
       )}
     </>
   );

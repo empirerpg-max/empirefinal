@@ -60,6 +60,8 @@ export function toPlayableTrack(item: any): PlayableTrack {
       item.drive_url,
     drive_url: item.audioUrl || item.id_do_arquivo || item.link || item.drive_url,
     letra: item.lyrics || item.letra,
+    letraSincronizada: item.syncedLyrics || item.letra_sincronizada || null,
+    telegramTopicId: item.telegramTopicId || item.id_do_topico || null,
     album: item.album || item.nome_do_album || "Single",
     metacriticAvg: item.metacriticAvg ?? item.metacritic ?? item.nota,
     forumTab: item.type || "musicas",

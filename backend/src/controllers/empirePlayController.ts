@@ -103,6 +103,10 @@ export interface EmpirePlayCleanItem {
   position?: number | null;
   metacriticAvg?: number | string | null;
   lyrics?: string | null;
+  // Letra sincronizada (formato LRC: "[mm:ss.cc]texto" por linha) — cadastrada
+  // pelo próprio dono do artista na tela de sincronização. Ausente/vazia
+  // significa que a faixa continua mostrando só a letra estática (lyrics).
+  syncedLyrics?: string | null;
   description?: string | null;
   category?: string | null;
   trackOrder?: number | null;
@@ -485,6 +489,7 @@ function buildCleanItem(
     "media_like",
   ]);
   const lyrics = getValue(record, ["letra", "lyrics", "letra_da_musica"]);
+  const syncedLyrics = getValue(record, ["letra_sincronizada"]);
   const description = getValue(record, ["descricao", "descrição", "description"]);
   const category = getValue(record, [
     "tipo_de_video",
@@ -531,6 +536,7 @@ function buildCleanItem(
   if (position !== null) item.position = position;
   if (metacriticAvg) item.metacriticAvg = metacriticAvg;
   if (lyrics) item.lyrics = lyrics;
+  if (syncedLyrics) item.syncedLyrics = syncedLyrics;
   if (description) item.description = description;
   if (category) item.category = category;
   if (trackOrder !== null) item.trackOrder = trackOrder;
