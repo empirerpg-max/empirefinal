@@ -1,5 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -284,37 +292,17 @@ function ArtistDashboard() {
       <div className="relative h-[30vh] min-h-[240px] overflow-hidden">
         {capaPerfilDesktop || capaPerfilMobile ? (
           <>
-            {/* Capa própria do artista — técnica de "letterbox" (igual
-                Spotify/Apple Music no artwork): fundo desfocado da própria
-                imagem preenche a área toda, e a imagem inteira aparece por
-                cima sem cortar nada. Sem isso, um object-cover puro cortava
-                a composição inteira quando a imagem enviada não batia
-                exatamente com a proporção (bem mais larga que alta) da
-                área do topo — cortava até o motivo principal da arte. */}
-            <img
-              aria-hidden
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              src={driveImg(capaPerfilDesktop || capaPerfilMobile, 800) || capaPerfilDesktop || capaPerfilMobile}
-              className="hidden sm:block absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-70"
-              alt=""
-            />
+            {/* Capa própria do artista: o upload já vem recortada no
+                Estúdio de Capa (arrastar-pra-posicionar + zoom) no tamanho
+                exato dessa área — por isso object-cover simples já basta,
+                sem sobrar espaço vazio nem cortar a arte sem querer (quem
+                escolhe o enquadramento é o próprio jogador, no upload). */}
             <img
               loading="lazy"
               decoding="async"
               referrerPolicy="no-referrer"
               src={driveImg(capaPerfilDesktop || capaPerfilMobile, 1600) || capaPerfilDesktop || capaPerfilMobile}
-              className="hidden sm:block relative w-full h-full object-contain"
-              alt=""
-            />
-            <img
-              aria-hidden
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              src={driveImg(capaPerfilMobile || capaPerfilDesktop, 800) || capaPerfilMobile || capaPerfilDesktop}
-              className="sm:hidden absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-70"
+              className="hidden sm:block w-full h-full object-cover"
               alt=""
             />
             <img
@@ -322,7 +310,7 @@ function ArtistDashboard() {
               decoding="async"
               referrerPolicy="no-referrer"
               src={driveImg(capaPerfilMobile || capaPerfilDesktop, 1200) || capaPerfilMobile || capaPerfilDesktop}
-              className="sm:hidden relative w-full h-full object-contain"
+              className="sm:hidden w-full h-full object-cover"
               alt=""
             />
             {/* Faixa escura só embaixo, o suficiente pra manter nome/badges
@@ -1235,41 +1223,174 @@ function BiografiaModal({ nome, onClose }: { nome: string; onClose: () => void }
   );
 }
 
-// Um slot de upload (desktop OU mobile) dentro do CapaModal — o topo do
-// perfil é bem mais largo no desktop do que no celular, então uma imagem só
-// não encaixa direito nos dois; cada slot mostra o tamanho ideal exato da
-// própria versão.
-function CapaUploadSlot({
-  label,
-  dimensions,
-  aspectClass,
-  preview,
-  onPick,
-}: {
-  label: string;
-  dimensions: string;
-  aspectClass: string;
-  preview: string | null;
-  onPick: (f: File | undefined) => void;
-}) {
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
+export interface CapaCropFieldHandle {
+  /** Gera o recorte final (no tamanho exato alvo) só se o usuário escolheu uma imagem. */
+  getCroppedBlob: () => Promise<Blob | null>;
+}
+
+// Recorte com arrastar-pra-posicionar + zoom — igual LinkedIn/Facebook/
+// Spotify na hora de trocar a capa: a imagem SEMPRE preenche a área (sem
+// sobrar vazio) e o próprio jogador escolhe o que fica dentro do recorte
+// (sem cortar a parte errada da arte sem querer).
+const CapaCropField = forwardRef<
+  CapaCropFieldHandle,
+  { label: string; dimensions: string; aspectClass: string; targetW: number; targetH: number }
+>(function CapaCropField({ label, dimensions, aspectClass, targetW, targetH }, ref) {
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [frameSize, setFrameSize] = useState({ w: 0, h: 0 });
+  const [rawSrc, setRawSrc] = useState<string | null>(null);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
+  const dragRef = useRef<{ startX: number; startY: number; startPos: { x: number; y: number } } | null>(null);
+
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const update = () => setFrameSize({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  function pick(f: File | undefined) {
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = String(reader.result);
+      const img = new Image();
+      img.onload = () => {
+        setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+        setRawSrc(src);
+        setZoom(1);
+        setPos({ x: 0.5, y: 0.5 });
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(f);
+  }
+
+  // Mesma fórmula usada na prévia (com o tamanho real do quadro em tela) e
+  // no recorte final (com o tamanho alvo em pixels) — garante que o que a
+  // pessoa vê é exatamente o que vira o arquivo enviado.
+  function geometry(boxW: number, boxH: number) {
+    if (!natural || boxW <= 0 || boxH <= 0) return null;
+    const coverScale = Math.max(boxW / natural.w, boxH / natural.h);
+    const scale = coverScale * zoom;
+    const drawW = natural.w * scale;
+    const drawH = natural.h * scale;
+    const excessX = Math.max(0, drawW - boxW);
+    const excessY = Math.max(0, drawH - boxH);
+    return { drawW, drawH, dx: -excessX * pos.x, dy: -excessY * pos.y, excessX, excessY };
+  }
+
+  const previewGeo = geometry(frameSize.w, frameSize.h);
+
+  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!previewGeo) return;
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startPos: pos };
+  }
+  function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragRef.current || !previewGeo) return;
+    const { excessX, excessY } = previewGeo;
+    const dxClient = e.clientX - dragRef.current.startX;
+    const dyClient = e.clientY - dragRef.current.startY;
+    setPos({
+      x: excessX > 0 ? clamp01(dragRef.current.startPos.x - dxClient / excessX) : 0.5,
+      y: excessY > 0 ? clamp01(dragRef.current.startPos.y - dyClient / excessY) : 0.5,
+    });
+  }
+  function handlePointerUp() {
+    dragRef.current = null;
+  }
+
+  useImperativeHandle(ref, () => ({
+    async getCroppedBlob() {
+      if (!natural || !rawSrc) return null;
+      const geo = geometry(targetW, targetH);
+      if (!geo) return null;
+      const canvas = document.createElement("canvas");
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Falha ao processar a imagem."));
+        img.src = rawSrc;
+      });
+      ctx.drawImage(img, geo.dx, geo.dy, geo.drawW, geo.drawH);
+      return new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", 0.92));
+    },
+  }));
+
   return (
-    <label className="block">
+    <div>
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-xs font-bold text-foreground">{label}</span>
         <span className="text-[10px] text-muted-foreground">Ideal: {dimensions}</span>
       </div>
-      <div className={`w-full ${aspectClass} rounded-2xl overflow-hidden bg-secondary border border-white/10 grid place-items-center`}>
-        {preview ? (
-          <img src={preview} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <ImageIcon className="size-6 text-muted-foreground" />
-        )}
-      </div>
-      <input type="file" accept="image/*" className="hidden" onChange={(e) => onPick(e.target.files?.[0])} />
-      <span className="block text-center text-xs font-bold text-primary mt-2 underline">Escolher arquivo</span>
-    </label>
+      {rawSrc && natural ? (
+        <>
+          <div
+            ref={frameRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className={`relative w-full ${aspectClass} rounded-2xl overflow-hidden bg-secondary border border-white/10 cursor-grab active:cursor-grabbing touch-none select-none`}
+          >
+            {previewGeo && (
+              <img
+                src={rawSrc}
+                alt=""
+                draggable={false}
+                className="absolute max-w-none pointer-events-none"
+                style={{
+                  width: previewGeo.drawW,
+                  height: previewGeo.drawH,
+                  left: previewGeo.dx,
+                  top: previewGeo.dy,
+                }}
+              />
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-[10px] text-muted-foreground shrink-0">Zoom</span>
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.01}
+              value={zoom}
+              onChange={(e) => setZoom(parseFloat(e.target.value))}
+              className="flex-1"
+            />
+          </div>
+          <label className="block text-center text-xs font-bold text-primary mt-2 underline cursor-pointer">
+            Trocar imagem
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
+          </label>
+        </>
+      ) : (
+        <label className="block">
+          <div className={`w-full ${aspectClass} rounded-2xl overflow-hidden bg-secondary border border-white/10 grid place-items-center`}>
+            <ImageIcon className="size-6 text-muted-foreground" />
+          </div>
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
+          <span className="block text-center text-xs font-bold text-primary mt-2 underline">Escolher arquivo</span>
+        </label>
+      )}
+    </div>
   );
-}
+});
 
 function CapaModal({
   nome,
@@ -1280,26 +1401,24 @@ function CapaModal({
   onClose: () => void;
   onDone: (urls: { capaUrl?: string; capaMobileUrl?: string }) => void;
 }) {
-  const [desktopFile, setDesktopFile] = useState<File | null>(null);
-  const [desktopPreview, setDesktopPreview] = useState<string | null>(null);
-  const [mobileFile, setMobileFile] = useState<File | null>(null);
-  const [mobilePreview, setMobilePreview] = useState<string | null>(null);
+  const mobileRef = useRef<CapaCropFieldHandle | null>(null);
+  const desktopRef = useRef<CapaCropFieldHandle | null>(null);
   const [s, setS] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  async function uploadOne(file: File): Promise<string> {
+  async function uploadOne(blob: Blob): Promise<string> {
     const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = reject;
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(blob);
     });
     const res = await fetch("/api/gestao/upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        fileName: file.name,
-        mimeType: file.type || "image/jpeg",
+        fileName: "capa.jpg",
+        mimeType: "image/jpeg",
         base64Data,
         folderType: "artistPhotos",
       }),
@@ -1311,13 +1430,21 @@ function CapaModal({
   }
 
   async function go() {
-    if (!desktopFile && !mobileFile) return;
     setS(true);
     setErrorMsg(null);
     try {
-      const [capaUrl, capaMobileUrl] = await Promise.all([
-        desktopFile ? uploadOne(desktopFile) : Promise.resolve(undefined),
-        mobileFile ? uploadOne(mobileFile) : Promise.resolve(undefined),
+      const [mobileBlob, desktopBlob] = await Promise.all([
+        mobileRef.current?.getCroppedBlob() ?? null,
+        desktopRef.current?.getCroppedBlob() ?? null,
+      ]);
+      if (!mobileBlob && !desktopBlob) {
+        setErrorMsg("Escolha ao menos uma imagem.");
+        setS(false);
+        return;
+      }
+      const [capaMobileUrl, capaUrl] = await Promise.all([
+        mobileBlob ? uploadOne(mobileBlob) : Promise.resolve(undefined),
+        desktopBlob ? uploadOne(desktopBlob) : Promise.resolve(undefined),
       ]);
       const salvo = await api.setArtistCapa(nome, capaUrl, capaMobileUrl);
       if (!salvo.success) throw new Error(salvo.error || "Falha ao salvar a capa.");
@@ -1333,38 +1460,31 @@ function CapaModal({
   return (
     <Modal title="Capa do perfil" onClose={onClose}>
       <p className="text-xs text-muted-foreground mb-4">
-        Imagem de fundo no topo do perfil. Manda as duas versões — o celular e o computador mostram essa área com
-        proporções bem diferentes — pra ela encaixar certinho nos dois. Sem elas, o topo continua mostrando a foto
-        do artista, como hoje.
+        Imagem de fundo no topo do perfil. Arraste pra posicionar e ajuste o zoom — igual capa de perfil do
+        LinkedIn/Facebook/Spotify, a imagem sempre preenche a área, sem sobrar espaço vazio nem cortar sem querer.
+        Manda as duas versões (celular e computador mostram essa área com proporções bem diferentes). Sem elas, o
+        topo continua mostrando a foto do artista, como hoje.
       </p>
-      <div className="space-y-4 mb-4">
-        <CapaUploadSlot
+      <div className="space-y-5 mb-4">
+        <CapaCropField
+          ref={mobileRef}
           label="Versão celular"
           dimensions="1200×750px"
           aspectClass="aspect-[1200/750]"
-          preview={mobilePreview}
-          onPick={(f) => {
-            if (!f) return;
-            setMobileFile(f);
-            setMobilePreview(URL.createObjectURL(f));
-            setErrorMsg(null);
-          }}
+          targetW={1200}
+          targetH={750}
         />
-        <CapaUploadSlot
+        <CapaCropField
+          ref={desktopRef}
           label="Versão computador"
           dimensions="1920×480px"
           aspectClass="aspect-[1920/480]"
-          preview={desktopPreview}
-          onPick={(f) => {
-            if (!f) return;
-            setDesktopFile(f);
-            setDesktopPreview(URL.createObjectURL(f));
-            setErrorMsg(null);
-          }}
+          targetW={1920}
+          targetH={480}
         />
       </div>
       {errorMsg && <p className="text-xs text-destructive mb-2">{errorMsg}</p>}
-      <button onClick={go} disabled={s || (!desktopFile && !mobileFile)} className={btnCls()}>
+      <button onClick={go} disabled={s} className={btnCls()}>
         {s && <Loader2 className="size-4 animate-spin" />} Enviar
       </button>
     </Modal>
