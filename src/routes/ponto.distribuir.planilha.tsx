@@ -94,25 +94,55 @@ function PontoPlanilha() {
     return musicas.filter((m) => m.musica.toLowerCase().includes(termo));
   }, [grupoAtivo, busca]);
 
+  async function refetchGrupos(): Promise<PontoGrupo[]> {
+    const d = await api.listarPontos(tgId);
+    setGrupos(d.grupos);
+    return d.grupos;
+  }
+
+  // A aba PONTOS é reescrita periodicamente pelo processo de charts (a
+  // música que estava na linha X pode virar outra de uma hora pra outra) —
+  // se a pessoa deixa a tela aberta por um tempo, o número de linha que o
+  // navegador guardou fica desatualizado e o backend recusa achando que a
+  // música "não é mais dela". Localiza a linha atual da mesma música
+  // (por artista+título) nos grupos recém-buscados, pra tentar de novo sem
+  // a pessoa precisar recarregar a página na mão.
+  function encontrarLinhaAtual(grupos: PontoGrupo[], row: PontoMusica): PontoMusica | null {
+    for (const g of grupos) {
+      const achada = g.musicas.find((m) => m.artista === row.artista && m.musica === row.musica);
+      if (achada) return achada;
+    }
+    return null;
+  }
+
   async function limparTudo(row: PontoMusica) {
     const key = `${row.linha}-limpar`;
     setSaving(key);
     setMsg(null);
-    const r = await api.limparPontoCelula(tgId, row.linha);
+    let r: any = await api.limparPontoCelula(tgId, row.linha);
+    let linhaUsada = row.linha;
+    if (!r?.ok && /não pertence a um artista seu/i.test(r?.error || "")) {
+      const gruposAtualizados = await refetchGrupos();
+      const atual = encontrarLinhaAtual(gruposAtualizados, row);
+      if (atual && atual.linha !== row.linha) {
+        linhaUsada = atual.linha;
+        r = await api.limparPontoCelula(tgId, atual.linha);
+      }
+    }
     setSaving(null);
-    if ((r as any)?.ok) {
+    if (r?.ok) {
       haptic.success();
       setGrupos((prev) =>
         prev.map((g) => ({
           ...g,
-          musicas: g.musicas.map((m) => (m.linha === row.linha ? { ...m, categorias: {} } : m)),
+          musicas: g.musicas.map((m) => (m.linha === linhaUsada ? { ...m, categorias: {} } : m)),
         })),
       );
-      setMusicaSelecionada((prev) => (prev && prev.linha === row.linha ? { ...prev, categorias: {} } : prev));
+      setMusicaSelecionada((prev) => (prev && prev.linha === row.linha ? { ...prev, linha: linhaUsada, categorias: {} } : prev));
       setMsg({ key, text: "Limpo! Escolha de novo.", ok: true });
     } else {
       haptic.error();
-      setMsg({ key, text: (r as any)?.error || "Erro ao limpar", ok: false });
+      setMsg({ key, text: r?.error || "Erro ao limpar", ok: false });
     }
   }
 
@@ -120,25 +150,36 @@ function PontoPlanilha() {
     const key = `${row.linha}-${coluna}`;
     setSaving(key);
     setMsg(null);
-    const r = await api.salvarPontoCelula(tgId, row.linha, coluna, valor);
+    let r: any = await api.salvarPontoCelula(tgId, row.linha, coluna, valor);
+    let linhaUsada = row.linha;
+    if (!r?.ok && /não pertence a um artista seu/i.test(r?.error || "")) {
+      const gruposAtualizados = await refetchGrupos();
+      const atual = encontrarLinhaAtual(gruposAtualizados, row);
+      if (atual && atual.linha !== row.linha) {
+        linhaUsada = atual.linha;
+        r = await api.salvarPontoCelula(tgId, atual.linha, coluna, valor);
+      }
+    }
     setSaving(null);
-    if ((r as any)?.ok) {
+    if (r?.ok) {
       haptic.success();
       setGrupos((prev) =>
         prev.map((g) => ({
           ...g,
           musicas: g.musicas.map((m) =>
-            m.linha === row.linha ? { ...m, categorias: { ...m.categorias, [coluna]: valor } } : m,
+            m.linha === linhaUsada ? { ...m, categorias: { ...m.categorias, [coluna]: valor } } : m,
           ),
         })),
       );
       setMusicaSelecionada((prev) =>
-        prev && prev.linha === row.linha ? { ...prev, categorias: { ...prev.categorias, [coluna]: valor } } : prev,
+        prev && prev.linha === row.linha
+          ? { ...prev, linha: linhaUsada, categorias: { ...prev.categorias, [coluna]: valor } }
+          : prev,
       );
       setMsg({ key, text: "Salvo com sucesso!", ok: true });
     } else {
       haptic.error();
-      setMsg({ key, text: (r as any)?.error || "Erro ao salvar", ok: false });
+      setMsg({ key, text: r?.error || "Erro ao salvar", ok: false });
     }
   }
 
