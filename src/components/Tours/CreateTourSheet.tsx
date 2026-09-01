@@ -70,6 +70,15 @@ export function CreateTourSheet({
     d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 10);
   });
+  // Duas formas de espaçar os shows: por intervalo fixo entre eles (como já
+  // era) ou escolhendo direto a data de término, com os shows distribuídos
+  // em espaçamento igual dentro desse período.
+  const [modoData, setModoData] = useState<"intervalo" | "periodo">("intervalo");
+  const [dataTermino, setDataTermino] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    return d.toISOString().slice(0, 10);
+  });
   const [capaUrl, setCapaUrl] = useState("");
   const [uploadingCapa, setUploadingCapa] = useState(false);
   const [sim, setSim] = useState<{ lucroMinimo: number; lucroMaximo: number } | null>(null);
@@ -176,6 +185,7 @@ export function CreateTourSheet({
     setSubmitting(true);
     try {
       const [ano, mes, dia] = dataInicio.split("-");
+      const [anoF, mesF, diaF] = dataTermino.split("-");
       const res = await fetch("/api/turnes/criar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -186,7 +196,9 @@ export function CreateTourSheet({
           capaUrl,
           metaLucro,
           dataInicio: `${dia}/${mes}/${ano}`,
-          intervaloDias,
+          ...(modoData === "periodo"
+            ? { dataTermino: `${diaF}/${mesF}/${anoF}` }
+            : { intervaloDias }),
           locais: Array.from(selecionados),
         }),
       });
@@ -280,35 +292,72 @@ export function CreateTourSheet({
           </div>
         </section>
 
-        <section className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">
-              Data de início
-            </label>
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white"
-            />
+        <section>
+          <div className="flex items-center gap-2 p-1 rounded-2xl bg-neutral-900 border border-white/10 mb-3">
+            <button
+              onClick={() => setModoData("intervalo")}
+              className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition ${
+                modoData === "intervalo" ? "bg-primary text-primary-foreground" : "text-neutral-400"
+              }`}
+            >
+              Por espaçamento
+            </button>
+            <button
+              onClick={() => setModoData("periodo")}
+              className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition ${
+                modoData === "periodo" ? "bg-primary text-primary-foreground" : "text-neutral-400"
+              }`}
+            >
+              Por data de término
+            </button>
           </div>
-          <div>
-            <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">
-              Espaçamento (dias)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={14}
-              value={intervaloDias}
-              onChange={(e) => setIntervaloDias(Math.max(1, Number(e.target.value) || 1))}
-              className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white"
-            />
-            <p className="text-[10px] text-neutral-500 mt-1.5 leading-snug">
-              Quantos dias de descanso entre um show e o próximo. Com 3, a agenda fica: dia 1, dia 4, dia
-              7...
-            </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">
+                Data de início
+              </label>
+              <input
+                type="date"
+                value={dataInicio}
+                onChange={(e) => setDataInicio(e.target.value)}
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white"
+              />
+            </div>
+            {modoData === "intervalo" ? (
+              <div>
+                <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">
+                  Espaçamento (dias)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={14}
+                  value={intervaloDias}
+                  onChange={(e) => setIntervaloDias(Math.max(1, Number(e.target.value) || 1))}
+                  className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="text-[11px] font-black uppercase text-neutral-400 mb-2 block">
+                  Data de término
+                </label>
+                <input
+                  type="date"
+                  min={dataInicio}
+                  value={dataTermino}
+                  onChange={(e) => setDataTermino(e.target.value)}
+                  className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white"
+                />
+              </div>
+            )}
           </div>
+          <p className="text-[10px] text-neutral-500 mt-1.5 leading-snug">
+            {modoData === "intervalo"
+              ? "Quantos dias de descanso entre um show e o próximo. Com 3, a agenda fica: dia 1, dia 4, dia 7..."
+              : "Os shows são distribuídos em espaçamento igual entre a data de início e a de término escolhidas."}
+          </p>
         </section>
 
         <section>

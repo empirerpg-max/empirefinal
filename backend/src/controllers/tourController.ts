@@ -366,7 +366,8 @@ interface CriarTurnePayload {
   capaUrl?: string;
   metaLucro?: number;
   dataInicio?: string; // dd/mm/yyyy
-  intervaloDias?: number; // dias entre um show e o próximo (padrão 3)
+  intervaloDias?: number; // dias entre um show e o próximo (padrão 3) — ignorado se dataTermino vier
+  dataTermino?: string; // dd/mm/yyyy — quando informada, os shows são espaçados igualmente até essa data em vez de usar intervaloDias
   locais?: string[]; // nomes dos locais (DADOS_TOUR."Local (Venue)"), na ordem desejada
 }
 
@@ -428,9 +429,20 @@ export async function criarTurneController(request: Request): Promise<Response> 
     const metaLucroRaw = Number(body.metaLucro) || lucroMinimoTotal;
     const metaLucro = Math.min(Math.max(metaLucroRaw, lucroMinimoTotal), lucroMaximoTotal);
 
+    // Duas formas de espaçar os shows: intervalo fixo entre eles (padrão de
+    // sempre) ou, se a pessoa escolheu uma data de término, espaçamento
+    // igual distribuído entre início e término — 1 show sempre no início,
+    // sem intervalo fracionado quebrado por causa de arredondamento de dias.
+    const terminoInformado = parseDataBR(body.dataTermino || "");
+    let intervaloEfetivo = intervaloDias;
+    if (terminoInformado && terminoInformado > inicio && escolhidos.length > 1) {
+      const diasTotais = Math.round((terminoInformado.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24));
+      intervaloEfetivo = Math.max(1, Math.round(diasTotais / (escolhidos.length - 1)));
+    }
+
     const agenda: TourShow[] = escolhidos.map((local, i) => {
       const data = new Date(inicio);
-      data.setDate(data.getDate() + i * intervaloDias);
+      data.setDate(data.getDate() + i * intervaloEfetivo);
       return {
         numero: i + 1,
         data: formatDataBR(data),
