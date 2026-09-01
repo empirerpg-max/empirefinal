@@ -145,6 +145,8 @@ import {
   criarTurneController,
   comprarTurneSimplesController,
   realizarAcaoDiaController,
+  editarAcaoDiaController,
+  editarTourInfoController,
   getComentariosTurneController,
   comentarTurneController,
   getMissoesController,
@@ -272,6 +274,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/turnes/criar",
     "/api/turnes/comprar-simples",
     "/api/turnes/acao",
+    "/api/turnes/acao/editar",
+    "/api/turnes/editar",
     "/api/turnes/comentarios",
     "/api/turnes/comentar",
     "/api/turnes/missoes",
@@ -957,6 +961,22 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await realizarAcaoDiaController(request);
+  } else if (url.pathname === "/api/turnes/acao/editar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/turnes/acao/editar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await editarAcaoDiaController(request);
+  } else if (url.pathname === "/api/turnes/editar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/turnes/editar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await editarTourInfoController(request);
   } else if (url.pathname === "/api/turnes/comentarios") {
     if (request.method !== "GET") {
       return new Response(
