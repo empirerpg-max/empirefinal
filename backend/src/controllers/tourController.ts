@@ -852,6 +852,118 @@ export async function realizarAcaoDiaController(request: Request): Promise<Respo
   }
 }
 
+interface EditarAcaoDiaPayload {
+  telegramId?: string;
+  idUnico?: string;
+  showNumero?: number;
+  texto?: string;
+  fotoUrl?: string;
+}
+
+// POST /api/turnes/acao/editar — corrige o texto/foto de uma ação do dia já
+// publicada (a pessoa errou algo ao escrever, ou quer trocar a foto) — não
+// mexe em tipo, data nem % de vendidos, só o conteúdo do post em si.
+export async function editarAcaoDiaController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as EditarAcaoDiaPayload;
+    const telegramId = normalizeText(body.telegramId);
+    const idUnico = normalizeText(body.idUnico);
+    const showNumero = Number(body.showNumero);
+    const texto = normalizeText(body.texto);
+
+    if (!telegramId || !idUnico || !showNumero) {
+      return jsonError("telegramId, idUnico e showNumero são obrigatórios.");
+    }
+    if (!texto) return jsonError("Escreva um resumo/texto para a ação.");
+
+    const raw = await readToursRaw();
+    const idUnicoCol = TOUR_HEADERS.indexOf("id_unico");
+    const found = raw.find(
+      ({ row }) => normalizeComparison(row[idUnicoCol]) === normalizeComparison(idUnico),
+    );
+    if (!found) return jsonError("Turnê não encontrada.", 404);
+
+    const tour = rowToTour(found.row);
+    if (normalizeComparison(tour.idUsuario) !== normalizeComparison(telegramId)) {
+      return jsonError("Essa turnê não pertence a este jogador.", 403);
+    }
+
+    const show = tour.agenda.find((s) => s.numero === showNumero);
+    if (!show) return jsonError("Show não encontrado nessa turnê.", 404);
+    const acao = show.acoes[show.acoes.length - 1];
+    if (!acao) return jsonError("Esse show ainda não tem ação registrada pra editar.");
+
+    acao.texto = texto;
+    acao.fotoUrl = normalizeText(body.fotoUrl) || null;
+
+    await persistAgenda(found.rowIndex, tour);
+
+    return jsonOk({ show });
+  } catch (err) {
+    console.error("[editarAcaoDiaController] Erro:", err);
+    return jsonError("Falha ao editar a ação do dia.", 500);
+  }
+}
+
+interface EditarTourInfoPayload {
+  telegramId?: string;
+  idUnico?: string;
+  nomeTurne?: string;
+  capaUrl?: string;
+}
+
+// POST /api/turnes/editar — troca nome e/ou capa de uma turnê já criada
+// (a pessoa pode querer ajustar depois, sem precisar recriar a turnê do
+// zero). Cada campo só é gravado se vier preenchido no corpo da requisição.
+export async function editarTourInfoController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as EditarTourInfoPayload;
+    const telegramId = normalizeText(body.telegramId);
+    const idUnico = normalizeText(body.idUnico);
+    const nomeTurne = normalizeText(body.nomeTurne);
+    const capaUrl = normalizeText(body.capaUrl);
+
+    if (!telegramId || !idUnico) {
+      return jsonError("telegramId e idUnico são obrigatórios.");
+    }
+    if (!nomeTurne && !capaUrl) {
+      return jsonError("Informe um novo nome e/ou uma nova capa.");
+    }
+
+    const raw = await readToursRaw();
+    const idUnicoCol = TOUR_HEADERS.indexOf("id_unico");
+    const found = raw.find(
+      ({ row }) => normalizeComparison(row[idUnicoCol]) === normalizeComparison(idUnico),
+    );
+    if (!found) return jsonError("Turnê não encontrada.", 404);
+
+    const dono = normalizeText(found.row[TOUR_HEADERS.indexOf("id_usuario")]);
+    if (normalizeComparison(dono) !== normalizeComparison(telegramId)) {
+      return jsonError("Essa turnê não pertence a este jogador.", 403);
+    }
+
+    const updates: Promise<unknown>[] = [];
+    if (nomeTurne) {
+      const col = colIndexToA1Letter(TOUR_HEADERS.indexOf("nome_da_turne"));
+      updates.push(
+        googleSheetsService.usuarios.updateValues(TOURS_SHEET, `${col}${found.rowIndex}`, [[nomeTurne]]),
+      );
+    }
+    if (capaUrl) {
+      const col = colIndexToA1Letter(TOUR_HEADERS.indexOf("capa"));
+      updates.push(
+        googleSheetsService.usuarios.updateValues(TOURS_SHEET, `${col}${found.rowIndex}`, [[capaUrl]]),
+      );
+    }
+    await Promise.all(updates);
+
+    return jsonOk({ nomeTurne: nomeTurne || undefined, capaUrl: capaUrl || undefined });
+  } catch (err) {
+    console.error("[editarTourInfoController] Erro:", err);
+    return jsonError("Falha ao editar a turnê.", 500);
+  }
+}
+
 interface ComentarioTurne {
   idUnico: string;
   showNumero: number;

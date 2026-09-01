@@ -19,6 +19,7 @@ import {
   Users2,
   Ticket,
   Clapperboard,
+  Pencil,
 } from "lucide-react";
 import { fmtMoney, driveImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -106,6 +107,8 @@ function TourDetails() {
   const [tours, setTours] = useState<Tour[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [acaoAberta, setAcaoAberta] = useState<TourShow | null>(null);
+  const [acaoEditando, setAcaoEditando] = useState<TourShow | null>(null);
+  const [editandoInfo, setEditandoInfo] = useState(false);
 
   function reload() {
     fetch(`/api/turnes?artista=${encodeURIComponent(nome)}`)
@@ -231,6 +234,16 @@ function TourDetails() {
           <ChevronLeft className="size-6" />
         </Link>
 
+        {isDono && (
+          <button
+            onClick={() => setEditandoInfo(true)}
+            title="Editar título/capa da turnê"
+            className="absolute top-6 right-6 z-30 size-12 rounded-2xl bg-black/40 backdrop-blur-xl border border-white/10 flex items-center justify-center shadow-2xl active:scale-90 transition-transform"
+          >
+            <Pencil className="size-5" />
+          </button>
+        )}
+
         <div className="absolute inset-x-6 bottom-8 z-20">
           <div className="flex flex-col items-center text-center">
             <div className="size-20 rounded-[2.5rem] overflow-hidden border-2 border-primary/30 shadow-2xl mb-4 rotate-[-3deg] bg-black">
@@ -333,6 +346,8 @@ function TourDetails() {
                       show={s}
                       telegramId={telegramId}
                       usuario={usuario}
+                      isDono={!!isDono}
+                      onEditar={() => setAcaoEditando(s)}
                     />
                   ))}
                 </div>
@@ -350,6 +365,33 @@ function TourDetails() {
           onClose={() => setAcaoAberta(null)}
           onDone={() => {
             setAcaoAberta(null);
+            reload();
+          }}
+        />
+      )}
+
+      {acaoEditando && (
+        <EditAcaoModal
+          idUnico={tour.idUnico}
+          show={acaoEditando}
+          telegramId={telegramId}
+          onClose={() => setAcaoEditando(null)}
+          onDone={() => {
+            setAcaoEditando(null);
+            reload();
+          }}
+        />
+      )}
+
+      {editandoInfo && (
+        <EditTourInfoModal
+          idUnico={tour.idUnico}
+          nomeTurne={tour.nomeTurne}
+          capaUrl={tour.capaUrl}
+          telegramId={telegramId}
+          onClose={() => setEditandoInfo(false)}
+          onDone={() => {
+            setEditandoInfo(false);
             reload();
           }}
         />
@@ -440,11 +482,15 @@ function ShowFeedPost({
   show,
   telegramId,
   usuario,
+  isDono,
+  onEditar,
 }: {
   idUnico: string;
   show: TourShow;
   telegramId: string;
   usuario: string;
+  isDono: boolean;
+  onEditar: () => void;
 }) {
   const [comentarios, setComentarios] = useState<Comentario[] | null>(null);
   const [texto, setTexto] = useState("");
@@ -500,11 +546,22 @@ function ShowFeedPost({
               {show.cidade} · {show.data}
             </p>
           </div>
-          {show.soldOut && (
-            <div className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-black uppercase rounded-lg shrink-0">
-              SOLD OUT
-            </div>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {show.soldOut && (
+              <div className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-black uppercase rounded-lg">
+                SOLD OUT
+              </div>
+            )}
+            {isDono && (
+              <button
+                onClick={onEditar}
+                title="Editar post"
+                className="size-7 rounded-lg bg-white/5 border border-white/10 text-neutral-400 hover:text-white grid place-items-center transition"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {ultimaAcao && <p className="text-sm text-white/90 leading-relaxed">{ultimaAcao.texto}</p>}
@@ -764,6 +821,283 @@ function TourActionModal({
         >
           {enviando ? <Loader2 className="size-4 animate-spin" /> : null}
           Publicar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EditAcaoModal({
+  idUnico,
+  show,
+  telegramId,
+  onClose,
+  onDone,
+}: {
+  idUnico: string;
+  show: TourShow;
+  telegramId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const ultimaAcao = show.acoes[show.acoes.length - 1];
+  const [texto, setTexto] = useState(ultimaAcao?.texto || "");
+  const [fotoUrl, setFotoUrl] = useState(ultimaAcao?.fotoUrl || "");
+  const [uploading, setUploading] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function handleUploadFoto(file: File) {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      formData.append("folderType", "turnes");
+      const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.data?.fileUrl) setFotoUrl(data.data.fileUrl);
+      else setErro("Não deu pra enviar a foto.");
+    } catch {
+      setErro("Não deu pra enviar a foto.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function salvar() {
+    if (!texto.trim()) return setErro("Escreva um resumo/texto pra ação.");
+    setErro("");
+    setEnviando(true);
+    try {
+      const res = await fetch("/api/turnes/acao/editar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          telegramId,
+          idUnico,
+          showNumero: show.numero,
+          texto: texto.trim(),
+          fotoUrl,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        haptic.selection();
+        onDone();
+      } else {
+        setErro(data?.error || "Não deu pra salvar a edição.");
+      }
+    } catch {
+      setErro("Não deu pra salvar a edição.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[150] bg-neutral-950/98 backdrop-blur-3xl flex flex-col animate-in slide-in-from-bottom overflow-hidden">
+      <div className="p-4 sm:p-6 border-b border-white/10 flex items-center justify-between bg-neutral-900/90 shrink-0">
+        <div>
+          <span className="text-[10px] font-mono font-black uppercase text-primary/80 block">
+            Editar post
+          </span>
+          <h2 className="text-lg font-black text-white">
+            {show.local} · {show.cidade}
+          </h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white transition"
+        >
+          <X className="size-5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 pb-32">
+        <div>
+          <p className="text-[11px] font-black uppercase text-neutral-400 mb-2">Foto (opcional)</p>
+          <div className="flex items-center gap-3">
+            <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 overflow-hidden shrink-0 grid place-items-center">
+              {fotoUrl ? (
+                <img src={driveImg(fotoUrl, 200)} alt="" className="size-full object-cover" />
+              ) : (
+                <ImagePlus className="size-5 text-neutral-600" />
+              )}
+            </div>
+            <label className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold uppercase tracking-wide cursor-pointer transition">
+              {uploading ? <Loader2 className="size-4 animate-spin" /> : fotoUrl ? "Trocar" : "Escolher"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => e.target.files?.[0] && handleUploadFoto(e.target.files[0])}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-black uppercase text-neutral-400 mb-2">Texto</p>
+          <textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            rows={6}
+            placeholder="O que rolou nesse show..."
+            className="w-full bg-neutral-900 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-primary/40 resize-none"
+          />
+        </div>
+
+        {erro && <p className="text-xs text-destructive">{erro}</p>}
+      </div>
+
+      <div className="p-4 sm:p-6 border-t border-white/10 bg-neutral-900/90 shrink-0">
+        <button
+          onClick={salvar}
+          disabled={enviando || uploading}
+          className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground font-black uppercase tracking-wide text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition"
+        >
+          {enviando && <Loader2 className="size-4 animate-spin" />}
+          Salvar edição
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EditTourInfoModal({
+  idUnico,
+  nomeTurne,
+  capaUrl: capaUrlAtual,
+  telegramId,
+  onClose,
+  onDone,
+}: {
+  idUnico: string;
+  nomeTurne: string;
+  capaUrl: string;
+  telegramId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [nome, setNome] = useState(nomeTurne);
+  const [capaUrl, setCapaUrl] = useState(capaUrlAtual);
+  const [uploading, setUploading] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function handleUploadCapa(file: File) {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      formData.append("folderType", "turnes");
+      const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.data?.fileUrl) setCapaUrl(data.data.fileUrl);
+      else setErro("Não deu pra enviar a capa.");
+    } catch {
+      setErro("Não deu pra enviar a capa.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function salvar() {
+    if (!nome.trim()) return setErro("Dê um nome pra turnê.");
+    setErro("");
+    setEnviando(true);
+    try {
+      const res = await fetch("/api/turnes/editar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          telegramId,
+          idUnico,
+          nomeTurne: nome.trim(),
+          capaUrl,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        haptic.selection();
+        onDone();
+      } else {
+        setErro(data?.error || "Não deu pra salvar as alterações.");
+      }
+    } catch {
+      setErro("Não deu pra salvar as alterações.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[150] bg-neutral-950/98 backdrop-blur-3xl flex flex-col animate-in slide-in-from-bottom overflow-hidden">
+      <div className="p-4 sm:p-6 border-b border-white/10 flex items-center justify-between bg-neutral-900/90 shrink-0">
+        <div>
+          <span className="text-[10px] font-mono font-black uppercase text-primary/80 block">
+            Editar turnê
+          </span>
+          <h2 className="text-lg font-black text-white">Título e capa</h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white transition"
+        >
+          <X className="size-5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 pb-32">
+        <div>
+          <p className="text-[11px] font-black uppercase text-neutral-400 mb-2">Capa</p>
+          <label className="block aspect-video w-full rounded-2xl bg-neutral-900 border border-white/10 overflow-hidden cursor-pointer relative">
+            {capaUrl ? (
+              <img src={driveImg(capaUrl, 800)} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full grid place-items-center">
+                <ImagePlus className="size-8 text-neutral-600" />
+              </div>
+            )}
+            {uploading && (
+              <div className="absolute inset-0 bg-black/60 grid place-items-center">
+                <Loader2 className="size-6 animate-spin text-white" />
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={uploading}
+              onChange={(e) => e.target.files?.[0] && handleUploadCapa(e.target.files[0])}
+            />
+          </label>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-black uppercase text-neutral-400 mb-2">Nome da turnê</p>
+          <input
+            type="text"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            className="w-full bg-neutral-900 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-primary/40"
+          />
+        </div>
+
+        {erro && <p className="text-xs text-destructive">{erro}</p>}
+      </div>
+
+      <div className="p-4 sm:p-6 border-t border-white/10 bg-neutral-900/90 shrink-0">
+        <button
+          onClick={salvar}
+          disabled={enviando || uploading}
+          className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground font-black uppercase tracking-wide text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition"
+        >
+          {enviando && <Loader2 className="size-4 animate-spin" />}
+          Salvar alterações
         </button>
       </div>
     </div>
