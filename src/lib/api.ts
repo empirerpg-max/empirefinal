@@ -243,6 +243,18 @@ async function call<T = unknown>(params: Record<string, unknown>, opts: { cache?
   return fetchAndStore<T>(key, params, base);
 }
 
+// Chaves de status/metadado que não contam como "conteúdo real" na hora de
+// decidir se uma resposta é vazia — sem ignorá-las, {success:true, data:[]}
+// nunca era detectado como vazio (o "true" sozinho já bastava pra passar).
+const EMPTYISH_IGNORED_KEYS = new Set(["success", "ok"]);
+
+// Detecta qualquer formato de resposta "vazia por dentro" — não só array
+// vazio no topo, mas objetos cujos campos são todos vazios também (ex.:
+// {grupos: [], artistas: []}, {dates: [], styles: []}). Sem isso, uma falha
+// transitória do backend que devolve 200 com esses campos vazios ficava até
+// 10 minutos "grudada" em cache (inclusive sobrevivendo a um F5, porque o
+// cache persiste em sessionStorage) — exatamente o "sumiço dos dados mesmo
+// recarregando" relatado várias vezes.
 function isEmptyish(data: unknown): boolean {
   if (data == null) return true;
   if (Array.isArray(data)) return data.length === 0;
@@ -250,6 +262,16 @@ function isEmptyish(data: unknown): boolean {
     const obj = data as Record<string, unknown>;
     if ("error" in obj || "erro" in obj) return true;
     if ("success" in obj && obj.success === false) return true;
+    const values = Object.entries(obj)
+      .filter(([k]) => !EMPTYISH_IGNORED_KEYS.has(k))
+      .map(([, v]) => v);
+    if (values.length === 0) return true;
+    return values.every((v) => {
+      if (v == null || v === "") return true;
+      if (Array.isArray(v)) return v.length === 0;
+      if (typeof v === "object") return isEmptyish(v);
+      return false; // número, boolean (não ignorado) ou string não-vazia = conteúdo real
+    });
   }
   return false;
 }
