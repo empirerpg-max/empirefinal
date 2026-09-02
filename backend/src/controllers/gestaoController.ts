@@ -4,6 +4,22 @@ import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { getOwnerIdForArtist } from "./artistasController";
 
+// Coluna H de Musicas sempre guarda "Artista - Título" junto — se algum
+// texto de entrada já vier com esse prefixo (autopreenchimento, busca de
+// faixa existente, o jogador digitando o artista de novo), colapsa
+// repetições consecutivas de volta pra uma única vez em vez de empilhar o
+// prefixo a cada gravação ("Artista - Artista - Música").
+function dedupeArtistPrefix(texto: string, artista: string): string {
+  if (!artista) return texto;
+  const prefixLen = artista.length + 3; // "Artista - "
+  const prefixLower = `${artista.toLowerCase()} - `;
+  let t = texto;
+  while (t.toLowerCase().startsWith(prefixLower) && t.slice(prefixLen).toLowerCase().startsWith(prefixLower)) {
+    t = t.slice(prefixLen);
+  }
+  return t;
+}
+
 // Gera o próximo "Código único" (padrão EMPALBM001 pra álbum, EMP001 pra
 // música) — acha a coluna "Código único" pelo cabeçalho (não por letra
 // fixa, porque cada aba tem ela numa posição diferente), pega o maior
@@ -288,17 +304,12 @@ export async function createSongController(request: Request): Promise<Response> 
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const participantesLimpos = participantes.filter(Boolean);
-    // Rede de segurança contra "Artista - Artista - Nome": se o título
-    // recebido já vier com o prefixo do artista duplicado (cliente antigo,
-    // ou o jogador digitou o artista de novo no campo de nome), remove a
-    // repetição em vez de empilhar o prefixo de novo.
-    const artistPrefix = `${artistaPrincipal} - `;
-    const tituloSemPrefixoDuplicado = tituloMusica.toLowerCase().startsWith(artistPrefix.toLowerCase())
-      ? tituloMusica.slice(artistPrefix.length).trim()
-      : tituloMusica;
+    // Rede de segurança contra "Artista - Artista - Nome" — ver
+    // dedupeArtistPrefix no topo do arquivo.
+    const tituloSemPrefixoDuplicado = dedupeArtistPrefix(tituloMusica, artistaPrincipal);
     const fullTitle = tituloSemPrefixoDuplicado.includes(" - ")
       ? tituloSemPrefixoDuplicado
-      : `${artistaPrincipal} - ${nomeMusica || tituloSemPrefixoDuplicado}`;
+      : `${artistaPrincipal} - ${dedupeArtistPrefix(nomeMusica || tituloSemPrefixoDuplicado, artistaPrincipal)}`;
 
     // ID único do tópico gerado para essa música — usado tanto como chave do
     // registro em Musicas (Coluna B) quanto como "Comentários para" (Coluna F).
@@ -1052,9 +1063,10 @@ async function processarFaixasDoAlbum(
 
     // Faixa inédita.
     const participantesLimpos = (faixa.participantes || []).filter(Boolean);
-    const songTitle = faixa.titulo.includes(" - ")
-      ? faixa.titulo
-      : `${artistaAlbum} - ${faixa.titulo}`;
+    const tituloFaixaSemPrefixoDuplicado = dedupeArtistPrefix(faixa.titulo, artistaAlbum);
+    const songTitle = tituloFaixaSemPrefixoDuplicado.includes(" - ")
+      ? tituloFaixaSemPrefixoDuplicado
+      : `${artistaAlbum} - ${tituloFaixaSemPrefixoDuplicado}`;
     const abrirTopico = !!faixa.abrirTopico;
     const pendente = abrirTopico ? "Não" : "Sim";
     const trackTopicId = abrirTopico

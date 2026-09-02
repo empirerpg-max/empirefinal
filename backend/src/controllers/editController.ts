@@ -64,6 +64,26 @@ const SHEET_NAMES: Record<EditCategory, string> = {
   albuns: "Albuns",
 };
 
+// Coluna H de Musicas (e o título de vídeos/álbuns) sempre guarda "Artista -
+// Título" junto — a tela de edição mostra/edita esse texto completo, então
+// quem digita de novo "Artista - " sem perceber que já estava ali duplica o
+// prefixo ("Artista - Artista - Música"). Colapsa qualquer repetição
+// consecutiva do prefixo do artista de volta pra uma única vez, sem exigir
+// que o prefixo exista (só corrige duplicação, nunca adiciona o artista).
+function dedupeArtistPrefix(titulo: string, artista: string): string {
+  if (!artista) return titulo;
+  const prefixLen = artista.length + 3; // "Artista - "
+  const prefixLower = `${artista.toLowerCase()} - `;
+  let result = titulo.trim();
+  while (
+    result.toLowerCase().startsWith(prefixLower) &&
+    result.slice(prefixLen).toLowerCase().startsWith(prefixLower)
+  ) {
+    result = result.slice(prefixLen);
+  }
+  return result;
+}
+
 /**
   GET /api/editar?artist=Taylor+Swift&tipo=musicas
   Lista os lançamentos do artista fornecido na categoria especificada.
@@ -204,20 +224,20 @@ export async function updateReleaseController(request: Request): Promise<Respons
     const {
       tipo,
       rowIndex,
-      titulo,
+      titulo: tituloRaw,
       descricao,
       artista,
       capaBase64,
       capaMimeType,
       oldCapaUrl,
-      oldTitulo,
+      oldTitulo: oldTituloRaw,
       letra,
     } = body;
 
     const tipoClean = (tipo || "musicas").toLowerCase() as EditCategory;
     const sheetName = SHEET_NAMES[tipoClean];
 
-    if (!sheetName || !rowIndex || !titulo) {
+    if (!sheetName || !rowIndex || !tituloRaw) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -226,6 +246,9 @@ export async function updateReleaseController(request: Request): Promise<Respons
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
+
+    const titulo = dedupeArtistPrefix(String(tituloRaw), String(artista || ""));
+    const oldTitulo = oldTituloRaw ? dedupeArtistPrefix(String(oldTituloRaw), String(artista || "")) : oldTituloRaw;
 
     let finalCapaUrl = oldCapaUrl || "";
 
