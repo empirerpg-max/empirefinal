@@ -17,6 +17,10 @@ export interface CommentModalProps {
   tituloMedia: string;
   topicId?: string;
   onCommentSubmitted?: (data: any) => void;
+  // "modal" (padrão) cobre a tela inteira, como sempre foi. "inline" renderiza
+  // o mesmo formulário encaixado no fluxo da página (usado no Fórum, pra dar
+  // pra comentar sem perder de vista o resto do tópico por trás de um popup).
+  variant?: "modal" | "inline";
 }
 
 const INTERVAL_OPTIONS = ["45 - 60", "61 - 75", "76 - 90", "91 - 100"] as const;
@@ -28,6 +32,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   tituloMedia,
   topicId,
   onCommentSubmitted,
+  variant = "modal",
 }) => {
   const { user: telegramUser } = useTelegramUser();
   const [nomeJogador, setNomeJogador] = useState("");
@@ -52,8 +57,11 @@ export const CommentModal: React.FC<CommentModalProps> = ({
     }
   }, [isOpen, telegramUser, nomeJogador]);
 
-  // "Voltar" fecha o modal em vez de sair da tela por trás dele.
-  useBackClose(isOpen, onClose);
+  // "Voltar" fecha o modal em vez de sair da tela por trás dele — só faz
+  // sentido pro modal cobrindo a tela; encaixado (inline) não deve capturar
+  // o botão voltar do dispositivo, senão sair do tópico via "voltar" fecharia
+  // o formulário em vez de navegar de verdade.
+  useBackClose(variant === "modal" && isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -134,11 +142,16 @@ export const CommentModal: React.FC<CommentModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-lg bg-neutral-900 border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-white overflow-hidden">
-        {/* Glow de fundo */}
-        <div className="absolute -top-12 -right-12 size-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+  const content = (
+    <div
+      className={
+        variant === "inline"
+          ? "relative w-full bg-neutral-900 border border-white/10 rounded-3xl p-5 sm:p-6 shadow-xl space-y-6 text-white overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300"
+          : "relative w-full max-w-lg bg-neutral-900 border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-white overflow-hidden"
+      }
+    >
+      {/* Glow de fundo */}
+      <div className="absolute -top-12 -right-12 size-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* Header do Modal */}
         <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
@@ -314,7 +327,14 @@ export const CommentModal: React.FC<CommentModalProps> = ({
             </button>
           </div>
         </form>
-      </div>
+    </div>
+  );
+
+  if (variant === "inline") return content;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+      {content}
     </div>
   );
 };

@@ -1159,13 +1159,36 @@ export const Forum: React.FC<ForumProps> = ({
               </div>
 
               <button
-                onClick={() => setIsCommentModalOpen(true)}
+                onClick={() => setIsCommentModalOpen((v) => !v)}
                 className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2"
               >
                 <Sparkles className="size-4" />
-                Avaliar & Comentar
+                {isCommentModalOpen ? "Fechar" : "Avaliar & Comentar"}
               </button>
             </div>
+
+            {/* Formulário encaixado na própria página (não é mais um popup
+                que cobre o tópico) — dá pra continuar lendo o resto enquanto
+                escreve o comentário. */}
+            {isCommentModalOpen && (
+              <CommentModal
+                isOpen={isCommentModalOpen}
+                onClose={() => setIsCommentModalOpen(false)}
+                tipoMedia={getMediaTypeForModal()}
+                tituloMedia={selectedTopic.title}
+                topicId={resolvedTopicId || selectedTopic.id}
+                onCommentSubmitted={() => {
+                  if (selectedTopic) {
+                    fetchTopicComments(selectedTopic);
+                    const topicKey = resolvedTopicId || selectedTopic.telegramTopicId || selectedTopic.id;
+                    if (topicKey) {
+                      setCommentedTopicIds((prev) => new Set(prev).add(topicKey));
+                    }
+                  }
+                }}
+                variant="inline"
+              />
+            )}
 
             {/* LISTA DE COMENTÁRIOS — feed estilo tópico do Telegram: avatar +
                 nome colorido por usuário, bolha de mensagem com "rabinho",
@@ -1430,25 +1453,6 @@ export const Forum: React.FC<ForumProps> = ({
         </div>
       )}
 
-      {/* MODAL DE COMENTÁRIO E AVALIAÇÃO INTERATIVA */}
-      {selectedTopic && (
-        <CommentModal
-          isOpen={isCommentModalOpen}
-          onClose={() => setIsCommentModalOpen(false)}
-          tipoMedia={getMediaTypeForModal()}
-          tituloMedia={selectedTopic.title}
-          topicId={resolvedTopicId || selectedTopic.id}
-          onCommentSubmitted={() => {
-            if (selectedTopic) {
-              fetchTopicComments(selectedTopic);
-              const topicKey = resolvedTopicId || selectedTopic.telegramTopicId || selectedTopic.id;
-              if (topicKey) {
-                setCommentedTopicIds((prev) => new Set(prev).add(topicKey));
-              }
-            }
-          }}
-        />
-      )}
     </div>
   );
 };
