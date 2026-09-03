@@ -344,6 +344,7 @@ export default {
     injectRuntimeEnv(env);
     const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
     const { limparStoriesExpiradosScheduled } = await import("../backend/src/controllers/socialController");
+    const { preencherLikesVideosSemMediaScheduled } = await import("../backend/src/controllers/videoLikesController");
     ctx.waitUntil(
       processarParticipacaoTV()
         .then((r) =>
@@ -357,6 +358,11 @@ export default {
       limparStoriesExpiradosScheduled()
         .then((r) => console.log(`[scheduled] Stories expirados apagados: ${r.apagados}`))
         .catch((err) => console.error("[scheduled] Erro ao limpar stories expirados:", err)),
+    );
+    ctx.waitUntil(
+      preencherLikesVideosSemMediaScheduled()
+        .then((r) => console.log(`[scheduled] Média Likes de vídeo preenchida: ${r.atualizados} vídeos.`))
+        .catch((err) => console.error("[scheduled] Erro ao preencher likes de vídeo:", err)),
     );
   },
 
