@@ -299,6 +299,11 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab || "musica");
+  // Painel de início com ações rápidas, no lugar das 3 abas gigantes sempre
+  // abertas — só pula direto pro formulário quando chega por um link
+  // profundo já com o tipo definido (ex.: botão "Álbum" no perfil do
+  // artista), pra não quebrar esse fluxo existente.
+  const [showLanding, setShowLanding] = useState<boolean>(!initialTab);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
 
   // Músicas do catálogo para seleção
@@ -1073,40 +1078,113 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         ))}
       </datalist>
 
-      {/* HEADER DA GESTÃO */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-neutral-900/80 border border-white/10 p-6 rounded-3xl backdrop-blur-md">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2">
-            <Sparkles className="size-3.5" />
-            Central do Gravador / Artista
+      {showLanding ? (
+        <div className="space-y-7">
+          {/* HEADER MINIMALISTA */}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400 mb-1">
+                Central do gravador
+              </p>
+              <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tight text-white">Gestão</h2>
+            </div>
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="px-3.5 py-2 rounded-full bg-neutral-900 border border-white/10 text-[11px] font-bold text-neutral-300 hover:text-white hover:border-white/20 transition flex items-center gap-1.5 shrink-0"
+            >
+              <Pencil className="size-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Editar meus materiais</span>
+              <span className="sm:hidden">Editar</span>
+            </button>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black text-white">Gestão & Lançamentos</h2>
-          <p className="text-xs text-neutral-400 mt-1">
-            Cadastre músicas, vídeos, music videos e álbuns para pontuação nos Charts e catálogo do
-            Empire Play.
+
+          {/* AÇÕES RÁPIDAS */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {[
+              { tab: "musica" as TabType, icon: Music, label: "Nova Música", accent: true },
+              { tab: "video" as TabType, icon: Tv, label: "Novo Vídeo", accent: false },
+              { tab: "album" as TabType, icon: Disc, label: "Novo Álbum", accent: false },
+            ].map(({ tab, icon: Icon, label, accent }) => (
+              <button
+                key={tab}
+                onClick={() => {
+                  setActiveTab(tab);
+                  resetFormState();
+                  setShowLanding(false);
+                }}
+                className="flex flex-col items-center gap-2 text-center group"
+              >
+                <div
+                  className={`w-full aspect-square rounded-2xl grid place-items-center transition ${
+                    accent
+                      ? "bg-emerald-500 text-black"
+                      : "bg-neutral-900 border border-white/10 text-neutral-200 group-hover:border-white/20"
+                  }`}
+                >
+                  <Icon className="size-5" />
+                </div>
+                <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
+                  {label}
+                </span>
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                setActiveTab("musica");
+                resetFormState();
+                setShowLanding(false);
+              }}
+              className="flex flex-col items-center gap-2 text-center group"
+            >
+              <div className="w-full aspect-square rounded-2xl bg-neutral-900 border border-white/10 text-neutral-200 grid place-items-center group-hover:border-white/20 transition">
+                <ListMusic className="size-5" />
+              </div>
+              <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
+                Sincronizar Letra
+              </span>
+            </button>
+          </div>
+
+          <p className="text-[11px] text-neutral-500 leading-relaxed">
+            Cadastre músicas, vídeos, music videos e álbuns para pontuação nos Charts e catálogo do Empire Play — escolha uma ação acima pra começar.
           </p>
         </div>
-
-        {/* BOTÃO PARA MODAL DE EDIÇÃO */}
+      ) : (
+        <>
+      {/* HEADER DA GESTÃO (modo formulário) */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setShowLanding(true)}
+          className="size-9 shrink-0 rounded-full bg-neutral-900 border border-white/10 text-neutral-300 hover:text-white hover:border-white/20 transition grid place-items-center"
+          title="Voltar ao início da Gestão"
+        >
+          <span className="sr-only">Voltar</span>
+          ←
+        </button>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg sm:text-xl font-black italic uppercase tracking-tight text-white truncate">
+            {activeTab === "musica" ? "Nova Música" : activeTab === "video" ? "Novo Vídeo" : "Novo Álbum"}
+          </h2>
+        </div>
         <button
           onClick={() => setIsEditModalOpen(true)}
-          className="px-4 py-2.5 rounded-2xl bg-neutral-800 hover:bg-neutral-700 border border-white/10 text-xs font-bold text-neutral-200 transition flex items-center gap-2"
+          className="px-3.5 py-2 rounded-full bg-neutral-900 border border-white/10 text-[11px] font-bold text-neutral-300 hover:text-white hover:border-white/20 transition flex items-center gap-1.5 shrink-0"
         >
           <Pencil className="size-3.5 text-emerald-400" />
-          <span>Editar meus materiais</span>
+          <span className="hidden sm:inline">Editar meus materiais</span>
         </button>
       </div>
 
       {/* TABS DE SELEÇÃO */}
-      <div className="grid grid-cols-3 gap-2 bg-neutral-900/90 p-2 rounded-2xl border border-white/10">
+      <div className="grid grid-cols-3 gap-1.5 bg-neutral-950/60 p-1.5 rounded-2xl border border-white/5">
         <button
           onClick={() => {
             setActiveTab("musica");
             resetFormState();
           }}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
             activeTab === "musica"
-              ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+              ? "bg-emerald-500 text-black"
               : "text-neutral-400 hover:text-white hover:bg-white/5"
           }`}
         >
@@ -1119,9 +1197,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             setActiveTab("video");
             resetFormState();
           }}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
             activeTab === "video"
-              ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+              ? "bg-emerald-500 text-black"
               : "text-neutral-400 hover:text-white hover:bg-white/5"
           }`}
         >
@@ -1134,7 +1212,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             setActiveTab("album");
             resetFormState();
           }}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
             activeTab === "album"
               ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
               : "text-neutral-400 hover:text-white hover:bg-white/5"
@@ -2230,6 +2308,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             </form>
           )}
         </div>
+      )}
+        </>
       )}
 
       {/* MODAL DE EDIÇÃO */}
