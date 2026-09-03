@@ -14,7 +14,13 @@ function dedupeArtistPrefix(texto: string, artista: string): string {
   const prefixLen = artista.length + 3; // "Artista - "
   const prefixLower = `${artista.toLowerCase()} - `;
   let t = texto;
-  while (t.toLowerCase().startsWith(prefixLower) && t.slice(prefixLen).toLowerCase().startsWith(prefixLower)) {
+  // Precisa remover TODA repetição do prefixo, inclusive quando só aparece
+  // uma vez (o caso mais comum: título já vem como "Artista - Música" e vai
+  // ser prefixado de novo por quem chama). A versão antiga só entrava no
+  // loop se o prefixo aparecesse duas vezes seguidas — com uma única
+  // ocorrência ela não tirava nada, e o prefixo era duplicado por cima
+  // ("Artista - Artista - Música").
+  while (t.toLowerCase().startsWith(prefixLower)) {
     t = t.slice(prefixLen);
   }
   return t;

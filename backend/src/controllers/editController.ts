@@ -75,10 +75,11 @@ function dedupeArtistPrefix(titulo: string, artista: string): string {
   const prefixLen = artista.length + 3; // "Artista - "
   const prefixLower = `${artista.toLowerCase()} - `;
   let result = titulo.trim();
-  while (
-    result.toLowerCase().startsWith(prefixLower) &&
-    result.slice(prefixLen).toLowerCase().startsWith(prefixLower)
-  ) {
+  // Ver comentário na cópia dessa função em gestaoController.ts — a versão
+  // antiga só removia o prefixo se ele aparecesse duas vezes seguidas,
+  // deixando passar (e duplicando por cima) o caso mais comum de uma única
+  // ocorrência.
+  while (result.toLowerCase().startsWith(prefixLower)) {
     result = result.slice(prefixLen);
   }
   return result;

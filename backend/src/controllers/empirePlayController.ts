@@ -416,9 +416,22 @@ function buildCleanItem(
   // normalmente já existe, o título nunca era limpo e a UI mostrava
   // "Artista - Título" inteiro repetido junto do nome do artista. Agora
   // sempre remove esse prefixo do título, independente de já ter "artist".
-  const cleanDashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
-  if (cleanDashMatch) {
-    title = cleanDashMatch[2].trim();
+  // Corrige de passagem títulos que ficaram gravados com o prefixo
+  // duplicado (bug antigo de dedupeArtistPrefix em gestaoController.ts/
+  // editController.ts: "Hyun - Hyun - Backstreetboys" em vez de "Hyun -
+  // Backstreetboys") — remove QUALQUER quantidade de repetições consecutivas
+  // do prefixo "Artista - ", não só uma.
+  let cleanDashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
+  while (cleanDashMatch) {
+    const rest = cleanDashMatch[2].trim();
+    const nextMatch = rest.match(/^(.+?)\s[-–—]\s(.+)$/);
+    if (nextMatch && normalizeComparison(nextMatch[1]) === normalizeComparison(cleanDashMatch[1])) {
+      title = rest;
+      cleanDashMatch = nextMatch;
+    } else {
+      title = rest;
+      break;
+    }
   }
 
   // ARTISTA 2-6 (colunas O-S em Musicas, I-M em faixas de álbum) — artistas
