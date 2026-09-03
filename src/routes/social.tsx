@@ -721,10 +721,16 @@ function SocialPage() {
   // Fileira "Em alta agora" no topo do feed — reaproveita os posts do tipo
   // Story do Instagram que já existem (sem precisar de nenhum dado novo),
   // um por autor, o mais recente primeiro.
+  const STORY_TTL_MS = 24 * 60 * 60 * 1000;
   const storyHighlights = useMemo(() => {
+    const cutoff = Date.now() - STORY_TTL_MS;
     const byAuthor = new Map<string, Post>();
     for (const p of posts) {
       if (p.tipo !== "Instagram" || p.subtipo !== "Story") continue;
+      // Story vale só 24h — igual Instagram de verdade, some sozinho da
+      // fileira depois disso (o post continua existindo na planilha, só
+      // deixa de contar como destaque ativo).
+      if (new Date(p.data).getTime() <= cutoff) continue;
       const existing = byAuthor.get(p.autor);
       if (!existing || new Date(p.data).getTime() > new Date(existing.data).getTime()) {
         byAuthor.set(p.autor, p);
