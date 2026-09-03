@@ -454,6 +454,7 @@ export function MusicPlayer({
   if (!currentTrack) return null;
 
   const cover = currentTrack.capa_url ? driveImg(currentTrack.capa_url, 300) : undefined;
+  const artistPhoto = currentTrack.artista_foto_url ? driveImg(currentTrack.artista_foto_url, 900) : undefined;
 
   return (
     <>
@@ -480,9 +481,25 @@ export function MusicPlayer({
       {/* MODAL EXPANDIDO DE REPRODUÇÃO */}
       {isExpanded && (
         <div
-          className="fixed inset-0 z-[120] bg-neutral-950/95 backdrop-blur-2xl flex flex-col justify-between px-6 pb-6 animate-in fade-in duration-300"
+          className="fixed inset-0 z-[120] bg-neutral-950 flex flex-col justify-between px-6 pb-6 animate-in fade-in duration-300 overflow-hidden"
           style={{ paddingTop: "calc(env(safe-area-inset-top) + 24px)" }}
         >
+          {/* Fundo em tela cheia: foto do artista, escurecida — a capa do
+              single some de "peça central" pra virar um detalhe sutil por
+              cima dela (ver abaixo), com título/artista/controles ancorados
+              num painel translúcido no rodapé, em vez de uma seção separada
+              logo abaixo da arte. Sem foto do artista cadastrada, cai pro
+              fundo escuro de sempre — não fica sem nada. */}
+          <div className="absolute inset-0 -z-10">
+            {artistPhoto ? (
+              <img src={artistPhoto} alt="" className="size-full object-cover" />
+            ) : (
+              <div className="size-full bg-gradient-to-br from-neutral-900 to-neutral-950" />
+            )}
+            <div className="absolute inset-0 bg-black/55" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/30 to-black/90" />
+          </div>
+
           {/* Top Bar Modal — empurrado abaixo do notch/status bar (padding
               acima) pra nunca ficar sob a área do sistema, onde os botões
               renderizavam mas ficavam inclicáveis (relato: "cliquei e nada
@@ -582,12 +599,18 @@ export function MusicPlayer({
                 )}
               </div>
             ) : (
-              <div className="relative aspect-square w-full rounded-3xl bg-neutral-900 border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] group">
+              <div
+                className={`relative aspect-square rounded-3xl bg-neutral-900 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] group transition-all ${
+                  artistPhoto
+                    ? "w-40 sm:w-48 border border-white/15 opacity-90"
+                    : "w-full border border-white/10"
+                }`}
+              >
                 {cover ? (
                   <img src={cover} alt={currentTrack.titulo} className="size-full object-cover" />
                 ) : (
                   <div className="size-full grid place-items-center bg-gradient-to-br from-neutral-800 to-neutral-950">
-                    <Disc className="size-24 text-emerald-500/30 animate-spin-slow" />
+                    <Disc className={artistPhoto ? "size-12 text-emerald-500/30" : "size-24 text-emerald-500/30 animate-spin-slow"} />
                   </div>
                 )}
                 {isBlobLoading && (
@@ -609,8 +632,10 @@ export function MusicPlayer({
             )}
           </div>
 
-          {/* Informações e Controles Expandidos */}
-          <div className="max-w-md mx-auto w-full space-y-4">
+          {/* Informações e Controles Expandidos — painel translúcido
+              ancorado no rodapé, por cima do fundo (foto do artista) em vez
+              de uma seção separada abaixo da arte. */}
+          <div className="max-w-md mx-auto w-full space-y-4 bg-black/35 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
                 <h3 className="text-xl font-black text-white truncate tracking-tight">
