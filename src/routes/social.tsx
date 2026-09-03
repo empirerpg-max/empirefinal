@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Instagram,
@@ -673,6 +673,22 @@ function SocialPage() {
   };
 
   const card = "rounded-[1.75rem] bg-white/5 border border-white/10 transition-all";
+
+  // Fileira "Em alta agora" no topo do feed — reaproveita os posts do tipo
+  // Story do Instagram que já existem (sem precisar de nenhum dado novo),
+  // um por autor, o mais recente primeiro.
+  const storyHighlights = useMemo(() => {
+    const byAuthor = new Map<string, Post>();
+    for (const p of posts) {
+      if (p.tipo !== "Instagram" || p.subtipo !== "Story") continue;
+      const existing = byAuthor.get(p.autor);
+      if (!existing || new Date(p.data).getTime() > new Date(existing.data).getTime()) {
+        byAuthor.set(p.autor, p);
+      }
+    }
+    return Array.from(byAuthor.values()).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+  }, [posts]);
+  const [seenStories, setSeenStories] = useState<Set<string>>(new Set());
   // text-base (16px) — abaixo disso o Safari/iOS dá zoom automático ao
   // focar o campo, e é esse zoom que "estica"/desalinha a tela até o
   // usuário beliscar pra voltar. Nunca usar texto menor que 16px em
@@ -784,6 +800,46 @@ function SocialPage() {
       <div className="px-4 max-w-md mx-auto mt-4">
         {viewMode === "Feed" ? (
           <>
+            {!loading && storyHighlights.length > 0 && (
+              <div className="mb-4 -mx-1">
+                <div className="flex items-baseline justify-between px-1 mb-2">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Em alta agora</h4>
+                  <span className="text-[9px] font-bold text-muted-foreground/60">Stories dos artistas</span>
+                </div>
+                <div className="flex gap-3.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  {storyHighlights.map((p) => {
+                    const seen = seenStories.has(p.autor);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setSeenStories((prev) => new Set(prev).add(p.autor));
+                          setSelectedPost(p);
+                          loadComments(p.id);
+                          setIsCommentModalOpen(true);
+                        }}
+                        className="flex-none w-14 flex flex-col items-center gap-1.5"
+                      >
+                        <div
+                          className={`size-14 rounded-full p-[2.5px] ${
+                            seen ? "bg-white/10" : "bg-gradient-to-tr from-primary via-sky-400 to-primary"
+                          }`}
+                        >
+                          <div className="w-full h-full rounded-full overflow-hidden border-2 border-background bg-secondary flex items-center justify-center font-black text-[10px] uppercase">
+                            {p.avatar ? (
+                              <img src={driveImg(p.avatar)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              p.autor[0]
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[9px] font-bold text-muted-foreground truncate w-full text-center">{p.autor}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {loading ? (
               <div className="flex flex-col items-center justify-center p-20 gap-4">
                 <Loader2 className="size-8 text-primary animate-spin" />
@@ -1158,6 +1214,13 @@ function SocialPage() {
                   });
                 };
 
+                // "Siga também" — outros artistas com perfil na mesma rede,
+                // pra descobrir sem sair da tela (mais seguidores primeiro).
+                const suggestions = profiles
+                  .filter((p) => p.rede === industryViewTab && p.artista !== selectedIndustryArtist.nome)
+                  .sort((a, b) => (b.seguidores || 0) - (a.seguidores || 0))
+                  .slice(0, 6);
+
                 const profileAvatarStr = perfil?.avatar_url || perfil?.avatar || perfil?.foto;
                 const avatarSrc = profileAvatarStr ? driveImg(profileAvatarStr) : undefined;
 
@@ -1254,6 +1317,56 @@ function SocialPage() {
                           </button>
                         </div>
                       </div>
+
+                      {suggestions.length > 0 && (
+                        <div className="mt-5 pb-1">
+                          <div className="flex items-baseline justify-between px-5 mb-2">
+                            <h4 className="text-[11px] font-black uppercase text-black/50 tracking-wide">Siga também</h4>
+                          </div>
+                          <div className="flex gap-2.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                            {suggestions.map((s) => {
+                              const sArtist = allArtists.find((a) => a.nome === s.artista);
+                              const sKey = `${s.artista}|${s.rede}`;
+                              const sFollowing = followingSet.has(sKey);
+                              return (
+                                <button
+                                  key={sKey}
+                                  onClick={() => {
+                                    haptic.selection();
+                                    setSelectedIndustryArtist(sArtist || { nome: s.artista, descricao: "" });
+                                    setIndustryViewTab(s.rede as any);
+                                  }}
+                                  className="flex-none w-[104px] rounded-2xl border border-zinc-200 overflow-hidden bg-white text-left"
+                                >
+                                  <div className="h-12 bg-gradient-to-br from-zinc-100 to-zinc-200" />
+                                  <div className="p-2">
+                                    <p className="text-[10px] font-black truncate">{s.artista}</p>
+                                    <p className="text-[9px] text-black/50 font-bold mb-1.5">{formatCount(s.seguidores || 0)} segs</p>
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        haptic.selection();
+                                        setFollowingSet((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(sKey)) next.delete(sKey);
+                                          else next.add(sKey);
+                                          return next;
+                                        });
+                                      }}
+                                      className={`block text-center py-1 rounded-md text-[9px] font-black uppercase ${
+                                        sFollowing ? "bg-zinc-100 text-black/60" : "bg-[#f472b6]/10 text-[#f472b6]"
+                                      }`}
+                                    >
+                                      {sFollowing ? "Seguindo" : "Seguir"}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Tabs */}
                       <div className="grid grid-cols-3 mt-4 border-t border-zinc-200">
                         <button className="py-2.5 flex items-center justify-center border-t-2 border-black text-black">
