@@ -592,7 +592,12 @@ function SocialPage() {
   }
 
   async function handlePost() {
-    if (!selectedType || !postText.trim() || !activeArtist || submitting) return;
+    // Story não exige legenda — a imagem/vídeo já é o post, igual
+    // Instagram de verdade (texto vira só um overlay opcional). Os outros
+    // tipos continuam exigindo texto como sempre.
+    const isStoryDraft = selectedType === "Instagram" && igMode === "Story";
+    const hasContent = isStoryDraft ? !!(postText.trim() || imageUrl) : !!postText.trim();
+    if (!selectedType || !hasContent || !activeArtist || submitting) return;
     if (blackoutMode && !blackoutUsername.trim()) return;
 
     setSubmitting(true);
@@ -1969,7 +1974,11 @@ function SocialPage() {
                     ref={postTextareaRef}
                     value={postText}
                     onChange={(e) => setPostText(e.target.value)}
-                    placeholder="Escreva algo f*** aqui... (use #hashtag, **negrito**, *itálico*)"
+                    placeholder={
+                      selectedType === "Instagram" && igMode === "Story"
+                        ? "Legenda (opcional)..."
+                        : "Escreva algo f*** aqui... (use #hashtag, **negrito**, *itálico*)"
+                    }
                     className={inputCls + " h-24 resize-none"}
                   />
 
@@ -2022,7 +2031,12 @@ function SocialPage() {
 
                   <button
                     onClick={handlePost}
-                    disabled={submitting || !postText.trim() || !activeArtist || (blackoutMode && !blackoutUsername.trim())}
+                    disabled={
+                      submitting ||
+                      !(selectedType === "Instagram" && igMode === "Story" ? postText.trim() || imageUrl : postText.trim()) ||
+                      !activeArtist ||
+                      (blackoutMode && !blackoutUsername.trim())
+                    }
                     className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
                   >
                     {submitting
@@ -2374,9 +2388,15 @@ function SocialPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[130] bg-black flex flex-col"
+              className="fixed inset-0 z-[130] bg-black/90 flex items-center justify-center sm:p-6"
             >
-              <div className="relative flex-1 min-h-0">
+              {/* Sem limite de tamanho, o story (imagem vertical 9:16)
+                  esticava/cortava exageradamente em telas largas de
+                  desktop — mobile já ficava certo por já ser estreito. Cai
+                  pra um painel no formato de story de verdade a partir de
+                  sm, centralizado, em vez do full-bleed que só faz sentido
+                  em tela de celular. */}
+              <div className="relative w-full h-full sm:h-auto sm:max-h-full sm:w-auto sm:aspect-[9/16] sm:max-w-md sm:rounded-2xl sm:overflow-hidden bg-black">
                 {story.media_url ? (
                   <PostMedia
                     url={story.media_url}
