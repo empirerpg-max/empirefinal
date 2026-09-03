@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Tv, Play, MessageSquare, Search } from "lucide-react";
-import { driveImg, driveVideo } from "@/lib/api";
+import { driveImg } from "@/lib/api";
 import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableVideo } from "@/components/EmpirePlay/VideoPlayer";
@@ -22,6 +22,43 @@ function youtubeThumb(youtubeUrl?: string): string | undefined {
   if (!youtubeUrl) return undefined;
   const match = youtubeUrl.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
   return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : undefined;
+}
+
+// Mesma fonte que o VideoPlayer usa pra tocar de verdade (rawLink, sem
+// passar por driveVideo() — isso é só pra thumbnail de imagem estática, não
+// serve pro <video> nativo tocar o arquivo real).
+function VideoThumbFallback({ video: v }: { video: PlayableVideo }) {
+  const [videoFailed, setVideoFailed] = useState(false);
+  const rawLink = v.url_final_player || v.link || "";
+  const isPlayableInline = v.fonte !== "youtube" && v.fonte !== "vimeo" && !!rawLink;
+  const ytThumb = youtubeThumb(v.youtube_url || (v.fonte === "youtube" ? rawLink : undefined));
+
+  if (isPlayableInline && !videoFailed) {
+    return (
+      <video
+        src={rawLink}
+        muted
+        playsInline
+        preload="metadata"
+        onError={() => setVideoFailed(true)}
+        className="size-full object-cover group-hover:scale-105 transition-transform"
+      />
+    );
+  }
+  if (ytThumb) {
+    return (
+      <img
+        src={ytThumb}
+        alt={v.titulo}
+        className="size-full object-cover group-hover:scale-105 transition-transform"
+      />
+    );
+  }
+  return (
+    <div className="size-full grid place-items-center text-neutral-600">
+      <Tv className="size-10" />
+    </div>
+  );
 }
 
 function EmpirePlayVideos() {
@@ -150,24 +187,8 @@ function EmpirePlayVideos() {
                   alt={v.titulo}
                   className="size-full object-cover group-hover:scale-105 transition-transform"
                 />
-              ) : v.fonte !== "youtube" && (v.url_final_player || v.link) ? (
-                <video
-                  src={driveVideo(v.url_final_player || v.link)}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  className="size-full object-cover group-hover:scale-105 transition-transform"
-                />
-              ) : youtubeThumb(v.youtube_url) ? (
-                <img
-                  src={youtubeThumb(v.youtube_url)}
-                  alt={v.titulo}
-                  className="size-full object-cover group-hover:scale-105 transition-transform"
-                />
               ) : (
-                <div className="size-full grid place-items-center text-neutral-600">
-                  <Tv className="size-10" />
-                </div>
+                <VideoThumbFallback video={v} />
               )}
               <span className="absolute inset-0 bg-black/0 sm:group-hover:bg-black/40 transition-colors grid place-items-center">
                 <span className="size-11 rounded-full bg-red-600/70 sm:group-hover:bg-red-500/85 backdrop-blur-sm text-white grid place-items-center transition-colors">
