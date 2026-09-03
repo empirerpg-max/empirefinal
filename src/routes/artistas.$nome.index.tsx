@@ -33,6 +33,7 @@ import {
   Sparkles,
   Play,
   Image as ImageIcon,
+  Camera,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
 import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type NivelJogador } from "@/lib/api";
@@ -363,19 +364,30 @@ function ArtistDashboard() {
         {/* Info Overlay */}
         <div className="absolute inset-x-6 bottom-6 z-20">
           <div className="flex items-end gap-4">
-            <div className="size-24 rounded-[2rem] overflow-hidden border-2 border-primary/30 shadow-2xl shrink-0 bg-secondary">
-              <img
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
-                src={driveImg(artist.foto, 400) || artist.foto}
-                onError={(e) => {
-                  const img = e.currentTarget;
-                  if (img.src !== artist.foto) img.src = artist.foto;
-                }}
-                className="w-full h-full object-cover object-top"
-                alt={artist.nome}
-              />
+            <div className="relative shrink-0">
+              <div className="size-24 rounded-full overflow-hidden border-2 border-primary/30 shadow-2xl bg-secondary">
+                <img
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  src={driveImg(artist.foto, 400) || artist.foto}
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if (img.src !== artist.foto) img.src = artist.foto;
+                  }}
+                  className="w-full h-full object-cover object-top"
+                  alt={artist.nome}
+                />
+              </div>
+              {isOwner && (
+                <button
+                  onClick={() => setModal("foto")}
+                  className="absolute -bottom-1 -right-1 size-7 rounded-full bg-primary text-primary-foreground grid place-items-center border-2 border-background active:scale-90 transition-transform"
+                  title="Trocar foto do artista"
+                >
+                  <Camera className="size-3.5" />
+                </button>
+              )}
             </div>
             <div className="flex-1 min-w-0 pb-1">
               <div className="flex items-center gap-2 mb-1">
@@ -920,6 +932,7 @@ function ToursProjetosTab({ nome, tourData, isOwner }: { nome: string; tourData:
 // ---------- Aba: Social ----------
 function SocialTab({ nome }: { nome: string }) {
   const [perfis, setPerfis] = useState<any[] | null>(null);
+  const [posts, setPosts] = useState<any[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -928,6 +941,15 @@ function SocialTab({ nome }: { nome: string }) {
       const mine = (list || []).filter((p: any) => (p.artista || "").trim().toLowerCase() === nome.trim().toLowerCase());
       setPerfis(mine);
     }).catch(() => alive && setPerfis([]));
+    // Prévia real dos posts do artista — antes a aba só levava pra outra
+    // tela pra ver isso; agora já mostra a grade de posts aqui mesmo.
+    api.listarPostsSocial().then((list) => {
+      if (!alive) return;
+      const mine = (list || [])
+        .filter((p: any) => (p.autor || "").trim().toLowerCase() === nome.trim().toLowerCase())
+        .sort((a: any, b: any) => new Date(b.data || 0).getTime() - new Date(a.data || 0).getTime());
+      setPosts(mine);
+    }).catch(() => {});
     return () => { alive = false; };
   }, [nome]);
 
@@ -950,25 +972,47 @@ function SocialTab({ nome }: { nome: string }) {
       {perfis.map((p, i) => {
         const handle = String(p.handle || "").replace(/^@+/, "");
         const avatarSrc = driveImg(p.avatar_url);
+        const postsDaRede = posts.filter((post) => (post.tipo || "").trim().toLowerCase() === (p.rede || "").trim().toLowerCase());
         return (
-          <Link
-            key={i}
-            to="/social"
-            search={{ artist: nome }}
-            className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center gap-3 hover:bg-white/[0.05] transition-colors"
-          >
-          <div className="size-11 rounded-full overflow-hidden bg-secondary shrink-0 grid place-items-center">
-            {avatarSrc ? <img src={avatarSrc} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <User className="size-5 text-muted-foreground" />}
+          <div key={i} className="rounded-2xl bg-white/[0.02] border border-white/5 overflow-hidden">
+            <Link
+              to="/social"
+              search={{ artist: nome }}
+              className="p-4 flex items-center gap-3 hover:bg-white/[0.05] transition-colors"
+            >
+              <div className="size-11 rounded-full overflow-hidden bg-secondary shrink-0 grid place-items-center">
+                {avatarSrc ? <img src={avatarSrc} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <User className="size-5 text-muted-foreground" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-black truncate">{p.rede} — @{handle}</div>
+                {p.bio && <div className="text-xs text-muted-foreground truncate">{p.bio}</div>}
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-sm font-black">{p.seguidores || 0}</div>
+                <div className="text-[9px] text-muted-foreground uppercase tracking-widest">seguidores</div>
+              </div>
+            </Link>
+
+            {postsDaRede.length > 0 && (
+              <Link to="/social" search={{ artist: nome }} className="grid grid-cols-3 gap-px bg-background">
+                {postsDaRede.slice(0, 6).map((post) => (
+                  <div key={post.id} className="aspect-square bg-secondary overflow-hidden">
+                    {post.media_url ? (
+                      post.media_tipo === "video" ? (
+                        <video src={driveImg(post.media_url)} muted className="w-full h-full object-cover" />
+                      ) : (
+                        <img src={driveImg(post.media_url)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      )
+                    ) : (
+                      <div className="w-full h-full grid place-items-center text-[9px] text-muted-foreground/50 p-1 text-center leading-tight">
+                        {post.texto?.slice(0, 40) || ""}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </Link>
+            )}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-black truncate">{p.rede} — @{handle}</div>
-            {p.bio && <div className="text-xs text-muted-foreground truncate">{p.bio}</div>}
-          </div>
-          <div className="text-right shrink-0">
-            <div className="text-sm font-black">{p.seguidores || 0}</div>
-            <div className="text-[9px] text-muted-foreground uppercase tracking-widest">seguidores</div>
-          </div>
-          </Link>
         );
       })}
     </div>
