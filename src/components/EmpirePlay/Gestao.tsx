@@ -299,11 +299,14 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 }) => {
   const { user: telegramUser } = useTelegramUser();
   // Fora do Telegram (login normal por usuário/senha), telegramUser.id vem
-  // "guest" — o id de verdade do jogador logado é o do getStoredLogin(), que
-  // é o que valia pra decidir se é admin (mesmo id hardcoded usado no resto
-  // do app, ex: album.$id.tsx).
-  const loginTgId = getStoredLogin()?.id || (telegramUser?.id && telegramUser.id !== "guest" ? String(telegramUser.id) : "");
-  const isAdminUser = loginTgId === "810141686";
+  // "guest" — o id de verdade do jogador logado é o do getStoredLogin(). E o
+  // "admin" que importa aqui não é só o dono do id hardcoded "810141686"
+  // (bypass histórico usado em outros pontos do app) — é quem tem
+  // tipo_de_perfil = "Admin" na aba Usuários (ver getStoredLogin().tipoPerfil,
+  // preenchido a partir dessa coluna no login).
+  const storedLogin = getStoredLogin();
+  const loginTgId = storedLogin?.id || (telegramUser?.id && telegramUser.id !== "guest" ? String(telegramUser.id) : "");
+  const isAdminUser = loginTgId === "810141686" || storedLogin?.tipoPerfil === "Admin";
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab || "musica");
