@@ -627,6 +627,32 @@ function useIsDesktop() {
   return isDesktop;
 }
 
+// Acompanha window.visualViewport (altura visível de verdade + quanto a
+// página foi "panada" pra cima) — usado pra manter vídeo/cabeçalho
+// realmente visíveis quando o teclado abre no iOS Safari. position:fixed/
+// absolute sozinhos não bastam: no iOS, focar um campo às vezes PANA a
+// página (desloca tudo pra cima, inclusive elementos fixed) em vez de
+// encolher a viewport, e como visualViewport.height/offsetTop refletem
+// exatamente a área visível a qualquer momento, corrigir com base neles
+// funciona nos dois comportamentos (resize OU pan), sem adivinhar qual
+// o navegador vai escolher.
+function useVisualViewport() {
+  const [vv, setVv] = useState<{ height: number; offsetTop: number } | null>(null);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => setVv({ height: viewport.height, offsetTop: viewport.offsetTop });
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+    };
+  }, []);
+  return vv;
+}
+
 // ---------- WatchView (chat + participantes + sobre) ----------
 function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBack: () => void; onMinimize: () => void }) {
   // Identidade vem só do login próprio (aba Usuários) — sem depender do
@@ -634,6 +660,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   const login = getStoredLogin();
   const myId = login?.id;
   const myName = login?.nome;
+  const vv = useVisualViewport();
   const [tab, setTab] = useState<WatchTab>("chat");
   const isDesktop = useIsDesktop();
 
@@ -825,7 +852,17 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     // é o scroller interno do próprio ChatPanel (ver comentário lá dentro).
     const videoHeight = "calc(3rem + env(safe-area-inset-top) + 100vw * 9 / 16)";
     return (
-      <div className="h-full relative bg-background overflow-hidden">
+      <div
+        className="relative bg-background overflow-hidden"
+        style={{
+          // window.visualViewport, quando disponível, é a área REALMENTE
+          // visível (já descontando o teclado) — mais confiável que h-full/
+          // 100dvh nesse cenário específico, porque o iOS às vezes pana a
+          // página em vez de encolher a viewport.
+          height: vv ? vv.height : "100%",
+          transform: vv?.offsetTop ? `translateY(${vv.offsetTop}px)` : undefined,
+        }}
+      >
         <div className="absolute top-0 inset-x-0 z-20">
           {header}
           <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
