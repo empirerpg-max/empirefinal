@@ -4,6 +4,7 @@ import {
   normalizeComparison,
   normalizeHeader,
   dedupeHeaders,
+  ensureSheetTab,
 } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
 import { ADMIN_TG_ID, requestProvesAdmin, verifySessionToken, extractBearerToken } from "../services/sessionService";
@@ -727,6 +728,13 @@ export async function saveSocialBannerController(request: Request): Promise<Resp
   const ativo = body.ativo === undefined ? true : !!body.ativo;
   const ordem = Number.isFinite(body.ordem) ? String(body.ordem) : "0";
 
+  // Aba SOCIAL_BANNERS não existia na planilha real — sem isso, appendRow
+  // falhava silenciosamente (erro de range engolido depois de 3 tentativas,
+  // ver googleSheetsService.appendRow) e a resposta ainda voltava "ok: true"
+  // porque o retorno nulo não é tratado como erro. Idempotente: só cria se
+  // ainda não existir.
+  await ensureSheetTab("usuarios", SHEETS.banners);
+
   if (body.id) {
     const rows = await googleSheetsService.usuarios.readValues(SHEETS.banners);
     const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === body.id);
@@ -742,7 +750,7 @@ export async function saveSocialBannerController(request: Request): Promise<Resp
   }
 
   const id = genId("BANNER");
-  await googleSheetsService.usuarios.appendRow(SHEETS.banners, [
+  const rowIndex = await googleSheetsService.usuarios.appendRow(SHEETS.banners, [
     id,
     body.imagem_url.trim(),
     body.link_destino?.trim() || "",
@@ -752,6 +760,9 @@ export async function saveSocialBannerController(request: Request): Promise<Resp
     body.tgId || "",
     body.legenda?.trim() || "",
   ]);
+  if (rowIndex === null) {
+    return jsonResponse({ ok: false, error: "Falha ao gravar o banner na planilha. Tente de novo." }, 500);
+  }
 
   return jsonResponse({ ok: true, id });
 }
