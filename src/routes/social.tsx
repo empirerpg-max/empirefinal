@@ -456,6 +456,12 @@ function SocialPage() {
       });
       return;
     }
+    // Fecha o overlay da notícia antes de abrir o comentário — os dois
+    // ficavam abertos ao mesmo tempo, e como o overlay de News (z-110) fica
+    // por cima do modal de comentário (z-100), o comentário abria escondido
+    // atrás dele: parecia que "clicar em comentar não fazia nada", e só
+    // aparecia depois de fechar a notícia no X.
+    setSelectedNews(null);
     setSelectedPost({
       id: newsItem.id,
       tipo: "News" as any,
@@ -890,7 +896,17 @@ function SocialPage() {
                         }}
                       >
                         <div className="flex items-center justify-between mb-3.5 gap-2">
-                          <div className="flex items-center gap-3 min-w-0">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const art = allArtists.find((a) => a.nome === post.autor);
+                              setSelectedIndustryArtist(art || { nome: post.autor, descricao: "" });
+                              setIndustryViewTab(post.tipo as any);
+                              setViewMode("Industry");
+                            }}
+                            className="flex items-center gap-3 min-w-0 text-left"
+                          >
                             <div className="size-10 rounded-full overflow-hidden flex-shrink-0 bg-secondary border border-white/10 flex items-center justify-center font-black ring-1 ring-primary/20">
                               {post.avatar ? (
                                 <img
@@ -923,7 +939,7 @@ function SocialPage() {
                                 Você
                               </span>
                             )}
-                          </div>
+                          </button>
                           <NetIcon className={`size-4.5 shrink-0 ${netColor}`} />
                         </div>
 
