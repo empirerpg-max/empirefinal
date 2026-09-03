@@ -46,6 +46,8 @@ import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from 
 import { EmpirePlayerProvider, useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { MusicPlayer } from "@/components/EmpirePlay/MusicPlayer";
 import { VideoPlayer } from "@/components/EmpirePlay/VideoPlayer";
+import { TvPlayerProvider } from "@/components/EmpireTV/TvPlayerContext";
+import { TvMiniPlayer } from "@/components/EmpireTV/TvMiniPlayer";
 
 const GRAVADORAS = ["King & Queen", "Crown", "Independent"] as const;
 
@@ -626,7 +628,9 @@ function AuthGate() {
 
   return (
     <EmpirePlayerProvider>
-      <RootInner />
+      <TvPlayerProvider>
+        <RootInner />
+      </TvPlayerProvider>
     </EmpirePlayerProvider>
   );
 }
@@ -931,6 +935,7 @@ function RootInner() {
       </div>
 
       <GlobalPersistentPlayers />
+      <TvMiniPlayer />
       <BottomNav />
       <InstallPrompt />
       <Toaster position="top-center" richColors closeButton offset={80} />
