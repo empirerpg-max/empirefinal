@@ -1,14 +1,16 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 
-// Roda pelo cron (ver server.ts "scheduled") a cada execução — recalcula a
-// "Média Likes" (coluna O de "Music Videos") de TODOS os vídeos com essa
-// fórmula, não só os que estão sem nota (inclusive o único que já tinha um
-// valor manual antes). Como a fórmula é determinística (mesmos comentários
-// + mesmas views = mesmo resultado), recalcular todo mundo de novo a cada
-// execução é seguro — e é o que mantém a nota viva conforme comentários
-// novos chegam ou o YOUTUBE TOTAL DA SEMANA muda. Só processa um lote
-// pequeno por execução (a cada 10min) pra nunca estourar o tempo do
-// Worker; o resto (e qualquer vídeo novo) fica pras próximas rodadas.
+// Roda pelo cron (ver server.ts "scheduled") a cada execução — é uma
+// CORREÇÃO PONTUAL, não um recálculo perpétuo: só preenche a "Média Likes"
+// (coluna O de "Music Videos") de quem ainda está vazio (o backlog de
+// clipes que nunca recebeu média). A partir do momento que uma linha ganha
+// um valor — seja por essa correção, seja por um like real que o jogador
+// mandar junto do comentário dele — ela nunca mais é tocada por aqui. A
+// única regra que continua valendo pra sempre é a combinação de pesos
+// (comentário do jogador 70% / views do material principal 30%); ela só
+// não é reaplicada automaticamente depois que a nota já existe. Só
+// processa um lote pequeno por execução (a cada 10min) pra nunca estourar
+// o tempo do Worker — o resto do backlog fica pras próximas rodadas.
 //
 // Fórmula (nota final 0-100, que o ScoreBadge multiplica por 300 pra virar
 // a contagem de likes exibida):
@@ -192,6 +194,9 @@ export async function preencherLikesVideosSemMediaScheduled(
     const linhaPlanilha = i + 1; // videoRows[0] é o cabeçalho (linha 1)
     i++;
     if (!row || !row.some((cell) => normalizeText(cell))) continue;
+
+    const mediaAtual = normalizeText(row[COL_MEDIA_LIKES]);
+    if (mediaAtual && Number(mediaAtual) > 0) continue;
 
     const topicoId = normalizeText(row[COL_THREAD_ID]);
     const textosComentarios = topicoId ? comentariosPorTopico.get(topicoId) || [] : [];
