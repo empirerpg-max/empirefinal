@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { driveImg, driveRawImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+import { getStoredLogin } from "@/components/LoginScreen";
 import { useBackClose } from "@/hooks/use-back-close";
 import { CommentModal } from "./CommentModal";
 import { ScoreBadge } from "./ScoreBadge";
@@ -237,9 +238,13 @@ export const Forum: React.FC<ForumProps> = ({
 
   // State para o Modal de Comentário
   const [isCommentModalOpen, setIsCommentModalOpen] = useState<boolean>(false);
-  // Comentário-pai de uma resposta em andamento (null = comentário novo no
-  // tópico, não resposta a ninguém).
-  const [replyingTo, setReplyingTo] = useState<{ id: string; jogador: string } | null>(null);
+  // ID do comentário com a caixinha de resposta aberta embaixo dele — só um
+  // por vez. "Responder" é uma interação normal (não passa pelo formulário
+  // padrão de avaliação/registro de ponto), então usa uma caixa de texto
+  // simples encaixada ali mesmo, não o CommentModal inteiro.
+  const [replyBoxFor, setReplyBoxFor] = useState<{ anchorId: string; rootId: string; jogador: string } | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [sendingReply, setSendingReply] = useState(false);
   // IDs de comentários-raiz cujas respostas estão expandidas ("N respostas").
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
@@ -613,6 +618,45 @@ export const Forum: React.FC<ForumProps> = ({
       console.error("Erro ao editar comentário:", err);
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  // "Responder" é uma interação normal, não o formulário padrão de
+  // avaliação/registro de ponto — grava direto na aba de comentários (com
+  // replyTo apontando pro comentário-pai), sem pedir nota/intervalo. O
+  // backend (createCommentController) já pula a parte de nota/audit log/
+  // prestígio sozinho quando recebe replyTo.
+  async function submitReply() {
+    if (!replyBoxFor || !replyText.trim() || !selectedTopic || sendingReply) return;
+    setSendingReply(true);
+    try {
+      const nomeLogin = getStoredLogin()?.nome || telegramUser?.name || "";
+      const res = await fetch("/api/forum/comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipoMedia: getMediaTypeForModal(),
+          tituloMedia: selectedTopic.title,
+          topicId: resolvedTopicId || selectedTopic.id,
+          jogadorId: myId,
+          nomeJogador: nomeLogin,
+          comentario: replyText.trim(),
+          replyTo: replyBoxFor.rootId,
+        }),
+      });
+      const json = await res.json();
+      if (json?.success) {
+        setExpandedReplies((prev) => new Set(prev).add(replyBoxFor.rootId));
+        fetchTopicComments(selectedTopic);
+        const topicKey = resolvedTopicId || selectedTopic.telegramTopicId || selectedTopic.id;
+        if (topicKey) setCommentedTopicIds((prev) => new Set(prev).add(topicKey));
+        setReplyBoxFor(null);
+        setReplyText("");
+      }
+    } catch (err) {
+      console.error("Erro ao responder comentário:", err);
+    } finally {
+      setSendingReply(false);
     }
   }
 
@@ -1169,14 +1213,11 @@ export const Forum: React.FC<ForumProps> = ({
               </div>
 
               <button
-                onClick={() => {
-                  setReplyingTo(null);
-                  setIsCommentModalOpen((v) => !v);
-                }}
+                onClick={() => setIsCommentModalOpen((v) => !v)}
                 className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2"
               >
                 <Sparkles className="size-4" />
-                {isCommentModalOpen && !replyingTo ? "Fechar" : "Avaliar & Comentar"}
+                {isCommentModalOpen ? "Fechar" : "Avaliar & Comentar"}
               </button>
             </div>
 
@@ -1186,25 +1227,18 @@ export const Forum: React.FC<ForumProps> = ({
             {isCommentModalOpen && (
               <CommentModal
                 isOpen={isCommentModalOpen}
-                onClose={() => {
-                  setIsCommentModalOpen(false);
-                  setReplyingTo(null);
-                }}
+                onClose={() => setIsCommentModalOpen(false)}
                 tipoMedia={getMediaTypeForModal()}
                 tituloMedia={selectedTopic.title}
                 topicId={resolvedTopicId || selectedTopic.id}
-                replyTo={replyingTo?.id}
-                replyingToName={replyingTo?.jogador}
                 onCommentSubmitted={() => {
                   if (selectedTopic) {
-                    if (replyingTo) setExpandedReplies((prev) => new Set(prev).add(replyingTo.id));
                     fetchTopicComments(selectedTopic);
                     const topicKey = resolvedTopicId || selectedTopic.telegramTopicId || selectedTopic.id;
                     if (topicKey) {
                       setCommentedTopicIds((prev) => new Set(prev).add(topicKey));
                     }
                   }
-                  setReplyingTo(null);
                   setIsCommentModalOpen(false);
                 }}
                 variant="inline"
@@ -1333,8 +1367,12 @@ export const Forum: React.FC<ForumProps> = ({
                             )}
                             <button
                               onClick={() => {
-                                setReplyingTo({ id: rootOf(c), jogador: c.jogador });
-                                setIsCommentModalOpen(true);
+                                if (replyBoxFor?.anchorId === c.id) {
+                                  setReplyBoxFor(null);
+                                } else {
+                                  setReplyBoxFor({ anchorId: c.id, rootId: rootOf(c), jogador: c.jogador });
+                                  setReplyText("");
+                                }
                               }}
                               className="text-[10px] text-neutral-500 hover:text-neutral-300 font-semibold"
                             >
@@ -1348,6 +1386,51 @@ export const Forum: React.FC<ForumProps> = ({
                                 <Pencil className="size-3" /> Editar
                               </button>
                             )}
+                          </div>
+                        )}
+
+                        {/* Caixinha de resposta inline — interação normal,
+                            sem passar pelo formulário padrão de avaliação. */}
+                        {replyBoxFor?.anchorId === c.id && (
+                          <div className="mt-2 flex items-start gap-2">
+                            <div
+                              className="size-7 rounded-full grid place-items-center flex-shrink-0 text-[10px] font-black text-white mt-0.5"
+                              style={{ backgroundColor: nameColorFor(getStoredLogin()?.nome || "Você") }}
+                            >
+                              {initialsFor(getStoredLogin()?.nome || "Você")}
+                            </div>
+                            <div className="min-w-0 flex-1 rounded-2xl rounded-tl-sm bg-neutral-800/70 border border-white/10 p-2.5">
+                              <p className="text-[10px] text-emerald-400 font-semibold mb-1">
+                                Respondendo a {c.jogador}
+                              </p>
+                              <textarea
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value.slice(0, 500))}
+                                rows={2}
+                                autoFocus
+                                placeholder="Deixar comentário"
+                                className="w-full bg-transparent text-xs sm:text-sm text-neutral-100 outline-none resize-none placeholder-neutral-500"
+                              />
+                              <div className="flex items-center justify-between mt-1.5">
+                                <span className="text-[10px] text-neutral-500">{replyText.length}/500</span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => setReplyBoxFor(null)}
+                                    disabled={sendingReply}
+                                    className="text-[10px] text-neutral-400 hover:text-neutral-200 font-semibold px-2 py-1"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    onClick={submitReply}
+                                    disabled={sendingReply || !replyText.trim()}
+                                    className="text-[10px] bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase px-3 py-1.5 rounded-full disabled:opacity-50"
+                                  >
+                                    Comentário
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>

@@ -159,6 +159,11 @@ export async function createCommentController(request: Request): Promise<Respons
       );
     }
 
+    // Resposta a outro comentário — não é "registro de ponto" (não rola
+    // nota, não entra na média/ratings da mídia, não conta pra audit log/
+    // prestígio); é só uma interação normal, salva na aba de comentários
+    // igual qualquer uma, com o replyTo apontando pro comentário-pai.
+    const isReply = !!(replyTo || "").trim();
     const score = rollRandomScore(intervalo);
     const titleClean = tituloMedia.trim();
     const topicIdClean = (topicId || "").trim();
@@ -219,8 +224,9 @@ export async function createCommentController(request: Request): Promise<Respons
 
     // 1. Atualizar nota/likes e média na planilha principal — isolado num
     // try/catch pra uma falha aqui (ex: título sem match nenhum) nunca
-    // impedir os passos 2 e 3 (salvar o comentário e o audit log).
-    try {
+    // impedir os passos 2 e 3 (salvar o comentário e o audit log). Pulado
+    // inteiro pra respostas (isReply) — não rolam nota nem mexem na média.
+    if (!isReply) try {
       // O maior índice de coluna usado por qualquer tipo de mídia é 25 (Z,
       // "Código único" de música) — o range default (A:ZZ, 702 colunas) lia
       // MUITO mais do que qualquer código aqui usa. Medido ao vivo: o
@@ -365,20 +371,23 @@ export async function createCommentController(request: Request): Promise<Respons
     // idas ao Sheets: registrarAuditLog lê EDIÇÃO CHARTS + REGISTRO inteiros
     // pra achar a próxima linha livre; somarPrestigio lê regras + usuário).
     // Rodar em paralelo em vez de sequencial foi o que finalmente tirou o
-    // comentário em vídeo da casa dos 5-7s medidos ao vivo.
-    await Promise.all([
-      registrarAuditLog({
-        nomeJogador: playerClean,
-        titulo: tituloOficial,
-        tipo:
-          tipoMedia === "album"
-            ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
-            : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-        isAlbum: tipoMedia === "album",
-        codigoUnico,
-      }),
-      somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(() => {}),
-    ]);
+    // comentário em vídeo da casa dos 5-7s medidos ao vivo. Pulado pra
+    // respostas — não é registro de ponto, só interação normal.
+    if (!isReply) {
+      await Promise.all([
+        registrarAuditLog({
+          nomeJogador: playerClean,
+          titulo: tituloOficial,
+          tipo:
+            tipoMedia === "album"
+              ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
+              : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+          isAlbum: tipoMedia === "album",
+          codigoUnico,
+        }),
+        somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(() => {}),
+      ]);
+    }
 
     return new Response(
       JSON.stringify({
