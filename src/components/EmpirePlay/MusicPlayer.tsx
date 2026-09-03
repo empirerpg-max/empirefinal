@@ -504,22 +504,22 @@ export function MusicPlayer({
               acima) pra nunca ficar sob a área do sistema, onde os botões
               renderizavam mas ficavam inclicáveis (relato: "cliquei e nada
               aconteceu"). */}
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-start justify-between gap-2">
             <button
               onClick={() => setIsExpanded(false)}
-              className="p-3 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10 shrink-0"
+              className="p-2.5 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10 shrink-0"
             >
-              <Minimize2 className="size-5" />
+              <Minimize2 className="size-4" />
             </button>
-            <div className="text-center min-w-0">
+            <div className="text-center min-w-0 pt-1">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">
                 Tocando Agora
               </p>
-              <p className="text-xs font-bold text-neutral-400 truncate max-w-[160px] sm:max-w-[200px]">
-                {currentTrack.album || "Empire Play Studio"}
-              </p>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
+            {/* Botões menores e empilhados na vertical — ocupam menos
+                largura, sobrando espaço pro "Tocando Agora" não quebrar
+                linha (ficava espremido/cortado com os 3 lado a lado). */}
+            <div className="flex flex-col items-center gap-1.5 shrink-0">
               {currentTrack.id && (
                 <Link
                   to="/empire-play/forum"
@@ -531,9 +531,9 @@ export function MusicPlayer({
                     setIsExpanded(false);
                   }}
                   title="Ver no Fórum"
-                  className="p-3 rounded-full bg-white/5 border border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
+                  className="p-2 rounded-full bg-white/5 border border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
                 >
-                  <MessageSquare className="size-5" />
+                  <MessageSquare className="size-3.5" />
                 </Link>
               )}
               {currentTrack.id && (
@@ -545,20 +545,20 @@ export function MusicPlayer({
                       ? "Já reportado, obrigado!"
                       : "Essa não é a música correta (arquivo errado)"
                   }
-                  className="p-3 rounded-full bg-white/5 border border-white/10 text-neutral-400 hover:text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="p-2 rounded-full bg-white/5 border border-white/10 text-neutral-400 hover:text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {reportingWrong ? (
-                    <Loader2 className="size-5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <FileWarning className="size-5" />
+                    <FileWarning className="size-3.5" />
                   )}
                 </button>
               )}
               <button
                 onClick={onClose}
-                className="p-3 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10"
+                className="p-2 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10"
               >
-                <X className="size-5" />
+                <X className="size-3.5" />
               </button>
             </div>
           </div>
@@ -635,7 +635,7 @@ export function MusicPlayer({
           {/* Informações e Controles Expandidos — painel translúcido
               ancorado no rodapé, por cima do fundo (foto do artista) em vez
               de uma seção separada abaixo da arte. */}
-          <div className="max-w-md mx-auto w-full space-y-4 bg-black/35 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl">
+          <div className="max-w-md mx-auto w-full space-y-4 bg-white/10 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 shadow-2xl">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
                 <h3 className="text-xl font-black text-white truncate tracking-tight">
@@ -645,7 +645,11 @@ export function MusicPlayer({
                   <p className="text-sm font-bold text-emerald-400 truncate">
                     {currentTrack.artista}
                   </p>
-                  <ScoreBadge score={currentTrack.metacriticAvg} variant="metacritic" />
+                  <ScoreBadge
+                    score={currentTrack.metacriticAvg}
+                    variant="metacritic"
+                    className="!px-1.5 !py-0.5 !text-[11px] !rounded-lg"
+                  />
                 </div>
               </div>
               {currentTrack.letra && (
