@@ -800,13 +800,29 @@ function SocialPage() {
       <div className="px-4 max-w-md mx-auto mt-4">
         {viewMode === "Feed" ? (
           <>
-            {!loading && storyHighlights.length > 0 && (
+            {!loading && (storyHighlights.length > 0 || activeArtist) && (
               <div className="mb-4 -mx-1">
                 <div className="flex items-baseline justify-between px-1 mb-2">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Em alta agora</h4>
                   <span className="text-[9px] font-bold text-muted-foreground/60">Stories dos artistas</span>
                 </div>
                 <div className="flex gap-3.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  {activeArtist && (
+                    <button
+                      onClick={() => {
+                        haptic.selection();
+                        setSelectedType("Instagram");
+                        setIgMode("Story");
+                        setIsModalOpen(true);
+                      }}
+                      className="flex-none w-14 flex flex-col items-center gap-1.5"
+                    >
+                      <div className="size-14 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center text-muted-foreground">
+                        <Plus className="size-5" />
+                      </div>
+                      <span className="text-[9px] font-bold text-muted-foreground truncate w-full text-center">Seu story</span>
+                    </button>
+                  )}
                   {storyHighlights.map((p) => {
                     const seen = seenStories.has(p.autor);
                     return (
