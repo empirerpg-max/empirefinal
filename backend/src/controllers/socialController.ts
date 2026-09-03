@@ -1,7 +1,41 @@
-import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import {
+  googleSheetsService,
+  normalizeText,
+  normalizeComparison,
+  normalizeHeader,
+  dedupeHeaders,
+} from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
-import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
+import { ADMIN_TG_ID, requestProvesAdmin, verifySessionToken, extractBearerToken } from "../services/sessionService";
 import { deleteFileFromDrive } from "../services/googleDriveService";
+
+/**
+ * requestProvesAdmin (sessionService) só libera pro ADMIN_TG_ID hardcoded —
+ * um telegram_id específico. Mas o admin "de verdade" do banner (quem loga
+ * com usuário/senha normal, sem ser dono daquele telegram_id) é identificado
+ * pela coluna tipo_de_perfil = "Admin" na aba Usuários. Essa função aceita
+ * os dois casos.
+ */
+async function requestProvesBannerAdmin(request: Request): Promise<boolean> {
+  if (await requestProvesAdmin(request)) return true;
+
+  const token = extractBearerToken(request);
+  const payload = await verifySessionToken(token);
+  if (!payload?.usuario) return false;
+
+  const rawRows = await googleSheetsService.usuarios.readValues("Usuários").catch(() => []);
+  if (!rawRows || rawRows.length < 2) return false;
+  const headers = dedupeHeaders("Usuários", rawRows[0].map((h, i) => normalizeHeader(h) || `coluna_${i + 1}`));
+  const usuarioIdx = headers.indexOf("usuario");
+  const tipoIdx = headers.indexOf("tipo_de_perfil");
+  if (usuarioIdx === -1 || tipoIdx === -1) return false;
+
+  const match = rawRows
+    .slice(1)
+    .find((row) => normalizeComparison(row[usuarioIdx] || "") === normalizeComparison(payload.usuario));
+
+  return normalizeComparison(match?.[tipoIdx] || "") === normalizeComparison("Admin");
+}
 
 // Dados sociais (posts, perfis, comentários e news) vivem na planilha
 // "usuarios" (a mesma de Usuários/ARTISTAS), em abas próprias: SOCIAL_POSTS,
@@ -672,7 +706,7 @@ export async function getSocialBannersController(): Promise<Response> {
  * "comprável" com prestígio; até lá, cadastro é manual only.
  */
 export async function saveSocialBannerController(request: Request): Promise<Response> {
-  if (!(await requestProvesAdmin(request))) {
+  if (!(await requestProvesBannerAdmin(request))) {
     return jsonResponse({ ok: false, error: "Só a administração pode publicar banners." }, 403);
   }
 
@@ -728,7 +762,7 @@ export async function saveSocialBannerController(request: Request): Promise<Resp
  * Também só admin — mesma regra do cadastro.
  */
 export async function deleteSocialBannerController(request: Request): Promise<Response> {
-  if (!(await requestProvesAdmin(request))) {
+  if (!(await requestProvesBannerAdmin(request))) {
     return jsonResponse({ ok: false, error: "Só a administração pode remover banners." }, 403);
   }
 
