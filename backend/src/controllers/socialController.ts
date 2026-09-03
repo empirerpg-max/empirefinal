@@ -735,6 +735,26 @@ export async function saveSocialBannerController(request: Request): Promise<Resp
   // ainda não existir.
   await ensureSheetTab("usuarios", SHEETS.banners);
 
+  // Aba recém-criada vem 100% vazia (sem cabeçalho) — sem essa linha 1,
+  // readRows() (que faz `.slice(1)` achando que a primeira linha é sempre
+  // cabeçalho) descarta o próprio banner que acabou de ser gravado como se
+  // fosse header. Só escreve se a aba ainda estiver vazia (idempotente).
+  const existentes = await googleSheetsService.usuarios.readValues(SHEETS.banners);
+  const header = ["id", "imagem_url", "link_destino", "ativo", "ordem", "data_criacao", "telegram_id", "legenda"];
+  if (!existentes || existentes.length === 0) {
+    await googleSheetsService.usuarios.updateValues(SHEETS.banners, "A1:H1", [header]);
+  } else if (String(existentes[0]?.[0] || "").startsWith("BANNER-")) {
+    // Migração pontual: um banner salvo antes desse fix caiu direto na
+    // linha 1 (sem cabeçalho acima) e ficou invisível pra sempre pro
+    // readRows(). Reescreve a aba com o cabeçalho na frente dele.
+    const comCabecalho = [header, ...existentes];
+    await googleSheetsService.usuarios.updateValues(
+      SHEETS.banners,
+      `A1:H${comCabecalho.length}`,
+      comCabecalho,
+    );
+  }
+
   if (body.id) {
     const rows = await googleSheetsService.usuarios.readValues(SHEETS.banners);
     const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === body.id);
