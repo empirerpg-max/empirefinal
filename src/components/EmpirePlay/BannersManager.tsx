@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image as ImageIcon, Link2, Trash2, Loader2, GripVertical } from "lucide-react";
+import { Image as ImageIcon, Link2, Trash2, Loader2, GripVertical, Search } from "lucide-react";
 import { driveImg, authHeaders } from "@/lib/api";
 
 interface BannerRow {
@@ -8,6 +8,59 @@ interface BannerRow {
   link_destino?: string;
   legenda?: string;
   ordem: number;
+}
+
+type DestinoTipo = "musica" | "video" | "album" | "artista" | "tv" | "manual";
+
+interface DestinoItem {
+  id: string;
+  titulo: string;
+  subtitulo?: string;
+}
+
+const DESTINO_TIPOS: { value: DestinoTipo; label: string }[] = [
+  { value: "musica", label: "Uma Música" },
+  { value: "video", label: "Um Vídeo" },
+  { value: "album", label: "Um Álbum" },
+  { value: "artista", label: "Um Artista" },
+  { value: "tv", label: "Empire TV" },
+  { value: "manual", label: "Link manual" },
+];
+
+// Cada tipo de destino busca numa fonte diferente e monta um link interno
+// diferente — assim o admin escolhe "uma música" e seleciona ela pelo nome,
+// em vez de precisar saber/montar a URL na mão.
+async function buscarDestinos(tipo: DestinoTipo): Promise<DestinoItem[]> {
+  if (tipo === "musica" || tipo === "video" || tipo === "album") {
+    const endpoint =
+      tipo === "musica" ? "/api/empire-play/musicas" : tipo === "video" ? "/api/empire-play/videos" : "/api/empire-play/albuns";
+    const res = await fetch(endpoint);
+    const data = await res.json().catch(() => null);
+    const list: any[] = data?.success && Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+    return list
+      .map((item) => ({
+        id: String(item.id || item.title || item.titulo || ""),
+        titulo: item.title || item.titulo || item.nome_da_musica || item.nome_do_video || "Sem título",
+        subtitulo: item.artist || item.artista || item.act_principal || undefined,
+      }))
+      .filter((d) => d.id);
+  }
+  if (tipo === "artista") {
+    const res = await fetch("/api/artistas/listar-todos");
+    const data = await res.json().catch(() => null);
+    const list: any[] = data?.success && Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+    return list.filter((a) => a.nome).map((a) => ({ id: a.nome, titulo: a.nome, subtitulo: a.gravadora }));
+  }
+  return [];
+}
+
+function montarLink(tipo: DestinoTipo, id: string): string {
+  if (tipo === "musica") return `/empire-play/forum?tab=musicas&id=${encodeURIComponent(id)}`;
+  if (tipo === "video") return `/empire-play/forum?tab=videos&id=${encodeURIComponent(id)}`;
+  if (tipo === "album") return `/empire-play/forum?tab=albuns&id=${encodeURIComponent(id)}`;
+  if (tipo === "artista") return `/artistas/${encodeURIComponent(id)}`;
+  if (tipo === "tv") return "/tv";
+  return "";
 }
 
 async function uploadBannerImage(file: File): Promise<string> {
@@ -30,7 +83,12 @@ export function BannersManager({ tgId }: { tgId: string }) {
   const [loading, setLoading] = useState(true);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [link, setLink] = useState("");
+  const [destinoTipo, setDestinoTipo] = useState<DestinoTipo>("musica");
+  const [destinoItens, setDestinoItens] = useState<DestinoItem[]>([]);
+  const [destinoLoading, setDestinoLoading] = useState(false);
+  const [destinoBusca, setDestinoBusca] = useState("");
+  const [destinoSelecionado, setDestinoSelecionado] = useState<DestinoItem | null>(null);
+  const [linkManual, setLinkManual] = useState("");
   const [legenda, setLegenda] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -49,11 +107,38 @@ export function BannersManager({ tgId }: { tgId: string }) {
     carregar();
   }, []);
 
+  useEffect(() => {
+    setDestinoSelecionado(null);
+    setDestinoBusca("");
+    if (destinoTipo === "tv" || destinoTipo === "manual") {
+      setDestinoItens([]);
+      return;
+    }
+    setDestinoLoading(true);
+    buscarDestinos(destinoTipo)
+      .then(setDestinoItens)
+      .catch(() => setDestinoItens([]))
+      .finally(() => setDestinoLoading(false));
+  }, [destinoTipo]);
+
+  const destinoFiltrado = destinoItens.filter((d) =>
+    d.titulo.toLowerCase().includes(destinoBusca.trim().toLowerCase()),
+  );
+
   const handleSalvar = async () => {
     if (!imageFile) {
       setErrorMsg("Escolha uma imagem para o banner.");
       return;
     }
+    const link_destino =
+      destinoTipo === "tv"
+        ? montarLink("tv", "")
+        : destinoTipo === "manual"
+          ? linkManual.trim()
+          : destinoSelecionado
+            ? montarLink(destinoTipo, destinoSelecionado.id)
+            : "";
+
     setSaving(true);
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -64,7 +149,7 @@ export function BannersManager({ tgId }: { tgId: string }) {
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           imagem_url,
-          link_destino: link.trim() || undefined,
+          link_destino: link_destino || undefined,
           legenda: legenda.trim() || undefined,
           ordem: banners.length,
           tgId,
@@ -76,7 +161,9 @@ export function BannersManager({ tgId }: { tgId: string }) {
       setSuccessMsg("Banner publicado!");
       setImageFile(null);
       setImagePreview(null);
-      setLink("");
+      setDestinoSelecionado(null);
+      setDestinoBusca("");
+      setLinkManual("");
       setLegenda("");
       carregar();
     } catch (err: any) {
@@ -140,15 +227,96 @@ export function BannersManager({ tgId }: { tgId: string }) {
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
             <Link2 className="size-4 text-emerald-400" />
-            Link de destino (opcional)
+            Ao clicar, leva para...
           </label>
-          <input
-            type="text"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="/empire-play/musicas/... ou https://..."
-            className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none backdrop-blur-sm"
-          />
+
+          <div className="grid grid-cols-3 gap-1.5 bg-black/25 p-1.5 rounded-xl border border-white/10">
+            {DESTINO_TIPOS.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setDestinoTipo(t.value)}
+                className={`py-2 px-2 rounded-lg text-[10.5px] font-bold uppercase tracking-wide transition ${
+                  destinoTipo === t.value
+                    ? "bg-emerald-500 text-black"
+                    : "text-neutral-400 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {destinoTipo === "tv" && (
+            <p className="text-[11px] text-neutral-500 px-1">Leva direto pro menu da Empire TV.</p>
+          )}
+
+          {destinoTipo === "manual" && (
+            <input
+              type="text"
+              value={linkManual}
+              onChange={(e) => setLinkManual(e.target.value)}
+              placeholder="/empire-play/... ou https://..."
+              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none backdrop-blur-sm"
+            />
+          )}
+
+          {(destinoTipo === "musica" || destinoTipo === "video" || destinoTipo === "album" || destinoTipo === "artista") && (
+            <div className="space-y-2">
+              {destinoSelecionado ? (
+                <div className="flex items-center justify-between gap-2 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white truncate">{destinoSelecionado.titulo}</p>
+                    {destinoSelecionado.subtitulo && (
+                      <p className="text-[10px] text-neutral-400 truncate">{destinoSelecionado.subtitulo}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDestinoSelecionado(null)}
+                    className="shrink-0 text-[10px] font-bold text-neutral-400 hover:text-white uppercase"
+                  >
+                    Trocar
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-neutral-500" />
+                    <input
+                      type="text"
+                      value={destinoBusca}
+                      onChange={(e) => setDestinoBusca(e.target.value)}
+                      placeholder="Buscar pelo nome..."
+                      className="w-full bg-black/25 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none backdrop-blur-sm"
+                    />
+                  </div>
+                  <div className="max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-black/20 divide-y divide-white/5">
+                    {destinoLoading && (
+                      <p className="text-[11px] text-neutral-500 p-3">Carregando...</p>
+                    )}
+                    {!destinoLoading && destinoFiltrado.length === 0 && (
+                      <p className="text-[11px] text-neutral-500 p-3">Nada encontrado.</p>
+                    )}
+                    {!destinoLoading &&
+                      destinoFiltrado.slice(0, 30).map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setDestinoSelecionado(item)}
+                          className="w-full text-left px-3 py-2 hover:bg-white/5 transition"
+                        >
+                          <p className="text-xs font-bold text-white truncate">{item.titulo}</p>
+                          {item.subtitulo && (
+                            <p className="text-[10px] text-neutral-500 truncate">{item.subtitulo}</p>
+                          )}
+                        </button>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">
