@@ -1,14 +1,14 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 
-// Roda pelo cron (ver server.ts "scheduled") a cada execução — preenche a
-// "Média Likes" (coluna O de "Music Videos") de qualquer clipe que ainda
-// esteja sem nota. Só processa um lote pequeno por execução (a cada 10min)
-// pra nunca estourar o tempo do Worker; o resto fica pra próxima rodada —
-// então também cobre automaticamente qualquer vídeo novo publicado sem
-// nota, não é só uma correção pontual. Como só escreve quando a célula
-// ainda está vazia, cada linha só é calculada UMA vez (nunca reprocessa um
-// valor já gravado, então não corre o risco de "misturar de novo" a cada
-// execução).
+// Roda pelo cron (ver server.ts "scheduled") a cada execução — recalcula a
+// "Média Likes" (coluna O de "Music Videos") de TODOS os vídeos com essa
+// fórmula, não só os que estão sem nota (inclusive o único que já tinha um
+// valor manual antes). Como a fórmula é determinística (mesmos comentários
+// + mesmas views = mesmo resultado), recalcular todo mundo de novo a cada
+// execução é seguro — e é o que mantém a nota viva conforme comentários
+// novos chegam ou o YOUTUBE TOTAL DA SEMANA muda. Só processa um lote
+// pequeno por execução (a cada 10min) pra nunca estourar o tempo do
+// Worker; o resto (e qualquer vídeo novo) fica pras próximas rodadas.
 //
 // Fórmula (nota final 0-100, que o ScoreBadge multiplica por 300 pra virar
 // a contagem de likes exibida):
@@ -58,7 +58,16 @@ function extrairArtistaTitulo(tituloTopico: string): { artista: string; titulo: 
   return { artista: match[1].trim(), titulo: match[2].trim() };
 }
 
-export async function preencherLikesVideosSemMediaScheduled(): Promise<{ atualizados: number }> {
+interface FlagsKvLike {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+}
+
+const CURSOR_KV_KEY = "video-likes-cursor";
+
+export async function preencherLikesVideosSemMediaScheduled(
+  flags?: FlagsKvLike,
+): Promise<{ atualizados: number }> {
   const [videoRows, commentRows, musicasRows, edicaoRows] = await Promise.all([
     googleSheetsService.principal.readValues(MUSICA_VIDEOS_SHEET),
     googleSheetsService.principal.readValues(COMENTARIOS_MV_SHEET),
@@ -105,13 +114,26 @@ export async function preencherLikesVideosSemMediaScheduled(): Promise<{ atualiz
     return Math.min(Math.round(total / YOUTUBE_TOTAL_PARA_NOTA_100), 100);
   }
 
-  let atualizados = 0;
-  for (let i = 1; i < videoRows.length && atualizados < LOTE_MAX; i++) {
-    const row = videoRows[i];
-    if (!row || !row.some((cell) => normalizeText(cell))) continue;
+  // Cursor persistido em KV — cada execução continua de onde a anterior
+  // parou, girando por toda a planilha ao longo do tempo em vez de sempre
+  // reprocessar só as primeiras linhas (que nunca deixaria as últimas
+  // serem alcançadas).
+  const cursorSalvo = flags ? Number(await flags.get(CURSOR_KV_KEY).catch(() => null)) : NaN;
+  const inicio = Number.isFinite(cursorSalvo) && cursorSalvo >= 1 && cursorSalvo < videoRows.length ? cursorSalvo : 1;
 
-    const mediaAtual = normalizeText(row[COL_MEDIA_LIKES]);
-    if (mediaAtual && Number(mediaAtual) > 0) continue;
+  let atualizados = 0;
+  let i = inicio;
+  let voltas = 0;
+  while (atualizados < LOTE_MAX && voltas < 2) {
+    if (i >= videoRows.length) {
+      i = 1;
+      voltas++;
+      continue;
+    }
+    const row = videoRows[i];
+    const linhaPlanilha = i + 1; // videoRows[0] é o cabeçalho (linha 1)
+    i++;
+    if (!row || !row.some((cell) => normalizeText(cell))) continue;
 
     const topicoId = normalizeText(row[COL_THREAD_ID]);
     const qtdComentarios = topicoId ? contagemPorTopico.get(topicoId) || 0 : 0;
@@ -123,9 +145,13 @@ export async function preencherLikesVideosSemMediaScheduled(): Promise<{ atualiz
     const notaFinal =
       notaViews > 0 ? Math.round(0.7 * notaJogador + 0.3 * notaViews) : notaJogador;
 
-    await googleSheetsService.principal.updateValues(MUSICA_VIDEOS_SHEET, `O${i + 1}`, [[String(notaFinal)]]);
+    await googleSheetsService.principal.updateValues(MUSICA_VIDEOS_SHEET, `O${linhaPlanilha}`, [
+      [String(notaFinal)],
+    ]);
     atualizados++;
   }
+
+  if (flags) await flags.put(CURSOR_KV_KEY, String(i)).catch(() => {});
 
   return { atualizados };
 }

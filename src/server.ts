@@ -360,9 +360,9 @@ export default {
         .catch((err) => console.error("[scheduled] Erro ao limpar stories expirados:", err)),
     );
     ctx.waitUntil(
-      preencherLikesVideosSemMediaScheduled()
-        .then((r) => console.log(`[scheduled] Média Likes de vídeo preenchida: ${r.atualizados} vídeos.`))
-        .catch((err) => console.error("[scheduled] Erro ao preencher likes de vídeo:", err)),
+      preencherLikesVideosSemMediaScheduled((env as { FLAGS?: FlagsKv }).FLAGS)
+        .then((r) => console.log(`[scheduled] Média Likes de vídeo recalculada: ${r.atualizados} vídeos.`))
+        .catch((err) => console.error("[scheduled] Erro ao recalcular likes de vídeo:", err)),
     );
   },
 
