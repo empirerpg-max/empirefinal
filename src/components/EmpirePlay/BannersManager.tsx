@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Image as ImageIcon, Link2, Trash2, Loader2, GripVertical } from "lucide-react";
-import { driveImg } from "@/lib/api";
+import { driveImg, authHeaders } from "@/lib/api";
 
 interface BannerRow {
   id: string;
@@ -61,7 +61,7 @@ export function BannersManager({ tgId }: { tgId: string }) {
       const imagem_url = await uploadBannerImage(imageFile);
       const res = await fetch("/api/social/banners", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           imagem_url,
           link_destino: link.trim() || undefined,
@@ -89,7 +89,7 @@ export function BannersManager({ tgId }: { tgId: string }) {
   const handleApagar = async (id: string) => {
     await fetch("/api/social/banners/deletar", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ id }),
     });
     setBanners((prev) => prev.filter((b) => b.id !== id));

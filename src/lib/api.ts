@@ -6,7 +6,7 @@ import { getStoredSessionToken, setStoredSessionToken } from "@/components/Login
 // Anexa o token de sessão (quando existe) como Authorization: Bearer — só
 // as ações admin-gated no backend (bypass do ID hardcoded) exigem que ele
 // bata; o resto do app continua funcionando normalmente sem ele.
-function authHeaders(): Record<string, string> {
+export function authHeaders(): Record<string, string> {
   const token = getStoredSessionToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
