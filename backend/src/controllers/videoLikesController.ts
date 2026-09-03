@@ -13,9 +13,13 @@ import { googleSheetsService, normalizeText, normalizeComparison } from "../serv
 // Fórmula (nota final 0-100, que o ScoreBadge multiplica por 300 pra virar
 // a contagem de likes exibida):
 //   nota_final = 0.7 * nota_jogador + 0.3 * nota_views
-// - nota_jogador: quantos comentários reais o vídeo recebeu no Fórum
-//   (Comentarios_MV, casado pelo ID do tópico == coluna F de Music Videos)
-//   — 35 sem nenhum comentário, subindo ~6 pontos por comentário até 98.
+// - nota_jogador: lê o TEXTO de cada comentário real do vídeo no Fórum
+//   (Comentarios_MV, casado pelo ID do tópico == coluna F de Music Videos),
+//   não só conta quantos tem. Cada comentário pontua pela intensidade dele
+//   (superlativos tipo "amei"/"perfeito"/"lendário"/"chocado", ênfase em
+//   CAIXA ALTA, "!!!") — um elogio morno soma pouco, um "melhor clipe do
+//   ano" empolgado soma bem mais. A soma de todos os comentários do vídeo
+//   vira a nota 0-100 (35 sem nenhum comentário ainda).
 // - nota_views: puxada do "YOUTUBE TOTAL DA SEMANA" (aba "EDIÇÃO CHARTS",
 //   coluna AC) da MÚSICA original — a mesma regra do jogo de que um clipe
 //   sem chart próprio (lyric video, live, dance video etc) sempre pontua
@@ -46,10 +50,61 @@ const COL_EDICAO_CODIGO = 55; // EDIÇÃO CHARTS BD = Código único
 // tabela de referência externa.
 const YOUTUBE_TOTAL_PARA_NOTA_100 = 11_000_000;
 const LOTE_MAX = 25;
+const COL_COMENTARIOS_MV_TOPICO = 0; // Comentarios_MV A = ID do tópico
+const COL_COMENTARIOS_MV_TEXTO = 3; // Comentarios_MV D = Comentário
 
-function calcularNotaPorComentarios(qtdComentarios: number): number {
-  if (qtdComentarios <= 0) return 35;
-  return Math.min(35 + qtdComentarios * 6, 98);
+// Termos que indicam um elogio mais entusiasmado (case-insensitive, sem
+// acento) — coletados a partir da leitura real dos comentários do fórum de
+// vídeos, que são quase todos positivos; a diferença real está na
+// intensidade, não em elogio-vs-crítica.
+const SUPERLATIVOS = [
+  "amei",
+  "perfeit",
+  "incriv",
+  "chocad",
+  "lendari",
+  "melhor",
+  "obra de arte",
+  "hit",
+  "smash",
+  "arrasou",
+  "arrasa",
+  "maravilhos",
+  "impecav",
+  "sensacional",
+  "genial",
+  "icônic",
+  "iconic",
+  "gritei",
+  "morri",
+  "morta",
+];
+
+function semAcento(texto: string): string {
+  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// Pontua um único comentário pela intensidade percebida do texto — usado
+// como proxy automático da leitura humana (feita manualmente uma vez pra
+// calibrar essa lista de termos), já que um comentário novo chega sem
+// ninguém aqui pra ler na hora.
+function pontuarComentario(texto: string): number {
+  if (!texto.trim()) return 0;
+  const t = semAcento(texto.toLowerCase());
+  let pontos = 3; // base: um comentário existe, é positivo (padrão da comunidade)
+  for (const termo of SUPERLATIVOS) {
+    if (t.includes(termo)) pontos += 1.3;
+  }
+  const exclamacoes = (texto.match(/!/g) || []).length;
+  pontos += Math.min(exclamacoes * 0.3, 3);
+  if (/[A-ZÀ-Ú]{4,}/.test(texto)) pontos += 1; // trecho em CAIXA ALTA = ênfase
+  return pontos;
+}
+
+function calcularNotaPorComentarios(textosComentarios: string[]): number {
+  if (textosComentarios.length === 0) return 35;
+  const soma = textosComentarios.reduce((acc, texto) => acc + pontuarComentario(texto), 0);
+  return Math.min(Math.round(35 + soma * 1.8), 98);
 }
 
 function extrairArtistaTitulo(tituloTopico: string): { artista: string; titulo: string } | null {
@@ -75,11 +130,14 @@ export async function preencherLikesVideosSemMediaScheduled(
     googleSheetsService.edicaoCharts.readValues(EDICAO_CHARTS_SHEET, "A2:BD5000"),
   ]);
 
-  const contagemPorTopico = new Map<string, number>();
+  const comentariosPorTopico = new Map<string, string[]>();
   for (let i = 1; i < commentRows.length; i++) {
-    const topicoId = normalizeText(commentRows[i]?.[0]);
+    const topicoId = normalizeText(commentRows[i]?.[COL_COMENTARIOS_MV_TOPICO]);
     if (!topicoId) continue;
-    contagemPorTopico.set(topicoId, (contagemPorTopico.get(topicoId) || 0) + 1);
+    const texto = normalizeText(commentRows[i]?.[COL_COMENTARIOS_MV_TEXTO]);
+    const lista = comentariosPorTopico.get(topicoId) || [];
+    lista.push(texto);
+    comentariosPorTopico.set(topicoId, lista);
   }
 
   // codigoUnico -> YOUTUBE TOTAL DA SEMANA (número cru, sem separador).
@@ -136,8 +194,8 @@ export async function preencherLikesVideosSemMediaScheduled(
     if (!row || !row.some((cell) => normalizeText(cell))) continue;
 
     const topicoId = normalizeText(row[COL_THREAD_ID]);
-    const qtdComentarios = topicoId ? contagemPorTopico.get(topicoId) || 0 : 0;
-    const notaJogador = calcularNotaPorComentarios(qtdComentarios);
+    const textosComentarios = topicoId ? comentariosPorTopico.get(topicoId) || [] : [];
+    const notaJogador = calcularNotaPorComentarios(textosComentarios);
 
     const tituloTopico = normalizeText(row[COL_TITULO_TOPICO]);
     const notaViews = tituloTopico ? calcularNotaViews(tituloTopico) : 0;
