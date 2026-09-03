@@ -1227,14 +1227,26 @@ export async function getEmpirePlayForumTopicController(
   const replyToColumnKey = sheetComments === "Comentarios_Musicas" ? "coluna_5" : "coluna_6";
 
   try {
-    const [mediaRecords, commentRecordsWithRow, genericComments, empireComments, topicCommentsSheet] =
+    const [mediaRecords, commentRecordsWithRow, genericComments, empireComments, topicCommentsSheet, usuariosRecords] =
       await Promise.all([
         sheetsService.readSheetObjects(sheetMedia).catch(() => []),
         readSheetObjectsWithRowIndex(sheetComments),
         sheetsService.readSheetObjects("Comentarios").catch(() => []),
         sheetsService.readSheetObjects("Comentarios_EmpirePlay").catch(() => []),
         sheetsService.readSheetObjects("Topicos_EmpirePlay").catch(() => []),
+        // Foto de perfil de quem comentou (config padrão de imagem da conta,
+        // não a foto do artista) — cacheada porque é a aba inteira de
+        // usuários, lida de novo a cada tópico de fórum aberto senão.
+        cachedRead("forum:usuarios_fotos", 120_000, () => googleSheetsService.usuarios.readSheetObjects("Usuários")).catch(
+          () => [],
+        ),
       ]);
+    const fotoPorJogadorId = new Map<string, string>();
+    for (const u of usuariosRecords as SheetRecord[]) {
+      const id = getValue(u, ["id"]);
+      const foto = getValue(u, ["foto_do_perfil"]);
+      if (id && foto) fotoPorJogadorId.set(id, foto);
+    }
 
     // Marca cada registro da aba de comentários principal com sua linha real
     // na planilha (__rowIndex) — é isso que permite reagir com emoji direto
@@ -1409,6 +1421,7 @@ export async function getEmpirePlayForumTopicController(
         // de verdade — abas de fallback legadas nunca tiveram resposta
         // aninhada, então ficam sempre como comentário raiz (replyTo vazio).
         const replyToVal = rowIndexVal ? getValue(rec, [replyToColumnKey]) || "" : "";
+        const fotoVal = jogadorIdVal ? fotoPorJogadorId.get(jogadorIdVal) || "" : "";
 
         return {
           id: `comment_${idx + 1}`,
@@ -1419,6 +1432,7 @@ export async function getEmpirePlayForumTopicController(
           jogador: playerVal,
           player: playerVal,
           jogadorId: jogadorIdVal,
+          foto: fotoVal,
           comentario: commentVal,
           comment: commentVal,
           nota: ratingVal,
@@ -1462,6 +1476,7 @@ export async function getEmpirePlayForumTopicController(
           reactions: {},
           reactedBy: {},
           replyTo: "",
+          foto: "",
         });
       }
 
@@ -1494,6 +1509,7 @@ export async function getEmpirePlayForumTopicController(
               reactions: {},
               reactedBy: {},
               replyTo: "",
+              foto: "",
             });
           }
         });
