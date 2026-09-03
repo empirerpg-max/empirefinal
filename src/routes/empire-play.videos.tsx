@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Tv, Play, MessageSquare, Search } from "lucide-react";
-import { driveImg } from "@/lib/api";
+import { driveImg, driveVideo } from "@/lib/api";
 import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableVideo } from "@/components/EmpirePlay/VideoPlayer";
@@ -11,6 +11,18 @@ import { LoadErrorState } from "@/components/LoadErrorState";
 export const Route = createFileRoute("/empire-play/videos")({
   component: EmpirePlayVideos,
 });
+
+// Sem capa cadastrada, usa um "take" congelado do próprio vídeo como
+// thumbnail — mesmo truque do destaque de "Últimas Publicações" no Início:
+// um <video preload="metadata"> sem autoplay já mostra o primeiro frame
+// sozinho, sem precisar capturar nada em canvas. Só funciona pra vídeo
+// hospedado no Drive (fonte reproduzível direto); pra YouTube usa a
+// thumbnail oficial do próprio YouTube, que já existe pronta.
+function youtubeThumb(youtubeUrl?: string): string | undefined {
+  if (!youtubeUrl) return undefined;
+  const match = youtubeUrl.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
+  return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : undefined;
+}
 
 function EmpirePlayVideos() {
   const { playVideo } = useEmpirePlayer();
@@ -135,6 +147,20 @@ function EmpirePlayVideos() {
               {v.capa_url || v.poster_url ? (
                 <img
                   src={driveImg(v.capa_url || v.poster_url, 400)}
+                  alt={v.titulo}
+                  className="size-full object-cover group-hover:scale-105 transition-transform"
+                />
+              ) : v.fonte !== "youtube" && (v.url_final_player || v.link) ? (
+                <video
+                  src={driveVideo(v.url_final_player || v.link)}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="size-full object-cover group-hover:scale-105 transition-transform"
+                />
+              ) : youtubeThumb(v.youtube_url) ? (
+                <img
+                  src={youtubeThumb(v.youtube_url)}
                   alt={v.titulo}
                   className="size-full object-cover group-hover:scale-105 transition-transform"
                 />
