@@ -24,12 +24,23 @@ export function ScoreBadge({
   }
 
   if (variant === "likes") {
+    // A nota (0-100, dada pelos jogadores) nunca foi pensada como a
+    // contagem de likes em si — é só o insumo. A conversão pra uma
+    // quantidade "de verdade" (nota 90 → 27.000 likes) sempre devia
+    // acontecer aqui na exibição, mas nunca tinha sido implementada: o
+    // componente mostrava a nota crua com "Likes" colado atrás. Como é só
+    // exibição (não grava nada), corrigir aqui já vale pra tudo que já
+    // existe e pro que vier, sem precisar migrar planilha nenhuma.
+    // Só multiplica quem ainda está na escala crua (0-100) — um valor acima
+    // disso já é uma contagem de likes de verdade (não uma nota), e
+    // multiplicar de novo inflaria ele sem sentido.
+    const likes = num <= 100 ? Math.round(num * 300) : num;
     return (
       <div
         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 font-black text-xs sm:text-sm border border-emerald-500/30 ${className}`}
       >
         <ThumbsUp className="size-3.5 fill-emerald-400" />
-        <span>{num} Likes</span>
+        <span>{likes.toLocaleString("pt-BR")} Likes</span>
       </div>
     );
   }
