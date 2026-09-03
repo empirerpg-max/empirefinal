@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2 } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV } from "@/lib/api";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
-import { useBackClose } from "@/hooks/use-back-close";
+import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
+import { resolveStreamEmbed, kickChannelFromUrl, forceUnmuteIframe, hasUnmutedThisSession } from "@/lib/tvEmbed";
 
 
 export const Route = createFileRoute("/tv")({
@@ -82,7 +83,7 @@ function parseProgramDate(p: Programa): Date | null {
 }
 
 function TvPage() {
-  const [watching, setWatching] = useState<Programa | null>(null);
+  const { watching, floating, open: setWatching, minimize, restore, close: stopWatching, updateWatching } = useTvPlayer();
   const [programasRaw, setProgramasRaw] = useState<Programa[]>([]);
   const [loading, setLoading] = useState(true);
   const [liveChannels, setLiveChannels] = useState<Record<string, { viewers?: number; title?: string }>>({});
@@ -150,34 +151,32 @@ function TvPage() {
     if (!watching) return;
     const updated = programas.find((p) => p.id === watching.id);
     if (updated && (updated.ao_vivo !== watching.ao_vivo || updated.espectadores !== watching.espectadores)) {
-      setWatching(updated);
+      updateWatching(updated);
     }
-  }, [programas, watching]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programas]);
+
+  // Voltar pra /tv com o player minimizado (ex.: veio de outra aba do app
+  // enquanto assistia) já restaura a tela cheia, sem precisar tocar na
+  // miniatura flutuante primeiro.
+  useEffect(() => {
+    if (watching && floating) restore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
       className={`fixed inset-0 bg-background text-foreground overflow-hidden transition-all ${
-        watching ? "z-[70]" : "top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(4rem+env(safe-area-inset-bottom))]"
+        watching && !floating ? "z-[70]" : "top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(4rem+env(safe-area-inset-bottom))]"
       }`}
     >
-      {watching ? (
-        <WatchView programa={watching} onBack={() => setWatching(null)} />
+      {watching && !floating ? (
+        <WatchView programa={watching} onBack={stopWatching} onMinimize={minimize} />
       ) : (
         <BrowseView programas={programas} loading={loading} onPlay={setWatching} />
       )}
     </div>
   );
-}
-
-function kickChannelFromUrl(url: string | undefined): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url.trim());
-    const host = u.hostname.replace(/^www\./, "");
-    if (host !== "kick.com" && host !== "player.kick.com") return null;
-    const seg = u.pathname.split("/").filter(Boolean);
-    return seg[0]?.toLowerCase() || null;
-  } catch { return null; }
 }
 
 
@@ -523,79 +522,6 @@ function ProgramRow({ title, programas, onPlay, showSchedule, emptyText }: {
   );
 }
 
-// Converte stream_url da planilha em URL embeddável quando possível.
-// - Kick canal (kick.com/<canal>): só embeda se ao_vivo, via player.kick.com
-// - YouTube watch/short: converte para youtube.com/embed
-// - URLs já embeddáveis (player.kick.com, youtube.com/embed, vimeo player, iframe): usa como está
-// - Telegram (t.me/...) ou nada: sem embed
-function resolveStreamEmbed(url: string | undefined, aoVivo: boolean): string | null {
-  if (!url) return null;
-  const u = url.trim();
-  if (!u) return null;
-  try {
-    const parsed = new URL(u);
-    const host = parsed.hostname.replace(/^www\./, "");
-
-    if (host === "t.me" || host === "telegram.me") return null;
-
-    // player.kick.com direto — forçamos os mesmos parâmetros do outro ramo
-    // abaixo (autoplay=true&muted=false) em vez de usar a URL crua como
-    // veio salva, porque se ela não tiver "muted=false" o player abre mudo
-    // silenciosamente sem nenhum erro visível — foi exatamente esse o caso
-    // que fez o som "sumir do nada" pra uma transmissão específica.
-    if (host === "player.kick.com") {
-      parsed.searchParams.set("autoplay", "true");
-      parsed.searchParams.set("muted", "false");
-      return parsed.toString();
-    }
-    if (host === "kick.com") {
-      // A checagem de "ao vivo" via API da Kick é bloqueada por proteção
-      // anti-bot server-side (confirmado: HTTP 403 "Request blocked by
-      // security policy") — não dá pra confiar nela pra decidir se embeda.
-      // Sempre embeda o canal quando a URL é válida; o próprio player da
-      // Kick mostra "offline" quando não tiver transmissão, então isso
-      // nunca piora a experiência, só deixa de depender de uma checagem
-      // que está bloqueada.
-      // muted=false: sem isso o player da Kick abre mudo por padrão.
-      const seg = parsed.pathname.split("/").filter(Boolean);
-      if (seg.length === 1) return `https://player.kick.com/${seg[0]}?autoplay=true&muted=false`;
-      return null; // rota não-embeddável (ex: /video/..., /clips/...)
-    }
-
-    // modestbranding/rel/iv_load_policy reduzem ao máximo a marca do
-    // YouTube (logo grande, sugestões de outros canais) — o player deve
-    // parecer o mesmo independente de qual plataforma serve o vídeo.
-    const YT_PARAMS = "modestbranding=1&rel=0&iv_load_policy=3&playsinline=1";
-    if (host === "youtu.be") {
-      const id = parsed.pathname.slice(1);
-      return id ? `https://www.youtube.com/embed/${id}?${YT_PARAMS}` : null;
-    }
-    if (host.endsWith("youtube.com")) {
-      if (parsed.pathname === "/watch") {
-        const id = parsed.searchParams.get("v");
-        return id ? `https://www.youtube.com/embed/${id}?${YT_PARAMS}` : null;
-      }
-      if (parsed.pathname.startsWith("/embed/") || parsed.pathname.startsWith("/live/")) {
-        return u.includes("?") ? `${u}&${YT_PARAMS}` : `${u}?${YT_PARAMS}`;
-      }
-      return null;
-    }
-
-    if (host.includes("vimeo.com")) {
-      const VIMEO_PARAMS = "title=0&byline=0&portrait=0";
-      if (host === "player.vimeo.com") {
-        return u.includes("?") ? `${u}&${VIMEO_PARAMS}` : `${u}?${VIMEO_PARAMS}`;
-      }
-      const id = parsed.pathname.split("/").filter(Boolean).pop();
-      return id && /^\d+$/.test(id) ? `https://player.vimeo.com/video/${id}?${VIMEO_PARAMS}` : null;
-    }
-
-    return u; // assume embeddável
-  } catch {
-    return null;
-  }
-}
-
 function GradeFull({ programas, onPlay, loading }: { programas: Programa[]; onPlay: (p: Programa) => void; loading: boolean }) {
   if (loading && programas.length === 0) return <div className="p-6 text-sm text-muted-foreground">Carregando...</div>;
   if (programas.length === 0) return <div className="p-6 text-sm text-muted-foreground italic">Sem programas agendados.</div>;
@@ -702,7 +628,7 @@ function useIsDesktop() {
 }
 
 // ---------- WatchView (chat + participantes + sobre) ----------
-function WatchView({ programa, onBack }: { programa: Programa; onBack: () => void }) {
+function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBack: () => void; onMinimize: () => void }) {
   // Identidade vem só do login próprio (aba Usuários) — sem depender do
   // Telegram pra nada.
   const login = getStoredLogin();
@@ -764,47 +690,21 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
     { id: "sobre", label: "Sobre", icon: Info },
   ];
 
-  // Sheet estilo Reels aberto no mobile (null = fechado, mostra só o vídeo).
-  const [mobileSheet, setMobileSheet] = useState<WatchTab | null>(null);
-  // "Voltar" (físico/swipe iOS) fecha a gaveta de comentários/participantes
-  // em vez de sair da tela do Empire TV.
-  useBackClose(!!mobileSheet, () => setMobileSheet(null));
-  // Altura do vídeo quando a gaveta está aberta — fixa em dvh (CSS puro,
-  // className abaixo), NÃO calculada via JS a partir do teclado/
-  // visualViewport. Tentar recalcular a altura quando o teclado abre foi a
-  // causa de tudo cobrir tudo: em PWA standalone o teclado do iOS não
-  // redimensiona o visualViewport, só sobrepõe por cima, então uma altura
-  // "recalculada" com base nele ficava presa atrás do teclado. O padrão já
-  // usado no resto do app (Fórum, CommentModal etc.) é bem mais simples e
-  // robusto: campo de digitar + lista vivem no MESMO container rolável
-  // (ver ChatPanel), e é o próprio Safari quem rola esse container pra
-  // revelar o campo acima do teclado — sem nenhuma conta de altura aqui.
-
   // O navegador força o autoplay como mudo até haver uma interação real do
-  // usuário — como o player é um iframe de outro domínio (Kick), não dá pra
-  // ativar o som via código nosso sem essa interação acontecer dentro dele.
-  // Setar o src do iframe DIRETO no DOM (via ref), de forma síncrona dentro
-  // do próprio handler de clique, é o que preserva a "ativação do usuário"
-  // pro navegador — trocar via state do React (re-render, key novo) atrasa
-  // a troca pro próximo paint e a ativação já não vale mais pro navegador
-  // nessa hora, então o player recarregava mudo do mesmo jeito.
+  // usuário — como o player é um iframe de outro domínio (Kick/YouTube),
+  // não dá pra ativar o som via código nosso sem essa interação acontecer
+  // dentro dele. forceUnmuteIframe (lib/tvEmbed) recria o NÓ do iframe de
+  // forma síncrona dentro do próprio clique — só trocar o "src" do mesmo
+  // elemento parou de bastar em navegadores recentes pra esse tipo de
+  // navegação cross-origin (endurecimento anti-abuso), então o botão tinha
+  // parado de funcionar de verdade mesmo clicando nele.
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [unmutedOnce, setUnmutedOnce] = useState(false);
   const handleUnmute = () => {
-    setUnmutedOnce(true);
     const el = iframeRef.current;
-    if (el) {
-      const url = new URL(el.src, window.location.href);
-      url.searchParams.set("muted", "false");
-      url.searchParams.set("autoplay", "true");
-      // A URL já pode vir IDÊNTICA (já tem muted=false desde o embed
-      // inicial) — nesse caso trocar el.src pro mesmo valor não recarrega
-      // nada e o clique não faz efeito nenhum. Um parâmetro que muda a
-      // cada clique garante que o iframe sempre navega de novo, de fato,
-      // como resposta direta a esse clique.
-      url.searchParams.set("_unmute", String(Date.now()));
-      el.src = url.toString();
-    }
+    if (!el) return;
+    setUnmutedOnce(true);
+    iframeRef.current = forceUnmuteIframe(el);
   };
   useEffect(() => {
     setUnmutedOnce(false);
@@ -823,15 +723,22 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
             allow="autoplay; camera; microphone; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
           />
-          {!unmutedOnce && (
-            <button
-              type="button"
-              onClick={handleUnmute}
-              className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
-            >
-              <VolumeX className="size-3.5" /> Toque para ativar o som
-            </button>
-          )}
+          {/* Depois do primeiro toque bem-sucedido nesta sessão, troca o aviso
+              grande por um ícone discreto — cada transmissão nova ainda exige
+              um toque de verdade (é o navegador quem exige, não dá pra
+              pular), mas não precisa mais do aviso chamativo repetido. */}
+          <button
+            type="button"
+            onClick={handleUnmute}
+            className={
+              unmutedOnce || hasUnmutedThisSession()
+                ? "absolute bottom-3 left-3 z-10 size-8 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
+                : "absolute bottom-3 left-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
+            }
+            aria-label="Ativar som"
+          >
+            {unmutedOnce ? <Volume2 className="size-3.5" /> : <><VolumeX className="size-3.5" /> {!hasUnmutedThisSession() && "Toque para ativar o som"}</>}
+          </button>
         </div>
       );
     }
@@ -852,136 +759,85 @@ function WatchView({ programa, onBack }: { programa: Programa; onBack: () => voi
     );
   })();
 
-  return (
-    <>
-      {/* ---------- Mobile: divisão real de tela (não overlay) — com a
-          gaveta aberta, o vídeo ENCOLHE pra uma faixa fixa no topo (ainda
-          inteiro, não cortado) e a gaveta ocupa o resto, lado a lado no
-          mesmo fluxo. Dá pra ver vídeo E comentários ao mesmo tempo, sem um
-          cobrir o outro. Fechada, o vídeo volta a ocupar a tela toda. */}
-      {!isDesktop && <div className="relative h-full bg-black flex flex-col">
-        <div
-          className={`relative shrink-0 transition-[height] duration-200 ${
-            mobileSheet ? "h-[30dvh]" : "flex-1 min-h-0"
-          }`}
-        >
-          <div
-            className="flex items-center gap-3 px-4 shrink-0 bg-gradient-to-b from-black/70 to-transparent absolute top-0 inset-x-0 z-10"
-            style={{ paddingTop: "env(safe-area-inset-top)", height: "calc(3rem + env(safe-area-inset-top))" }}
+  const header = (
+    <div
+      className="flex items-center gap-2 px-3 shrink-0 bg-background/95 backdrop-blur border-b border-border/60"
+      style={{ paddingTop: "env(safe-area-inset-top)", height: "calc(3rem + env(safe-area-inset-top))" }}
+    >
+      <button onClick={onBack} className="size-8 rounded-full hover:bg-muted flex items-center justify-center shrink-0" aria-label="Voltar">
+        <ArrowLeft className="size-4" />
+      </button>
+      <div className="min-w-0 flex-1 truncate text-sm font-semibold">{programa.titulo}</div>
+      {programa.ao_vivo && (
+        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
+          <Radio className="size-2.5 animate-pulse" /> LIVE
+        </span>
+      )}
+      <button onClick={onMinimize} className="size-8 rounded-full hover:bg-muted flex items-center justify-center shrink-0" aria-label="Minimizar (continua tocando)" title="Minimizar — continua tocando">
+        <Minimize2 className="size-4" />
+      </button>
+    </div>
+  );
+
+  const tabBar = (
+    <div className="flex items-center gap-1 px-2 h-10 border-b border-border shrink-0 overflow-x-auto">
+      {tabs.map((t) => {
+        const Icon = t.icon;
+        const active = tab === t.id;
+        return (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`relative shrink-0 h-8 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 ${
+              active
+                ? "text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]"
+                : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
+            }`}
           >
-            <button onClick={onBack} className="size-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white shrink-0" aria-label="Voltar">
-              <ArrowLeft className="size-4" />
-            </button>
-            <div className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{programa.titulo}</div>
-            {programa.ao_vivo && (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
-                <Radio className="size-2.5 animate-pulse" /> LIVE
-              </span>
-            )}
-          </div>
-          <div className="w-full h-full">{player}</div>
+            {active && <span className="absolute inset-0 rounded-md bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+            <Icon className="relative z-10 size-3.5" /> <span className="relative z-10">{t.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 
-          {/* Botões flutuantes estilo Reels (comentar / participantes / sobre)
-              — pinados no canto do próprio vídeo, então nunca ficam por cima
-              da gaveta quando ela está aberta. */}
-          <div className="absolute right-3 bottom-3 z-10 flex flex-col items-center gap-3">
-            <button
-              onClick={() => setMobileSheet(mobileSheet === "chat" ? null : "chat")}
-              className="size-10 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
-              aria-label="Comentários"
-            >
-              <MessageSquare className="size-4.5" />
-            </button>
-            <button
-              onClick={() => setMobileSheet(mobileSheet === "participantes" ? null : "participantes")}
-              className="size-10 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
-              aria-label="Participantes"
-            >
-              <Users className="size-4.5" />
-            </button>
-            <button
-              onClick={() => setMobileSheet(mobileSheet === "sobre" ? null : "sobre")}
-              className="size-10 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white shadow-lg active:scale-95 transition"
-              aria-label="Sobre"
-            >
-              <Info className="size-4.5" />
-            </button>
-          </div>
-        </div>
+  const panel = (
+    <div className="flex-1 min-h-0 flex flex-col">
+      {tab === "chat" && <ChatPanel programaId={programa.id} />}
+      {tab === "participantes" && <ParticipantesPanel programa={programa} />}
+      {tab === "sobre" && <SobrePanel programa={programa} />}
+    </div>
+  );
 
-        {mobileSheet && (
-          <div className="flex-1 min-h-0 bg-background rounded-t-2xl border-t border-border flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200">
-              {/* Alça de arrastar (só visual, como no TikTok — fechar continua
-                  sendo pelo X ou "voltar"). */}
-              <div className="flex justify-center pt-2 pb-1 shrink-0">
-                <div className="h-1 w-9 rounded-full bg-muted-foreground/30" />
-              </div>
-              <div className="flex items-center justify-between px-4 h-11 border-b border-border shrink-0">
-                <span className="text-sm font-bold flex items-center gap-1.5">
-                  {mobileSheet === "chat" && <><MessageSquare className="size-3.5" /> Comentários</>}
-                  {mobileSheet === "participantes" && <><Users className="size-3.5" /> Participantes</>}
-                  {mobileSheet === "sobre" && <><Info className="size-3.5" /> Sobre</>}
-                </span>
-                <button onClick={() => setMobileSheet(null)} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Fechar">
-                  <X className="size-4" />
-                </button>
-              </div>
-              <div className="flex-1 min-h-0 flex flex-col">
-                {mobileSheet === "chat" && <ChatPanel programaId={programa.id} />}
-                {mobileSheet === "participantes" && <ParticipantesPanel programa={programa} />}
-                {mobileSheet === "sobre" && <SobrePanel programa={programa} />}
-              </div>
-          </div>
-        )}
-      </div>}
+  // ---------- Mobile: vídeo em bloco fixo no topo (não tela cheia) + chat
+  // SEMPRE visível logo abaixo, sem gaveta que soma/sobrepõe o vídeo — vídeo
+  // e teclado nunca disputam o mesmo espaço, porque nenhum dos dois cobre o
+  // outro: cada um vive na sua própria faixa da tela o tempo todo. ----------
+  if (!isDesktop) {
+    return (
+      <div className="h-full flex flex-col bg-background">
+        {header}
+        <div className="w-full bg-black shrink-0" style={{ aspectRatio: "16 / 9" }}>{player}</div>
+        {tabBar}
+        {panel}
+      </div>
+    );
+  }
 
-      {/* ---------- Desktop: player + painel lateral fixo, como antes ---------- */}
-      {isDesktop && <div className="flex h-full min-h-0">
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex items-center gap-3 px-4 h-12 border-b border-border/60 bg-background/90 backdrop-blur shrink-0">
-            <button onClick={onBack} className="size-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Voltar">
-              <ArrowLeft className="size-4" />
-            </button>
-            <div className="min-w-0 flex-1 truncate text-sm font-semibold">{programa.titulo}</div>
-            {programa.ao_vivo && (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
-                <Radio className="size-2.5 animate-pulse" /> LIVE
-              </span>
-            )}
-          </div>
-          <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
-        </div>
+  // ---------- Desktop: player + painel lateral fixo ----------
+  return (
+    <div className="flex h-full min-h-0">
+      <div className="flex-1 flex flex-col min-w-0">
+        {header}
+        <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
+      </div>
 
-        <div className="lg:w-[360px] border-l border-border flex flex-col min-h-0 bg-card/30">
-          <div className="flex items-center gap-1 px-2 h-10 border-b border-border shrink-0 overflow-x-auto">
-            {tabs.map((t) => {
-              const Icon = t.icon;
-              const active = tab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`relative shrink-0 h-8 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 ${
-                    active
-                      ? "text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]"
-                      : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
-                  }`}
-                >
-                  {active && <span className="absolute inset-0 rounded-md bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
-                  <Icon className="relative z-10 size-3.5" /> <span className="relative z-10">{t.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex-1 min-h-0 flex flex-col">
-            {tab === "chat" && <ChatPanel programaId={programa.id} />}
-            {tab === "participantes" && <ParticipantesPanel programa={programa} />}
-            {tab === "sobre" && <SobrePanel programa={programa} />}
-          </div>
-        </div>
-      </div>}
-    </>
+      <div className="lg:w-[360px] border-l border-border flex flex-col min-h-0 bg-card/30">
+        {tabBar}
+        {panel}
+      </div>
+    </div>
   );
 }
 
