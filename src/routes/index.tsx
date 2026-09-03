@@ -59,6 +59,7 @@ interface ProximoEvento {
 interface SocialPostResumo {
   id: string;
   tipo: string;
+  subtipo?: string;
   autor: string;
   handle?: string;
   avatar?: string;
@@ -165,7 +166,11 @@ function Index() {
         (api as any).listarNewsSocial().catch(() => []),
       ])
         .then(([posts, news]: [SocialPostResumo[], any[]]) => {
-          const postsArr = Array.isArray(posts) ? posts : [];
+          // Stories não são post permanente — não entram em "Últimas
+          // Publicações" (só vivem na fileira de destaques da Social).
+          const postsArr = (Array.isArray(posts) ? posts : []).filter(
+            (p: SocialPostResumo) => !(p.tipo === "Instagram" && p.subtipo === "Story"),
+          );
           const newsArr = Array.isArray(news) ? news : [];
           const newsComoPost: SocialPostResumo[] = newsArr.map((n) => ({
             id: n.id,
