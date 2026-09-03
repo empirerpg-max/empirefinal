@@ -666,8 +666,16 @@ export async function getSocialBannersController(): Promise<Response> {
  * Cadastra (ou atualiza, se vier `id`) um banner promocional. Usado pela
  * tela de Gestão. `ativo` fica implícito true na criação; pra desativar sem
  * apagar, reenvia o mesmo id com ativo:false.
+ *
+ * Só admin pode publicar banner — não é uma ação self-service dos
+ * artistas/jogadores (diferente de post/news). Futuramente vira algo
+ * "comprável" com prestígio; até lá, cadastro é manual only.
  */
 export async function saveSocialBannerController(request: Request): Promise<Response> {
+  if (!(await requestProvesAdmin(request))) {
+    return jsonResponse({ ok: false, error: "Só a administração pode publicar banners." }, 403);
+  }
+
   const body = (await request.json().catch(() => ({}))) as {
     id?: string;
     imagem_url?: string;
@@ -717,8 +725,13 @@ export async function saveSocialBannerController(request: Request): Promise<Resp
 /**
  * POST /api/social/banners/deletar
  * Limpa a linha inteira (mesmo padrão soft-delete do resto do arquivo).
+ * Também só admin — mesma regra do cadastro.
  */
 export async function deleteSocialBannerController(request: Request): Promise<Response> {
+  if (!(await requestProvesAdmin(request))) {
+    return jsonResponse({ ok: false, error: "Só a administração pode remover banners." }, 403);
+  }
+
   const body = (await request.json().catch(() => ({}))) as { id?: string };
   if (!body.id) return jsonResponse({ ok: false, error: "id é obrigatório." }, 400);
 

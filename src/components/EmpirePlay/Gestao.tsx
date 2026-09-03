@@ -1144,21 +1144,23 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 Sincronizar Letra
               </span>
             </button>
-            <button
-              onClick={() => {
-                setActiveTab("banners");
-                resetFormState();
-                setShowLanding(false);
-              }}
-              className="flex flex-col items-center gap-2 text-center group"
-            >
-              <div className="w-full aspect-square rounded-2xl bg-neutral-900 border border-white/10 text-neutral-200 grid place-items-center group-hover:border-white/20 transition">
-                <ImageIcon className="size-5" />
-              </div>
-              <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
-                Banners
-              </span>
-            </button>
+            {telegramUser?.id && String(telegramUser.id) === "810141686" && (
+              <button
+                onClick={() => {
+                  setActiveTab("banners");
+                  resetFormState();
+                  setShowLanding(false);
+                }}
+                className="flex flex-col items-center gap-2 text-center group"
+              >
+                <div className="w-full aspect-square rounded-2xl bg-neutral-900 border border-white/10 text-neutral-200 grid place-items-center group-hover:border-white/20 transition">
+                  <ImageIcon className="size-5" />
+                </div>
+                <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
+                  Banners
+                </span>
+              </button>
+            )}
           </div>
 
           <p className="text-[11px] text-neutral-500 leading-relaxed">
@@ -1247,9 +1249,11 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       </div>
       )}
 
-      {/* BANNERS DO CATÁLOGO — tela própria, fora do fluxo de músicas/vídeos/álbuns */}
-      {activeTab === "banners" && (
-        <BannersManager tgId={telegramUser?.id ? String(telegramUser.id) : ""} />
+      {/* BANNERS DO CATÁLOGO — tela própria, fora do fluxo de músicas/vídeos/álbuns.
+          Só admin (mesmo dono do "810141686" hardcoded em outros pontos do
+          app) — o backend também recusa sem o token de sessão de admin. */}
+      {activeTab === "banners" && telegramUser?.id && String(telegramUser.id) === "810141686" && (
+        <BannersManager tgId={String(telegramUser.id)} />
       )}
 
       {/* MENSAGENS DE SUCESSO E ERRO (músicas/vídeos/álbuns) */}
