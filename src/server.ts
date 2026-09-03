@@ -343,6 +343,7 @@ export default {
   async scheduled(_event: unknown, env: unknown, ctx: { waitUntil: (p: Promise<unknown>) => void }) {
     injectRuntimeEnv(env);
     const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
+    const { limparStoriesExpiradosScheduled } = await import("../backend/src/controllers/socialController");
     ctx.waitUntil(
       processarParticipacaoTV()
         .then((r) =>
@@ -351,6 +352,11 @@ export default {
           ),
         )
         .catch((err) => console.error("[scheduled] Erro ao processar participação TV:", err)),
+    );
+    ctx.waitUntil(
+      limparStoriesExpiradosScheduled()
+        .then((r) => console.log(`[scheduled] Stories expirados apagados: ${r.apagados}`))
+        .catch((err) => console.error("[scheduled] Erro ao limpar stories expirados:", err)),
     );
   },
 

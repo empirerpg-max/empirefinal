@@ -1,6 +1,7 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
 import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
+import { deleteFileFromDrive } from "../services/googleDriveService";
 
 // Dados sociais (posts, perfis, comentários e news) vivem na planilha
 // "usuarios" (a mesma de Usuários/ARTISTAS), em abas próprias: SOCIAL_POSTS,
@@ -278,6 +279,48 @@ export async function deleteSocialPostController(request: Request): Promise<Resp
   ]);
 
   return jsonResponse({ ok: true });
+}
+
+const STORY_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Roda pelo cron (ver server.ts "scheduled") a cada execução — varre
+ * SOCIAL_POSTS por Stories (tipo Instagram, subtipo Story) publicados há
+ * mais de 24h e apaga de verdade: limpa a linha na planilha (mesmo padrão de
+ * soft-delete usado no resto do arquivo) e apaga o arquivo de mídia
+ * correspondente do Google Drive. Diferente do delete manual do dono
+ * (deleteSocialPostController), aqui não tem "dono" clicando — é limpeza
+ * automática, então roda sem checagem de tgId.
+ */
+export async function limparStoriesExpiradosScheduled(): Promise<{ apagados: number }> {
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts);
+  const agora = Date.now();
+
+  const expirados = rows
+    .map((row, i) => ({ row, rowIndex: i + 1 }))
+    .filter(({ row, rowIndex }) => {
+      if (rowIndex <= 1) return false;
+      const tipo = normalizeText(row[1]);
+      const subtipo = normalizeText(row[2]);
+      const id = normalizeText(row[0]);
+      if (!id || tipo !== "Instagram" || subtipo !== "Story") return false;
+      const dataPost = new Date(normalizeText(row[7])).getTime();
+      return Number.isFinite(dataPost) && agora - dataPost > STORY_TTL_MS;
+    });
+
+  for (const { row, rowIndex } of expirados) {
+    const mediaUrl = normalizeText(row[5]);
+    if (mediaUrl) {
+      await deleteFileFromDrive(mediaUrl).catch((err) =>
+        console.warn(`[limparStoriesExpiradosScheduled] Falha ao apagar mídia do Drive (linha ${rowIndex}):`, err),
+      );
+    }
+    await googleSheetsService.usuarios.updateValues(SHEETS.posts, `A${rowIndex}:J${rowIndex}`, [
+      ["", "", "", "", "", "", "", "", "", ""],
+    ]);
+  }
+
+  return { apagados: expirados.length };
 }
 
 // -------------------- COMENTÁRIOS --------------------
