@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { EmpirePlayHeader } from "@/components/EmpirePlay/Header";
+import { BannerCarousel } from "@/components/EmpirePlay/BannerCarousel";
 import { EmpirePlayTabNav } from "@/components/EmpirePlay/TabNav";
 
 export const Route = createFileRoute("/empire-play")({
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/empire-play")({
 function EmpirePlayLayout() {
   return (
     <div className="w-full max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-28 min-w-0 max-w-full overflow-x-hidden">
-      <EmpirePlayHeader />
+      <BannerCarousel />
       <EmpirePlayTabNav />
       <Outlet />
     </div>
