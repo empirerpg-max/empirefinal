@@ -54,6 +54,12 @@ export async function streamDriveFileController(request: Request): Promise<Respo
     const resHeaders = new Headers();
     resHeaders.set("Content-Type", driveRes.headers.get("content-type") || "application/octet-stream");
     resHeaders.set("Accept-Ranges", "bytes");
+    // Sem isso, o navegador refazia a busca completa no Drive toda vez que a
+    // página recarregava — mesmo pro mesmo vídeo, pro mesmo trecho de bytes
+    // (ex: o preview de metadata das thumbnails congeladas em Catálogo >
+    // Vídeos). O conteúdo de um file_id do Drive não muda sozinho, então uma
+    // resposta (inclusive parcial/206) pode ficar em cache por bastante tempo.
+    resHeaders.set("Cache-Control", "public, max-age=604800, immutable");
     if (driveRes.headers.has("content-length")) {
       resHeaders.set("Content-Length", driveRes.headers.get("content-length")!);
     }

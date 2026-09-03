@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Tv, Play, MessageSquare, Search } from "lucide-react";
 import { driveImg } from "@/lib/api";
 import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
@@ -29,20 +29,48 @@ function youtubeThumb(youtubeUrl?: string): string | undefined {
 // serve pro <video> nativo tocar o arquivo real).
 function VideoThumbFallback({ video: v }: { video: PlayableVideo }) {
   const [videoFailed, setVideoFailed] = useState(false);
+  // Cada card com <video> dispara uma busca de metadata no proxy do Drive
+  // assim que monta — com a grade inteira montada de uma vez, isso virava
+  // uma dúzia de requisições simultâneas (grade toda "carregando" junto,
+  // parecendo muito lento). Só monta o <video> quando o card realmente
+  // entra na tela (IntersectionObserver), como um lazy-load de imagem.
+  const [visible, setVisible] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || visible) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [visible]);
+
   const rawLink = v.url_final_player || v.link || "";
   const isPlayableInline = v.fonte !== "youtube" && v.fonte !== "vimeo" && !!rawLink;
   const ytThumb = youtubeThumb(v.youtube_url || (v.fonte === "youtube" ? rawLink : undefined));
 
   if (isPlayableInline && !videoFailed) {
     return (
-      <video
-        src={rawLink}
-        muted
-        playsInline
-        preload="metadata"
-        onError={() => setVideoFailed(true)}
-        className="size-full object-cover group-hover:scale-105 transition-transform"
-      />
+      <div ref={wrapperRef} className="size-full">
+        {visible && (
+          <video
+            src={rawLink}
+            muted
+            playsInline
+            preload="metadata"
+            onError={() => setVideoFailed(true)}
+            className="size-full object-cover group-hover:scale-105 transition-transform"
+          />
+        )}
+      </div>
     );
   }
   if (ytThumb) {
