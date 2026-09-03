@@ -725,24 +725,37 @@ function SocialPage() {
 
   // Fileira "Em alta agora" no topo do feed — reaproveita os posts do tipo
   // Story do Instagram que já existem (sem precisar de nenhum dado novo),
-  // um por autor, o mais recente primeiro.
+  // agrupados por autor (mais de um story do mesmo artista vira um grupo
+  // navegável, não bolinhas repetidas nem só o mais recente escondendo os
+  // outros) — grupo com o story mais recente primeiro.
   const STORY_TTL_MS = 24 * 60 * 60 * 1000;
-  const storyHighlights = useMemo(() => {
+  const storyGroups = useMemo(() => {
     const cutoff = Date.now() - STORY_TTL_MS;
-    const byAuthor = new Map<string, Post>();
+    const byAuthor = new Map<string, Post[]>();
     for (const p of posts) {
       if (p.tipo !== "Instagram" || p.subtipo !== "Story") continue;
       // Story vale só 24h — igual Instagram de verdade, some sozinho da
       // fileira depois disso (o post continua existindo na planilha, só
       // deixa de contar como destaque ativo).
       if (new Date(p.data).getTime() <= cutoff) continue;
-      const existing = byAuthor.get(p.autor);
-      if (!existing || new Date(p.data).getTime() > new Date(existing.data).getTime()) {
-        byAuthor.set(p.autor, p);
-      }
+      if (!byAuthor.has(p.autor)) byAuthor.set(p.autor, []);
+      byAuthor.get(p.autor)!.push(p);
     }
-    return Array.from(byAuthor.values()).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+    const groups = Array.from(byAuthor.entries()).map(([autor, items]) => ({
+      autor,
+      // Ordem de postagem (mais antigo primeiro) — igual Instagram, avança
+      // pra frente no tempo enquanto a pessoa toca pra direita.
+      items: items.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()),
+    }));
+    groups.sort(
+      (a, b) =>
+        new Date(b.items[b.items.length - 1].data).getTime() -
+        new Date(a.items[a.items.length - 1].data).getTime(),
+    );
+    return groups;
   }, [posts]);
+  // IDs de story individuais já vistos — o anel da bolinha só apaga quando
+  // TODOS os stories daquele autor já foram vistos.
   const [seenStories, setSeenStories] = useState<Set<string>>(new Set());
   // Stories só aparecem na fileira de destaques (bolinha) — nunca soltos no
   // feed principal, mesmo sendo tecnicamente um post com subtipo "Story".
@@ -750,7 +763,16 @@ function SocialPage() {
     () => posts.filter((p) => !(p.tipo === "Instagram" && p.subtipo === "Story")),
     [posts],
   );
-  const [viewingStory, setViewingStory] = useState<Post | null>(null);
+  const [viewingStoryGroup, setViewingStoryGroup] = useState<{ autor: string; index: number } | null>(null);
+  // Marca o story atualmente aberto como visto — cobre tanto o primeiro
+  // (aberto direto pela bolinha) quanto cada avanço via goTo.
+  useEffect(() => {
+    if (!viewingStoryGroup) return;
+    const group = storyGroups.find((g) => g.autor === viewingStoryGroup.autor);
+    const story = group?.items[Math.min(viewingStoryGroup.index, group.items.length - 1)];
+    if (story) setSeenStories((prev) => (prev.has(story.id) ? prev : new Set(prev).add(story.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingStoryGroup]);
   // text-base (16px) — abaixo disso o Safari/iOS dá zoom automático ao
   // focar o campo, e é esse zoom que "estica"/desalinha a tela até o
   // usuário beliscar pra voltar. Nunca usar texto menor que 16px em
@@ -862,7 +884,7 @@ function SocialPage() {
       <div className="px-4 max-w-md mx-auto mt-4">
         {viewMode === "Feed" ? (
           <>
-            {!loading && (storyHighlights.length > 0 || activeArtist) && (
+            {!loading && (storyGroups.length > 0 || activeArtist) && (
               <div className="mb-4 -mx-1">
                 <div className="flex items-baseline justify-between px-1 mb-2">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Em alta agora</h4>
@@ -885,15 +907,19 @@ function SocialPage() {
                       <span className="text-[9px] font-bold text-muted-foreground truncate w-full text-center">Seu story</span>
                     </button>
                   )}
-                  {storyHighlights.map((p) => {
-                    const seen = seenStories.has(p.autor);
+                  {storyGroups.map((group) => {
+                    // Anel só apaga quando TODOS os stories desse autor já
+                    // foram vistos — avisa que tem coisa nova mesmo se a
+                    // pessoa já tinha visto um story anterior dele.
+                    const seen = group.items.every((p) => seenStories.has(p.id));
+                    const firstUnseenIdx = group.items.findIndex((p) => !seenStories.has(p.id));
+                    const p = group.items[group.items.length - 1];
                     return (
                       <button
-                        key={p.id}
+                        key={group.autor}
                         onClick={() => {
                           haptic.selection();
-                          setSeenStories((prev) => new Set(prev).add(p.autor));
-                          setViewingStory(p);
+                          setViewingStoryGroup({ autor: group.autor, index: firstUnseenIdx === -1 ? 0 : firstUnseenIdx });
                         }}
                         className="flex-none w-14 flex flex-col items-center gap-1.5"
                       >
@@ -2386,14 +2412,28 @@ function SocialPage() {
         )}
       </AnimatePresence>
 
-      {/* Visualizador de Story — tela cheia, separado do comentário genérico
-          de post. Busca a versão mais atual em `posts` (pra refletir curtida
-          na hora) e cai pro snapshot salvo em viewingStory se ela já não
-          estiver mais na lista. */}
+      {/* Visualizador de Story — tela cheia, com navegação entre os stories
+          do mesmo autor (toque na direita avança, na esquerda volta, igual
+          Instagram) quando ele tem mais de um. Busca o grupo atualizado em
+          `storyGroups` (reflete curtida/novo story na hora). */}
       <AnimatePresence>
-        {viewingStory && (() => {
-          const story = posts.find((p) => p.id === viewingStory.id) || viewingStory;
+        {viewingStoryGroup && (() => {
+          const group = storyGroups.find((g) => g.autor === viewingStoryGroup.autor);
+          if (!group) return null;
+          const index = Math.min(viewingStoryGroup.index, group.items.length - 1);
+          const story = group.items[index];
           const liked = !!myTgId && !!story.analytics.likedBy?.includes(myTgId);
+
+          const goTo = (i: number) => {
+            if (i < 0) return; // já é o primeiro — toque na esquerda não faz nada
+            if (i >= group.items.length) {
+              setViewingStoryGroup(null); // acabaram os stories desse autor — fecha
+              return;
+            }
+            haptic.selection();
+            setViewingStoryGroup({ autor: group.autor, index: i });
+          };
+
           return (
             <motion.div
               initial={{ opacity: 0 }}
@@ -2422,10 +2462,49 @@ function SocialPage() {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/70 pointer-events-none" />
 
+                {/* Barrinhas de progresso — uma por story do autor, igual
+                    Instagram, pra saber quantos tem e onde você está. */}
+                {group.items.length > 1 && (
+                  <div
+                    className="absolute inset-x-3 top-0 flex gap-1 z-10"
+                    style={{ marginTop: "calc(env(safe-area-inset-top) + 8px)" }}
+                  >
+                    {group.items.map((it, i) => (
+                      <div key={it.id} className="h-[3px] flex-1 rounded-full bg-white/25 overflow-hidden">
+                        <div className={`h-full bg-white ${i <= index ? "w-full" : "w-0"}`} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Zonas de toque esquerda/direita pra navegar entre os
+                    stories do mesmo autor — com uma setinha discreta
+                    avisando que dá pra avançar/voltar. */}
+                {group.items.length > 1 && (
+                  <>
+                    {index > 0 && (
+                      <button
+                        onClick={() => goTo(index - 1)}
+                        className="absolute inset-y-0 left-0 w-[35%] z-10 flex items-center justify-start pl-2 opacity-35 active:opacity-90 transition-opacity"
+                        aria-label="Story anterior"
+                      >
+                        <ChevronLeft className="size-6 text-white" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => goTo(index + 1)}
+                      className="absolute inset-y-0 right-0 w-[35%] z-10 flex items-center justify-end pr-2 opacity-35 active:opacity-90 transition-opacity"
+                      aria-label="Próximo story"
+                    >
+                      <ChevronRight className="size-6 text-white" />
+                    </button>
+                  </>
+                )}
+
                 {/* Cabeçalho */}
                 <div
-                  className="absolute inset-x-0 top-0 flex items-center gap-2.5 px-4"
-                  style={{ paddingTop: "calc(env(safe-area-inset-top) + 14px)" }}
+                  className="absolute inset-x-0 top-0 flex items-center gap-2.5 px-4 z-10"
+                  style={{ paddingTop: `calc(env(safe-area-inset-top) + ${group.items.length > 1 ? "22px" : "14px"})` }}
                 >
                   <div className="size-9 rounded-full overflow-hidden bg-secondary border border-white/20 shrink-0 grid place-items-center">
                     {story.avatar ? (
@@ -2442,7 +2521,7 @@ function SocialPage() {
                     <p className="text-[11px] text-white/70 truncate">{story.handle}</p>
                   </div>
                   <button
-                    onClick={() => setViewingStory(null)}
+                    onClick={() => setViewingStoryGroup(null)}
                     className="size-9 rounded-full bg-black/40 border border-white/15 grid place-items-center text-white shrink-0"
                   >
                     <X className="size-4.5" />
@@ -2451,7 +2530,7 @@ function SocialPage() {
 
                 {/* Texto do story sobreposto na foto */}
                 {story.texto && (
-                  <div className="absolute inset-x-6 bottom-24 sm:bottom-28 text-center">
+                  <div className="absolute inset-x-6 bottom-24 sm:bottom-28 text-center z-10 pointer-events-none">
                     <p className="text-2xl sm:text-3xl font-black italic text-white leading-tight [text-shadow:0_2px_16px_rgba(0,0,0,0.7)] whitespace-pre-wrap">
                       {story.texto}
                     </p>
@@ -2460,7 +2539,7 @@ function SocialPage() {
 
                 {/* Curtir */}
                 <div
-                  className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 px-4 pb-4"
+                  className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 px-4 pb-4 z-10"
                   style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}
                 >
                   <button
