@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { X, Play, Pause, Check, Loader2, Pencil, XCircle, Eye, Mic2, Trash2, Plus, Minus } from "lucide-react";
+import { X, Play, Pause, Check, Loader2, Pencil, XCircle, Eye, Trash2, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { api, driveImg } from "@/lib/api";
 import { haptic, useTelegramUser } from "@/lib/telegram";
@@ -227,7 +227,15 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
   }
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex flex-col">
+    <div className="fixed inset-0 z-[200] bg-neutral-950 flex flex-col overflow-hidden">
+      {/* Fundo com a própria capa borrada, em vez de preto liso — visual
+          mais limpo/atmosférico, na linha da referência mandada. */}
+      {track.capaUrl && (
+        <div className="absolute inset-0 -z-10">
+          <img src={driveImg(track.capaUrl)} alt="" className="size-full object-cover blur-3xl scale-125 opacity-40" />
+          <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/70 via-neutral-950/85 to-neutral-950" />
+        </div>
+      )}
       <audio
         ref={audioRef}
         src={effectiveAudioSrc}
@@ -240,26 +248,25 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
         onError={() => toast.error("Não foi possível carregar o áudio dessa faixa.")}
       />
 
-      <div className="flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+16px)] pb-3 border-b border-white/10">
+      <div className="flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+16px)] pb-3">
         <div className="min-w-0 flex items-center gap-3">
           {track.capaUrl && (
             <img
               src={driveImg(track.capaUrl)}
               alt=""
-              className="size-9 rounded-lg object-cover border border-white/10 shrink-0"
+              className="size-9 rounded-xl object-cover shrink-0"
             />
           )}
           <div className="min-w-0">
-            <h2 className="text-sm font-black uppercase tracking-wide truncate flex items-center gap-1.5">
-              <Mic2 className="size-3.5 text-emerald-400 shrink-0" />
-              {mode === "preview" ? "Prévia" : "Estúdio de Sincronização"}
-            </h2>
-            <p className="text-xs text-neutral-400 truncate">{track.titulo} — {track.artista}</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400">
+              {mode === "preview" ? "Prévia" : "Sincronizando"}
+            </p>
+            <h2 className="text-sm font-bold truncate">{track.titulo} — {track.artista}</h2>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center text-neutral-300 hover:text-white"
+          className="size-8 shrink-0 rounded-full bg-white/10 backdrop-blur grid place-items-center text-neutral-300 hover:text-white"
         >
           <X className="size-4" />
         </button>
