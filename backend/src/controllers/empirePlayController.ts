@@ -1219,6 +1219,13 @@ export async function getEmpirePlayForumTopicController(
     sheetIdLabel = "Videos";
   }
 
+  // Coluna nova (sem cabeçalho na planilha ainda) com o ID do comentário-pai
+  // — só existe pra saber se um comentário é resposta a outro. Sem título,
+  // readSheetObjects expõe ela como "coluna_N" (N = posição, 1-based):
+  // Comentarios_Musicas tem 4 colunas (A-D), então a nova é a 5ª; as outras
+  // duas abas (com "Data" a mais) têm 5, então a nova é a 6ª.
+  const replyToColumnKey = sheetComments === "Comentarios_Musicas" ? "coluna_5" : "coluna_6";
+
   try {
     const [mediaRecords, commentRecordsWithRow, genericComments, empireComments, topicCommentsSheet] =
       await Promise.all([
@@ -1398,6 +1405,11 @@ export async function getEmpirePlayForumTopicController(
           if (Array.isArray(jogadorIds) && jogadorIds.length > 0) reactions[emoji] = jogadorIds.length;
         });
 
+        // Só os registros da aba principal (com __rowIndex) têm essa coluna
+        // de verdade — abas de fallback legadas nunca tiveram resposta
+        // aninhada, então ficam sempre como comentário raiz (replyTo vazio).
+        const replyToVal = rowIndexVal ? getValue(rec, [replyToColumnKey]) || "" : "";
+
         return {
           id: `comment_${idx + 1}`,
           data: dataVal,
@@ -1415,6 +1427,7 @@ export async function getEmpirePlayForumTopicController(
           sheetComments: rowIndexVal ? sheetComments : null,
           reactions,
           reactedBy: rowIndexVal ? reactionsMap : {},
+          replyTo: replyToVal,
         };
       });
 
@@ -1448,6 +1461,7 @@ export async function getEmpirePlayForumTopicController(
           sheetComments: null,
           reactions: {},
           reactedBy: {},
+          replyTo: "",
         });
       }
 
@@ -1479,6 +1493,7 @@ export async function getEmpirePlayForumTopicController(
               sheetComments: null,
               reactions: {},
               reactedBy: {},
+              replyTo: "",
             });
           }
         });

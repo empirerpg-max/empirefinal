@@ -82,6 +82,10 @@ export interface CreateCommentBody {
   nomeJogador: string;
   comentario: string;
   intervalo: string; // "45 - 60" | "61 - 75" | "76 - 90" | "91 - 100"
+  // ID (formato "tipo_linha", ver getCommentsController) do comentário pai —
+  // presente só quando essa é uma RESPOSTA a outro comentário, não um
+  // comentário raiz novo no tópico.
+  replyTo?: string;
 }
 
 /**
@@ -93,18 +97,21 @@ export interface CreateCommentBody {
  */
 function buildCommentRow(
   tipoMedia: CreateCommentBody["tipoMedia"],
-  params: { topicId: string; jogadorId: string; playerClean: string; comentario: string; nowStr: string },
+  params: { topicId: string; jogadorId: string; playerClean: string; comentario: string; nowStr: string; replyTo: string },
 ): string[] {
-  const { topicId, jogadorId, playerClean, comentario, nowStr } = params;
+  const { topicId, jogadorId, playerClean, comentario, nowStr, replyTo } = params;
 
   if (tipoMedia === "musica") {
-    // Comentarios_Musicas: ID do tópico, ID do jogador, Nome do jogador, Comentário
-    return [topicId, jogadorId, playerClean, comentario];
+    // Comentarios_Musicas: ID do tópico, ID do jogador, Nome do jogador,
+    // Comentário, [E] ID do comentário-pai (resposta) — coluna nova no fim,
+    // não mexe nas colunas existentes.
+    return [topicId, jogadorId, playerClean, comentario, replyTo];
   }
   // Comentarios_MV (vídeos — a antiga Comentarios_Videos não existe mais,
   // Vídeos e Music Videos foram consolidados) / Comentarios_Albuns:
-  // ID do tópico, ID do jogador, Nome do jogador, Comentário, Data
-  return [topicId, jogadorId, playerClean, comentario, nowStr];
+  // ID do tópico, ID do jogador, Nome do jogador, Comentário, Data,
+  // [F] ID do comentário-pai (resposta)
+  return [topicId, jogadorId, playerClean, comentario, nowStr, replyTo];
 }
 
 export function rollRandomScore(intervaloStr: string): number {
@@ -140,7 +147,7 @@ export async function createCommentController(request: Request): Promise<Respons
   try {
     const body = (await request.json()) as CreateCommentBody;
 
-    const { tipoMedia, tituloMedia, topicId, jogadorId, nomeJogador, comentario, intervalo } = body;
+    const { tipoMedia, tituloMedia, topicId, jogadorId, nomeJogador, comentario, intervalo, replyTo } = body;
 
     if (!tipoMedia || !tituloMedia || !nomeJogador || !comentario) {
       return new Response(
@@ -343,6 +350,7 @@ export async function createCommentController(request: Request): Promise<Respons
             playerClean,
             comentario: comentario.trim(),
             nowStr,
+            replyTo: (replyTo || "").trim(),
           }),
         )
         .catch((err) => {
@@ -417,6 +425,10 @@ export async function getCommentsController(request: Request): Promise<Response>
     // o parse precisa respeitar isso, não dá pra usar posições genéricas.
     const formatMusicaOrAlbumStyle = (rows: string[][], tipo: string, hasData: boolean) => {
       if (!rows || rows.length <= 1) return [];
+      // Coluna do ID do comentário-pai (resposta) fica sempre no fim da
+      // linha — E (índice 4) pra Comentarios_Musicas (sem Data), F (índice
+      // 5) pra Comentarios_MV/Comentarios_Albuns (com Data).
+      const replyToIndex = hasData ? 5 : 4;
       return rows.slice(1).map((r, idx) => ({
         id: `${tipo}_${idx + 1}`,
         tipo,
@@ -425,6 +437,7 @@ export async function getCommentsController(request: Request): Promise<Response>
         jogador: r[2] || "",
         comentario: r[3] || "",
         data: hasData ? r[4] || "" : "",
+        replyTo: r[replyToIndex] || "",
       }));
     };
 

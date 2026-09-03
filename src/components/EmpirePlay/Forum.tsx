@@ -50,6 +50,9 @@ interface CommentItem {
   sheetComments: string | null;
   reactions: Record<string, number>;
   reactedBy: Record<string, string[]>;
+  // ID de outro comentário desta mesma lista — presente quando este é uma
+  // resposta, não um comentário raiz do tópico.
+  replyTo?: string;
 }
 
 interface ForumAlbumTrack {
@@ -234,6 +237,11 @@ export const Forum: React.FC<ForumProps> = ({
 
   // State para o Modal de Comentário
   const [isCommentModalOpen, setIsCommentModalOpen] = useState<boolean>(false);
+  // Comentário-pai de uma resposta em andamento (null = comentário novo no
+  // tópico, não resposta a ninguém).
+  const [replyingTo, setReplyingTo] = useState<{ id: string; jogador: string } | null>(null);
+  // IDs de comentários-raiz cujas respostas estão expandidas ("N respostas").
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
   // State para o Player de Vídeo Expandido
   const [activeVideo, setActiveVideo] = useState<PlayableVideo | null>(null);
@@ -467,6 +475,7 @@ export const Forum: React.FC<ForumProps> = ({
           sheetComments: c.sheetComments ?? null,
           reactions: c.reactions || {},
           reactedBy: c.reactedBy || {},
+          replyTo: c.replyTo || "",
         }));
       }
 
@@ -495,6 +504,7 @@ export const Forum: React.FC<ForumProps> = ({
             sheetComments: null,
             reactions: {},
             reactedBy: {},
+            replyTo: c.replyTo || "",
           }));
         }
       }
@@ -1159,11 +1169,14 @@ export const Forum: React.FC<ForumProps> = ({
               </div>
 
               <button
-                onClick={() => setIsCommentModalOpen((v) => !v)}
+                onClick={() => {
+                  setReplyingTo(null);
+                  setIsCommentModalOpen((v) => !v);
+                }}
                 className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2"
               >
                 <Sparkles className="size-4" />
-                {isCommentModalOpen ? "Fechar" : "Avaliar & Comentar"}
+                {isCommentModalOpen && !replyingTo ? "Fechar" : "Avaliar & Comentar"}
               </button>
             </div>
 
@@ -1173,18 +1186,26 @@ export const Forum: React.FC<ForumProps> = ({
             {isCommentModalOpen && (
               <CommentModal
                 isOpen={isCommentModalOpen}
-                onClose={() => setIsCommentModalOpen(false)}
+                onClose={() => {
+                  setIsCommentModalOpen(false);
+                  setReplyingTo(null);
+                }}
                 tipoMedia={getMediaTypeForModal()}
                 tituloMedia={selectedTopic.title}
                 topicId={resolvedTopicId || selectedTopic.id}
+                replyTo={replyingTo?.id}
+                replyingToName={replyingTo?.jogador}
                 onCommentSubmitted={() => {
                   if (selectedTopic) {
+                    if (replyingTo) setExpandedReplies((prev) => new Set(prev).add(replyingTo.id));
                     fetchTopicComments(selectedTopic);
                     const topicKey = resolvedTopicId || selectedTopic.telegramTopicId || selectedTopic.id;
                     if (topicKey) {
                       setCommentedTopicIds((prev) => new Set(prev).add(topicKey));
                     }
                   }
+                  setReplyingTo(null);
+                  setIsCommentModalOpen(false);
                 }}
                 variant="inline"
               />
@@ -1202,13 +1223,41 @@ export const Forum: React.FC<ForumProps> = ({
                 Nenhum comentário registrado ainda. Seja o primeiro a avaliar!
               </div>
             ) : (
-              <div className="flex flex-col gap-3 sm:gap-4">
-                {topicComments.map((c) => {
+              (() => {
+                // Comentários-raiz (sem replyTo, ou cujo pai não existe mais
+                // na lista) + respostas agrupadas pelo pai — só 1 nível de
+                // profundidade (responder a uma resposta também entra na
+                // mesma lista do comentário-raiz, igual Instagram/redes
+                // sociais reais, sem aninhar infinito).
+                const byId = new Map(topicComments.map((c) => [c.id, c] as const));
+                const rootOf = (c: CommentItem): string => {
+                  let cur = c;
+                  const seen = new Set<string>();
+                  while (cur.replyTo && byId.has(cur.replyTo) && !seen.has(cur.id)) {
+                    seen.add(cur.id);
+                    cur = byId.get(cur.replyTo)!;
+                  }
+                  return cur.id;
+                };
+                const roots: CommentItem[] = [];
+                const repliesByRoot = new Map<string, CommentItem[]>();
+                for (const c of topicComments) {
+                  const isRoot = !c.replyTo || !byId.has(c.replyTo);
+                  if (isRoot) {
+                    roots.push(c);
+                  } else {
+                    const rid = rootOf(c);
+                    if (!repliesByRoot.has(rid)) repliesByRoot.set(rid, []);
+                    repliesByRoot.get(rid)!.push(c);
+                  }
+                }
+
+                const renderBubble = (c: CommentItem, isReply: boolean) => {
                   const color = nameColorFor(c.jogador || c.id);
                   return (
                     <div key={c.id} className="flex items-start gap-2 sm:gap-2.5">
                       <div
-                        className="size-8 sm:size-9 rounded-full grid place-items-center flex-shrink-0 text-[11px] sm:text-xs font-black text-white mt-0.5"
+                        className={`${isReply ? "size-6 sm:size-7" : "size-8 sm:size-9"} rounded-full grid place-items-center flex-shrink-0 text-[10px] sm:text-xs font-black text-white mt-0.5`}
                         style={{ backgroundColor: color }}
                       >
                         {initialsFor(c.jogador)}
@@ -1271,8 +1320,8 @@ export const Forum: React.FC<ForumProps> = ({
                           </div>
                         )}
 
-                        {editingCommentId !== c.id && (c.rowIndex != null || (c.jogadorId && c.jogadorId === myId)) && (
-                          <div className="mt-1 pl-1 flex items-center gap-2">
+                        {editingCommentId !== c.id && (
+                          <div className="mt-1 pl-1 flex items-center gap-2 flex-wrap">
                             {c.rowIndex != null && (
                               <ReactionBar
                                 reactions={c.reactions}
@@ -1282,6 +1331,15 @@ export const Forum: React.FC<ForumProps> = ({
                                 onToggle={(emoji) => handleToggleReaction(c, emoji)}
                               />
                             )}
+                            <button
+                              onClick={() => {
+                                setReplyingTo({ id: rootOf(c), jogador: c.jogador });
+                                setIsCommentModalOpen(true);
+                              }}
+                              className="text-[10px] text-neutral-500 hover:text-neutral-300 font-semibold"
+                            >
+                              Responder
+                            </button>
                             {c.rowIndex != null && c.jogadorId && c.jogadorId === myId && (
                               <button
                                 onClick={() => startEditComment(c)}
@@ -1295,8 +1353,39 @@ export const Forum: React.FC<ForumProps> = ({
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                };
+
+                return (
+                  <div className="flex flex-col gap-3 sm:gap-4">
+                    {roots.map((root) => {
+                      const replies = repliesByRoot.get(root.id) || [];
+                      const expanded = expandedReplies.has(root.id);
+                      return (
+                        <div key={root.id}>
+                          {renderBubble(root, false)}
+                          {replies.length > 0 && (
+                            <div className="pl-8 sm:pl-9 mt-2">
+                              {!expanded ? (
+                                <button
+                                  onClick={() => setExpandedReplies((prev) => new Set(prev).add(root.id))}
+                                  className="text-[11px] text-neutral-400 hover:text-neutral-200 font-semibold flex items-center gap-1"
+                                >
+                                  <span className="w-4 h-px bg-neutral-600" />
+                                  {replies.length} resposta{replies.length > 1 ? "s" : ""}
+                                </button>
+                              ) : (
+                                <div className="flex flex-col gap-3">
+                                  {replies.map((r) => renderBubble(r, true))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
             )}
           </div>
           </div>
