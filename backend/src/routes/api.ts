@@ -121,6 +121,9 @@ import {
   saveSocialNewsController,
   editSocialNewsController,
   deleteSocialNewsController,
+  getSocialBannersController,
+  saveSocialBannerController,
+  deleteSocialBannerController,
 } from "../controllers/socialController";
 import {
   getPlaylistsController,
@@ -265,6 +268,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/news",
     "/api/social/news/editar",
     "/api/social/news/deletar",
+    "/api/social/banners",
+    "/api/social/banners/deletar",
     "/api/empire-tv/gifs",
     "/api/turnes/locais",
     "/api/turnes/simular",
@@ -799,6 +804,24 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await deleteSocialNewsController(request);
+  } else if (url.pathname === "/api/social/banners") {
+    response =
+      request.method === "GET"
+        ? await getSocialBannersController()
+        : request.method === "POST"
+          ? await saveSocialBannerController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/banners." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
+  } else if (url.pathname === "/api/social/banners/deletar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/social/banners/deletar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await deleteSocialBannerController(request);
   } else if (url.pathname === "/api/auth/login") {
     if (request.method !== "POST") {
       return new Response(

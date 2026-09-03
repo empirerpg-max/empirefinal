@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
 import { EditModal } from "./EditModal";
+import { BannersManager } from "./BannersManager";
 import {
   ExtraMaterialEditor,
   emptyExtraMaterialEditorValue,
@@ -28,7 +29,7 @@ import {
   type ExtraMaterialEditorValue,
 } from "./ExtraMaterial";
 
-export type TabType = "musica" | "video" | "album";
+export type TabType = "musica" | "video" | "album" | "banners";
 
 export interface UserProfile {
   artistName: string;
@@ -1143,6 +1144,21 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 Sincronizar Letra
               </span>
             </button>
+            <button
+              onClick={() => {
+                setActiveTab("banners");
+                resetFormState();
+                setShowLanding(false);
+              }}
+              className="flex flex-col items-center gap-2 text-center group"
+            >
+              <div className="w-full aspect-square rounded-2xl bg-neutral-900 border border-white/10 text-neutral-200 grid place-items-center group-hover:border-white/20 transition">
+                <ImageIcon className="size-5" />
+              </div>
+              <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
+                Banners
+              </span>
+            </button>
           </div>
 
           <p className="text-[11px] text-neutral-500 leading-relaxed">
@@ -1163,7 +1179,13 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         </button>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg sm:text-xl font-black italic uppercase tracking-tight text-white truncate">
-            {activeTab === "musica" ? "Nova Música" : activeTab === "video" ? "Novo Vídeo" : "Novo Álbum"}
+            {activeTab === "musica"
+              ? "Nova Música"
+              : activeTab === "video"
+                ? "Novo Vídeo"
+                : activeTab === "banners"
+                  ? "Banners do Catálogo"
+                  : "Novo Álbum"}
           </h2>
         </div>
         <button
@@ -1175,7 +1197,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         </button>
       </div>
 
-      {/* TABS DE SELEÇÃO */}
+      {/* TABS DE SELEÇÃO (banners tem tela própria, sem essas 3 abas) */}
+      {activeTab !== "banners" && (
       <div className="grid grid-cols-3 gap-1.5 bg-neutral-950/60 p-1.5 rounded-2xl border border-white/5">
         <button
           onClick={() => {
@@ -1222,16 +1245,22 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           <span>Álbuns</span>
         </button>
       </div>
+      )}
 
-      {/* MENSAGENS DE SUCESSO E ERRO */}
-      {successMsg && (
+      {/* BANNERS DO CATÁLOGO — tela própria, fora do fluxo de músicas/vídeos/álbuns */}
+      {activeTab === "banners" && (
+        <BannersManager tgId={telegramUser?.id ? String(telegramUser.id) : ""} />
+      )}
+
+      {/* MENSAGENS DE SUCESSO E ERRO (músicas/vídeos/álbuns) */}
+      {activeTab !== "banners" && successMsg && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-3">
           <CheckCircle2 className="size-5 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
-      {errorMsg && (
+      {activeTab !== "banners" && errorMsg && (
         <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-3">
           <AlertCircle className="size-5 shrink-0" />
           <span>{errorMsg}</span>
@@ -1242,7 +1271,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       {activeTab === "musica" && (
         <form
           onSubmit={handleSubmitMusica}
-          className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-md"
+          className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
         >
           {/* SELEÇÃO DO ARTISTA RESPONSÁVEL */}
           <div className="space-y-2">
@@ -1254,7 +1283,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               <select
                 value={artistaResponsavel}
                 onChange={(e) => setArtistaResponsavel(e.target.value)}
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
               >
                 {profile.associatedArtists.map((art) => (
                   <option key={art} value={art}>
@@ -1268,7 +1297,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 value={artistaResponsavel}
                 onChange={(e) => setArtistaResponsavel(e.target.value)}
                 placeholder="Ex: Taylor Swift"
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
               />
             )}
           </div>
@@ -1284,7 +1313,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               value={nomeMusica}
               onChange={(e) => setNomeMusica(e.target.value)}
               placeholder="Ex: Anti-Hero"
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
             />
             <p className="text-[11px] text-neutral-400 leading-relaxed">
               Só o nome da música — o artista já vem do campo acima e é
@@ -1307,7 +1336,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               <select
                 value={tipoSingle}
                 onChange={(e) => setTipoSingle(e.target.value)}
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
               >
                 {TIPOS_SINGLE.map((t) => (
                   <option key={t} value={t}>
@@ -1324,7 +1353,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               <select
                 value={tipoMusica}
                 onChange={(e) => setTipoMusica(e.target.value)}
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
               >
                 {TIPOS_MUSICA.map((t) => (
                   <option key={t} value={t}>
@@ -1389,7 +1418,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                     value={musicaReferenciaQuery}
                     onChange={(e) => setMusicaReferenciaQuery(e.target.value)}
                     placeholder="Busque pelo título ou artista..."
-                    className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
                   />
                   {musicaReferenciaQuery.trim().length > 0 && (
                     <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
@@ -1579,7 +1608,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       {activeTab === "video" && (
         <form
           onSubmit={handleSubmitVideo}
-          className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-md"
+          className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
         >
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
@@ -1590,7 +1619,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               <select
                 value={artistaResponsavel}
                 onChange={(e) => setArtistaResponsavel(e.target.value)}
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
               >
                 {profile.associatedArtists.map((art) => (
                   <option key={art} value={art}>
@@ -1604,7 +1633,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 value={artistaResponsavel}
                 onChange={(e) => setArtistaResponsavel(e.target.value)}
                 placeholder="Ex: Taylor Swift"
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
               />
             )}
           </div>
@@ -1619,7 +1648,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               value={tituloVideo}
               onChange={(e) => setTituloVideo(e.target.value)}
               placeholder="Ex: Entrevista Exclusiva no Empire Hub"
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
             />
             <p className="text-[11px] text-neutral-400 leading-relaxed">
               Só o título — o artista já vem do campo acima e é adicionado automaticamente.
@@ -1644,7 +1673,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                   setMusicasVinculadas((prev) => prev.slice(0, 1));
                 }
               }}
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
             >
               {CATEGORIAS_VIDEO.map((cat) => (
                 <option key={cat} value={cat}>
@@ -1690,7 +1719,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                   value={musicaVinculadaQuery}
                   onChange={(e) => setMusicaVinculadaQuery(e.target.value)}
                   placeholder="Busque pelo título ou artista da música lançada..."
-                  className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                  className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
                 />
                 {musicaVinculadaQuery.trim().length > 0 && (
                   <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
@@ -1926,7 +1955,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           {albumObjetivo === "a" && (
         <form
           onSubmit={handleSubmitAlbum}
-          className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-md"
+          className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
         >
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
@@ -1937,7 +1966,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               <select
                 value={artistaResponsavel}
                 onChange={(e) => setArtistaResponsavel(e.target.value)}
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
               >
                 {profile.associatedArtists.map((art) => (
                   <option key={art} value={art}>
@@ -1951,7 +1980,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 value={artistaResponsavel}
                 onChange={(e) => setArtistaResponsavel(e.target.value)}
                 placeholder="Ex: Taylor Swift"
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
               />
             )}
           </div>
@@ -1966,7 +1995,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               value={tituloAlbum}
               onChange={(e) => setTituloAlbum(e.target.value)}
               placeholder="Ex: Midnights"
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
             />
             <p className="text-[11px] text-neutral-400 leading-relaxed">
               Só o título — o artista já vem do campo acima e é adicionado automaticamente.
@@ -1984,7 +2013,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             <select
               value={tipoAlbum}
               onChange={(e) => setTipoAlbum(e.target.value)}
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
             >
               {TIPOS_ALBUM.map((tipo) => (
                 <option key={tipo} value={tipo}>
@@ -2134,7 +2163,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           {albumObjetivo === "b" && (
             <form
               onSubmit={handleSubstituirAlbum}
-              className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-md"
+              className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
             >
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
@@ -2164,7 +2193,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                       value={albumSubstQuery}
                       onChange={(e) => setAlbumSubstQuery(e.target.value)}
                       placeholder="Busque pelo título do álbum já lançado..."
-                      className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                      className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
                     />
                     {albumSubstQuery.trim().length > 0 && (
                       <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">

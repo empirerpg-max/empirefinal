@@ -14,12 +14,14 @@ import { deleteFileFromDrive } from "../services/googleDriveService";
 // SOCIAL_PERFIS:  A artista | B rede | C handle | D bio | E avatar_url | F telegram_id | G seguidores | H seguindo
 // SOCIAL_COMMENTS:A postid | B autor | C texto | D data | E telegram_id
 // SOCIAL_NEWS:    A id | B titulo | C conteudo | D imagem | E autor | F data | G telegram_id | H origem_tipo ("tour" quando a notícia veio de uma ação de turnê, vazio quando é matéria normal) | I origem_id (id_unico da turnê) | J origem_show (número do show)
+// SOCIAL_BANNERS: A id | B imagem_url | C link_destino | D ativo ("1"/"") | E ordem (número, menor primeiro) | F data_criacao | G telegram_id (quem cadastrou) | H legenda (texto curto exibido fora da imagem, opcional)
 
 const SHEETS = {
   posts: "SOCIAL_POSTS",
   perfis: "SOCIAL_PERFIS",
   comments: "SOCIAL_COMMENTS",
   news: "SOCIAL_NEWS",
+  banners: "SOCIAL_BANNERS",
 } as const;
 
 function genId(prefix: string): string {
@@ -628,6 +630,104 @@ export async function deleteSocialNewsController(request: Request): Promise<Resp
 
   await googleSheetsService.usuarios.updateValues(SHEETS.news, `A${rowIndex + 1}:J${rowIndex + 1}`, [
     ["", "", "", "", "", "", "", "", "", ""],
+  ]);
+
+  return jsonResponse({ ok: true });
+}
+
+// -------------------- BANNERS (Catálogo) --------------------
+
+/**
+ * GET /api/social/banners
+ * Só devolve banners ativos (coluna D) com imagem cadastrada, ordenados
+ * pela coluna E (ordem) — usados pelo carrossel de vidro no topo do
+ * Catálogo. Sem imagem = sem banner (nunca aparece card vazio).
+ */
+export async function getSocialBannersController(): Promise<Response> {
+  const rows = await readRows(SHEETS.banners);
+  const banners = rows
+    .map((row) => ({
+      id: normalizeText(row[0]),
+      imagem_url: normalizeText(row[1]),
+      link_destino: normalizeText(row[2]) || undefined,
+      ativo: normalizeText(row[3]) === "1",
+      ordem: Number(normalizeText(row[4])) || 0,
+      data: normalizeText(row[5]),
+      legenda: normalizeText(row[7]) || undefined,
+    }))
+    .filter((b) => b.id && b.imagem_url && b.ativo)
+    .sort((a, b) => a.ordem - b.ordem);
+
+  return jsonResponse(banners);
+}
+
+/**
+ * POST /api/social/banners
+ * Cadastra (ou atualiza, se vier `id`) um banner promocional. Usado pela
+ * tela de Gestão. `ativo` fica implícito true na criação; pra desativar sem
+ * apagar, reenvia o mesmo id com ativo:false.
+ */
+export async function saveSocialBannerController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    id?: string;
+    imagem_url?: string;
+    link_destino?: string;
+    legenda?: string;
+    ativo?: boolean;
+    ordem?: number;
+    tgId?: string;
+  };
+
+  if (!body.imagem_url?.trim()) {
+    return jsonResponse({ ok: false, error: "Imagem é obrigatória para o banner." }, 400);
+  }
+
+  const ativo = body.ativo === undefined ? true : !!body.ativo;
+  const ordem = Number.isFinite(body.ordem) ? String(body.ordem) : "0";
+
+  if (body.id) {
+    const rows = await googleSheetsService.usuarios.readValues(SHEETS.banners);
+    const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === body.id);
+    if (rowIndex === -1) return jsonResponse({ ok: false, error: "Banner não encontrado." }, 404);
+
+    await googleSheetsService.usuarios.updateValues(SHEETS.banners, `B${rowIndex + 1}:E${rowIndex + 1}`, [
+      [body.imagem_url.trim(), body.link_destino?.trim() || "", ativo ? "1" : "", ordem],
+    ]);
+    await googleSheetsService.usuarios.updateValues(SHEETS.banners, `H${rowIndex + 1}`, [
+      [body.legenda?.trim() || ""],
+    ]);
+    return jsonResponse({ ok: true, id: body.id });
+  }
+
+  const id = genId("BANNER");
+  await googleSheetsService.usuarios.appendRow(SHEETS.banners, [
+    id,
+    body.imagem_url.trim(),
+    body.link_destino?.trim() || "",
+    ativo ? "1" : "",
+    ordem,
+    new Date().toISOString(),
+    body.tgId || "",
+    body.legenda?.trim() || "",
+  ]);
+
+  return jsonResponse({ ok: true, id });
+}
+
+/**
+ * POST /api/social/banners/deletar
+ * Limpa a linha inteira (mesmo padrão soft-delete do resto do arquivo).
+ */
+export async function deleteSocialBannerController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { id?: string };
+  if (!body.id) return jsonResponse({ ok: false, error: "id é obrigatório." }, 400);
+
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.banners);
+  const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === body.id);
+  if (rowIndex === -1) return jsonResponse({ ok: false, error: "Banner não encontrado." }, 404);
+
+  await googleSheetsService.usuarios.updateValues(SHEETS.banners, `A${rowIndex + 1}:H${rowIndex + 1}`, [
+    ["", "", "", "", "", "", "", ""],
   ]);
 
   return jsonResponse({ ok: true });
