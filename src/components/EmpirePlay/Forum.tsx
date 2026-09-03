@@ -43,6 +43,9 @@ interface CommentItem {
   titulo: string;
   jogador: string;
   jogadorId: string;
+  // Foto de perfil da conta (config padrão do usuário, aba Usuários) — não
+  // confundir com foto de artista. Ausente = mostra as iniciais mesmo.
+  foto?: string;
   comentario: string;
   nota: string;
   // Linha real na planilha + aba de comentários — null quando o comentário
@@ -481,6 +484,7 @@ export const Forum: React.FC<ForumProps> = ({
           reactions: c.reactions || {},
           reactedBy: c.reactedBy || {},
           replyTo: c.replyTo || "",
+          foto: c.foto || "",
         }));
       }
 
@@ -510,6 +514,7 @@ export const Forum: React.FC<ForumProps> = ({
             reactions: {},
             reactedBy: {},
             replyTo: c.replyTo || "",
+            foto: c.foto || "",
           }));
         }
       }
@@ -1291,10 +1296,23 @@ export const Forum: React.FC<ForumProps> = ({
                   return (
                     <div key={c.id} className="flex items-start gap-2 sm:gap-2.5">
                       <div
-                        className={`${isReply ? "size-6 sm:size-7" : "size-8 sm:size-9"} rounded-full grid place-items-center flex-shrink-0 text-[10px] sm:text-xs font-black text-white mt-0.5`}
+                        className={`${isReply ? "size-6 sm:size-7" : "size-8 sm:size-9"} rounded-full grid place-items-center flex-shrink-0 text-[10px] sm:text-xs font-black text-white mt-0.5 overflow-hidden`}
                         style={{ backgroundColor: color }}
                       >
-                        {initialsFor(c.jogador)}
+                        {c.foto ? (
+                          <img
+                            src={driveImg(c.foto)}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          initialsFor(c.jogador)
+                        )}
                       </div>
 
                       <div className="min-w-0 flex-1">

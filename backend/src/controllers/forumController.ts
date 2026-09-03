@@ -424,11 +424,26 @@ export async function getCommentsController(request: Request): Promise<Response>
   try {
     // "Comentarios_Videos" não existe mais — Vídeos e Music Videos foram
     // consolidados em "Comentarios_MV".
-    const [musicaComments, mvComments, albumComments] = await Promise.all([
+    const [musicaComments, mvComments, albumComments, usuariosRows] = await Promise.all([
       googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
       googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
       googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
+      // Foto de perfil de quem comentou — mesma coluna usada no login
+      // (getArtistInfoController usa outra fonte; essa é a config de conta
+      // de verdade, aba "Usuários", colunas A id / ... / foto_do_perfil).
+      googleSheetsService.usuarios.readValues("Usuários").catch(() => []),
     ]);
+    const usuariosHeaders = usuariosRows[0] || [];
+    const idColIdx = usuariosHeaders.findIndex((h) => normalizeHeader(h) === "id");
+    const fotoColIdx = usuariosHeaders.findIndex((h) => normalizeHeader(h) === "foto_do_perfil");
+    const fotoPorJogadorId = new Map<string, string>();
+    if (idColIdx !== -1 && fotoColIdx !== -1) {
+      for (const r of usuariosRows.slice(1)) {
+        const id = normalizeText(r[idColIdx]);
+        const foto = normalizeText(r[fotoColIdx]);
+        if (id && foto) fotoPorJogadorId.set(id, foto);
+      }
+    }
 
     // Cada aba tem seu próprio schema de colunas (ver buildCommentRow acima) —
     // o parse precisa respeitar isso, não dá pra usar posições genéricas.
@@ -438,16 +453,20 @@ export async function getCommentsController(request: Request): Promise<Response>
       // linha — E (índice 4) pra Comentarios_Musicas (sem Data), F (índice
       // 5) pra Comentarios_MV/Comentarios_Albuns (com Data).
       const replyToIndex = hasData ? 5 : 4;
-      return rows.slice(1).map((r, idx) => ({
-        id: `${tipo}_${idx + 1}`,
-        tipo,
-        topicId: r[0] || "",
-        jogadorId: r[1] || "",
-        jogador: r[2] || "",
-        comentario: r[3] || "",
-        data: hasData ? r[4] || "" : "",
-        replyTo: r[replyToIndex] || "",
-      }));
+      return rows.slice(1).map((r, idx) => {
+        const jogadorId = r[1] || "";
+        return {
+          id: `${tipo}_${idx + 1}`,
+          tipo,
+          topicId: r[0] || "",
+          jogadorId,
+          jogador: r[2] || "",
+          comentario: r[3] || "",
+          data: hasData ? r[4] || "" : "",
+          replyTo: r[replyToIndex] || "",
+          foto: fotoPorJogadorId.get(jogadorId) || "",
+        };
+      });
     };
 
     let allComments = [
