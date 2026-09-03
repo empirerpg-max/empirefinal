@@ -136,6 +136,44 @@ function PostMedia({
   );
 }
 
+// Proporção padrão de story (retangular em pé, igual Instagram/TikTok).
+const STORY_ASPECT = 9 / 16;
+
+// Recorta a imagem escolhida pro centro, na proporção de story — a pessoa
+// escolhe qualquer foto e o app ajusta o enquadramento sozinho pro formato
+// vertical padrão, em vez de subir a imagem crua (que podia sair cortada
+// ou esticada errado dependendo da proporção original).
+function cropImageToStoryRatio(file: File): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const srcRatio = img.width / img.height;
+      let sx = 0, sy = 0, sw = img.width, sh = img.height;
+      if (srcRatio > STORY_ASPECT) {
+        sw = img.height * STORY_ASPECT;
+        sx = (img.width - sw) / 2;
+      } else {
+        sh = img.width / STORY_ASPECT;
+        sy = (img.height - sh) / 2;
+      }
+      const targetH = Math.min(1920, sh);
+      const canvas = document.createElement("canvas");
+      canvas.height = targetH;
+      canvas.width = targetH * STORY_ASPECT;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("Canvas indisponível.")); return; }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(new File([blob], file.name, { type: "image/jpeg" })) : reject(new Error("Falha ao recortar a imagem."))),
+        "image/jpeg",
+        0.9,
+      );
+    };
+    img.onerror = () => reject(new Error("Não deu pra ler essa imagem."));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 function formatCount(n: number | undefined): string {
   const v = Number(n || 0);
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1).replace(/\.0$/, "") + "M";
@@ -695,6 +733,13 @@ function SocialPage() {
     return Array.from(byAuthor.values()).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
   }, [posts]);
   const [seenStories, setSeenStories] = useState<Set<string>>(new Set());
+  // Stories só aparecem na fileira de destaques (bolinha) — nunca soltos no
+  // feed principal, mesmo sendo tecnicamente um post com subtipo "Story".
+  const feedPosts = useMemo(
+    () => posts.filter((p) => !(p.tipo === "Instagram" && p.subtipo === "Story")),
+    [posts],
+  );
+  const [viewingStory, setViewingStory] = useState<Post | null>(null);
   // text-base (16px) — abaixo disso o Safari/iOS dá zoom automático ao
   // focar o campo, e é esse zoom que "estica"/desalinha a tela até o
   // usuário beliscar pra voltar. Nunca usar texto menor que 16px em
@@ -835,10 +880,9 @@ function SocialPage() {
                       <button
                         key={p.id}
                         onClick={() => {
+                          haptic.selection();
                           setSeenStories((prev) => new Set(prev).add(p.autor));
-                          setSelectedPost(p);
-                          loadComments(p.id);
-                          setIsCommentModalOpen(true);
+                          setViewingStory(p);
                         }}
                         className="flex-none w-14 flex flex-col items-center gap-1.5"
                       >
@@ -867,7 +911,7 @@ function SocialPage() {
                 <Loader2 className="size-8 text-primary animate-spin" />
                 <p className="font-black uppercase text-xs tracking-widest text-muted-foreground">Carregando feed...</p>
               </div>
-            ) : posts.length === 0 ? (
+            ) : feedPosts.length === 0 ? (
               <div className="w-full p-8 rounded-[1.75rem] bg-card/50 border-2 border-dashed border-primary/20 flex flex-col items-center text-center min-h-40 gap-2 mt-6">
                 <Rss className="size-8 text-primary/60" />
                 <p className="text-sm font-black uppercase tracking-tight">Nenhum post ainda</p>
@@ -877,7 +921,7 @@ function SocialPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-4 pb-4">
-                {posts.map((post) => {
+                {feedPosts.map((post) => {
                   const isMine = activeArtist && post.autor === activeArtist.nome;
                   const { icon: NetIcon, color: netColor } = networkAccent(post.tipo);
                   return (
@@ -1951,10 +1995,14 @@ function SocialPage() {
                           const file = e.target.files?.[0];
                           if (!file) return;
                           const isVideo = file.type.startsWith("video/");
+                          const isStory = selectedType === "Instagram" && igMode === "Story";
                           setUploadingImage(true);
-                          const folderType: SocialFolderType =
-                            selectedType === "Instagram" && igMode === "Story" ? "socialStories" : "socialPosts";
-                          const url = await uploadToDrive(file, folderType);
+                          const folderType: SocialFolderType = isStory ? "socialStories" : "socialPosts";
+                          // Story sempre sobe recortado no padrão vertical —
+                          // a pessoa escolhe a foto, o enquadramento é
+                          // ajustado automaticamente pro formato certo.
+                          const fileToUpload = isStory && !isVideo ? await cropImageToStoryRatio(file).catch(() => file) : file;
+                          const url = await uploadToDrive(fileToUpload, folderType);
                           if (url) {
                             setImageUrl(url);
                             setMediaTipo(isVideo ? "video" : "imagem");
@@ -2305,6 +2353,103 @@ function SocialPage() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* Visualizador de Story — tela cheia, separado do comentário genérico
+          de post. Busca a versão mais atual em `posts` (pra refletir curtida
+          na hora) e cai pro snapshot salvo em viewingStory se ela já não
+          estiver mais na lista. */}
+      <AnimatePresence>
+        {viewingStory && (() => {
+          const story = posts.find((p) => p.id === viewingStory.id) || viewingStory;
+          const liked = !!myTgId && !!story.analytics.likedBy?.includes(myTgId);
+          return (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[130] bg-black flex flex-col"
+            >
+              <div className="relative flex-1 min-h-0">
+                {story.media_url ? (
+                  <PostMedia
+                    url={story.media_url}
+                    tipo={story.media_tipo}
+                    resolveUrl={driveImg}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full grid place-items-center text-muted-foreground text-xs font-black uppercase">
+                    Story
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/70 pointer-events-none" />
+
+                {/* Cabeçalho */}
+                <div
+                  className="absolute inset-x-0 top-0 flex items-center gap-2.5 px-4"
+                  style={{ paddingTop: "calc(env(safe-area-inset-top) + 14px)" }}
+                >
+                  <div className="size-9 rounded-full overflow-hidden bg-secondary border border-white/20 shrink-0 grid place-items-center">
+                    {story.avatar ? (
+                      <img src={driveImg(story.avatar)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-[10px] font-black uppercase">{story.autor[0]}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-black text-white truncate flex items-center gap-1">
+                      {story.autor}
+                      <BadgeCheck className="size-3.5 text-sky-400 shrink-0" fill="currentColor" />
+                    </p>
+                    <p className="text-[11px] text-white/70 truncate">{story.handle}</p>
+                  </div>
+                  <button
+                    onClick={() => setViewingStory(null)}
+                    className="size-9 rounded-full bg-black/40 border border-white/15 grid place-items-center text-white shrink-0"
+                  >
+                    <X className="size-4.5" />
+                  </button>
+                </div>
+
+                {/* Texto do story sobreposto na foto */}
+                {story.texto && (
+                  <div className="absolute inset-x-6 bottom-24 sm:bottom-28 text-center">
+                    <p className="text-2xl sm:text-3xl font-black italic text-white leading-tight [text-shadow:0_2px_16px_rgba(0,0,0,0.7)] whitespace-pre-wrap">
+                      {story.texto}
+                    </p>
+                  </div>
+                )}
+
+                {/* Curtir */}
+                <div
+                  className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 px-4 pb-4"
+                  style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}
+                >
+                  <button
+                    onClick={() => handleLike(story.id)}
+                    className="flex items-center gap-2 min-w-0"
+                  >
+                    <motion.div animate={likedPulse === story.id ? { scale: [1, 1.4, 1] } : { scale: 1 }}>
+                      <Heart className={`size-6 ${liked ? "fill-rose-500 text-rose-500" : "text-white"}`} />
+                    </motion.div>
+                    {story.analytics.likes > 0 && (
+                      <span className="text-xs text-white/90 font-semibold truncate">
+                        {story.analytics.likes} curtida{story.analytics.likes === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleLike(story.id)}
+                    className="px-5 py-2 rounded-full bg-white text-black text-xs font-black uppercase tracking-wide shrink-0"
+                  >
+                    {liked ? "Curtido" : "Curtir"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       <AnimatePresence>
