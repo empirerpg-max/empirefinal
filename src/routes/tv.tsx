@@ -815,12 +815,25 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   // e teclado nunca disputam o mesmo espaço, porque nenhum dos dois cobre o
   // outro: cada um vive na sua própria faixa da tela o tempo todo. ----------
   if (!isDesktop) {
+    // Vídeo + cabeçalho ficam em "position: absolute" (não itens normais de
+    // flex) e o painel de chat ocupa o resto via "position: absolute" com
+    // "top" calculado — de propósito, não é só estética. Como itens comuns
+    // de flex, quando o Safari rola pra revelar o campo de digitar acima do
+    // teclado, ele rola a COLUNA INTEIRA (arrastando vídeo e cabeçalho pra
+    // fora da tela junto, foi exatamente isso que aconteceu). "absolute"
+    // tira os dois de qualquer fluxo/scroll ancestral — só quem pode rolar
+    // é o scroller interno do próprio ChatPanel (ver comentário lá dentro).
+    const videoHeight = "calc(3rem + env(safe-area-inset-top) + 100vw * 9 / 16)";
     return (
-      <div className="h-full flex flex-col bg-background">
-        {header}
-        <div className="w-full bg-black shrink-0" style={{ aspectRatio: "16 / 9" }}>{player}</div>
-        {tabBar}
-        {panel}
+      <div className="h-full relative bg-background overflow-hidden">
+        <div className="absolute top-0 inset-x-0 z-20">
+          {header}
+          <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
+        </div>
+        <div className="absolute inset-x-0 bottom-0 flex flex-col" style={{ top: videoHeight }}>
+          {tabBar}
+          {panel}
+        </div>
       </div>
     );
   }
