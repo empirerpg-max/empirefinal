@@ -22,6 +22,7 @@ import {
 import { useTelegramUser } from "@/lib/telegram";
 import { EditModal } from "./EditModal";
 import { BannersManager } from "./BannersManager";
+import { getStoredLogin } from "@/components/LoginScreen";
 import {
   ExtraMaterialEditor,
   emptyExtraMaterialEditorValue,
@@ -297,6 +298,12 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   initialArtista,
 }) => {
   const { user: telegramUser } = useTelegramUser();
+  // Fora do Telegram (login normal por usuário/senha), telegramUser.id vem
+  // "guest" — o id de verdade do jogador logado é o do getStoredLogin(), que
+  // é o que valia pra decidir se é admin (mesmo id hardcoded usado no resto
+  // do app, ex: album.$id.tsx).
+  const loginTgId = getStoredLogin()?.id || (telegramUser?.id && telegramUser.id !== "guest" ? String(telegramUser.id) : "");
+  const isAdminUser = loginTgId === "810141686";
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab || "musica");
@@ -1144,7 +1151,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 Sincronizar Letra
               </span>
             </button>
-            {telegramUser?.id && String(telegramUser.id) === "810141686" && (
+            {isAdminUser && (
               <button
                 onClick={() => {
                   setActiveTab("banners");
@@ -1252,9 +1259,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       {/* BANNERS DO CATÁLOGO — tela própria, fora do fluxo de músicas/vídeos/álbuns.
           Só admin (mesmo dono do "810141686" hardcoded em outros pontos do
           app) — o backend também recusa sem o token de sessão de admin. */}
-      {activeTab === "banners" && telegramUser?.id && String(telegramUser.id) === "810141686" && (
-        <BannersManager tgId={String(telegramUser.id)} />
-      )}
+      {activeTab === "banners" && isAdminUser && <BannersManager tgId={loginTgId} />}
 
       {/* MENSAGENS DE SUCESSO E ERRO (músicas/vídeos/álbuns) */}
       {activeTab !== "banners" && successMsg && (
