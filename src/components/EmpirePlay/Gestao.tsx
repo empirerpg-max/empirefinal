@@ -1141,9 +1141,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             ))}
             <button
               onClick={() => {
-                setActiveTab("musica");
-                resetFormState();
-                setShowLanding(false);
+                // Sincronizar letra só faz sentido pra música já postada —
+                // abre direto a lista de lançamentos do artista (mesma tela
+                // de "Editar meus materiais"), não o formulário de cadastro.
+                setIsEditModalOpen(true);
               }}
               className="flex flex-col items-center gap-2 text-center group"
             >
