@@ -18,7 +18,6 @@ import {
   ChevronRight,
   ChevronLeft,
   Grid3x3,
-  BadgeCheck,
   Play,
   Music2,
   Repeat2,
@@ -39,6 +38,7 @@ import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { renderRichText } from "@/lib/richText";
 import { RichTextToolbar } from "@/components/EmpirePlay/RichTextToolbar";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 
 // Alternativa ao upload: colar direto o link de uma imagem já hospedada em
 // outro lugar (.png/.jpg/.jpeg/.webp). Só aplica se o link for válido —
@@ -986,7 +986,10 @@ function SocialPage() {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-black text-sm leading-none truncate">{post.autor}</p>
+                              <p className="font-black text-sm leading-none truncate flex items-center gap-1">
+                                <span className="truncate">{post.autor}</span>
+                                <VerifiedBadge className="size-3.5 shrink-0" />
+                              </p>
                               <p className="text-[10px] text-muted-foreground font-bold mt-1 truncate">{post.handle}</p>
                             </div>
                             {isMine && (
@@ -1279,8 +1282,13 @@ function SocialPage() {
                 const perfil = profiles.find(
                   (p) => p.artista === selectedIndustryArtist.nome && p.rede === industryViewTab,
                 );
+                // Stories não são post permanente — não entram na grade do
+                // feed do perfil, só na fileira de destaques do feed geral.
                 const artistPosts = posts.filter(
-                  (p) => p.autor === selectedIndustryArtist.nome && p.tipo === industryViewTab,
+                  (p) =>
+                    p.autor === selectedIndustryArtist.nome &&
+                    p.tipo === industryViewTab &&
+                    p.subtipo !== "Story",
                 );
                 const handle = perfil?.handle || "@" + selectedIndustryArtist.nome.toLowerCase().replace(/\s+/g, "");
                 const cleanHandle = handle.replace(/^@/, "");
@@ -1347,7 +1355,7 @@ function SocialPage() {
                     </button>
                     <p className="font-bold text-sm flex items-center gap-1 min-w-0 truncate">
                       {cleanHandle}
-                      <BadgeCheck className={`size-4 shrink-0 ${accent}`} fill="currentColor" />
+                      <VerifiedBadge className="size-4 shrink-0" />
                     </p>
                     <MoreVertical className="size-5 opacity-70 shrink-0" />
                   </div>
@@ -1383,7 +1391,7 @@ function SocialPage() {
                         <div className="mt-4">
                           <p className="font-black text-sm flex items-center gap-1">
                             {selectedIndustryArtist.nome}{" "}
-                            <BadgeCheck className="size-4 text-[#1d9bf0]" fill="currentColor" />
+                            <VerifiedBadge className="size-4" />
                           </p>
                           <p className="text-[11px] uppercase text-black/50 font-bold tracking-wide">Artista</p>
                           {bio && <p className="text-[13px] mt-1.5 leading-snug whitespace-pre-line">{bio}</p>}
@@ -1427,7 +1435,10 @@ function SocialPage() {
                                 >
                                   <div className="h-12 bg-gradient-to-br from-zinc-100 to-zinc-200" />
                                   <div className="p-2">
-                                    <p className="text-[10px] font-black truncate">{s.artista}</p>
+                                    <p className="text-[10px] font-black truncate flex items-center gap-1">
+                                      <span className="truncate">{s.artista}</span>
+                                      <VerifiedBadge className="size-3 shrink-0" />
+                                    </p>
                                     <p className="text-[9px] text-black/50 font-bold mb-1.5">{formatCount(s.seguidores || 0)} segs</p>
                                     <span
                                       onClick={(e) => {
@@ -1501,9 +1512,6 @@ function SocialPage() {
                               {p.media_tipo === "video" && (
                                 <Play className="absolute inset-0 m-auto size-6 text-white drop-shadow fill-white/30" />
                               )}
-                              {p.subtipo === "Story" && (
-                                <Film className="absolute top-1.5 right-1.5 size-3.5 text-white drop-shadow" />
-                              )}
                             </button>
                           ))}
                         </div>
@@ -1543,7 +1551,7 @@ function SocialPage() {
                         <div className="mt-3 min-w-0">
                           <p className="font-black text-lg sm:text-xl flex items-center gap-1.5 truncate">
                             {selectedIndustryArtist.nome}{" "}
-                            <BadgeCheck className="size-5 text-[#1d9bf0] shrink-0" fill="currentColor" />
+                            <VerifiedBadge className="size-5 shrink-0" />
                           </p>
                           <p className="text-sm text-zinc-500 truncate">{handle}</p>
                           {bio && <p className="text-[14px] mt-2 leading-snug whitespace-pre-line">{bio}</p>}
@@ -1602,7 +1610,7 @@ function SocialPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1 text-[14px] min-w-0">
                                   <span className="font-black truncate">{selectedIndustryArtist.nome}</span>
-                                  <BadgeCheck className="size-4 text-[#1d9bf0] shrink-0" fill="currentColor" />
+                                  <VerifiedBadge className="size-4 shrink-0" />
                                   <span className="text-zinc-500 truncate">{handle}</span>
                                   <span className="text-zinc-500 shrink-0">·</span>
                                   <span className="text-zinc-500 shrink-0">
@@ -1663,7 +1671,7 @@ function SocialPage() {
                     <div className="px-5 pt-6 pb-5 flex flex-col items-center text-center">
                       {renderAvatar("size-24 rounded-full overflow-hidden border-2 border-zinc-800 bg-zinc-900")}
                       <p className="font-black text-lg mt-3 flex items-center gap-1">
-                        {handle} <BadgeCheck className="size-4 text-[#25F4EE]" fill="currentColor" />
+                        {handle} <VerifiedBadge className="size-4" />
                       </p>
                       <p className="text-[13px] text-zinc-400">{selectedIndustryArtist.nome}</p>
                       <div className="flex gap-2 mt-3">
@@ -2327,7 +2335,10 @@ function SocialPage() {
 
               <div className="flex-1 overflow-y-auto p-5 sm:p-6">
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground mb-3 tracking-widest">
-                  <span className="text-primary">Por {selectedNews.autor}</span>
+                  <span className="text-primary inline-flex items-center gap-1">
+                    Por {selectedNews.autor}
+                    <VerifiedBadge className="size-3.5" />
+                  </span>
                   <span className="size-1 rounded-full bg-white/20" />
                   <span>{new Date(selectedNews.data).toLocaleDateString("pt-BR")}</span>
                 </div>
@@ -2426,7 +2437,7 @@ function SocialPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black text-white truncate flex items-center gap-1">
                       {story.autor}
-                      <BadgeCheck className="size-3.5 text-sky-400 shrink-0" fill="currentColor" />
+                      <VerifiedBadge className="size-3.5 shrink-0" />
                     </p>
                     <p className="text-[11px] text-white/70 truncate">{story.handle}</p>
                   </div>

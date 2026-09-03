@@ -36,6 +36,7 @@ import {
   Camera,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type NivelJogador } from "@/lib/api";
 import { getHOFProfile, type HOFProfile } from "@/lib/charts";
 import { notify } from "@/lib/notify";
@@ -401,8 +402,9 @@ function ArtistDashboard() {
                     </span>
                   )}
               </div>
-              <h1 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter leading-tight mb-1 drop-shadow-xl break-words">
+              <h1 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter leading-tight mb-1 drop-shadow-xl break-words flex items-center gap-1.5">
                 {artist.nome}
+                <VerifiedBadge className="size-4 sm:size-5 shrink-0 not-italic" />
               </h1>
               <div className="flex items-center gap-2">
                 <div
@@ -947,6 +949,9 @@ function SocialTab({ nome }: { nome: string }) {
       if (!alive) return;
       const mine = (list || [])
         .filter((p: any) => (p.autor || "").trim().toLowerCase() === nome.trim().toLowerCase())
+        // Stories não são post permanente — não devem aparecer na grade do
+        // feed do artista, só na fileira de destaques da Social.
+        .filter((p: any) => !(p.tipo === "Instagram" && p.subtipo === "Story"))
         .sort((a: any, b: any) => new Date(b.data || 0).getTime() - new Date(a.data || 0).getTime());
       setPosts(mine);
     }).catch(() => {});

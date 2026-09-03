@@ -24,6 +24,7 @@ import {
 import { driveImg, driveRawImg } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { useBackClose } from "@/hooks/use-back-close";
 import { CommentModal } from "./CommentModal";
 import { ScoreBadge } from "./ScoreBadge";
@@ -1352,10 +1353,11 @@ export const Forum: React.FC<ForumProps> = ({
                           <div className="rounded-2xl rounded-tl-sm bg-neutral-800/70 border border-white/5 px-3 py-2 sm:px-4 sm:py-2.5 inline-block max-w-full">
                             <div className="flex items-baseline gap-2 mb-0.5">
                               <span
-                                className="text-[12px] sm:text-[13px] font-bold truncate"
+                                className="text-[12px] sm:text-[13px] font-bold truncate inline-flex items-center gap-1"
                                 style={{ color }}
                               >
-                                {c.jogador}
+                                <span className="truncate">{c.jogador}</span>
+                                <VerifiedBadge className="size-3 shrink-0" />
                               </span>
                               {c.nota && (
                                 <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold text-[9px] sm:text-[10px] rounded border border-emerald-500/20 flex-shrink-0">
