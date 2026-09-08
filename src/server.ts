@@ -345,6 +345,9 @@ export default {
     const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
     const { limparStoriesExpiradosScheduled } = await import("../backend/src/controllers/socialController");
     const { preencherLikesVideosSemMediaScheduled } = await import("../backend/src/controllers/videoLikesController");
+    const { reconciliarPontosComentariosScheduled } = await import(
+      "../backend/src/controllers/reconciliacaoRegistroController"
+    );
     ctx.waitUntil(
       processarParticipacaoTV()
         .then((r) =>
@@ -363,6 +366,19 @@ export default {
       preencherLikesVideosSemMediaScheduled((env as { FLAGS?: FlagsKv }).FLAGS)
         .then((r) => console.log(`[scheduled] Média Likes de vídeo recalculada: ${r.atualizados} vídeos.`))
         .catch((err) => console.error("[scheduled] Erro ao recalcular likes de vídeo:", err)),
+    );
+    // Correção pontual do backlog de comentários que nunca geraram ponto em
+    // REGISTRO (bug de nome canônico + colisão de linha, já corrigido pra
+    // comentários novos) — reconcilia contagem de comentários vs. REGISTRO e
+    // completa a diferença, em lotes pequenos por execução.
+    ctx.waitUntil(
+      reconciliarPontosComentariosScheduled((env as { FLAGS?: FlagsKv }).FLAGS)
+        .then((r) =>
+          console.log(
+            `[scheduled] Reconciliação de pontos: ${r.chavesProcessadas} chaves, ${r.linhasGravadas} linhas gravadas em REGISTRO.`,
+          ),
+        )
+        .catch((err) => console.error("[scheduled] Erro ao reconciliar pontos de comentários:", err)),
     );
   },
 

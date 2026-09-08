@@ -30,7 +30,7 @@ const COL_TITULO_EDICAO_CHARTS_ALBUNS = 3; // D
  * código não veio ou não bateu com nenhuma linha, pra nunca bloquear o
  * registro por causa de uma linha antiga sem código preenchido ainda.
  */
-async function buscarNomeCanonico(params: {
+export async function buscarNomeCanonico(params: {
   titulo: string;
   isAlbum: boolean;
   codigoUnico?: string;
@@ -95,6 +95,49 @@ async function buscarNomeCanonico(params: {
  * a próxima linha livre e tenta de novo, até 3 vezes — nunca lança, o audit
  * log continua best-effort e jamais pode derrubar o comentário em si.
  */
+function acharProximaLinhaLivre(rows: string[][]): number {
+  let ultimaLinhaComConteudo = 1; // linha 1 = cabeçalho, nunca escrevemos nela
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i]?.some((c) => normalizeText(c))) ultimaLinhaComConteudo = i + 1;
+  }
+  return ultimaLinhaComConteudo + 1;
+}
+
+/**
+ * Escreve uma linha (B:D) em REGISTRO, achando a próxima linha livre na
+ * hora e relendo pra confirmar que ninguém colidiu (ver comentário longo em
+ * registrarAuditLog logo abaixo pra entender por que é feito assim). Extraído
+ * como função própria pra ser reaproveitado pela reconciliação em lote
+ * (reconciliacaoRegistroController.ts), que grava várias linhas seguidas.
+ */
+export async function gravarLinhaRegistro(valores: string[]): Promise<boolean> {
+  const MAX_TENTATIVAS = 3;
+  let rows = await googleSheetsService.registrosCharts.readValues("REGISTRO");
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+    const proximaLinha = acharProximaLinhaLivre(rows);
+    await googleSheetsService.registrosCharts.updateValues(
+      "REGISTRO",
+      `B${proximaLinha}:D${proximaLinha}`,
+      [valores],
+    );
+
+    const confirmacao = await googleSheetsService.registrosCharts.readValues(
+      "REGISTRO",
+      `B${proximaLinha}:D${proximaLinha}`,
+    );
+    const linhaConfirmada = confirmacao?.[0] || [];
+    const bateu = valores.every((v, i) => normalizeText(linhaConfirmada[i]) === normalizeText(v));
+    if (bateu) return true;
+
+    console.warn(
+      `[registroLog] Colisão detectada na linha ${proximaLinha} (tentativa ${tentativa}/${MAX_TENTATIVAS}) — recalculando e tentando de novo.`,
+    );
+    rows = await googleSheetsService.registrosCharts.readValues("REGISTRO");
+  }
+  console.warn("[registroLog] Não foi possível gravar em REGISTRO após retries — colisão persistente.");
+  return false;
+}
+
 export async function registrarAuditLog(params: {
   nomeJogador: string;
   titulo: string;
@@ -103,52 +146,10 @@ export async function registrarAuditLog(params: {
   codigoUnico?: string;
 }): Promise<void> {
   const { nomeJogador, titulo, tipo, isAlbum, codigoUnico } = params;
-  const MAX_TENTATIVAS = 3;
   try {
-    // As duas leituras não dependem uma da outra até a escrita final — rodar
-    // em paralelo em vez de sequencial corta uma ida inteira à API do Sheets
-    // do tempo total.
-    const [nomeCanonico, rowsIniciais] = await Promise.all([
-      buscarNomeCanonico({ titulo, isAlbum: !!isAlbum, codigoUnico }),
-      googleSheetsService.registrosCharts.readValues("REGISTRO"),
-    ]);
+    const nomeCanonico = await buscarNomeCanonico({ titulo, isAlbum: !!isAlbum, codigoUnico });
     const conteudo = isAlbum ? `(ALBUM) - ${nomeCanonico}` : nomeCanonico;
-    const valoresGravados = [nomeJogador, conteudo, tipo];
-
-    const acharProximaLinhaLivre = (rows: string[][]): number => {
-      let ultimaLinhaComConteudo = 1; // linha 1 = cabeçalho, nunca escrevemos nela
-      for (let i = 0; i < rows.length; i++) {
-        if (rows[i]?.some((c) => normalizeText(c))) ultimaLinhaComConteudo = i + 1;
-      }
-      return ultimaLinhaComConteudo + 1;
-    };
-
-    let rows = rowsIniciais;
-    for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
-      const proximaLinha = acharProximaLinhaLivre(rows);
-      await googleSheetsService.registrosCharts.updateValues(
-        "REGISTRO",
-        `B${proximaLinha}:D${proximaLinha}`,
-        [valoresGravados],
-      );
-
-      // Relê a mesma linha pra confirmar que ninguém colidiu escrevendo nela
-      // entre a leitura e a escrita (a condição de corrida documentada acima).
-      const confirmacao = await googleSheetsService.registrosCharts.readValues(
-        "REGISTRO",
-        `B${proximaLinha}:D${proximaLinha}`,
-      );
-      const linhaConfirmada = confirmacao?.[0] || [];
-      const bateu = valoresGravados.every((v, i) => normalizeText(linhaConfirmada[i]) === normalizeText(v));
-      if (bateu) return;
-
-      console.warn(
-        `[registroLog] Colisão detectada na linha ${proximaLinha} (tentativa ${tentativa}/${MAX_TENTATIVAS}) — recalculando e tentando de novo.`,
-      );
-      rows = await googleSheetsService.registrosCharts.readValues("REGISTRO");
-    }
-
-    console.warn("[registroLog] Não foi possível gravar em REGISTRO após retries — colisão persistente.");
+    await gravarLinhaRegistro([nomeJogador, conteudo, tipo]);
   } catch (err) {
     console.warn("[registroLog] Erro ao gravar em REGISTRO:", err);
   }
