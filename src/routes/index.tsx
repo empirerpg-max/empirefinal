@@ -300,9 +300,17 @@ function Index() {
             }))
             .sort((a: ProximoEvento, b: ProximoEvento) => a.timestamp - b.timestamp);
 
-          // 1 evento de TV normalmente; se não tem nenhuma turnê rolando,
-          // mostra mais TV pra não deixar o card praticamente vazio.
-          const tvEventos = tvEventosTodos.slice(0, tourEventos.length === 0 ? 5 : 1);
+          // Normalmente só 1 evento de TV quando já tem turnê ocupando o
+          // card (senão fica poluído); mas se tiver MAIS de um programa
+          // agendado de verdade na Empire TV, mostra até 3 — antes cortava
+          // pra 1 sempre que existia qualquer turnê rolando (quase sempre
+          // existe), então um segundo evento (ex: um Grammy recém-agendado)
+          // nunca aparecia, mesmo cadastrado corretamente. Sem turnê nenhuma
+          // rolando, mostra mais ainda pra não deixar o card vazio.
+          const tvEventos = tvEventosTodos.slice(
+            0,
+            tourEventos.length === 0 ? 5 : Math.min(3, tvEventosTodos.length),
+          );
 
           const eventos = [...tourEventos, ...tvEventos]
             .map(({ _artista, ...ev }: any) => ev as ProximoEvento)
