@@ -524,7 +524,17 @@ function buildCleanItem(
     trackOrderValue && !Number.isNaN(Number(trackOrderValue)) ? Number(trackOrderValue) : null;
 
   const item: EmpirePlayCleanItem = {
-    id: `${sheetName.toLowerCase().replace(/\s+/g, "_")}_${index + 1}`,
+    // Antes era só `${sheetName}_${index+1}` (posição na leitura da planilha
+    // naquele instante) — um ID fantasma que MUDA sozinho toda vez que uma
+    // linha é inserida/removida/reordenada antes dela. Um link salvo (ou só
+    // a navegação entre telas) podia então abrir o tópico de OUTRA música
+    // completamente, misturando comentários — causa raiz confirmada (ex:
+    // "musicas_198" abrindo "Zoe Osbourne" sem bater com nada na planilha).
+    // Agora usa o ID real e estável do tópico (message_thread_id/
+    // id_do_topico/ref_telegram_id) sempre que existe; só cai pro índice
+    // como último recurso pra linhas que nunca tiveram tópico (ex: algumas
+    // entradas de chart puramente numéricas).
+    id: `${sheetName.toLowerCase().replace(/\s+/g, "_")}_${telegramTopicId || `idx${index + 1}`}`,
     type: sheetName.toLowerCase().replace(/\s+/g, "-"),
     title,
     artist,
@@ -1112,6 +1122,12 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
             .filter(Boolean)
         : [];
       const codigoUnico = getValue(rec, ["codigo_unico"]);
+      const telegramTopicId = getValue(rec, [
+        "ref_telegram_id",
+        "telegram_topic_id",
+        "id_do_topico",
+        "message_thread_id",
+      ]);
 
       // Junção com a aba Musicas
       const matchingSongs = songs.filter((s) => {
@@ -1142,7 +1158,10 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
       }));
 
       return {
-        id: `album_${idx + 1}`,
+        // Mesma correção de Musicas/Music Videos: ID real do tópico em vez
+        // da posição na leitura da planilha (que muda sozinha e misturava
+        // álbum/comentários errados quando uma linha era inserida/removida).
+        id: `album_${telegramTopicId || `idx${idx + 1}`}`,
         title: albumTitle,
         artist,
         coverUrl,
