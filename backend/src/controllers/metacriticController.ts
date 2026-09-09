@@ -83,6 +83,10 @@ async function montarSnapshot(semanaId: string): Promise<MetacriticSnapshot> {
     const item = buildCleanItem("Musicas", rec, idx);
     const nota = extrairNota(item.metacriticAvg);
     if (nota === null) return;
+    // Linha com nota preenchida mas sem título real (lixo/linha de teste na
+    // planilha) — sem isso entrava no ranking como um card em branco (nota
+    // aparecendo, resto vazio), reportado pelo usuário.
+    if (!item.title?.trim()) return;
     itens.push({
       id: item.id,
       tipo: "musicas",
@@ -99,6 +103,7 @@ async function montarSnapshot(semanaId: string): Promise<MetacriticSnapshot> {
     const item = buildCleanItem("Albuns", rec, idx);
     const nota = extrairNota(item.metacriticAvg);
     if (nota === null) return;
+    if (!item.title?.trim()) return;
     itens.push({
       id: item.id,
       tipo: "albuns",
