@@ -11,6 +11,7 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Sparkles,
   User,
   Image as ImageIcon,
@@ -18,6 +19,8 @@ import {
   FileVideo,
   ListMusic,
   FileText,
+  Repeat2,
+  Link2,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
 import { EditModal } from "./EditModal";
@@ -78,24 +81,37 @@ export interface MeuAlbum {
 
 const TIPOS_ALBUM = ["EP", "Álbum", "Deluxe"];
 
+// Reformulado a pedido do usuário: jogadores estavam clicando em "Registrar
+// em Chart" (a) pra música que JÁ EXISTIA — deveria ser "Substituir" (b).
+// Título+descrição agora deixam explícito o caso de uso de cada opção
+// (com o oposto do que ela NÃO é), e cada uma ganha ícone/cor própria pra
+// ficar visualmente óbvio que são coisas diferentes, não 3 variações do
+// mesmo botão. Ver também o aviso de "música parecida já existe" abaixo
+// (possivelDuplicataChart), que é a segunda camada dessa mesma correção.
 const OPCOES_CHART = [
   {
     key: "a",
     value: "a) Registrar essa música em chart",
-    title: "Registrar em Chart",
-    desc: "Nova música apta a pontuar nos charts do Empire Hub.",
+    title: "Lançamento Novo",
+    desc: "Essa música NUNCA foi publicada antes — é a primeira vez que ela entra nos charts.",
+    icon: Sparkles,
+    color: "emerald",
   },
   {
     key: "b",
     value: "b) Substituir música no chart",
-    title: "Substituir no Chart",
-    desc: "Substitui um lançamento anterior do seu artista nos charts.",
+    title: "Substituir Existente",
+    desc: "A música JÁ EXISTE no seu catálogo — isso troca o material dela (áudio, capa, letra), sem duplicar.",
+    icon: Repeat2,
+    color: "amber",
   },
   {
     key: "c",
     value: "c) Os comentários desse tópico devem valer para uma música já lançada",
-    title: "Vincular a Música Lançada",
-    desc: "Os comentários e avaliações valerão para uma música já existente.",
+    title: "Vincular Comentários",
+    desc: "Esse tópico é sobre uma música que já existe (ex: lyric video) — só os comentários passam a valer pra ela.",
+    icon: Link2,
+    color: "sky",
   },
 ];
 
@@ -386,6 +402,44 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   // Música existente referenciada (obrigatório quando opcaoChart é "b" ou "c")
   const [musicaReferenciaQuery, setMusicaReferenciaQuery] = useState<string>("");
   const [musicaReferencia, setMusicaReferencia] = useState<ExistingTrack | null>(null);
+
+  // Aviso de "essa música já existe" quando o jogador escolhe "Lançamento
+  // Novo" (a) mas digita um título parecido com algo que o artista dele já
+  // tem no catálogo — causa raiz do erro reportado (gente clicando em
+  // "Registrar" pra música que já existia e deveria ser "Substituir").
+  // Comparação simples (normaliza acento/pontuação/maiúsculas e casa por
+  // igualdade OU um título contido no outro) — não precisa ser perfeita,
+  // só pegar o caso óbvio de "mesma música, escrita quase igual".
+  const possivelDuplicataChart = useMemo(() => {
+    if (opcaoChart !== OPCOES_CHART[0].value) return null;
+    const tituloNorm = nomeMusica
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9 ]/g, "")
+      .trim();
+    if (tituloNorm.length < 3) return null;
+    const artistaNorm = artistaResponsavel.trim().toLowerCase();
+    return (
+      myCatalogSongs.find((s) => {
+        if (!artistaNorm || s.artist?.toLowerCase() !== artistaNorm) return false;
+        const existenteNorm = s.title
+          ?.trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[̀-ͯ]/g, "")
+          .replace(/[^a-z0-9 ]/g, "")
+          .trim();
+        if (!existenteNorm) return false;
+        return (
+          existenteNorm === tituloNorm ||
+          existenteNorm.includes(tituloNorm) ||
+          tituloNorm.includes(existenteNorm)
+        );
+      }) || null
+    );
+  }, [opcaoChart, nomeMusica, artistaResponsavel, myCatalogSongs]);
 
   // Form Vídeo (unificado — Vídeos e Music Video são a mesma aba de
   // cadastro, diferenciados pela Categoria/Tipo de Vídeo selecionada)
@@ -1377,27 +1431,88 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             </div>
           </div>
 
-          {/* OPÇÕES DE CHART */}
+          {/* OPÇÕES DE CHART — ícone/cor própria por opção (antes eram 3
+              cards visualmente idênticos, causa de gente clicar errado). */}
           <div className="space-y-3">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
               Objetivo no Chart
             </label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {OPCOES_CHART.map((op) => (
-                <div
-                  key={op.key}
-                  onClick={() => setOpcaoChart(op.value)}
-                  className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
-                    opcaoChart === op.value
-                      ? "bg-emerald-500/10 border-emerald-500 text-white"
-                      : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
-                  }`}
-                >
-                  <span className="font-bold text-xs text-white mb-1">{op.title}</span>
-                  <span className="text-[11px] text-neutral-400">{op.desc}</span>
-                </div>
-              ))}
+              {OPCOES_CHART.map((op) => {
+                const Icon = op.icon;
+                const ativo = opcaoChart === op.value;
+                const cores: Record<string, { border: string; bg: string; text: string; icon: string }> = {
+                  emerald: {
+                    border: "border-emerald-500",
+                    bg: "bg-emerald-500/10",
+                    text: "text-emerald-300",
+                    icon: "text-emerald-400",
+                  },
+                  amber: {
+                    border: "border-amber-500",
+                    bg: "bg-amber-500/10",
+                    text: "text-amber-300",
+                    icon: "text-amber-400",
+                  },
+                  sky: {
+                    border: "border-sky-500",
+                    bg: "bg-sky-500/10",
+                    text: "text-sky-300",
+                    icon: "text-sky-400",
+                  },
+                };
+                const c = cores[op.color];
+                return (
+                  <button
+                    type="button"
+                    key={op.key}
+                    onClick={() => setOpcaoChart(op.value)}
+                    className={`text-left p-4 rounded-2xl border-2 cursor-pointer transition flex flex-col gap-2 ${
+                      ativo
+                        ? `${c.bg} ${c.border} text-white`
+                        : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
+                    }`}
+                  >
+                    <Icon className={`size-5 ${ativo ? c.icon : "text-neutral-500"}`} />
+                    <span className={`font-black text-xs uppercase tracking-wide ${ativo ? c.text : "text-white"}`}>
+                      {op.title}
+                    </span>
+                    <span className="text-[11px] text-neutral-400 leading-relaxed">{op.desc}</span>
+                  </button>
+                );
+              })}
             </div>
+
+            {/* AVISO DE POSSÍVEL DUPLICATA — o pedido original: detectar que
+                o jogador escolheu "Lançamento Novo" pra uma música que já
+                existe no catálogo do artista dele, e oferecer trocar pra
+                "Substituir" com a música já pré-selecionada. */}
+            {possivelDuplicataChart && (
+              <div className="flex items-start gap-3 p-4 rounded-2xl border-2 border-amber-500 bg-amber-500/10">
+                <AlertTriangle className="size-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0 space-y-2">
+                  <p className="text-xs text-amber-200 leading-relaxed">
+                    Encontramos uma música parecida no seu catálogo:{" "}
+                    <span className="font-black text-white">
+                      {possivelDuplicataChart.artist} - {possivelDuplicataChart.title}
+                    </span>
+                    . Tem certeza que esse é um lançamento <span className="font-black">novo</span>? Se não for,
+                    use "Substituir Existente" pra não duplicar a música no chart.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpcaoChart(OPCOES_CHART[1].value);
+                      setMusicaReferencia(possivelDuplicataChart);
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-black text-amber-300 hover:text-amber-200 uppercase tracking-wide"
+                  >
+                    <Repeat2 className="size-3.5" />
+                    Na verdade, é pra substituir essa música
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* SELEÇÃO DE MÚSICA EXISTENTE — obrigatório para (b) e (c) */}
