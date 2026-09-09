@@ -82,6 +82,7 @@ import {
   registrarPresencaTVController,
   listarPresencaTVController,
   processarParticipacaoTV,
+  registrarEventoTransmissaoController,
 } from "../controllers/tvController";
 import {
   getPontosController,
@@ -202,6 +203,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/tv/programas",
     "/api/tv/presenca",
     "/api/tv/processar-participacao",
+    "/api/tv/evento-transmissao",
     "/api/artistas/vincular",
     "/api/artistas/criar",
     "/api/artistas/infos",
@@ -759,6 +761,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
               JSON.stringify({ success: false, error: "Use GET ou POST para /api/tv/presenca." }),
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
+  } else if (url.pathname === "/api/tv/evento-transmissao") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ ok: false, erro: "Use POST para /api/tv/evento-transmissao." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await registrarEventoTransmissaoController(request);
   } else if (url.pathname === "/api/tv/processar-participacao") {
     if (request.method !== "POST") {
       return new Response(
