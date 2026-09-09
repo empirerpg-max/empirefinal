@@ -18,6 +18,21 @@ interface FlagsKvLike {
   put(key: string, value: string): Promise<void>;
 }
 
+// Mesmo "error-log" (KV FLAGS) já usado por processarParticipacaoTV — dá
+// pra checar em /api/debug/error-log sem precisar adivinhar por que a aba
+// apareceu vazia da próxima vez.
+async function registrarDiagnosticoMetacritic(flags: FlagsKvLike, mensagem: string): Promise<void> {
+  try {
+    const entry = { ts: Date.now(), source: "metacritic-snapshot", message: mensagem, path: undefined };
+    const raw = await flags.get("error-log");
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift(entry);
+    await flags.put("error-log", JSON.stringify(list.slice(0, 50)));
+  } catch {
+    // Nunca deixar o log de diagnóstico derrubar a geração em si.
+  }
+}
+
 export interface MetacriticSnapshotItem {
   id: string;
   tipo: "musicas" | "albuns";
@@ -119,9 +134,23 @@ export async function atualizarSnapshotMetacriticSemanalScheduled(
     }
     const snapshot = await montarSnapshot(semanaId);
     await flags.put(KV_KEY, JSON.stringify(snapshot));
+    if (snapshot.itens.length === 0) {
+      // Não é erro (a geração rodou certinho), mas é o motivo mais provável
+      // da aba aparecer vazia pro jogador — nenhuma linha de Musicas/Albuns
+      // tinha uma nota de Metacritic preenchida na hora da geração. Deixa
+      // rastro pra não precisar adivinhar da próxima vez.
+      await registrarDiagnosticoMetacritic(
+        flags,
+        `[metacriticController] Snapshot da semana ${semanaId} gerado com 0 itens — nenhuma linha de Musicas/Albuns tinha nota de Metacritic preenchida no momento da geração.`,
+      );
+    }
     return { atualizou: true, semanaId };
   } catch (err) {
     console.warn("[metacriticController] Erro ao atualizar snapshot semanal:", err);
+    await registrarDiagnosticoMetacritic(
+      flags,
+      `[metacriticController] Erro ao gerar snapshot da semana ${semanaId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return { atualizou: false, semanaId };
   }
 }
