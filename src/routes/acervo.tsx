@@ -642,12 +642,17 @@ function PitchforkActionsBar({
   async function curtir() {
     if (!login?.id) return;
     haptic.selection();
+    const estadoAnterior = { curtido, curtidas };
     setCurtido((c) => !c);
     setCurtidas((n) => (curtido ? n - 1 : n + 1));
     const r = await api.pitchforkCurtir(edicao.tipo, edicao.periodoId, login.id);
     if (r.success && typeof r.curtidas === "number") {
       setCurtidas(r.curtidas);
       setCurtido(!!r.curtidoPorMim);
+    } else {
+      // Backend não confirmou — desfaz o otimismo, senão o botão mente.
+      setCurtido(estadoAnterior.curtido);
+      setCurtidas(estadoAnterior.curtidas);
     }
   }
 
