@@ -524,6 +524,90 @@ function PitchforkTab({ edicoes }: { edicoes: PitchforkEdicao[] | null }) {
       )}
 
       {topArtist && <PitchforkTopArtistCard edicao={topArtist} />}
+
+      <PitchforkArquivo />
+    </div>
+  );
+}
+
+const MES_NOMES = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+];
+
+function formatarMes(mes: string): string {
+  const [ano, mm] = mes.split("-");
+  const idx = Number(mm) - 1;
+  return `${MES_NOMES[idx] || mm} ${ano}`;
+}
+
+// Arquivo — edições anteriores, organizadas por mês/ano, crescendo à
+// medida que novas edições vão sendo geradas (uma aba "Arquivo AAAA-MM"
+// por mês na planilha, nunca sobrescrita).
+function PitchforkArquivo() {
+  const [meses, setMeses] = useState<string[] | null>(null);
+  const [mesSelecionado, setMesSelecionado] = useState<string | null>(null);
+  const [edicoesPorMes, setEdicoesPorMes] = useState<Record<string, PitchforkEdicao[]>>({});
+
+  useEffect(() => {
+    api.pitchforkMeses().then((r) => setMeses(r.meses));
+  }, []);
+
+  async function selecionarMes(mes: string) {
+    haptic.selection();
+    const proximo = mesSelecionado === mes ? null : mes;
+    setMesSelecionado(proximo);
+    if (proximo && !edicoesPorMes[proximo]) {
+      const r = await api.pitchforkArquivo(proximo, getStoredLogin()?.id || "");
+      setEdicoesPorMes((prev) => ({ ...prev, [proximo]: r.edicoes }));
+    }
+  }
+
+  if (meses === null || meses.length === 0) return null;
+
+  return (
+    <div className="space-y-4 pt-2">
+      <div className="flex items-center gap-2">
+        <Archive className="size-4 text-muted-foreground" />
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">Edições anteriores</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {meses.map((mes) => (
+          <button
+            key={mes}
+            onClick={() => selecionarMes(mes)}
+            className={`shrink-0 px-3.5 py-2 rounded-full text-[11px] font-black uppercase tracking-wide transition-all active:scale-95 ${
+              mesSelecionado === mes
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
+            }`}
+          >
+            {formatarMes(mes)}
+          </button>
+        ))}
+      </div>
+
+      {mesSelecionado && (
+        <div className="space-y-5 pt-1">
+          {!edicoesPorMes[mesSelecionado] ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="size-6 text-primary animate-spin" />
+            </div>
+          ) : edicoesPorMes[mesSelecionado].length === 0 ? (
+            <p className="text-xs text-muted-foreground font-medium text-center py-4">
+              Nenhuma edição registrada nesse mês.
+            </p>
+          ) : (
+            edicoesPorMes[mesSelecionado].map((e, i) =>
+              e.tipo === "BEST_NEW_TRACK" ? (
+                <PitchforkBestNewTrackCard key={`${e.tipo}-${i}`} edicao={e} />
+              ) : (
+                <PitchforkTopArtistCard key={`${e.tipo}-${i}`} edicao={e} />
+              ),
+            )
+          )}
+        </div>
+      )}
     </div>
   );
 }
