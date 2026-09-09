@@ -393,6 +393,16 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [extraMusica, setExtraMusica] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
   const [extraAlbum, setExtraAlbum] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
 
+  // Duplo aviso antes de publicar (música e vídeo) — mostra um resumo do
+  // que foi preenchido + um aviso opcional (ex: categoria de vídeo que não
+  // pontua no YouTube), e só publica de fato quando o jogador confirma.
+  const [confirmacao, setConfirmacao] = useState<{
+    titulo: string;
+    itens: { label: string; valor: string }[];
+    aviso?: string;
+    onConfirm: () => void;
+  } | null>(null);
+
   // Form Música
   const [opcaoChart, setOpcaoChart] = useState<string>(OPCOES_CHART[0].value);
   const [nomeMusica, setNomeMusica] = useState<string>("");
@@ -730,6 +740,31 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       return;
     }
 
+    // Duplo aviso antes de publicar de fato — mostra um resumo do que foi
+    // preenchido pro jogador conferir (a pedido do usuário, depois do erro
+    // de gente escolhendo "Lançamento Novo" pra música que já existia).
+    const opcaoEscolhida = OPCOES_CHART.find((o) => o.value === opcaoChart);
+    setConfirmacao({
+      titulo: "Confirmar Lançamento de Música",
+      itens: [
+        { label: "Artista Responsável", valor: artistaResponsavel },
+        { label: "Título", valor: `${artistaResponsavel} - ${stripArtistPrefix(nomeMusica, artistaResponsavel)}` },
+        { label: "Tipo de Single", valor: tipoSingle },
+        { label: "Tipo de Música", valor: tipoMusica },
+        { label: "Objetivo no Chart", valor: opcaoEscolhida?.title || opcaoChart },
+        ...(musicaReferencia
+          ? [{ label: "Música Referenciada", valor: `${musicaReferencia.artist} - ${musicaReferencia.title}` }]
+          : []),
+        ...(participantes.filter((p) => p.trim()).length > 0
+          ? [{ label: "Participantes", valor: participantes.filter((p) => p.trim()).join(", ") }]
+          : []),
+      ],
+      onConfirm: () => publicarMusica(),
+    });
+  };
+
+  const publicarMusica = async () => {
+    setConfirmacao(null);
     setIsSubmitting(true);
     setUploadProgress("Fazendo upload da capa...");
 
@@ -843,6 +878,31 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       return;
     }
 
+    // Duplo aviso antes de publicar — mesmo padrão da Nova Música, e aqui
+    // reforça especificamente que só a categoria "Music Video" dá o
+    // impulso no chart do YouTube (jogador esquecendo disso era o pedido
+    // do usuário).
+    setConfirmacao({
+      titulo: "Confirmar Lançamento de Vídeo",
+      itens: [
+        { label: "Artista Responsável", valor: artistaResponsavel },
+        { label: "Título", valor: tituloVideo },
+        { label: "Categoria", valor: categoriaVideo },
+        { label: "Músicas Vinculadas", valor: musicasVinculadas.map((s) => `${s.artist} - ${s.title}`).join(", ") },
+        ...(participantes.filter((p) => p.trim()).length > 0
+          ? [{ label: "Participantes", valor: participantes.filter((p) => p.trim()).join(", ") }]
+          : []),
+      ],
+      aviso:
+        categoriaVideo !== "Music Video"
+          ? `Categoria "${categoriaVideo}" NÃO conta pontos no chart do YouTube — só a categoria "Music Video" dá esse impulso. Se a intenção é pontuar no YouTube, volte e troque a categoria.`
+          : undefined,
+      onConfirm: () => publicarVideo(),
+    });
+  };
+
+  const publicarVideo = async () => {
+    setConfirmacao(null);
     setIsSubmitting(true);
     setUploadProgress("Fazendo upload da capa do vídeo...");
 
@@ -2476,6 +2536,57 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         associatedArtists={profile?.associatedArtists || []}
         defaultArtist={artistaResponsavel}
       />
+
+      {/* DUPLO AVISO ANTES DE PUBLICAR — música e vídeo. Mostra tudo que foi
+          preenchido pro jogador conferir de olho aberto antes de publicar
+          de vez, em vez do botão disparar direto. */}
+      {confirmacao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-neutral-900 border border-white/10 rounded-3xl p-6 space-y-5 shadow-2xl">
+            <div className="space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400">
+                Confira antes de publicar
+              </p>
+              <h3 className="text-lg font-black text-white">{confirmacao.titulo}</h3>
+            </div>
+
+            <div className="space-y-2.5">
+              {confirmacao.itens.map((item, i) => (
+                <div key={i} className="flex flex-col gap-0.5 pb-2 border-b border-white/5 last:border-b-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                    {item.label}
+                  </span>
+                  <span className="text-sm text-white font-bold break-words">{item.valor || "—"}</span>
+                </div>
+              ))}
+            </div>
+
+            {confirmacao.aviso && (
+              <div className="flex items-start gap-2.5 p-3.5 rounded-2xl border-2 border-amber-500 bg-amber-500/10">
+                <AlertTriangle className="size-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-200 leading-relaxed">{confirmacao.aviso}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmacao(null)}
+                className="flex-1 py-3 rounded-2xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition"
+              >
+                Revisar
+              </button>
+              <button
+                type="button"
+                onClick={confirmacao.onConfirm}
+                className="flex-1 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider transition"
+              >
+                Confirmar e Publicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
