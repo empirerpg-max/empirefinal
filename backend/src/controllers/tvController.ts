@@ -651,6 +651,18 @@ export async function processarParticipacaoTV(flags?: FlagsKvLike): Promise<{
     ]);
 
     const jogadores = new Set([...presenca.keys(), ...chat.keys()]);
+    if (jogadores.size === 0) {
+      // Transmissão bate TIPO_EVENTO e Regras, mas nenhum registro de
+      // Presenca_TV/chat casou com os rowIds desse grupo — a transmissão é
+      // marcada como processada mesmo assim (fica pra sempre sem nenhum
+      // jogador) e antes disso não sobrava NENHUM rastro de que isso
+      // aconteceu, nem nos 3 outros pontos de log acima.
+      await registrarDiagnosticoSkip(
+        flags,
+        `[processarParticipacaoTV] "${grupo.programa}" (${key}) marcado como processado mas SEM nenhum jogador: nenhuma linha de Presenca_TV/chat casou com os Programa_ID/rowIds dessa transmissão (${grupo.rowIds.join(", ")}).`,
+      );
+    }
+    let registrosGravadosNesseGrupo = 0;
     for (const telegramId of jogadores) {
       const p = presenca.get(telegramId);
       const c = chat.get(telegramId);
@@ -665,6 +677,7 @@ export async function processarParticipacaoTV(flags?: FlagsKvLike): Promise<{
       const nomeJogador = p?.nome || c?.nome || "Anônimo";
       await gravarRegistroParticipacaoTV(nomeJogador, tier.label);
       registrosGravados++;
+      registrosGravadosNesseGrupo++;
 
       // Assistir_tv exige presença quase completa (>=90%) — prestígio por
       // chat foi removido: a pedido do usuário, porque contava mensagens de
@@ -675,6 +688,16 @@ export async function processarParticipacaoTV(flags?: FlagsKvLike): Promise<{
       if (presencaPct >= 90) {
         await somarPrestigio({ telegramId }, "assistir_tv").catch(() => {});
       }
+    }
+
+    if (jogadores.size > 0 && registrosGravadosNesseGrupo === 0) {
+      // Achou jogadores (presença ou chat) mas ninguém bateu nem a menor
+      // faixa cadastrada em Regras pro TIPO_EVENTO — também marcado como
+      // processado e também sem nenhum rastro até aqui.
+      await registrarDiagnosticoSkip(
+        flags,
+        `[processarParticipacaoTV] "${grupo.programa}" (${key}) marcado como processado mas 0 registros gravados: ${jogadores.size} jogador(es) encontrado(s), nenhum bateu faixa cadastrada em Regras pro TIPO_EVENTO "${grupo.tipoEvento}".`,
+      );
     }
 
     await googleSheetsService.agendaTV.appendRow(
