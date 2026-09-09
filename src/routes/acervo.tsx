@@ -519,34 +519,36 @@ function PitchforkTab({ edicoes }: { edicoes: PitchforkEdicao[] | null }) {
           onClick={() => haptic.selection()}
           className="block rounded-[1.75rem] overflow-hidden bg-black border border-white/10 active:scale-[0.98] transition-transform"
         >
-          <div className="p-5 flex flex-col items-center text-center gap-1.5 border-b border-white/10">
-            <TrendingUp className="size-8 text-red-500" strokeWidth={2.5} />
-            <p className="text-lg font-black uppercase tracking-wide text-red-500">Best New Track</p>
+          <div className="p-4 flex items-center justify-center gap-2 border-b border-white/10">
+            <TrendingUp className="size-5 text-red-500" strokeWidth={2.5} />
+            <p className="text-sm font-black uppercase tracking-wide text-red-500">Best New Track</p>
           </div>
-          <div className="aspect-square w-full bg-secondary">
-            {bestNewTrack.capaUrl && (
-              <img
-                src={resolveImg(bestNewTrack.capaUrl)}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-                loading="lazy"
-              />
-            )}
+          <div className="p-4 flex gap-3">
+            <div className="size-20 shrink-0 rounded-xl overflow-hidden bg-secondary">
+              {bestNewTrack.capaUrl && (
+                <img
+                  src={resolveImg(bestNewTrack.capaUrl)}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                />
+              )}
+            </div>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <p className="text-base font-black text-white leading-tight truncate">{bestNewTrack.titulo}</p>
+              <p className="text-xs text-neutral-400 font-bold truncate">{bestNewTrack.artista}</p>
+              {bestNewTrack.nota !== null && (
+                <p className="text-[11px] text-red-500 font-black uppercase tracking-wide">
+                  {bestNewTrack.nota.toFixed(0)} no Metacritic
+                </p>
+              )}
+            </div>
           </div>
-          <div className="p-5 space-y-2">
-            <p className="text-xl font-black text-white leading-tight">{bestNewTrack.titulo}</p>
-            <p className="text-sm text-neutral-400 font-bold">{bestNewTrack.artista}</p>
-            {bestNewTrack.nota !== null && (
-              <p className="text-xs text-red-500 font-black uppercase tracking-wide">
-                {bestNewTrack.nota.toFixed(0)} de nota no Metacritic
-              </p>
-            )}
-            {bestNewTrack.texto && (
-              <p className="text-sm text-neutral-300 leading-relaxed pt-2 border-t border-white/10">
-                {bestNewTrack.texto}
-              </p>
-            )}
-          </div>
+          {bestNewTrack.texto && (
+            <div className="px-4 pb-4 pt-3 border-t border-white/10">
+              <p className="text-sm text-neutral-300 leading-relaxed">{bestNewTrack.texto}</p>
+            </div>
+          )}
         </Link>
       )}
 
@@ -557,8 +559,8 @@ function PitchforkTab({ edicoes }: { edicoes: PitchforkEdicao[] | null }) {
           onClick={() => haptic.selection()}
           className="block rounded-[1.75rem] overflow-hidden bg-white/5 border border-white/10 active:scale-[0.98] transition-transform"
         >
-          <div className="p-5 flex items-center gap-4">
-            <div className="size-16 shrink-0 rounded-full overflow-hidden bg-secondary border-2 border-primary/40">
+          <div className="p-4 flex items-center gap-3">
+            <div className="size-12 shrink-0 rounded-full overflow-hidden bg-secondary border-2 border-primary/40">
               {topArtist.capaUrl && (
                 <img
                   src={driveImg(topArtist.capaUrl, 150)}
@@ -570,7 +572,7 @@ function PitchforkTab({ edicoes }: { edicoes: PitchforkEdicao[] | null }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-black uppercase tracking-widest text-primary">Top Artist</p>
-              <p className="text-lg font-black text-white leading-tight truncate">{topArtist.artista}</p>
+              <p className="text-base font-black text-white leading-tight truncate">{topArtist.artista}</p>
               {topArtist.nota !== null && (
                 <p className="text-[11px] text-muted-foreground font-bold">
                   {topArtist.nota.toLocaleString("pt-BR")} pts em Fortuna Charts
@@ -579,7 +581,7 @@ function PitchforkTab({ edicoes }: { edicoes: PitchforkEdicao[] | null }) {
             </div>
           </div>
           {topArtist.texto && (
-            <div className="px-5 pb-5 pt-1 border-t border-white/10 space-y-3">
+            <div className="px-4 pb-4 pt-1 border-t border-white/10 space-y-3">
               {topArtist.texto.split("\n").filter((p) => p.trim()).map((paragrafo, i) => (
                 <p key={i} className="text-sm text-neutral-300 leading-relaxed">
                   {paragrafo}
