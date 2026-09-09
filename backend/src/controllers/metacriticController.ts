@@ -1,4 +1,5 @@
 import { sheetsService } from "../services/sheetsService";
+import { googleSheetsService, normalizeComparison, normalizeText } from "../services/googleSheetsService";
 import { buildCleanItem } from "./empirePlayController";
 
 // Ranking do "Metacritic" (nota crítica dos jogadores) — antes exibido em
@@ -38,6 +39,11 @@ export interface MetacriticSnapshotItem {
   tipo: "musicas" | "albuns";
   titulo: string;
   artista: string;
+  // Artista principal "limpo" (sem feats) — usado pro filtro/agrupamento
+  // por artista e pra cruzar com a foto de perfil dele. `artista` (acima)
+  // é o de EXIBIÇÃO no card, que já vem com "Feat 1, Feat 2" quando existe.
+  artistaPrincipal: string;
+  artistaFotoUrl: string | null;
   capaUrl: string | null;
   nota: number;
   genero: string | null;
@@ -72,10 +78,20 @@ function extrairNota(valor: number | string | null | undefined): number | null {
 }
 
 async function montarSnapshot(semanaId: string): Promise<MetacriticSnapshot> {
-  const [musicasRows, albunsRows] = await Promise.all([
+  const [musicasRows, albunsRows, artistRecords] = await Promise.all([
     sheetsService.readSheetObjects("Musicas").catch(() => []),
     sheetsService.readSheetObjects("Albuns").catch(() => []),
+    // ARTISTAS vive na planilha "usuarios" — mesma fonte da foto de perfil
+    // já usada em Catálogo > Início (getEmpirePlayHomeController).
+    googleSheetsService.usuarios.readSheetObjects("ARTISTAS").catch(() => []),
   ]);
+
+  const fotoPorArtista = new Map<string, string>();
+  for (const rec of artistRecords) {
+    const nome = normalizeComparison(rec["nome"]);
+    const foto = normalizeText(rec["foto"]);
+    if (nome && foto && !fotoPorArtista.has(nome)) fotoPorArtista.set(nome, foto);
+  }
 
   const itens: MetacriticSnapshotItem[] = [];
 
@@ -92,6 +108,8 @@ async function montarSnapshot(semanaId: string): Promise<MetacriticSnapshot> {
       tipo: "musicas",
       titulo: item.title,
       artista: item.displayArtists || item.artist,
+      artistaPrincipal: item.artist,
+      artistaFotoUrl: fotoPorArtista.get(normalizeComparison(item.artist)) || null,
       capaUrl: item.coverUrl || null,
       nota,
       genero: item.genero || null,
@@ -109,6 +127,8 @@ async function montarSnapshot(semanaId: string): Promise<MetacriticSnapshot> {
       tipo: "albuns",
       titulo: item.title,
       artista: item.displayArtists || item.artist,
+      artistaPrincipal: item.artist,
+      artistaFotoUrl: fotoPorArtista.get(normalizeComparison(item.artist)) || null,
       capaUrl: item.coverUrl || null,
       nota,
       genero: item.genero || null,

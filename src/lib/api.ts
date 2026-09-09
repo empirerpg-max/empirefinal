@@ -1146,6 +1146,8 @@ export const api = {
       tipo: "musicas" | "albuns";
       titulo: string;
       artista: string;
+      artistaPrincipal: string;
+      artistaFotoUrl: string | null;
       capaUrl: string | null;
       nota: number;
       genero: string | null;
