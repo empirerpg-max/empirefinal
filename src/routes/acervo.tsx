@@ -19,6 +19,8 @@ import {
   Sparkle,
   Tags,
   CalendarDays,
+  Users,
+  Search,
 } from "lucide-react";
 import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -50,6 +52,8 @@ type MetacriticItem = {
   tipo: "musicas" | "albuns";
   titulo: string;
   artista: string;
+  artistaPrincipal: string;
+  artistaFotoUrl: string | null;
   capaUrl: string | null;
   nota: number;
   genero: string | null;
@@ -444,8 +448,15 @@ function MetacriticTab({
   metacritic: { semanaId: string | null; itens: MetacriticItem[] } | null;
   card: string;
 }) {
-  const [view, setView] = useState<"destaques" | "ranking" | "recentes" | "estilo" | "ano">("destaques");
+  const [view, setView] = useState<"destaques" | "ranking" | "recentes" | "estilo" | "ano" | "artistas">(
+    "destaques",
+  );
   const [rankingTipo, setRankingTipo] = useState<"musicas" | "albuns">("musicas");
+  // Filtro por artista — pedido do usuário, separado da guia "Artistas"
+  // (aquela é o ranking médio por artista; este filtro só recorta os
+  // materiais individuais das guias Ranking/Recentes/Estilo/Ano pra um
+  // artista só). Não afeta Destaques (visão geral) nem Artistas.
+  const [artistaFiltro, setArtistaFiltro] = useState<string>("");
 
   if (metacritic === null) {
     return (
@@ -458,11 +469,21 @@ function MetacriticTab({
     return <EmptyState text="Nenhuma nota do Metacritic registrada ainda." />;
   }
 
+  const artistasDisponiveis = [...new Set(metacritic.itens.map((i) => i.artistaPrincipal))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+
+  const itensFiltrados = artistaFiltro
+    ? metacritic.itens.filter((i) => i.artistaPrincipal === artistaFiltro)
+    : metacritic.itens;
+
   // Música e álbum NUNCA se misturam no mesmo ranking (pedido do usuário) —
   // toda visão em lista/grade separa os dois, nunca mostra os dois juntos
   // competindo pela mesma posição.
-  const musicas = metacritic.itens.filter((i) => i.tipo === "musicas");
-  const albuns = metacritic.itens.filter((i) => i.tipo === "albuns");
+  const musicasGlobais = metacritic.itens.filter((i) => i.tipo === "musicas");
+  const albunsGlobais = metacritic.itens.filter((i) => i.tipo === "albuns");
+  const musicas = itensFiltrados.filter((i) => i.tipo === "musicas");
+  const albuns = itensFiltrados.filter((i) => i.tipo === "albuns");
 
   const top3 = (lista: MetacriticItem[]) => [...lista].sort((a, b) => b.nota - a.nota).slice(0, 3);
 
@@ -471,19 +492,19 @@ function MetacriticTab({
   const dentroDosUltimosSeisMeses = (i: MetacriticItem) =>
     !!i.releaseDateIso && new Date(i.releaseDateIso).getTime() >= corteRecente;
 
-  const top3Musica = top3(musicas);
-  const top3Album = top3(albuns);
-  const top3RecentesMusica = top3(musicas.filter(dentroDosUltimosSeisMeses));
-  const top3RecentesAlbum = top3(albuns.filter(dentroDosUltimosSeisMeses));
+  const top3Musica = top3(musicasGlobais);
+  const top3Album = top3(albunsGlobais);
+  const top3RecentesMusica = top3(musicasGlobais.filter(dentroDosUltimosSeisMeses));
+  const top3RecentesAlbum = top3(albunsGlobais.filter(dentroDosUltimosSeisMeses));
 
   const porNota = [...(rankingTipo === "musicas" ? musicas : albuns)].sort((a, b) => b.nota - a.nota);
 
-  const porData = [...metacritic.itens]
+  const porData = [...itensFiltrados]
     .filter((i) => i.releaseDateIso)
     .sort((a, b) => (b.releaseDateIso || "").localeCompare(a.releaseDateIso || ""));
 
   const gruposEstilo = new Map<string, MetacriticItem[]>();
-  for (const item of metacritic.itens) {
+  for (const item of itensFiltrados) {
     const chave = item.genero || "Sem estilo definido";
     if (!gruposEstilo.has(chave)) gruposEstilo.set(chave, []);
     gruposEstilo.get(chave)!.push(item);
@@ -493,7 +514,7 @@ function MetacriticTab({
     .map(([nome, itens]) => [nome, itens.sort((a, b) => b.nota - a.nota)] as const);
 
   const gruposAno = new Map<string, MetacriticItem[]>();
-  for (const item of metacritic.itens) {
+  for (const item of itensFiltrados) {
     const chave = metacriticAno(item.releaseDateIso) || "Sem data";
     if (!gruposAno.has(chave)) gruposAno.set(chave, []);
     gruposAno.get(chave)!.push(item);
@@ -502,9 +523,27 @@ function MetacriticTab({
     .sort((a, b) => (b[0] === "Sem data" ? -1 : a[0] === "Sem data" ? 1 : b[0].localeCompare(a[0])))
     .map(([nome, itens]) => [nome, itens.sort((a, b) => b.nota - a.nota)] as const);
 
+  // Ranking de ARTISTAS (não de materiais) — média de todas as notas
+  // recebidas por cada artista (música + álbum juntos), com a foto de
+  // perfil dele. Pedido do usuário.
+  const gruposArtista = new Map<string, MetacriticItem[]>();
+  for (const item of metacritic.itens) {
+    if (!gruposArtista.has(item.artistaPrincipal)) gruposArtista.set(item.artistaPrincipal, []);
+    gruposArtista.get(item.artistaPrincipal)!.push(item);
+  }
+  const artistasRankeados = [...gruposArtista.entries()]
+    .map(([nome, itens]) => ({
+      nome,
+      fotoUrl: itens.find((i) => i.artistaFotoUrl)?.artistaFotoUrl || null,
+      media: itens.reduce((soma, i) => soma + i.nota, 0) / itens.length,
+      total: itens.length,
+    }))
+    .sort((a, b) => b.media - a.media);
+
   const views: { key: typeof view; label: string; icon: typeof ListOrdered }[] = [
     { key: "destaques", label: "Destaques", icon: Award },
     { key: "ranking", label: "Ranking", icon: ListOrdered },
+    { key: "artistas", label: "Artistas", icon: Users },
     { key: "recentes", label: "Recentes", icon: Sparkle },
     { key: "estilo", label: "Estilo", icon: Tags },
     { key: "ano", label: "Ano", icon: CalendarDays },
@@ -558,6 +597,30 @@ function MetacriticTab({
           ))}
         </div>
       </div>
+
+      {/* Filtro por artista — só faz sentido nas guias de material
+          (Ranking/Recentes/Estilo/Ano); Destaques e Artistas são visões
+          gerais e ficam de fora dele. */}
+      {view !== "destaques" && view !== "artistas" && artistasDisponiveis.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+          <select
+            value={artistaFiltro}
+            onChange={(e) => {
+              haptic.selection();
+              setArtistaFiltro(e.target.value);
+            }}
+            className="w-full appearance-none bg-white/[0.03] border border-white/10 rounded-xl pl-9 pr-8 py-2.5 text-xs font-bold text-white focus:border-primary focus:outline-none"
+          >
+            <option value="">Todos os artistas</option>
+            {artistasDisponiveis.map((nome) => (
+              <option key={nome} value={nome}>
+                {nome}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {view === "destaques" && (
         <div className="space-y-6">
@@ -696,6 +759,60 @@ function MetacriticTab({
                 ))}
               </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {view === "artistas" && (
+        <div className="space-y-2">
+          <p className="text-[10px] text-muted-foreground font-medium px-1">
+            Média de todas as notas recebidas (música + álbum). Toque num artista pra ver só os materiais dele no Ranking.
+          </p>
+          {artistasRankeados.map(({ nome, fotoUrl, media, total }, idx) => (
+            <button
+              key={nome}
+              onClick={() => {
+                haptic.selection();
+                setArtistaFiltro(nome);
+                setView("ranking");
+              }}
+              className={`${card} w-full p-3.5 flex items-center gap-3 text-left active:scale-95`}
+            >
+              <span
+                className={`w-7 shrink-0 text-center text-sm font-black ${
+                  idx === 0
+                    ? "text-amber-400"
+                    : idx === 1
+                      ? "text-slate-300"
+                      : idx === 2
+                        ? "text-amber-700"
+                        : "text-muted-foreground"
+                }`}
+              >
+                {idx + 1}
+              </span>
+              <div className="size-11 shrink-0 rounded-full overflow-hidden bg-secondary">
+                {fotoUrl && (
+                  <img
+                    src={driveImg(fotoUrl, 150)}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                  />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold leading-snug truncate">{nome}</p>
+                <p className="text-[10px] text-muted-foreground font-medium">
+                  {total} material{total === 1 ? "" : "is"} avaliado{total === 1 ? "" : "s"}
+                </p>
+              </div>
+              <span
+                className={`shrink-0 min-w-[2rem] h-8 px-1.5 rounded-lg grid place-items-center text-black text-sm font-black leading-none ${metacriticScoreColor(media)}`}
+              >
+                {media.toFixed(0)}
+              </span>
+            </button>
           ))}
         </div>
       )}
