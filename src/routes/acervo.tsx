@@ -474,9 +474,12 @@ function MetacriticTab({
   // Filtra vazio — algumas linhas antigas de Musicas/Albuns têm nota mas
   // "ACT PRINCIPAL" em branco; sem isso viravam um artista fantasma "" no
   // topo do ranking de Artistas (foto/nome em branco, reportado pelo
-  // usuário).
+  // usuário). `|| ""` também protege contra um snapshot ainda em cache no
+  // KV, gerado por uma versão anterior do código sem esse campo — sem
+  // isso, um `undefined.trim()` derrubava a aba inteira (também já
+  // reportado): nunca confiar que dado vindo de fora tem o formato certo.
   const artistasDisponiveis = [
-    ...new Set(metacritic.itens.map((i) => i.artistaPrincipal).filter((nome) => nome.trim())),
+    ...new Set(metacritic.itens.map((i) => i.artistaPrincipal || "").filter((nome) => nome.trim())),
   ].sort((a, b) => a.localeCompare(b));
 
   const itensFiltrados = artistaFiltro
@@ -534,7 +537,7 @@ function MetacriticTab({
   // perfil dele. Pedido do usuário.
   const gruposArtista = new Map<string, MetacriticItem[]>();
   for (const item of metacritic.itens) {
-    if (!item.artistaPrincipal.trim()) continue;
+    if (!(item.artistaPrincipal || "").trim()) continue;
     if (!gruposArtista.has(item.artistaPrincipal)) gruposArtista.set(item.artistaPrincipal, []);
     gruposArtista.get(item.artistaPrincipal)!.push(item);
   }
