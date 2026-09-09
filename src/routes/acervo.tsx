@@ -575,7 +575,7 @@ function PitchforkTab({ edicoes }: { edicoes: PitchforkEdicao[] | null }) {
               <p className="text-base font-black text-white leading-tight truncate">{topArtist.artista}</p>
               {topArtist.nota !== null && (
                 <p className="text-[11px] text-muted-foreground font-bold">
-                  {topArtist.nota.toLocaleString("pt-BR")} pts em Fortuna Charts
+                  {topArtist.nota.toLocaleString("pt-BR")} pts acumulados
                 </p>
               )}
             </div>
