@@ -551,7 +551,31 @@ async function gravarRegistroParticipacaoTV(nomeJogador: string, tipoRegistro: s
  * e marca a transmissão como processada. Chamado pelo cron (ver
  * src/server.ts, handler "scheduled") a cada 10 minutos.
  */
-export async function processarParticipacaoTV(): Promise<{
+interface FlagsKvLike {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+}
+
+// Motivos de "essa transmissão nunca vira registro" (TIPO_EVENTO vazio, sem
+// faixa cadastrada em Regras, chave já processada) só apareciam num
+// console.warn que ninguém vê — o admin não tinha como saber que uma
+// transmissão inteira (ex: Empire Hits de uma semana) ficou de fora sem
+// nenhum aviso. Agora grava no mesmo "error-log" (KV FLAGS) que já alimenta
+// /api/debug/error-log, pra dar pra checar depois.
+async function registrarDiagnosticoSkip(flags: FlagsKvLike | undefined, mensagem: string): Promise<void> {
+  if (!flags) return;
+  try {
+    const entry = { ts: Date.now(), source: "tv-participacao", message: mensagem, path: undefined };
+    const raw = await flags.get("error-log");
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift(entry);
+    await flags.put("error-log", JSON.stringify(list.slice(0, 50)));
+  } catch {
+    // Nunca deixar o log de diagnóstico derrubar o processamento em si.
+  }
+}
+
+export async function processarParticipacaoTV(flags?: FlagsKvLike): Promise<{
   transmissoesProcessadas: number;
   registrosGravados: number;
 }> {
@@ -590,14 +614,34 @@ export async function processarParticipacaoTV(): Promise<{
     // do zero a cada 10 minutos, gravando um REGISTRO novo mesmo depois do
     // usuário apagar o anterior.
     if (processados.has(key) || processados.has(chaveLegada)) continue;
-    if (!grupo.endTs || now < grupo.endTs + bufferMs) continue; // ainda não acabou (ou falta a folga de segurança)
+    if (!grupo.endTs) {
+      // Diferente de "ainda não acabou" (abaixo) — isso significa que
+      // NUNCA vai processar sozinho: Data/Horario não bateram no formato
+      // esperado (DD/MM/YYYY e HH:MM) em nenhuma linha desse grupo, então
+      // não dá pra calcular quando a transmissão terminou. Fica pra sempre
+      // pendente até alguém corrigir a data/horário na planilha.
+      await registrarDiagnosticoSkip(
+        flags,
+        `[processarParticipacaoTV] "${grupo.programa}" (${key}) nunca processado: Data/Horario não bateram no formato esperado (DD/MM/YYYY e HH:MM) em nenhuma linha — sem isso não dá pra saber quando a transmissão terminou.`,
+      );
+      continue;
+    }
+    if (now < grupo.endTs + bufferMs) continue; // ainda não acabou (ou falta a folga de segurança) — normal, não é erro
     if (!grupo.tipoEvento) {
       console.warn(`[processarParticipacaoTV] "${key}" sem TIPO_EVENTO — pulando.`);
+      await registrarDiagnosticoSkip(
+        flags,
+        `[processarParticipacaoTV] "${grupo.programa}" (${key}) não gerou registro: coluna TIPO_EVENTO está vazia em Agenda_TV.`,
+      );
       continue;
     }
     const tiers = regras.get(normalizeComparison(grupo.tipoEvento.trim()));
     if (!tiers || tiers.length === 0) {
       console.warn(`[processarParticipacaoTV] Nenhuma regra encontrada pro TIPO "${grupo.tipoEvento}".`);
+      await registrarDiagnosticoSkip(
+        flags,
+        `[processarParticipacaoTV] "${grupo.programa}" (${key}) não gerou registro: nenhuma faixa cadastrada na aba Regras pro TIPO_EVENTO "${grupo.tipoEvento}".`,
+      );
       continue;
     }
 
