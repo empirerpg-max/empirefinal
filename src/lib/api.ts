@@ -1136,6 +1136,18 @@ export const api = {
     const data = await res.json().catch(() => null);
     return Array.isArray(data) ? data : [];
   },
+  // Ranking do Metacritic (Acervo) — retrato semanal pronto, nunca lê a
+  // planilha em tempo real (ver metacriticController.ts no backend).
+  async listarMetacriticAcervo(): Promise<{
+    semanaId: string | null;
+    geradoEm: string | null;
+    itens: { id: string; tipo: "musicas" | "albuns"; titulo: string; artista: string; capaUrl: string | null; nota: number }[];
+  }> {
+    const res = await fetch("/api/acervo/metacritic");
+    const data = await res.json().catch(() => null);
+    if (data?.success && data?.data) return data.data;
+    return { semanaId: null, geradoEm: null, itens: [] };
+  },
   // Letra sincronizada (formato LRC) — só o dono do artista da faixa
   // consegue gravar; o backend confere isso de novo antes de escrever.
   async salvarLetraSincronizada(

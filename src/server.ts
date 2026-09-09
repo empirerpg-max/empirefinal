@@ -357,6 +357,9 @@ export default {
     const { reconciliarPontosComentariosScheduled } = await import(
       "../backend/src/controllers/reconciliacaoRegistroController"
     );
+    const { atualizarSnapshotMetacriticSemanalScheduled } = await import(
+      "../backend/src/controllers/metacriticController"
+    );
     ctx.waitUntil(
       processarParticipacaoTV((env as { FLAGS?: FlagsKv }).FLAGS)
         .then((r) =>
@@ -388,6 +391,17 @@ export default {
           ),
         )
         .catch((err) => console.error("[scheduled] Erro ao reconciliar pontos de comentários:", err)),
+    );
+    // Ranking do Metacritic (Acervo) — checa a cada 10 min, mas só REGRAVA
+    // o snapshot uma vez por semana (corte quarta 00:00, ver
+    // metacriticController.ts). O resto do tempo essa chamada é barata: só
+    // compara o id da semana salvo e não faz nada.
+    ctx.waitUntil(
+      atualizarSnapshotMetacriticSemanalScheduled((env as { FLAGS?: FlagsKv }).FLAGS)
+        .then((r) =>
+          r.atualizou ? console.log(`[scheduled] Snapshot Metacritic semanal atualizado (semana ${r.semanaId}).`) : null,
+        )
+        .catch((err) => console.error("[scheduled] Erro ao atualizar snapshot Metacritic:", err)),
     );
   },
 

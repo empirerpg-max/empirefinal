@@ -17,7 +17,6 @@ import {
 import { toast } from "sonner";
 import { driveImg } from "@/lib/api";
 import { haptic } from "@/lib/telegram";
-import { ScoreBadge } from "./ScoreBadge";
 import { parseLrc, findCurrentLrcLineIndex } from "@/lib/lrc";
 import { useEmpirePlayer } from "./PlayerContext";
 
@@ -645,11 +644,6 @@ export function MusicPlayer({
                   <p className="text-sm font-bold text-emerald-400 truncate">
                     {currentTrack.artista}
                   </p>
-                  <ScoreBadge
-                    score={currentTrack.metacriticAvg}
-                    variant="metacritic"
-                    className="!px-1.5 !py-0.5 !text-[11px] !rounded-lg"
-                  />
                 </div>
               </div>
               {currentTrack.letra && (
@@ -734,11 +728,6 @@ export function MusicPlayer({
                 <p className="text-[11px] font-medium text-neutral-400 truncate">
                   {currentTrack.artista}
                 </p>
-                <ScoreBadge
-                  score={currentTrack.metacriticAvg}
-                  variant="metacritic"
-                  className="!px-1.5 !py-0 !text-[10px] shrink-0"
-                />
               </div>
             </div>
           </button>

@@ -11,6 +11,7 @@ import {
   getAcervoEntrevistasController,
   createAcervoEntrevistaController,
 } from "../controllers/acervoController";
+import { getMetacriticRankingController } from "../controllers/metacriticController";
 import { getNivelController } from "../controllers/nivelController";
 import {
   createCommentController,
@@ -192,6 +193,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/charts",
     "/api/acervo/revistas",
     "/api/acervo/entrevistas",
+    "/api/acervo/metacritic",
     "/api/auth/login",
     "/api/auth/heartbeat",
     "/api/auth/perfil",
@@ -475,6 +477,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
               JSON.stringify({ success: false, error: "Use GET ou POST para /api/acervo/entrevistas." }),
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
+  } else if (url.pathname === "/api/acervo/metacritic") {
+    response = await getMetacriticRankingController();
   } else if (url.pathname === "/api/social/posts") {
     response =
       request.method === "GET"

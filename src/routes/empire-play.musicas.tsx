@@ -5,7 +5,6 @@ import { driveImg, type PlaylistTrack } from "@/lib/api";
 import { toPlayableTrack, toPlaylistTrack } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
-import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 import { LoadErrorState } from "@/components/LoadErrorState";
 
@@ -137,11 +136,6 @@ function EmpirePlayMusicas() {
                     <p className="text-[11px] sm:text-xs text-neutral-400 break-words">
                       {m.artista}
                     </p>
-                    <ScoreBadge
-                      score={m.metacriticAvg}
-                      variant="metacritic"
-                      className="!px-1.5 !py-0 !text-[10px] shrink-0"
-                    />
                   </div>
                 </div>
               </div>

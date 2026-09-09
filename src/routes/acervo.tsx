@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -14,6 +14,7 @@ import {
   Trash2,
   BookOpenText,
   Crown,
+  Award,
 } from "lucide-react";
 import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -38,6 +39,15 @@ type Revista = {
   data: string;
   telegram_id?: string;
   musicas?: string[];
+};
+
+type MetacriticItem = {
+  id: string;
+  tipo: "musicas" | "albuns";
+  titulo: string;
+  artista: string;
+  capaUrl: string | null;
+  nota: number;
 };
 
 type Pergunta = { pergunta: string; resposta: string };
@@ -76,10 +86,11 @@ function AcervoPage() {
   // jogador não tinha nenhum artista vinculado mesmo tendo (mesmo padrão já
   // usado em /perfil).
   const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
-  const [tab, setTab] = useState<"revistas" | "entrevistas" | "forbes">("revistas");
+  const [tab, setTab] = useState<"revistas" | "entrevistas" | "forbes" | "metacritic">("revistas");
   const [revistas, setRevistas] = useState<Revista[]>([]);
   const [entrevistas, setEntrevistas] = useState<Entrevista[]>([]);
   const [forbes, setForbes] = useState<Artist[] | null>(null);
+  const [metacritic, setMetacritic] = useState<{ semanaId: string | null; itens: MetacriticItem[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [myArtists, setMyArtists] = useState<any[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -111,6 +122,11 @@ function AcervoPage() {
       setForbes(ranked);
     });
   }, [tab, forbes]);
+
+  useEffect(() => {
+    if (tab !== "metacritic" || metacritic !== null) return;
+    api.listarMetacriticAcervo().then((r) => setMetacritic({ semanaId: r.semanaId, itens: r.itens }));
+  }, [tab, metacritic]);
 
   useEffect(() => {
     if (!tgId || tgId === "guest") return;
@@ -176,6 +192,20 @@ function AcervoPage() {
           {tab === "forbes" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
           <Crown className="relative z-10 size-3.5" /> <span className="relative z-10">Forbes</span>
         </button>
+        <button
+          onClick={() => {
+            haptic.selection();
+            setTab("metacritic");
+          }}
+          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+            tab === "metacritic"
+              ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+              : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
+          }`}
+        >
+          {tab === "metacritic" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+          <Award className="relative z-10 size-3.5" /> <span className="relative z-10">Metacritic</span>
+        </button>
       </div>
 
       <div className="px-4">
@@ -209,6 +239,66 @@ function AcervoPage() {
                   <p className="text-sm font-black text-primary shrink-0">{fmtMoney(a.fortuna_total || 0)}</p>
                 </div>
               ))}
+            </div>
+          )
+        ) : tab === "metacritic" ? (
+          metacritic === null ? (
+            <div className="flex flex-col items-center justify-center p-20 gap-4">
+              <Loader2 className="size-8 text-primary animate-spin" />
+            </div>
+          ) : metacritic.itens.length === 0 ? (
+            <EmptyState text="Nenhuma nota do Metacritic registrada ainda." />
+          ) : (
+            <div className="space-y-4">
+              {/* Atualização é semanal de propósito (não em tempo real) —
+                  pra ninguém conseguir inferir "quem deu nota pra quem"
+                  vendo o ranking mudar assim que um comentário é postado. */}
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide px-1">
+                Ranking atualizado semanalmente
+              </p>
+              <div className="grid gap-2">
+                {metacritic.itens.map((item, idx) => (
+                  <Link
+                    key={item.id}
+                    to="/empire-play/forum"
+                    search={{ tab: item.tipo, id: item.id }}
+                    onClick={() => haptic.selection()}
+                    className={`${card} p-3.5 flex items-center gap-3 active:scale-95`}
+                  >
+                    <span
+                      className={`w-7 shrink-0 text-center text-sm font-black ${
+                        idx === 0
+                          ? "text-amber-400"
+                          : idx === 1
+                            ? "text-slate-300"
+                            : idx === 2
+                              ? "text-amber-700"
+                              : "text-muted-foreground"
+                      }`}
+                    >
+                      {idx + 1}
+                    </span>
+                    <div className="size-11 shrink-0 rounded-xl overflow-hidden bg-secondary">
+                      {item.capaUrl && (
+                        <img
+                          src={resolveImg(item.capaUrl)}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
+                        />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold leading-snug truncate">{item.titulo}</p>
+                      <p className="text-[10px] text-muted-foreground font-medium truncate">{item.artista}</p>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-1 text-primary">
+                      <Award className="size-3.5" />
+                      <span className="text-sm font-black">{item.nota.toFixed(0)}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </div>
           )
         ) : loading ? (
@@ -282,7 +372,7 @@ function AcervoPage() {
       </div>
       </div>
 
-      {tab !== "forbes" && (
+      {tab !== "forbes" && tab !== "metacritic" && (
         <button
           onClick={() => {
             haptic.light();
@@ -300,7 +390,7 @@ function AcervoPage() {
       {selectedEntrevista && (
         <EntrevistaViewer entrevista={selectedEntrevista} onClose={() => setSelectedEntrevista(null)} />
       )}
-      {isCreateOpen && tab !== "forbes" && (
+      {isCreateOpen && tab !== "forbes" && tab !== "metacritic" && (
         <CreateModal
           tab={tab}
           myArtists={myArtists}
