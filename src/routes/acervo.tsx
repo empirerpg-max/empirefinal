@@ -444,7 +444,8 @@ function MetacriticTab({
   metacritic: { semanaId: string | null; itens: MetacriticItem[] } | null;
   card: string;
 }) {
-  const [view, setView] = useState<"ranking" | "recentes" | "estilo" | "ano">("ranking");
+  const [view, setView] = useState<"destaques" | "ranking" | "recentes" | "estilo" | "ano">("destaques");
+  const [rankingTipo, setRankingTipo] = useState<"musicas" | "albuns">("musicas");
 
   if (metacritic === null) {
     return (
@@ -457,7 +458,25 @@ function MetacriticTab({
     return <EmptyState text="Nenhuma nota do Metacritic registrada ainda." />;
   }
 
-  const porNota = [...metacritic.itens].sort((a, b) => b.nota - a.nota);
+  // Música e álbum NUNCA se misturam no mesmo ranking (pedido do usuário) —
+  // toda visão em lista/grade separa os dois, nunca mostra os dois juntos
+  // competindo pela mesma posição.
+  const musicas = metacritic.itens.filter((i) => i.tipo === "musicas");
+  const albuns = metacritic.itens.filter((i) => i.tipo === "albuns");
+
+  const top3 = (lista: MetacriticItem[]) => [...lista].sort((a, b) => b.nota - a.nota).slice(0, 3);
+
+  const SEIS_MESES_MS = 1000 * 60 * 60 * 24 * 30 * 6;
+  const corteRecente = Date.now() - SEIS_MESES_MS;
+  const dentroDosUltimosSeisMeses = (i: MetacriticItem) =>
+    !!i.releaseDateIso && new Date(i.releaseDateIso).getTime() >= corteRecente;
+
+  const top3Musica = top3(musicas);
+  const top3Album = top3(albuns);
+  const top3RecentesMusica = top3(musicas.filter(dentroDosUltimosSeisMeses));
+  const top3RecentesAlbum = top3(albuns.filter(dentroDosUltimosSeisMeses));
+
+  const porNota = [...(rankingTipo === "musicas" ? musicas : albuns)].sort((a, b) => b.nota - a.nota);
 
   const porData = [...metacritic.itens]
     .filter((i) => i.releaseDateIso)
@@ -484,11 +503,25 @@ function MetacriticTab({
     .map(([nome, itens]) => [nome, itens.sort((a, b) => b.nota - a.nota)] as const);
 
   const views: { key: typeof view; label: string; icon: typeof ListOrdered }[] = [
+    { key: "destaques", label: "Destaques", icon: Award },
     { key: "ranking", label: "Ranking", icon: ListOrdered },
     { key: "recentes", label: "Recentes", icon: Sparkle },
     { key: "estilo", label: "Estilo", icon: Tags },
     { key: "ano", label: "Ano", icon: CalendarDays },
   ];
+
+  // Reaproveitada nos 4 blocos de "Destaques" e disponível pro Ranking —
+  // fileira horizontal de até 3 cards, mesmo estilo dos outros lugares.
+  const TrioGrid = ({ itens }: { itens: MetacriticItem[] }) =>
+    itens.length === 0 ? (
+      <p className="text-xs text-muted-foreground italic px-1">Nada por aqui ainda.</p>
+    ) : (
+      <div className="grid grid-cols-3 gap-3">
+        {itens.map((item) => (
+          <MetacriticGridCard key={item.id} item={item} />
+        ))}
+      </div>
+    );
 
   return (
     <div className="space-y-5">
@@ -522,8 +555,52 @@ function MetacriticTab({
         </div>
       </div>
 
+      {view === "destaques" && (
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <MetacriticSectionHeader>Top 3 Música</MetacriticSectionHeader>
+            <TrioGrid itens={top3Musica} />
+          </div>
+          <div className="space-y-3">
+            <MetacriticSectionHeader>Top 3 Álbum</MetacriticSectionHeader>
+            <TrioGrid itens={top3Album} />
+          </div>
+          <div className="space-y-3">
+            <MetacriticSectionHeader>Top 3 Recentes · Música</MetacriticSectionHeader>
+            <p className="text-[10px] text-muted-foreground -mt-2 px-1">Lançamentos dos últimos 6 meses</p>
+            <TrioGrid itens={top3RecentesMusica} />
+          </div>
+          <div className="space-y-3">
+            <MetacriticSectionHeader>Top 3 Recentes · Álbum</MetacriticSectionHeader>
+            <p className="text-[10px] text-muted-foreground -mt-2 px-1">Lançamentos dos últimos 6 meses</p>
+            <TrioGrid itens={top3RecentesAlbum} />
+          </div>
+        </div>
+      )}
+
       {view === "ranking" && (
-        <div className="grid gap-2">
+        <div className="space-y-3">
+          {/* Toggle Música/Álbum — os dois nunca aparecem misturados no
+              ranking geral (pedido do usuário). */}
+          <div className="flex gap-2">
+            {(["musicas", "albuns"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => {
+                  haptic.selection();
+                  setRankingTipo(t);
+                }}
+                className={`flex-1 py-2 rounded-xl font-black text-[11px] uppercase transition-all active:scale-95 ${
+                  rankingTipo === t
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground border border-white/10 bg-white/[0.03]"
+                }`}
+              >
+                {t === "musicas" ? "Música" : "Álbum"}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-2">
           {porNota.map((item, idx) => (
             <Link
               key={item.id}
@@ -571,6 +648,7 @@ function MetacriticTab({
               </span>
             </Link>
           ))}
+          </div>
         </div>
       )}
 
