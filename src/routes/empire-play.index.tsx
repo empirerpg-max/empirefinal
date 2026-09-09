@@ -409,7 +409,9 @@ function EmpirePlayInicio() {
                         )}
                       </div>
 
-                      {/* Título (com feats) + selo de nota/likes quando o item tem avaliação real */}
+                      {/* Título (com feats) + selo de likes (só YouTube — a
+                          nota do Metacritic saiu daqui, mora só em Acervo
+                          > Metacritic agora) */}
                       <div className="flex-1 min-w-0 flex items-center gap-2.5">
                         <div className="flex-1 min-w-0">
                           <h4 className="font-extrabold text-sm text-white break-words leading-tight">
@@ -421,11 +423,13 @@ function EmpirePlayInicio() {
                             </p>
                           )}
                         </div>
-                        <ScoreBadge
-                          score={item.metacriticAvg}
-                          variant={activeSlidingPlaylist === "youtube" ? "likes" : "metacritic"}
-                          className="shrink-0 !text-[10px] !px-2 !py-1"
-                        />
+                        {activeSlidingPlaylist === "youtube" && (
+                          <ScoreBadge
+                            score={item.metacriticAvg}
+                            variant="likes"
+                            className="shrink-0 !text-[10px] !px-2 !py-1"
+                          />
+                        )}
                       </div>
 
                       {/* Salvar / adicionar à playlist (só faixas de áudio) */}
