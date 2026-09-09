@@ -4,16 +4,18 @@ import {
   Music, Flame, Youtube, Disc3, DollarSign, Search, X, ChevronLeft, ChevronRight, Loader2, Radio,
 } from "lucide-react";
 import {
-  getBannerN1s, getTopArtistCover, getReleases, getChartFilters, getChartData, parseEditorial,
+  getChartFilters, getChartData,
   getMonthlyYears, getMonthlyDates, getMonthlyArtists, getMonthlyStats, getRealTime,
-  type ChartRow, type TopArtistCover, type ReleaseItem, type BannerN1s, type RealTimeData,
+  type ChartRow, type RealTimeData,
 } from "@/lib/charts";
 import { resolveImg } from "@/lib/api";
 
 type CategoryId = "hot100" | "spotify" | "apple" | "youtube" | "albums" | "sales";
-type TabId = "home" | "live" | CategoryId;
+type TabId = "live" | CategoryId;
 
-const VALID_TABS: TabId[] = ["home", "live", "hot100", "spotify", "apple", "youtube", "albums", "sales"];
+// "Início" removido a pedido do usuário — mantém só os blocos de verdade
+// (Ao vivo + categorias de chart).
+const VALID_TABS: TabId[] = ["live", "hot100", "spotify", "apple", "youtube", "albums", "sales"];
 
 export const Route = createFileRoute("/charts")({
   head: () => ({
@@ -74,7 +76,7 @@ function ChartsBubbleBackdrop() {
 
 function ChartsPage() {
   const { tab: tabFromUrl } = Route.useSearch();
-  const [tab, setTab] = useState<TabId>(tabFromUrl || "home");
+  const [tab, setTab] = useState<TabId>(tabFromUrl || "live");
   const category = CATEGORIES.find((c) => c.id === tab) || null;
 
   return (
@@ -83,9 +85,7 @@ function ChartsPage() {
       <div className="relative flex-1 overflow-y-auto overflow-x-hidden">
         <ChartsBubbleBackdrop />
         <div className="relative">
-          {tab === "home" ? (
-            <ChartsHome />
-          ) : tab === "live" ? (
+          {tab === "live" ? (
             <ChartsRealTime />
           ) : category ? (
             <ChartsCategoryView category={category} />
@@ -129,10 +129,6 @@ function ChartsTabBar({ active, onChange }: { active: TabId; onChange: (t: TabId
       {/* linha de glow sutil no rodapé da barra — mesma paleta primary/fuchsia usada nos blobs de fundo do Charts */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
       <div className="h-12 flex items-center gap-2 px-3 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        <button onClick={() => onChange("home")} className={chartsPillClass(active === "home")}>
-          {active === "home" && <ChartsPillActiveBg />}
-          <span className="relative z-10">Início</span>
-        </button>
         <button onClick={() => onChange("live")} className={chartsPillClass(active === "live", true)}>
           {active === "live" && <ChartsPillActiveBg />}
           <Radio
@@ -291,136 +287,6 @@ function ChartsRealTime() {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-// ---------- Home ----------
-function ChartsHome() {
-  const [cover, setCover] = useState<TopArtistCover | null>(null);
-  const [releases, setReleases] = useState<ReleaseItem[]>([]);
-  const [banner, setBanner] = useState<BannerN1s | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setErrorMsg(null);
-    Promise.all([
-      getTopArtistCover().catch(() => ({} as TopArtistCover)),
-      getReleases().catch(() => [] as ReleaseItem[]),
-      getBannerN1s().catch(() => null),
-    ]).then(([c, r, b]) => {
-      if (!alive) return;
-      setCover(c);
-      setReleases(Array.isArray(r) ? r : []);
-      setBanner(b);
-      setLoading(false);
-    });
-    return () => { alive = false; };
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center text-sm text-muted-foreground gap-2">
-        <Loader2 className="size-4 animate-spin" /> Carregando charts...
-      </div>
-    );
-  }
-
-  if (cover?.error) {
-    return (
-      <div className="p-10 text-center text-sm text-muted-foreground">
-        Erro ao carregar os charts: {cover.error}
-      </div>
-    );
-  }
-
-  const editorial = parseEditorial(cover?.editorial);
-  const n1s: { label: string; color: string; item?: { capa?: string; tit?: string; art?: string } }[] = [
-    { label: "Hot 100", color: "text-red-400", item: banner?.hot100 },
-    { label: "Spotify", color: "text-emerald-400", item: banner?.spotify },
-    { label: "Apple Music", color: "text-rose-400", item: banner?.apple },
-    { label: "YouTube", color: "text-red-500", item: banner?.youtube },
-    { label: "Digital Sales", color: "text-sky-400", item: banner?.sales },
-    { label: "Billboard 200", color: "text-amber-400", item: banner?.bb200 },
-  ].filter((x) => x.item);
-
-  return (
-    <div>
-      {cover?.name ? (
-        <div className="relative w-full h-[55vh] min-h-[320px] overflow-hidden rounded-b-3xl">
-          <CoverImg src={cover.img} alt={cover.name} className="absolute inset-0 w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/20" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/80 to-transparent" />
-          <div className="relative h-full flex flex-col justify-end p-6 max-w-2xl">
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold w-fit mb-2 bg-primary/20 text-primary">
-              TOP ARTIST {cover.month ? `— ${cover.month}` : ""}
-            </span>
-            <h1 className="font-['Fjalla_One'] text-4xl sm:text-5xl tracking-tight uppercase">{cover.name}</h1>
-            {cover.pts && (
-              <div className="mt-2 text-sm font-bold text-muted-foreground">{cover.pts} <span className="text-xs">PTS</span></div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="p-10 text-center text-sm text-muted-foreground italic">
-          Artista do topo do mês ainda não disponível.
-        </div>
-      )}
-
-      {editorial.length > 0 && (
-        <div className="px-6 py-5 max-w-2xl space-y-2">
-          {cover?.author && (
-            <div className="text-[11px] uppercase tracking-wider font-black text-muted-foreground">{cover.author}</div>
-          )}
-          {editorial.map((line, i) =>
-            line.kind === "site" ? (
-              <div key={i} className="text-[11px] uppercase tracking-widest text-primary font-bold">{line.text}</div>
-            ) : line.kind === "headline" ? (
-              <div key={i} className="text-lg font-black">{line.text}</div>
-            ) : (
-              <p key={i} className="text-sm text-muted-foreground leading-relaxed">{line.text}</p>
-            )
-          )}
-        </div>
-      )}
-
-      {n1s.length > 0 && (
-        <section className="px-4 pb-6">
-          <h2 className="font-['Fjalla_One'] text-sm tracking-wider text-muted-foreground mb-3 px-2">#1s DA SEMANA</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2 px-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            {n1s.map((x, i) => (
-              <div key={i} className="shrink-0 w-56 rounded-2xl border border-border/60 bg-card/40 p-3 flex items-center gap-3 shadow-sm shadow-black/10">
-                <CoverImg src={x.item?.capa} alt={x.item?.tit || ""} className="size-12 rounded-xl object-cover shrink-0" />
-                <div className="min-w-0">
-                  <div className={`text-[10px] font-bold uppercase tracking-wider ${x.color}`}>{x.label}</div>
-                  <div className="text-sm font-semibold line-clamp-2 leading-snug break-words">{x.item?.tit || "—"}</div>
-                  {x.item?.art && <div className="text-xs text-muted-foreground line-clamp-1 break-words">{x.item.art}</div>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {releases.length > 0 && (
-        <section className="px-4 pb-8">
-          <h2 className="font-['Fjalla_One'] text-sm tracking-wider text-muted-foreground mb-3 px-2">LANÇAMENTOS RECENTES</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2 px-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            {releases.map((r, i) => (
-              <div key={i} className="shrink-0 w-44 rounded-2xl border border-border/60 bg-card/40 p-3 shadow-sm shadow-black/10">
-                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary uppercase mb-2">
-                  {r.tipo || "Single"}
-                </span>
-                <div className="text-sm font-semibold line-clamp-2 leading-snug break-words">{r.musica || r.titulo || r.t || "—"}</div>
-                {r.data && <div className="text-xs text-muted-foreground mt-1">{r.data}</div>}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
