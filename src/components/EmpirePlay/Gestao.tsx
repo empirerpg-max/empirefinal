@@ -60,6 +60,10 @@ export interface TrackConfig {
   tipoMusica?: string;
   participantes?: string[];
   mediaUrl?: string;
+  // Arquivo de áudio local escolhido pelo jogador pra essa faixa (upload
+  // direto pro Drive) — alternativa ao link colado em mediaUrl. Só existe
+  // em memória até o álbum ser enviado (não é serializado/salvo).
+  mediaFile?: File | null;
   abrirTopico?: boolean;
   // Estado só de UI — texto digitado na busca antes de selecionar a faixa.
   buscaQuery?: string;
@@ -224,6 +228,23 @@ const FaixaEditor: React.FC<{
             placeholder="Link do Drive ou YouTube (áudio)"
             className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
           />
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-white/5" />
+            <span className="text-[10px] font-bold uppercase text-neutral-600">ou</span>
+            <div className="h-px flex-1 bg-white/5" />
+          </div>
+          <label className="cursor-pointer w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[11px] uppercase tracking-wider border border-white/10 transition">
+            <Upload className="size-3.5 text-emerald-400" />
+            <span className="truncate">
+              {faixa.mediaFile ? `Selecionado: ${faixa.mediaFile.name}` : "Upload de arquivo local"}
+            </span>
+            <input
+              type="file"
+              accept="audio/*,video/*"
+              onChange={(e) => onChange({ mediaFile: e.target.files?.[0] || null })}
+              className="hidden"
+            />
+          </label>
           <input
             type="text"
             value={(faixa.participantes || []).join(", ")}
@@ -1000,8 +1021,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         );
         return;
       }
-      if (faixa.inedita && !faixa.mediaUrl?.trim()) {
-        setErrorMsg(`Informe o link do áudio (Drive ou YouTube) da Faixa #${faixa.num}.`);
+      if (faixa.inedita && !faixa.mediaUrl?.trim() && !faixa.mediaFile) {
+        setErrorMsg(`Informe o link do áudio (Drive ou YouTube) ou envie um arquivo pra Faixa #${faixa.num}.`);
         return;
       }
     }
@@ -1035,6 +1056,24 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         }
       }
 
+      // Faixas inéditas com arquivo de áudio local (em vez de link colado)
+      // sobem pro Drive antes de montar o payload — mesma pasta usada pra
+      // música avulsa (musicaAudio).
+      const faixasComAudio: TrackConfig[] = [];
+      for (const f of faixasConfig) {
+        if (f.inedita && f.mediaFile) {
+          setUploadProgress(`Fazendo upload do áudio da Faixa #${f.num}...`);
+          const url = await handleUploadToDrive(
+            f.mediaFile,
+            "musicaAudio",
+            `AUDIO_${artistaResponsavel}_${f.titulo}_${Date.now()}`,
+          );
+          faixasComAudio.push({ ...f, mediaUrl: url });
+        } else {
+          faixasComAudio.push(f);
+        }
+      }
+
       setUploadProgress("Registrando álbum no sistema...");
 
       const payload = {
@@ -1045,7 +1084,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         encartesUrls,
         nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
         jogadorId: telegramUser?.id ? String(telegramUser.id) : "",
-        faixas: faixasConfig.map((f) => ({
+        faixas: faixasComAudio.map((f) => ({
           num: f.num,
           inedita: f.inedita,
           titulo: f.titulo,
@@ -1112,8 +1151,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         );
         return;
       }
-      if (faixa.inedita && !faixa.mediaUrl?.trim()) {
-        setErrorMsg(`Informe o link do áudio (Drive ou YouTube) da nova faixa #${faixa.num}.`);
+      if (faixa.inedita && !faixa.mediaUrl?.trim() && !faixa.mediaFile) {
+        setErrorMsg(`Informe o link do áudio (Drive ou YouTube) ou envie um arquivo pra nova faixa #${faixa.num}.`);
         return;
       }
     }
@@ -1145,13 +1184,30 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         }
       }
 
+      // Mesma lógica da criação de álbum: faixa inédita com arquivo local
+      // sobe pro Drive antes de montar o payload.
+      const substFaixasComAudio: TrackConfig[] = [];
+      for (const f of substNovasFaixas) {
+        if (f.inedita && f.mediaFile) {
+          setUploadProgress(`Fazendo upload do áudio da nova faixa #${f.num}...`);
+          const url = await handleUploadToDrive(
+            f.mediaFile,
+            "musicaAudio",
+            `AUDIO_${albumSubstSelecionado.artist}_${f.titulo}_${Date.now()}`,
+          );
+          substFaixasComAudio.push({ ...f, mediaUrl: url });
+        } else {
+          substFaixasComAudio.push(f);
+        }
+      }
+
       setUploadProgress("Salvando alterações do álbum...");
 
       const payload = {
         albumTopicId: albumSubstSelecionado.topicId,
         novaCapaUrl,
         novosEncartesUrls,
-        novasFaixas: substNovasFaixas.map((f) => ({
+        novasFaixas: substFaixasComAudio.map((f) => ({
           num: f.num,
           inedita: f.inedita,
           titulo: f.titulo,
