@@ -1159,6 +1159,27 @@ export const api = {
     if (data?.success && data?.data) return data.data;
     return { semanaId: null, geradoEm: null, itens: [] };
   },
+  // Edição do "Pitchfork"/Empirefork (Acervo) — só lê o que o Apps Script
+  // já deixou pronto na aba "Pitchfork" (ver pitchforkController.ts).
+  async listarPitchfork(): Promise<{
+    edicoes: {
+      tipo: "BEST_NEW_TRACK" | "TOP_ARTIST";
+      periodoId: string;
+      titulo: string;
+      artista: string;
+      capaUrl: string | null;
+      nota: number | null;
+      texto: string;
+      linkTipo: string | null;
+      linkId: string | null;
+      geradoEm: string | null;
+    }[];
+  }> {
+    const res = await fetch("/api/acervo/pitchfork");
+    const data = await res.json().catch(() => null);
+    if (data?.success && data?.data) return data.data;
+    return { edicoes: [] };
+  },
   // Letra sincronizada (formato LRC) — só o dono do artista da faixa
   // consegue gravar; o backend confere isso de novo antes de escrever.
   async salvarLetraSincronizada(
