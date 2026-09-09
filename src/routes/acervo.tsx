@@ -15,6 +15,10 @@ import {
   BookOpenText,
   Crown,
   Award,
+  ListOrdered,
+  Sparkle,
+  Tags,
+  CalendarDays,
 } from "lucide-react";
 import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -48,6 +52,8 @@ type MetacriticItem = {
   artista: string;
   capaUrl: string | null;
   nota: number;
+  genero: string | null;
+  releaseDateIso: string | null;
 };
 
 type Pergunta = { pergunta: string; resposta: string };
@@ -242,65 +248,7 @@ function AcervoPage() {
             </div>
           )
         ) : tab === "metacritic" ? (
-          metacritic === null ? (
-            <div className="flex flex-col items-center justify-center p-20 gap-4">
-              <Loader2 className="size-8 text-primary animate-spin" />
-            </div>
-          ) : metacritic.itens.length === 0 ? (
-            <EmptyState text="Nenhuma nota do Metacritic registrada ainda." />
-          ) : (
-            <div className="space-y-4">
-              {/* Atualização é semanal de propósito (não em tempo real) —
-                  pra ninguém conseguir inferir "quem deu nota pra quem"
-                  vendo o ranking mudar assim que um comentário é postado. */}
-              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide px-1">
-                Ranking atualizado semanalmente
-              </p>
-              <div className="grid gap-2">
-                {metacritic.itens.map((item, idx) => (
-                  <Link
-                    key={item.id}
-                    to="/empire-play/forum"
-                    search={{ tab: item.tipo, id: item.id }}
-                    onClick={() => haptic.selection()}
-                    className={`${card} p-3.5 flex items-center gap-3 active:scale-95`}
-                  >
-                    <span
-                      className={`w-7 shrink-0 text-center text-sm font-black ${
-                        idx === 0
-                          ? "text-amber-400"
-                          : idx === 1
-                            ? "text-slate-300"
-                            : idx === 2
-                              ? "text-amber-700"
-                              : "text-muted-foreground"
-                      }`}
-                    >
-                      {idx + 1}
-                    </span>
-                    <div className="size-11 shrink-0 rounded-xl overflow-hidden bg-secondary">
-                      {item.capaUrl && (
-                        <img
-                          src={resolveImg(item.capaUrl)}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                          loading="lazy"
-                        />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold leading-snug truncate">{item.titulo}</p>
-                      <p className="text-[10px] text-muted-foreground font-medium truncate">{item.artista}</p>
-                    </div>
-                    <div className="shrink-0 flex items-center gap-1 text-primary">
-                      <Award className="size-3.5" />
-                      <span className="text-sm font-black">{item.nota.toFixed(0)}</span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )
+          <MetacriticTab metacritic={metacritic} card={card} />
         ) : loading ? (
           <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="size-8 text-primary animate-spin" />
@@ -413,6 +361,262 @@ function EmptyState({ text }: { text: string }) {
       <Archive className="size-8 text-primary/60" />
       <p className="text-sm font-black uppercase tracking-tight">Vazio por aqui</p>
       <p className="text-[11px] font-medium text-muted-foreground leading-snug max-w-[16rem]">{text}</p>
+    </div>
+  );
+}
+
+// Cor da nota — mesma escala semântica já usada em ScoreBadge (≥75 verde,
+// ≥50 amarelo, <50 vermelho), só que aqui vira o "quadrado colorido plano"
+// que é a assinatura visual do Metacritic de verdade, adaptado pro tema
+// escuro do app (fundo sólido + texto preto, igual a referência, em vez de
+// pill translúcida).
+function metacriticScoreColor(nota: number): string {
+  if (nota >= 75) return "bg-emerald-400";
+  if (nota >= 50) return "bg-amber-400";
+  return "bg-rose-500";
+}
+
+function metacriticAno(iso: string | null): string | null {
+  if (!iso) return null;
+  const ano = iso.slice(0, 4);
+  return /^\d{4}$/.test(ano) ? ano : null;
+}
+
+// Card usado nas 3 visões em grade (Recentes / Por Estilo / Por Ano) —
+// capa + faixa colorida no topo (força/fraqueza da nota, tipo o destaque
+// das capas de "New and Notable" do Metacritic real) + selo de nota no
+// canto, quadrado e chapado (não pill), + tag Música/Álbum sempre visível
+// (pedido explícito: álbum também precisa aparecer, não só música).
+function MetacriticGridCard({ item }: { item: MetacriticItem }) {
+  const ano = metacriticAno(item.releaseDateIso);
+  return (
+    <Link
+      to="/empire-play/forum"
+      search={{ tab: item.tipo, id: item.id }}
+      onClick={() => haptic.selection()}
+      className="group block rounded-2xl overflow-hidden bg-white/5 border border-white/10 active:scale-[0.97] transition-transform"
+    >
+      <div className={`h-1 w-full ${metacriticScoreColor(item.nota)}`} aria-hidden="true" />
+      <div className="aspect-square w-full bg-secondary relative">
+        {item.capaUrl && (
+          <img
+            src={resolveImg(item.capaUrl)}
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+            loading="lazy"
+          />
+        )}
+        <span
+          className={`absolute bottom-2 right-2 size-9 rounded-lg grid place-items-center text-black text-sm font-black shadow-lg ${metacriticScoreColor(item.nota)}`}
+        >
+          {item.nota.toFixed(0)}
+        </span>
+      </div>
+      <div className="p-2.5 space-y-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-black uppercase tracking-wide text-primary px-1.5 py-0.5 rounded bg-primary/15">
+            {item.tipo === "albuns" ? "Álbum" : "Música"}
+          </span>
+          {ano && <span className="text-[9px] font-bold text-muted-foreground">{ano}</span>}
+        </div>
+        <p className="text-xs font-bold leading-snug truncate">{item.titulo}</p>
+        <p className="text-[10px] text-muted-foreground font-medium truncate">{item.artista}</p>
+      </div>
+    </Link>
+  );
+}
+
+// Cabeçalho de seção editorial (grande/itálico/black, com régua embaixo) —
+// mesma linguagem tipográfica já usada nos títulos do app, inspirado no
+// sublinhado do "New and Notable" do Metacritic real.
+function MetacriticSectionHeader({ children }: { children: string }) {
+  return (
+    <div className="pb-2 border-b-2 border-white/10">
+      <h3 className="text-lg font-black italic uppercase tracking-tight text-white">{children}</h3>
+    </div>
+  );
+}
+
+function MetacriticTab({
+  metacritic,
+  card,
+}: {
+  metacritic: { semanaId: string | null; itens: MetacriticItem[] } | null;
+  card: string;
+}) {
+  const [view, setView] = useState<"ranking" | "recentes" | "estilo" | "ano">("ranking");
+
+  if (metacritic === null) {
+    return (
+      <div className="flex flex-col items-center justify-center p-20 gap-4">
+        <Loader2 className="size-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+  if (metacritic.itens.length === 0) {
+    return <EmptyState text="Nenhuma nota do Metacritic registrada ainda." />;
+  }
+
+  const porNota = [...metacritic.itens].sort((a, b) => b.nota - a.nota);
+
+  const porData = [...metacritic.itens]
+    .filter((i) => i.releaseDateIso)
+    .sort((a, b) => (b.releaseDateIso || "").localeCompare(a.releaseDateIso || ""));
+
+  const gruposEstilo = new Map<string, MetacriticItem[]>();
+  for (const item of metacritic.itens) {
+    const chave = item.genero || "Sem estilo definido";
+    if (!gruposEstilo.has(chave)) gruposEstilo.set(chave, []);
+    gruposEstilo.get(chave)!.push(item);
+  }
+  const estilosOrdenados = [...gruposEstilo.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([nome, itens]) => [nome, itens.sort((a, b) => b.nota - a.nota)] as const);
+
+  const gruposAno = new Map<string, MetacriticItem[]>();
+  for (const item of metacritic.itens) {
+    const chave = metacriticAno(item.releaseDateIso) || "Sem data";
+    if (!gruposAno.has(chave)) gruposAno.set(chave, []);
+    gruposAno.get(chave)!.push(item);
+  }
+  const anosOrdenados = [...gruposAno.entries()]
+    .sort((a, b) => (b[0] === "Sem data" ? -1 : a[0] === "Sem data" ? 1 : b[0].localeCompare(a[0])))
+    .map(([nome, itens]) => [nome, itens.sort((a, b) => b.nota - a.nota)] as const);
+
+  const views: { key: typeof view; label: string; icon: typeof ListOrdered }[] = [
+    { key: "ranking", label: "Ranking", icon: ListOrdered },
+    { key: "recentes", label: "Recentes", icon: Sparkle },
+    { key: "estilo", label: "Estilo", icon: Tags },
+    { key: "ano", label: "Ano", icon: CalendarDays },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div>
+        {/* Atualização é semanal de propósito (não em tempo real) — pra
+            ninguém conseguir inferir "quem deu nota pra quem" vendo o
+            ranking mudar assim que um comentário é postado. */}
+        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide px-1 mb-3">
+          Ranking atualizado semanalmente · músicas e álbuns
+        </p>
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+          {views.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => {
+                haptic.selection();
+                setView(key);
+              }}
+              className={`relative shrink-0 px-3.5 py-2 rounded-xl font-black text-[11px] uppercase flex items-center gap-1.5 transition-all active:scale-95 ${
+                view === key
+                  ? "text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]"
+                  : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
+              }`}
+            >
+              {view === key && (
+                <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />
+              )}
+              <Icon className="relative z-10 size-3.5" /> <span className="relative z-10">{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view === "ranking" && (
+        <div className="grid gap-2">
+          {porNota.map((item, idx) => (
+            <Link
+              key={item.id}
+              to="/empire-play/forum"
+              search={{ tab: item.tipo, id: item.id }}
+              onClick={() => haptic.selection()}
+              className={`${card} p-3.5 flex items-center gap-3 active:scale-95`}
+            >
+              <span
+                className={`w-7 shrink-0 text-center text-sm font-black ${
+                  idx === 0
+                    ? "text-amber-400"
+                    : idx === 1
+                      ? "text-slate-300"
+                      : idx === 2
+                        ? "text-amber-700"
+                        : "text-muted-foreground"
+                }`}
+              >
+                {idx + 1}
+              </span>
+              <div className="size-11 shrink-0 rounded-xl overflow-hidden bg-secondary">
+                {item.capaUrl && (
+                  <img
+                    src={resolveImg(item.capaUrl)}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                  />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-black uppercase tracking-wide text-primary px-1.5 py-0.5 rounded bg-primary/15 shrink-0">
+                    {item.tipo === "albuns" ? "Álbum" : "Música"}
+                  </span>
+                  <p className="text-sm font-bold leading-snug truncate">{item.titulo}</p>
+                </div>
+                <p className="text-[10px] text-muted-foreground font-medium truncate">{item.artista}</p>
+              </div>
+              <span
+                className={`shrink-0 size-8 rounded-lg grid place-items-center text-black text-sm font-black ${metacriticScoreColor(item.nota)}`}
+              >
+                {item.nota.toFixed(0)}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {view === "recentes" && (
+        <div className="space-y-3">
+          {porData.length === 0 ? (
+            <EmptyState text="Nenhum item com data de lançamento cadastrada ainda." />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {porData.map((item) => (
+                <MetacriticGridCard key={item.id} item={item} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === "estilo" && (
+        <div className="space-y-6">
+          {estilosOrdenados.map(([estilo, itens]) => (
+            <div key={estilo} className="space-y-3">
+              <MetacriticSectionHeader>{estilo}</MetacriticSectionHeader>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {itens.map((item) => (
+                  <MetacriticGridCard key={item.id} item={item} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {view === "ano" && (
+        <div className="space-y-6">
+          {anosOrdenados.map(([ano, itens]) => (
+            <div key={ano} className="space-y-3">
+              <MetacriticSectionHeader>{ano}</MetacriticSectionHeader>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {itens.map((item) => (
+                  <MetacriticGridCard key={item.id} item={item} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

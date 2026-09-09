@@ -109,6 +109,7 @@ export interface EmpirePlayCleanItem {
   syncedLyrics?: string | null;
   description?: string | null;
   category?: string | null;
+  genero?: string | null;
   trackOrder?: number | null;
   // Foto de perfil do artista (aba ARTISTAS, planilha "usuarios") — distinta
   // de coverUrl, que é a capa da música/vídeo. Usada nas capas dinâmicas de
@@ -513,6 +514,10 @@ export function buildCleanItem(
     "categoria_video",
     "tipo",
   ]);
+  // Gênero musical (coluna própria em Musicas/Albuns, distinta de
+  // "categoria" que é sobre TIPO de vídeo) — usado pra agrupar por estilo
+  // no ranking do Metacritic (Acervo).
+  const genero = getValue(record, ["genero", "gênero", "genero_da_musica", "genero_do_album"]);
 
   const trackOrderValue = getValue(record, [
     "ordem",
@@ -564,6 +569,7 @@ export function buildCleanItem(
   if (syncedLyrics) item.syncedLyrics = syncedLyrics;
   if (description) item.description = description;
   if (category) item.category = category;
+  if (genero) item.genero = genero;
   if (trackOrder !== null) item.trackOrder = trackOrder;
 
   // Código único (Musicas!Z / Albuns!L) — chave de cruzamento com

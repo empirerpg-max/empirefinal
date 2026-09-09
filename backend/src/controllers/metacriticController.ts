@@ -40,6 +40,8 @@ export interface MetacriticSnapshotItem {
   artista: string;
   capaUrl: string | null;
   nota: number;
+  genero: string | null;
+  releaseDateIso: string | null;
 }
 
 interface MetacriticSnapshot {
@@ -88,6 +90,8 @@ async function montarSnapshot(semanaId: string): Promise<MetacriticSnapshot> {
       artista: item.displayArtists || item.artist,
       capaUrl: item.coverUrl || null,
       nota,
+      genero: item.genero || null,
+      releaseDateIso: item.releaseDateIso || null,
     });
   });
 
@@ -102,6 +106,8 @@ async function montarSnapshot(semanaId: string): Promise<MetacriticSnapshot> {
       artista: item.displayArtists || item.artist,
       capaUrl: item.coverUrl || null,
       nota,
+      genero: item.genero || null,
+      releaseDateIso: item.releaseDateIso || null,
     });
   });
 

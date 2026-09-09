@@ -1141,7 +1141,16 @@ export const api = {
   async listarMetacriticAcervo(): Promise<{
     semanaId: string | null;
     geradoEm: string | null;
-    itens: { id: string; tipo: "musicas" | "albuns"; titulo: string; artista: string; capaUrl: string | null; nota: number }[];
+    itens: {
+      id: string;
+      tipo: "musicas" | "albuns";
+      titulo: string;
+      artista: string;
+      capaUrl: string | null;
+      nota: number;
+      genero: string | null;
+      releaseDateIso: string | null;
+    }[];
   }> {
     const res = await fetch("/api/acervo/metacritic");
     const data = await res.json().catch(() => null);
