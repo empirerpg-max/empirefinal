@@ -21,6 +21,14 @@ const SHEET = "Pitchfork";
 // célula — não uma linha por comentário. Menos linhas = menos leitura/
 // escrita na planilha (evita crescer sem limite e estourar cota/custo do
 // Sheets API só por causa de comentário).
+//
+// Fica na planilha "principal" (catálogo), NÃO na "editorial"
+// (chartsTop50) — essa última é mantida fora do app (só leitura pro
+// backend, quem escreve nela é o Apps Script rodando como dono da
+// planilha); o service account do backend não tem permissão de edição
+// lá, só de leitura. "principal" já é gravável (é onde
+// Comentarios_Musicas/Comentarios_Albuns vivem), então as interações do
+// Empirefork usam essa mesma planilha.
 const INTERACOES_SHEET = "Pitchfork_Interacoes";
 
 // Cada geração mensal também vai pra uma aba "Arquivo AAAA-MM" (ver
@@ -77,7 +85,7 @@ function parseInteracoesRow(r: string[]): InteracoesRow {
 }
 
 async function lerInteracoes(): Promise<{ rows: string[][]; porChave: Map<string, InteracoesRow> }> {
-  const rows = await googleSheetsService.chartsTop50.readValues(INTERACOES_SHEET).catch(() => []);
+  const rows = await googleSheetsService.principal.readValues(INTERACOES_SHEET).catch(() => []);
   const porChave = new Map<string, InteracoesRow>();
   for (const r of rows.slice(1)) {
     const tipo = normalizeText(r[0]);
@@ -243,9 +251,9 @@ async function acharOuCriarLinhaInteracoes(
   tipo: string,
   periodoId: string,
 ): Promise<{ linha: number; estado: InteracoesRow }> {
-  const rows = await googleSheetsService.chartsTop50.readValues(INTERACOES_SHEET).catch(() => []);
+  const rows = await googleSheetsService.principal.readValues(INTERACOES_SHEET).catch(() => []);
   if (rows.length === 0) {
-    await googleSheetsService.chartsTop50.appendRow(INTERACOES_SHEET, [
+    await googleSheetsService.principal.appendRow(INTERACOES_SHEET, [
       "Tipo",
       "PeriodoId",
       "CurtidasJson",
@@ -258,8 +266,8 @@ async function acharOuCriarLinhaInteracoes(
     return { linha: idx + 2, estado: parseInteracoesRow(rows[idx + 1]) };
   }
 
-  await googleSheetsService.chartsTop50.appendRow(INTERACOES_SHEET, [tipo, periodoId, "[]", "[]"]);
-  const rowsAtualizadas = await googleSheetsService.chartsTop50.readValues(INTERACOES_SHEET).catch(() => []);
+  await googleSheetsService.principal.appendRow(INTERACOES_SHEET, [tipo, periodoId, "[]", "[]"]);
+  const rowsAtualizadas = await googleSheetsService.principal.readValues(INTERACOES_SHEET).catch(() => []);
   return { linha: rowsAtualizadas.length, estado: { curtidas: [], comentarios: [] } };
 }
 
@@ -300,7 +308,7 @@ export async function createPitchforkComentarioController(request: Request): Pro
     };
     const comentarios = [...estado.comentarios, novoComentario];
 
-    await googleSheetsService.chartsTop50.updateValues(INTERACOES_SHEET, `D${linha}`, [
+    await googleSheetsService.principal.updateValues(INTERACOES_SHEET, `D${linha}`, [
       [JSON.stringify(comentarios)],
     ]);
 
@@ -339,7 +347,7 @@ export async function togglePitchforkCurtidaController(request: Request): Promis
     const curtiu = estado.curtidas.includes(jogadorId);
     const curtidas = curtiu ? estado.curtidas.filter((id) => id !== jogadorId) : [...estado.curtidas, jogadorId];
 
-    await googleSheetsService.chartsTop50.updateValues(INTERACOES_SHEET, `C${linha}`, [
+    await googleSheetsService.principal.updateValues(INTERACOES_SHEET, `C${linha}`, [
       [JSON.stringify(curtidas)],
     ]);
 
