@@ -127,6 +127,37 @@ export async function atualizarSnapshotMetacriticSemanalScheduled(
 }
 
 /**
+ * POST /api/acervo/metacritic/atualizar — força a geração do snapshot AGORA,
+ * ignorando o "já gerado essa semana". Existe só pra popular a aba na
+ * primeira vez (sem esperar até 10 min do próximo tick do cron) e pra dar
+ * pra forçar uma atualização pontual se precisar — o fluxo normal continua
+ * sendo o cron semanal automático.
+ */
+export async function forcarAtualizacaoMetacriticController(flagsParam?: FlagsKvLike): Promise<Response> {
+  const flags = flagsParam || ((globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined);
+  if (!flags) {
+    return new Response(JSON.stringify({ success: false, error: "KV FLAGS indisponível neste ambiente." }), {
+      status: 503,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  }
+  try {
+    const semanaId = calcularSemanaId();
+    const snapshot = await montarSnapshot(semanaId);
+    await flags.put(KV_KEY, JSON.stringify(snapshot));
+    return new Response(JSON.stringify({ success: true, data: { semanaId, totalItens: snapshot.itens.length } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (error: any) {
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao gerar snapshot do Metacritic." }),
+      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
+  }
+}
+
+/**
  * GET /api/acervo/metacritic — só lê o retrato pronto do KV, nunca a
  * planilha na hora (é exatamente esse o ponto: leve, e sem dar pra
  * ninguém inferir "quem comentou o quê" vendo o ranking mudar ao vivo).
