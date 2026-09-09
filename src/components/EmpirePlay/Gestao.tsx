@@ -64,6 +64,7 @@ export interface TrackConfig {
   // direto pro Drive) — alternativa ao link colado em mediaUrl. Só existe
   // em memória até o álbum ser enviado (não é serializado/salvo).
   mediaFile?: File | null;
+  letra?: string;
   abrirTopico?: boolean;
   // Estado só de UI — texto digitado na busca antes de selecionar a faixa.
   buscaQuery?: string;
@@ -257,6 +258,13 @@ const FaixaEditor: React.FC<{
               })
             }
             placeholder="Artistas participantes, separados por vírgula (opcional)"
+            className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+          />
+          <textarea
+            rows={3}
+            value={faixa.letra || ""}
+            onChange={(e) => onChange({ letra: e.target.value })}
+            placeholder="Letra da música (opcional)"
             className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
           />
           <label className="flex items-center gap-2 text-[11px] text-neutral-400">
@@ -1092,6 +1100,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           tipoMusica: f.tipoMusica,
           participantes: f.participantes,
           mediaUrl: f.mediaUrl,
+          letra: f.letra,
           abrirTopico: f.abrirTopico,
         })),
       };
@@ -1215,6 +1224,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           tipoMusica: f.tipoMusica,
           participantes: f.participantes,
           mediaUrl: f.mediaUrl,
+          letra: f.letra,
           abrirTopico: f.abrirTopico,
         })),
         nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
