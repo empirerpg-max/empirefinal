@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Archive,
@@ -23,6 +23,10 @@ import {
   Search,
   TrendingUp,
   Newspaper,
+  Heart,
+  MessageCircle,
+  ExternalLink,
+  Send,
 } from "lucide-react";
 import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -65,6 +69,9 @@ type MetacriticItem = {
 type PitchforkEdicao = {
   tipo: "BEST_NEW_TRACK" | "TOP_ARTIST";
   periodoId: string;
+  curtidas: number;
+  curtidoPorMim: boolean;
+  comentarios: number;
   titulo: string;
   artista: string;
   capaUrl: string | null;
@@ -156,7 +163,7 @@ function AcervoPage() {
 
   useEffect(() => {
     if (tab !== "pitchfork" || pitchfork !== null) return;
-    api.listarPitchfork().then((r) => setPitchfork(r.edicoes));
+    api.listarPitchfork(getStoredLogin()?.id || "").then((r) => setPitchfork(r.edicoes));
   }, [tab, pitchfork]);
 
   useEffect(() => {
@@ -502,95 +509,272 @@ function PitchforkTab({ edicoes }: { edicoes: PitchforkEdicao[] | null }) {
   const periodoId = bestNewTrack?.periodoId || topArtist?.periodoId || "";
 
   return (
-    <div className="space-y-8">
-      <div className="text-center space-y-1 py-2">
-        <p className="text-2xl font-black italic tracking-tight text-white">Empirefork</p>
+    <div className="space-y-7">
+      <div className="space-y-1 py-2">
+        <p className="text-4xl font-black italic tracking-tighter text-white leading-none">Empirefork</p>
         {periodoId && (
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
             Edição · {periodoId}
           </p>
         )}
       </div>
 
       {bestNewTrack && (
-        <Link
-          to="/empire-play/forum"
-          search={{ tab: bestNewTrack.linkTipo || "musicas", id: bestNewTrack.linkId || "" }}
-          onClick={() => haptic.selection()}
-          className="block rounded-[1.75rem] overflow-hidden bg-black border border-white/10 active:scale-[0.98] transition-transform"
-        >
-          <div className="p-4 flex items-center justify-center gap-2 border-b border-white/10">
-            <TrendingUp className="size-5 text-red-500" strokeWidth={2.5} />
-            <p className="text-sm font-black uppercase tracking-wide text-red-500">Best New Track</p>
-          </div>
-          <div className="p-4 flex gap-3">
-            <div className="size-20 shrink-0 rounded-xl overflow-hidden bg-secondary">
-              {bestNewTrack.capaUrl && (
-                <img
-                  src={resolveImg(bestNewTrack.capaUrl)}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                  loading="lazy"
-                />
-              )}
-            </div>
-            <div className="min-w-0 flex-1 space-y-0.5">
-              <p className="text-base font-black text-white leading-tight truncate">{bestNewTrack.titulo}</p>
-              <p className="text-xs text-neutral-400 font-bold truncate">{bestNewTrack.artista}</p>
-              {bestNewTrack.nota !== null && (
-                <p className="text-[11px] text-red-500 font-black uppercase tracking-wide">
-                  {bestNewTrack.nota.toFixed(0)} no Metacritic
-                </p>
-              )}
-            </div>
-          </div>
-          {bestNewTrack.texto && (
-            <div className="px-4 pb-4 pt-3 border-t border-white/10">
-              <p className="text-sm text-neutral-300 leading-relaxed">{bestNewTrack.texto}</p>
-            </div>
-          )}
-        </Link>
+        <PitchforkBestNewTrackCard edicao={bestNewTrack} />
       )}
 
-      {topArtist && (
-        <Link
-          to="/artistas/$nome"
-          params={{ nome: topArtist.artista }}
-          onClick={() => haptic.selection()}
-          className="block rounded-[1.75rem] overflow-hidden bg-white/5 border border-white/10 active:scale-[0.98] transition-transform"
+      {topArtist && <PitchforkTopArtistCard edicao={topArtist} />}
+    </div>
+  );
+}
+
+// Classe de vidro (glass) — mesmo tratamento visual dos chips de tab
+// (backdrop-blur + borda translúcida), usado nos botões "Ver música"/"Ver
+// artista" pra "sair" do card sem competir com like/comentário.
+const GLASS_CTA_CLS =
+  "inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-black uppercase tracking-wide text-white bg-white/10 border border-white/20 backdrop-blur-md active:scale-95 transition-transform hover:bg-white/15";
+
+function PitchforkActionsBar({
+  edicao,
+  comentarios,
+  setComentarios,
+  aberto,
+  setAberto,
+}: {
+  edicao: PitchforkEdicao;
+  comentarios: Record<string, { id: string; nome: string; fotoPerfil: string | null; comentario: string; data: string }[]>;
+  setComentarios: Dispatch<SetStateAction<typeof comentarios>>;
+  aberto: boolean;
+  setAberto: (v: boolean) => void;
+}) {
+  const chave = `${edicao.tipo}::${edicao.periodoId}`;
+  const [curtidas, setCurtidas] = useState(edicao.curtidas);
+  const [curtido, setCurtido] = useState(edicao.curtidoPorMim);
+  const [totalComentarios, setTotalComentarios] = useState(edicao.comentarios);
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const login = getStoredLogin();
+
+  async function curtir() {
+    if (!login?.id) return;
+    haptic.selection();
+    setCurtido((c) => !c);
+    setCurtidas((n) => (curtido ? n - 1 : n + 1));
+    const r = await api.pitchforkCurtir(edicao.tipo, edicao.periodoId, login.id);
+    if (r.success && typeof r.curtidas === "number") {
+      setCurtidas(r.curtidas);
+      setCurtido(!!r.curtidoPorMim);
+    }
+  }
+
+  async function abrirComentarios() {
+    const proximo = !aberto;
+    setAberto(proximo);
+    if (proximo && !comentarios[chave]) {
+      const r = await api.pitchforkComentarios(edicao.tipo, edicao.periodoId);
+      setComentarios((prev) => ({ ...prev, [chave]: r.comentarios }));
+    }
+  }
+
+  async function enviarComentario() {
+    const valor = texto.trim();
+    if (!valor || !login?.id || enviando) return;
+    setEnviando(true);
+    haptic.selection();
+    const r = await api.pitchforkComentar(edicao.tipo, edicao.periodoId, login.id, login.nome, valor);
+    setEnviando(false);
+    if (r.success) {
+      setTexto("");
+      setTotalComentarios((n) => n + 1);
+      const atualizados = await api.pitchforkComentarios(edicao.tipo, edicao.periodoId);
+      setComentarios((prev) => ({ ...prev, [chave]: atualizados.comentarios }));
+    }
+  }
+
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-2 px-4 pb-3 pt-2">
+        <button
+          onClick={curtir}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-white/[0.06] border border-white/10 active:scale-95 transition-transform"
         >
-          <div className="p-4 flex items-center gap-3">
-            <div className="size-12 shrink-0 rounded-full overflow-hidden bg-secondary border-2 border-primary/40">
-              {topArtist.capaUrl && (
-                <img
-                  src={driveImg(topArtist.capaUrl, 150)}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                  loading="lazy"
-                />
-              )}
+          <Heart className={`size-3.5 ${curtido ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} strokeWidth={2.5} />
+          <span className={curtido ? "text-red-500" : "text-muted-foreground"}>{curtidas}</span>
+        </button>
+        <button
+          onClick={abrirComentarios}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-white/[0.06] border border-white/10 active:scale-95 transition-transform"
+        >
+          <MessageCircle className="size-3.5 text-muted-foreground" strokeWidth={2.5} />
+          <span className="text-muted-foreground">{totalComentarios}</span>
+        </button>
+      </div>
+
+      {aberto && (
+        <div className="px-4 pb-4 space-y-3 border-t border-white/10 pt-3">
+          {!comentarios[chave] ? (
+            <div className="flex justify-center py-3">
+              <Loader2 className="size-4 text-primary animate-spin" />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-primary">Top Artist</p>
-              <p className="text-base font-black text-white leading-tight truncate">{topArtist.artista}</p>
-              {topArtist.nota !== null && (
-                <p className="text-[11px] text-muted-foreground font-bold">
-                  {topArtist.nota.toLocaleString("pt-BR")} pts acumulados
-                </p>
-              )}
-            </div>
-          </div>
-          {topArtist.texto && (
-            <div className="px-4 pb-4 pt-1 border-t border-white/10 space-y-3">
-              {topArtist.texto.split("\n").filter((p) => p.trim()).map((paragrafo, i) => (
-                <p key={i} className="text-sm text-neutral-300 leading-relaxed">
-                  {paragrafo}
-                </p>
+          ) : comentarios[chave].length === 0 ? (
+            <p className="text-xs text-muted-foreground font-medium text-center py-2">
+              Nenhum comentário ainda — seja o primeiro.
+            </p>
+          ) : (
+            <div className="space-y-2.5 max-h-64 overflow-y-auto">
+              {comentarios[chave].map((c) => (
+                <div key={c.id} className="flex gap-2">
+                  <div className="size-7 shrink-0 rounded-full overflow-hidden bg-secondary">
+                    {c.fotoPerfil && (
+                      <img src={driveImg(c.fotoPerfil, 80)} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 bg-white/[0.04] rounded-2xl rounded-tl-sm px-3 py-2">
+                    <p className="text-[11px] font-black text-white">{c.nome}</p>
+                    <p className="text-xs text-neutral-300 leading-snug break-words">{c.comentario}</p>
+                  </div>
+                </div>
               ))}
             </div>
           )}
-        </Link>
+
+          {login?.id && (
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && enviarComentario()}
+                placeholder="Comente essa matéria..."
+                className="flex-1 bg-white/5 border border-white/10 rounded-full px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground/50"
+              />
+              <button
+                onClick={enviarComentario}
+                disabled={!texto.trim() || enviando}
+                className="shrink-0 size-8 rounded-full bg-primary flex items-center justify-center disabled:opacity-40 active:scale-95 transition-transform"
+              >
+                {enviando ? <Loader2 className="size-3.5 animate-spin text-primary-foreground" /> : <Send className="size-3.5 text-primary-foreground" strokeWidth={2.5} />}
+              </button>
+            </div>
+          )}
+        </div>
       )}
+    </div>
+  );
+}
+
+function PitchforkBestNewTrackCard({ edicao }: { edicao: PitchforkEdicao }) {
+  const [comentarios, setComentarios] = useState<Record<string, { id: string; nome: string; fotoPerfil: string | null; comentario: string; data: string }[]>>({});
+  const [aberto, setAberto] = useState(false);
+
+  return (
+    <div className="relative rounded-[1.75rem] overflow-hidden bg-black border border-white/10">
+      {/* Triângulo de canto — o mesmo tratamento gráfico do selo real da
+          Pitchfork, adaptado pro vermelho já usado no resto do app pra
+          "destaque"/urgência. */}
+      <div
+        className="absolute top-0 right-0 size-16 bg-red-500"
+        style={{ clipPath: "polygon(100% 0, 0 0, 100% 100%)" }}
+        aria-hidden="true"
+      />
+      <div className="p-4 pb-3">
+        <div className="flex items-center gap-1.5">
+          <TrendingUp className="size-4 text-red-500" strokeWidth={2.5} />
+          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-red-500">Best New Track</p>
+        </div>
+      </div>
+
+      <div className="px-4 flex gap-3 items-center">
+        <div className="size-14 shrink-0 rounded-lg overflow-hidden bg-secondary">
+          {edicao.capaUrl && (
+            <img src={resolveImg(edicao.capaUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xl font-black text-white leading-[1.05] tracking-tight">{edicao.titulo}</p>
+          <p className="text-xs text-neutral-400 font-bold uppercase tracking-wide truncate mt-0.5">{edicao.artista}</p>
+        </div>
+        {edicao.nota !== null && (
+          <div className="shrink-0 text-center">
+            <p className="text-2xl font-black text-red-500 leading-none">{edicao.nota.toFixed(0)}</p>
+            <p className="text-[8px] font-bold uppercase text-neutral-500 tracking-wide">Metacritic</p>
+          </div>
+        )}
+      </div>
+
+      {edicao.texto && (
+        <p className="px-4 pt-3 text-sm text-neutral-300 leading-relaxed italic">"{edicao.texto.replace(/^"|"$/g, "")}"</p>
+      )}
+
+      <div className="px-4 pt-3">
+        <Link
+          to="/empire-play/forum"
+          search={{ tab: edicao.linkTipo || "musicas", id: edicao.linkId || "" }}
+          onClick={() => haptic.selection()}
+          className={GLASS_CTA_CLS}
+        >
+          Ver música <ExternalLink className="size-3" strokeWidth={2.5} />
+        </Link>
+      </div>
+
+      <PitchforkActionsBar edicao={edicao} comentarios={comentarios} setComentarios={setComentarios} aberto={aberto} setAberto={setAberto} />
+    </div>
+  );
+}
+
+function PitchforkTopArtistCard({ edicao }: { edicao: PitchforkEdicao }) {
+  const [comentarios, setComentarios] = useState<Record<string, { id: string; nome: string; fotoPerfil: string | null; comentario: string; data: string }[]>>({});
+  const [aberto, setAberto] = useState(false);
+
+  const blocos = edicao.texto.split(/\n\s*\n/).filter((p) => p.trim());
+  const manchete = blocos[0] || edicao.artista;
+  const corpo = blocos.slice(1);
+
+  return (
+    <div className="relative rounded-[1.75rem] overflow-hidden bg-white/[0.04] border border-white/10">
+      <div className="absolute top-0 left-0 w-1.5 h-20 bg-primary" aria-hidden="true" />
+      <div className="p-4 pb-3 flex items-center gap-3">
+        <div className="size-11 shrink-0 rounded-full overflow-hidden bg-secondary border-2 border-primary/50">
+          {edicao.capaUrl && (
+            <img src={driveImg(edicao.capaUrl, 150)} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-primary">Top Artist</p>
+          <p className="text-sm font-bold text-white truncate">{edicao.artista}</p>
+        </div>
+        {edicao.nota !== null && (
+          <div className="shrink-0 text-right">
+            <p className="text-base font-black text-primary leading-none">{edicao.nota.toLocaleString("pt-BR")}</p>
+            <p className="text-[8px] font-bold uppercase text-neutral-500 tracking-wide">pts em charts</p>
+          </div>
+        )}
+      </div>
+
+      <div className="px-4">
+        <p className="text-2xl font-black uppercase leading-[1.05] tracking-tight text-white text-balance">{manchete}</p>
+        {corpo.length > 0 && (
+          <div className="mt-3 space-y-3">
+            {corpo.map((paragrafo, i) => (
+              <p key={i} className="text-sm text-neutral-300 leading-relaxed">
+                {paragrafo}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="px-4 pt-3">
+        <Link
+          to="/artistas/$nome"
+          params={{ nome: edicao.artista }}
+          onClick={() => haptic.selection()}
+          className={GLASS_CTA_CLS}
+        >
+          Ver artista <ExternalLink className="size-3" strokeWidth={2.5} />
+        </Link>
+      </div>
+
+      <PitchforkActionsBar edicao={edicao} comentarios={comentarios} setComentarios={setComentarios} aberto={aberto} setAberto={setAberto} />
     </div>
   );
 }

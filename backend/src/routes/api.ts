@@ -15,7 +15,12 @@ import {
   getMetacriticRankingController,
   forcarAtualizacaoMetacriticController,
 } from "../controllers/metacriticController";
-import { getPitchforkController } from "../controllers/pitchforkController";
+import {
+  getPitchforkController,
+  getPitchforkComentariosController,
+  createPitchforkComentarioController,
+  togglePitchforkCurtidaController,
+} from "../controllers/pitchforkController";
 import { getNivelController } from "../controllers/nivelController";
 import {
   createCommentController,
@@ -200,6 +205,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/acervo/metacritic",
     "/api/acervo/metacritic/atualizar",
     "/api/acervo/pitchfork",
+    "/api/acervo/pitchfork/comentarios",
+    "/api/acervo/pitchfork/curtir",
     "/api/auth/login",
     "/api/auth/heartbeat",
     "/api/auth/perfil",
@@ -491,7 +498,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   } else if (url.pathname === "/api/acervo/metacritic") {
     response = await getMetacriticRankingController();
   } else if (url.pathname === "/api/acervo/pitchfork") {
-    response = await getPitchforkController();
+    response = await getPitchforkController(request);
+  } else if (url.pathname === "/api/acervo/pitchfork/comentarios") {
+    response =
+      request.method === "POST"
+        ? await createPitchforkComentarioController(request)
+        : await getPitchforkComentariosController(request);
+  } else if (url.pathname === "/api/acervo/pitchfork/curtir") {
+    response = await togglePitchforkCurtidaController(request);
   } else if (url.pathname === "/api/social/posts") {
     response =
       request.method === "GET"

@@ -19,7 +19,7 @@ const USUARIOS_SHEET = "Usuários";
  * com o nome correto; nunca falha o comentário se a busca der errado, cai
  * pro nome que o cliente mandou.
  */
-async function resolveNomeOficial(jogadorId: string, fallback: string): Promise<string> {
+export async function resolveNomeOficial(jogadorId: string, fallback: string): Promise<string> {
   try {
     const rows = await googleSheetsService.usuarios.readValues(USUARIOS_SHEET);
     if (!rows || rows.length < 2) return fallback;
