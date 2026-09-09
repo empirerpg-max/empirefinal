@@ -246,20 +246,46 @@ const FaixaEditor: React.FC<{
               className="hidden"
             />
           </label>
-          <input
-            type="text"
-            value={(faixa.participantes || []).join(", ")}
-            onChange={(e) =>
-              onChange({
-                participantes: e.target.value
-                  .split(",")
-                  .map((p) => p.trim())
-                  .filter(Boolean),
-              })
-            }
-            placeholder="Artistas participantes, separados por vírgula (opcional)"
-            className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-          />
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+              Participantes (Feat, opcional)
+            </span>
+            {(faixa.participantes || []).map((part, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={part}
+                  onChange={(e) => {
+                    const atualizados = [...(faixa.participantes || [])];
+                    atualizados[idx] = e.target.value;
+                    onChange({ participantes: atualizados });
+                  }}
+                  placeholder="Nome do artista"
+                  list="participantes-conhecidos"
+                  className="w-full bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChange({ participantes: (faixa.participantes || []).filter((_, i) => i !== idx) })
+                  }
+                  className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg border border-red-500/20 transition shrink-0"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            ))}
+            {(faixa.participantes || []).length < 5 && (
+              <button
+                type="button"
+                onClick={() => onChange({ participantes: [...(faixa.participantes || []), ""] })}
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition"
+              >
+                <Plus className="size-3.5" />
+                <span>Adicionar participante</span>
+              </button>
+            )}
+          </div>
           <textarea
             rows={3}
             value={faixa.letra || ""}
@@ -1098,7 +1124,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           titulo: f.titulo,
           tipoSingle: f.tipoSingle,
           tipoMusica: f.tipoMusica,
-          participantes: f.participantes,
+          participantes: (f.participantes || []).filter((p) => p.trim()),
           mediaUrl: f.mediaUrl,
           letra: f.letra,
           abrirTopico: f.abrirTopico,
@@ -1222,7 +1248,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           titulo: f.titulo,
           tipoSingle: f.tipoSingle,
           tipoMusica: f.tipoMusica,
-          participantes: f.participantes,
+          participantes: (f.participantes || []).filter((p) => p.trim()),
           mediaUrl: f.mediaUrl,
           letra: f.letra,
           abrirTopico: f.abrirTopico,
