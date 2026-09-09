@@ -1,5 +1,24 @@
-import { googleSheetsService, normalizeText, ensureSheetTab } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeText, normalizeHeader, ensureSheetTab } from "../services/googleSheetsService";
 import { resolveNomeOficial } from "./forumController";
+
+// Foto de perfil de quem comentou — resolvida na LEITURA, não gravada no
+// comentário (senão fica presa na foto antiga de quando comentou, mesmo
+// que a pessoa troque de foto depois). Mesma fonte que o fórum usa: aba
+// "Usuários" (planilha usuarios), colunas id / foto_do_perfil.
+async function mapaFotosPorJogadorId(): Promise<Map<string, string>> {
+  const rows = await googleSheetsService.usuarios.readValues("Usuários").catch(() => []);
+  const headers = rows[0] || [];
+  const idColIdx = headers.findIndex((h) => normalizeHeader(h) === "id");
+  const fotoColIdx = headers.findIndex((h) => normalizeHeader(h) === "foto_do_perfil");
+  const mapa = new Map<string, string>();
+  if (idColIdx === -1 || fotoColIdx === -1) return mapa;
+  for (const r of rows.slice(1)) {
+    const id = normalizeText(r[idColIdx]);
+    const foto = normalizeText(r[fotoColIdx]);
+    if (id && foto) mapa.set(id, foto);
+  }
+  return mapa;
+}
 
 // "Pitchfork"/Empirefork — aba própria dentro de Acervo, no estilo de
 // revista online (referência: pitchfork.com/reviews/best/tracks). Dois
@@ -229,8 +248,11 @@ export async function getPitchforkComentariosController(request: Request): Promi
       });
     }
 
-    const { porChave } = await lerInteracoes();
-    const comentarios = (porChave.get(`${tipo}::${periodoId}`)?.comentarios || []).slice().reverse();
+    const [{ porChave }, fotos] = await Promise.all([lerInteracoes(), mapaFotosPorJogadorId()]);
+    const comentarios = (porChave.get(`${tipo}::${periodoId}`)?.comentarios || [])
+      .slice()
+      .reverse()
+      .map((c) => ({ ...c, fotoPerfil: fotos.get(c.jogadorId) || c.fotoPerfil }));
 
     return new Response(JSON.stringify({ success: true, data: { comentarios } }), {
       status: 200,
