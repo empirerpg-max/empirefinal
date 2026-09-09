@@ -407,7 +407,7 @@ function MetacriticGridCard({ item }: { item: MetacriticItem }) {
           />
         )}
         <span
-          className={`absolute bottom-2 right-2 size-9 rounded-lg grid place-items-center text-black text-sm font-black shadow-lg ${metacriticScoreColor(item.nota)}`}
+          className={`absolute bottom-2 right-2 min-w-[2.25rem] h-9 px-1.5 rounded-lg grid place-items-center text-black text-sm font-black shadow-lg leading-none ${metacriticScoreColor(item.nota)}`}
         >
           {item.nota.toFixed(0)}
         </span>
@@ -532,7 +532,11 @@ function MetacriticTab({
         <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide px-1 mb-3">
           Ranking atualizado semanalmente · músicas e álbuns
         </p>
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+        {/* -mx-4 px-4: sangra por baixo do padding da página, pra sobrar
+            respiro nas duas pontas ao rolar (sem isso o último botão ficava
+            colado/cortado na borda da tela). Padding/fonte reduzidos pra
+            caber melhor em tela de celular sem apertar o texto. */}
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4">
           {views.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -540,7 +544,7 @@ function MetacriticTab({
                 haptic.selection();
                 setView(key);
               }}
-              className={`relative shrink-0 px-3.5 py-2 rounded-xl font-black text-[11px] uppercase flex items-center gap-1.5 transition-all active:scale-95 ${
+              className={`relative shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase flex items-center gap-1 whitespace-nowrap transition-all active:scale-95 ${
                 view === key
                   ? "text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]"
                   : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
@@ -549,7 +553,7 @@ function MetacriticTab({
               {view === key && (
                 <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />
               )}
-              <Icon className="relative z-10 size-3.5" /> <span className="relative z-10">{label}</span>
+              <Icon className="relative z-10 size-3.5 shrink-0" /> <span className="relative z-10">{label}</span>
             </button>
           ))}
         </div>
@@ -642,7 +646,7 @@ function MetacriticTab({
                 <p className="text-[10px] text-muted-foreground font-medium truncate">{item.artista}</p>
               </div>
               <span
-                className={`shrink-0 size-8 rounded-lg grid place-items-center text-black text-sm font-black ${metacriticScoreColor(item.nota)}`}
+                className={`shrink-0 min-w-[2rem] h-8 px-1.5 rounded-lg grid place-items-center text-black text-sm font-black leading-none ${metacriticScoreColor(item.nota)}`}
               >
                 {item.nota.toFixed(0)}
               </span>
