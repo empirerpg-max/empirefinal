@@ -349,7 +349,7 @@ export default {
       "../backend/src/controllers/reconciliacaoRegistroController"
     );
     ctx.waitUntil(
-      processarParticipacaoTV()
+      processarParticipacaoTV((env as { FLAGS?: FlagsKv }).FLAGS)
         .then((r) =>
           console.log(
             `[scheduled] Participação TV: ${r.transmissoesProcessadas} transmissões, ${r.registrosGravados} registros.`,
