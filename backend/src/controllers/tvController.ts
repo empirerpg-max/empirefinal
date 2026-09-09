@@ -1,5 +1,6 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
+import { readRuntimeEnv } from "../google/service-account";
 
 // "Programacao_RPG" é uma aba antiga/duplicada que ficou sem manutenção —
 // as capas lá estão todas com o link quebrado (uc?export=view&id= sem
@@ -575,10 +576,117 @@ async function registrarDiagnosticoSkip(flags: FlagsKvLike | undefined, mensagem
   }
 }
 
-export async function processarParticipacaoTV(flags?: FlagsKvLike): Promise<{
+// GAP real identificado: o fim de uma transmissão nunca foi conhecido de
+// verdade em lugar nenhum acessível pelo backend — nem a Data/Horario+
+// margem estimada aqui (Agenda_TV não tem duração real), nem o heurístico
+// do Apps Script (fim = início do próximo item agendado, ou +3h). Quem sabe
+// o horário real de início/fim é o próprio `transmissao.py` (repo
+// empiretv), que agora avisa via POST /api/tv/evento-transmissao logo antes
+// de começar a transmitir e logo depois que o ffmpeg termina. Isso é
+// guardado aqui (chave única no KV FLAGS, um dicionário {topicoId: {...}})
+// e tratado como fonte de verdade — sobrepõe a estimativa por Data/Horario
+// sempre que existir. Removido do dicionário assim que a transmissão é
+// processada (ver fim de processarParticipacaoTV), pra não crescer sem limite.
+const TV_EVENTOS_REAIS_KV_KEY = "tv-eventos-reais";
+
+interface EventoRealTV {
+  inicioTs?: number;
+  fimTs?: number;
+}
+
+async function lerEventosReais(flags: FlagsKvLike | undefined): Promise<Record<string, EventoRealTV>> {
+  if (!flags) return {};
+  try {
+    const raw = await flags.get(TV_EVENTOS_REAIS_KV_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function gravarEventosReais(flags: FlagsKvLike, mapa: Record<string, EventoRealTV>): Promise<void> {
+  await flags.put(TV_EVENTOS_REAIS_KV_KEY, JSON.stringify(mapa));
+}
+
+/**
+ * POST /api/tv/evento-transmissao
+ * Chamado pelo transmissao.py (repo empiretv) no início real (logo antes do
+ * ffmpeg começar) e no fim real (logo depois que o ffmpeg termina) de cada
+ * transmissão — dá ao backend o horário verdadeiro, em vez de estimado.
+ * body: { topico_id, acao: "inicio" | "fim" }
+ * header: X-TV-Webhook-Secret precisa bater com TV_WEBHOOK_SECRET.
+ */
+export async function registrarEventoTransmissaoController(
+  request: Request,
+  flagsParam?: FlagsKvLike,
+): Promise<Response> {
+  // Rota chamada sem `env` (ver handleEmpireApiRoutes) — o binding de KV
+  // FLAGS é exposto em globalThis por injectRuntimeEnv (src/server.ts),
+  // igual já é feito com os outros secrets de runtime.
+  const flags = flagsParam || ((globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined);
+  try {
+    const segredoEsperado = readRuntimeEnv("TV_WEBHOOK_SECRET");
+    const segredoRecebido = request.headers.get("X-TV-Webhook-Secret") || "";
+    if (!segredoEsperado || segredoRecebido !== segredoEsperado) {
+      return new Response(JSON.stringify({ ok: false, erro: "Não autorizado." }), {
+        status: 401,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+    if (!flags) {
+      return new Response(JSON.stringify({ ok: false, erro: "KV FLAGS indisponível neste ambiente." }), {
+        status: 503,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+
+    const body = (await request.json().catch(() => ({}))) as { topico_id?: string; acao?: string };
+    const topicoId = (body.topico_id || "").trim();
+    const acao = (body.acao || "").trim();
+    if (!topicoId || (acao !== "inicio" && acao !== "fim")) {
+      return new Response(
+        JSON.stringify({ ok: false, erro: "topico_id e acao ('inicio' ou 'fim') são obrigatórios." }),
+        { status: 400, headers: { "Content-Type": "application/json; charset=utf-8" } },
+      );
+    }
+
+    const mapa = await lerEventosReais(flags);
+    const atual = mapa[topicoId] || {};
+    if (acao === "inicio") atual.inicioTs = Date.now();
+    else atual.fimTs = Date.now();
+    mapa[topicoId] = atual;
+    await gravarEventosReais(flags, mapa);
+
+    // No fim real, processa na hora em vez de esperar até 10 min do cron —
+    // é exatamente o momento que se sabe, com certeza, que já dá pra fechar
+    // a conta de participação dessa transmissão.
+    let resultado: { transmissoesProcessadas: number; registrosGravados: number } | undefined;
+    if (acao === "fim") {
+      resultado = await processarParticipacaoTV(flags);
+    }
+
+    return new Response(JSON.stringify({ ok: true, resultado }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (error: any) {
+    console.error("[registrarEventoTransmissaoController] Erro:", error);
+    return new Response(JSON.stringify({ ok: false, erro: error.message || "Erro ao registrar evento." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  }
+}
+
+export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise<{
   transmissoesProcessadas: number;
   registrosGravados: number;
 }> {
+  // Idem registrarEventoTransmissaoController: cai no KV exposto em
+  // globalThis quando chamado sem `flags` (ex: o endpoint manual
+  // /api/tv/processar-participacao), pra também enxergar eventos reais e
+  // gravar diagnóstico mesmo fora do cron.
+  const flags = flagsParam || ((globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined);
   // A conta de serviço não tem permissão pra criar abas novas na planilha
   // Agenda_TV (só editar conteúdo de abas já existentes) — a aba
   // TV_Participacao_Processada precisa já existir, criada manualmente.
@@ -601,8 +709,25 @@ export async function processarParticipacaoTV(flags?: FlagsKvLike): Promise<{
   const now = Date.now();
   const bufferMs = MINUTOS_BUFFER_PRE_PROCESSAMENTO * 60 * 1000;
 
+  // Sobrepõe a estimativa de Data/Horario+margem pelo horário REAL avisado
+  // pelo transmissao.py (ver registrarEventoTransmissaoController acima) —
+  // quando existe, é sempre mais confiável que qualquer estimativa: também
+  // corrige totalDuracaoSeg (usado no cálculo de % de presença) pra duração
+  // de fato transmitida, em vez do intervalo entre Data/Horario da planilha.
+  const eventosReais = await lerEventosReais(flags);
+  for (const grupo of grupos) {
+    const real = eventosReais[grupo.chave];
+    if (real?.fimTs) {
+      grupo.endTs = real.fimTs;
+      if (real.inicioTs && real.fimTs > real.inicioTs) {
+        grupo.totalDuracaoSeg = Math.round((real.fimTs - real.inicioTs) / 1000);
+      }
+    }
+  }
+
   let transmissoesProcessadas = 0;
   let registrosGravados = 0;
+  let eventosReaisAlterado = false;
 
   for (const grupo of grupos) {
     const key = grupo.chave;
@@ -614,6 +739,7 @@ export async function processarParticipacaoTV(flags?: FlagsKvLike): Promise<{
     // do zero a cada 10 minutos, gravando um REGISTRO novo mesmo depois do
     // usuário apagar o anterior.
     if (processados.has(key) || processados.has(chaveLegada)) continue;
+    if (!grupo.endTs && eventosReais[key]?.inicioTs) continue; // início real avisado, fim real ainda não chegou — ainda ao vivo de verdade, não é erro
     if (!grupo.endTs) {
       // Diferente de "ainda não acabou" (abaixo) — isso significa que
       // NUNCA vai processar sozinho: Data/Horario não bateram no formato
@@ -706,6 +832,14 @@ export async function processarParticipacaoTV(flags?: FlagsKvLike): Promise<{
       "A:C",
     );
     transmissoesProcessadas++;
+    if (eventosReais[grupo.chave]) {
+      delete eventosReais[grupo.chave];
+      eventosReaisAlterado = true;
+    }
+  }
+
+  if (flags && eventosReaisAlterado) {
+    await gravarEventosReais(flags, eventosReais).catch(() => {});
   }
 
   return { transmissoesProcessadas, registrosGravados };

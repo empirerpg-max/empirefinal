@@ -81,6 +81,7 @@ const RUNTIME_ENV_KEYS = [
   "DRIVE_OAUTH_REFRESH_TOKEN",
   "RESEND_API_KEY",
   "SESSION_TOKEN_SECRET",
+  "TV_WEBHOOK_SECRET",
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -235,6 +236,14 @@ function injectRuntimeEnv(env: unknown): void {
     if (typeof value === "string" && value) {
       (globalThis as Record<string, unknown>)[`__${key}__`] = value;
     }
+  }
+
+  // FLAGS é o binding de KV do Worker (não uma string) — exposto à parte,
+  // no mesmo padrão, pra handlers que hoje só recebem `request` (sem `env`)
+  // conseguirem gravar/ler nele, ex: o webhook de evento de transmissão da
+  // Empire TV (ver registrarEventoTransmissaoController).
+  if (runtimeEnv.FLAGS && typeof runtimeEnv.FLAGS === "object") {
+    (globalThis as Record<string, unknown>).__FLAGS_KV__ = runtimeEnv.FLAGS;
   }
 }
 
