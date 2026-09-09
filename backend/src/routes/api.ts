@@ -15,6 +15,7 @@ import {
   getMetacriticRankingController,
   forcarAtualizacaoMetacriticController,
 } from "../controllers/metacriticController";
+import { getPitchforkController } from "../controllers/pitchforkController";
 import { getNivelController } from "../controllers/nivelController";
 import {
   createCommentController,
@@ -198,6 +199,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/acervo/entrevistas",
     "/api/acervo/metacritic",
     "/api/acervo/metacritic/atualizar",
+    "/api/acervo/pitchfork",
     "/api/auth/login",
     "/api/auth/heartbeat",
     "/api/auth/perfil",
@@ -488,6 +490,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await forcarAtualizacaoMetacriticController();
   } else if (url.pathname === "/api/acervo/metacritic") {
     response = await getMetacriticRankingController();
+  } else if (url.pathname === "/api/acervo/pitchfork") {
+    response = await getPitchforkController();
   } else if (url.pathname === "/api/social/posts") {
     response =
       request.method === "GET"

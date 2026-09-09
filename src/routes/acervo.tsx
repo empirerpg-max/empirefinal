@@ -21,6 +21,8 @@ import {
   CalendarDays,
   Users,
   Search,
+  TrendingUp,
+  Newspaper,
 } from "lucide-react";
 import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -60,6 +62,19 @@ type MetacriticItem = {
   releaseDateIso: string | null;
 };
 
+type PitchforkEdicao = {
+  tipo: "BEST_NEW_TRACK" | "TOP_ARTIST";
+  periodoId: string;
+  titulo: string;
+  artista: string;
+  capaUrl: string | null;
+  nota: number | null;
+  texto: string;
+  linkTipo: string | null;
+  linkId: string | null;
+  geradoEm: string | null;
+};
+
 type Pergunta = { pergunta: string; resposta: string };
 
 type Entrevista = {
@@ -96,11 +111,12 @@ function AcervoPage() {
   // jogador não tinha nenhum artista vinculado mesmo tendo (mesmo padrão já
   // usado em /perfil).
   const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
-  const [tab, setTab] = useState<"revistas" | "entrevistas" | "forbes" | "metacritic">("revistas");
+  const [tab, setTab] = useState<"revistas" | "entrevistas" | "forbes" | "metacritic" | "pitchfork">("revistas");
   const [revistas, setRevistas] = useState<Revista[]>([]);
   const [entrevistas, setEntrevistas] = useState<Entrevista[]>([]);
   const [forbes, setForbes] = useState<Artist[] | null>(null);
   const [metacritic, setMetacritic] = useState<{ semanaId: string | null; itens: MetacriticItem[] } | null>(null);
+  const [pitchfork, setPitchfork] = useState<PitchforkEdicao[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [myArtists, setMyArtists] = useState<any[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -139,6 +155,11 @@ function AcervoPage() {
   }, [tab, metacritic]);
 
   useEffect(() => {
+    if (tab !== "pitchfork" || pitchfork !== null) return;
+    api.listarPitchfork().then((r) => setPitchfork(r.edicoes));
+  }, [tab, pitchfork]);
+
+  useEffect(() => {
     if (!tgId || tgId === "guest") return;
     api.meusArtistas(tgId).then(setMyArtists).catch(() => setMyArtists([]));
   }, [tgId]);
@@ -159,13 +180,13 @@ function AcervoPage() {
         </p>
       </div>
 
-      <div className="px-4 flex gap-2 mb-5">
+      <div className="px-4 flex flex-wrap gap-2 mb-5">
         <button
           onClick={() => {
             haptic.selection();
             setTab("revistas");
           }}
-          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+          className={`relative shrink-0 px-4 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
             tab === "revistas"
               ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
               : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
@@ -179,7 +200,7 @@ function AcervoPage() {
             haptic.selection();
             setTab("entrevistas");
           }}
-          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+          className={`relative shrink-0 px-4 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
             tab === "entrevistas"
               ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
               : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
@@ -193,7 +214,7 @@ function AcervoPage() {
             haptic.selection();
             setTab("forbes");
           }}
-          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+          className={`relative shrink-0 px-4 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
             tab === "forbes"
               ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
               : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
@@ -207,7 +228,7 @@ function AcervoPage() {
             haptic.selection();
             setTab("metacritic");
           }}
-          className={`relative flex-1 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+          className={`relative shrink-0 px-4 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
             tab === "metacritic"
               ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
               : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
@@ -215,6 +236,20 @@ function AcervoPage() {
         >
           {tab === "metacritic" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
           <Award className="relative z-10 size-3.5" /> <span className="relative z-10">Metacritic</span>
+        </button>
+        <button
+          onClick={() => {
+            haptic.selection();
+            setTab("pitchfork");
+          }}
+          className={`relative shrink-0 px-4 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+            tab === "pitchfork"
+              ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+              : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
+          }`}
+        >
+          {tab === "pitchfork" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+          <Newspaper className="relative z-10 size-3.5" /> <span className="relative z-10">Empirefork</span>
         </button>
       </div>
 
@@ -253,6 +288,8 @@ function AcervoPage() {
           )
         ) : tab === "metacritic" ? (
           <MetacriticTab metacritic={metacritic} card={card} />
+        ) : tab === "pitchfork" ? (
+          <PitchforkTab edicoes={pitchfork} />
         ) : loading ? (
           <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="size-8 text-primary animate-spin" />
@@ -324,7 +361,7 @@ function AcervoPage() {
       </div>
       </div>
 
-      {tab !== "forbes" && tab !== "metacritic" && (
+      {tab !== "forbes" && tab !== "metacritic" && tab !== "pitchfork" && (
         <button
           onClick={() => {
             haptic.light();
@@ -342,7 +379,7 @@ function AcervoPage() {
       {selectedEntrevista && (
         <EntrevistaViewer entrevista={selectedEntrevista} onClose={() => setSelectedEntrevista(null)} />
       )}
-      {isCreateOpen && tab !== "forbes" && tab !== "metacritic" && (
+      {isCreateOpen && tab !== "forbes" && tab !== "metacritic" && tab !== "pitchfork" && (
         <CreateModal
           tab={tab}
           myArtists={myArtists}
@@ -437,6 +474,121 @@ function MetacriticSectionHeader({ children }: { children: string }) {
   return (
     <div className="pb-2 border-b-2 border-white/10">
       <h3 className="text-lg font-black italic uppercase tracking-tight text-white">{children}</h3>
+    </div>
+  );
+}
+
+// "Empirefork" — inspirado direto na referência que o usuário trouxe
+// (pitchfork.com/reviews/best/tracks + o selo preto/vermelho "Best New
+// Track"), mas simples de propósito: sem geração ao vivo, só lê o que o
+// Apps Script já deixou pronto na aba "Pitchfork" (ver pitchforkController.ts
+// no backend). Dois blocos fixos por edição: Best New Track (cálculo
+// simples, sem IA) e Top Artist (matéria escrita por IA, gerada dentro da
+// própria planilha).
+function PitchforkTab({ edicoes }: { edicoes: PitchforkEdicao[] | null }) {
+  if (edicoes === null) {
+    return (
+      <div className="flex flex-col items-center justify-center p-20 gap-4">
+        <Loader2 className="size-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+  if (edicoes.length === 0) {
+    return <EmptyState text="Nenhuma edição do Empirefork publicada ainda." />;
+  }
+
+  const bestNewTrack = edicoes.find((e) => e.tipo === "BEST_NEW_TRACK");
+  const topArtist = edicoes.find((e) => e.tipo === "TOP_ARTIST");
+  const periodoId = bestNewTrack?.periodoId || topArtist?.periodoId || "";
+
+  return (
+    <div className="space-y-8">
+      <div className="text-center space-y-1 py-2">
+        <p className="text-2xl font-black italic tracking-tight text-white">Empirefork</p>
+        {periodoId && (
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            Edição · {periodoId}
+          </p>
+        )}
+      </div>
+
+      {bestNewTrack && (
+        <Link
+          to="/empire-play/forum"
+          search={{ tab: bestNewTrack.linkTipo || "musicas", id: bestNewTrack.linkId || "" }}
+          onClick={() => haptic.selection()}
+          className="block rounded-[1.75rem] overflow-hidden bg-black border border-white/10 active:scale-[0.98] transition-transform"
+        >
+          <div className="p-5 flex flex-col items-center text-center gap-1.5 border-b border-white/10">
+            <TrendingUp className="size-8 text-red-500" strokeWidth={2.5} />
+            <p className="text-lg font-black uppercase tracking-wide text-red-500">Best New Track</p>
+          </div>
+          <div className="aspect-square w-full bg-secondary">
+            {bestNewTrack.capaUrl && (
+              <img
+                src={resolveImg(bestNewTrack.capaUrl)}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+                loading="lazy"
+              />
+            )}
+          </div>
+          <div className="p-5 space-y-2">
+            <p className="text-xl font-black text-white leading-tight">{bestNewTrack.titulo}</p>
+            <p className="text-sm text-neutral-400 font-bold">{bestNewTrack.artista}</p>
+            {bestNewTrack.nota !== null && (
+              <p className="text-xs text-red-500 font-black uppercase tracking-wide">
+                {bestNewTrack.nota.toFixed(0)} de nota no Metacritic
+              </p>
+            )}
+            {bestNewTrack.texto && (
+              <p className="text-sm text-neutral-300 leading-relaxed pt-2 border-t border-white/10">
+                {bestNewTrack.texto}
+              </p>
+            )}
+          </div>
+        </Link>
+      )}
+
+      {topArtist && (
+        <Link
+          to="/artistas/$nome"
+          params={{ nome: topArtist.artista }}
+          onClick={() => haptic.selection()}
+          className="block rounded-[1.75rem] overflow-hidden bg-white/5 border border-white/10 active:scale-[0.98] transition-transform"
+        >
+          <div className="p-5 flex items-center gap-4">
+            <div className="size-16 shrink-0 rounded-full overflow-hidden bg-secondary border-2 border-primary/40">
+              {topArtist.capaUrl && (
+                <img
+                  src={driveImg(topArtist.capaUrl, 150)}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-primary">Top Artist</p>
+              <p className="text-lg font-black text-white leading-tight truncate">{topArtist.artista}</p>
+              {topArtist.nota !== null && (
+                <p className="text-[11px] text-muted-foreground font-bold">
+                  {topArtist.nota.toLocaleString("pt-BR")} pts em Fortuna Charts
+                </p>
+              )}
+            </div>
+          </div>
+          {topArtist.texto && (
+            <div className="px-5 pb-5 pt-1 border-t border-white/10 space-y-3">
+              {topArtist.texto.split("\n").filter((p) => p.trim()).map((paragrafo, i) => (
+                <p key={i} className="text-sm text-neutral-300 leading-relaxed">
+                  {paragrafo}
+                </p>
+              ))}
+            </div>
+          )}
+        </Link>
+      )}
     </div>
   );
 }
