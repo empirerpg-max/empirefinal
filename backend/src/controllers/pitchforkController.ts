@@ -1,4 +1,4 @@
-import { googleSheetsService, normalizeText } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeText, ensureSheetTab } from "../services/googleSheetsService";
 import { resolveNomeOficial } from "./forumController";
 
 // "Pitchfork"/Empirefork — aba própria dentro de Acervo, no estilo de
@@ -251,14 +251,20 @@ async function acharOuCriarLinhaInteracoes(
   tipo: string,
   periodoId: string,
 ): Promise<{ linha: number; estado: InteracoesRow }> {
+  // A aba nunca foi criada manualmente na planilha "principal" — sem isso,
+  // appendRow/updateValues apontam pra uma faixa (ex: "Pitchfork_Interacoes!A:ZZ")
+  // que não existe, e falham. ensureSheetTab é idempotente (só cria se faltar).
+  await ensureSheetTab("principal", INTERACOES_SHEET);
+
   const rows = await googleSheetsService.principal.readValues(INTERACOES_SHEET).catch(() => []);
   if (rows.length === 0) {
-    await googleSheetsService.principal.appendRow(INTERACOES_SHEET, [
+    const cabecalho = await googleSheetsService.principal.appendRow(INTERACOES_SHEET, [
       "Tipo",
       "PeriodoId",
       "CurtidasJson",
       "ComentariosJson",
     ]);
+    if (cabecalho === null) throw new Error('Não foi possível criar o cabeçalho da aba "Pitchfork_Interacoes".');
   }
 
   const idx = rows.slice(1).findIndex((r) => normalizeText(r[0]) === tipo && normalizeText(r[1]) === periodoId);
@@ -266,9 +272,9 @@ async function acharOuCriarLinhaInteracoes(
     return { linha: idx + 2, estado: parseInteracoesRow(rows[idx + 1]) };
   }
 
-  await googleSheetsService.principal.appendRow(INTERACOES_SHEET, [tipo, periodoId, "[]", "[]"]);
-  const rowsAtualizadas = await googleSheetsService.principal.readValues(INTERACOES_SHEET).catch(() => []);
-  return { linha: rowsAtualizadas.length, estado: { curtidas: [], comentarios: [] } };
+  const linhaNova = await googleSheetsService.principal.appendRow(INTERACOES_SHEET, [tipo, periodoId, "[]", "[]"]);
+  if (linhaNova === null) throw new Error('Não foi possível criar a linha de interações na aba "Pitchfork_Interacoes".');
+  return { linha: linhaNova, estado: { curtidas: [], comentarios: [] } };
 }
 
 interface CriarComentarioBody {
