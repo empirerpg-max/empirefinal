@@ -20,6 +20,8 @@ import {
   getPitchforkComentariosController,
   createPitchforkComentarioController,
   togglePitchforkCurtidaController,
+  getPitchforkMesesController,
+  getPitchforkArquivoController,
 } from "../controllers/pitchforkController";
 import { getNivelController } from "../controllers/nivelController";
 import {
@@ -207,6 +209,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/acervo/pitchfork",
     "/api/acervo/pitchfork/comentarios",
     "/api/acervo/pitchfork/curtir",
+    "/api/acervo/pitchfork/meses",
+    "/api/acervo/pitchfork/arquivo",
     "/api/auth/login",
     "/api/auth/heartbeat",
     "/api/auth/perfil",
@@ -506,6 +510,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         : await getPitchforkComentariosController(request);
   } else if (url.pathname === "/api/acervo/pitchfork/curtir") {
     response = await togglePitchforkCurtidaController(request);
+  } else if (url.pathname === "/api/acervo/pitchfork/meses") {
+    response = await getPitchforkMesesController();
+  } else if (url.pathname === "/api/acervo/pitchfork/arquivo") {
+    response = await getPitchforkArquivoController(request);
   } else if (url.pathname === "/api/social/posts") {
     response =
       request.method === "GET"

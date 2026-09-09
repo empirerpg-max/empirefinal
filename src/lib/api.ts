@@ -1184,6 +1184,38 @@ export const api = {
     if (data?.success && data?.data) return data.data;
     return { edicoes: [] };
   },
+  async pitchforkMeses(): Promise<{ meses: string[] }> {
+    const res = await fetch("/api/acervo/pitchfork/meses");
+    const data = await res.json().catch(() => null);
+    if (data?.success && data?.data) return data.data;
+    return { meses: [] };
+  },
+  async pitchforkArquivo(
+    mes: string,
+    jogadorId?: string,
+  ): Promise<{
+    edicoes: {
+      tipo: "BEST_NEW_TRACK" | "TOP_ARTIST";
+      periodoId: string;
+      titulo: string;
+      artista: string;
+      capaUrl: string | null;
+      nota: number | null;
+      texto: string;
+      linkTipo: string | null;
+      linkId: string | null;
+      geradoEm: string | null;
+      curtidas: number;
+      curtidoPorMim: boolean;
+      comentarios: number;
+    }[];
+  }> {
+    const qs = jogadorId ? `&jogadorId=${encodeURIComponent(jogadorId)}` : "";
+    const res = await fetch(`/api/acervo/pitchfork/arquivo?mes=${encodeURIComponent(mes)}${qs}`);
+    const data = await res.json().catch(() => null);
+    if (data?.success && data?.data) return data.data;
+    return { edicoes: [] };
+  },
   async pitchforkComentarios(
     tipo: "BEST_NEW_TRACK" | "TOP_ARTIST",
     periodoId: string,
