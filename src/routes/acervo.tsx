@@ -457,6 +457,8 @@ function MetacriticTab({
   // materiais individuais das guias Ranking/Recentes/Estilo/Ano pra um
   // artista só). Não afeta Destaques (visão geral) nem Artistas.
   const [artistaFiltro, setArtistaFiltro] = useState<string>("");
+  const [artistaDropdownAberto, setArtistaDropdownAberto] = useState(false);
+  const [buscaArtistaFiltro, setBuscaArtistaFiltro] = useState("");
 
   if (metacritic === null) {
     return (
@@ -469,9 +471,13 @@ function MetacriticTab({
     return <EmptyState text="Nenhuma nota do Metacritic registrada ainda." />;
   }
 
-  const artistasDisponiveis = [...new Set(metacritic.itens.map((i) => i.artistaPrincipal))].sort((a, b) =>
-    a.localeCompare(b),
-  );
+  // Filtra vazio — algumas linhas antigas de Musicas/Albuns têm nota mas
+  // "ACT PRINCIPAL" em branco; sem isso viravam um artista fantasma "" no
+  // topo do ranking de Artistas (foto/nome em branco, reportado pelo
+  // usuário).
+  const artistasDisponiveis = [
+    ...new Set(metacritic.itens.map((i) => i.artistaPrincipal).filter((nome) => nome.trim())),
+  ].sort((a, b) => a.localeCompare(b));
 
   const itensFiltrados = artistaFiltro
     ? metacritic.itens.filter((i) => i.artistaPrincipal === artistaFiltro)
@@ -528,6 +534,7 @@ function MetacriticTab({
   // perfil dele. Pedido do usuário.
   const gruposArtista = new Map<string, MetacriticItem[]>();
   for (const item of metacritic.itens) {
+    if (!item.artistaPrincipal.trim()) continue;
     if (!gruposArtista.has(item.artistaPrincipal)) gruposArtista.set(item.artistaPrincipal, []);
     gruposArtista.get(item.artistaPrincipal)!.push(item);
   }
@@ -571,11 +578,10 @@ function MetacriticTab({
         <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide px-1 mb-3">
           Ranking atualizado semanalmente · músicas e álbuns
         </p>
-        {/* -mx-4 px-4: sangra por baixo do padding da página, pra sobrar
-            respiro nas duas pontas ao rolar (sem isso o último botão ficava
-            colado/cortado na borda da tela). Padding/fonte reduzidos pra
-            caber melhor em tela de celular sem apertar o texto. */}
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4">
+        {/* flex-wrap (não mais rolagem escondida) — todo botão fica sempre
+            visível, quebrando pra segunda linha em tela estreita, em vez de
+            cortar/depender de rolar pra ver o resto. */}
+        <div className="flex flex-wrap gap-2">
           {views.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -583,7 +589,7 @@ function MetacriticTab({
                 haptic.selection();
                 setView(key);
               }}
-              className={`relative shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase flex items-center gap-1 whitespace-nowrap transition-all active:scale-95 ${
+              className={`relative px-3 py-2 rounded-xl font-black text-[10px] uppercase flex items-center gap-1.5 whitespace-nowrap transition-all active:scale-95 ${
                 view === key
                   ? "text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]"
                   : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
@@ -600,25 +606,86 @@ function MetacriticTab({
 
       {/* Filtro por artista — só faz sentido nas guias de material
           (Ranking/Recentes/Estilo/Ano); Destaques e Artistas são visões
-          gerais e ficam de fora dele. */}
+          gerais e ficam de fora dele. Dropdown de botões de verdade (não
+          <select> nativo) com busca, mesmo padrão já usado em outras buscas
+          do app (ex: participantes em Gestão). */}
       {view !== "destaques" && view !== "artistas" && artistasDisponiveis.length > 0 && (
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-          <select
-            value={artistaFiltro}
-            onChange={(e) => {
+          <button
+            type="button"
+            onClick={() => {
               haptic.selection();
-              setArtistaFiltro(e.target.value);
+              setArtistaDropdownAberto((v) => !v);
+              setBuscaArtistaFiltro("");
             }}
-            className="w-full appearance-none bg-white/[0.03] border border-white/10 rounded-xl pl-9 pr-8 py-2.5 text-xs font-bold text-white focus:border-primary focus:outline-none"
+            className={`w-full flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-bold transition ${
+              artistaFiltro
+                ? "border-primary/40 bg-primary/10 text-white"
+                : "border-white/10 bg-white/[0.03] text-muted-foreground"
+            }`}
           >
-            <option value="">Todos os artistas</option>
-            {artistasDisponiveis.map((nome) => (
-              <option key={nome} value={nome}>
-                {nome}
-              </option>
-            ))}
-          </select>
+            <Search className="size-3.5 shrink-0" />
+            <span className="flex-1 text-left truncate">{artistaFiltro || "Todos os artistas"}</span>
+            {artistaFiltro && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  haptic.selection();
+                  setArtistaFiltro("");
+                }}
+                className="shrink-0 rounded-full p-0.5 hover:bg-white/10"
+              >
+                <X className="size-3.5" />
+              </span>
+            )}
+          </button>
+
+          {artistaDropdownAberto && (
+            <div className="absolute z-20 mt-1.5 w-full max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-neutral-900 shadow-2xl">
+              <div className="p-2 sticky top-0 bg-neutral-900 border-b border-white/5">
+                <input
+                  autoFocus
+                  value={buscaArtistaFiltro}
+                  onChange={(e) => setBuscaArtistaFiltro(e.target.value)}
+                  placeholder="Buscar artista..."
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-muted-foreground focus:border-primary focus:outline-none"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  haptic.selection();
+                  setArtistaFiltro("");
+                  setArtistaDropdownAberto(false);
+                }}
+                className={`w-full text-left px-3.5 py-2.5 text-xs font-bold hover:bg-white/5 transition ${
+                  !artistaFiltro ? "text-primary" : "text-white"
+                }`}
+              >
+                Todos os artistas
+              </button>
+              {artistasDisponiveis
+                .filter((nome) => nome.toLowerCase().includes(buscaArtistaFiltro.trim().toLowerCase()))
+                .map((nome) => (
+                  <button
+                    type="button"
+                    key={nome}
+                    onClick={() => {
+                      haptic.selection();
+                      setArtistaFiltro(nome);
+                      setArtistaDropdownAberto(false);
+                    }}
+                    className={`w-full text-left px-3.5 py-2.5 text-xs font-bold hover:bg-white/5 transition border-t border-white/5 ${
+                      artistaFiltro === nome ? "text-primary" : "text-white"
+                    }`}
+                  >
+                    {nome}
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
       )}
 
