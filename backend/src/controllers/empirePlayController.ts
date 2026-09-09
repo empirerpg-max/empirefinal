@@ -1334,15 +1334,18 @@ export async function getEmpirePlayForumTopicController(
 
     // ID do tópico REAL da planilha (não o id sintético gerado pelo app) — é
     // esse valor que deve ser usado como chave nas abas Comentarios_*.
-    const realTopicId = rawMedia
-      ? getValue(rawMedia, [
-          "id_do_topico",
-          "id_topico",
-          "topico_id",
-          "topico",
-          "message_thread_id",
-        ]) || ""
-      : "";
+    //
+    // BUG CORRIGIDO: aqui recalculava esse valor com sua PRÓPRIA lista de
+    // aliases (sem "ref_telegram_id"/"telegram_topic_id"), diferente e mais
+    // estreita que a lista usada por buildCleanItem() pra montar o mesmo
+    // dado (linha ~478, telegramTopicId, já exposto em mediaItem.telegramTopicId
+    // logo abaixo). Numa linha com "ref_telegram_id" preenchido (valor
+    // atual/correto) e também um "id_do_topico" antigo/divergente ainda na
+    // planilha, buildCleanItem gerava item.id com um valor e esse bloco
+    // gravava/lia os comentários com OUTRO — exatamente o "comentário some"
+    // que o PR #641 devia ter fechado de vez. Reaproveita o valor já
+    // calculado (mesma fonte única de verdade) em vez de recalcular.
+    const realTopicId = mediaItem?.telegramTopicId || "";
     const mediaTopicId = realTopicId || (mediaItem ? mediaItem.id : "");
     if (mediaItem && realTopicId) {
       mediaItem.topicId = realTopicId;
