@@ -83,11 +83,13 @@ const TIPOS_ALBUM = ["EP", "Álbum", "Deluxe"];
 
 // Reformulado a pedido do usuário: jogadores estavam clicando em "Registrar
 // em Chart" (a) pra música que JÁ EXISTIA — deveria ser "Substituir" (b).
-// Título+descrição agora deixam explícito o caso de uso de cada opção
-// (com o oposto do que ela NÃO é), e cada uma ganha ícone/cor própria pra
-// ficar visualmente óbvio que são coisas diferentes, não 3 variações do
-// mesmo botão. Ver também o aviso de "música parecida já existe" abaixo
-// (possivelDuplicataChart), que é a segunda camada dessa mesma correção.
+// Título+descrição agora deixam explícito o caso de uso de cada opção, e
+// cada uma ganha ícone próprio pra ficar visualmente óbvio que são coisas
+// diferentes — mas mantendo o único acento (emerald) que o resto do app já
+// usa, não uma cor por opção (ficava "carregado" fora da identidade visual
+// do app — ver ScoreBadge/Charts/Social, que usam sempre 1 acento restrito
+// + superfícies neutras). Ver também o aviso de "música parecida já existe"
+// abaixo (possivelDuplicataChart), que é a segunda camada dessa correção.
 const OPCOES_CHART = [
   {
     key: "a",
@@ -95,7 +97,6 @@ const OPCOES_CHART = [
     title: "Lançamento Novo",
     desc: "Essa música NUNCA foi publicada antes — é a primeira vez que ela entra nos charts.",
     icon: Sparkles,
-    color: "emerald",
   },
   {
     key: "b",
@@ -103,7 +104,6 @@ const OPCOES_CHART = [
     title: "Substituir Existente",
     desc: "A música JÁ EXISTE no seu catálogo — isso troca o material dela (áudio, capa, letra), sem duplicar.",
     icon: Repeat2,
-    color: "amber",
   },
   {
     key: "c",
@@ -111,7 +111,6 @@ const OPCOES_CHART = [
     title: "Vincular Comentários",
     desc: "Esse tópico é sobre uma música que já existe (ex: lyric video) — só os comentários passam a valer pra ela.",
     icon: Link2,
-    color: "sky",
   },
 ];
 
@@ -1501,42 +1500,19 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               {OPCOES_CHART.map((op) => {
                 const Icon = op.icon;
                 const ativo = opcaoChart === op.value;
-                const cores: Record<string, { border: string; bg: string; text: string; icon: string }> = {
-                  emerald: {
-                    border: "border-emerald-500",
-                    bg: "bg-emerald-500/10",
-                    text: "text-emerald-300",
-                    icon: "text-emerald-400",
-                  },
-                  amber: {
-                    border: "border-amber-500",
-                    bg: "bg-amber-500/10",
-                    text: "text-amber-300",
-                    icon: "text-amber-400",
-                  },
-                  sky: {
-                    border: "border-sky-500",
-                    bg: "bg-sky-500/10",
-                    text: "text-sky-300",
-                    icon: "text-sky-400",
-                  },
-                };
-                const c = cores[op.color];
                 return (
                   <button
                     type="button"
                     key={op.key}
                     onClick={() => setOpcaoChart(op.value)}
-                    className={`text-left p-4 rounded-2xl border-2 cursor-pointer transition flex flex-col gap-2 ${
+                    className={`text-left p-4 rounded-2xl border cursor-pointer transition flex flex-col gap-2 ${
                       ativo
-                        ? `${c.bg} ${c.border} text-white`
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-white"
                         : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
                     }`}
                   >
-                    <Icon className={`size-5 ${ativo ? c.icon : "text-neutral-500"}`} />
-                    <span className={`font-black text-xs uppercase tracking-wide ${ativo ? c.text : "text-white"}`}>
-                      {op.title}
-                    </span>
+                    <Icon className={`size-5 ${ativo ? "text-emerald-400" : "text-neutral-500"}`} />
+                    <span className="font-black text-xs uppercase tracking-wide text-white">{op.title}</span>
                     <span className="text-[11px] text-neutral-400 leading-relaxed">{op.desc}</span>
                   </button>
                 );
@@ -1548,7 +1524,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 existe no catálogo do artista dele, e oferecer trocar pra
                 "Substituir" com a música já pré-selecionada. */}
             {possivelDuplicataChart && (
-              <div className="flex items-start gap-3 p-4 rounded-2xl border-2 border-amber-500 bg-amber-500/10">
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10">
                 <AlertTriangle className="size-5 text-amber-400 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0 space-y-2">
                   <p className="text-xs text-amber-200 leading-relaxed">
@@ -2562,7 +2538,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             </div>
 
             {confirmacao.aviso && (
-              <div className="flex items-start gap-2.5 p-3.5 rounded-2xl border-2 border-amber-500 bg-amber-500/10">
+              <div className="flex items-start gap-2.5 p-3.5 rounded-2xl border border-amber-500/30 bg-amber-500/10">
                 <AlertTriangle className="size-4 text-amber-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-amber-200 leading-relaxed">{confirmacao.aviso}</p>
               </div>
