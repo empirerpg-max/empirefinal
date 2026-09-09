@@ -594,6 +594,15 @@ export const googleSheetsService = {
   },
   chartsTop50: {
     readValues: (sheetName: string, range?: string) => readValues("chartsTop50", sheetName, range),
+    findRows: (
+      sheetName: string,
+      predicate: (row: string[], index: number) => boolean,
+      range?: string,
+    ) => findRows("chartsTop50", sheetName, predicate, range),
+    updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
+      updateValues("chartsTop50", sheetName, range, values),
+    appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
+      appendRow("chartsTop50", sheetName, values, range),
   },
   chartsReleases: {
     readValues: (sheetName: string, range?: string) => readValues("chartsReleases", sheetName, range),

@@ -1161,7 +1161,7 @@ export const api = {
   },
   // Edição do "Pitchfork"/Empirefork (Acervo) — só lê o que o Apps Script
   // já deixou pronto na aba "Pitchfork" (ver pitchforkController.ts).
-  async listarPitchfork(): Promise<{
+  async listarPitchfork(jogadorId?: string): Promise<{
     edicoes: {
       tipo: "BEST_NEW_TRACK" | "TOP_ARTIST";
       periodoId: string;
@@ -1173,12 +1173,58 @@ export const api = {
       linkTipo: string | null;
       linkId: string | null;
       geradoEm: string | null;
+      curtidas: number;
+      curtidoPorMim: boolean;
+      comentarios: number;
     }[];
   }> {
-    const res = await fetch("/api/acervo/pitchfork");
+    const qs = jogadorId ? `?jogadorId=${encodeURIComponent(jogadorId)}` : "";
+    const res = await fetch(`/api/acervo/pitchfork${qs}`);
     const data = await res.json().catch(() => null);
     if (data?.success && data?.data) return data.data;
     return { edicoes: [] };
+  },
+  async pitchforkComentarios(
+    tipo: "BEST_NEW_TRACK" | "TOP_ARTIST",
+    periodoId: string,
+  ): Promise<{
+    comentarios: { id: string; jogadorId: string; nome: string; fotoPerfil: string | null; comentario: string; data: string }[];
+  }> {
+    const res = await fetch(
+      `/api/acervo/pitchfork/comentarios?tipo=${encodeURIComponent(tipo)}&periodoId=${encodeURIComponent(periodoId)}`,
+    );
+    const data = await res.json().catch(() => null);
+    if (data?.success && data?.data) return data.data;
+    return { comentarios: [] };
+  },
+  async pitchforkComentar(
+    tipo: "BEST_NEW_TRACK" | "TOP_ARTIST",
+    periodoId: string,
+    jogadorId: string,
+    nomeJogador: string,
+    comentario: string,
+    fotoPerfil?: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/acervo/pitchfork/comentarios", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo, periodoId, jogadorId, nomeJogador, comentario, fotoPerfil }),
+    });
+    return res.json().catch(() => ({ success: false }));
+  },
+  async pitchforkCurtir(
+    tipo: "BEST_NEW_TRACK" | "TOP_ARTIST",
+    periodoId: string,
+    jogadorId: string,
+  ): Promise<{ success: boolean; curtidas?: number; curtidoPorMim?: boolean }> {
+    const res = await fetch("/api/acervo/pitchfork/curtir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo, periodoId, jogadorId }),
+    });
+    const data = await res.json().catch(() => null);
+    if (data?.success) return { success: true, curtidas: data.data.curtidas, curtidoPorMim: data.data.curtidoPorMim };
+    return { success: false };
   },
   // Letra sincronizada (formato LRC) — só o dono do artista da faixa
   // consegue gravar; o backend confere isso de novo antes de escrever.
