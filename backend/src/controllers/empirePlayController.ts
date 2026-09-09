@@ -348,7 +348,7 @@ function matchesMonth(isoDate: string | null, requestedMonth?: string): boolean 
  * Converte um registro bruto da planilha em objeto de domínio limpo do produto (camelCase)
  * sem metadados internos (telegram_file_id, drive_folder_id, etc)
  */
-function buildCleanItem(
+export function buildCleanItem(
   sheetName: string,
   record: SheetRecord,
   index: number,

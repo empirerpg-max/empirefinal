@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { Disc3, Play, Search } from "lucide-react";
 import { driveImg, type AlbumPayload } from "@/lib/api";
 import { type PlayableTrack } from "./MusicPlayer";
-import { ScoreBadge } from "./ScoreBadge";
 
 export interface MappedTrack extends PlayableTrack {
   ordem?: number | string;
@@ -186,9 +185,6 @@ export function AlbumList() {
                     </span>
                   )}
 
-                  <div className="absolute top-2 right-2 pointer-events-none">
-                    <ScoreBadge score={alb.metacriticAvg} variant="metacritic" />
-                  </div>
                 </div>
 
                 <h3 className="font-bold text-sm text-white truncate group-hover:text-emerald-400 transition-colors">
