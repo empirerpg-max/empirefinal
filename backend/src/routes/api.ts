@@ -482,12 +482,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
   } else if (url.pathname === "/api/acervo/metacritic/atualizar") {
-    if (request.method !== "POST") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/acervo/metacritic/atualizar." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
+    // Aceita GET também (além do POST) só pra dar pra colar a URL direto no
+    // navegador e diagnosticar na hora (mostra quantos itens achou) sem
+    // precisar de Postman/curl — mesma filosofia de /api/debug/error-log.
     response = await forcarAtualizacaoMetacriticController();
   } else if (url.pathname === "/api/acervo/metacritic") {
     response = await getMetacriticRankingController();

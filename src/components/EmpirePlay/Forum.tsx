@@ -913,28 +913,20 @@ export const Forum: React.FC<ForumProps> = ({
                 </div>
               )}
 
-              {/* CARD DE AVALIAÇÃO OFICIAL — só aparece com nota/likes real,
-                  e escondido no modo Visual (coluna fica estreita demais). */}
-              {!visualAberto && getItemScore(selectedTopic) && (
+              {/* CARD DE AVALIAÇÃO OFICIAL — só likes de vídeo agora; a nota do
+                  Metacritic saiu do Catálogo (vira ranking semanal em
+                  Acervo > Metacritic, a pedido do usuário). */}
+              {!visualAberto && activeSubmenu === "videos" && getItemScore(selectedTopic) && (
                 <div className="bg-neutral-800/60 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex items-center justify-between">
                   <div>
                     <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">
-                      {activeSubmenu === "videos"
-                        ? "Total de Likes Accum"
-                        : "Nota Oficial Metacritic"}
+                      Total de Likes Accum
                     </span>
                     <span className="text-[11px] sm:text-xs text-neutral-300 font-medium">
                       Média da comunidade do Empire Hub
                     </span>
                   </div>
-                  <ScoreBadge
-                    score={getItemScore(selectedTopic)}
-                    variant={
-                      activeSubmenu === "videos"
-                        ? "likes"
-                        : "metacritic"
-                    }
-                  />
+                  <ScoreBadge score={getItemScore(selectedTopic)} variant="likes" />
                 </div>
               )}
             </div>
@@ -1569,17 +1561,15 @@ export const Forum: React.FC<ForumProps> = ({
                         </button>
                       )}
 
-                      <div className="absolute top-2 right-2 sm:top-3 sm:right-3 pointer-events-none">
-                        <ScoreBadge
-                          score={getItemScore(item)}
-                          variant={
-                            activeSubmenu === "videos"
-                              ? "likes"
-                              : "metacritic"
-                          }
-                          className="!px-2 !py-0.5 sm:!px-3 sm:!py-1 !text-[10px] sm:!text-xs"
-                        />
-                      </div>
+                      {activeSubmenu === "videos" && (
+                        <div className="absolute top-2 right-2 sm:top-3 sm:right-3 pointer-events-none">
+                          <ScoreBadge
+                            score={getItemScore(item)}
+                            variant="likes"
+                            className="!px-2 !py-0.5 sm:!px-3 sm:!py-1 !text-[10px] sm:!text-xs"
+                          />
+                        </div>
+                      )}
 
                       {item.telegramTopicId && commentedTopicIds.has(item.telegramTopicId) && (
                         <div
