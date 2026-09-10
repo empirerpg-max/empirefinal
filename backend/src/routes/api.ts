@@ -15,7 +15,7 @@ import {
   getMetacriticRankingController,
   forcarAtualizacaoMetacriticController,
 } from "../controllers/metacriticController";
-import { corrigirPrestigioAssistirTvDuplicado } from "../services/prestigioService";
+import { corrigirPrestigioAssistirTvDuplicado, restaurarPrestigioAteData } from "../services/prestigioService";
 import { reconstruirRegistroDesdeCorte } from "../controllers/reconciliacaoRegistroController";
 import {
   getPitchforkController,
@@ -222,6 +222,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/listar-todos",
     "/api/artistas/calcular-fortuna-charts",
     "/api/prestigio/corrigir-assistir-tv-duplicado",
+    "/api/prestigio/restaurar",
     "/api/registro/reconstruir",
     "/api/tv/programas",
     "/api/tv/presenca",
@@ -528,6 +529,44 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
+  } else if (url.pathname === "/api/prestigio/restaurar") {
+    // Restaura o prestígio de todo mundo pro que era numa data de corte,
+    // usando o histórico do Prestigio_Log como fonte de verdade (ver
+    // restaurarPrestigioAteData em prestigioService.ts). Corte padrão:
+    // ontem 00:30 no horário de Brasília. Roda em SIMULAÇÃO (não escreve
+    // nada) a menos que venha "?confirmar=1" na URL — dá pra conferir a
+    // lista de mudanças antes de aplicar de verdade.
+    const confirmar = url.searchParams.get("confirmar") === "1";
+    const corteParam = url.searchParams.get("ate");
+    let corte: Date;
+    if (corteParam) {
+      corte = new Date(corteParam);
+    } else {
+      const agora = new Date();
+      const ontemBRT = new Date(agora.getTime() - 24 * 60 * 60 * 1000);
+      corte = new Date(
+        Date.UTC(
+          ontemBRT.getUTCFullYear(),
+          ontemBRT.getUTCMonth(),
+          ontemBRT.getUTCDate(),
+          3,
+          30,
+          0,
+        ),
+      );
+    }
+    if (Number.isNaN(corte.getTime())) {
+      response = new Response(
+        JSON.stringify({ success: false, error: "Data de corte inválida (use ?ate=ISO)." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    } else {
+      const resultado = await restaurarPrestigioAteData(corte, confirmar);
+      response = new Response(JSON.stringify({ success: true, data: resultado }), {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
   } else if (url.pathname === "/api/acervo/metacritic") {
     response = await getMetacriticRankingController();
   } else if (url.pathname === "/api/acervo/pitchfork") {

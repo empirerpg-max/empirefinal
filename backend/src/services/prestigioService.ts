@@ -415,3 +415,126 @@ export async function corrigirPrestigioAssistirTvDuplicado(): Promise<CorrecaoCh
 
   return { jaAplicado: false, corrigidos };
 }
+
+const RESTAURACAO_MARCADOR_PREFIXO = "restauracao_prestigio_ate_";
+
+export interface RestauracaoPrestigioItem {
+  telegramId: string;
+  usuario: string;
+  saldoAtual: number;
+  saldoRestaurado: number;
+  diferenca: number;
+}
+
+export interface RestauracaoPrestigioResultado {
+  corteISO: string;
+  modo: "simulacao" | "aplicado";
+  ignoradosSemHistorico: number;
+  alteracoes: RestauracaoPrestigioItem[];
+}
+
+/**
+ * Restaura o prestígio de todo mundo pro saldo que tinha no Prestigio_Log
+ * até uma data de corte (usa o "saldoDepois" da última entrada de log de
+ * cada jogador com timestamp <= corte). Jogador sem NENHUMA entrada de log
+ * antes do corte é ignorado (não dá pra saber com segurança qual era o
+ * saldo dele naquele momento — mexer seria chute). Sempre roda em modo
+ * simulação (não escreve nada) a menos que `confirmar` seja true; sempre
+ * registra uma entrada de correção no próprio log pra cada alteração real,
+ * então o resultado da restauração também fica auditável.
+ */
+export async function restaurarPrestigioAteData(
+  corte: Date,
+  confirmar: boolean,
+): Promise<RestauracaoPrestigioResultado> {
+  const corteMs = corte.getTime();
+  const corteISO = corte.toISOString();
+  const marcador = `${RESTAURACAO_MARCADOR_PREFIXO}${corteISO}`;
+
+  const logRows = await googleSheetsService.usuarios.readValues(PRESTIGIO_LOG_SHEET).catch(() => []);
+  const usuariosRows = await googleSheetsService.usuarios.readValues(USUARIOS_SHEET).catch(() => []);
+  if (!logRows || logRows.length < 2 || !usuariosRows || usuariosRows.length < 2) {
+    return { corteISO, modo: confirmar ? "aplicado" : "simulacao", ignoradosSemHistorico: 0, alteracoes: [] };
+  }
+
+  if (confirmar) {
+    const jaAplicado = logRows.slice(1).some((r) => normalizeText(r[3]) === marcador);
+    if (jaAplicado) {
+      return { corteISO, modo: "aplicado", ignoradosSemHistorico: 0, alteracoes: [] };
+    }
+  }
+
+  // Última entrada <= corte por jogador (chave = telegramId ou usuario).
+  const ultimaAntesDoCorte = new Map<string, { telegramId: string; usuario: string; ts: number; saldoDepois: number }>();
+  for (const row of logRows.slice(1)) {
+    const telegramId = normalizeText(row[1]);
+    const usuario = normalizeText(row[2]);
+    const chave = telegramId || usuario;
+    if (!chave) continue;
+    const ts = new Date(normalizeText(row[0])).getTime();
+    if (!Number.isFinite(ts) || ts > corteMs) continue;
+    const saldoDepois = parseInt(normalizeText(row[6]), 10) || 0;
+    const atual = ultimaAntesDoCorte.get(chave);
+    if (!atual || ts > atual.ts) {
+      ultimaAntesDoCorte.set(chave, { telegramId, usuario, ts, saldoDepois });
+    }
+  }
+
+  const headers = dedupeHeaders(
+    USUARIOS_SHEET,
+    usuariosRows[0].map((h, i) => normalizeHeader(h) || `coluna_${i + 1}`),
+  );
+  const idCol = headers.indexOf("id");
+  const usuarioCol = headers.indexOf("usuario");
+  const prestigioColIndex = headers.indexOf("prestigio");
+  if ((idCol === -1 && usuarioCol === -1) || prestigioColIndex === -1) {
+    return { corteISO, modo: confirmar ? "aplicado" : "simulacao", ignoradosSemHistorico: 0, alteracoes: [] };
+  }
+  const colLetter = colIndexToA1Letter(prestigioColIndex);
+
+  const alteracoes: RestauracaoPrestigioItem[] = [];
+  let ignoradosSemHistorico = 0;
+
+  for (let i = 1; i < usuariosRows.length; i++) {
+    const row = usuariosRows[i];
+    const telegramId = idCol !== -1 ? normalizeText(row[idCol]) : "";
+    const usuario = usuarioCol !== -1 ? normalizeText(row[usuarioCol]) : "";
+    const chave = telegramId || usuario;
+    if (!chave) continue;
+
+    const historico = ultimaAntesDoCorte.get(chave);
+    if (!historico) {
+      ignoradosSemHistorico++;
+      continue;
+    }
+
+    const saldoAtual = parseInt(normalizeText(row[prestigioColIndex]) || "0", 10) || 0;
+    const saldoRestaurado = historico.saldoDepois;
+    if (saldoAtual === saldoRestaurado) continue;
+
+    alteracoes.push({
+      telegramId,
+      usuario,
+      saldoAtual,
+      saldoRestaurado,
+      diferenca: saldoRestaurado - saldoAtual,
+    });
+
+    if (confirmar) {
+      await googleSheetsService.usuarios.updateValues(
+        USUARIOS_SHEET,
+        `${colLetter}${i + 1}`,
+        [[saldoRestaurado]],
+      );
+      await registrarLogPrestigio(
+        { telegramId, usuario },
+        marcador,
+        saldoRestaurado - saldoAtual,
+        saldoAtual,
+        saldoRestaurado,
+      );
+    }
+  }
+
+  return { corteISO, modo: confirmar ? "aplicado" : "simulacao", ignoradosSemHistorico, alteracoes };
+}
