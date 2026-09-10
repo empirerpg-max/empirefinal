@@ -1779,6 +1779,15 @@ export async function createAlbumController(request: Request): Promise<Response>
     );
   } catch (error: any) {
     console.error("[createAlbumController] Erro:", error);
+    // Sem isso, um álbum que falha aqui não deixa rastro nenhum no LOGS
+    // didático — só um console.error que ninguém vê depois do fato. Foi
+    // assim que um álbum sumiu sem explicação nenhuma pra investigar.
+    registrarLogSistema({
+      categoria: "Falha de escrita",
+      oQueAconteceu: `Falha ao lançar álbum: ${error.message || "erro desconhecido"}.`,
+      onde: "createAlbumController",
+      detalheTecnico: error.stack || error.message || String(error),
+    }).catch(() => {});
     return new Response(
       JSON.stringify({
         success: false,

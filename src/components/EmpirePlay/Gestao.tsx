@@ -642,44 +642,33 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     };
   }, [telegramUser]);
 
-  // Atualizar lista de faixas do álbum
+  // Atualizar lista de faixas do álbum — mexer no "Quantidade de Faixas"
+  // (+/-) só deve adicionar/remover faixas do FIM da lista, nunca apagar o
+  // que já foi preenchido nas faixas existentes. Antes essa lista era
+  // reconstruída campo a campo (sem spread do `existing`), o que
+  // silenciosamente descartava mediaFile e letra de TODAS as faixas — o
+  // jogador enchia o formulário, ajustava a quantidade, e perdia áudio/
+  // letra sem nenhum aviso.
   useEffect(() => {
     const updated: TrackConfig[] = [];
     for (let i = 1; i <= totalFaixasCount; i++) {
       const existing = faixasConfig[i - 1];
-      updated.push({
-        num: i,
-        titulo: existing?.titulo || "",
-        inedita: existing ? existing.inedita : true,
-        tipoSingle: existing?.tipoSingle || "TRACKLIST ALBUM",
-        tipoMusica: existing?.tipoMusica || "SOLO",
-        participantes: existing?.participantes || [],
-        mediaUrl: existing?.mediaUrl || "",
-        abrirTopico: existing?.abrirTopico ?? false,
-        buscaQuery: existing?.buscaQuery || "",
-      });
+      updated.push(existing ? { ...existing, num: i } : { num: i, titulo: "", inedita: true });
     }
     setFaixasConfig(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalFaixasCount]);
 
   // Atualizar lista de novas faixas a adicionar num álbum (fluxo Substituir)
+  // — mesma correção acima (preserva mediaFile/letra das faixas já preenchidas).
   useEffect(() => {
     const updated: TrackConfig[] = [];
     for (let i = 1; i <= substNovasFaixasCount; i++) {
       const existing = substNovasFaixas[i - 1];
-      updated.push({
-        num: i,
-        titulo: existing?.titulo || "",
-        inedita: existing ? existing.inedita : true,
-        tipoSingle: existing?.tipoSingle || "TRACKLIST ALBUM",
-        tipoMusica: existing?.tipoMusica || "SOLO",
-        participantes: existing?.participantes || [],
-        mediaUrl: existing?.mediaUrl || "",
-        abrirTopico: existing?.abrirTopico ?? false,
-        buscaQuery: existing?.buscaQuery || "",
-      });
+      updated.push(existing ? { ...existing, num: i } : { num: i, titulo: "", inedita: true });
     }
     setSubstNovasFaixas(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [substNovasFaixasCount]);
 
   // File to Base64
@@ -700,6 +689,17 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   ): Promise<string> => {
     const resolvedFolderType = folderType === "video" ? "musica" : folderType;
 
+    // Timeout próprio nas duas tentativas — sem isso, um upload grande
+    // (ex: áudio de álbum) que trava no servidor deixa o fetch pendurado
+    // pra sempre, o botão "enviando" nunca termina, e o jogador acha que
+    // "não aconteceu nada" (quando na real nunca ia terminar mesmo).
+    const TIMEOUT_MS = 45_000;
+    const fetchComTimeout = (input: string, init: RequestInit) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+    };
+
     // 1. Tentar via FormData primeiro (evita estouro de memória Base64 no cliente)
     try {
       const formData = new FormData();
@@ -707,7 +707,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       formData.append("fileName", customName || file.name);
       formData.append("folderType", resolvedFolderType);
 
-      const res = await fetch("/api/gestao/upload", {
+      const res = await fetchComTimeout("/api/gestao/upload", {
         method: "POST",
         body: formData,
       });
@@ -725,7 +725,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       const base64 = await fileToBase64(file);
       const fileName = customName || file.name;
 
-      const res = await fetch("/api/gestao/upload", {
+      const res = await fetchComTimeout("/api/gestao/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
