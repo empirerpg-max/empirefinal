@@ -1660,22 +1660,18 @@ export async function createAlbumController(request: Request): Promise<Response>
     const encartesStr = encartesUrls.join(", ");
     const albumTopicId = `album_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // 1. Processar cada faixa (existente ou inédita).
-    const { faixasIneditasEsperadas, faixasIneditasGravadas } = await processarFaixasDoAlbum(
-      faixas,
-      albumFullTitle,
-      artistaAlbum,
-      capaUrl,
-      jogadorId,
-      dataFormatada,
-    );
-
-    // 2. Gravar Álbum na planilha principal — SEM engolir erro: se isso
-    // falhar, o álbum não existe de verdade no app (some do catálogo/Fórum
-    // mesmo as faixas tendo sido processadas), então precisa propagar pro
-    // catch de fora e responder success:false — antes isso era só um
-    // console.warn e a resposta final sempre dizia "sucesso", mesmo com o
-    // álbum nunca tendo sido de fato registrado.
+    // 1. Gravar Álbum na planilha principal PRIMEIRO — antes de processar
+    // qualquer faixa. Ordem invertida de propósito: antes o álbum era
+    // gravado só DEPOIS das faixas, então uma falha aqui (SEM engolir
+    // erro — se isso falhar, o álbum não existe de verdade no app) deixava
+    // pra trás faixas "órfãs" em Musicas/EDIÇÃO CHARTS, associadas a um
+    // álbum que nunca chegou a existir de fato (foi exatamente o que
+    // aconteceu com o álbum "SANTISSIMA" da Emma — as faixas gravaram,
+    // essa gravação falhou, e o álbum nunca apareceu no catálogo). Com o
+    // álbum gravado primeiro, se ISSO falhar não sobra faixa nenhuma pra
+    // trás; se o que falhar for uma faixa individual depois, o álbum já
+    // existe e só fica com menos faixas (degradação já tratada abaixo via
+    // faixasIneditasFalharam), never o inverso.
     // Range explícito (A:K) — mesma classe de bug de "próxima linha livre"
     // corrigida em registrarNaEdicaoCharts logo abaixo.
     const albumRowIndexNovo = await googleSheetsService.principal.appendRow(
@@ -1696,7 +1692,7 @@ export async function createAlbumController(request: Request): Promise<Response>
       "A:K",
     );
 
-    // 3. Gravar em "EDIÇÃO CHARTS ÁLBUMS" (edicaoCharts) — aba separada da
+    // 2. Gravar em "EDIÇÃO CHARTS ÁLBUMS" (edicaoCharts) — aba separada da
     // "EDIÇÃO CHARTS" usada pelas faixas, confirmada via dump ao vivo. Já
     // inclui o "Código único" (coluna R, padrão EMPALBM001, EMPALBM002...)
     // — antes essa coluna ficava sempre em branco pra álbum lançado pelo
@@ -1741,6 +1737,17 @@ export async function createAlbumController(request: Request): Promise<Response>
     } catch (err) {
       console.warn("[createAlbumController] Erro ao gravar em EDIÇÃO CHARTS ÁLBUMS:", err);
     }
+
+    // 3. Processar cada faixa (existente ou inédita) — só depois do álbum
+    // já existir de verdade em "Albuns".
+    const { faixasIneditasEsperadas, faixasIneditasGravadas } = await processarFaixasDoAlbum(
+      faixas,
+      albumFullTitle,
+      artistaAlbum,
+      capaUrl,
+      jogadorId,
+      dataFormatada,
+    );
 
     // REGISTRO é só pra comentários de OUTROS jogadores (ver
     // forumController.ts) — lançar o próprio álbum não é comentário.
