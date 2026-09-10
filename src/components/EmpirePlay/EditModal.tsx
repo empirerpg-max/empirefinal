@@ -29,6 +29,7 @@ import {
   FileText,
   Check,
   Mic2,
+  FileVideo,
 } from "lucide-react";
 import { SyncStudioModal, type SyncStudioTrack } from "./SyncStudioModal";
 
@@ -118,6 +119,11 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [extraEdit, setExtraEdit] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
   const [capaFile, setCapaFile] = useState<File | null>(null);
   const [capaPreview, setCapaPreview] = useState<string | null>(null);
+  // Áudio da música em edição — tela de editar lançamento nunca teve como
+  // inserir/trocar o áudio (só tinha na criação e no álbum), mesmo já
+  // existindo faixa sem áudio nenhum ou com link quebrado.
+  const [editAudioFile, setEditAudioFile] = useState<File | null>(null);
+  const [editAudioUrlInput, setEditAudioUrlInput] = useState<string>("");
 
   const [saving, setSaving] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -242,6 +248,8 @@ export const EditModal: React.FC<EditModalProps> = ({
     setEditTitulo(item.titulo);
     setEditDescricao(item.descricao || "");
     setEditLetra(item.fields?.letra || "");
+    setEditAudioFile(null);
+    setEditAudioUrlInput(item.fields?.audioUrl || "");
     setCapaFile(null);
     setCapaPreview(item.capaUrl || null);
     setSuccessMsg(null);
@@ -548,6 +556,15 @@ export const EditModal: React.FC<EditModalProps> = ({
         capaMimeType = capaFile.type;
       }
 
+      let audioUrl: string | undefined = undefined;
+      if (category === "musicas") {
+        if (editAudioFile) {
+          audioUrl = await handleUploadAudioToDrive(editAudioFile, editTitulo.trim());
+        } else if (editAudioUrlInput.trim() && editAudioUrlInput.trim() !== editingItem.fields?.audioUrl) {
+          audioUrl = editAudioUrlInput.trim();
+        }
+      }
+
       const payload = {
         tipo: category,
         rowIndex: editingItem.rowIndex,
@@ -559,6 +576,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         capaBase64,
         capaMimeType,
         ...(category === "musicas" ? { letra: editLetra } : {}),
+        ...(audioUrl ? { audioUrl } : {}),
       };
 
       const res = await fetch("/api/editar", {
@@ -592,7 +610,9 @@ export const EditModal: React.FC<EditModalProps> = ({
                 descricao: editDescricao.trim(),
                 capaUrl: json.capaUrl || r.capaUrl,
                 fields:
-                  category === "musicas" ? { ...r.fields, letra: editLetra } : r.fields,
+                  category === "musicas"
+                    ? { ...r.fields, letra: editLetra, ...(audioUrl ? { audioUrl } : {}) }
+                    : r.fields,
               }
             : r,
         ),
@@ -1092,6 +1112,53 @@ export const EditModal: React.FC<EditModalProps> = ({
                     placeholder="Descrição oficial do vídeo/clipe..."
                     className="w-full px-4 py-3 bg-neutral-800 border border-white/10 rounded-2xl text-sm text-white focus:outline-none focus:border-amber-500"
                   />
+                </div>
+              )}
+
+              {/* ÁUDIO (apenas para Músicas) — inserir (quando faltava) ou
+                  trocar o áudio já lançado, gravado na coluna C de Musicas.
+                  Antes só dava pra definir áudio na criação/álbum, nunca
+                  depois de editar um lançamento já existente. */}
+              {category === "musicas" && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileVideo className="size-3.5 text-amber-400" />
+                    {editingItem.fields?.audioUrl ? "Trocar Áudio" : "Inserir Áudio"}
+                  </label>
+                  <input
+                    type="text"
+                    value={editAudioUrlInput}
+                    onChange={(e) => setEditAudioUrlInput(e.target.value)}
+                    placeholder="Cole o link (YouTube, Google Drive, MP3 URL) ou selecione abaixo"
+                    className="w-full px-4 py-3 bg-neutral-800 border border-white/10 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500"
+                  />
+                  <div className="flex items-center gap-4 p-4 bg-neutral-800/40 border border-white/10 rounded-2xl">
+                    <div className="size-14 rounded-xl overflow-hidden bg-black border border-white/10 shrink-0 flex items-center justify-center">
+                      <FileVideo className="size-6 text-neutral-600" />
+                    </div>
+                    <div className="space-y-2 min-w-0">
+                      <input
+                        type="file"
+                        accept="audio/*,video/*"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            setEditAudioFile(f);
+                            setEditAudioUrlInput("");
+                          }
+                        }}
+                        className="hidden"
+                        id="edit-audio-input"
+                      />
+                      <label
+                        htmlFor="edit-audio-input"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 cursor-pointer transition"
+                      >
+                        <Upload className="size-3.5 text-amber-400" />
+                        <span className="truncate">{editAudioFile ? editAudioFile.name : "Upload de Arquivo Local"}</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               )}
 

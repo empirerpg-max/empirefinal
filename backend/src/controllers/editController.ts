@@ -233,6 +233,7 @@ export async function updateReleaseController(request: Request): Promise<Respons
       oldCapaUrl,
       oldTitulo: oldTituloRaw,
       letra,
+      audioUrl,
     } = body;
 
     const tipoClean = (tipo || "musicas").toLowerCase() as EditCategory;
@@ -298,6 +299,15 @@ export async function updateReleaseController(request: Request): Promise<Respons
       // (permite editar/inserir letra sem exigir os outros campos).
       if (typeof letra === "string") {
         await googleSheetsService.principal.updateValues(sheetName, `E${rowIndex}`, [[letra]]);
+      }
+
+      // Áudio (Coluna C, "ID do arquivo") — opcional, só grava quando o
+      // campo veio no body. Antes a tela de edição não tinha como inserir
+      // ou trocar o áudio de um lançamento já existente.
+      if (typeof audioUrl === "string" && audioUrl.trim()) {
+        await googleSheetsService.principal.updateValues(sheetName, `C${rowIndex}`, [
+          [audioUrl.trim()],
+        ]);
       }
 
       // Atualizar o novo título na planilha Edição Charts (1GPajSCp1TkJDEDOGZIrXxgZuNuRs7545buFntyDlpL8), aba EDIÇÃO CHARTS.
