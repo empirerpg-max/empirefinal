@@ -259,7 +259,18 @@ interface RegistroPlanejado {
   tipo: string;
 }
 
-async function planejarComentarios(corteTs: number): Promise<RegistroPlanejado[]> {
+interface DiagnosticoFonte {
+  linhasVarridas: number;
+  semTopicoOuJogador: number;
+  comResposta: number;
+  dataInvalidaOuForaDoCorte?: number;
+  semTituloEncontrado: number;
+  aceitas: number;
+}
+
+async function planejarComentarios(
+  corteTs: number,
+): Promise<{ planejados: RegistroPlanejado[]; diagnostico: { musicas: DiagnosticoFonte; mv: DiagnosticoFonte; albuns: DiagnosticoFonte } }> {
   const [comentariosMusicas, comentariosMV, comentariosAlbuns, musicas, musicVideos, albuns] = await Promise.all([
     googleSheetsService.principal.readValues("Comentarios_Musicas"),
     googleSheetsService.principal.readValues("Comentarios_MV"),
@@ -283,52 +294,69 @@ async function planejarComentarios(corteTs: number): Promise<RegistroPlanejado[]
   const titulosAlbuns = tituloPorTopico(albuns, 1, 6); // B, G
 
   const planejados: RegistroPlanejado[] = [];
+  const diagnostico = {
+    musicas: { linhasVarridas: 0, semTopicoOuJogador: 0, comResposta: 0, semTituloEncontrado: 0, aceitas: 0 },
+    mv: { linhasVarridas: 0, semTopicoOuJogador: 0, comResposta: 0, dataInvalidaOuForaDoCorte: 0, semTituloEncontrado: 0, aceitas: 0 },
+    albuns: { linhasVarridas: 0, semTopicoOuJogador: 0, comResposta: 0, dataInvalidaOuForaDoCorte: 0, semTituloEncontrado: 0, aceitas: 0 },
+  };
 
   // Comentarios_Musicas — sem data, corte por linha (confirmado pelo usuário).
   for (let i = Math.max(1, MUSICAS_LINHA_CORTE - 1); i < comentariosMusicas.length; i++) {
+    diagnostico.musicas.linhasVarridas++;
     const row = comentariosMusicas[i];
     const topicId = normalizeComparison(row?.[0] || "");
     const jogador = normalizeText(row?.[2]);
     const replyTo = normalizeText(row?.[4]);
-    if (!topicId || !jogador || replyTo) continue;
+    if (!topicId || !jogador) { diagnostico.musicas.semTopicoOuJogador++; continue; }
+    if (replyTo) { diagnostico.musicas.comResposta++; continue; }
     const titulo = titulosMusicas.get(topicId);
-    if (!titulo) continue;
+    if (!titulo) { diagnostico.musicas.semTituloEncontrado++; continue; }
+    diagnostico.musicas.aceitas++;
     planejados.push({ jogador, conteudo: titulo, tipo: TIPO_MUSICA });
   }
 
   // Comentarios_MV — Data real na coluna E (índice 4).
   for (let i = 1; i < comentariosMV.length; i++) {
+    diagnostico.mv.linhasVarridas++;
     const row = comentariosMV[i];
     const topicId = normalizeComparison(row?.[0] || "");
     const jogador = normalizeText(row?.[2]);
     const data = parseDataBR(normalizeText(row?.[4]));
     const replyTo = normalizeText(row?.[5]);
-    if (!topicId || !jogador || replyTo || data === null || data < corteTs) continue;
+    if (!topicId || !jogador) { diagnostico.mv.semTopicoOuJogador++; continue; }
+    if (replyTo) { diagnostico.mv.comResposta++; continue; }
+    if (data === null || data < corteTs) { diagnostico.mv.dataInvalidaOuForaDoCorte++; continue; }
     const titulo = titulosVideos.get(topicId);
-    if (!titulo) continue;
+    if (!titulo) { diagnostico.mv.semTituloEncontrado++; continue; }
+    diagnostico.mv.aceitas++;
     planejados.push({ jogador, conteudo: titulo, tipo: TIPO_MUSICA });
   }
 
   // Comentarios_Albuns — mesma estrutura de Comentarios_MV.
   for (let i = 1; i < comentariosAlbuns.length; i++) {
+    diagnostico.albuns.linhasVarridas++;
     const row = comentariosAlbuns[i];
     const topicId = normalizeComparison(row?.[0] || "");
     const jogador = normalizeText(row?.[2]);
     const data = parseDataBR(normalizeText(row?.[4]));
     const replyTo = normalizeText(row?.[5]);
-    if (!topicId || !jogador || replyTo || data === null || data < corteTs) continue;
+    if (!topicId || !jogador) { diagnostico.albuns.semTopicoOuJogador++; continue; }
+    if (replyTo) { diagnostico.albuns.comResposta++; continue; }
+    if (data === null || data < corteTs) { diagnostico.albuns.dataInvalidaOuForaDoCorte++; continue; }
     const titulo = titulosAlbuns.get(topicId);
-    if (!titulo) continue;
+    if (!titulo) { diagnostico.albuns.semTituloEncontrado++; continue; }
+    diagnostico.albuns.aceitas++;
     planejados.push({ jogador, conteudo: `(ALBUM) - ${titulo}`, tipo: TIPO_ALBUM });
   }
 
-  return planejados;
+  return { planejados, diagnostico };
 }
 
 export async function reconstruirRegistroDesdeCorte(confirmar: boolean): Promise<{
   confirmar: boolean;
   corte: string;
   comentariosPlanejados: number;
+  diagnosticoComentarios?: { musicas: DiagnosticoFonte; mv: DiagnosticoFonte; albuns: DiagnosticoFonte };
   empireHitsPreservados: { chave: string; existiam: number; mantidas: number }[];
   totalLinhasFinal: number;
   executado: boolean;
@@ -354,6 +382,7 @@ async function reconstruirRegistroDesdeCorteInterno(confirmar: boolean): Promise
   confirmar: boolean;
   corte: string;
   comentariosPlanejados: number;
+  diagnosticoComentarios: { musicas: DiagnosticoFonte; mv: DiagnosticoFonte; albuns: DiagnosticoFonte };
   empireHitsPreservados: { chave: string; existiam: number; mantidas: number }[];
   totalLinhasFinal: number;
   executado: boolean;
@@ -368,7 +397,7 @@ async function reconstruirRegistroDesdeCorteInterno(confirmar: boolean): Promise
   );
   const corteTs = corteData.getTime();
 
-  const [comentariosPlanejados, registroRows] = await Promise.all([
+  const [{ planejados: comentariosPlanejados, diagnostico: diagnosticoComentarios }, registroRows] = await Promise.all([
     planejarComentarios(corteTs),
     googleSheetsService.registrosCharts.readValues("REGISTRO"),
   ]);
@@ -398,6 +427,7 @@ async function reconstruirRegistroDesdeCorteInterno(confirmar: boolean): Promise
       confirmar: false,
       corte: corteData.toISOString(),
       comentariosPlanejados: comentariosPlanejados.length,
+      diagnosticoComentarios,
       empireHitsPreservados,
       totalLinhasFinal,
       executado: false,
@@ -444,6 +474,7 @@ async function reconstruirRegistroDesdeCorteInterno(confirmar: boolean): Promise
     confirmar: true,
     corte: corteData.toISOString(),
     comentariosPlanejados: comentariosPlanejados.length,
+    diagnosticoComentarios,
     empireHitsPreservados,
     totalLinhasFinal,
     executado: true,
