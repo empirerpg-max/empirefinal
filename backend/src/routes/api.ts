@@ -522,10 +522,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     // sem registro + fragmentação de transmissão do Empire Hits).
     // Idempotente e GET, mesma filosofia dos outros endpoints acima.
     const resultadoLimpeza = await limparRegistroExcedente();
-    response = new Response(JSON.stringify({ success: true, data: resultadoLimpeza }), {
-      status: 200,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
+    response = new Response(
+      JSON.stringify({ success: !resultadoLimpeza.erro, data: resultadoLimpeza }),
+      { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
   } else if (url.pathname === "/api/acervo/metacritic") {
     response = await getMetacriticRankingController();
   } else if (url.pathname === "/api/acervo/pitchfork") {

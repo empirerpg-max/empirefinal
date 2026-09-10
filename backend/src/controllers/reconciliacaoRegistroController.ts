@@ -257,6 +257,29 @@ export async function limparRegistroExcedente(): Promise<{
   jaAplicado: boolean;
   linhasRemovidas: number;
   detalhes: { chave: string; existiam: number; permitidas: number; removidas: number }[];
+  erro?: string;
+}> {
+  try {
+    return await limparRegistroExcedenteInterno();
+  } catch (err: any) {
+    // Nunca lança — igual toda outra correção pontual desse arquivo — mas
+    // devolve o erro de verdade na resposta em vez de um "erro interno"
+    // genérico, pra dar pra diagnosticar sem precisar de acesso a log de
+    // servidor.
+    console.warn("[limparRegistroExcedente] Erro:", err);
+    return {
+      jaAplicado: false,
+      linhasRemovidas: 0,
+      detalhes: [],
+      erro: err?.message || String(err),
+    };
+  }
+}
+
+async function limparRegistroExcedenteInterno(): Promise<{
+  jaAplicado: boolean;
+  linhasRemovidas: number;
+  detalhes: { chave: string; existiam: number; permitidas: number; removidas: number }[];
 }> {
   const logsExistentes = await googleSheetsService.logsSistema.readValues("LOGS").catch(() => []);
   const jaRodou = logsExistentes
