@@ -103,9 +103,11 @@ function buildCommentRow(
 
   if (tipoMedia === "musica") {
     // Comentarios_Musicas: ID do tópico, ID do jogador, Nome do jogador,
-    // Comentário, [E] ID do comentário-pai (resposta) — coluna nova no fim,
-    // não mexe nas colunas existentes.
-    return [topicId, jogadorId, playerClean, comentario, replyTo];
+    // Comentário, [E] ID do comentário-pai (resposta), [F] Data/Hora — essa
+    // aba nunca teve coluna de data (diferente de Comentarios_MV/Albuns),
+    // o que impossibilitava qualquer reconciliação por período depois do
+    // fato. Coluna nova no fim, não mexe nas existentes.
+    return [topicId, jogadorId, playerClean, comentario, replyTo, nowStr];
   }
   // Comentarios_MV (vídeos — a antiga Comentarios_Videos não existe mais,
   // Vídeos e Music Videos foram consolidados) / Comentarios_Albuns:

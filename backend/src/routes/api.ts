@@ -16,6 +16,7 @@ import {
   forcarAtualizacaoMetacriticController,
 } from "../controllers/metacriticController";
 import { corrigirPrestigioAssistirTvDuplicado } from "../services/prestigioService";
+import { reconstruirRegistroDesdeCorte } from "../controllers/reconciliacaoRegistroController";
 import {
   getPitchforkController,
   getPitchforkComentariosController,
@@ -221,6 +222,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/listar-todos",
     "/api/artistas/calcular-fortuna-charts",
     "/api/prestigio/corrigir-assistir-tv-duplicado",
+    "/api/registro/reconstruir",
     "/api/tv/programas",
     "/api/tv/presenca",
     "/api/tv/processar-participacao",
@@ -501,6 +503,19 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     // navegador e diagnosticar na hora (mostra quantos itens achou) sem
     // precisar de Postman/curl — mesma filosofia de /api/debug/error-log.
     response = await forcarAtualizacaoMetacriticController();
+  } else if (url.pathname === "/api/registro/reconstruir") {
+    // Reconstrução completa de REGISTRO a partir da quarta-feira 00:00
+    // (horário de Brasília) — ver reconciliacaoRegistroController.ts pro
+    // porquê (a limpeza por diferença tinha bug e apagou linha legítima).
+    // DRY-RUN por padrão (só mostra o que faria); só executa de verdade
+    // com ?confirmar=1 na URL — depois do incidente anterior, precisa de
+    // confirmação explícita em duas etapas antes de mexer em produção.
+    const confirmar = url.searchParams.get("confirmar") === "1";
+    const resultadoReconstrucao = await reconstruirRegistroDesdeCorte(confirmar);
+    response = new Response(JSON.stringify({ success: true, data: resultadoReconstrucao }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
   } else if (url.pathname === "/api/prestigio/corrigir-assistir-tv-duplicado") {
     // Correção pontual (ver prestigioService.ts) pro prestígio/nível
     // inflado pelo bug de fragmentação de transmissão do Empire Hits (ver
