@@ -217,3 +217,236 @@ export async function reconciliarPontosComentariosScheduled(
   return { chavesProcessadas, linhasGravadas };
 }
 
+// =========================================================================
+// RECONSTRUÇÃO — pedido explícito do usuário depois do incidente de
+// limparRegistroExcedente (removida): em vez de tentar diferenciar "linha
+// certa" de "linha duplicada" dentro de REGISTRO (é isso que tinha bug),
+// RECONSTRÓI do zero, só com o que dá pra confirmar direto na fonte:
+//   - Comentarios_MV / Comentarios_Albuns: têm coluna de Data de verdade —
+//     filtra comentário raiz (sem resposta) com Data >= corte.
+//   - Comentarios_Musicas: NUNCA teve coluna de data (createCommentController
+//     grava Data ali a partir de agora, ver forumController.ts) — pro
+//     histórico, usa o corte por LINHA que o usuário confirmou
+//     manualmente (linha 990 em diante = comentários de música de verdade
+//     feitos no período).
+//   - Empire Hits: só houve 1 transmissão real no dia (confirmado via
+//     Agenda_TV) — mantém no máximo 1 crédito por (jogador, tier)
+//     existente em REGISTRO, já que não dá pra ter mais que isso legítimo.
+// Título usado é o BRUTO da planilha de origem (Musicas!H / Music Videos!B
+// / Albuns!G) — sem passar pela resolução "canônica" via EDIÇÃO CHARTS que
+// causou o bug anterior (produzia falso-negativo silencioso).
+//
+// DRY-RUN por padrão: só mostra o que faria. Só executa (limpa REGISTRO e
+// escreve de novo) com confirmar=true — depois do que aconteceu, nada
+// mexe em produção sem uma segunda confirmação explícita.
+// =========================================================================
+const MUSICAS_LINHA_CORTE = 990; // confirmado manualmente pelo usuário
+
+function parseDataBR(valor: string): number | null {
+  // Formato gravado por toLocaleString("pt-BR", {timeZone: "America/Sao_Paulo"}):
+  // "09/09/2026 14:30:00" ou "09/09/2026, 14:30:00" (vírgula depende do ambiente).
+  const m = (valor || "").trim().match(/^(\d{2})\/(\d{2})\/(\d{4}),?\s+(\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const [, dd, mm, yyyy, hh, mi, ss] = m;
+  // Constrói como se fosse horário de Brasília (UTC-3) pra comparar com o
+  // corte, que também é dado em horário de Brasília.
+  return Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh) + 3, Number(mi), Number(ss));
+}
+
+interface RegistroPlanejado {
+  jogador: string;
+  conteudo: string;
+  tipo: string;
+}
+
+async function planejarComentarios(corteTs: number): Promise<RegistroPlanejado[]> {
+  const [comentariosMusicas, comentariosMV, comentariosAlbuns, musicas, musicVideos, albuns] = await Promise.all([
+    googleSheetsService.principal.readValues("Comentarios_Musicas"),
+    googleSheetsService.principal.readValues("Comentarios_MV"),
+    googleSheetsService.principal.readValues("Comentarios_Albuns"),
+    googleSheetsService.principal.readValues("Musicas"),
+    googleSheetsService.principal.readValues("Music Videos"),
+    googleSheetsService.principal.readValues("Albuns"),
+  ]);
+
+  const tituloPorTopico = (rows: string[][], colTopicId: number, colTitulo: number): Map<string, string> => {
+    const mapa = new Map<string, string>();
+    for (let i = 1; i < rows.length; i++) {
+      const topicId = normalizeComparison(rows[i]?.[colTopicId] || "");
+      const titulo = normalizeText(rows[i]?.[colTitulo]);
+      if (topicId && titulo) mapa.set(topicId, titulo);
+    }
+    return mapa;
+  };
+  const titulosMusicas = tituloPorTopico(musicas, 1, 7); // B, H
+  const titulosVideos = tituloPorTopico(musicVideos, 5, 1); // F, B
+  const titulosAlbuns = tituloPorTopico(albuns, 1, 6); // B, G
+
+  const planejados: RegistroPlanejado[] = [];
+
+  // Comentarios_Musicas — sem data, corte por linha (confirmado pelo usuário).
+  for (let i = Math.max(1, MUSICAS_LINHA_CORTE - 1); i < comentariosMusicas.length; i++) {
+    const row = comentariosMusicas[i];
+    const topicId = normalizeComparison(row?.[0] || "");
+    const jogador = normalizeText(row?.[2]);
+    const replyTo = normalizeText(row?.[4]);
+    if (!topicId || !jogador || replyTo) continue;
+    const titulo = titulosMusicas.get(topicId);
+    if (!titulo) continue;
+    planejados.push({ jogador, conteudo: titulo, tipo: TIPO_MUSICA });
+  }
+
+  // Comentarios_MV — Data real na coluna E (índice 4).
+  for (let i = 1; i < comentariosMV.length; i++) {
+    const row = comentariosMV[i];
+    const topicId = normalizeComparison(row?.[0] || "");
+    const jogador = normalizeText(row?.[2]);
+    const data = parseDataBR(normalizeText(row?.[4]));
+    const replyTo = normalizeText(row?.[5]);
+    if (!topicId || !jogador || replyTo || data === null || data < corteTs) continue;
+    const titulo = titulosVideos.get(topicId);
+    if (!titulo) continue;
+    planejados.push({ jogador, conteudo: titulo, tipo: TIPO_MUSICA });
+  }
+
+  // Comentarios_Albuns — mesma estrutura de Comentarios_MV.
+  for (let i = 1; i < comentariosAlbuns.length; i++) {
+    const row = comentariosAlbuns[i];
+    const topicId = normalizeComparison(row?.[0] || "");
+    const jogador = normalizeText(row?.[2]);
+    const data = parseDataBR(normalizeText(row?.[4]));
+    const replyTo = normalizeText(row?.[5]);
+    if (!topicId || !jogador || replyTo || data === null || data < corteTs) continue;
+    const titulo = titulosAlbuns.get(topicId);
+    if (!titulo) continue;
+    planejados.push({ jogador, conteudo: `(ALBUM) - ${titulo}`, tipo: TIPO_ALBUM });
+  }
+
+  return planejados;
+}
+
+export async function reconstruirRegistroDesdeCorte(confirmar: boolean): Promise<{
+  confirmar: boolean;
+  corte: string;
+  comentariosPlanejados: number;
+  empireHitsPreservados: { chave: string; existiam: number; mantidas: number }[];
+  totalLinhasFinal: number;
+  executado: boolean;
+  erro?: string;
+}> {
+  try {
+    return await reconstruirRegistroDesdeCorteInterno(confirmar);
+  } catch (err: any) {
+    console.warn("[reconstruirRegistroDesdeCorte] Erro:", err);
+    return {
+      confirmar,
+      corte: "",
+      comentariosPlanejados: 0,
+      empireHitsPreservados: [],
+      totalLinhasFinal: 0,
+      executado: false,
+      erro: err?.message || String(err),
+    };
+  }
+}
+
+async function reconstruirRegistroDesdeCorteInterno(confirmar: boolean): Promise<{
+  confirmar: boolean;
+  corte: string;
+  comentariosPlanejados: number;
+  empireHitsPreservados: { chave: string; existiam: number; mantidas: number }[];
+  totalLinhasFinal: number;
+  executado: boolean;
+}> {
+  // Corte: quarta-feira mais recente, 00:00 no horário de Brasília.
+  const agora = new Date();
+  const hojeBRT = new Date(agora.getTime() - 3 * 60 * 60 * 1000); // desloca pra "ver" a data local BRT em UTC
+  const diaSemana = hojeBRT.getUTCDay(); // 0=domingo ... 3=quarta
+  const diasDesdeQuarta = (diaSemana - 3 + 7) % 7;
+  const corteData = new Date(
+    Date.UTC(hojeBRT.getUTCFullYear(), hojeBRT.getUTCMonth(), hojeBRT.getUTCDate() - diasDesdeQuarta, 3, 0, 0),
+  );
+  const corteTs = corteData.getTime();
+
+  const [comentariosPlanejados, registroRows] = await Promise.all([
+    planejarComentarios(corteTs),
+    googleSheetsService.registrosCharts.readValues("REGISTRO"),
+  ]);
+
+  // Empire Hits — sem data em REGISTRO pra filtrar por período, então só
+  // reduz o excedente óbvio: no máximo 1 crédito por (jogador, tier), já
+  // que só houve 1 transmissão real no período (confirmado via Agenda_TV).
+  const empireHitsPorChave = new Map<string, number>();
+  for (let i = 1; i < registroRows.length; i++) {
+    const tipo = normalizeText(registroRows[i]?.[3] || "");
+    if (!normalizeComparison(tipo).startsWith("empire hits")) continue;
+    const jogador = normalizeComparison(registroRows[i]?.[1] || "");
+    const chave = `${jogador}|${normalizeComparison(tipo)}`;
+    empireHitsPorChave.set(chave, (empireHitsPorChave.get(chave) || 0) + 1);
+  }
+  const empireHitsPreservados = [...empireHitsPorChave.entries()].map(([chave, existiam]) => ({
+    chave,
+    existiam,
+    mantidas: Math.min(existiam, 1),
+  }));
+
+  const totalLinhasFinal =
+    comentariosPlanejados.length + empireHitsPreservados.reduce((soma, e) => soma + e.mantidas, 0);
+
+  if (!confirmar) {
+    return {
+      confirmar: false,
+      corte: corteData.toISOString(),
+      comentariosPlanejados: comentariosPlanejados.length,
+      empireHitsPreservados,
+      totalLinhasFinal,
+      executado: false,
+    };
+  }
+
+  // Executa: limpa TODO o conteúdo (B:D) de REGISTRO — inclusive fora do
+  // escopo dessa reconstrução, tipos que essa função não sabe recalcular
+  // não sobrevivem (não existiam outros tipos além de comentário/Empire
+  // Hits nas linhas revisadas até aqui). Depois escreve de novo, do zero.
+  const totalLinhasExistentes = registroRows.length - 1;
+  if (totalLinhasExistentes > 0) {
+    await googleSheetsService.registrosCharts.updateValues(
+      "REGISTRO",
+      `B2:D${registroRows.length}`,
+      Array.from({ length: totalLinhasExistentes }, () => ["", "", ""]),
+    );
+  }
+
+  for (const p of comentariosPlanejados) {
+    await gravarLinhaRegistro([p.jogador, p.conteudo, p.tipo]);
+  }
+  // Empire Hits: reescreve só as linhas preservadas (até 1 por jogador+tier).
+  // Reconstrói o nome "de exibição" a partir da própria linha original já
+  // lida (primeira ocorrência de cada chave), já que REGISTRO só guarda o
+  // nome normalizado na chave — precisa do texto original da linha.
+  const primeiraOcorrenciaEmpireHits = new Map<string, { jogador: string; tipo: string }>();
+  for (let i = 1; i < registroRows.length; i++) {
+    const tipo = normalizeText(registroRows[i]?.[3] || "");
+    if (!normalizeComparison(tipo).startsWith("empire hits")) continue;
+    const jogador = normalizeText(registroRows[i]?.[1] || "");
+    const chave = `${normalizeComparison(jogador)}|${normalizeComparison(tipo)}`;
+    if (!primeiraOcorrenciaEmpireHits.has(chave)) primeiraOcorrenciaEmpireHits.set(chave, { jogador, tipo });
+  }
+  for (const e of empireHitsPreservados) {
+    const original = primeiraOcorrenciaEmpireHits.get(e.chave);
+    if (!original) continue;
+    for (let n = 0; n < e.mantidas; n++) {
+      await gravarLinhaRegistro([original.jogador, "", original.tipo]);
+    }
+  }
+
+  return {
+    confirmar: true,
+    corte: corteData.toISOString(),
+    comentariosPlanejados: comentariosPlanejados.length,
+    empireHitsPreservados,
+    totalLinhasFinal,
+    executado: true,
+  };
+}
+
