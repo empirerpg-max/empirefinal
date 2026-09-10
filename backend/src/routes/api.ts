@@ -16,7 +16,6 @@ import {
   forcarAtualizacaoMetacriticController,
 } from "../controllers/metacriticController";
 import { corrigirPrestigioAssistirTvDuplicado } from "../services/prestigioService";
-import { limparRegistroExcedente } from "../controllers/reconciliacaoRegistroController";
 import {
   getPitchforkController,
   getPitchforkComentariosController,
@@ -222,7 +221,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/listar-todos",
     "/api/artistas/calcular-fortuna-charts",
     "/api/prestigio/corrigir-assistir-tv-duplicado",
-    "/api/registro/limpar-excedente",
     "/api/tv/programas",
     "/api/tv/presenca",
     "/api/tv/processar-participacao",
@@ -515,17 +513,6 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
-  } else if (url.pathname === "/api/registro/limpar-excedente") {
-    // Correção pontual (ver reconciliacaoRegistroController.ts) pro
-    // excedente de linha duplicada em REGISTRO causado pelos dois bugs de
-    // cron corrigidos em paralelo (contagem de resposta como comentário
-    // sem registro + fragmentação de transmissão do Empire Hits).
-    // Idempotente e GET, mesma filosofia dos outros endpoints acima.
-    const resultadoLimpeza = await limparRegistroExcedente();
-    response = new Response(
-      JSON.stringify({ success: !resultadoLimpeza.erro, data: resultadoLimpeza }),
-      { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
-    );
   } else if (url.pathname === "/api/acervo/metacritic") {
     response = await getMetacriticRankingController();
   } else if (url.pathname === "/api/acervo/pitchfork") {
