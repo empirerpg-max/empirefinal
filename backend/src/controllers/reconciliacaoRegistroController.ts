@@ -68,11 +68,22 @@ async function coletarComentariosResolvidos(): Promise<ComentarioResolvido[]> {
 
   const resolvidos: ComentarioResolvido[] = [];
 
+  // Resposta a outro comentário (replyTo preenchido) NUNCA gera linha em
+  // REGISTRO — mesma regra do createCommentController (`if (!isReply)`).
+  // Sem filtrar isso aqui, toda resposta contava como "comentário que
+  // devia ter REGISTRO e não tem", e como resposta é atividade normal de
+  // chat (nunca some, só cresce), essa função ficava injetando linha
+  // duplicada pro mesmo (jogador, título, tipo) a cada rodada do cron,
+  // pra sempre — foi isso que inundou REGISTRO de linha repetida.
+  // Comentarios_Musicas não tem coluna Data (replyTo na E, índice 4);
+  // Comentarios_MV/Comentarios_Albuns têm (replyTo na F, índice 5) —
+  // mesmos índices usados em getCommentsController.
   for (let i = 1; i < comentariosMusicas.length; i++) {
     const row = comentariosMusicas[i];
     const topicId = normalizeComparison(row?.[0] || "");
     const jogador = normalizeText(row?.[2]);
-    if (!topicId || !jogador) continue;
+    const replyTo = normalizeText(row?.[4]);
+    if (!topicId || !jogador || replyTo) continue;
     const info = topicosMusicas.get(topicId);
     if (!info?.titulo) continue;
     resolvidos.push({ jogador, titulo: info.titulo, isAlbum: false, codigoUnico: info.codigoUnico, tipo: TIPO_MUSICA });
@@ -82,7 +93,8 @@ async function coletarComentariosResolvidos(): Promise<ComentarioResolvido[]> {
     const row = comentariosMV[i];
     const topicId = normalizeComparison(row?.[0] || "");
     const jogador = normalizeText(row?.[2]);
-    if (!topicId || !jogador) continue;
+    const replyTo = normalizeText(row?.[5]);
+    if (!topicId || !jogador || replyTo) continue;
     const info = topicosVideos.get(topicId);
     if (!info?.titulo) continue;
     resolvidos.push({ jogador, titulo: info.titulo, isAlbum: false, codigoUnico: info.codigoUnico, tipo: TIPO_MUSICA });
@@ -92,7 +104,8 @@ async function coletarComentariosResolvidos(): Promise<ComentarioResolvido[]> {
     const row = comentariosAlbuns[i];
     const topicId = normalizeComparison(row?.[0] || "");
     const jogador = normalizeText(row?.[2]);
-    if (!topicId || !jogador) continue;
+    const replyTo = normalizeText(row?.[5]);
+    if (!topicId || !jogador || replyTo) continue;
     const info = topicosAlbuns.get(topicId);
     if (!info?.titulo) continue;
     resolvidos.push({ jogador, titulo: info.titulo, isAlbum: true, codigoUnico: info.codigoUnico, tipo: TIPO_ALBUM });

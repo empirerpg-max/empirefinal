@@ -370,9 +370,20 @@ function agruparTransmissoes(programas: ProgramaRow[]): BroadcastGroup[] {
   const startsPorGrupo = new Map<string, number[]>();
 
   for (const p of programas) {
-    // Sala única (Topico_ID) é a chave real de uma transmissão — cai pra
-    // data+título só pra linhas antigas gravadas antes da coluna existir.
-    const key = p.salaId || `${p.data}|${p.titulo}`;
+    // ANTES: usava salaId (Topico_ID) como chave principal, caindo pra
+    // data+título só quando salaId vinha vazio. Na prática, Topico_ID não
+    // vem preenchido IGUAL em todo segmento da mesma transmissão (às vezes
+    // fica em branco num segmento e preenchido no outro, às vezes cada
+    // segmento nasce com um ID próprio) — cada variação virava um "grupo"
+    // de 1 linha só, cada um processado (e creditado no REGISTRO) como se
+    // fosse uma transmissão inteira separada. Foi isso que inundou o
+    // REGISTRO de linha repetida do Empire Hits: um programa de várias
+    // horas com vários segmentos virava várias "transmissões" de mentira.
+    // data+título é mais grosseiro mas muito mais estável (mesmo dia +
+    // mesmo nome de programa = mesma transmissão de verdade, quase sempre),
+    // então agora é a chave PRINCIPAL; salaId só entra como desempate
+    // quando data+título por si só não bastam (ambos vazios).
+    const key = (p.data && p.titulo) ? `${p.data}|${p.titulo}` : (p.salaId || `linha_${p.id}`);
     if (!grupos.has(key)) {
       grupos.set(key, {
         chave: key,
