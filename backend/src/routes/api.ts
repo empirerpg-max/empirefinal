@@ -838,12 +838,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     }
     response = await registrarEventoTransmissaoController(request);
   } else if (url.pathname === "/api/tv/processar-participacao") {
-    if (request.method !== "POST") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/tv/processar-participacao." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
+    // Aceita GET também, pra dar pra colar a URL direto no navegador sem
+    // precisar de console/curl — mesma filosofia dos outros endpoints de
+    // correção pontual.
     try {
       const resultado = await processarParticipacaoTV();
       response = new Response(JSON.stringify({ success: true, data: resultado }), {

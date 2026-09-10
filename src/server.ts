@@ -354,9 +354,6 @@ export default {
     const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
     const { limparStoriesExpiradosScheduled } = await import("../backend/src/controllers/socialController");
     const { preencherLikesVideosSemMediaScheduled } = await import("../backend/src/controllers/videoLikesController");
-    const { reconciliarPontosComentariosScheduled } = await import(
-      "../backend/src/controllers/reconciliacaoRegistroController"
-    );
     const { atualizarSnapshotMetacriticSemanalScheduled } = await import(
       "../backend/src/controllers/metacriticController"
     );
@@ -379,19 +376,15 @@ export default {
         .then((r) => console.log(`[scheduled] Média Likes de vídeo recalculada: ${r.atualizados} vídeos.`))
         .catch((err) => console.error("[scheduled] Erro ao recalcular likes de vídeo:", err)),
     );
-    // Correção pontual do backlog de comentários que nunca geraram ponto em
-    // REGISTRO (bug de nome canônico + colisão de linha, já corrigido pra
-    // comentários novos) — reconcilia contagem de comentários vs. REGISTRO e
-    // completa a diferença, em lotes pequenos por execução.
-    ctx.waitUntil(
-      reconciliarPontosComentariosScheduled((env as { FLAGS?: FlagsKv }).FLAGS)
-        .then((r) =>
-          console.log(
-            `[scheduled] Reconciliação de pontos: ${r.chavesProcessadas} chaves, ${r.linhasGravadas} linhas gravadas em REGISTRO.`,
-          ),
-        )
-        .catch((err) => console.error("[scheduled] Erro ao reconciliar pontos de comentários:", err)),
-    );
+    // A reconciliação de backlog de comentários (reconciliarPontosComentariosScheduled)
+    // foi REMOVIDA daqui — era uma correção pontual de um bug antigo, não
+    // deveria ter ficado rodando pra sempre. Ela reinseria automaticamente
+    // qualquer comentário "sem linha em REGISTRO" que encontrasse — inclusive
+    // toda vez que alguém limpava REGISTRO manualmente pra manter só
+    // registro recente, ela via isso como "sumiu" e recolocava tudo de
+    // volta sozinha, brigando com a limpeza manual. Ver
+    // reconciliacaoRegistroController.ts (função ainda existe, só não é
+    // mais chamada automaticamente).
     // Ranking do Metacritic (Acervo) — checa a cada 10 min, mas só REGRAVA
     // o snapshot uma vez por semana (corte quarta 00:00, ver
     // metacriticController.ts). O resto do tempo essa chamada é barata: só
