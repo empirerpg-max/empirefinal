@@ -497,8 +497,18 @@ function getSupabaseCreds(): { url: string; key: string } {
 
 // Conta mensagens de chat por jogador (user_id) numa transmissão — soma de
 // todos os segmentos (mesma chave "row_N" usada no chat, igual Presença).
+// SÓ conta mensagem mandada dentro da janela real de horário da
+// transmissão (inicioTs..fimTs) — antes filtrava só por programa_id (ID da
+// sala), sem checar quando a mensagem foi mandada. Como o ID da sala é
+// reaproveitado por todo mundo que usar aquele chat (ex: gente testando
+// antes/depois do horário real, ou mensagem solta de outro dia na mesma
+// sala), isso dava crédito de presença pra quem nunca assistiu a
+// transmissão em si — foi assim que um jogador que não estava presente
+// ganhou crédito de Empire Hits.
 async function contarChatPorTransmissao(
   rowIds: string[],
+  inicioTs: number,
+  fimTs: number,
 ): Promise<Map<string, { nome: string; count: number }>> {
   const resultado = new Map<string, { nome: string; count: number }>();
   const { url, key } = getSupabaseCreds();
@@ -506,7 +516,11 @@ async function contarChatPorTransmissao(
 
   try {
     const idsParam = rowIds.map((id) => `"${id}"`).join(",");
-    const restUrl = `${url}/rest/v1/tv_chat_messages?programa_id=in.(${idsParam})&select=user_id,user_name`;
+    const inicioIso = new Date(inicioTs).toISOString();
+    const fimIso = new Date(fimTs).toISOString();
+    const restUrl =
+      `${url}/rest/v1/tv_chat_messages?programa_id=in.(${idsParam})` +
+      `&created_at=gte.${inicioIso}&created_at=lte.${fimIso}&select=user_id,user_name`;
     const res = await fetch(restUrl, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
@@ -782,9 +796,14 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
       continue;
     }
 
+    // Janela real da transmissão (com uma margem de segurança pra frente e
+    // pra trás) — usada só pra filtrar chat por horário, ver
+    // contarChatPorTransmissao acima.
+    const margemChatMs = 15 * 60 * 1000;
+    const inicioEstimadoTs = grupo.endTs - grupo.totalDuracaoSeg * 1000;
     const [presenca, chat] = await Promise.all([
       somarPresencaPorTransmissao(grupo.rowIds),
-      contarChatPorTransmissao(grupo.rowIds),
+      contarChatPorTransmissao(grupo.rowIds, inicioEstimadoTs - margemChatMs, grupo.endTs + margemChatMs),
     ]);
 
     const jogadores = new Set([...presenca.keys(), ...chat.keys()]);
