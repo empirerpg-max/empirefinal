@@ -207,45 +207,6 @@ export async function ensureSheetTab(
   );
 }
 
-// Apaga linhas de uma aba (1-indexed, igual aparece na UI do Sheets — linha
-// 1 = cabeçalho) via batchUpdate deleteDimension. Índices são resolvidos
-// pelo sheetId real (não pelo nome), então funciona mesmo se a aba foi
-// renomeada. Sempre passe `linhas1Indexed` em QUALQUER ordem — a função
-// ordena decrescente e deleta de baixo pra cima sozinha, senão apagar a
-// linha 5 antes da 10 desloca todo mundo e a 10 vira outra coisa.
-export async function deleteRows(
-  spreadsheetKeyOrId: SpreadsheetKey | string,
-  sheetName: string,
-  linhas1Indexed: number[],
-): Promise<void> {
-  if (linhas1Indexed.length === 0) return;
-  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
-  const tabs = await listSheetTabs(spreadsheetId);
-  const tab = tabs.find((t) => t.title === sheetName);
-  if (!tab || tab.sheetId < 0) throw new Error(`Aba "${sheetName}" não encontrada pra deleteRows.`);
-
-  const ordenadas = [...new Set(linhas1Indexed)].sort((a, b) => b - a);
-  const requests = ordenadas.map((linha) => ({
-    deleteDimension: {
-      range: {
-        sheetId: tab.sheetId,
-        dimension: "ROWS",
-        startIndex: linha - 1, // API é 0-indexed
-        endIndex: linha,
-      },
-    },
-  }));
-
-  // Uma request por linha (mesmo sendo mais chamadas dentro do mesmo
-  // batchUpdate) em vez de tentar agrupar ranges contíguos — mais simples
-  // e evita erro de cálculo de range sobreposto.
-  await sheetsRequest(
-    `/${spreadsheetId}:batchUpdate`,
-    { method: "POST", body: JSON.stringify({ requests }) },
-    [SHEETS_READWRITE_SCOPE],
-  );
-}
-
 export async function readValues(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
@@ -560,8 +521,6 @@ export const googleSheetsService = {
       range?: string,
       insertDataOption?: "INSERT_ROWS" | "OVERWRITE",
     ) => appendRow("registrosCharts", sheetName, values, range, insertDataOption),
-    deleteRows: (sheetName: string, linhas1Indexed: number[]) =>
-      deleteRows("registrosCharts", sheetName, linhas1Indexed),
   },
   edicaoCharts: {
     readValues: (sheetName: string, range?: string) => readValues("edicaoCharts", sheetName, range),

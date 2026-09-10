@@ -373,7 +373,14 @@ async function limparRegistroExcedenteInterno(): Promise<{
   }
 
   if (paraDeletar.length > 0) {
-    await googleSheetsService.registrosCharts.deleteRows("REGISTRO", paraDeletar);
+    // NÃO usa deleteRows aqui — a coluna E ("VALOR") é protegida (fórmula),
+    // e excluir a linha inteira mexe nela também, batendo na proteção
+    // ("You are trying to edit a protected cell or object"). Em vez de
+    // excluir a linha estruturalmente, limpa só o conteúdo de B:D — mesmo
+    // padrão que gravarLinhaRegistro já usa pra nunca tocar em E.
+    for (const linha of paraDeletar) {
+      await googleSheetsService.registrosCharts.updateValues("REGISTRO", `B${linha}:D${linha}`, [["", "", ""]]);
+    }
   }
 
   await registrarLogSistema({
