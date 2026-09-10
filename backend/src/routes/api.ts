@@ -15,6 +15,7 @@ import {
   getMetacriticRankingController,
   forcarAtualizacaoMetacriticController,
 } from "../controllers/metacriticController";
+import { corrigirPrestigioAssistirTvDuplicado } from "../services/prestigioService";
 import {
   getPitchforkController,
   getPitchforkComentariosController,
@@ -219,6 +220,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/disponiveis",
     "/api/artistas/listar-todos",
     "/api/artistas/calcular-fortuna-charts",
+    "/api/prestigio/corrigir-assistir-tv-duplicado",
     "/api/tv/programas",
     "/api/tv/presenca",
     "/api/tv/processar-participacao",
@@ -499,6 +501,18 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     // navegador e diagnosticar na hora (mostra quantos itens achou) sem
     // precisar de Postman/curl — mesma filosofia de /api/debug/error-log.
     response = await forcarAtualizacaoMetacriticController();
+  } else if (url.pathname === "/api/prestigio/corrigir-assistir-tv-duplicado") {
+    // Correção pontual (ver prestigioService.ts) pro prestígio/nível
+    // inflado pelo bug de fragmentação de transmissão do Empire Hits (ver
+    // tvController.ts agruparTransmissoes, corrigido em paralelo) — reverte
+    // créditos de "assistir_tv" que caíram em sequência (<12min) pro mesmo
+    // jogador. Idempotente (não roda 2x) e GET pra dar pra rodar colando a
+    // URL no navegador, mesma filosofia do /atualizar acima.
+    const resultado = await corrigirPrestigioAssistirTvDuplicado();
+    response = new Response(JSON.stringify({ success: true, data: resultado }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
   } else if (url.pathname === "/api/acervo/metacritic") {
     response = await getMetacriticRankingController();
   } else if (url.pathname === "/api/acervo/pitchfork") {
