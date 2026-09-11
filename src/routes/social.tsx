@@ -146,6 +146,74 @@ function PostMedia({
   );
 }
 
+// Carrossel de fotos do Feed (até 10) — setinhas nas laterais pra avançar,
+// além do swipe já suportado pelo scroll horizontal com snap. Sem as
+// setinhas, quem usa mouse (desktop) não tinha nenhum jeito de trocar de
+// foto, só quem usa touch.
+function PostCarousel({ urls, resolveUrl }: { urls: string[]; resolveUrl: (u?: string) => string | undefined }) {
+  const [index, setIndex] = useState(0);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+  function goTo(i: number) {
+    const clamped = Math.max(0, Math.min(urls.length - 1, i));
+    setIndex(clamped);
+    const el = scrollerRef.current;
+    if (el) {
+      el.scrollTo({ left: clamped * el.clientWidth, behavior: "smooth" });
+    }
+  }
+
+  return (
+    <div className="relative mb-3.5">
+      <div
+        ref={scrollerRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          if (el.clientWidth > 0) setIndex(Math.round(el.scrollLeft / el.clientWidth));
+        }}
+        className="flex gap-0 overflow-x-auto snap-x snap-mandatory rounded-[1.25rem] border border-white/10 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {urls.map((url, idx) => (
+          <div key={idx} className="aspect-square w-full shrink-0 snap-center bg-secondary overflow-hidden">
+            <PostMedia url={url} tipo="imagem" resolveUrl={resolveUrl} className="w-full h-full object-cover" />
+          </div>
+        ))}
+      </div>
+
+      {index > 0 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            goTo(index - 1);
+          }}
+          className="absolute left-2 top-1/2 -translate-y-1/2 size-8 rounded-full bg-black/60 text-white grid place-items-center"
+          aria-label="Foto anterior"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+      )}
+      {index < urls.length - 1 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            goTo(index + 1);
+          }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 size-8 rounded-full bg-black/60 text-white grid place-items-center"
+          aria-label="Próxima foto"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+      )}
+
+      <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px] font-black">
+        {index + 1}/{urls.length}
+      </span>
+    </div>
+  );
+}
+
 // Fonte tocável de verdade pra tag <audio>: link do Drive precisa passar
 // pelo proxy /api/media/audio do backend (suporta Range, contorna CORS) —
 // usar o link "cru" do Drive, ou pior, a URL de /preview (feita pra
@@ -201,7 +269,10 @@ function PostAudioBadge({ audio }: { audio: { titulo: string; url: string; start
       />
       <button
         type="button"
-        onClick={toggle}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggle();
+        }}
         className="size-6 rounded-full bg-primary text-primary-foreground shrink-0 grid place-items-center active:scale-90 transition-transform"
       >
         {playing ? <Pause className="size-3" /> : <Play className="size-3 ml-0.5" />}
@@ -1046,6 +1117,34 @@ function SocialPage() {
       const res = await (api as any).salvarPostSocial(payload, tgId);
       if (res.ok) {
         haptic.success();
+        // Insere o post localmente na hora, sem esperar o recarregamento —
+        // a escrita no Sheets confirma antes de ficar visível numa leitura
+        // logo em seguida, então só chamar loadPosts() podia deixar quem
+        // acabou de postar sem ver o próprio post por alguns segundos
+        // (parecia que "não aconteceu nada").
+        const perfil = profiles.find(
+          (pr) => pr.artista === autorFinal && pr.rede === selectedType,
+        );
+        setPosts((prev) => [
+          {
+            id: res.id || `temp_${Date.now()}`,
+            tipo: payload.tipo as Post["tipo"],
+            subtipo: payload.subtipo,
+            autor: autorFinal,
+            handle: perfil?.handle || "",
+            avatar: perfil?.avatar_url || perfil?.avatar || perfil?.foto || activeArtist?.foto,
+            texto: payload.texto,
+            media_url: payload.media_url || undefined,
+            media_tipo: payload.media_tipo,
+            analytics: { likes: 0, comments: 0, shares: 0 },
+            data: new Date().toISOString(),
+            telegram_id: tgId,
+            material: (payload as any).material,
+            extra_media: (payload as any).extra_media,
+            audio: (payload as any).audio,
+          },
+          ...prev,
+        ]);
         closePostModal();
         loadPosts();
       } else {
@@ -1497,18 +1596,10 @@ function SocialPage() {
                         ) : (
                           post.media_url &&
                           (post.extra_media?.length ? (
-                            <div className="relative mb-3.5">
-                              <div className="flex gap-0 overflow-x-auto snap-x snap-mandatory rounded-[1.25rem] border border-white/10 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                                {[post.media_url, ...post.extra_media].map((url, idx) => (
-                                  <div key={idx} className="aspect-square w-full shrink-0 snap-center bg-secondary overflow-hidden">
-                                    <PostMedia url={url} tipo="imagem" resolveUrl={driveImg} className="w-full h-full object-cover" />
-                                  </div>
-                                ))}
-                              </div>
-                              <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px] font-black">
-                                1/{post.extra_media.length + 1}
-                              </span>
-                            </div>
+                            <PostCarousel
+                              urls={[post.media_url, ...post.extra_media]}
+                              resolveUrl={driveImg}
+                            />
                           ) : (
                             <div className="aspect-square bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_50px_-25px_rgba(0,0,0,0.7)]">
                               <PostMedia
