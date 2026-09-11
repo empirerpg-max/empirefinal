@@ -112,11 +112,13 @@ function PostMedia({
   tipo,
   className,
   resolveUrl,
+  muted,
 }: {
   url?: string;
   tipo?: string;
   className?: string;
   resolveUrl: (u?: string) => string | undefined;
+  muted?: boolean;
 }) {
   if (!url) return null;
   if (tipo === "video") {
@@ -126,6 +128,7 @@ function PostMedia({
         controls
         playsInline
         preload="metadata"
+        muted={muted}
         className={className}
       />
     );
@@ -436,7 +439,7 @@ function SocialPage() {
   const [attachedAudio, setAttachedAudio] = useState<PostAudio | null>(null);
   const [isAudioPickerOpen, setIsAudioPickerOpen] = useState(false);
   const MAX_IG_PHOTOS = 10;
-  const MAX_AUDIO_SEC = 10;
+  const MAX_AUDIO_SEC = selectedType === "TikTok" ? 15 : 10;
   // Story compartilhando música (capa + trecho de áudio) em vez de
   // foto/vídeo escolhido manualmente.
   const [storyMusicMode, setStoryMusicMode] = useState(false);
@@ -922,8 +925,10 @@ function SocialPage() {
         ...(selectedType === "Instagram" && igMode === "Feed" && extraImageUrls.length
           ? { extra_media: extraImageUrls }
           : {}),
-        ...(selectedType === "Instagram" && igMode === "Feed" && attachedAudio
-          ? { audio: attachedAudio }
+        ...((selectedType === "Instagram" && igMode === "Feed") || selectedType === "TikTok"
+          ? attachedAudio
+            ? { audio: attachedAudio }
+            : {}
           : {}),
         ...(isStoryMusicDraft && storyComSom && attachedAudio ? { audio: attachedAudio } : {}),
       };
@@ -1395,6 +1400,7 @@ function SocialPage() {
                                 tipo={post.media_tipo}
                                 resolveUrl={driveImg}
                                 className="w-full h-full object-cover"
+                                muted={post.tipo === "TikTok" && !!post.audio}
                               />
                             </div>
                           ))
@@ -2578,7 +2584,7 @@ function SocialPage() {
                       {uploadingImage ? "Enviando..." : imageUrl ? "Trocar mídia" : "Selecionar do dispositivo"}
                       <input
                         type="file"
-                        accept="image/*,video/*"
+                        accept={selectedType === "TikTok" ? "video/*" : "image/*,video/*"}
                         className="hidden"
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
@@ -2600,7 +2606,9 @@ function SocialPage() {
                         }}
                       />
                     </label>
-                    {mediaTipo === "imagem" && <PasteImageLinkInput onApply={setImageUrl} className={inputCls} />}
+                    {mediaTipo === "imagem" && selectedType !== "TikTok" && (
+                      <PasteImageLinkInput onApply={setImageUrl} className={inputCls} />
+                    )}
                   </div>
                   )}
 
@@ -2649,10 +2657,12 @@ function SocialPage() {
                     </div>
                   )}
 
-                  {selectedType === "Instagram" && igMode === "Feed" && (
+                  {((selectedType === "Instagram" && igMode === "Feed") || selectedType === "TikTok") && (
                     <div className="space-y-1.5">
                       <p className="text-[10px] font-black uppercase text-muted-foreground">
-                        Música na publicação (opcional, até {MAX_AUDIO_SEC}s):
+                        {selectedType === "TikTok"
+                          ? `Música por cima do vídeo (opcional, até ${MAX_AUDIO_SEC}s):`
+                          : `Música na publicação (opcional, até ${MAX_AUDIO_SEC}s):`}
                       </p>
                       {attachedAudio ? (
                         <div className="rounded-2xl border border-white/15 bg-white/[0.03] p-3 space-y-2.5">
