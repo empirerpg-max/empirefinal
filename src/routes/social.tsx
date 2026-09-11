@@ -32,6 +32,8 @@ import {
   EyeOff,
   Eye,
   Shuffle,
+  Disc,
+  Music,
 } from "lucide-react";
 import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -202,6 +204,18 @@ type Post = {
   analytics: { likes: number; comments: number; shares: number; likedBy?: string[] };
   data: string;
   telegram_id?: string;
+  material?: PostMaterial;
+};
+
+// Música ou álbum do catálogo anexado a um post (compartilhar no Twitter,
+// futuramente também em Instagram/TikTok) — clicar no card leva direto pro
+// tópico correspondente no fórum/catálogo (mesmo destino das notificações).
+type PostMaterial = {
+  tipo: "musica" | "album";
+  titulo: string;
+  artista: string;
+  capaUrl?: string;
+  topicId: string;
 };
 
 type SocialProfile = {
@@ -245,6 +259,14 @@ function SocialPage() {
   const [imageUrl, setImageUrl] = useState("");
   const [mediaTipo, setMediaTipo] = useState<"imagem" | "video">("imagem");
   const [editingPost, setEditingPost] = useState<any | null>(null);
+  // Compartilhar música/álbum do próprio catálogo num post de Twitter —
+  // igual compartilhar um link do Spotify: o card do material substitui
+  // (ou acompanha) o texto.
+  const [attachedMaterial, setAttachedMaterial] = useState<PostMaterial | null>(null);
+  const [isMaterialPickerOpen, setIsMaterialPickerOpen] = useState(false);
+  const [materialPickerTipo, setMaterialPickerTipo] = useState<"musica" | "album">("musica");
+  const [materialOptions, setMaterialOptions] = useState<any[]>([]);
+  const [loadingMaterialOptions, setLoadingMaterialOptions] = useState(false);
   // Blackout Mode — posta com um nome fictício em vez do nome real do
   // artista, pra criar suspense antes de um anúncio (ex: lançamento de era).
   // O post continua vinculado ao telegram_id de verdade (dono não muda),
@@ -582,6 +604,46 @@ function SocialPage() {
     setEditingPost(null);
     setBlackoutMode(false);
     setBlackoutUsername("");
+    setAttachedMaterial(null);
+    setIsMaterialPickerOpen(false);
+  }
+
+  async function loadMaterialOptions(tipo: "musica" | "album") {
+    if (!activeArtist) return;
+    setLoadingMaterialOptions(true);
+    try {
+      const tipoParam = tipo === "album" ? "albuns" : "musicas";
+      const res = await fetch(
+        `/api/editar?artist=${encodeURIComponent(activeArtist.nome)}&tipo=${tipoParam}`,
+      );
+      const json = await res.json().catch(() => null);
+      setMaterialOptions(json?.success ? json.data || [] : []);
+    } catch {
+      setMaterialOptions([]);
+    } finally {
+      setLoadingMaterialOptions(false);
+    }
+  }
+
+  function openMaterialPicker() {
+    haptic.selection();
+    setIsMaterialPickerOpen(true);
+    setMaterialPickerTipo("musica");
+    loadMaterialOptions("musica");
+  }
+
+  function pickMaterial(item: any, tipo: "musica" | "album") {
+    const topicId = item.fields?.topicId || item.codigoUnico;
+    if (!topicId) return;
+    haptic.selection();
+    setAttachedMaterial({
+      tipo,
+      titulo: item.titulo,
+      artista: item.artista || activeArtist?.nome || "",
+      capaUrl: item.capaUrl || undefined,
+      topicId: String(topicId),
+    });
+    setIsMaterialPickerOpen(false);
   }
 
   function gerarNomeBlackout() {
@@ -596,7 +658,12 @@ function SocialPage() {
     // Instagram de verdade (texto vira só um overlay opcional). Os outros
     // tipos continuam exigindo texto como sempre.
     const isStoryDraft = selectedType === "Instagram" && igMode === "Story";
-    const hasContent = isStoryDraft ? !!(postText.trim() || imageUrl) : !!postText.trim();
+    const isTwitterMaterial = selectedType === "Twitter" && !!attachedMaterial;
+    const hasContent = isStoryDraft
+      ? !!(postText.trim() || imageUrl)
+      : isTwitterMaterial
+        ? true
+        : !!postText.trim();
     if (!selectedType || !hasContent || !activeArtist || submitting) return;
     if (blackoutMode && !blackoutUsername.trim()) return;
 
@@ -630,6 +697,7 @@ function SocialPage() {
         media_url: imageUrl,
         media_tipo: mediaTipo,
         analytics: { likes: 0, comments: 0, shares: 0 },
+        ...(selectedType === "Twitter" && attachedMaterial ? { material: attachedMaterial } : {}),
       };
 
       const res = await (api as any).salvarPostSocial(payload, tgId);
@@ -1088,9 +1156,50 @@ function SocialPage() {
                           )
                         )}
 
-                        <p className="font-medium text-sm leading-snug mb-3.5 text-pretty whitespace-pre-wrap break-words">
-                          {renderRichText(post.texto, { hashtags: true })}
-                        </p>
+                        {post.texto && (
+                          <p className="font-medium text-sm leading-snug mb-3.5 text-pretty whitespace-pre-wrap break-words">
+                            {renderRichText(post.texto, { hashtags: true })}
+                          </p>
+                        )}
+
+                        {post.material && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              haptic.selection();
+                              navigate({
+                                to: "/empire-play/forum",
+                                search: {
+                                  tab: post.material!.tipo === "album" ? "albuns" : "musicas",
+                                  id: post.material!.topicId,
+                                },
+                              });
+                            }}
+                            className="w-full flex items-stretch rounded-2xl border border-white/15 bg-white/[0.03] overflow-hidden mb-3.5 text-left active:scale-[0.98] transition-transform"
+                          >
+                            <div className="size-16 shrink-0 bg-secondary flex items-center justify-center overflow-hidden">
+                              {post.material.capaUrl ? (
+                                <img
+                                  src={driveImg(post.material.capaUrl)}
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                  loading="lazy"
+                                />
+                              ) : post.material.tipo === "album" ? (
+                                <Disc className="size-6 text-muted-foreground" />
+                              ) : (
+                                <Music className="size-6 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="flex flex-col justify-center min-w-0 px-3.5 py-2">
+                              <span className="font-black text-sm truncate">{post.material.titulo}</span>
+                              <span className="text-[11px] text-muted-foreground font-bold truncate">
+                                empirehub.app
+                              </span>
+                            </div>
+                          </button>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-5 pt-3 border-t border-white/5">
@@ -2039,10 +2148,58 @@ function SocialPage() {
                     placeholder={
                       selectedType === "Instagram" && igMode === "Story"
                         ? "Legenda (opcional)..."
-                        : "Escreva algo f*** aqui... (use #hashtag, **negrito**, *itálico*)"
+                        : selectedType === "Twitter" && attachedMaterial
+                          ? "Comentário (opcional)..."
+                          : "Escreva algo f*** aqui... (use #hashtag, **negrito**, *itálico*)"
                     }
                     className={inputCls + " h-24 resize-none"}
                   />
+
+                  {selectedType === "Twitter" && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground">
+                        Compartilhar música/álbum:
+                      </p>
+                      {attachedMaterial ? (
+                        <div className="flex items-stretch rounded-2xl border border-white/15 bg-white/[0.03] overflow-hidden">
+                          <div className="size-14 shrink-0 bg-secondary flex items-center justify-center overflow-hidden">
+                            {attachedMaterial.capaUrl ? (
+                              <img
+                                src={driveImg(attachedMaterial.capaUrl)}
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : attachedMaterial.tipo === "album" ? (
+                              <Disc className="size-5 text-muted-foreground" />
+                            ) : (
+                              <Music className="size-5 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0 flex flex-col justify-center px-3 py-1.5">
+                            <span className="font-black text-xs truncate">{attachedMaterial.titulo}</span>
+                            <span className="text-[10px] text-muted-foreground font-bold truncate">
+                              empirehub.app
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAttachedMaterial(null)}
+                            className="w-11 shrink-0 grid place-items-center text-muted-foreground hover:text-white"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={openMaterialPicker}
+                          className={inputCls + " flex items-center justify-center gap-2 text-center"}
+                        >
+                          <Music2 className="size-4" /> Anexar música ou álbum
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <p className="text-[10px] font-black uppercase text-muted-foreground">Mídia (imagem ou vídeo):</p>
@@ -2095,7 +2252,11 @@ function SocialPage() {
                     onClick={handlePost}
                     disabled={
                       submitting ||
-                      !(selectedType === "Instagram" && igMode === "Story" ? postText.trim() || imageUrl : postText.trim()) ||
+                      !(selectedType === "Instagram" && igMode === "Story"
+                        ? postText.trim() || imageUrl
+                        : selectedType === "Twitter" && attachedMaterial
+                          ? true
+                          : postText.trim()) ||
                       !activeArtist ||
                       (blackoutMode && !blackoutUsername.trim())
                     }
@@ -2110,6 +2271,86 @@ function SocialPage() {
                         : "Lançar Agora"}{" "}
                     <Send className="size-4" />
                   </button>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Seletor de música/álbum do catálogo (compartilhar no Twitter) */}
+      <AnimatePresence>
+        {isMaterialPickerOpen && (
+          <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ y: 200 }}
+              animate={{ y: 0 }}
+              exit={{ y: 200 }}
+              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[85dvh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-black uppercase">Anexar material</h2>
+                <button
+                  onClick={() => setIsMaterialPickerOpen(false)}
+                  className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1 mb-4">
+                <button
+                  onClick={() => {
+                    setMaterialPickerTipo("musica");
+                    loadMaterialOptions("musica");
+                  }}
+                  className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "musica" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                >
+                  Músicas
+                </button>
+                <button
+                  onClick={() => {
+                    setMaterialPickerTipo("album");
+                    loadMaterialOptions("album");
+                  }}
+                  className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "album" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                >
+                  Álbuns
+                </button>
+              </div>
+
+              {loadingMaterialOptions ? (
+                <div className="py-10 flex items-center justify-center">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : materialOptions.length === 0 ? (
+                <p className="text-xs text-muted-foreground font-medium text-center py-10">
+                  Nenhum {materialPickerTipo === "album" ? "álbum" : "música"} de {activeArtist?.nome} encontrado.
+                </p>
+              ) : (
+                <div className="grid gap-2">
+                  {materialOptions.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => pickMaterial(item, materialPickerTipo)}
+                      className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 text-left active:scale-[0.98] transition-transform"
+                    >
+                      <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
+                        {item.capaUrl ? (
+                          <img
+                            src={driveImg(item.capaUrl)}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : materialPickerTipo === "album" ? (
+                          <Disc className="size-4 text-muted-foreground" />
+                        ) : (
+                          <Music className="size-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <span className="font-bold text-sm truncate">{item.titulo}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </motion.div>
