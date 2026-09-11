@@ -356,6 +356,11 @@ interface BroadcastGroup {
   programa: string;
   tipoEvento: string;
   rowIds: string[];
+  // Topico_ID (salaId) de cada linha do grupo, sem duplicar — é o formato
+  // de chave usado em TV_Participacao_Processada ANTES da mudança pra
+  // data|titulo. Precisa ficar aqui pro dedup de processarParticipacaoTV
+  // conseguir reconhecer transmissões já pagas sob o formato antigo.
+  salaIds: string[];
   totalDuracaoSeg: number;
   endTs: number | null;
 }
@@ -391,12 +396,14 @@ function agruparTransmissoes(programas: ProgramaRow[]): BroadcastGroup[] {
         programa: p.titulo,
         tipoEvento: p.tipoEvento,
         rowIds: [],
+        salaIds: [],
         totalDuracaoSeg: 0,
         endTs: null,
       });
     }
     const grupo = grupos.get(key)!;
     grupo.rowIds.push(p.id);
+    if (p.salaId && !grupo.salaIds.includes(p.salaId)) grupo.salaIds.push(p.salaId);
     grupo.totalDuracaoSeg += p.duracao_seg || 0;
     if (!grupo.tipoEvento && p.tipoEvento) grupo.tipoEvento = p.tipoEvento;
 
@@ -756,14 +763,18 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
 
   for (const grupo of grupos) {
     const key = grupo.chave;
-    const chaveLegada = `${grupo.data}|${grupo.programa}`;
-    // Linhas gravadas em TV_Participacao_Processada ANTES da mudança pra
-    // chave por sala (Topico_ID) usavam só "data|programa" — sem checar
-    // também esse formato antigo, toda transmissão já processada antes
-    // dessa mudança nunca batia com a chave nova, e o cron reprocessava ela
-    // do zero a cada 10 minutos, gravando um REGISTRO novo mesmo depois do
-    // usuário apagar o anterior.
-    if (processados.has(key) || processados.has(chaveLegada)) continue;
+    // BUG CONFIRMADO em 2026-09-10: antes dessa correção, "chaveLegada" era
+    // montada com a MESMA fórmula de `key` (data|programa) — nunca batia
+    // com o formato de verdade usado ANTES da mudança pra data|titulo como
+    // chave principal, que era o Topico_ID/salaId cru de cada linha (ex:
+    // "empirehits_20260602_2000", "180435.0"). Resultado: toda transmissão
+    // do Empire Hits já paga meses atrás sob o formato antigo foi
+    // silenciosamente tratada como nova na primeira vez que o cron rodou
+    // depois da mudança de chave — reprocessou ~12 transmissões de uma vez,
+    // duplicando REGISTRO e inflando prestígio de novo. Agora compara
+    // também contra o salaId real de cada linha do grupo, que é o valor que
+    // realmente foi gravado em TV_Participacao_Processada antigamente.
+    if (processados.has(key) || grupo.salaIds.some((id) => processados.has(id))) continue;
     if (!grupo.endTs && eventosReais[key]?.inicioTs) continue; // início real avisado, fim real ainda não chegou — ainda ao vivo de verdade, não é erro
     if (!grupo.endTs) {
       // Diferente de "ainda não acabou" (abaixo) — isso significa que

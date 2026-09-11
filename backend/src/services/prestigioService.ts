@@ -538,3 +538,85 @@ export async function restaurarPrestigioAteData(
 
   return { corteISO, modo: confirmar ? "aplicado" : "simulacao", ignoradosSemHistorico, alteracoes };
 }
+
+export interface CorrecaoJanelaResultado {
+  modo: "simulacao" | "aplicado";
+  desdeISO: string;
+  ateISO: string;
+  itens: { telegramId: string; usuario: string; valorRevertido: number; saldoAntes: number; saldoDepois: number }[];
+}
+
+/**
+ * Correção pontual: reverte créditos de "assistir_tv" concedidos dentro de
+ * uma janela de tempo específica — usada quando um reprocessamento em massa
+ * (ex: mudança na chave de dedup de transmissões, ver tvController.ts
+ * agruparTransmissoes) credita de novo transmissões que já tinham sido
+ * pagas antes, tudo de uma vez, num intervalo curto e identificável. Ao
+ * contrário de corrigirPrestigioAssistirTvDuplicado (que olha o padrão de
+ * intervalo entre créditos do mesmo jogador), esta reverte TODO crédito de
+ * "assistir_tv" que caiu dentro da janela informada, não importa o jogador
+ * — pensada pra um evento pontual já confirmado (não pra rodar sempre).
+ * Sempre roda em simulação (não escreve nada) a menos que `confirmar` seja
+ * true.
+ */
+export async function corrigirPrestigioAssistirTvPorJanela(
+  desde: Date,
+  ate: Date,
+  confirmar: boolean,
+): Promise<CorrecaoJanelaResultado> {
+  const desdeMs = desde.getTime();
+  const ateMs = ate.getTime();
+  const logRows = await googleSheetsService.usuarios.readValues(PRESTIGIO_LOG_SHEET).catch(() => []);
+  const itens: CorrecaoJanelaResultado["itens"] = [];
+  if (!logRows || logRows.length < 2) {
+    return { modo: confirmar ? "aplicado" : "simulacao", desdeISO: desde.toISOString(), ateISO: ate.toISOString(), itens };
+  }
+
+  const porUsuario = new Map<string, { telegramId: string; usuario: string; total: number }>();
+  for (const row of logRows.slice(1)) {
+    if (normalizeText(row[3]) !== "assistir_tv") continue;
+    const ts = new Date(normalizeText(row[0])).getTime();
+    if (!Number.isFinite(ts) || ts < desdeMs || ts > ateMs) continue;
+    const telegramId = normalizeText(row[1]);
+    const usuario = normalizeText(row[2]);
+    const chave = telegramId || usuario;
+    if (!chave) continue;
+    const valor = parseInt(normalizeText(row[4]), 10) || 0;
+    const atual = porUsuario.get(chave) || { telegramId, usuario, total: 0 };
+    atual.total += valor;
+    porUsuario.set(chave, atual);
+  }
+
+  for (const { telegramId, usuario, total } of porUsuario.values()) {
+    if (total <= 0) continue;
+    const usuarioRow = await findUsuarioRow({
+      telegramId: telegramId || undefined,
+      usuario: usuario || undefined,
+    });
+    if (!usuarioRow) continue;
+    const prestigioColIndex = usuarioRow.headers.indexOf("prestigio");
+    if (prestigioColIndex === -1) continue;
+
+    const saldoAntes = parseInt(usuarioRow.rec["prestigio"] || "0", 10) || 0;
+    const saldoDepois = Math.max(0, saldoAntes - total);
+    itens.push({ telegramId, usuario, valorRevertido: saldoAntes - saldoDepois, saldoAntes, saldoDepois });
+
+    if (confirmar) {
+      const colLetter = colIndexToA1Letter(prestigioColIndex);
+      await googleSheetsService.usuarios.updateValues(
+        USUARIOS_SHEET,
+        `${colLetter}${usuarioRow.rowIndex}`,
+        [[saldoDepois]],
+      );
+      await registrarLogPrestigio(
+        { telegramId, usuario },
+        `correcao_assistir_tv_janela_${desde.toISOString()}`,
+        -(saldoAntes - saldoDepois),
+        saldoAntes,
+        saldoDepois,
+      );
+    }
+  }
+
+  return { modo: confirmar ? "aplicado" : "simulacao", desdeISO: desde.toISOString(), ateISO: ate.toISOString(), itens };
+}

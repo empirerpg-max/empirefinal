@@ -15,7 +15,11 @@ import {
   getMetacriticRankingController,
   forcarAtualizacaoMetacriticController,
 } from "../controllers/metacriticController";
-import { corrigirPrestigioAssistirTvDuplicado, restaurarPrestigioAteData } from "../services/prestigioService";
+import {
+  corrigirPrestigioAssistirTvDuplicado,
+  restaurarPrestigioAteData,
+  corrigirPrestigioAssistirTvPorJanela,
+} from "../services/prestigioService";
 import { reconstruirRegistroDesdeCorte } from "../controllers/reconciliacaoRegistroController";
 import {
   getPitchforkController,
@@ -223,6 +227,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/artistas/calcular-fortuna-charts",
     "/api/prestigio/corrigir-assistir-tv-duplicado",
     "/api/prestigio/restaurar",
+    "/api/prestigio/corrigir-reprocessamento-tv",
     "/api/registro/reconstruir",
     "/api/tv/programas",
     "/api/tv/presenca",
@@ -562,6 +567,32 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     } else {
       const resultado = await restaurarPrestigioAteData(corte, confirmar);
+      response = new Response(JSON.stringify({ success: true, data: resultado }), {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+  } else if (url.pathname === "/api/prestigio/corrigir-reprocessamento-tv") {
+    // Correção pontual (ver corrigirPrestigioAssistirTvPorJanela em
+    // prestigioService.ts): reverte prestígio de "assistir_tv" creditado
+    // dentro de uma janela de tempo — usada pro reprocessamento em massa
+    // confirmado em 2026-09-10 (~12 transmissões antigas do Empire Hits
+    // recreditadas de uma vez por causa da mudança de chave de dedup, já
+    // corrigida em agruparTransmissoes/processarParticipacaoTV). Janela
+    // padrão cobre o burst confirmado; ?desde=ISO e ?ate=ISO sobrescrevem.
+    // Sempre simulação a menos que venha ?confirmar=1.
+    const confirmarJanela = url.searchParams.get("confirmar") === "1";
+    const desdeParam = url.searchParams.get("desde");
+    const ateParam = url.searchParams.get("ate");
+    const desdeJanela = desdeParam ? new Date(desdeParam) : new Date("2026-09-10T13:00:00.000Z");
+    const ateJanela = ateParam ? new Date(ateParam) : new Date("2026-09-10T14:00:00.000Z");
+    if (Number.isNaN(desdeJanela.getTime()) || Number.isNaN(ateJanela.getTime())) {
+      response = new Response(
+        JSON.stringify({ success: false, error: "Datas inválidas (use ?desde=ISO&ate=ISO)." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    } else {
+      const resultado = await corrigirPrestigioAssistirTvPorJanela(desdeJanela, ateJanela, confirmarJanela);
       response = new Response(JSON.stringify({ success: true, data: resultado }), {
         status: 200,
         headers: { "Content-Type": "application/json; charset=utf-8" },
