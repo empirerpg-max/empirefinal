@@ -761,7 +761,24 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
   let registrosGravados = 0;
   let eventosReaisAlterado = false;
 
+  // Trava de segurança: um cron normal processa no máximo 1-2 transmissões
+  // por execução (só a que acabou de terminar). Processar muito mais que
+  // isso de uma vez só acontece em cenário de bug (ex: reprocessamento em
+  // massa confirmado em 2026-09-10, que duplicou centenas de linhas em
+  // REGISTRO de um só golpe) ou backlog acumulado de verdade. Em vez de
+  // confiar cegamente e gravar tudo, pára nesse limite e avisa — dá pra
+  // aumentar/rodar de novo manualmente depois de confirmar que é backlog
+  // legítimo, mas nunca mais silenciosamente.
+  const MAX_TRANSMISSOES_POR_EXECUCAO = 5;
+
   for (const grupo of grupos) {
+    if (transmissoesProcessadas >= MAX_TRANSMISSOES_POR_EXECUCAO) {
+      await registrarDiagnosticoSkip(
+        flags,
+        `[processarParticipacaoTV] PAROU nessa execução: já processou ${MAX_TRANSMISSOES_POR_EXECUCAO} transmissões, o que é anormal pra um único ciclo de cron (o normal é 0-1). Pode ser um backlog legítimo ou um bug reprocessando em massa — confira antes de rodar de novo manualmente.`,
+      );
+      break;
+    }
     const key = grupo.chave;
     // BUG CONFIRMADO em 2026-09-10: antes dessa correção, "chaveLegada" era
     // montada com a MESMA fórmula de `key` (data|programa) — nunca batia
