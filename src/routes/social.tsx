@@ -755,8 +755,36 @@ function SocialPage() {
     return groups;
   }, [posts]);
   // IDs de story individuais já vistos — o anel da bolinha só apaga quando
-  // TODOS os stories daquele autor já foram vistos.
-  const [seenStories, setSeenStories] = useState<Set<string>>(new Set());
+  // TODOS os stories daquele autor já foram vistos. Persistido no
+  // localStorage (por usuário) pra não "esquecer" que já viu ao sair e
+  // voltar pro menu — antes era só estado em memória, resetava a cada
+  // remount da tela.
+  const seenStoriesStorageKey = `empire_seen_stories_${user?.id || "anon"}`;
+  const [seenStories, setSeenStories] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(seenStoriesStorageKey);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  // Recarrega se a chave mudar (ex: user.id só resolve depois do 1º render).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(seenStoriesStorageKey);
+      if (raw) setSeenStories(new Set(JSON.parse(raw)));
+    } catch {
+      // ignora
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seenStoriesStorageKey]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(seenStoriesStorageKey, JSON.stringify(Array.from(seenStories)));
+    } catch {
+      // localStorage indisponível (modo privado etc.) — não trava a UI.
+    }
+  }, [seenStories, seenStoriesStorageKey]);
   // Stories só aparecem na fileira de destaques (bolinha) — nunca soltos no
   // feed principal, mesmo sendo tecnicamente um post com subtipo "Story".
   const feedPosts = useMemo(
