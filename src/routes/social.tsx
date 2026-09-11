@@ -2542,7 +2542,14 @@ function SocialPage() {
                                 <img src={driveImg(attachedMaterial.capaUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               )}
                             </div>
-                            <span className="font-black text-xs truncate flex-1">{attachedMaterial.titulo}</span>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-black text-xs truncate">{attachedMaterial.titulo}</p>
+                              {attachedMaterial.tipo === "album" && attachedAudio && (
+                                <p className="text-[10px] text-muted-foreground font-bold truncate">
+                                  Faixa: {attachedAudio.titulo.split(" — ").slice(1).join(" — ")}
+                                </p>
+                              )}
+                            </div>
                             <button
                               type="button"
                               onClick={() => {
@@ -2607,12 +2614,9 @@ function SocialPage() {
                           onClick={openMaterialPicker}
                           className={inputCls + " flex items-center justify-center gap-2 text-center"}
                         >
-                          <Music2 className="size-4" /> Escolher música
+                          <Music2 className="size-4" /> Escolher música ou álbum
                         </button>
                       )}
-                      <p className="text-[10px] text-muted-foreground font-medium leading-snug px-0.5">
-                        Álbuns ainda não estão disponíveis pra Story — só músicas, por enquanto.
-                      </p>
                     </div>
                   )}
 
