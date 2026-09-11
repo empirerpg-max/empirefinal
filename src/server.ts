@@ -351,31 +351,31 @@ export default {
   // jogadores (presença + chat) em REGISTRO.
   async scheduled(_event: unknown, env: unknown, ctx: { waitUntil: (p: Promise<unknown>) => void }) {
     injectRuntimeEnv(env);
+    const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
     const { limparStoriesExpiradosScheduled } = await import("../backend/src/controllers/socialController");
     const { preencherLikesVideosSemMediaScheduled } = await import("../backend/src/controllers/videoLikesController");
     const { atualizarSnapshotMetacriticSemanalScheduled } = await import(
       "../backend/src/controllers/metacriticController"
     );
-    // PAUSADO EM 2026-09-11: mesmo depois de duas correções (chave de dedup
-    // quebrada, trava de máx. 5 transmissões/execução), a mesma transmissão
-    // do Empire Hits continuou sendo recreditada em REGISTRO a cada ciclo de
-    // 10 min — sinal de que existe uma 3ª causa raiz ainda não identificada
-    // (provavelmente a marca de "processado" não está persistindo pra essa
-    // transmissão específica, ou o agrupamento data|titulo está instável
-    // pra ela). Desligado daqui até a causa real ser confirmada e corrigida
-    // — SEM isso, cada ciclo de cron continuava piorando o estrago enquanto
-    // a investigação rodava. O endpoint manual (/api/tv/processar-
-    // participacao, GET) continua funcionando pra quem quiser rodar na mão
-    // depois que a causa for corrigida.
-    // ctx.waitUntil(
-    //   processarParticipacaoTV((env as { FLAGS?: FlagsKv }).FLAGS)
-    //     .then((r) =>
-    //       console.log(
-    //         `[scheduled] Participação TV: ${r.transmissoesProcessadas} transmissões, ${r.registrosGravados} registros.`,
-    //       ),
-    //     )
-    //     .catch((err) => console.error("[scheduled] Erro ao processar participação TV:", err)),
-    // );
+    // Religado em 2026-09-11 depois da causa raiz de verdade ser encontrada
+    // e corrigida (ver tvController.ts processarParticipacaoTV): a marca de
+    // "processado" era gravada por ÚLTIMO, depois de já creditar todo mundo,
+    // sem nunca conferir se a escrita (appendRow, que devolve null em falha
+    // em vez de lançar exceção) realmente aconteceu — se falhasse, o
+    // crédito já tinha sido dado mas a marca nunca ficava, e a mesma
+    // transmissão era recreditada a cada ciclo, pra sempre. Corrigido
+    // gravando a marca ANTES de creditar qualquer coisa e conferindo o
+    // retorno. Ficou pausado temporariamente enquanto essa causa era
+    // investigada.
+    ctx.waitUntil(
+      processarParticipacaoTV((env as { FLAGS?: FlagsKv }).FLAGS)
+        .then((r) =>
+          console.log(
+            `[scheduled] Participação TV: ${r.transmissoesProcessadas} transmissões, ${r.registrosGravados} registros.`,
+          ),
+        )
+        .catch((err) => console.error("[scheduled] Erro ao processar participação TV:", err)),
+    );
     ctx.waitUntil(
       limparStoriesExpiradosScheduled()
         .then((r) => console.log(`[scheduled] Stories expirados apagados: ${r.apagados}`))
