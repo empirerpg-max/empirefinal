@@ -35,6 +35,8 @@ import {
   Disc,
   Music,
   Pause,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { api, resolveImg, isDirectImageUrl, driveVideo, driveAudioSrc } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -182,6 +184,105 @@ function PostAudioBadge({ audio }: { audio: { titulo: string; url: string; start
         {playing ? <Pause className="size-3" /> : <Play className="size-3 ml-0.5" />}
       </button>
       <span className="text-[11px] font-bold truncate">{audio.titulo}</span>
+    </div>
+  );
+}
+
+// Story compartilhando música — capa borrada de fundo (efeito "disco
+// tocando"), capa nítida centralizada e nome da faixa/artista, com o
+// trecho de áudio escolhido tocando (ou não, se "sem som") por baixo.
+function StoryMusicCard({
+  material,
+  audio,
+  autoplay,
+}: {
+  material: { titulo: string; artista: string; capaUrl?: string; topicId?: string; tipo?: string };
+  audio?: { url: string; startSec: number; durationSec: number } | null;
+  autoplay: boolean;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [muted, setMuted] = useState(!autoplay);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !audio) return;
+    if (autoplay && !muted) {
+      el.currentTime = audio.startSec;
+      el.play().catch(() => {});
+    } else {
+      el.pause();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoplay, muted, audio?.url]);
+
+  const cover = material.capaUrl ? resolveImg(material.capaUrl) : undefined;
+
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-black">
+      {cover && (
+        <img
+          src={cover}
+          className="absolute inset-0 w-full h-full object-cover scale-125 blur-2xl opacity-50"
+          referrerPolicy="no-referrer"
+          aria-hidden="true"
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/70" />
+      <div className="relative z-10 w-full h-full flex flex-col items-center justify-center gap-5 px-8">
+        <div className="size-48 max-w-[70%] aspect-square rounded-2xl overflow-hidden shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 bg-secondary">
+          {cover ? (
+            <img src={cover} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          ) : (
+            <div className="w-full h-full grid place-items-center">
+              <Music className="size-10 text-white/40" />
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!material.topicId) return;
+            navigate({
+              to: "/empire-play/forum",
+              search: { tab: material.tipo === "album" ? "albuns" : "musicas", id: material.topicId },
+            });
+          }}
+          className="text-center"
+        >
+          <p className="text-white font-black text-lg leading-tight truncate max-w-[16rem]">{material.titulo}</p>
+          <p className="text-white/70 text-xs font-bold truncate max-w-[16rem]">{material.artista}</p>
+        </button>
+        {audio && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMuted((m) => !m);
+            }}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20"
+          >
+            {muted ? <VolumeX className="size-3.5 text-white" /> : <Volume2 className="size-3.5 text-white" />}
+            <span className="text-[10px] font-black uppercase text-white">{muted ? "Sem som" : "Com som"}</span>
+          </button>
+        )}
+      </div>
+      {audio && (
+        <audio
+          ref={audioRef}
+          src={driveAudioSrc(audio.url)}
+          preload="none"
+          loop={false}
+          onTimeUpdate={(e) => {
+            const el = e.currentTarget;
+            if (el.currentTime >= audio.startSec + audio.durationSec) {
+              el.currentTime = audio.startSec;
+              el.play().catch(() => {});
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -336,6 +437,10 @@ function SocialPage() {
   const [isAudioPickerOpen, setIsAudioPickerOpen] = useState(false);
   const MAX_IG_PHOTOS = 10;
   const MAX_AUDIO_SEC = 10;
+  // Story compartilhando música (capa + trecho de áudio) em vez de
+  // foto/vídeo escolhido manualmente.
+  const [storyMusicMode, setStoryMusicMode] = useState(false);
+  const [storyComSom, setStoryComSom] = useState(true);
   // Blackout Mode — posta com um nome fictício em vez do nome real do
   // artista, pra criar suspense antes de um anúncio (ex: lançamento de era).
   // O post continua vinculado ao telegram_id de verdade (dono não muda),
@@ -678,6 +783,8 @@ function SocialPage() {
     setExtraImageUrls([]);
     setAttachedAudio(null);
     setIsAudioPickerOpen(false);
+    setStoryMusicMode(false);
+    setStoryComSom(true);
   }
 
   async function loadMaterialOptions(tipo: "musica" | "album") {
@@ -715,6 +822,19 @@ function SocialPage() {
       capaUrl: item.capaUrl || undefined,
       topicId: String(topicId),
     });
+    // No Story de música, o trecho de áudio já vem pré-selecionado (a
+    // pessoa só ajusta o início/duração se quiser) — sem isso, escolher a
+    // música não bastava pra ligar o áudio no story.
+    if (storyMusicMode && tipo === "musica" && item.fields?.audioUrl) {
+      setAttachedAudio({
+        titulo: item.titulo,
+        artista: item.artista || activeArtist?.nome || "",
+        url: item.fields.audioUrl,
+        topicId: String(topicId),
+        startSec: 0,
+        durationSec: MAX_AUDIO_SEC,
+      });
+    }
     setIsMaterialPickerOpen(false);
   }
 
@@ -755,12 +875,15 @@ function SocialPage() {
     // Instagram de verdade (texto vira só um overlay opcional). Os outros
     // tipos continuam exigindo texto como sempre.
     const isStoryDraft = selectedType === "Instagram" && igMode === "Story";
+    const isStoryMusicDraft = isStoryDraft && storyMusicMode;
     const isTwitterMaterial = selectedType === "Twitter" && !!attachedMaterial;
-    const hasContent = isStoryDraft
-      ? !!(postText.trim() || imageUrl)
-      : isTwitterMaterial
-        ? true
-        : !!postText.trim();
+    const hasContent = isStoryMusicDraft
+      ? !!attachedMaterial
+      : isStoryDraft
+        ? !!(postText.trim() || imageUrl)
+        : isTwitterMaterial
+          ? true
+          : !!postText.trim();
     if (!selectedType || !hasContent || !activeArtist || submitting) return;
     if (blackoutMode && !blackoutUsername.trim()) return;
 
@@ -791,16 +914,18 @@ function SocialPage() {
         subtipo: selectedType === "Instagram" ? igMode : undefined,
         autor: autorFinal,
         texto: postText,
-        media_url: imageUrl,
+        media_url: isStoryMusicDraft ? attachedMaterial?.capaUrl || "" : imageUrl,
         media_tipo: mediaTipo,
         analytics: { likes: 0, comments: 0, shares: 0 },
         ...(selectedType === "Twitter" && attachedMaterial ? { material: attachedMaterial } : {}),
+        ...(isStoryMusicDraft && attachedMaterial ? { material: attachedMaterial } : {}),
         ...(selectedType === "Instagram" && igMode === "Feed" && extraImageUrls.length
           ? { extra_media: extraImageUrls }
           : {}),
         ...(selectedType === "Instagram" && igMode === "Feed" && attachedAudio
           ? { audio: attachedAudio }
           : {}),
+        ...(isStoryMusicDraft && storyComSom && attachedAudio ? { audio: attachedAudio } : {}),
       };
 
       const res = await (api as any).salvarPostSocial(payload, tgId);
@@ -1228,7 +1353,9 @@ function SocialPage() {
 
                         {post.tipo === "Instagram" && post.subtipo === "Story" ? (
                           <div className="relative aspect-[9/16] max-h-[26rem] bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_50px_-25px_rgba(0,0,0,0.7)]">
-                            {post.media_url ? (
+                            {post.material ? (
+                              <StoryMusicCard material={post.material} audio={post.audio} autoplay={false} />
+                            ) : post.media_url ? (
                               <PostMedia
                                 url={post.media_url}
                                 tipo={post.media_tipo}
@@ -2259,6 +2386,114 @@ function SocialPage() {
                     </div>
                   )}
 
+                  {selectedType === "Instagram" && igMode === "Story" && (
+                    <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1">
+                      <button
+                        onClick={() => {
+                          setStoryMusicMode(false);
+                          setAttachedMaterial(null);
+                          setAttachedAudio(null);
+                        }}
+                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${!storyMusicMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                      >
+                        Foto/Vídeo
+                      </button>
+                      <button
+                        onClick={() => {
+                          setStoryMusicMode(true);
+                          setImageUrl("");
+                        }}
+                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${storyMusicMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                      >
+                        <Music2 className="size-3.5 inline mr-1" /> Música
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedType === "Instagram" && igMode === "Story" && storyMusicMode && (
+                    <div className="space-y-2">
+                      {attachedMaterial ? (
+                        <div className="rounded-2xl border border-white/15 bg-white/[0.03] p-3 space-y-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary">
+                              {attachedMaterial.capaUrl && (
+                                <img src={driveImg(attachedMaterial.capaUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              )}
+                            </div>
+                            <span className="font-black text-xs truncate flex-1">{attachedMaterial.titulo}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAttachedMaterial(null);
+                                setAttachedAudio(null);
+                              }}
+                              className="text-muted-foreground hover:text-white"
+                            >
+                              <X className="size-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1">
+                            <button
+                              onClick={() => setStoryComSom(true)}
+                              className={`flex-1 py-1.5 min-h-8 rounded-lg font-black text-[10px] uppercase transition-all ${storyComSom ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                            >
+                              Com som
+                            </button>
+                            <button
+                              onClick={() => setStoryComSom(false)}
+                              className={`flex-1 py-1.5 min-h-8 rounded-lg font-black text-[10px] uppercase transition-all ${!storyComSom ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                            >
+                              Sem som
+                            </button>
+                          </div>
+
+                          {storyComSom && attachedAudio && (
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between text-[10px] text-muted-foreground font-bold uppercase">
+                                <span>Início: {attachedAudio.startSec}s</span>
+                                <span>Duração: {attachedAudio.durationSec}s</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={300}
+                                step={1}
+                                value={attachedAudio.startSec}
+                                onChange={(e) =>
+                                  setAttachedAudio((prev) => (prev ? { ...prev, startSec: Number(e.target.value) } : prev))
+                                }
+                                className="w-full"
+                              />
+                              <input
+                                type="range"
+                                min={1}
+                                max={MAX_AUDIO_SEC}
+                                step={1}
+                                value={attachedAudio.durationSec}
+                                onChange={(e) =>
+                                  setAttachedAudio((prev) => (prev ? { ...prev, durationSec: Number(e.target.value) } : prev))
+                                }
+                                className="w-full"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={openMaterialPicker}
+                          className={inputCls + " flex items-center justify-center gap-2 text-center"}
+                        >
+                          <Music2 className="size-4" /> Escolher música
+                        </button>
+                      )}
+                      <p className="text-[10px] text-muted-foreground font-medium leading-snug px-0.5">
+                        Álbuns ainda não estão disponíveis pra Story — só músicas, por enquanto.
+                      </p>
+                    </div>
+                  )}
+
                   <RichTextToolbar textareaRef={postTextareaRef} value={postText} onChange={setPostText} />
                   <textarea
                     ref={postTextareaRef}
@@ -2320,6 +2555,7 @@ function SocialPage() {
                     </div>
                   )}
 
+                  {!(selectedType === "Instagram" && igMode === "Story" && storyMusicMode) && (
                   <div className="space-y-1.5">
                     <p className="text-[10px] font-black uppercase text-muted-foreground">Mídia (imagem ou vídeo):</p>
                     {imageUrl && (
@@ -2366,6 +2602,7 @@ function SocialPage() {
                     </label>
                     {mediaTipo === "imagem" && <PasteImageLinkInput onApply={setImageUrl} className={inputCls} />}
                   </div>
+                  )}
 
                   {selectedType === "Instagram" && igMode === "Feed" && mediaTipo === "imagem" && imageUrl && (
                     <div className="space-y-1.5">
@@ -2471,11 +2708,13 @@ function SocialPage() {
                     onClick={handlePost}
                     disabled={
                       submitting ||
-                      !(selectedType === "Instagram" && igMode === "Story"
-                        ? postText.trim() || imageUrl
-                        : selectedType === "Twitter" && attachedMaterial
-                          ? true
-                          : postText.trim()) ||
+                      !(selectedType === "Instagram" && igMode === "Story" && storyMusicMode
+                        ? attachedMaterial
+                        : selectedType === "Instagram" && igMode === "Story"
+                          ? postText.trim() || imageUrl
+                          : selectedType === "Twitter" && attachedMaterial
+                            ? true
+                            : postText.trim()) ||
                       !activeArtist ||
                       (blackoutMode && !blackoutUsername.trim())
                     }
@@ -2517,26 +2756,28 @@ function SocialPage() {
                 </button>
               </div>
 
-              <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1 mb-4">
-                <button
-                  onClick={() => {
-                    setMaterialPickerTipo("musica");
-                    loadMaterialOptions("musica");
-                  }}
-                  className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "musica" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                >
-                  Músicas
-                </button>
-                <button
-                  onClick={() => {
-                    setMaterialPickerTipo("album");
-                    loadMaterialOptions("album");
-                  }}
-                  className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "album" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                >
-                  Álbuns
-                </button>
-              </div>
+              {!storyMusicMode && (
+                <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1 mb-4">
+                  <button
+                    onClick={() => {
+                      setMaterialPickerTipo("musica");
+                      loadMaterialOptions("musica");
+                    }}
+                    className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "musica" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                  >
+                    Músicas
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMaterialPickerTipo("album");
+                      loadMaterialOptions("album");
+                    }}
+                    className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "album" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                  >
+                    Álbuns
+                  </button>
+                </div>
+              )}
 
               {loadingMaterialOptions ? (
                 <div className="py-10 flex items-center justify-center">
@@ -2992,7 +3233,9 @@ function SocialPage() {
                   sm, centralizado, em vez do full-bleed que só faz sentido
                   em tela de celular. */}
               <div className="relative w-full h-full sm:h-auto sm:max-h-full sm:w-auto sm:aspect-[9/16] sm:max-w-md sm:rounded-2xl sm:overflow-hidden bg-black">
-                {story.media_url ? (
+                {story.material ? (
+                  <StoryMusicCard material={story.material} audio={story.audio} autoplay />
+                ) : story.media_url ? (
                   <PostMedia
                     url={story.media_url}
                     tipo={story.media_tipo}
