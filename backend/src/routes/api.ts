@@ -100,6 +100,7 @@ import {
   registrarPresencaTVController,
   listarPresencaTVController,
   processarParticipacaoTV,
+  corrigirRegistroReprocessamentoTV,
   registrarEventoTransmissaoController,
 } from "../controllers/tvController";
 import {
@@ -228,6 +229,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/prestigio/corrigir-assistir-tv-duplicado",
     "/api/prestigio/restaurar",
     "/api/prestigio/corrigir-reprocessamento-tv",
+    "/api/registro/corrigir-reprocessamento-tv",
     "/api/registro/reconstruir",
     "/api/tv/programas",
     "/api/tv/presenca",
@@ -593,6 +595,30 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     } else {
       const resultado = await corrigirPrestigioAssistirTvPorJanela(desdeJanela, ateJanela, confirmarJanela);
+      response = new Response(JSON.stringify({ success: true, data: resultado }), {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+  } else if (url.pathname === "/api/registro/corrigir-reprocessamento-tv") {
+    // Par do endpoint de prestígio acima: identifica exatamente quais
+    // transmissões foram processadas duas vezes (marca de "processado" antes
+    // E dentro da janela) e apaga só a ocorrência mais recente de cada
+    // jogador+tipo em REGISTRO (a mais provável de ser a duplicata gravada
+    // no reprocessamento). Mesma janela padrão do endpoint de prestígio;
+    // sempre simulação a menos que venha ?confirmar=1.
+    const confirmarRegistro = url.searchParams.get("confirmar") === "1";
+    const desdeParamR = url.searchParams.get("desde");
+    const ateParamR = url.searchParams.get("ate");
+    const desdeJanelaR = desdeParamR ? new Date(desdeParamR) : new Date("2026-09-10T13:00:00.000Z");
+    const ateJanelaR = ateParamR ? new Date(ateParamR) : new Date("2026-09-10T14:00:00.000Z");
+    if (Number.isNaN(desdeJanelaR.getTime()) || Number.isNaN(ateJanelaR.getTime())) {
+      response = new Response(
+        JSON.stringify({ success: false, error: "Datas inválidas (use ?desde=ISO&ate=ISO)." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    } else {
+      const resultado = await corrigirRegistroReprocessamentoTV(desdeJanelaR, ateJanelaR, confirmarRegistro);
       response = new Response(JSON.stringify({ success: true, data: resultado }), {
         status: 200,
         headers: { "Content-Type": "application/json; charset=utf-8" },
