@@ -253,7 +253,16 @@ function PostAudioBadge({ audio }: { audio: { titulo: string; url: string; start
   }
 
   return (
-    <div className="flex items-center gap-2 mb-3.5 px-3 py-2 rounded-full bg-white/5 border border-white/10 w-fit max-w-full">
+    <div
+      onClick={(e) => {
+        // O post inteiro tem um onClick por baixo pra abrir o modal de
+        // comentário — sem isso, clicar em QUALQUER parte do badge (não só
+        // no botão de play) abria o comentário em vez de tocar o áudio.
+        e.stopPropagation();
+        toggle();
+      }}
+      className="flex items-center gap-2 mb-3.5 px-3 py-2 rounded-full bg-white/5 border border-white/10 w-fit max-w-full cursor-pointer"
+    >
       <audio
         ref={audioRef}
         src={resolvePlayableAudioSrc(audio.url)}

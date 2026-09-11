@@ -239,7 +239,14 @@ export async function createSocialPostController(request: Request): Promise<Resp
   const analytics = payload.analytics || { likes: 0, comments: 0, shares: 0 };
   const extraMedia = (payload.extra_media || []).filter(Boolean).slice(0, 9);
 
-  await googleSheetsService.usuarios.appendRow(SHEETS.posts, [
+  // appendRow tenta 3x e devolve null em caso de falha — NUNCA lança
+  // exceção. Sem conferir esse retorno, o post podia "falhar" de verdade
+  // (linha nunca gravada em SOCIAL_POSTS) e mesmo assim a resposta dizer
+  // {ok:true}: quem publicou via com sucesso na hora (a UI já tinha
+  // inserido o post localmente), mas ele nunca existiu de fato — sumia no
+  // próximo recarregamento. Era exatamente isso que fazia um Story de
+  // música "nunca ir ao ar" sem erro nenhum aparecer.
+  const linhaGravada = await googleSheetsService.usuarios.appendRow(SHEETS.posts, [
     id,
     payload.tipo,
     payload.subtipo || "",
@@ -254,6 +261,13 @@ export async function createSocialPostController(request: Request): Promise<Resp
     extraMedia.length ? JSON.stringify(extraMedia) : "",
     payload.audio ? JSON.stringify(payload.audio) : "",
   ]);
+
+  if (linhaGravada === null) {
+    return jsonResponse(
+      { ok: false, error: "Não foi possível salvar o post (falha ao gravar na planilha). Tenta de novo." },
+      500,
+    );
+  }
 
   await somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "post_social").catch(() => {});
 
