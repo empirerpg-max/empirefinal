@@ -45,7 +45,7 @@ async function requestProvesBannerAdmin(request: Request): Promise<boolean> {
 // cabeçalhos numerados tipo "1. ID", então indexamos por posição, que é
 // robusto pros dois casos):
 //
-// SOCIAL_POSTS:   A id | B tipo | C subtipo | D autor | E texto | F media_url | G analytics(json) | H data | I telegram_id | J media_tipo ("imagem"/"video", coluna nova — linhas antigas ficam vazias e continuam tratadas como imagem)
+// SOCIAL_POSTS:   A id | B tipo | C subtipo | D autor | E texto | F media_url | G analytics(json) | H data | I telegram_id | J media_tipo ("imagem"/"video", coluna nova — linhas antigas ficam vazias e continuam tratadas como imagem) | K material_json (coluna nova — música/álbum do catálogo anexado ao post, ver tipo PostMaterial; vazia quando o post não compartilha material nenhum)
 // SOCIAL_PERFIS:  A artista | B rede | C handle | D bio | E avatar_url | F telegram_id | G seguidores | H seguindo
 // SOCIAL_COMMENTS:A postid | B autor | C texto | D data | E telegram_id
 // SOCIAL_NEWS:    A id | B titulo | C conteudo | D imagem | E autor | F data | G telegram_id | H origem_tipo ("tour" quando a notícia veio de uma ação de turnê, vazio quando é matéria normal) | I origem_id (id_unico da turnê) | J origem_show (número do show)
@@ -82,6 +82,31 @@ function parseAnalytics(raw: string): AnalyticsJson {
     };
   } catch {
     return { likes: 0, comments: 0, shares: 0 };
+  }
+}
+
+export interface PostMaterial {
+  tipo: "musica" | "album";
+  titulo: string;
+  artista: string;
+  capaUrl?: string;
+  topicId: string;
+}
+
+function parseMaterial(raw: string): PostMaterial | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.titulo || !parsed.topicId) return undefined;
+    return {
+      tipo: parsed.tipo === "album" ? "album" : "musica",
+      titulo: String(parsed.titulo),
+      artista: String(parsed.artista || ""),
+      capaUrl: parsed.capaUrl ? String(parsed.capaUrl) : undefined,
+      topicId: String(parsed.topicId),
+    };
+  } catch {
+    return undefined;
   }
 }
 
@@ -134,6 +159,7 @@ export async function getSocialPostsController(): Promise<Response> {
         data: normalizeText(row[7]),
         telegram_id: normalizeText(row[8]) || undefined,
         media_tipo: normalizeText(row[9]) || undefined,
+        material: parseMaterial(row[10]),
       };
     })
     .filter((p) => p.id);
@@ -156,9 +182,13 @@ export async function createSocialPostController(request: Request): Promise<Resp
     media_url?: string;
     media_tipo?: string;
     analytics?: AnalyticsJson;
+    material?: PostMaterial;
   };
 
-  if (!payload.tipo || !payload.autor || !payload.texto?.trim()) {
+  // Post de Twitter compartilhando material do catálogo não precisa de
+  // legenda — o card do material já é o conteúdo (igual compartilhar um
+  // link de música/álbum de verdade, a pessoa pode só soltar o link).
+  if (!payload.tipo || !payload.autor || (!payload.texto?.trim() && !payload.material)) {
     return jsonResponse({ ok: false, error: "Dados incompletos para o post." }, 400);
   }
 
@@ -170,12 +200,13 @@ export async function createSocialPostController(request: Request): Promise<Resp
     payload.tipo,
     payload.subtipo || "",
     payload.autor,
-    payload.texto,
+    payload.texto || "",
     payload.media_url || "",
     JSON.stringify(analytics),
     new Date().toISOString(),
     body.tgId || "",
     payload.media_url ? payload.media_tipo || "imagem" : "",
+    payload.material ? JSON.stringify(payload.material) : "",
   ]);
 
   await somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "post_social").catch(() => {});
