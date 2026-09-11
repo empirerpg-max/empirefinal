@@ -1663,7 +1663,8 @@ function SocialPage() {
                             <div className="flex flex-col justify-center min-w-0 px-3.5 py-2">
                               <span className="font-black text-sm truncate">{post.material.titulo}</span>
                               <span className="text-[11px] text-muted-foreground font-bold truncate">
-                                empirehub.app
+                                {post.material.tipo === "album" ? "Álbum" : "Música"} de{" "}
+                                {post.material.artista || post.autor}
                               </span>
                             </div>
                           </button>
@@ -2758,7 +2759,8 @@ function SocialPage() {
                           <div className="flex-1 min-w-0 flex flex-col justify-center px-3 py-1.5">
                             <span className="font-black text-xs truncate">{attachedMaterial.titulo}</span>
                             <span className="text-[10px] text-muted-foreground font-bold truncate">
-                              empirehub.app
+                              {attachedMaterial.tipo === "album" ? "Álbum" : "Música"} de{" "}
+                              {attachedMaterial.artista || activeArtist?.nome}
                             </span>
                           </div>
                           <button
