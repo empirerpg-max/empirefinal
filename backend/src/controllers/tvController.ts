@@ -824,6 +824,33 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
       continue;
     }
 
+    // CAUSA RAIZ CONFIRMADA em 2026-09-11 (investigação na planilha real): a
+    // marca de "processado" era gravada por ÚLTIMO, depois de já creditar
+    // REGISTRO/prestígio pra todo mundo — e o retorno de appendRow (que
+    // devolve null em caso de falha, NUNCA lança exceção, mesmo depois de 3
+    // tentativas internas) nunca era conferido. Se essa escrita falhasse
+    // (ex: limite de escrita da API do Sheets, bem provável logo depois de
+    // várias escritas seguidas de jogadores na mesma execução), o crédito já
+    // tinha sido dado mas a marca nunca ficava gravada — no ciclo seguinte
+    // do cron (10 min depois), sem marca, a MESMA transmissão era creditada
+    // de novo, pra sempre, a cada ciclo. Corrigido gravando a marca
+    // PRIMEIRO, antes de creditar qualquer coisa, e conferindo o retorno: se
+    // falhar, pula essa transmissão nessa execução (tenta de novo no
+    // próximo ciclo, sem ter creditado ninguém ainda) em vez de creditar e
+    // só then tentar marcar.
+    const linhaMarcada = await googleSheetsService.agendaTV.appendRow(
+      PROCESSADO_SHEET,
+      [grupo.chave, grupo.programa, new Date().toISOString()],
+      "A:C",
+    );
+    if (linhaMarcada === null) {
+      await registrarDiagnosticoSkip(
+        flags,
+        `[processarParticipacaoTV] "${grupo.programa}" (${key}) NÃO processado nessa execução: falha ao gravar a marca de "processado" em ${PROCESSADO_SHEET} (appendRow retornou null após retries). Tenta de novo automaticamente no próximo ciclo do cron — ninguém foi creditado ainda.`,
+      );
+      continue;
+    }
+
     // Janela real da transmissão (com uma margem de segurança pra frente e
     // pra trás) — usada só pra filtrar chat por horário, ver
     // contarChatPorTransmissao acima.
@@ -884,11 +911,6 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
       );
     }
 
-    await googleSheetsService.agendaTV.appendRow(
-      PROCESSADO_SHEET,
-      [grupo.chave, grupo.programa, new Date().toISOString()],
-      "A:C",
-    );
     transmissoesProcessadas++;
     if (eventosReais[grupo.chave]) {
       delete eventosReais[grupo.chave];
