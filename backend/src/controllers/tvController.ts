@@ -885,3 +885,124 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
 
   return { transmissoesProcessadas, registrosGravados };
 }
+
+export interface RegistroDuplicadoItem {
+  jogador: string;
+  tipoLabel: string;
+  linha: number;
+  transmissao: string;
+}
+
+export interface CorrecaoRegistroDuplicadoResultado {
+  modo: "simulacao" | "aplicado";
+  gruposDuplicados: number;
+  itens: RegistroDuplicadoItem[];
+}
+
+/**
+ * Correção pontual, par do corrigirPrestigioAssistirTvPorJanela: identifica
+ * transmissões que foram processadas DUAS vezes (uma marca de "processado"
+ * antes da janela informada, outra dentro dela — assinatura exata do bug de
+ * reprocessamento em massa confirmado em 2026-09-10, ver comentário em
+ * processarParticipacaoTV) e, pra cada jogador que teria recebido a mesma
+ * linha de REGISTRO de novo, apaga a ocorrência mais recente que bate
+ * jogador+tipo (REGISTRO é preenchido em ordem crescente de linha, então a
+ * ocorrência mais recente é a mais provável de ser a duplicata gravada no
+ * reprocessamento, não a original). Cada linha só é considerada uma vez
+ * (nunca apaga duas transmissões diferentes na mesma linha). Sempre roda em
+ * simulação (não escreve nada) a menos que `confirmar` seja true.
+ */
+export async function corrigirRegistroReprocessamentoTV(
+  desde: Date,
+  ate: Date,
+  confirmar: boolean,
+): Promise<CorrecaoRegistroDuplicadoResultado> {
+  const desdeMs = desde.getTime();
+  const ateMs = ate.getTime();
+
+  const [programas, regras, processadoRowsRaw] = await Promise.all([
+    readProgramas(),
+    readRegras(),
+    googleSheetsService.agendaTV.readValues(PROCESSADO_SHEET).catch(() => [] as string[][]),
+  ]);
+
+  const processadoEntries = processadoRowsRaw
+    .slice(1)
+    .map((r) => ({ chave: normalizeText(r[0]), ts: new Date(normalizeText(r[2])).getTime() }))
+    .filter((e) => e.chave && Number.isFinite(e.ts));
+
+  const grupos = agruparTransmissoes(programas);
+  const gruposDuplicados = grupos.filter((grupo) => {
+    const chaves = [grupo.chave, ...grupo.salaIds];
+    const matches = processadoEntries.filter((e) => chaves.includes(e.chave));
+    const teveBurst = matches.some((e) => e.ts >= desdeMs && e.ts <= ateMs);
+    const teveAntes = matches.some((e) => e.ts < desdeMs);
+    return teveBurst && teveAntes;
+  });
+
+  const registroRows = await googleSheetsService.registrosCharts
+    .readValues(REGISTRO_SHEET, "B:D")
+    .catch(() => [] as string[][]);
+
+  const itens: RegistroDuplicadoItem[] = [];
+  const linhasJaMarcadas = new Set<number>();
+
+  for (const grupo of gruposDuplicados) {
+    const tiers = regras.get(normalizeComparison(grupo.tipoEvento.trim()));
+    if (!tiers || tiers.length === 0) continue;
+    if (!grupo.endTs || grupo.totalDuracaoSeg <= 0) continue;
+
+    const margemChatMs = 15 * 60 * 1000;
+    const inicioEstimadoTs = grupo.endTs - grupo.totalDuracaoSeg * 1000;
+    const [presenca, chat] = await Promise.all([
+      somarPresencaPorTransmissao(grupo.rowIds),
+      contarChatPorTransmissao(grupo.rowIds, inicioEstimadoTs - margemChatMs, grupo.endTs + margemChatMs),
+    ]);
+    const jogadores = new Set([...presenca.keys(), ...chat.keys()]);
+
+    for (const telegramId of jogadores) {
+      const p = presenca.get(telegramId);
+      const c = chat.get(telegramId);
+      const presencaPct =
+        grupo.totalDuracaoSeg > 0 ? Math.min(100, ((p?.watchedSeconds || 0) / grupo.totalDuracaoSeg) * 100) : 0;
+      const chatPct = Math.min(100, ((c?.count || 0) / CHAT_MSGS_PARA_100_PORCENTO) * 100);
+      const percentual = Math.round(Math.max(presencaPct, chatPct));
+      const tier = escolherTier(tiers, percentual);
+      if (!tier) continue;
+      const nomeJogador = titleCase(p?.nome || c?.nome || "Anônimo");
+
+      let linhaEncontrada = -1;
+      for (let i = registroRows.length - 1; i >= 0; i--) {
+        const rowIndex = i + 1;
+        if (linhasJaMarcadas.has(rowIndex)) continue;
+        const jogadorRow = normalizeText(registroRows[i][0]);
+        const tipoRow = normalizeText(registroRows[i][2]);
+        if (
+          normalizeComparison(jogadorRow) === normalizeComparison(nomeJogador) &&
+          normalizeComparison(tipoRow) === normalizeComparison(tier.label)
+        ) {
+          linhaEncontrada = rowIndex;
+          break;
+        }
+      }
+      if (linhaEncontrada === -1) continue;
+      linhasJaMarcadas.add(linhaEncontrada);
+      itens.push({
+        jogador: nomeJogador,
+        tipoLabel: tier.label,
+        linha: linhaEncontrada,
+        transmissao: `${grupo.programa} (${grupo.data})`,
+      });
+
+      if (confirmar) {
+        await googleSheetsService.registrosCharts.updateValues(
+          REGISTRO_SHEET,
+          `B${linhaEncontrada}:D${linhaEncontrada}`,
+          [["", "", ""]],
+        );
+      }
+    }
+  }
+
+  return { modo: confirmar ? "aplicado" : "simulacao", gruposDuplicados: gruposDuplicados.length, itens };
+}
