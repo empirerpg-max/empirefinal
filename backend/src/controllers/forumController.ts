@@ -168,7 +168,12 @@ export async function createCommentController(request: Request): Promise<Respons
     const isReply = !!(replyTo || "").trim();
     const score = rollRandomScore(intervalo);
     const titleClean = tituloMedia.trim();
-    const topicIdClean = (topicId || "").trim();
+    // Precisa poder ser reatribuído: quando a linha ainda não tem "ID do
+    // tópico" preenchido (ver bug estrutural abaixo, passo 1), um ID
+    // estável é gerado e gravado na hora — o comentário passa a ser salvo
+    // com ESSE id, não com o que o cliente mandou (que era só um fallback
+    // baseado na posição da linha, instável).
+    let topicIdClean = (topicId || "").trim();
     const jogadorIdClean = (jogadorId || "").trim();
     // Comentário/audit log sempre gravam o nome "oficial" (coluna A da aba
     // Usuários), nunca o nome de login (coluna C) — mesmo que o cliente
@@ -271,6 +276,28 @@ export async function createCommentController(request: Request): Promise<Respons
           const tituloDaLinha = normalizeText(rowData[colTituloIndex]);
           if (tituloDaLinha) tituloOficial = tituloDaLinha;
           codigoUnico = normalizeText(rowData[colCodigoIndex]);
+
+          // BUG ESTRUTURAL confirmado em 2026-09-11 (ex: "CURSED BLESSED"):
+          // quando a linha não tem "ID do tópico" preenchido, o cliente
+          // manda um id sintético baseado na POSIÇÃO da linha na planilha
+          // (ex: "musicas_idx416") — instável: se uma linha for inserida
+          // acima depois, a posição muda e os comentários já salvos com o
+          // id antigo ficam órfãos (o app não acha mais nenhum comentário
+          // pra essa música, mesmo tendo vários). Corrige na raiz: assim
+          // que alguém comenta uma mídia sem "ID do tópico" ainda, gera um
+          // id estável de verdade AQUI e grava na planilha antes de salvar
+          // o comentário — a partir daí a mídia nunca mais depende da
+          // posição da linha.
+          const topicIdJaTinha = normalizeText(rowData[colTopicIdIndex]);
+          if (!topicIdJaTinha) {
+            const prefixo = tipoMedia === "album" ? "album" : tipoMedia === "video" || tipoMedia === "music-video" ? "video" : "musica";
+            const novoTopicId = `${prefixo}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const colTopicLetter = colIndexToA1Letter(colTopicIdIndex);
+            await googleSheetsService.principal
+              .updateValues(targetSheet, `${colTopicLetter}${foundRowIndex}`, [[novoTopicId]])
+              .catch((err) => console.warn("[ForumController] Falha ao gravar novo ID do tópico:", err));
+            topicIdClean = novoTopicId;
+          }
 
           // Se essa linha carrega o Código único de OUTRA música (ex: um
           // vídeo vinculado, ou uma faixa criada com "conta pra uma música
@@ -773,4 +800,50 @@ export async function getAtividadeRecenteController(): Promise<Response> {
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
+}
+
+export interface RechaveamentoResultado {
+  modo: "simulacao" | "aplicado";
+  sheet: string;
+  linhasEncontradas: number[];
+}
+
+const COMENTARIOS_SHEET_POR_TIPO: Record<string, string> = {
+  musica: "Comentarios_Musicas",
+  album: "Comentarios_Albuns",
+  video: "Comentarios_MV",
+  "music-video": "Comentarios_MV",
+};
+
+/**
+ * Correção pontual: re-vincula comentários órfãos gravados sob um "ID do
+ * tópico" antigo/instável (ex: fallback baseado na posição da linha, tipo
+ * "musicas_195", de antes da mídia ter um ID de verdade — ver bug
+ * estrutural corrigido em createCommentController) pro ID atual da mídia.
+ * Sem isso, comentários reais continuam existindo na planilha mas nunca
+ * aparecem no Catálogo pra ninguém, porque a busca de comentários é sempre
+ * por ID exato. Sempre simulação a menos que `confirmar` seja true.
+ */
+export async function rechavearComentarios(
+  tipoMedia: string,
+  topicIdAntigo: string,
+  topicIdNovo: string,
+  confirmar: boolean,
+): Promise<RechaveamentoResultado> {
+  const sheet = COMENTARIOS_SHEET_POR_TIPO[tipoMedia] || "Comentarios_Musicas";
+  const rows = await googleSheetsService.principal.readValues(sheet).catch(() => []);
+  const antigoNorm = normalizeComparison(topicIdAntigo);
+  const linhasEncontradas: number[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    if (normalizeComparison(rows[i][0] || "") === antigoNorm) {
+      const linha = i + 1;
+      linhasEncontradas.push(linha);
+      if (confirmar) {
+        await googleSheetsService.principal.updateValues(sheet, `A${linha}`, [[topicIdNovo]]);
+      }
+    }
+  }
+
+  return { modo: confirmar ? "aplicado" : "simulacao", sheet, linhasEncontradas };
 }
