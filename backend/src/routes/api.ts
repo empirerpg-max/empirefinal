@@ -32,6 +32,7 @@ import {
 import { getNivelController } from "../controllers/nivelController";
 import {
   createCommentController,
+  rechavearComentarios,
   getCommentsController,
   toggleCommentReactionController,
   editCommentController,
@@ -232,6 +233,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/prestigio/corrigir-reprocessamento-tv",
     "/api/registro/corrigir-reprocessamento-tv",
     "/api/social/corrigir-desalinhamento-posts",
+    "/api/forum/rechavear-comentarios",
     "/api/registro/reconstruir",
     "/api/tv/programas",
     "/api/tv/presenca",
@@ -638,6 +640,29 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
+  } else if (url.pathname === "/api/forum/rechavear-comentarios") {
+    // Correção pontual (ver rechavearComentarios em forumController.ts):
+    // move comentários órfãos de um "ID do tópico" antigo/instável pro ID
+    // atual da mídia (ex: "CURSED BLESSED", que teve 8 comentários reais
+    // presos sob um id de fallback antigo). Parâmetros: tipo (musica/album/
+    // video), de (id antigo), para (id novo). Simulação por padrão,
+    // ?confirmar=1 pra aplicar.
+    const tipoRechave = url.searchParams.get("tipo") || "musica";
+    const deTopic = url.searchParams.get("de") || "";
+    const paraTopic = url.searchParams.get("para") || "";
+    const confirmarRechave = url.searchParams.get("confirmar") === "1";
+    if (!deTopic || !paraTopic) {
+      response = new Response(
+        JSON.stringify({ success: false, error: "Parâmetros 'de' e 'para' são obrigatórios." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    } else {
+      const resultadoRechave = await rechavearComentarios(tipoRechave, deTopic, paraTopic, confirmarRechave);
+      response = new Response(JSON.stringify({ success: true, data: resultadoRechave }), {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
   } else if (url.pathname === "/api/acervo/metacritic") {
     response = await getMetacriticRankingController();
   } else if (url.pathname === "/api/acervo/pitchfork") {
