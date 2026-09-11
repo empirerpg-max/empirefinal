@@ -246,21 +246,33 @@ export async function createSocialPostController(request: Request): Promise<Resp
   // inserido o post localmente), mas ele nunca existiu de fato — sumia no
   // próximo recarregamento. Era exatamente isso que fazia um Story de
   // música "nunca ir ao ar" sem erro nenhum aparecer.
-  const linhaGravada = await googleSheetsService.usuarios.appendRow(SHEETS.posts, [
-    id,
-    payload.tipo,
-    payload.subtipo || "",
-    payload.autor,
-    payload.texto || "",
-    payload.media_url || "",
-    JSON.stringify(analytics),
-    new Date().toISOString(),
-    body.tgId || "",
-    payload.media_url ? payload.media_tipo || "imagem" : "",
-    payload.material ? JSON.stringify(payload.material) : "",
-    extraMedia.length ? JSON.stringify(extraMedia) : "",
-    payload.audio ? JSON.stringify(payload.audio) : "",
-  ]);
+  // Range travado em "A:M" (13 colunas, id..audio_json) — SEM isso (usando
+  // o range padrão "A:ZZ"), a API de append do Sheets vai "adivinhar" em
+  // que colunas a tabela começa olhando a linha inteira, e depois de um
+  // desalinhamento (por qualquer motivo, mesmo um só) cada append seguinte
+  // encadeia a partir de onde o anterior parou — foi exatamente isso que
+  // aconteceu em 2026-09-11: um post caiu nas colunas L-X, o próximo em
+  // X-AJ, o próximo em AJ-AV, cada vez 12 colunas mais pra direita. Travar
+  // o range impede a tabela de "andar" pra fora de A:M de novo.
+  const linhaGravada = await googleSheetsService.usuarios.appendRow(
+    SHEETS.posts,
+    [
+      id,
+      payload.tipo,
+      payload.subtipo || "",
+      payload.autor,
+      payload.texto || "",
+      payload.media_url || "",
+      JSON.stringify(analytics),
+      new Date().toISOString(),
+      body.tgId || "",
+      payload.media_url ? payload.media_tipo || "imagem" : "",
+      payload.material ? JSON.stringify(payload.material) : "",
+      extraMedia.length ? JSON.stringify(extraMedia) : "",
+      payload.audio ? JSON.stringify(payload.audio) : "",
+    ],
+    "A:M",
+  );
 
   if (linhaGravada === null) {
     return jsonResponse(
@@ -509,13 +521,11 @@ export async function comentarSocialPostController(request: Request): Promise<Re
     return jsonResponse({ ok: false, error: "Dados incompletos para o comentário." }, 400);
   }
 
-  await googleSheetsService.usuarios.appendRow(SHEETS.comments, [
-    payload.postId,
-    payload.autor,
-    payload.texto,
-    new Date().toISOString(),
-    body.tgId || "",
-  ]);
+  await googleSheetsService.usuarios.appendRow(
+    SHEETS.comments,
+    [payload.postId, payload.autor, payload.texto, new Date().toISOString(), body.tgId || ""],
+    "A:E",
+  );
 
   const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts);
   const rowIndex = rows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === payload.postId);
@@ -587,16 +597,11 @@ export async function saveSocialPerfilController(request: Request): Promise<Resp
     ]);
     await googleSheetsService.usuarios.updateValues(SHEETS.perfis, `H${rowIndex + 1}`, [[String(seguindo)]]);
   } else {
-    await googleSheetsService.usuarios.appendRow(SHEETS.perfis, [
-      payload.artista,
-      payload.rede,
-      handle,
-      bio,
-      avatarUrl,
-      body.tgId || "",
-      "0",
-      String(seguindo),
-    ]);
+    await googleSheetsService.usuarios.appendRow(
+      SHEETS.perfis,
+      [payload.artista, payload.rede, handle, bio, avatarUrl, body.tgId || "", "0", String(seguindo)],
+      "A:H",
+    );
   }
 
   return jsonResponse({ ok: true });
@@ -861,16 +866,20 @@ export async function saveSocialBannerController(request: Request): Promise<Resp
   }
 
   const id = genId("BANNER");
-  const rowIndex = await googleSheetsService.usuarios.appendRow(SHEETS.banners, [
-    id,
-    body.imagem_url.trim(),
-    body.link_destino?.trim() || "",
-    ativo ? "1" : "",
-    ordem,
-    new Date().toISOString(),
-    body.tgId || "",
-    body.legenda?.trim() || "",
-  ]);
+  const rowIndex = await googleSheetsService.usuarios.appendRow(
+    SHEETS.banners,
+    [
+      id,
+      body.imagem_url.trim(),
+      body.link_destino?.trim() || "",
+      ativo ? "1" : "",
+      ordem,
+      new Date().toISOString(),
+      body.tgId || "",
+      body.legenda?.trim() || "",
+    ],
+    "A:H",
+  );
   if (rowIndex === null) {
     return jsonResponse({ ok: false, error: "Falha ao gravar o banner na planilha. Tente de novo." }, 500);
   }
@@ -900,4 +909,73 @@ export async function deleteSocialBannerController(request: Request): Promise<Re
   ]);
 
   return jsonResponse({ ok: true });
+}
+
+function colIndexToA1LetterSocial(colIndex: number): string {
+  let temp = colIndex;
+  let letter = "";
+  while (temp >= 0) {
+    letter = String.fromCharCode((temp % 26) + 65) + letter;
+    temp = Math.floor(temp / 26) - 1;
+  }
+  return letter;
+}
+
+export interface DesalinhamentoItem {
+  linha: number;
+  colunaOrigem: string;
+  id: string;
+}
+
+export interface CorrecaoDesalinhamentoResultado {
+  modo: "simulacao" | "aplicado";
+  itens: DesalinhamentoItem[];
+}
+
+const SOCIAL_POSTS_LARGURA = 13; // A..M
+
+/**
+ * Correção pontual: em 2026-09-11, appendRow pra SOCIAL_POSTS usava range
+ * padrão ("A:ZZ", sem limite de colunas) — depois de UM desalinhamento
+ * (causa exata não confirmada, mas o efeito é claro nos dados), cada
+ * publicação seguinte encadeava 12 colunas mais pra direita que a
+ * anterior (L→X→AJ→AV...), porque a API de append do Sheets usa a última
+ * célula usada na faixa informada pra decidir onde a "tabela" continua.
+ * Já corrigido pra sempre (createSocialPostController agora trava o range
+ * em "A:M") — esta função só realinha as linhas que JÁ saíram do lugar:
+ * acha linhas com a coluna A vazia mas um "POST-..." mais adiante, move o
+ * bloco de 13 colunas de volta pra A:M e limpa o que sobrar fora dali.
+ * Sempre simulação a menos que `confirmar` seja true.
+ */
+export async function corrigirDesalinhamentoSocialPosts(
+  confirmar: boolean,
+): Promise<CorrecaoDesalinhamentoResultado> {
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts, "A:CZ").catch(() => []);
+  const itens: DesalinhamentoItem[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (normalizeText(row[0])) continue; // coluna A já tem dado — linha normal
+    const idx = row.findIndex((c) => normalizeText(c).startsWith("POST-"));
+    if (idx === -1) continue;
+
+    const linha = i + 1;
+    const bloco = Array.from({ length: SOCIAL_POSTS_LARGURA }, (_, k) => row[idx + k] ?? "");
+    itens.push({ linha, colunaOrigem: colIndexToA1LetterSocial(idx), id: normalizeText(bloco[0]) });
+
+    if (confirmar) {
+      await googleSheetsService.usuarios.updateValues(SHEETS.posts, `A${linha}:M${linha}`, [bloco]);
+      const limparDe = Math.max(SOCIAL_POSTS_LARGURA, idx);
+      const limparAte = idx + SOCIAL_POSTS_LARGURA - 1;
+      if (limparDe <= limparAte) {
+        const colDe = colIndexToA1LetterSocial(limparDe);
+        const colAte = colIndexToA1LetterSocial(limparAte);
+        await googleSheetsService.usuarios.updateValues(SHEETS.posts, `${colDe}${linha}:${colAte}${linha}`, [
+          Array(limparAte - limparDe + 1).fill(""),
+        ]);
+      }
+    }
+  }
+
+  return { modo: confirmar ? "aplicado" : "simulacao", itens };
 }
