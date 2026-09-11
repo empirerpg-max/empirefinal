@@ -34,8 +34,9 @@ import {
   Shuffle,
   Disc,
   Music,
+  Pause,
 } from "lucide-react";
-import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
+import { api, resolveImg, isDirectImageUrl, driveVideo, driveAudioSrc } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { renderRichText } from "@/lib/richText";
@@ -138,6 +139,53 @@ function PostMedia({
   );
 }
 
+// Badge de "toca o trecho da música anexada" numa publicação do feed —
+// clique reproduz só o pedaço escolhido (startSec..startSec+durationSec) e
+// para sozinho no fim, sem precisar de player externo.
+function PostAudioBadge({ audio }: { audio: { titulo: string; url: string; startSec: number; durationSec: number } }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+
+  function toggle() {
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) {
+      el.pause();
+      setPlaying(false);
+      return;
+    }
+    el.currentTime = audio.startSec;
+    el.play().catch(() => {});
+    setPlaying(true);
+  }
+
+  return (
+    <div className="flex items-center gap-2 mb-3.5 px-3 py-2 rounded-full bg-white/5 border border-white/10 w-fit max-w-full">
+      <audio
+        ref={audioRef}
+        src={driveAudioSrc(audio.url)}
+        preload="none"
+        onTimeUpdate={(e) => {
+          const el = e.currentTarget;
+          if (el.currentTime >= audio.startSec + audio.durationSec) {
+            el.pause();
+            setPlaying(false);
+          }
+        }}
+        onEnded={() => setPlaying(false)}
+      />
+      <button
+        type="button"
+        onClick={toggle}
+        className="size-6 rounded-full bg-primary text-primary-foreground shrink-0 grid place-items-center active:scale-90 transition-transform"
+      >
+        {playing ? <Pause className="size-3" /> : <Play className="size-3 ml-0.5" />}
+      </button>
+      <span className="text-[11px] font-bold truncate">{audio.titulo}</span>
+    </div>
+  );
+}
+
 // Proporção padrão de story (retangular em pé, igual Instagram/TikTok).
 const STORY_ASPECT = 9 / 16;
 
@@ -205,6 +253,19 @@ type Post = {
   data: string;
   telegram_id?: string;
   material?: PostMaterial;
+  extra_media?: string[];
+  audio?: PostAudio;
+};
+
+// Trecho de música tocando por cima de uma publicação do Instagram (feed) —
+// até 10s, a pessoa escolhe o início.
+type PostAudio = {
+  titulo: string;
+  artista: string;
+  url: string;
+  topicId: string;
+  startSec: number;
+  durationSec: number;
 };
 
 // Música ou álbum do catálogo anexado a um post (compartilhar no Twitter,
@@ -267,6 +328,14 @@ function SocialPage() {
   const [materialPickerTipo, setMaterialPickerTipo] = useState<"musica" | "album">("musica");
   const [materialOptions, setMaterialOptions] = useState<any[]>([]);
   const [loadingMaterialOptions, setLoadingMaterialOptions] = useState(false);
+  // Feed do Instagram: até 10 fotos (a 1ª vai em imageUrl, as demais aqui) e
+  // um trecho de até 10s de uma música do catálogo tocando por cima.
+  const [extraImageUrls, setExtraImageUrls] = useState<string[]>([]);
+  const [uploadingExtraImage, setUploadingExtraImage] = useState(false);
+  const [attachedAudio, setAttachedAudio] = useState<PostAudio | null>(null);
+  const [isAudioPickerOpen, setIsAudioPickerOpen] = useState(false);
+  const MAX_IG_PHOTOS = 10;
+  const MAX_AUDIO_SEC = 10;
   // Blackout Mode — posta com um nome fictício em vez do nome real do
   // artista, pra criar suspense antes de um anúncio (ex: lançamento de era).
   // O post continua vinculado ao telegram_id de verdade (dono não muda),
@@ -606,6 +675,9 @@ function SocialPage() {
     setBlackoutUsername("");
     setAttachedMaterial(null);
     setIsMaterialPickerOpen(false);
+    setExtraImageUrls([]);
+    setAttachedAudio(null);
+    setIsAudioPickerOpen(false);
   }
 
   async function loadMaterialOptions(tipo: "musica" | "album") {
@@ -644,6 +716,31 @@ function SocialPage() {
       topicId: String(topicId),
     });
     setIsMaterialPickerOpen(false);
+  }
+
+  function openAudioPicker() {
+    haptic.selection();
+    setIsAudioPickerOpen(true);
+    loadMaterialOptions("musica");
+  }
+
+  function pickAudio(item: any) {
+    const audioUrl = item.fields?.audioUrl;
+    const topicId = item.fields?.topicId || item.codigoUnico;
+    if (!audioUrl) {
+      alert("Essa música não tem áudio cadastrado.");
+      return;
+    }
+    haptic.selection();
+    setAttachedAudio({
+      titulo: item.titulo,
+      artista: item.artista || activeArtist?.nome || "",
+      url: audioUrl,
+      topicId: String(topicId || ""),
+      startSec: 0,
+      durationSec: MAX_AUDIO_SEC,
+    });
+    setIsAudioPickerOpen(false);
   }
 
   function gerarNomeBlackout() {
@@ -698,6 +795,12 @@ function SocialPage() {
         media_tipo: mediaTipo,
         analytics: { likes: 0, comments: 0, shares: 0 },
         ...(selectedType === "Twitter" && attachedMaterial ? { material: attachedMaterial } : {}),
+        ...(selectedType === "Instagram" && igMode === "Feed" && extraImageUrls.length
+          ? { extra_media: extraImageUrls }
+          : {}),
+        ...(selectedType === "Instagram" && igMode === "Feed" && attachedAudio
+          ? { audio: attachedAudio }
+          : {}),
       };
 
       const res = await (api as any).salvarPostSocial(payload, tgId);
@@ -1144,7 +1247,21 @@ function SocialPage() {
                             </div>
                           </div>
                         ) : (
-                          post.media_url && (
+                          post.media_url &&
+                          (post.extra_media?.length ? (
+                            <div className="relative mb-3.5">
+                              <div className="flex gap-0 overflow-x-auto snap-x snap-mandatory rounded-[1.25rem] border border-white/10 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                                {[post.media_url, ...post.extra_media].map((url, idx) => (
+                                  <div key={idx} className="aspect-square w-full shrink-0 snap-center bg-secondary overflow-hidden">
+                                    <PostMedia url={url} tipo="imagem" resolveUrl={driveImg} className="w-full h-full object-cover" />
+                                  </div>
+                                ))}
+                              </div>
+                              <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px] font-black">
+                                1/{post.extra_media.length + 1}
+                              </span>
+                            </div>
+                          ) : (
                             <div className="aspect-square bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_50px_-25px_rgba(0,0,0,0.7)]">
                               <PostMedia
                                 url={post.media_url}
@@ -1153,8 +1270,10 @@ function SocialPage() {
                                 className="w-full h-full object-cover"
                               />
                             </div>
-                          )
+                          ))
                         )}
+
+                        {post.audio && <PostAudioBadge audio={post.audio} />}
 
                         {post.texto && (
                           <p className="font-medium text-sm leading-snug mb-3.5 text-pretty whitespace-pre-wrap break-words">
@@ -2248,6 +2367,106 @@ function SocialPage() {
                     {mediaTipo === "imagem" && <PasteImageLinkInput onApply={setImageUrl} className={inputCls} />}
                   </div>
 
+                  {selectedType === "Instagram" && igMode === "Feed" && mediaTipo === "imagem" && imageUrl && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground">
+                        Mais fotos ({extraImageUrls.length + 1}/{MAX_IG_PHOTOS}):
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {extraImageUrls.map((url, idx) => (
+                          <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-secondary border border-white/10">
+                            <img src={driveImg(url)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <button
+                              type="button"
+                              onClick={() => setExtraImageUrls((prev) => prev.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-1 size-5 rounded-full bg-black/70 grid place-items-center"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {extraImageUrls.length + 1 < MAX_IG_PHOTOS && (
+                          <label
+                            className={
+                              "aspect-square rounded-xl border border-dashed border-white/20 flex items-center justify-center cursor-pointer text-muted-foreground " +
+                              (uploadingExtraImage ? "opacity-60 pointer-events-none" : "")
+                            }
+                          >
+                            {uploadingExtraImage ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-5" />}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setUploadingExtraImage(true);
+                                const url = await uploadToDrive(file, "socialPosts");
+                                if (url) setExtraImageUrls((prev) => [...prev, url]);
+                                setUploadingExtraImage(false);
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedType === "Instagram" && igMode === "Feed" && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground">
+                        Música na publicação (opcional, até {MAX_AUDIO_SEC}s):
+                      </p>
+                      {attachedAudio ? (
+                        <div className="rounded-2xl border border-white/15 bg-white/[0.03] p-3 space-y-2.5">
+                          <div className="flex items-center gap-2.5">
+                            <Music2 className="size-4 text-primary shrink-0" />
+                            <span className="font-black text-xs truncate flex-1">{attachedAudio.titulo}</span>
+                            <button type="button" onClick={() => setAttachedAudio(null)} className="text-muted-foreground hover:text-white">
+                              <X className="size-4" />
+                            </button>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground font-bold uppercase">
+                              <span>Início: {attachedAudio.startSec}s</span>
+                              <span>Duração: {attachedAudio.durationSec}s</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={0}
+                              max={300}
+                              step={1}
+                              value={attachedAudio.startSec}
+                              onChange={(e) =>
+                                setAttachedAudio((prev) => (prev ? { ...prev, startSec: Number(e.target.value) } : prev))
+                              }
+                              className="w-full"
+                            />
+                            <input
+                              type="range"
+                              min={1}
+                              max={MAX_AUDIO_SEC}
+                              step={1}
+                              value={attachedAudio.durationSec}
+                              onChange={(e) =>
+                                setAttachedAudio((prev) => (prev ? { ...prev, durationSec: Number(e.target.value) } : prev))
+                              }
+                              className="w-full"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={openAudioPicker}
+                          className={inputCls + " flex items-center justify-center gap-2 text-center"}
+                        >
+                          <Music2 className="size-4" /> Escolher música
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   <button
                     onClick={handlePost}
                     disabled={
@@ -2349,6 +2568,62 @@ function SocialPage() {
                         )}
                       </div>
                       <span className="font-bold text-sm truncate">{item.titulo}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Seletor de música pra tocar por cima da publicação do Instagram */}
+      <AnimatePresence>
+        {isAudioPickerOpen && (
+          <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ y: 200 }}
+              animate={{ y: 0 }}
+              exit={{ y: 200 }}
+              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[85dvh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-black uppercase">Escolher música</h2>
+                <button
+                  onClick={() => setIsAudioPickerOpen(false)}
+                  className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              {loadingMaterialOptions ? (
+                <div className="py-10 flex items-center justify-center">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : materialOptions.length === 0 ? (
+                <p className="text-xs text-muted-foreground font-medium text-center py-10">
+                  Nenhuma música de {activeArtist?.nome} encontrada.
+                </p>
+              ) : (
+                <div className="grid gap-2">
+                  {materialOptions.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => pickAudio(item)}
+                      className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 text-left active:scale-[0.98] transition-transform"
+                    >
+                      <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
+                        {item.capaUrl ? (
+                          <img src={driveImg(item.capaUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <Music className="size-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <span className="font-bold text-sm truncate flex-1">{item.titulo}</span>
+                      {!item.fields?.audioUrl && (
+                        <span className="text-[9px] font-black uppercase text-muted-foreground shrink-0">Sem áudio</span>
+                      )}
                     </button>
                   ))}
                 </div>

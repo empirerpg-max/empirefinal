@@ -45,7 +45,7 @@ async function requestProvesBannerAdmin(request: Request): Promise<boolean> {
 // cabeçalhos numerados tipo "1. ID", então indexamos por posição, que é
 // robusto pros dois casos):
 //
-// SOCIAL_POSTS:   A id | B tipo | C subtipo | D autor | E texto | F media_url | G analytics(json) | H data | I telegram_id | J media_tipo ("imagem"/"video", coluna nova — linhas antigas ficam vazias e continuam tratadas como imagem) | K material_json (coluna nova — música/álbum do catálogo anexado ao post, ver tipo PostMaterial; vazia quando o post não compartilha material nenhum)
+// SOCIAL_POSTS:   A id | B tipo | C subtipo | D autor | E texto | F media_url | G analytics(json) | H data | I telegram_id | J media_tipo ("imagem"/"video", coluna nova — linhas antigas ficam vazias e continuam tratadas como imagem) | K material_json (coluna nova — música/álbum do catálogo anexado ao post, ver tipo PostMaterial; vazia quando o post não compartilha material nenhum) | L extra_media_json (coluna nova — array de URLs extras, carrossel de até 10 fotos no feed do Instagram; media_url/F guarda sempre a primeira) | M audio_json (coluna nova — trecho de música tocando por cima da publicação, ver tipo PostAudio)
 // SOCIAL_PERFIS:  A artista | B rede | C handle | D bio | E avatar_url | F telegram_id | G seguidores | H seguindo
 // SOCIAL_COMMENTS:A postid | B autor | C texto | D data | E telegram_id
 // SOCIAL_NEWS:    A id | B titulo | C conteudo | D imagem | E autor | F data | G telegram_id | H origem_tipo ("tour" quando a notícia veio de uma ação de turnê, vazio quando é matéria normal) | I origem_id (id_unico da turnê) | J origem_show (número do show)
@@ -110,6 +110,45 @@ function parseMaterial(raw: string): PostMaterial | undefined {
   }
 }
 
+export interface PostAudio {
+  titulo: string;
+  artista: string;
+  url: string;
+  topicId: string;
+  startSec: number;
+  durationSec: number;
+}
+
+function parseExtraMedia(raw: string): string[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return undefined;
+    const urls = parsed.map((x) => String(x)).filter(Boolean);
+    return urls.length ? urls : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseAudio(raw: string): PostAudio | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.url) return undefined;
+    return {
+      titulo: String(parsed.titulo || ""),
+      artista: String(parsed.artista || ""),
+      url: String(parsed.url),
+      topicId: String(parsed.topicId || ""),
+      startSec: Number(parsed.startSec) || 0,
+      durationSec: Math.min(10, Number(parsed.durationSec) || 10),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -160,6 +199,8 @@ export async function getSocialPostsController(): Promise<Response> {
         telegram_id: normalizeText(row[8]) || undefined,
         media_tipo: normalizeText(row[9]) || undefined,
         material: parseMaterial(row[10]),
+        extra_media: parseExtraMedia(row[11]),
+        audio: parseAudio(row[12]),
       };
     })
     .filter((p) => p.id);
@@ -183,6 +224,8 @@ export async function createSocialPostController(request: Request): Promise<Resp
     media_tipo?: string;
     analytics?: AnalyticsJson;
     material?: PostMaterial;
+    extra_media?: string[];
+    audio?: PostAudio;
   };
 
   // Post de Twitter compartilhando material do catálogo não precisa de
@@ -194,6 +237,7 @@ export async function createSocialPostController(request: Request): Promise<Resp
 
   const id = genId("POST");
   const analytics = payload.analytics || { likes: 0, comments: 0, shares: 0 };
+  const extraMedia = (payload.extra_media || []).filter(Boolean).slice(0, 9);
 
   await googleSheetsService.usuarios.appendRow(SHEETS.posts, [
     id,
@@ -207,6 +251,8 @@ export async function createSocialPostController(request: Request): Promise<Resp
     body.tgId || "",
     payload.media_url ? payload.media_tipo || "imagem" : "",
     payload.material ? JSON.stringify(payload.material) : "",
+    extraMedia.length ? JSON.stringify(extraMedia) : "",
+    payload.audio ? JSON.stringify(payload.audio) : "",
   ]);
 
   await somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "post_social").catch(() => {});
