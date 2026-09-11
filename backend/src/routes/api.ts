@@ -129,6 +129,7 @@ import {
 import {
   getSocialPostsController,
   createSocialPostController,
+  corrigirDesalinhamentoSocialPosts,
   curtirSocialPostController,
   getSocialComentariosController,
   comentarSocialPostController,
@@ -230,6 +231,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/prestigio/restaurar",
     "/api/prestigio/corrigir-reprocessamento-tv",
     "/api/registro/corrigir-reprocessamento-tv",
+    "/api/social/corrigir-desalinhamento-posts",
     "/api/registro/reconstruir",
     "/api/tv/programas",
     "/api/tv/presenca",
@@ -624,6 +626,18 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         headers: { "Content-Type": "application/json; charset=utf-8" },
       });
     }
+  } else if (url.pathname === "/api/social/corrigir-desalinhamento-posts") {
+    // Correção pontual (ver corrigirDesalinhamentoSocialPosts em
+    // socialController.ts): realinha linhas de SOCIAL_POSTS que saíram das
+    // colunas A:M por causa do bug de range sem limite (já corrigido pra
+    // sempre — createSocialPostController agora trava o range). Simulação
+    // por padrão, ?confirmar=1 pra aplicar.
+    const confirmarDesalinhamento = url.searchParams.get("confirmar") === "1";
+    const resultadoDesalinhamento = await corrigirDesalinhamentoSocialPosts(confirmarDesalinhamento);
+    response = new Response(JSON.stringify({ success: true, data: resultadoDesalinhamento }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
   } else if (url.pathname === "/api/acervo/metacritic") {
     response = await getMetacriticRankingController();
   } else if (url.pathname === "/api/acervo/pitchfork") {
