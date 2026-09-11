@@ -414,8 +414,8 @@ export async function deleteSocialPostController(request: Request): Promise<Resp
     }
   }
 
-  await googleSheetsService.usuarios.updateValues(SHEETS.posts, `A${rowIndex + 1}:J${rowIndex + 1}`, [
-    ["", "", "", "", "", "", "", "", "", ""],
+  await googleSheetsService.usuarios.updateValues(SHEETS.posts, `A${rowIndex + 1}:M${rowIndex + 1}`, [
+    ["", "", "", "", "", "", "", "", "", "", "", "", ""],
   ]);
 
   return jsonResponse({ ok: true });

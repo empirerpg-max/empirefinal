@@ -881,6 +881,27 @@ function SocialPage() {
     }
   }
 
+  // Exclui um story próprio — mesmo endpoint/regra dos posts do Feed (só o
+  // dono, até 24h depois de postar). Fecha o visualizador (avança pro
+  // próximo story do grupo, se tiver, senão fecha tudo) antes de recarregar.
+  async function handleDeleteStory(story: Post, group: { autor: string; items: Post[] }) {
+    haptic.selection();
+    if (!confirm("Excluir este story? Não dá pra desfazer.")) return;
+    const res = await api.deletarPostSocial(story.id, user?.id || "");
+    if (res.ok) {
+      haptic.success();
+      if (group.items.length > 1) {
+        const idx = group.items.findIndex((it) => it.id === story.id);
+        setViewingStoryGroup({ autor: group.autor, index: Math.max(0, idx - 1) });
+      } else {
+        setViewingStoryGroup(null);
+      }
+      loadPosts();
+    } else {
+      alert((res as any).error || res.erro || "Não deu pra excluir o story.");
+    }
+  }
+
   function closePostModal() {
     setIsModalOpen(false);
     setSelectedType(null);
@@ -3606,6 +3627,14 @@ function SocialPage() {
                     </p>
                     <p className="text-[11px] text-white/70 truncate">{story.handle}</p>
                   </div>
+                  {story.telegram_id && String(story.telegram_id) === String(user?.id || "") && (
+                    <button
+                      onClick={() => handleDeleteStory(story, group)}
+                      className="size-9 rounded-full bg-black/40 border border-white/15 grid place-items-center text-white shrink-0"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => setViewingStoryGroup(null)}
                     className="size-9 rounded-full bg-black/40 border border-white/15 grid place-items-center text-white shrink-0"
