@@ -1376,7 +1376,19 @@ export async function publicarFaixaPendenteController(request: Request): Promise
         headers: { "Content-Type": "application/json" },
       });
     }
-    if ((row[1] || "").trim()) {
+    // "Já publicada" precisa ser decidido pela coluna X ("Pendente?"), não
+    // pela B ("ID do tópico") — desde que createCommentController passou a
+    // gerar um ID provisório pra permitir comentar numa faixa ainda
+    // pendente (backfill na primeira interação, ver forumController.ts),
+    // B pode estar preenchida SEM a faixa ter passado por aqui ainda. Se
+    // esse guard continuasse olhando só a B, comentar numa faixa pendente
+    // travava o "Publicar" de verdade pra sempre (recusava achando que já
+    // tinha sido publicada, e código único/charts/INFOS MÚSICAS nunca
+    // rodavam). Reaproveita o ID já gravado (se veio de um comentário
+    // antes de publicar) em vez de gerar outro e reabrir o mesmo problema
+    // de "dois códigos pra mesma faixa" que já aconteceu.
+    const pendenteAtual = (row[23] || "").trim();
+    if (normalizeComparison(pendenteAtual) !== "sim") {
       return new Response(JSON.stringify({ success: false, error: "Essa faixa já tem tópico publicado." }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
@@ -1384,7 +1396,7 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     }
 
     const fullTitle = row[7] || "";
-    const topicId = `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const topicId = (row[1] || "").trim() || `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     await googleSheetsService.principal.updateValues("Musicas", `B${musicaRowIndex}`, [[topicId]]);
     await googleSheetsService.principal.updateValues("Musicas", `F${musicaRowIndex}`, [[topicId]]);
