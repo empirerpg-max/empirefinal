@@ -37,8 +37,10 @@ import {
   Pause,
   Volume2,
   VolumeX,
+  Search,
 } from "lucide-react";
-import { api, resolveImg, isDirectImageUrl, driveVideo, driveAudioSrc } from "@/lib/api";
+import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
+import { extractDriveFileId } from "@/components/EmpirePlay/MusicPlayer";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { renderRichText } from "@/lib/richText";
@@ -144,6 +146,24 @@ function PostMedia({
   );
 }
 
+// Fonte tocável de verdade pra tag <audio>: link do Drive precisa passar
+// pelo proxy /api/media/audio do backend (suporta Range, contorna CORS) —
+// usar o link "cru" do Drive, ou pior, a URL de /preview (feita pra
+// <iframe>, não pra <audio>), resultava em áudio que não tocava nada,
+// mesmo sem erro nenhum aparecer.
+function resolvePlayableAudioSrc(url?: string): string | undefined {
+  if (!url) return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+  const isDrive =
+    trimmed.includes("drive.google.com") ||
+    trimmed.includes("docs.google.com") ||
+    trimmed.includes("googleusercontent.com");
+  const driveId = extractDriveFileId(trimmed);
+  if (isDrive && driveId) return `/api/media/audio?id=${driveId}`;
+  return trimmed;
+}
+
 // Badge de "toca o trecho da música anexada" numa publicação do feed —
 // clique reproduz só o pedaço escolhido (startSec..startSec+durationSec) e
 // para sozinho no fim, sem precisar de player externo.
@@ -168,7 +188,7 @@ function PostAudioBadge({ audio }: { audio: { titulo: string; url: string; start
     <div className="flex items-center gap-2 mb-3.5 px-3 py-2 rounded-full bg-white/5 border border-white/10 w-fit max-w-full">
       <audio
         ref={audioRef}
-        src={driveAudioSrc(audio.url)}
+        src={resolvePlayableAudioSrc(audio.url)}
         preload="none"
         onTimeUpdate={(e) => {
           const el = e.currentTarget;
@@ -254,6 +274,11 @@ function StoryMusicCard({
           }}
           className="text-center"
         >
+          {material.tipo === "album" && (
+            <span className="inline-flex items-center gap-1 mb-1.5 px-2 py-0.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-[9px] font-black uppercase text-white">
+              <Disc className="size-2.5" /> Álbum
+            </span>
+          )}
           <p className="text-white font-black text-lg leading-tight truncate max-w-[16rem]">{material.titulo}</p>
           <p className="text-white/70 text-xs font-bold truncate max-w-[16rem]">{material.artista}</p>
         </button>
@@ -274,7 +299,7 @@ function StoryMusicCard({
       {audio && (
         <audio
           ref={audioRef}
-          src={driveAudioSrc(audio.url)}
+          src={resolvePlayableAudioSrc(audio.url)}
           preload="none"
           loop={false}
           onTimeUpdate={(e) => {
@@ -432,6 +457,10 @@ function SocialPage() {
   const [materialPickerTipo, setMaterialPickerTipo] = useState<"musica" | "album">("musica");
   const [materialOptions, setMaterialOptions] = useState<any[]>([]);
   const [loadingMaterialOptions, setLoadingMaterialOptions] = useState(false);
+  const [materialSearchQuery, setMaterialSearchQuery] = useState("");
+  // Quando a pessoa escolhe um álbum no Story de música: guarda o álbum
+  // escolhido enquanto ela decide qual faixa vai tocar.
+  const [albumTrackPicker, setAlbumTrackPicker] = useState<any | null>(null);
   // Feed do Instagram: até 10 fotos (a 1ª vai em imageUrl, as demais aqui) e
   // um trecho de até 10s de uma música do catálogo tocando por cima.
   const [extraImageUrls, setExtraImageUrls] = useState<string[]>([]);
@@ -788,18 +817,54 @@ function SocialPage() {
     setIsAudioPickerOpen(false);
     setStoryMusicMode(false);
     setStoryComSom(true);
+    setMaterialSearchQuery("");
+    setAlbumTrackPicker(null);
   }
 
-  async function loadMaterialOptions(tipo: "musica" | "album") {
-    if (!activeArtist) return;
+  // Catálogo inteiro (qualquer artista, não só o ativo) — mesmos endpoints
+  // que alimentam o Fórum/Catálogo do Empire Play, então cobre exatamente o
+  // que já está lançado e navegável por lá.
+  async function loadMaterialOptions(tipo: "musica" | "album", query: string = "") {
     setLoadingMaterialOptions(true);
     try {
-      const tipoParam = tipo === "album" ? "albuns" : "musicas";
-      const res = await fetch(
-        `/api/editar?artist=${encodeURIComponent(activeArtist.nome)}&tipo=${tipoParam}`,
-      );
-      const json = await res.json().catch(() => null);
-      setMaterialOptions(json?.success ? json.data || [] : []);
+      if (tipo === "musica") {
+        const res = await fetch(`/api/empire-play/musicas${query ? `?q=${encodeURIComponent(query)}` : ""}`);
+        const json = await res.json().catch(() => null);
+        const items = (json?.success ? json.data || [] : []).map((it: any) => ({
+          id: it.id,
+          titulo: it.title,
+          artista: it.artist,
+          capaUrl: it.coverUrl,
+          audioUrl: it.audioUrl,
+          topicId: it.telegramTopicId,
+        }));
+        setMaterialOptions(items);
+      } else {
+        const res = await fetch("/api/empire-play/albuns");
+        const json = await res.json().catch(() => null);
+        let items = (json?.success ? json.data || [] : []) as any[];
+        const q = normalizeComparisonLocal(query);
+        if (q) {
+          items = items.filter((a) => normalizeComparisonLocal(`${a.title} ${a.artist}`).includes(q));
+        }
+        setMaterialOptions(
+          items.map((it) => ({
+            id: it.id,
+            titulo: it.title,
+            artista: it.artist,
+            capaUrl: it.coverUrl,
+            topicId: it.id?.replace(/^album_/, ""),
+            tracks: (it.tracks || []).map((t: any) => ({
+              id: t.id,
+              titulo: t.title,
+              artista: t.artist,
+              capaUrl: t.coverUrl || it.coverUrl,
+              audioUrl: t.audioUrl,
+              topicId: t.telegramTopicId,
+            })),
+          })),
+        );
+      }
     } catch {
       setMaterialOptions([]);
     } finally {
@@ -807,59 +872,104 @@ function SocialPage() {
     }
   }
 
+  function normalizeComparisonLocal(s: string) {
+    return s
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
   function openMaterialPicker() {
     haptic.selection();
     setIsMaterialPickerOpen(true);
     setMaterialPickerTipo("musica");
-    loadMaterialOptions("musica");
+    setMaterialSearchQuery("");
+    setAlbumTrackPicker(null);
+    loadMaterialOptions("musica", "");
   }
 
   function pickMaterial(item: any, tipo: "musica" | "album") {
-    const topicId = item.fields?.topicId || item.codigoUnico;
-    if (!topicId) return;
+    // Álbum no Story de música: a pessoa ainda precisa escolher QUAL faixa
+    // vai tocar — abre a lista de faixas em vez de fechar o seletor.
+    if (tipo === "album" && storyMusicMode) {
+      if (!item.tracks?.length) {
+        alert("Esse álbum não tem faixas com áudio cadastrado.");
+        return;
+      }
+      haptic.selection();
+      setAlbumTrackPicker(item);
+      return;
+    }
+
+    if (!item.topicId) {
+      alert("Essa faixa não tem um tópico vinculado no catálogo — não dá pra compartilhar.");
+      return;
+    }
     haptic.selection();
     setAttachedMaterial({
       tipo,
       titulo: item.titulo,
-      artista: item.artista || activeArtist?.nome || "",
+      artista: item.artista || "",
       capaUrl: item.capaUrl || undefined,
-      topicId: String(topicId),
+      topicId: String(item.topicId),
     });
-    // No Story de música, o trecho de áudio já vem pré-selecionado (a
-    // pessoa só ajusta o início/duração se quiser) — sem isso, escolher a
-    // música não bastava pra ligar o áudio no story.
-    if (storyMusicMode && tipo === "musica" && item.fields?.audioUrl) {
+    if (storyMusicMode && tipo === "musica" && item.audioUrl) {
       setAttachedAudio({
         titulo: item.titulo,
-        artista: item.artista || activeArtist?.nome || "",
-        url: item.fields.audioUrl,
-        topicId: String(topicId),
+        artista: item.artista || "",
+        url: item.audioUrl,
+        topicId: String(item.topicId),
         startSec: 0,
         durationSec: MAX_AUDIO_SEC,
       });
     }
     setIsMaterialPickerOpen(false);
+    setAlbumTrackPicker(null);
+  }
+
+  // Faixa escolhida dentro de um álbum (Story de música/álbum): o card
+  // mostra o ÁLBUM (capa/título/topicId do álbum), o áudio é o da faixa.
+  function pickAlbumTrack(track: any) {
+    if (!albumTrackPicker || !track.audioUrl) return;
+    haptic.selection();
+    setAttachedMaterial({
+      tipo: "album",
+      titulo: albumTrackPicker.titulo,
+      artista: albumTrackPicker.artista || "",
+      capaUrl: albumTrackPicker.capaUrl || undefined,
+      topicId: String(albumTrackPicker.topicId),
+    });
+    setAttachedAudio({
+      titulo: `${albumTrackPicker.titulo} — ${track.titulo}`,
+      artista: track.artista || "",
+      url: track.audioUrl,
+      topicId: String(track.topicId || albumTrackPicker.topicId),
+      startSec: 0,
+      durationSec: MAX_AUDIO_SEC,
+    });
+    setIsMaterialPickerOpen(false);
+    setAlbumTrackPicker(null);
   }
 
   function openAudioPicker() {
     haptic.selection();
     setIsAudioPickerOpen(true);
-    loadMaterialOptions("musica");
+    setMaterialSearchQuery("");
+    loadMaterialOptions("musica", "");
   }
 
   function pickAudio(item: any) {
-    const audioUrl = item.fields?.audioUrl;
-    const topicId = item.fields?.topicId || item.codigoUnico;
-    if (!audioUrl) {
+    if (!item.audioUrl) {
       alert("Essa música não tem áudio cadastrado.");
       return;
     }
     haptic.selection();
     setAttachedAudio({
       titulo: item.titulo,
-      artista: item.artista || activeArtist?.nome || "",
-      url: audioUrl,
-      topicId: String(topicId || ""),
+      artista: item.artista || "",
+      url: item.audioUrl,
+      topicId: String(item.topicId || ""),
       startSec: 0,
       durationSec: MAX_AUDIO_SEC,
     });
@@ -938,9 +1048,15 @@ function SocialPage() {
         haptic.success();
         closePostModal();
         loadPosts();
+      } else {
+        // Sem isso, uma falha do backend (ex: dados incompletos) passava
+        // batido pra quem postou — parecia que "nada aconteceu" ao clicar,
+        // sem erro nenhum visível.
+        alert(res.error || "Não deu pra publicar. Tenta de novo.");
       }
     } catch (err) {
       console.error("Erro ao postar:", err);
+      alert("Não deu pra publicar. Tenta de novo.");
     } finally {
       setSubmitting(false);
     }
@@ -2757,7 +2873,9 @@ function SocialPage() {
               className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[85dvh] overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-black uppercase">Anexar material</h2>
+                <h2 className="text-lg font-black uppercase">
+                  {albumTrackPicker ? "Escolher faixa" : "Anexar material"}
+                </h2>
                 <button
                   onClick={() => setIsMaterialPickerOpen(false)}
                   className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
@@ -2766,62 +2884,109 @@ function SocialPage() {
                 </button>
               </div>
 
-              {!storyMusicMode && (
-                <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1 mb-4">
-                  <button
-                    onClick={() => {
-                      setMaterialPickerTipo("musica");
-                      loadMaterialOptions("musica");
-                    }}
-                    className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "musica" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                  >
-                    Músicas
-                  </button>
-                  <button
-                    onClick={() => {
-                      setMaterialPickerTipo("album");
-                      loadMaterialOptions("album");
-                    }}
-                    className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "album" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                  >
-                    Álbuns
-                  </button>
-                </div>
-              )}
-
-              {loadingMaterialOptions ? (
-                <div className="py-10 flex items-center justify-center">
-                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : materialOptions.length === 0 ? (
-                <p className="text-xs text-muted-foreground font-medium text-center py-10">
-                  Nenhum {materialPickerTipo === "album" ? "álbum" : "música"} de {activeArtist?.nome} encontrado.
-                </p>
-              ) : (
+              {albumTrackPicker ? (
                 <div className="grid gap-2">
-                  {materialOptions.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => pickMaterial(item, materialPickerTipo)}
-                      className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 text-left active:scale-[0.98] transition-transform"
-                    >
-                      <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
-                        {item.capaUrl ? (
-                          <img
-                            src={driveImg(item.capaUrl)}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : materialPickerTipo === "album" ? (
-                          <Disc className="size-4 text-muted-foreground" />
-                        ) : (
-                          <Music className="size-4 text-muted-foreground" />
-                        )}
-                      </div>
-                      <span className="font-bold text-sm truncate">{item.titulo}</span>
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => setAlbumTrackPicker(null)}
+                    className="flex items-center gap-1.5 text-[11px] font-black uppercase text-muted-foreground mb-1"
+                  >
+                    <ChevronLeft className="size-3.5" /> {albumTrackPicker.titulo}
+                  </button>
+                  {albumTrackPicker.tracks
+                    .filter((t: any) => t.audioUrl)
+                    .map((t: any) => (
+                      <button
+                        key={t.id}
+                        onClick={() => pickAlbumTrack(t)}
+                        className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 text-left active:scale-[0.98] transition-transform"
+                      >
+                        <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
+                          {t.capaUrl ? (
+                            <img src={driveImg(t.capaUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <Music className="size-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <span className="font-bold text-sm truncate">{t.titulo}</span>
+                      </button>
+                    ))}
                 </div>
+              ) : (
+                <>
+                  <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1 mb-3">
+                    <button
+                      onClick={() => {
+                        setMaterialPickerTipo("musica");
+                        loadMaterialOptions("musica", materialSearchQuery);
+                      }}
+                      className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "musica" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                    >
+                      Músicas
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMaterialPickerTipo("album");
+                        loadMaterialOptions("album", materialSearchQuery);
+                      }}
+                      className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "album" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                    >
+                      Álbuns
+                    </button>
+                  </div>
+
+                  <div className="relative mb-4">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={materialSearchQuery}
+                      onChange={(e) => {
+                        const q = e.target.value;
+                        setMaterialSearchQuery(q);
+                        loadMaterialOptions(materialPickerTipo, q);
+                      }}
+                      placeholder="Buscar por artista ou título..."
+                      className={inputCls + " pl-10"}
+                    />
+                  </div>
+
+                  {loadingMaterialOptions ? (
+                    <div className="py-10 flex items-center justify-center">
+                      <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : materialOptions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground font-medium text-center py-10">
+                      Nenhum {materialPickerTipo === "album" ? "álbum" : "música"} encontrado.
+                    </p>
+                  ) : (
+                    <div className="grid gap-2">
+                      {materialOptions.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => pickMaterial(item, materialPickerTipo)}
+                          className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 text-left active:scale-[0.98] transition-transform"
+                        >
+                          <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
+                            {item.capaUrl ? (
+                              <img
+                                src={driveImg(item.capaUrl)}
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : materialPickerTipo === "album" ? (
+                              <Disc className="size-4 text-muted-foreground" />
+                            ) : (
+                              <Music className="size-4 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-sm truncate">{item.titulo}</p>
+                            <p className="text-[10px] text-muted-foreground font-bold truncate">{item.artista}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </motion.div>
           </div>
@@ -2848,13 +3013,28 @@ function SocialPage() {
                 </button>
               </div>
 
+              <div className="relative mb-4">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={materialSearchQuery}
+                  onChange={(e) => {
+                    const q = e.target.value;
+                    setMaterialSearchQuery(q);
+                    loadMaterialOptions("musica", q);
+                  }}
+                  placeholder="Buscar por artista ou título..."
+                  className={inputCls + " pl-10"}
+                />
+              </div>
+
               {loadingMaterialOptions ? (
                 <div className="py-10 flex items-center justify-center">
                   <Loader2 className="size-5 animate-spin text-muted-foreground" />
                 </div>
               ) : materialOptions.length === 0 ? (
                 <p className="text-xs text-muted-foreground font-medium text-center py-10">
-                  Nenhuma música de {activeArtist?.nome} encontrada.
+                  Nenhuma música encontrada.
                 </p>
               ) : (
                 <div className="grid gap-2">
@@ -2871,8 +3051,11 @@ function SocialPage() {
                           <Music className="size-4 text-muted-foreground" />
                         )}
                       </div>
-                      <span className="font-bold text-sm truncate flex-1">{item.titulo}</span>
-                      {!item.fields?.audioUrl && (
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-sm truncate">{item.titulo}</p>
+                        <p className="text-[10px] text-muted-foreground font-bold truncate">{item.artista}</p>
+                      </div>
+                      {!item.audioUrl && (
                         <span className="text-[9px] font-black uppercase text-muted-foreground shrink-0">Sem áudio</span>
                       )}
                     </button>
