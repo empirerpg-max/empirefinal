@@ -382,6 +382,20 @@ export function buildCleanItem(
   // artista (ou virava "Artista Independente" perdendo o dado de verdade).
   // O "Título" da própria aba já vem como "Artista - Música" nesses casos,
   // então reusa o mesmo split abaixo.
+  // A aba "Albuns" não tem coluna própria de artista — "nome_do_criador"
+  // guarda o jogador que publicou (ou nem isso), então usá-la como "artist"
+  // faz o Fórum/widgets mostrarem "Jogador" genérico em vez do nome real do
+  // artista. O título do álbum SEMPRE vem como "Artista - Título" (mesma
+  // convenção usada em createAlbumController), então pra Albuns o split do
+  // título é sempre mais confiável que qualquer coluna de "criador".
+  if (sheetName === "Albuns" && title) {
+    const albumDashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
+    if (albumDashMatch) {
+      artist = albumDashMatch[1].trim();
+      title = albumDashMatch[2].trim();
+    }
+  }
+
   const looksLikeRawId = (v: string | null | undefined) => !!v && /^\d+$/.test(v.trim());
   if (title && (!artist || looksLikeRawId(artist))) {
     const dashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
