@@ -5,6 +5,7 @@ import {
   normalizeComparison,
   dedupeHeaders,
 } from "../services/googleSheetsService";
+import { resolveNomeOficial } from "./forumController";
 
 /**
  * Lê os artistas do jogador direto da aba ARTISTAS da planilha "Usuários"
@@ -90,10 +91,16 @@ export async function getUserProfile(telegramId: string): Promise<UserProfile> {
             new Set([artistName, ...extraArtists].filter(Boolean)),
           );
 
+          // "Jogador" genérico só quando NADA foi achado — antes, uma linha
+          // de "Jogadores" com a Coluna C (Nome do OFF) vazia (comum pra
+          // quem só existe hoje via a aba ARTISTAS mais nova) fazia o
+          // Fórum mostrar "Jogador" pra sempre em vez do nome real, mesmo
+          // ele existindo na aba "Usuários" (mesma fonte que comentário/
+          // audit log já usam via resolveNomeOficial).
           return {
             artistName: artistName || "Artista Independente",
             telegramId: rowTelegramId,
-            playerName: playerName || "Jogador",
+            playerName: playerName || (await resolveNomeOficial(rowTelegramId, "Jogador")),
             associatedArtists:
               associatedArtists.length > 0
                 ? associatedArtists
@@ -111,7 +118,7 @@ export async function getUserProfile(telegramId: string): Promise<UserProfile> {
       return {
         artistName: artistasNovos[0],
         telegramId: normalizedTelegramId,
-        playerName: "Jogador",
+        playerName: await resolveNomeOficial(normalizedTelegramId, "Jogador"),
         associatedArtists: artistasNovos,
         sourceSheet: "ARTISTAS",
         rowNumber: 0,
@@ -119,11 +126,14 @@ export async function getUserProfile(telegramId: string): Promise<UserProfile> {
     }
   }
 
-  // Fallback perfil padrão para usuários convidados ou IDs não cadastrados
+  // Fallback perfil padrão pra usuários convidados ou IDs não cadastrados em
+  // nenhuma das duas fontes acima — ainda tenta achar o nome real na aba
+  // "Usuários" antes de desistir e usar "Jogador" (evita mostrar genérico
+  // pra alguém que existe na planilha mas não tem linha em Jogadores/ARTISTAS).
   return {
     artistName: "Artista Independente",
     telegramId: normalizedTelegramId || "guest",
-    playerName: "Jogador",
+    playerName: normalizedTelegramId ? await resolveNomeOficial(normalizedTelegramId, "Jogador") : "Jogador",
     associatedArtists: ["Artista Independente"],
     sourceSheet: "Jogadores",
     rowNumber: 0,
