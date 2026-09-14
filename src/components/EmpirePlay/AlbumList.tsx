@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Disc3, Play, Search } from "lucide-react";
-import { driveImg, type AlbumPayload } from "@/lib/api";
+import { driveImg, driveRawImg, type AlbumPayload } from "@/lib/api";
 import { type PlayableTrack } from "./MusicPlayer";
 
 export interface MappedTrack extends PlayableTrack {
@@ -15,6 +15,51 @@ export interface DetailedAlbum extends Omit<AlbumPayload, "faixas"> {
   data_lancamento?: string;
   telegramTopicId?: string;
   metacriticAvg?: number | string | null;
+}
+
+// Thumbnail de capa com fallback pro proxy de conteúdo direto quando o
+// endpoint de thumbnail reduzido do Drive falha (mais instável pra alguns
+// arquivos) — sem isso, a imagem quebrada mostrava só o texto do título por
+// cima do quadrado preto (alt text do <img> quebrado), mesmo a capa abrindo
+// normal em qualquer outro lugar do app. Mesma correção já aplicada em
+// TopicThumbImg (Forum.tsx).
+function AlbumCoverImg({ capaUrl, alt, className }: { capaUrl?: string | null; alt: string; className?: string }) {
+  const sizedSrc = capaUrl ? driveImg(capaUrl, 400) : undefined;
+  const rawSrc = capaUrl ? driveRawImg(capaUrl) : undefined;
+  const [src, setSrc] = useState(sizedSrc || rawSrc);
+  const [triedRaw, setTriedRaw] = useState(!sizedSrc);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const nextSized = capaUrl ? driveImg(capaUrl, 400) : undefined;
+    setSrc(nextSized || (capaUrl ? driveRawImg(capaUrl) : undefined));
+    setTriedRaw(!nextSized);
+    setFailed(false);
+  }, [capaUrl]);
+
+  if (!src || failed) {
+    return (
+      <div className={`${className || ""} grid place-items-center bg-neutral-900 text-neutral-600`}>
+        <Disc3 className="size-12" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      className={className}
+      onError={() => {
+        if (!triedRaw && rawSrc && rawSrc !== src) {
+          setTriedRaw(true);
+          setSrc(rawSrc);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
 }
 
 export function AlbumList() {
@@ -148,8 +193,6 @@ export function AlbumList() {
               preMapped && preMapped.length > 0
                 ? preMapped
                 : getTracksForAlbum(alb.titulo, alb.artista);
-            const cover = alb.capa_url ? driveImg(alb.capa_url, 400) : undefined;
-
             return (
               <Link
                 key={alb.id || alb.titulo}
@@ -158,18 +201,11 @@ export function AlbumList() {
                 className="group cursor-pointer rounded-2xl bg-neutral-900/50 border border-white/10 p-3 hover:bg-neutral-800/80 hover:border-emerald-500/30 transition-all duration-300"
               >
                 <div className="relative aspect-square rounded-xl overflow-hidden bg-neutral-950 mb-3 shadow-lg">
-                  {cover ? (
-                    <img
-                      src={cover}
-                      alt={alb.titulo}
-                      className="size-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="size-full grid place-items-center bg-neutral-900 text-neutral-600">
-                      <Disc3 className="size-12" />
-                    </div>
-                  )}
+                  <AlbumCoverImg
+                    capaUrl={alb.capa_url}
+                    alt={alb.titulo}
+                    className="size-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
 
                   {/* Play — visível por padrão (essencial no touch); o escurecido
                       de fundo só reforça no hover do desktop. */}
