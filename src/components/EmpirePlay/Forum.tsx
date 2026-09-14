@@ -135,8 +135,26 @@ function initialsFor(name: string): string {
 // antes trocava por uma foto de banco de imagens (Unsplash) sem nenhuma
 // relação com o conteúdo, o que enganava o jogador fazendo parecer que
 // aquela era a capa de verdade.
-function TopicThumbImg({ src, alt, className }: { src?: string; alt: string; className?: string }) {
+// Thumbnail reduzido (driveImg com tamanho) às vezes falha pra arquivo que a
+// versão em tamanho cheio (driveRawImg, mesma usada no modal de "expandir")
+// carrega sem problema — o endpoint de thumbnail do Drive é mais instável
+// que o de conteúdo direto pra alguns arquivos. Sem esse fallback, o card
+// ficava com o ícone genérico pra sempre mesmo quando a imagem existia e
+// abria normal ao clicar em cima (confirmado: "SANTISSIMA" da Emma).
+function TopicThumbImg({ cover, alt, className }: { cover?: string | null; alt: string; className?: string }) {
+  const sizedSrc = driveImg(cover, 400);
+  const rawSrc = driveRawImg(cover);
+  const [src, setSrc] = useState(sizedSrc || rawSrc);
+  const [triedRaw, setTriedRaw] = useState(!sizedSrc);
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setSrc(driveImg(cover, 400) || driveRawImg(cover));
+    setTriedRaw(!driveImg(cover, 400));
+    setFailed(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cover]);
+
   if (!src || failed) {
     return (
       <div className={`${className || ""} grid place-items-center bg-neutral-900`}>
@@ -145,7 +163,19 @@ function TopicThumbImg({ src, alt, className }: { src?: string; alt: string; cla
     );
   }
   return (
-    <img src={src} alt={alt} className={className} onError={() => setFailed(true)} />
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => {
+        if (!triedRaw && rawSrc && rawSrc !== src) {
+          setTriedRaw(true);
+          setSrc(rawSrc);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
   );
 }
 
@@ -1541,7 +1571,7 @@ export const Forum: React.FC<ForumProps> = ({
                     {/* THUMBNAIL / CAPA REDUZIDA */}
                     <div className="aspect-square w-full max-h-36 sm:max-h-44 rounded-lg sm:rounded-xl overflow-hidden bg-neutral-950 relative border border-white/5 group-hover:border-emerald-500/30 transition">
                       <TopicThumbImg
-                        src={driveImg(item.cover, 400)}
+                        cover={item.cover}
                         alt={item.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
                       />
