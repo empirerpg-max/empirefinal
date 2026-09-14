@@ -1651,7 +1651,8 @@ export const Forum: React.FC<ForumProps> = ({
           <button
             type="button"
             onClick={() => setCoverExpanded(false)}
-            className="absolute top-4 right-4 sm:top-6 sm:right-6 size-10 rounded-full bg-white/10 hover:bg-white/20 text-white grid place-items-center transition"
+            className="absolute right-4 sm:right-6 size-10 rounded-full bg-white/10 hover:bg-white/20 text-white grid place-items-center transition"
+            style={{ top: "calc(env(safe-area-inset-top) + 16px)" }}
             aria-label="Fechar"
           >
             <X className="size-5" />
