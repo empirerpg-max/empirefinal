@@ -1334,7 +1334,8 @@ function RevistaViewer({ revista, onClose }: { revista: Revista; onClose: () => 
     >
       <button
         onClick={lendo ? () => setLendo(false) : onClose}
-        className="absolute top-4 right-4 z-20 size-9 rounded-full bg-black/50 border border-white/10 grid place-items-center active:scale-90"
+        className="absolute right-4 z-20 size-9 rounded-full bg-black/50 border border-white/10 grid place-items-center active:scale-90"
+        style={{ top: "calc(env(safe-area-inset-top) + 16px)" }}
       >
         <X className="size-4 text-white" />
       </button>
