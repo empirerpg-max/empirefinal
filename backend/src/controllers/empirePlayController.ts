@@ -1109,8 +1109,22 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         `Álbum ${idx + 1}`;
       const normAlbumTitle = normalizeComparison(albumTitle);
 
-      const artist =
-        getValue(rec, ["act_principal", "artista", "nome_do_criador", "nome_do_artista"]) || "";
+      // BUG CONFIRMADO em 2026-09-14 (álbum do Wesley pro artista "Max
+      // Gorghan" mostrando "Jogador" como artista): a aba "Albuns" NUNCA
+      // teve coluna própria de artista (act_principal/artista/
+      // nome_do_artista) — esses candidatos sempre falhavam e o código caía
+      // pro fallback "nome_do_criador", que é o nome do JOGADOR humano que
+      // cadastrou o álbum (createAlbumController grava isso em "Nome do
+      // criador"), não o nome do artista fictício. Título do álbum sempre
+      // vem como "Artista - Título" (albumFullTitle em createAlbumController)
+      // — extrai o artista de lá primeiro, que é a fonte de verdade.
+      const dashMatchAlbum = albumTitle.match(/^(.+?)\s[-–—]\s(.+)$/);
+      let artist = dashMatchAlbum
+        ? dashMatchAlbum[1].trim()
+        : getValue(rec, ["act_principal", "artista", "nome_do_artista"]) || "";
+      if (!artist) {
+        artist = getValue(rec, ["nome_do_criador"]) || "";
+      }
       const coverUrl = getValue(rec, ["capa_do_album", "capa", "thumb", "imagem", "cover_url"]);
       const releaseDate = getValue(rec, ["data_de_lancamento", "data_lancamento", "data"]);
       const releaseDateIso = parseDateToIso(releaseDate);
