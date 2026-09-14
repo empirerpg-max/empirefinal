@@ -1125,6 +1125,10 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
       if (!artist) {
         artist = getValue(rec, ["nome_do_criador"]) || "";
       }
+      // Título em destaque só com o nome do álbum, sem repetir o artista
+      // (que já aparece embaixo) — mesmo padrão já usado em Músicas/Vídeos
+      // (buildCleanItem tira o prefixo "Artista - " de lá também).
+      const displayTitle = dashMatchAlbum ? dashMatchAlbum[2].trim() : albumTitle;
       const coverUrl = getValue(rec, ["capa_do_album", "capa", "thumb", "imagem", "cover_url"]);
       const releaseDate = getValue(rec, ["data_de_lancamento", "data_lancamento", "data"]);
       const releaseDateIso = parseDateToIso(releaseDate);
@@ -1167,7 +1171,7 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         id: s.id,
         title: s.title,
         artist: s.artist || artist,
-        album: albumTitle,
+        album: displayTitle,
         trackOrder: s.trackOrder || songIdx + 1,
         coverUrl: s.coverUrl || coverUrl,
         audioUrl: s.audioUrl,
@@ -1182,7 +1186,7 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         // da posição na leitura da planilha (que muda sozinha e misturava
         // álbum/comentários errados quando uma linha era inserida/removida).
         id: `album_${telegramTopicId || `idx${idx + 1}`}`,
-        title: albumTitle,
+        title: displayTitle,
         artist,
         coverUrl,
         releaseDate,
