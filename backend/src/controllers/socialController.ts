@@ -455,8 +455,18 @@ export async function limparStoriesExpiradosScheduled(): Promise<{ apagados: num
         console.warn(`[limparStoriesExpiradosScheduled] Falha ao apagar mídia do Drive (linha ${rowIndex}):`, err),
       );
     }
-    await googleSheetsService.usuarios.updateValues(SHEETS.posts, `A${rowIndex}:J${rowIndex}`, [
-      ["", "", "", "", "", "", "", "", "", ""],
+    // CAUSA RAIZ do desalinhamento que voltou em 2026-09-12 (sábado):
+    // essa limpeza automática de Story vencido só apagava A:J, esquecendo
+    // K:L:M (material_json/extra_media_json/audio_json — colunas que só
+    // passaram a existir depois que Story de música foi lançado). Toda
+    // Story de música que expirava (24h) ficava com uma linha vazia em
+    // A:J mas AINDA com dado em K/L/M — exatamente o padrão de "conteúdo
+    // isolado bem à direita" que já tinha causado o desalinhamento em
+    // cascata da vez passada (a API de append do Sheets usa a última
+    // célula usada dentro do range pra decidir onde a próxima linha
+    // começa). Trava em A:M igual o resto do arquivo já faz.
+    await googleSheetsService.usuarios.updateValues(SHEETS.posts, `A${rowIndex}:M${rowIndex}`, [
+      ["", "", "", "", "", "", "", "", "", "", "", "", ""],
     ]);
   }
 
