@@ -105,6 +105,12 @@ import {
   registrarEventoTransmissaoController,
 } from "../controllers/tvController";
 import {
+  getRedCarpetFeedController,
+  createRedCarpetPostController,
+  curtirRedCarpetPostController,
+  getRedCarpetRankingController,
+} from "../controllers/redCarpetController";
+import {
   getPontosController,
   salvarPontoCelulaController,
   distribuirPontosAleatorioController,
@@ -239,6 +245,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/tv/presenca",
     "/api/tv/processar-participacao",
     "/api/tv/evento-transmissao",
+    "/api/tv/red-carpet",
+    "/api/tv/red-carpet/curtir",
+    "/api/tv/red-carpet/ranking",
     "/api/artistas/vincular",
     "/api/artistas/criar",
     "/api/artistas/infos",
@@ -736,6 +745,26 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await editSocialCommentController(request);
+  } else if (url.pathname === "/api/tv/red-carpet") {
+    response =
+      request.method === "GET"
+        ? await getRedCarpetFeedController(request)
+        : request.method === "POST"
+          ? await createRedCarpetPostController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/tv/red-carpet." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
+  } else if (url.pathname === "/api/tv/red-carpet/curtir") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/tv/red-carpet/curtir." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await curtirRedCarpetPostController(request);
+  } else if (url.pathname === "/api/tv/red-carpet/ranking") {
+    response = await getRedCarpetRankingController(request);
   } else if (url.pathname === "/api/social/perfis") {
     response =
       request.method === "GET"

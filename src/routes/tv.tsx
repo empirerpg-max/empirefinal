@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2 } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
-import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV } from "@/lib/api";
+import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost } from "@/lib/api";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
@@ -61,7 +61,42 @@ const GIF_PREFIX = "GIF::";
 const VIDEO_GIF_PREFIX = "VIDGIF::";
 
 type HomeTab = "home" | "arquivo" | "grade";
-type WatchTab = "chat" | "participantes" | "sobre";
+type WatchTab = "chat" | "redcarpet" | "participantes" | "sobre";
+
+// TIPO_EVENTO (Agenda_TV) que habilita a aba Red Carpet na sala — comparado
+// sem acento/caixa pra não depender de digitação exata na planilha.
+const RED_CARPET_TIPOS = new Set(["EVENTOS OFICIAIS", "PREMIACOES", "SUPERBOWL"]);
+function semAcento(s: string) {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function temRedCarpet(programa: Programa) {
+  const norm = semAcento((programa.tipo_evento || "").trim().toUpperCase());
+  return RED_CARPET_TIPOS.has(norm);
+}
+
+// Prefixo usado na mensagem de sistema do Chat quando um look é publicado no
+// Red Carpet — carrega o postId pra permitir navegar direto até ele (ver
+// RedCarpetPanel/ChatPanel abaixo). Formato: RC_ARRIVAL::postId::Nome do artista
+const RC_ARRIVAL_PREFIX = "RC_ARRIVAL::";
+
+// Insere direto na mesma tabela Supabase que o ChatPanel já escuta em tempo
+// real (tv_chat_messages) — não precisa de nenhuma referência ao ChatPanel
+// montado, então funciona mesmo publicando a partir da aba Red Carpet.
+async function sendRedCarpetArrivalMessage(programaId: string, postId: string, artistaNome: string, artistaFoto?: string) {
+  try {
+    const { supabase } = await import("@/integrations/supabase/client");
+    await supabase.from("tv_chat_messages").insert({
+      programa_id: programaId,
+      user_name: artistaNome.slice(0, 60),
+      user_id: null,
+      user_photo: artistaFoto || null,
+      text: `${RC_ARRIVAL_PREFIX}${postId}::${artistaNome}`.slice(0, 500),
+      reply_to: null,
+    });
+  } catch (err) {
+    console.warn("[sendRedCarpetArrivalMessage] Falha ao avisar no chat:", err);
+  }
+}
 
 const NAME_COLORS = [
   "text-rose-400", "text-amber-400", "text-emerald-400", "text-sky-400",
@@ -711,11 +746,22 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     };
   }, [programa.id, myId, myName]);
 
+  // Red Carpet sempre logo ao lado de Chat — só existe quando o TIPO_EVENTO
+  // da sala está na lista (Eventos Oficiais/Premiações/Superbowl).
   const tabs: { id: WatchTab; label: string; icon: typeof MessageSquare }[] = [
     { id: "chat", label: "Chat", icon: MessageSquare },
+    ...(temRedCarpet(programa) ? [{ id: "redcarpet" as WatchTab, label: "Red Carpet", icon: Sparkles }] : []),
     { id: "participantes", label: "Participantes", icon: Users },
     { id: "sobre", label: "Sobre", icon: Info },
   ];
+
+  // postId destacado quando a pessoa clica no aviso "chegou ao Programa" no
+  // Chat — RedCarpetPanel usa isso pra rolar/realçar o look em questão.
+  const [highlightPostId, setHighlightPostId] = useState<string | null>(null);
+  const openRedCarpetPost = (postId: string) => {
+    setHighlightPostId(postId);
+    setTab("redcarpet");
+  };
 
   // O navegador força o autoplay como mudo até haver uma interação real do
   // usuário — como o player é um iframe de outro domínio (Kick/YouTube),
@@ -831,7 +877,10 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
 
   const panel = (
     <div className="flex-1 min-h-0 flex flex-col">
-      {tab === "chat" && <ChatPanel programaId={programa.id} />}
+      {tab === "chat" && <ChatPanel programaId={programa.id} onOpenRedCarpetPost={openRedCarpetPost} />}
+      {tab === "redcarpet" && (
+        <RedCarpetPanel programa={programa} highlightPostId={highlightPostId} onHighlightConsumed={() => setHighlightPostId(null)} />
+      )}
       {tab === "participantes" && <ParticipantesPanel programa={programa} />}
       {tab === "sobre" && <SobrePanel programa={programa} />}
     </div>
@@ -892,7 +941,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
 }
 
 // ---------- Chat (realtime via Lovable Cloud) ----------
-function ChatPanel({ programaId }: { programaId: string }) {
+function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; onOpenRedCarpetPost: (postId: string) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -1200,6 +1249,26 @@ function ChatPanel({ programaId }: { programaId: string }) {
           </div>
         ) : (
           messages.map((m) => {
+            // Aviso de chegada no Red Carpet — pill centralizada e clicável
+            // que leva direto ao look publicado, em vez de bolha de chat comum.
+            if (m.text.startsWith(RC_ARRIVAL_PREFIX)) {
+              const rest = m.text.slice(RC_ARRIVAL_PREFIX.length);
+              const sep = rest.indexOf("::");
+              const postId = sep >= 0 ? rest.slice(0, sep) : rest;
+              const nomeArtista = sep >= 0 ? rest.slice(sep + 2) : m.user;
+              return (
+                <div key={m.id} className="flex justify-center py-1">
+                  <button
+                    type="button"
+                    onClick={() => onOpenRedCarpetPost(postId)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-fuchsia-500/10 border border-fuchsia-500/30 text-[11px] font-semibold text-fuchsia-300 hover:bg-fuchsia-500/20 active:scale-95 transition"
+                  >
+                    <Sparkles className="size-3" />
+                    <span className="text-foreground">{nomeArtista}</span> chegou ao Programa
+                  </button>
+                </div>
+              );
+            }
             const own = myId ? m.userId === myId : m.user === displayName;
             return (
               <div
@@ -1403,6 +1472,431 @@ function ChatPanel({ programaId }: { programaId: string }) {
         </button>
       </form>
       </div>
+    </div>
+  );
+}
+
+// ---------- Red Carpet ----------
+function RedCarpetCarousel({ fotos }: { fotos: string[] }) {
+  const [idx, setIdx] = useState(0);
+  if (fotos.length === 0) return null;
+  const go = (delta: number) => setIdx((i) => Math.max(0, Math.min(fotos.length - 1, i + delta)));
+  return (
+    <div className="relative aspect-[4/5] bg-black">
+      <img src={driveRawImg(fotos[idx])} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+      {fotos.length > 1 && (
+        <>
+          {idx > 0 && (
+            <button
+              type="button"
+              onClick={() => go(-1)}
+              className="absolute left-2 top-1/2 -translate-y-1/2 size-7 rounded-full bg-black/45 backdrop-blur grid place-items-center text-white"
+              aria-label="Foto anterior"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+          )}
+          {idx < fotos.length - 1 && (
+            <button
+              type="button"
+              onClick={() => go(1)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 size-7 rounded-full bg-black/45 backdrop-blur grid place-items-center text-white"
+              aria-label="Próxima foto"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          )}
+          <div className="absolute bottom-2.5 left-0 right-0 flex justify-center gap-1">
+            {fotos.map((_, i) => (
+              <span key={i} className={`h-1 rounded-full transition-all ${i === idx ? "w-3.5 bg-white" : "w-1 bg-white/40"}`} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RedCarpetComposer({
+  programa,
+  artists,
+  onClose,
+  onPosted,
+}: {
+  programa: Programa;
+  artists: Artist[];
+  onClose: () => void;
+  onPosted: (post: RedCarpetPost) => void;
+}) {
+  const login = getStoredLogin();
+  const [artista, setArtista] = useState<Artist | null>(artists[0] || null);
+  const [fotos, setFotos] = useState<string[]>([]);
+  const [legenda, setLegenda] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const addFotos = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const restantes = Math.max(0, 4 - fotos.length);
+    const escolhidas = Array.from(files).slice(0, restantes);
+    if (escolhidas.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of escolhidas) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("fileName", file.name);
+        formData.append("folderType", "redCarpet");
+        const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success && data?.data?.fileUrl) {
+          setFotos((prev) => [...prev, data.data.fileUrl as string]);
+        }
+      }
+    } catch (err) {
+      console.error("[RedCarpetComposer] Erro no upload:", err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const publicar = async () => {
+    if (!artista || fotos.length === 0 || posting) return;
+    setPosting(true);
+    try {
+      const res = await api.postarRedCarpet({
+        programaId: programa.id,
+        artista: artista.nome,
+        artistaFoto: artista.foto,
+        fotos,
+        legenda: legenda.trim(),
+        telegramId: login?.id || "",
+      });
+      if (res.success && res.data) {
+        sendRedCarpetArrivalMessage(programa.id, res.data.id, artista.nome, artista.foto);
+        onPosted(res.data);
+      } else {
+        alert(res.error || "Não deu pra publicar. Tente de novo.");
+      }
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      <div className="flex items-center gap-2 px-3 h-12 border-b border-border shrink-0">
+        <button onClick={onClose} className="size-8 rounded-full hover:bg-muted flex items-center justify-center" aria-label="Fechar">
+          <X className="size-4" />
+        </button>
+        <div className="flex-1 text-sm font-bold">Postar no Red Carpet</div>
+        <button
+          onClick={publicar}
+          disabled={!artista || fotos.length === 0 || posting}
+          className="px-3.5 h-8 rounded-full bg-gradient-to-br from-primary via-primary to-fuchsia-500/80 text-primary-foreground text-xs font-bold disabled:opacity-40 flex items-center gap-1.5"
+        >
+          {posting ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+          Publicar
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {artists.length > 1 && (
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Postando como</div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {artists.map((a) => (
+                <button
+                  key={a.nome}
+                  onClick={() => setArtista(a)}
+                  className={`flex items-center gap-2 pl-1 pr-3 h-9 rounded-full border shrink-0 ${
+                    artista?.nome === a.nome ? "border-primary bg-primary/10" : "border-border"
+                  }`}
+                >
+                  <div className="size-7 rounded-full overflow-hidden bg-muted shrink-0">
+                    {a.foto && <img src={driveRawImg(a.foto)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
+                  </div>
+                  <span className="text-xs font-semibold">{a.nome}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Fotos (até 4)</div>
+          <div className="grid grid-cols-4 gap-2">
+            {fotos.map((f, i) => (
+              <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
+                <img src={driveRawImg(f)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <button
+                  type="button"
+                  onClick={() => setFotos((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="absolute top-1 right-1 size-5 rounded-full bg-black/70 grid place-items-center"
+                  aria-label="Remover foto"
+                >
+                  <X className="size-3 text-white" />
+                </button>
+              </div>
+            ))}
+            {fotos.length < 4 && (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="aspect-square rounded-lg border-2 border-dashed border-border grid place-items-center text-muted-foreground disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="size-5 animate-spin" /> : <Camera className="size-5" />}
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(e) => addFotos(e.target.files)}
+          />
+        </div>
+
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Legenda</div>
+          <textarea
+            value={legenda}
+            onChange={(e) => setLegenda(e.target.value)}
+            placeholder="Escreva uma legenda para o tapete vermelho..."
+            className="w-full h-20 resize-none rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            maxLength={280}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RedCarpetPanel({
+  programa,
+  highlightPostId,
+  onHighlightConsumed,
+}: {
+  programa: Programa;
+  highlightPostId: string | null;
+  onHighlightConsumed: () => void;
+}) {
+  const login = getStoredLogin();
+  const [posts, setPosts] = useState<RedCarpetPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [myArtists, setMyArtists] = useState<Artist[]>([]);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [likedLocally, setLikedLocally] = useState<Set<string>>(new Set());
+  const postRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [view, setView] = useState<"feed" | "ranking">("feed");
+  const [ranking, setRanking] = useState<RedCarpetPost[]>([]);
+  const [rankingLoading, setRankingLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const data = await api.listarRedCarpet(programa.id);
+    setPosts(data);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+    if (login?.id) api.meusArtistas(login.id).then(setMyArtists);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programa.id]);
+
+  useEffect(() => {
+    if (!highlightPostId || posts.length === 0) return;
+    const el = postRefs.current[highlightPostId];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-fuchsia-500");
+      setTimeout(() => el.classList.remove("ring-2", "ring-fuchsia-500"), 1600);
+    }
+    onHighlightConsumed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightPostId, posts]);
+
+  useEffect(() => {
+    if (view !== "ranking") return;
+    setRankingLoading(true);
+    api.rankingRedCarpet(programa.id).then((data) => {
+      setRanking(data);
+      setRankingLoading(false);
+    });
+  }, [view, programa.id]);
+
+  const curtir = async (post: RedCarpetPost) => {
+    if (likedLocally.has(post.id)) return;
+    setLikedLocally((prev) => new Set(prev).add(post.id));
+    setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, likes: p.likes + 1 } : p)));
+    await api.curtirRedCarpet(post.id, login?.id || "");
+  };
+
+  // Artistas distintos que já postaram nesta sala — rail no topo, igual ao
+  // menu Social. "Você" sempre aparece primeiro pra abrir o composer.
+  const artistasNoFeed = Array.from(new Map(posts.map((p) => [p.artista, p.artistaFoto])).entries());
+
+  return (
+    <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex items-center gap-1.5 px-3 pt-3">
+        <button
+          type="button"
+          onClick={() => setView("feed")}
+          className={`h-7 px-3 rounded-full text-[11px] font-bold transition ${
+            view === "feed" ? "bg-gradient-to-br from-primary via-primary to-fuchsia-500/80 text-primary-foreground" : "text-muted-foreground border border-border"
+          }`}
+        >
+          Feed
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("ranking")}
+          className={`h-7 px-3 rounded-full text-[11px] font-bold transition flex items-center gap-1 ${
+            view === "ranking" ? "bg-gradient-to-br from-primary via-primary to-fuchsia-500/80 text-primary-foreground" : "text-muted-foreground border border-border"
+          }`}
+        >
+          🏆 Ranking
+        </button>
+      </div>
+
+      {view === "ranking" ? (
+        <div className="px-3 py-3">
+          <div className="mb-3 px-3 py-2.5 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/25 text-[11px] text-fuchsia-300">
+            Ranking dos looks mais curtidos nesta sala — base do prêmio <b className="text-foreground">Gary Lake Fashion Carpet</b>.
+          </div>
+          {rankingLoading ? (
+            <div className="py-8 text-center text-xs text-muted-foreground">Carregando ranking...</div>
+          ) : ranking.length === 0 ? (
+            <div className="py-8 text-center text-xs text-muted-foreground">Nenhum look curtido ainda.</div>
+          ) : (
+            <div className="space-y-2">
+              {ranking.map((post, i) => (
+                <div key={post.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-2">
+                  <div className="w-6 text-center font-mono text-xs font-bold text-muted-foreground shrink-0">
+                    {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
+                  </div>
+                  <div className="size-12 rounded-lg overflow-hidden bg-muted shrink-0">
+                    {post.fotos[0] && (
+                      <img src={driveRawImg(post.fotos[0])} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold truncate">{post.artista}</div>
+                    {post.legenda && <div className="text-[10.5px] text-muted-foreground truncate">{post.legenda}</div>}
+                  </div>
+                  <div className="flex items-center gap-1 text-fuchsia-400 shrink-0">
+                    <Heart className="size-3.5 fill-fuchsia-400" />
+                    <span className="text-xs font-mono font-bold">{post.likes}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+      <div className="flex gap-3 px-3 py-3 overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => setComposerOpen(true)}
+          disabled={myArtists.length === 0}
+          className="flex flex-col items-center gap-1 w-14 shrink-0 disabled:opacity-40"
+        >
+          <div className="size-12 rounded-full border-2 border-dashed border-primary/50 grid place-items-center text-primary">
+            <Plus className="size-5" />
+          </div>
+          <span className="text-[9.5px] text-muted-foreground truncate w-full text-center">Você</span>
+        </button>
+        {artistasNoFeed.map(([nome, foto]) => (
+          <div key={nome} className="flex flex-col items-center gap-1 w-14 shrink-0">
+            <div className="size-12 rounded-full p-0.5 bg-gradient-to-br from-primary via-primary to-fuchsia-500/80">
+              <div className="size-full rounded-full overflow-hidden bg-muted border-2 border-background">
+                {foto && <img src={driveRawImg(foto)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
+              </div>
+            </div>
+            <span className="text-[9.5px] text-muted-foreground truncate w-full text-center">{nome}</span>
+          </div>
+        ))}
+      </div>
+
+      {myArtists.length === 0 && (
+        <div className="mx-3 mb-3 px-3 py-2 rounded-lg bg-muted/40 text-[11px] text-muted-foreground">
+          Você precisa ter um artista pra postar no Red Carpet.
+        </div>
+      )}
+
+      {loading ? (
+        <div className="px-3 py-8 text-center text-xs text-muted-foreground">Carregando o tapete vermelho...</div>
+      ) : posts.length === 0 ? (
+        <div className="px-3 py-10 text-center text-xs text-muted-foreground">
+          Ninguém chegou ao Red Carpet ainda. Seja o primeiro a postar seu look.
+        </div>
+      ) : (
+        <div className="px-3 pb-4 space-y-3">
+          {posts.map((post) => (
+            <div
+              key={post.id}
+              ref={(el) => { postRefs.current[post.id] = el; }}
+              className="rounded-2xl overflow-hidden border border-border bg-card transition-shadow"
+            >
+              <div className="flex items-center gap-2 px-3 py-2.5">
+                <div className="size-8 rounded-full overflow-hidden bg-muted shrink-0">
+                  {post.artistaFoto && (
+                    <img src={driveRawImg(post.artistaFoto)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold truncate">{post.artista}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {new Date(post.data).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </div>
+              </div>
+
+              <RedCarpetCarousel fotos={post.fotos} />
+
+              <div className="flex items-center gap-1.5 px-3 pt-2 text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => curtir(post)}
+                  className={`flex items-center gap-1 active:scale-90 transition ${likedLocally.has(post.id) ? "text-fuchsia-500" : ""}`}
+                  aria-label="Curtir look"
+                >
+                  <Heart className={`size-[18px] ${likedLocally.has(post.id) ? "fill-fuchsia-500" : ""}`} />
+                </button>
+                <span className="text-[11px] font-mono">{post.likes}</span>
+              </div>
+
+              {post.legenda && (
+                <div className="px-3 pt-1 pb-3 text-xs">
+                  <span className="font-bold mr-1">{post.artista}</span>
+                  {post.legenda}
+                </div>
+              )}
+              {!post.legenda && <div className="pb-2" />}
+            </div>
+          ))}
+        </div>
+      )}
+        </>
+      )}
+
+      {composerOpen && (
+        <RedCarpetComposer
+          programa={programa}
+          artists={myArtists}
+          onClose={() => setComposerOpen(false)}
+          onPosted={(post) => {
+            setPosts((prev) => [post, ...prev]);
+            setComposerOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -38,6 +38,18 @@ export interface Artist {
   pais?: string;
 }
 
+export interface RedCarpetPost {
+  id: string;
+  programaId: string;
+  artista: string;
+  artistaFoto: string;
+  fotos: string[];
+  legenda: string;
+  telegramId: string;
+  data: string;
+  likes: number;
+}
+
 export interface NivelInfo {
   nivel: number;
   fase: string;
@@ -122,6 +134,10 @@ export interface ProgramaTV {
   titulo: string;
   subtitulo: string;
   categoria: string;
+  // TIPO_EVENTO da aba Agenda_TV — usado pra Regras de prestígio/registro E
+  // pra decidir se a sala mostra a aba "Red Carpet" (Eventos Oficiais,
+  // Premiações, Superbowl).
+  tipo_evento?: string;
   ao_vivo: boolean;
   finalizado?: boolean;
   status?: string;
@@ -522,6 +538,7 @@ export const api = {
         titulo: String(x.titulo || ""),
         subtitulo: String(x.subtitulo || ""),
         categoria: String(x.categoria || ""),
+        tipo_evento: x.tipo_evento ? String(x.tipo_evento) : undefined,
         ao_vivo: !!x.ao_vivo,
         finalizado: !!x.finalizado,
         status: x.status ? String(x.status) : undefined,
@@ -535,6 +552,45 @@ export const api = {
         buff: x.buff ? String(x.buff) : undefined,
         topico_url: x.topico_url ? String(x.topico_url) : undefined,
       }));
+    } catch {
+      return [];
+    }
+  },
+
+  // ---- Red Carpet (Empire TV) ----
+  async listarRedCarpet(programaId: string): Promise<RedCarpetPost[]> {
+    try {
+      const res = await fetch(`/api/tv/red-carpet?programaId=${encodeURIComponent(programaId)}`);
+      const json = await res.json().catch(() => null);
+      return Array.isArray(json?.data) ? json.data : [];
+    } catch {
+      return [];
+    }
+  },
+  async postarRedCarpet(payload: {
+    programaId: string; artista: string; artistaFoto?: string; fotos: string[]; legenda?: string; telegramId: string;
+  }): Promise<{ success: boolean; data?: RedCarpetPost; error?: string }> {
+    const res = await fetch("/api/tv/red-carpet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+  async curtirRedCarpet(postId: string, tgId: string): Promise<{ success: boolean; likes?: number }> {
+    const res = await fetch("/api/tv/red-carpet/curtir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, tgId }),
+    });
+    return res.json();
+  },
+  async rankingRedCarpet(programaId?: string): Promise<RedCarpetPost[]> {
+    try {
+      const qs = programaId ? `?programaId=${encodeURIComponent(programaId)}` : "";
+      const res = await fetch(`/api/tv/red-carpet/ranking${qs}`);
+      const json = await res.json().catch(() => null);
+      return Array.isArray(json?.data) ? json.data : [];
     } catch {
       return [];
     }
