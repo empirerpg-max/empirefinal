@@ -220,6 +220,8 @@ export async function createRedCarpetPostController(request: Request): Promise<R
  * POST /api/tv/red-carpet/curtir { postId, tgId }
  * Mesmo padrão de curtirSocialPostController: 1 curtida por jogador por
  * post, controlada dentro do próprio JSON de curtidas (sem aba auxiliar).
+ * Quem publicou o look não pode curtir o próprio post (o ranking do prêmio
+ * Gary Lake Fashion Carpet fica inválido se o dono conseguir se autovotar).
  */
 export async function curtirRedCarpetPostController(request: Request): Promise<Response> {
   try {
@@ -242,8 +244,16 @@ export async function curtirRedCarpetPostController(request: Request): Promise<R
       });
     }
 
-    const curtidas = parseCurtidas(rows[rowIndex][8]);
     const tgId = normalizeComparison(body.tgId || "");
+    const donoDoPost = normalizeComparison(rows[rowIndex][6]);
+    if (tgId && donoDoPost && tgId === donoDoPost) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Você não pode curtir seu próprio look." }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const curtidas = parseCurtidas(rows[rowIndex][8]);
     const jaCurtiu = !!tgId && curtidas.likedBy.some((id) => normalizeComparison(id) === tgId);
     if (!jaCurtiu) {
       curtidas.likes += 1;
@@ -295,6 +305,60 @@ export async function getRedCarpetRankingController(request: Request): Promise<R
     console.error("[getRedCarpetRankingController] Erro:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message || "Erro ao buscar o ranking do Red Carpet." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+/**
+ * POST /api/tv/red-carpet/deletar { postId, tgId }
+ * Mesmo padrão de soft-delete de deleteSocialPostController: só o dono do
+ * post pode apagar, e a linha inteira (A:I) é limpa. Sem prazo de 24h aqui
+ * (diferente do Social) — a sala do evento pode continuar ativa por mais
+ * tempo que isso e não faz sentido travar quem quer corrigir o próprio look.
+ */
+export async function deleteRedCarpetPostController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as { postId?: string; tgId?: string };
+    const postId = (body.postId || "").trim();
+    const tgId = (body.tgId || "").trim();
+    if (!postId || !tgId) {
+      return new Response(
+        JSON.stringify({ success: false, error: "postId e tgId são obrigatórios." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    await ensureRedCarpetSheet();
+    const rows = await googleSheetsService.agendaTV.readValues(SHEET);
+    const rowIndex = rows.findIndex((row, i) => i > 0 && (row[0] || "").trim() === postId);
+    if (rowIndex === -1) {
+      return new Response(JSON.stringify({ success: false, error: "Post não encontrado." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const donoDoPost = normalizeComparison(rows[rowIndex][6]);
+    if (!donoDoPost || donoDoPost !== normalizeComparison(tgId)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Você só pode excluir seus próprios posts." }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    await googleSheetsService.agendaTV.updateValues(SHEET, `A${rowIndex + 1}:I${rowIndex + 1}`, [
+      ["", "", "", "", "", "", "", "", ""],
+    ]);
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (error: any) {
+    console.error("[deleteRedCarpetPostController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao excluir o post do Red Carpet." }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }

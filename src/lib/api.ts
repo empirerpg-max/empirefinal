@@ -577,8 +577,16 @@ export const api = {
     });
     return res.json();
   },
-  async curtirRedCarpet(postId: string, tgId: string): Promise<{ success: boolean; likes?: number }> {
+  async curtirRedCarpet(postId: string, tgId: string): Promise<{ success: boolean; likes?: number; error?: string }> {
     const res = await fetch("/api/tv/red-carpet/curtir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, tgId }),
+    });
+    return res.json();
+  },
+  async deletarRedCarpet(postId: string, tgId: string): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/tv/red-carpet/deletar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ postId, tgId }),
