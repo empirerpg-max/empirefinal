@@ -78,14 +78,15 @@ function temRedCarpet(programa: Programa) {
 }
 
 // Prefixo usado na mensagem de sistema do Chat quando um look é publicado no
-// Red Carpet — carrega o postId pra permitir navegar direto até ele (ver
-// RedCarpetPanel/ChatPanel abaixo). Formato: RC_ARRIVAL::postId::Nome do artista
+// Red Carpet — carrega o postId (pra navegar direto até ele) e o nome exato
+// da sala (coluna "Programa" da Agenda_TV, ex: "Testes RC"), não um texto
+// genérico. Formato: RC_ARRIVAL::postId::Nome do artista::Nome do programa
 const RC_ARRIVAL_PREFIX = "RC_ARRIVAL::";
 
 // Insere direto na mesma tabela Supabase que o ChatPanel já escuta em tempo
 // real (tv_chat_messages) — não precisa de nenhuma referência ao ChatPanel
 // montado, então funciona mesmo publicando a partir da aba Red Carpet.
-async function sendRedCarpetArrivalMessage(programaId: string, postId: string, artistaNome: string, artistaFoto?: string) {
+async function sendRedCarpetArrivalMessage(programaId: string, postId: string, artistaNome: string, programaTitulo: string, artistaFoto?: string) {
   try {
     const { supabase } = await import("@/integrations/supabase/client");
     await supabase.from("tv_chat_messages").insert({
@@ -93,7 +94,7 @@ async function sendRedCarpetArrivalMessage(programaId: string, postId: string, a
       user_name: artistaNome.slice(0, 60),
       user_id: null,
       user_photo: artistaFoto || null,
-      text: `${RC_ARRIVAL_PREFIX}${postId}::${artistaNome}`.slice(0, 500),
+      text: `${RC_ARRIVAL_PREFIX}${postId}::${artistaNome}::${programaTitulo}`.slice(0, 500),
       reply_to: null,
     });
   } catch (err) {
@@ -1255,10 +1256,8 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
             // Aviso de chegada no Red Carpet — pill centralizada e clicável
             // que leva direto ao look publicado, em vez de bolha de chat comum.
             if (m.text.startsWith(RC_ARRIVAL_PREFIX)) {
-              const rest = m.text.slice(RC_ARRIVAL_PREFIX.length);
-              const sep = rest.indexOf("::");
-              const postId = sep >= 0 ? rest.slice(0, sep) : rest;
-              const nomeArtista = sep >= 0 ? rest.slice(sep + 2) : m.user;
+              const partes = m.text.slice(RC_ARRIVAL_PREFIX.length).split("::");
+              const [postId, nomeArtista, nomePrograma] = [partes[0] || "", partes[1] || m.user, partes[2] || ""];
               return (
                 <div key={m.id} className="flex justify-center py-1">
                   <button
@@ -1267,7 +1266,7 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                     className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-fuchsia-500/10 border border-fuchsia-500/30 text-[11px] font-semibold text-fuchsia-300 hover:bg-fuchsia-500/20 active:scale-95 transition"
                   >
                     <Sparkles className="size-3" />
-                    <span className="text-foreground">{nomeArtista}</span> chegou ao Programa
+                    <span className="text-foreground">{nomeArtista}</span> chegou ao{nomePrograma ? ` ${nomePrograma}` : " Programa"}
                   </button>
                 </div>
               );
@@ -1486,7 +1485,15 @@ function RedCarpetCarousel({ fotos }: { fotos: string[] }) {
   const go = (delta: number) => setIdx((i) => Math.max(0, Math.min(fotos.length - 1, i + delta)));
   return (
     <div className="relative aspect-[4/5] bg-black">
-      <img src={driveRawImg(fotos[idx])} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+      {/* Foto como background-image (não <img>) — evita o selo nativo
+          "Visual Look Up" que o Safari/iOS sobrepõe automaticamente em
+          <img> com uma pessoa/objeto reconhecível na cena. */}
+      <div
+        role="img"
+        aria-label={`Foto do look de ${idx + 1} de ${fotos.length}`}
+        className="w-full h-full bg-center bg-cover"
+        style={{ backgroundImage: `url(${driveRawImg(fotos[idx])})` }}
+      />
       {fotos.length > 1 && (
         <>
           {idx > 0 && (
@@ -1577,7 +1584,7 @@ function RedCarpetComposer({
         telegramId: login?.id || "",
       });
       if (res.success && res.data) {
-        sendRedCarpetArrivalMessage(programa.id, res.data.id, artista.nome, artista.foto);
+        sendRedCarpetArrivalMessage(programa.id, res.data.id, artista.nome, programa.titulo, artista.foto);
         onPosted(res.data);
       } else {
         alert(res.error || "Não deu pra publicar. Tente de novo.");
@@ -1785,7 +1792,12 @@ function RedCarpetPanel({
                   </div>
                   <div className="size-12 rounded-lg overflow-hidden bg-muted shrink-0">
                     {post.fotos[0] && (
-                      <img src={driveRawImg(post.fotos[0])} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <div
+                        role="img"
+                        aria-label={`Look de ${post.artista}`}
+                        className="w-full h-full bg-center bg-cover"
+                        style={{ backgroundImage: `url(${driveRawImg(post.fotos[0])})` }}
+                      />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
