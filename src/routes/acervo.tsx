@@ -29,6 +29,7 @@ import {
   Send,
 } from "lucide-react";
 import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
 
@@ -281,7 +282,7 @@ function AcervoPage() {
                   </span>
                   <div className="size-11 shrink-0 rounded-xl overflow-hidden bg-secondary">
                     {a.foto && (
-                      <img src={driveImg(a.foto, 150)} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+                      <SmartImg src={a.foto} size={150} alt="" className="w-full h-full object-cover" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -715,7 +716,7 @@ function PitchforkActionsBar({
                 <div key={c.id} className="flex gap-2">
                   <div className="size-7 shrink-0 rounded-full overflow-hidden bg-secondary">
                     {c.fotoPerfil && (
-                      <img src={driveImg(c.fotoPerfil, 80)} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+                      <SmartImg src={c.fotoPerfil} size={80} alt="" className="w-full h-full object-cover" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1 bg-white/[0.04] rounded-2xl rounded-tl-sm px-3 py-2">
@@ -824,7 +825,7 @@ function PitchforkTopArtistCard({ edicao }: { edicao: PitchforkEdicao }) {
       <div className="p-4 pb-3 flex items-center gap-3">
         <div className="size-11 shrink-0 rounded-full overflow-hidden bg-secondary border-2 border-primary/50">
           {edicao.capaUrl && (
-            <img src={driveImg(edicao.capaUrl, 150)} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+            <SmartImg src={edicao.capaUrl} size={150} alt="" className="w-full h-full object-cover" />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -1290,12 +1291,7 @@ function MetacriticTab({
               </span>
               <div className="size-11 shrink-0 rounded-full overflow-hidden bg-secondary">
                 {fotoUrl && (
-                  <img
-                    src={driveImg(fotoUrl, 150)}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                  />
+                  <SmartImg src={fotoUrl} size={150} alt="" className="w-full h-full object-cover" />
                 )}
               </div>
               <div className="min-w-0 flex-1">

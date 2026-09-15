@@ -12,7 +12,8 @@ import {
   Search,
   RotateCcw,
 } from "lucide-react";
-import { api, driveImg } from "@/lib/api";
+import { api } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { useDragScroll } from "@/lib/useDragScroll";
 
@@ -352,7 +353,16 @@ function PontoPlaylistsPlanilha() {
                         }`}
                       >
                         {fotos[a] ? (
-                          <img src={driveImg(fotos[a])} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                          <SmartImg
+                            src={fotos[a]}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            fallback={
+                              <div className="w-full h-full bg-emerald-500/15 grid place-items-center">
+                                <Music2 className="size-5 text-emerald-500" />
+                              </div>
+                            }
+                          />
                         ) : (
                           <div className="w-full h-full bg-emerald-500/15 grid place-items-center">
                             <Music2 className="size-5 text-emerald-500" />

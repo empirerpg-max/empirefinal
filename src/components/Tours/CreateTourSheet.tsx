@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Loader2, ImagePlus, Sparkles, Check, Wand2, ListChecks, Music2, Building2, Landmark } from "lucide-react";
-import { fmtMoney, driveImg } from "@/lib/api";
+import { fmtMoney } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { haptic } from "@/lib/telegram";
 
 interface LocalTurne {
@@ -271,7 +272,7 @@ export function CreateTourSheet({
           <div className="flex items-center gap-3">
             <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 overflow-hidden shrink-0 grid place-items-center">
               {capaUrl ? (
-                <img src={driveImg(capaUrl, 200)} alt="Capa" className="size-full object-cover" />
+                <SmartImg src={capaUrl} size={200} alt="Capa" className="size-full object-cover" fallback={<ImagePlus className="size-6 text-neutral-600" />} />
               ) : (
                 <ImagePlus className="size-6 text-neutral-600" />
               )}

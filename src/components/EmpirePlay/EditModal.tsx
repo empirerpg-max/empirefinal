@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { driveImg } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useBackClose } from "@/hooks/use-back-close";
 import {
   ExtraMaterialEditor,
@@ -1358,10 +1359,15 @@ export const EditModal: React.FC<EditModalProps> = ({
                       >
                         <div className="flex items-center gap-3.5 min-w-0">
                           {rel.capaUrl ? (
-                            <img
-                              src={driveImg(rel.capaUrl)}
+                            <SmartImg
+                              src={rel.capaUrl}
                               alt={rel.titulo}
                               className="size-12 rounded-xl object-cover shrink-0 border border-white/10"
+                              fallback={
+                                <div className="size-12 rounded-xl bg-neutral-900 grid place-items-center text-neutral-500 shrink-0 border border-white/5">
+                                  <Music className="size-6" />
+                                </div>
+                              }
                             />
                           ) : (
                             <div className="size-12 rounded-xl bg-neutral-900 grid place-items-center text-neutral-500 shrink-0 border border-white/5">

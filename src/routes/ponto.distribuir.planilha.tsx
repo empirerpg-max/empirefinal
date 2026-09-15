@@ -11,7 +11,8 @@ import {
   Search,
   RotateCcw,
 } from "lucide-react";
-import { api, driveImg } from "@/lib/api";
+import { api } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { useDragScroll } from "@/lib/useDragScroll";
 
@@ -212,12 +213,7 @@ function PontoPlanilha() {
         <div className="rounded-2xl border border-white/10 bg-neutral-900 p-4 flex items-start gap-3">
           <div className="size-11 rounded-xl bg-emerald-500/15 grid place-items-center shrink-0 overflow-hidden">
             {fotos[musicaSelecionada.artista] ? (
-              <img
-                src={driveImg(fotos[musicaSelecionada.artista])}
-                alt=""
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover"
-              />
+              <SmartImg src={fotos[musicaSelecionada.artista]} alt="" className="w-full h-full object-cover" fallback={<Music2 className="size-5 text-emerald-500" />} />
             ) : (
               <Music2 className="size-5 text-emerald-500" />
             )}
@@ -386,11 +382,15 @@ function PontoPlanilha() {
                       }`}
                     >
                       {fotos[g.artista] ? (
-                        <img
-                          src={driveImg(fotos[g.artista])}
+                        <SmartImg
+                          src={fotos[g.artista]}
                           alt=""
-                          referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
+                          fallback={
+                            <div className="w-full h-full bg-emerald-500/15 grid place-items-center">
+                              <Music2 className="size-5 text-emerald-500" />
+                            </div>
+                          }
                         />
                       ) : (
                         <div className="w-full h-full bg-emerald-500/15 grid place-items-center">
@@ -460,12 +460,7 @@ function PontoPlanilha() {
                         </div>
                         <div className="size-9 rounded-xl bg-emerald-500/15 grid place-items-center shrink-0 overflow-hidden">
                           {fotos[row.artista] ? (
-                            <img
-                              src={driveImg(fotos[row.artista])}
-                              alt=""
-                              referrerPolicy="no-referrer"
-                              className="w-full h-full object-cover"
-                            />
+                            <SmartImg src={fotos[row.artista]} alt="" className="w-full h-full object-cover" fallback={<Music2 className="size-4 text-emerald-500" />} />
                           ) : (
                             <Music2 className="size-4 text-emerald-500" />
                           )}
