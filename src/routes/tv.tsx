@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2 } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost } from "@/lib/api";
 import { getKickStatus } from "@/lib/kick.functions";
@@ -1741,10 +1741,26 @@ function RedCarpetPanel({
   }, [view, programa.id]);
 
   const curtir = async (post: RedCarpetPost) => {
-    if (likedLocally.has(post.id)) return;
+    if (likedLocally.has(post.id) || post.telegramId === login?.id) return;
     setLikedLocally((prev) => new Set(prev).add(post.id));
     setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, likes: p.likes + 1 } : p)));
-    await api.curtirRedCarpet(post.id, login?.id || "");
+    const res = await api.curtirRedCarpet(post.id, login?.id || "");
+    if (!res.success) {
+      // Reverte se o backend recusou (ex: tentou curtir o próprio look).
+      setLikedLocally((prev) => {
+        const next = new Set(prev);
+        next.delete(post.id);
+        return next;
+      });
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, likes: Math.max(0, p.likes - 1) } : p)));
+    }
+  };
+
+  const excluir = async (post: RedCarpetPost) => {
+    if (!login?.id || post.telegramId !== login.id) return;
+    if (!confirm("Excluir essa publicação do Red Carpet?")) return;
+    setPosts((prev) => prev.filter((p) => p.id !== post.id));
+    await api.deletarRedCarpet(post.id, login.id);
   };
 
   // Artistas distintos que já postaram nesta sala — rail no topo, igual ao
@@ -1871,19 +1887,33 @@ function RedCarpetPanel({
                     {new Date(post.data).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                   </div>
                 </div>
+                {post.telegramId === login?.id && (
+                  <button
+                    type="button"
+                    onClick={() => excluir(post)}
+                    className="size-7 rounded-full grid place-items-center text-muted-foreground hover:text-red-400 active:scale-90 transition shrink-0"
+                    aria-label="Excluir publicação"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
               </div>
 
               <RedCarpetCarousel fotos={post.fotos} />
 
               <div className="flex items-center gap-1.5 px-3 pt-2 text-muted-foreground">
-                <button
-                  type="button"
-                  onClick={() => curtir(post)}
-                  className={`flex items-center gap-1 active:scale-90 transition ${likedLocally.has(post.id) ? "text-fuchsia-500" : ""}`}
-                  aria-label="Curtir look"
-                >
-                  <Heart className={`size-[18px] ${likedLocally.has(post.id) ? "fill-fuchsia-500" : ""}`} />
-                </button>
+                {post.telegramId === login?.id ? (
+                  <Heart className="size-[18px] opacity-30" />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => curtir(post)}
+                    className={`flex items-center gap-1 active:scale-90 transition ${likedLocally.has(post.id) ? "text-fuchsia-500" : ""}`}
+                    aria-label="Curtir look"
+                  >
+                    <Heart className={`size-[18px] ${likedLocally.has(post.id) ? "fill-fuchsia-500" : ""}`} />
+                  </button>
+                )}
                 <span className="text-[11px] font-mono">{post.likes}</span>
               </div>
 

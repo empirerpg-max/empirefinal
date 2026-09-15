@@ -109,6 +109,7 @@ import {
   createRedCarpetPostController,
   curtirRedCarpetPostController,
   getRedCarpetRankingController,
+  deleteRedCarpetPostController,
 } from "../controllers/redCarpetController";
 import {
   getPontosController,
@@ -248,6 +249,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/tv/red-carpet",
     "/api/tv/red-carpet/curtir",
     "/api/tv/red-carpet/ranking",
+    "/api/tv/red-carpet/deletar",
     "/api/artistas/vincular",
     "/api/artistas/criar",
     "/api/artistas/infos",
@@ -765,6 +767,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await curtirRedCarpetPostController(request);
   } else if (url.pathname === "/api/tv/red-carpet/ranking") {
     response = await getRedCarpetRankingController(request);
+  } else if (url.pathname === "/api/tv/red-carpet/deletar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/tv/red-carpet/deletar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await deleteRedCarpetPostController(request);
   } else if (url.pathname === "/api/social/perfis") {
     response =
       request.method === "GET"
