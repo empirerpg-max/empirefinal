@@ -1603,6 +1603,7 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
 // ---------- Red Carpet ----------
 function RedCarpetCarousel({ fotos }: { fotos: string[] }) {
   const [idx, setIdx] = useState(0);
+  const [expanded, setExpanded] = useState(false);
   if (fotos.length === 0) return null;
   const go = (delta: number) => setIdx((i) => Math.max(0, Math.min(fotos.length - 1, i + delta)));
   return (
@@ -1610,10 +1611,11 @@ function RedCarpetCarousel({ fotos }: { fotos: string[] }) {
       {/* Foto como background-image (não <img>) — evita o selo nativo
           "Visual Look Up" que o Safari/iOS sobrepõe automaticamente em
           <img> com uma pessoa/objeto reconhecível na cena. */}
-      <div
-        role="img"
-        aria-label={`Foto do look de ${idx + 1} de ${fotos.length}`}
-        className="w-full h-full bg-center bg-cover"
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        aria-label={`Ver foto do look ${idx + 1} de ${fotos.length} em tela cheia`}
+        className="block w-full h-full bg-center bg-cover"
         style={{ backgroundImage: `url(${driveRawImg(fotos[idx])})` }}
       />
       {fotos.length > 1 && (
@@ -1644,6 +1646,60 @@ function RedCarpetCarousel({ fotos }: { fotos: string[] }) {
             ))}
           </div>
         </>
+      )}
+
+      {expanded && (
+        <div className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center" onClick={() => setExpanded(false)}>
+          {/* Botão de fechar afastado do topo por env(safe-area-inset-top) —
+              mesma correção já aplicada no expandir de capa de álbum
+              (Forum.tsx) e na Revista (acervo.tsx): sem isso, colide com o
+              notch/status bar e só dá pra sair arrastando pra baixo. */}
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="absolute right-4 z-20 size-9 rounded-full bg-black/60 backdrop-blur grid place-items-center text-white"
+            style={{ top: "calc(env(safe-area-inset-top) + 16px)" }}
+            aria-label="Fechar"
+          >
+            <X className="size-5" />
+          </button>
+          <div
+            role="img"
+            aria-label={`Foto do look ${idx + 1} de ${fotos.length}`}
+            className="w-full h-full bg-center bg-contain bg-no-repeat"
+            style={{ backgroundImage: `url(${driveRawImg(fotos[idx])})` }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          {fotos.length > 1 && (
+            <>
+              {idx > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); go(-1); }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 size-10 rounded-full bg-black/50 backdrop-blur grid place-items-center text-white"
+                  aria-label="Foto anterior"
+                >
+                  <ChevronLeft className="size-5" />
+                </button>
+              )}
+              {idx < fotos.length - 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); go(1); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 size-10 rounded-full bg-black/50 backdrop-blur grid place-items-center text-white"
+                  aria-label="Próxima foto"
+                >
+                  <ChevronRight className="size-5" />
+                </button>
+              )}
+              <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-1.5">
+                {fotos.map((_, i) => (
+                  <span key={i} className={`h-1.5 rounded-full transition-all ${i === idx ? "w-5 bg-white" : "w-1.5 bg-white/40"}`} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
