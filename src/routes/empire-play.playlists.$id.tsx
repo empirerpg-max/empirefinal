@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Play, ListMusic, Edit, Trash2, FileText, X } from "lucide-react";
 import { api, driveImg, type PlaylistPayload, type PlaylistTrack } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser } from "@/lib/telegram";
 import { notify } from "@/lib/notify";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -69,14 +70,7 @@ function PlaylistView() {
         <div className="flex items-end gap-4">
           <div className="size-32 sm:size-40 rounded-2xl bg-neutral-800 overflow-hidden grid place-items-center shadow-2xl shrink-0">
             {pl.capa_url ? (
-              <img
-                src={driveImg(pl.capa_url, 500)}
-                alt=""
-                className="w-full h-full object-cover"
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
-              />
+              <SmartImg src={pl.capa_url} size={500} alt="" className="w-full h-full object-cover" fallback={<ListMusic className="size-14 text-neutral-500" />} />
             ) : (
               <ListMusic className="size-14 text-neutral-500" />
             )}
@@ -121,14 +115,7 @@ function PlaylistView() {
             >
               <div className="size-10 grid place-items-center">
                 {t.capa_url ? (
-                  <img
-                    src={driveImg(t.capa_url, 80)}
-                    alt=""
-                    className="size-10 rounded-lg object-cover"
-                    loading="lazy"
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                  />
+                  <SmartImg src={t.capa_url} size={80} alt="" className="size-10 rounded-lg object-cover" fallback={<span className="text-neutral-500">{i + 1}</span>} />
                 ) : (
                   <span className="text-neutral-500">{i + 1}</span>
                 )}

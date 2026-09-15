@@ -13,6 +13,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { api, driveImg, driveRawImg, driveAudioSrc, type AlbumPayload, type PlaylistTrack } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 
 export const Route = createFileRoute("/album/$id")({
@@ -98,12 +99,12 @@ function AlbumPage() {
             className="shrink-0"
             title="Ver capa em tela cheia"
           >
-            <img
-              src={driveImg(album.capa_url, 800)}
+            <SmartImg
+              src={album.capa_url}
+              size={800}
               alt={album.titulo}
               className="size-48 sm:size-56 rounded-lg object-cover shadow-2xl bg-secondary"
               loading="eager"
-              decoding="async"
             />
           </button>
           <div className="flex-1 min-w-0">
@@ -226,11 +227,7 @@ function AlbumPage() {
       {playingIdx !== null && album.faixas[playingIdx]?.drive_url && (
         <div className="fixed bottom-20 inset-x-0 z-30 bg-card border-t border-border">
           <div className="mx-auto max-w-2xl px-4 py-2 flex items-center gap-3">
-            <img
-              src={driveImg(album.capa_url, 80)}
-              alt=""
-              className="size-10 rounded object-cover"
-             loading="lazy" decoding="async"/>
+            <SmartImg src={album.capa_url} size={80} alt="" className="size-10 rounded object-cover" />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold truncate">{album.faixas[playingIdx].titulo}</p>
               <p className="text-[10px] text-muted-foreground truncate">
@@ -261,12 +258,7 @@ function AlbumPage() {
                 onClick={() => setShowEncarte(album.contracapa_url!)}
                 className="aspect-square rounded-lg overflow-hidden bg-card"
               >
-                <img
-                  src={driveImg(album.contracapa_url, 300)}
-                  alt="contracapa"
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                 decoding="async"/>
+                <SmartImg src={album.contracapa_url} size={300} alt="contracapa" className="w-full h-full object-cover" />
               </button>
             )}
             {album.encarte?.map((u, i) => (
@@ -275,12 +267,7 @@ function AlbumPage() {
                 onClick={() => setShowEncarte(u)}
                 className="aspect-square rounded-lg overflow-hidden bg-card"
               >
-                <img
-                  src={driveImg(u, 300)}
-                  alt={`encarte ${i + 1}`}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                 decoding="async"/>
+                <SmartImg src={u} size={300} alt={`encarte ${i + 1}`} className="w-full h-full object-cover" />
               </button>
             ))}
           </div>

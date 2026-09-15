@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Disc3, Play, FileText, X, MoreVertical, Pencil } from "lucide-react";
-import { api, driveImg, type PlaylistTrack } from "@/lib/api";
+import { api, type PlaylistTrack } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { useTelegramUser } from "@/lib/telegram";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
@@ -68,14 +69,7 @@ function AlbumAntigoDetail() {
         <div className="flex items-end gap-4">
           <div className="size-32 sm:size-40 rounded-2xl bg-neutral-800 overflow-hidden grid place-items-center shadow-2xl shrink-0">
             {album.capa_url ? (
-              <img
-                src={driveImg(album.capa_url, 500)}
-                alt=""
-                className="w-full h-full object-cover"
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
-              />
+              <SmartImg src={album.capa_url} size={500} alt="" className="w-full h-full object-cover" fallback={<Disc3 className="size-14 text-neutral-500" />} />
             ) : (
               <Disc3 className="size-14 text-neutral-500" />
             )}

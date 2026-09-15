@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Music, Play, MessageSquare, MoreVertical, Search } from "lucide-react";
-import { driveImg, type PlaylistTrack } from "@/lib/api";
+import { type PlaylistTrack } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { toPlayableTrack, toPlaylistTrack } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableTrack } from "@/components/EmpirePlay/MusicPlayer";
@@ -117,10 +118,16 @@ function EmpirePlayMusicas() {
                 </span>
                 <div className="size-12 rounded-xl bg-neutral-950 overflow-hidden shrink-0 border border-white/10">
                   {m.capa_url ? (
-                    <img
-                      src={driveImg(m.capa_url, 200)}
+                    <SmartImg
+                      src={m.capa_url}
+                      size={200}
                       alt={m.titulo}
                       className="size-full object-cover"
+                      fallback={
+                        <div className="size-full grid place-items-center text-neutral-600">
+                          <Music className="size-5" />
+                        </div>
+                      }
                     />
                   ) : (
                     <div className="size-full grid place-items-center text-neutral-600">

@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Disc3, Search } from "lucide-react";
-import { api, driveImg, type AlbumPayload } from "@/lib/api";
+import { api, type AlbumPayload } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 
 export const Route = createFileRoute("/albuns")({
   component: AlbunsPage,
@@ -59,12 +60,17 @@ function AlbunsPage() {
             <Link key={a.id} to="/album/$id" params={{ id: a.id! }} className="group">
               <div className="aspect-square rounded-2xl overflow-hidden bg-secondary border border-white/10 charcoal-sketch shadow-xl transition-transform group-active:scale-95">
                 {a.capa_url ? (
-                  <img
-                    src={driveImg(a.capa_url, 400)}
+                  <SmartImg
+                    src={a.capa_url}
+                    size={400}
                     alt={a.titulo}
                     className="w-full h-full object-cover grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500"
-                    loading="lazy"
-                   decoding="async"/>
+                    fallback={
+                      <div className="w-full h-full grid place-items-center bg-card">
+                        <Disc3 className="size-10 text-muted-foreground/30" />
+                      </div>
+                    }
+                  />
                 ) : (
                   <div className="w-full h-full grid place-items-center bg-card">
                     <Disc3 className="size-10 text-muted-foreground/30" />

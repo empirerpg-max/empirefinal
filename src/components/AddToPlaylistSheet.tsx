@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Heart, ListMusic, Plus, X, Check, Loader2 } from "lucide-react";
-import { api, driveImg, type PlaylistPayload, type PlaylistTrack } from "@/lib/api";
+import { api, type PlaylistPayload, type PlaylistTrack } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 
 export function AddToPlaylistSheet({
@@ -129,7 +130,7 @@ export function AddToPlaylistSheet({
                   >
                     <div className="size-10 rounded-lg bg-neutral-800 overflow-hidden grid place-items-center shrink-0">
                       {pl.capa_url ? (
-                        <img src={driveImg(pl.capa_url, 100)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <SmartImg src={pl.capa_url} size={100} alt="" className="w-full h-full object-cover" fallback={<ListMusic className="size-4 text-neutral-500" />} />
                       ) : (
                         <ListMusic className="size-4 text-neutral-500" />
                       )}

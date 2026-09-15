@@ -21,6 +21,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { api, fmtMoney, driveImg } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser } from "@/lib/telegram";
 import { CreateTourSheet } from "@/components/Tours/CreateTourSheet";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -528,11 +529,11 @@ function FeedGlobal({ feed }: { feed: FeedItem[] | null }) {
               <div className="rounded-3xl bg-card border border-white/5 overflow-hidden shadow-xl shadow-black/10 transition hover:scale-[1.01] active:scale-[0.98] hover:border-white/15">
                 {item.fotoUrl ? (
                   <div className="relative">
-                    <img
-                      src={driveImg(item.fotoUrl, 800)}
+                    <SmartImg
+                      src={item.fotoUrl}
+                      size={800}
                       alt=""
                       className="w-full aspect-[16/8.5] object-cover"
-                      loading="lazy"
                     />
                     <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-transparent to-fuchsia-600/15" />
                     {item.soldOut && (
@@ -611,12 +612,16 @@ function TourCardItem({ t }: { t: TourCard }) {
         {/* Lado da imagem — capa + gradiente, nome da turnê e artista sobrepostos */}
         <div className="relative h-36 overflow-hidden">
           {t.capaUrl ? (
-            <img
-              src={driveImg(t.capaUrl, 600)}
+            <SmartImg
+              src={t.capaUrl}
+              size={600}
               alt={t.artista}
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              loading="lazy"
-              decoding="async"
+              fallback={
+                <div className="absolute inset-0 bg-slate-900 grid place-items-center">
+                  <Crown className="size-12 text-primary/30" />
+                </div>
+              }
             />
           ) : (
             <div className="absolute inset-0 bg-slate-900 grid place-items-center">

@@ -15,7 +15,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
-import { driveImg } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { haptic } from "@/lib/telegram";
 import { parseLrc, findCurrentLrcLineIndex } from "@/lib/lrc";
 import { useEmpirePlayer } from "./PlayerContext";
@@ -452,8 +452,8 @@ export function MusicPlayer({
 
   if (!currentTrack) return null;
 
-  const cover = currentTrack.capa_url ? driveImg(currentTrack.capa_url, 300) : undefined;
-  const artistPhoto = currentTrack.artista_foto_url ? driveImg(currentTrack.artista_foto_url, 900) : undefined;
+  const cover = currentTrack.capa_url || undefined;
+  const artistPhoto = currentTrack.artista_foto_url || undefined;
 
   return (
     <>
@@ -491,7 +491,7 @@ export function MusicPlayer({
               fundo escuro de sempre — não fica sem nada. */}
           <div className="absolute inset-0 -z-10">
             {artistPhoto ? (
-              <img src={artistPhoto} alt="" className="size-full object-cover" />
+              <SmartImg src={artistPhoto} alt="" className="size-full object-cover" size={900} />
             ) : (
               <div className="size-full bg-gradient-to-br from-neutral-900 to-neutral-950" />
             )}
@@ -606,7 +606,17 @@ export function MusicPlayer({
                 }`}
               >
                 {cover ? (
-                  <img src={cover} alt={currentTrack.titulo} className="size-full object-cover" />
+                  <SmartImg
+                    src={cover}
+                    size={300}
+                    alt={currentTrack.titulo}
+                    className="size-full object-cover"
+                    fallback={
+                      <div className="size-full grid place-items-center bg-gradient-to-br from-neutral-800 to-neutral-950">
+                        <Disc className={artistPhoto ? "size-12 text-emerald-500/30" : "size-24 text-emerald-500/30 animate-spin-slow"} />
+                      </div>
+                    }
+                  />
                 ) : (
                   <div className="size-full grid place-items-center bg-gradient-to-br from-neutral-800 to-neutral-950">
                     <Disc className={artistPhoto ? "size-12 text-emerald-500/30" : "size-24 text-emerald-500/30 animate-spin-slow"} />
@@ -712,7 +722,17 @@ export function MusicPlayer({
           >
             <div className="size-12 rounded-xl bg-neutral-800 overflow-hidden flex-shrink-0 border border-white/10 relative">
               {cover ? (
-                <img src={cover} alt={currentTrack.titulo} className="size-full object-cover" />
+                <SmartImg
+                  src={cover}
+                  size={300}
+                  alt={currentTrack.titulo}
+                  className="size-full object-cover"
+                  fallback={
+                    <div className="size-full grid place-items-center bg-neutral-800">
+                      <Disc className="size-6 text-emerald-400" />
+                    </div>
+                  }
+                />
               ) : (
                 <div className="size-full grid place-items-center bg-neutral-800">
                   <Disc className="size-6 text-emerald-400" />

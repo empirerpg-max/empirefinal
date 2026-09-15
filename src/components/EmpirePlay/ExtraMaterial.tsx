@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ShoppingBag, Info, Sparkles, X, Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, Loader2 } from "lucide-react";
 import DOMPurify from "dompurify";
 import { driveImg, driveImgWide } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { uploadToDrive } from "@/lib/driveUpload";
 
 // Botões "Shop", "Info" e "Visual" nos tópicos de Música/Álbum — material
@@ -246,7 +247,7 @@ export function ExtraMaterialButtons({
                   <div key={i} className="bg-neutral-800/40 border border-white/10 rounded-2xl overflow-hidden">
                     <div className="aspect-square bg-neutral-900">
                       {item.foto && (
-                        <img src={driveImg(item.foto, 600)} alt={item.titulo} className="w-full h-full object-cover" loading="lazy" />
+                        <SmartImg src={item.foto} size={600} alt={item.titulo} className="w-full h-full object-cover" />
                       )}
                     </div>
                     <div className="p-3 space-y-2">
@@ -347,7 +348,7 @@ function ImageUploadSlot({
       {enviando ? (
         <Loader2 className="size-5 animate-spin text-emerald-400" />
       ) : url ? (
-        <img src={driveImg(url, 400)} alt="" className="w-full h-full object-cover" />
+        <SmartImg src={url} size={400} alt="" className="w-full h-full object-cover" fallback={<ImagePlus className="size-6 text-neutral-500" />} />
       ) : (
         <ImagePlus className="size-6 text-neutral-500" />
       )}

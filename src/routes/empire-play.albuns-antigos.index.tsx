@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Disc3 } from "lucide-react";
-import { api, driveImg } from "@/lib/api";
+import { api } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 
 export const Route = createFileRoute("/empire-play/albuns-antigos/")({
   component: AlbunsAntigosPage,
@@ -62,12 +63,16 @@ function AlbunsAntigosPage() {
             >
               <div className="aspect-square rounded-2xl bg-neutral-900 overflow-hidden border border-white/10 group-hover:border-emerald-500/40 transition-colors">
                 {a.capa_url ? (
-                  <img
-                    src={driveImg(a.capa_url, 300)}
+                  <SmartImg
+                    src={a.capa_url}
+                    size={300}
                     alt=""
                     className="w-full h-full object-cover"
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
+                    fallback={
+                      <div className="w-full h-full grid place-items-center text-neutral-700">
+                        <Disc3 className="size-8" />
+                      </div>
+                    }
                   />
                 ) : (
                   <div className="w-full h-full grid place-items-center text-neutral-700">

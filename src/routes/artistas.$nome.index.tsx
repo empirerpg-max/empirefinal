@@ -38,6 +38,7 @@ import {
 import { useTelegramUser } from "@/lib/telegram";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type NivelJogador } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { getHOFProfile, type HOFProfile } from "@/lib/charts";
 import { notify } from "@/lib/notify";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -299,19 +300,15 @@ function ArtistDashboard() {
                 exato dessa área — por isso object-cover simples já basta,
                 sem sobrar espaço vazio nem cortar a arte sem querer (quem
                 escolhe o enquadramento é o próprio jogador, no upload). */}
-            <img
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              src={driveImg(capaPerfilDesktop || capaPerfilMobile, 1600) || capaPerfilDesktop || capaPerfilMobile}
+            <SmartImg
+              src={capaPerfilDesktop || capaPerfilMobile}
+              size={1600}
               className="hidden sm:block w-full h-full object-cover"
               alt=""
             />
-            <img
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              src={driveImg(capaPerfilMobile || capaPerfilDesktop, 1200) || capaPerfilMobile || capaPerfilDesktop}
+            <SmartImg
+              src={capaPerfilMobile || capaPerfilDesktop}
+              size={1200}
               className="sm:hidden w-full h-full object-cover"
               alt=""
             />
@@ -322,15 +319,9 @@ function ArtistDashboard() {
           </>
         ) : (
           <>
-            <img
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              src={driveImg(artist.foto, 1600) || artist.foto}
-              onError={(e) => {
-                const img = e.currentTarget;
-                if (img.src !== artist.foto) img.src = artist.foto;
-              }}
+            <SmartImg
+              src={artist.foto}
+              size={1600}
               className="w-full h-full object-cover object-top scale-105 opacity-60 transition-opacity duration-700"
               alt=""
             />
@@ -367,15 +358,9 @@ function ArtistDashboard() {
           <div className="flex items-end gap-4">
             <div className="relative shrink-0">
               <div className="size-24 rounded-full overflow-hidden border-2 border-primary/30 shadow-2xl bg-secondary">
-                <img
-                  loading="lazy"
-                  decoding="async"
-                  referrerPolicy="no-referrer"
-                  src={driveImg(artist.foto, 400) || artist.foto}
-                  onError={(e) => {
-                    const img = e.currentTarget;
-                    if (img.src !== artist.foto) img.src = artist.foto;
-                  }}
+                <SmartImg
+                  src={artist.foto}
+                  size={400}
                   className="w-full h-full object-cover object-top"
                   alt={artist.nome}
                 />
@@ -627,7 +612,7 @@ function DiscografiaTab({
               <>
                 <div className="aspect-square rounded-[2rem] overflow-hidden bg-secondary shadow-lg border border-white/5 grid place-items-center">
                   {a.capa_url ? (
-                    <img src={driveImg(a.capa_url, 300)} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+                    <SmartImg src={a.capa_url} size={300} alt={a.titulo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" fallback={<Disc3 className="size-8 text-muted-foreground" />} />
                   ) : (
                     <Disc3 className="size-8 text-muted-foreground" />
                   )}
@@ -681,7 +666,6 @@ function MusicasTab({ nome }: { nome: string }) {
       ) : (
         <div className="space-y-1.5">
           {musicas.map((m, i) => {
-            const cover = driveImg(m.coverUrl);
             return (
               <button
                 key={i}
@@ -689,7 +673,7 @@ function MusicasTab({ nome }: { nome: string }) {
                 className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors text-left"
               >
                 <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
-                  {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Music className="size-4 text-muted-foreground" />}
+                  {m.coverUrl ? <SmartImg src={m.coverUrl} alt="" className="w-full h-full object-cover" fallback={<Music className="size-4 text-muted-foreground" />} /> : <Music className="size-4 text-muted-foreground" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium break-words leading-tight">{m.title || m.titulo || "—"}</p>
@@ -734,7 +718,6 @@ function VideosTab({ nome }: { nome: string }) {
       ) : (
         <div className="space-y-1.5">
           {videos.map((v, i) => {
-            const cover = driveImg(v.coverUrl);
             return (
               <button
                 key={i}
@@ -742,7 +725,7 @@ function VideosTab({ nome }: { nome: string }) {
                 className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors text-left"
               >
                 <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
-                  {cover ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Video className="size-4 text-muted-foreground" />}
+                  {v.coverUrl ? <SmartImg src={v.coverUrl} alt="" className="w-full h-full object-cover" fallback={<Video className="size-4 text-muted-foreground" />} /> : <Video className="size-4 text-muted-foreground" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium break-words leading-tight">{v.title || v.titulo || "—"}</p>
@@ -976,7 +959,6 @@ function SocialTab({ nome }: { nome: string }) {
     <div className="space-y-3">
       {perfis.map((p, i) => {
         const handle = String(p.handle || "").replace(/^@+/, "");
-        const avatarSrc = driveImg(p.avatar_url);
         const postsDaRede = posts.filter((post) => (post.tipo || "").trim().toLowerCase() === (p.rede || "").trim().toLowerCase());
         return (
           <div key={i} className="rounded-2xl bg-white/[0.02] border border-white/5 overflow-hidden">
@@ -986,7 +968,7 @@ function SocialTab({ nome }: { nome: string }) {
               className="p-4 flex items-center gap-3 hover:bg-white/[0.05] transition-colors"
             >
               <div className="size-11 rounded-full overflow-hidden bg-secondary shrink-0 grid place-items-center">
-                {avatarSrc ? <img src={avatarSrc} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <User className="size-5 text-muted-foreground" />}
+                {p.avatar_url ? <SmartImg src={p.avatar_url} alt="" className="w-full h-full object-cover" fallback={<User className="size-5 text-muted-foreground" />} /> : <User className="size-5 text-muted-foreground" />}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-black truncate">{p.rede} — @{handle}</div>
@@ -1006,7 +988,16 @@ function SocialTab({ nome }: { nome: string }) {
                       post.media_tipo === "video" ? (
                         <video src={driveImg(post.media_url)} muted className="w-full h-full object-cover" />
                       ) : (
-                        <img src={driveImg(post.media_url)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <SmartImg
+                          src={post.media_url}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          fallback={
+                            <div className="w-full h-full grid place-items-center text-[9px] text-muted-foreground/50 p-1 text-center leading-tight">
+                              {post.texto?.slice(0, 40) || ""}
+                            </div>
+                          }
+                        />
                       )
                     ) : (
                       <div className="w-full h-full grid place-items-center text-[9px] text-muted-foreground/50 p-1 text-center leading-tight">
