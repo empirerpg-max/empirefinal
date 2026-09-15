@@ -113,6 +113,42 @@ function colorFor(name: string) {
   return NAME_COLORS[h % NAME_COLORS.length];
 }
 
+// Teto de mensagens buscadas no histórico inicial e mantidas na lista ao
+// vivo do Chat — sem isso, uma sala com muito fluxo (principalmente com
+// GIFs em vídeo, que cada um vira um <video> decodificando e tocando em
+// loop) acumulava centenas de nós no DOM até travar o app/esquentar o
+// aparelho. Ver LazyGifVideo abaixo pra mitigação complementar.
+const CHAT_HISTORY_LIMIT = 150;
+const MAX_LIVE_MESSAGES = 150;
+
+// Vídeo-GIF que só decodifica/toca quando está de fato visível na tela —
+// antes, TODO vídeo da lista tinha autoPlay+loop incondicional, então uma
+// sala com vários GIFs em vídeo mantinha dezenas deles tocando ao mesmo
+// tempo (inclusive os que já saíram de tela), sobrecarregando o aparelho.
+// Usa IntersectionObserver (gratuito, nativo do navegador) pra pausar fora
+// de vista e retomar só quando reaparece — sem precisar de nenhuma infra
+// nova, só disciplina de renderização.
+function LazyGifVideo({ src }: { src: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          el.play().catch(() => {});
+        } else {
+          el.pause();
+        }
+      },
+      { threshold: 0.25 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return <video ref={ref} src={src} muted loop playsInline preload="metadata" className="w-full h-auto block" />;
+}
+
 // "DD/MM/YYYY HH:mm" → Date
 function parseProgramDate(p: Programa): Date | null {
   const s = (p.data_inicio || `${p.data || ""} ${p.horario || ""}`).trim();
@@ -978,14 +1014,21 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
       // `order(ascending: true).limit(300)` pegava sempre as 300 mensagens
       // MAIS ANTIGAS do programa — depois que um show ao vivo passava desse
       // total, toda mensagem nova sumia de quem recarregava/voltava pro chat
-      // (fetchHistory roda de novo a cada visibilitychange). Busca as 300
-      // mais RECENTES (ordem decrescente) e desfaz a ordem só na exibição.
+      // (fetchHistory roda de novo a cada visibilitychange). Busca as mais
+      // RECENTES (ordem decrescente) e desfaz a ordem só na exibição.
+      //
+      // Baixado de 300 pra CHAT_HISTORY_LIMIT: em sala cheia com muitos GIFs
+      // em vídeo, 300 mensagens montadas de uma vez no DOM (cada GIF-vídeo
+      // virando um <video> decodificando) era o principal motivo de celular
+      // esquentar/app fechar sozinho — ver bug reportado de "alto fluxo +
+      // GIF sobrecarrega". Some isso à janela de vídeos pausados fora de
+      // tela (mais abaixo) e ao teto de mensagens vivas (MAX_LIVE_MESSAGES).
       const { data } = await supabase
         .from("tv_chat_messages")
         .select("id,user_name,user_id,user_photo,text,reply_to,created_at")
         .eq("programa_id", programaId)
         .order("created_at", { ascending: false })
-        .limit(300);
+        .limit(CHAT_HISTORY_LIMIT);
       if (!alive || !data) return;
       setMessages(
         data
@@ -1020,7 +1063,7 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
             const r = payload.new;
             setMessages((prev) => {
               if (prev.some((m) => m.id === r.id)) return prev;
-              return [
+              const next = [
                 ...prev,
                 {
                   id: r.id,
@@ -1033,6 +1076,11 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                   reply_to: r.reply_to || undefined,
                 },
               ];
+              // Numa transmissão longa e movimentada, essa lista cresceria pra
+              // sempre (nunca era podada) — cada mensagem nova virando mais um
+              // nó no DOM (e, se for GIF-vídeo, mais um <video> decodificando)
+              // até travar o app. Mantém só a janela mais recente.
+              return next.length > MAX_LIVE_MESSAGES ? next.slice(next.length - MAX_LIVE_MESSAGES) : next;
             });
           }
         )
@@ -1305,14 +1353,7 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                         <span className={`block text-[11px] font-bold px-2 pt-1 bg-muted ${m.color}`}>{m.user}</span>
                       )}
                       {m.text.startsWith(VIDEO_GIF_PREFIX) ? (
-                        <video
-                          src={m.text.slice(VIDEO_GIF_PREFIX.length)}
-                          autoPlay
-                          muted
-                          loop
-                          playsInline
-                          className="w-full h-auto block"
-                        />
+                        <LazyGifVideo src={m.text.slice(VIDEO_GIF_PREFIX.length)} />
                       ) : (
                         <img
                           src={m.text.slice(GIF_PREFIX.length)}
