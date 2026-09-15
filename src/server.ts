@@ -352,7 +352,9 @@ export default {
   async scheduled(_event: unknown, env: unknown, ctx: { waitUntil: (p: Promise<unknown>) => void }) {
     injectRuntimeEnv(env);
     const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
-    const { limparStoriesExpiradosScheduled } = await import("../backend/src/controllers/socialController");
+    const { limparStoriesExpiradosScheduled, limparLinhasOrfasSocialPosts } = await import(
+      "../backend/src/controllers/socialController"
+    );
     const { preencherLikesVideosSemMediaScheduled } = await import("../backend/src/controllers/videoLikesController");
     const { atualizarSnapshotMetacriticSemanalScheduled } = await import(
       "../backend/src/controllers/metacriticController"
@@ -380,6 +382,22 @@ export default {
       limparStoriesExpiradosScheduled()
         .then((r) => console.log(`[scheduled] Stories expirados apagados: ${r.apagados}`))
         .catch((err) => console.error("[scheduled] Erro ao limpar stories expirados:", err)),
+    );
+    // Auto-limpeza definitiva do desalinhamento de SOCIAL_POSTS (causa raiz:
+    // linha órfã com dado sobrando dentro de A:M confunde a detecção de
+    // tabela do append do Sheets e joga o próximo post pra fora da coluna
+    // A). Antes só existia como endpoint manual (precisava alguém abrir a
+    // URL) — rodando aqui a cada ciclo do cron (10 min), nenhuma linha órfã
+    // sobrevive tempo suficiente pra atrapalhar o próximo post, sem
+    // depender de ninguém rodar nada na mão.
+    ctx.waitUntil(
+      limparLinhasOrfasSocialPosts(true)
+        .then((r) => {
+          if (r.itens.length > 0) {
+            console.log(`[scheduled] SOCIAL_POSTS: ${r.itens.length} linha(s) órfã(s) limpas automaticamente.`);
+          }
+        })
+        .catch((err) => console.error("[scheduled] Erro ao limpar linhas órfãs de SOCIAL_POSTS:", err)),
     );
     ctx.waitUntil(
       preencherLikesVideosSemMediaScheduled((env as { FLAGS?: FlagsKv }).FLAGS)
