@@ -1359,7 +1359,7 @@ function SocialPage() {
     <div className="flex-1 bg-background min-h-dvh pb-32">
       {/* Header */}
       <div className="pt-6 px-4 sticky top-0 bg-background/90 backdrop-blur-md z-[60] border-b border-white/5">
-        <div className="flex flex-col gap-4 mb-4 max-w-md mx-auto">
+        <div className="flex flex-col gap-2.5 mb-3 max-w-md mx-auto">
           <h1 className="text-2xl font-black uppercase tracking-tight flex items-center gap-2">
             Empire <span className="text-primary">Social</span>
           </h1>
@@ -1383,14 +1383,14 @@ function SocialPage() {
                     setViewMode(tab.id);
                     if (tab.id === "Industry") setSelectedIndustryArtist(null);
                   }}
-                  className={`relative py-2.5 min-h-11 font-black text-[10px] uppercase rounded-xl transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
+                  className={`relative py-1.5 min-h-8 font-black text-[10px] uppercase rounded-xl transition-all flex flex-row items-center justify-center gap-1.5 active:scale-95 ${
                     active
                       ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
                       : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06] hover:text-foreground"
                   }`}
                 >
                   {active && <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
-                  <Icon className="relative z-10 size-3.5" />
+                  <Icon className="relative z-10 size-3" />
                   <span className="relative z-10 truncate">{tab.label}</span>
                 </button>
               );
