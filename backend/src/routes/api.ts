@@ -138,6 +138,7 @@ import {
   getSocialPostsController,
   createSocialPostController,
   corrigirDesalinhamentoSocialPosts,
+  limparLinhasOrfasSocialPosts,
   curtirSocialPostController,
   getSocialComentariosController,
   comentarSocialPostController,
@@ -240,6 +241,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/prestigio/corrigir-reprocessamento-tv",
     "/api/registro/corrigir-reprocessamento-tv",
     "/api/social/corrigir-desalinhamento-posts",
+    "/api/social/limpar-linhas-orfas",
     "/api/forum/rechavear-comentarios",
     "/api/registro/reconstruir",
     "/api/tv/programas",
@@ -648,6 +650,17 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     const confirmarDesalinhamento = url.searchParams.get("confirmar") === "1";
     const resultadoDesalinhamento = await corrigirDesalinhamentoSocialPosts(confirmarDesalinhamento);
     response = new Response(JSON.stringify({ success: true, data: resultadoDesalinhamento }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } else if (url.pathname === "/api/social/limpar-linhas-orfas") {
+    // Causa raiz do desalinhamento nº3 (ver limparLinhasOrfasSocialPosts em
+    // socialController.ts): limpa linhas sem nenhum id mas com dado sobrando
+    // isolado em A:M (sobra de incidentes antigos) que confundia a detecção
+    // de tabela do append do Sheets. Simulação por padrão, ?confirmar=1.
+    const confirmarLimpezaOrfas = url.searchParams.get("confirmar") === "1";
+    const resultadoLimpezaOrfas = await limparLinhasOrfasSocialPosts(confirmarLimpezaOrfas);
+    response = new Response(JSON.stringify({ success: true, data: resultadoLimpezaOrfas }), {
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });

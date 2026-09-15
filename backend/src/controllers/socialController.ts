@@ -989,3 +989,58 @@ export async function corrigirDesalinhamentoSocialPosts(
 
   return { modo: confirmar ? "aplicado" : "simulacao", itens };
 }
+
+export interface LinhaOrfaItem {
+  linha: number;
+  colunasComDado: string[];
+}
+
+export interface LimpezaOrfasResultado {
+  modo: "simulacao" | "aplicado";
+  itens: LinhaOrfaItem[];
+}
+
+/**
+ * Causa raiz do desalinhamento nº3 (2026-09-15): corrigirDesalinhamentoSocialPosts
+ * (acima) só sabe realinhar linhas onde sobrou um "POST-..." em algum lugar
+ * da linha — linhas verdadeiramente ÓRFÃS (sem nenhum id, mas com dado
+ * isolado em alguma coluna dentro de A:M — sobra de incidentes antigos,
+ * ex: só a coluna G com analytics, ou só K/M com material/audio_json de
+ * Story) eram simplesmente puladas (idx === -1 → continue) e ficavam pra
+ * sempre na planilha. Mesmo com createSocialPostController e
+ * limparStoriesExpiradosScheduled já gravando com range travado em "A:M",
+ * a API de append do Sheets usa a ÚLTIMA CÉLULA USADA dentro da faixa pra
+ * decidir onde a tabela continua — uma linha "vazia" em A mas com conteúdo
+ * sobrando em G ou K/M é o bastante pra ela "adivinhar" que a tabela
+ * começa ali, jogando o próximo post pra M em vez de A. Essa função limpa
+ * essas linhas órfãs de vez. Sempre simulação a menos que `confirmar` seja
+ * true.
+ */
+export async function limparLinhasOrfasSocialPosts(confirmar: boolean): Promise<LimpezaOrfasResultado> {
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts, "A:CZ").catch(() => []);
+  const itens: LinhaOrfaItem[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (normalizeText(row[0])) continue; // coluna A já tem dado — linha normal
+    const temPostId = row.some((c) => normalizeText(c).startsWith("POST-"));
+    if (temPostId) continue; // essa é tratada por corrigirDesalinhamentoSocialPosts, não aqui
+
+    const colunasComDado: string[] = [];
+    for (let c = 0; c < SOCIAL_POSTS_LARGURA; c++) {
+      if (normalizeText(row[c])) colunasComDado.push(colIndexToA1LetterSocial(c));
+    }
+    if (colunasComDado.length === 0) continue; // linha de verdade vazia, nada a fazer
+
+    const linha = i + 1;
+    itens.push({ linha, colunasComDado });
+
+    if (confirmar) {
+      await googleSheetsService.usuarios.updateValues(SHEETS.posts, `A${linha}:M${linha}`, [
+        Array(SOCIAL_POSTS_LARGURA).fill(""),
+      ]);
+    }
+  }
+
+  return { modo: confirmar ? "aplicado" : "simulacao", itens };
+}
