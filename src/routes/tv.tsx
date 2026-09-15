@@ -998,6 +998,16 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   const myId = login?.id;
   const myPhoto = login?.fotoPerfil || "";
 
+  // "Carregar mensagens mais antigas" — explícito (botão), não infinito
+  // automático, justamente pra pessoa saber que aquele clique dispara um
+  // carregamento. Não sofre o teto MAX_LIVE_MESSAGES (esse só poda o
+  // crescimento orgânico do lado ao vivo); aqui é a pessoa pedindo histórico
+  // de propósito.
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const OLDER_PAGE_SIZE = 60;
+  const justLoadedOlderRef = useRef(false);
+
   // Histórico inicial + subscrição realtime — celular em segundo plano
   // (troca de app, tela apagada) costuma derrubar o websocket em silêncio,
   // sem disparar nenhum evento de erro; o app só reconectava se a pessoa
@@ -1030,6 +1040,7 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
         .order("created_at", { ascending: false })
         .limit(CHAT_HISTORY_LIMIT);
       if (!alive || !data) return;
+      setHasMoreHistory(data.length === CHAT_HISTORY_LIMIT);
       setMessages(
         data
           .slice()
@@ -1109,8 +1120,58 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
     };
   }, [programaId]);
 
-  // auto-scroll
+  const loadOlderMessages = async () => {
+    if (loadingOlder || !hasMoreHistory || messages.length === 0) return;
+    setLoadingOlder(true);
+    try {
+      const el = scrollerRef.current;
+      const alturaAntes = el?.scrollHeight || 0;
+      const oldestIso = new Date(messages[0].ts).toISOString();
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data } = await supabase
+        .from("tv_chat_messages")
+        .select("id,user_name,user_id,user_photo,text,reply_to,created_at")
+        .eq("programa_id", programaId)
+        .lt("created_at", oldestIso)
+        .order("created_at", { ascending: false })
+        .limit(OLDER_PAGE_SIZE);
+
+      const mais = (data || []).map((r: any) => ({
+        id: r.id,
+        user: r.user_name,
+        userId: r.user_id || undefined,
+        userPhoto: r.user_photo || undefined,
+        text: r.text,
+        ts: new Date(r.created_at).getTime(),
+        color: colorFor(r.user_name),
+        reply_to: r.reply_to || undefined,
+      }));
+      setHasMoreHistory(mais.length === OLDER_PAGE_SIZE);
+      if (mais.length > 0) {
+        justLoadedOlderRef.current = true;
+        setMessages((prev) => {
+          const existentes = new Set(prev.map((m) => m.id));
+          return [...mais.reverse().filter((m) => !existentes.has(m.id)), ...prev];
+        });
+        // Mantém a posição de leitura — sem isso, prepender mensagens acima
+        // empurra tudo pra baixo e a pessoa "perde o lugar" onde estava lendo.
+        requestAnimationFrame(() => {
+          if (el) el.scrollTop = el.scrollHeight - alturaAntes;
+        });
+      }
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  // auto-scroll — pulado quando a mudança em `messages` veio de "Carregar
+  // mais antigas" (loadOlderMessages já cuida da própria posição de scroll
+  // ali, senão esse efeito jogaria a pessoa de volta pro fundo do chat).
   useEffect(() => {
+    if (justLoadedOlderRef.current) {
+      justLoadedOlderRef.current = false;
+      return;
+    }
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
@@ -1300,7 +1361,26 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
             Seja o primeiro a comentar.
           </div>
         ) : (
-          messages.map((m) => {
+          <>
+            {hasMoreHistory && (
+              <div className="flex justify-center pb-1">
+                <button
+                  type="button"
+                  onClick={loadOlderMessages}
+                  disabled={loadingOlder}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-muted/40 text-[11px] font-semibold text-muted-foreground hover:bg-muted active:scale-95 transition disabled:opacity-60"
+                >
+                  {loadingOlder ? (
+                    <>
+                      <Loader2 className="size-3 animate-spin" /> Carregando...
+                    </>
+                  ) : (
+                    "Carregar mensagens mais antigas"
+                  )}
+                </button>
+              </div>
+            )}
+            {messages.map((m) => {
             // Aviso de chegada no Red Carpet — pill centralizada e clicável
             // que leva direto ao look publicado, em vez de bolha de chat comum.
             if (m.text.startsWith(RC_ARRIVAL_PREFIX)) {
@@ -1388,7 +1468,8 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                 </button>
               </div>
             );
-          })
+          })}
+          </>
         )}
       </div>
 
