@@ -40,6 +40,7 @@ import {
   Search,
 } from "lucide-react";
 import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { extractDriveFileId } from "@/components/EmpirePlay/MusicPlayer";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
@@ -1504,7 +1505,7 @@ function SocialPage() {
                         >
                           <div className="w-full h-full rounded-full overflow-hidden border-2 border-background bg-secondary flex items-center justify-center font-black text-[10px] uppercase">
                             {p.avatar ? (
-                              <img src={driveImg(p.avatar)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <SmartImg src={p.avatar} alt="" className="w-full h-full object-cover" fallback={p.autor[0]} />
                             ) : (
                               p.autor[0]
                             )}
@@ -1669,11 +1670,17 @@ function SocialPage() {
                           >
                             <div className="size-16 shrink-0 bg-secondary flex items-center justify-center overflow-hidden">
                               {post.material.capaUrl ? (
-                                <img
-                                  src={driveImg(post.material.capaUrl)}
+                                <SmartImg
+                                  src={post.material.capaUrl}
+                                  alt=""
                                   className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                  loading="lazy"
+                                  fallback={
+                                    post.material.tipo === "album" ? (
+                                      <Disc className="size-6 text-muted-foreground" />
+                                    ) : (
+                                      <Music className="size-6 text-muted-foreground" />
+                                    )
+                                  }
                                 />
                               ) : post.material.tipo === "album" ? (
                                 <Disc className="size-6 text-muted-foreground" />
@@ -1792,12 +1799,15 @@ function SocialPage() {
                 >
                   <div className="aspect-[16/9] bg-secondary relative overflow-hidden">
                     {item.imagem ? (
-                      <img
-                        src={driveImg(item.imagem)}
+                      <SmartImg
+                        src={item.imagem}
+                        alt=""
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                        referrerPolicy="no-referrer"
-                        loading="lazy"
-                        decoding="async"
+                        fallback={
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Newspaper className="size-12 text-muted-foreground/20" />
+                          </div>
+                        }
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
@@ -2147,12 +2157,17 @@ function SocialPage() {
                                 p.media_tipo === "video" ? (
                                   <video src={driveVideo(p.media_url)} muted preload="metadata" className="w-full h-full object-cover" />
                                 ) : (
-                                  <img
-                                    src={driveImg(p.media_url)}
+                                  <SmartImg
+                                    src={p.media_url}
+                                    alt=""
                                     className="w-full h-full object-cover"
-                                    referrerPolicy="no-referrer"
-                                    loading="lazy"
-                                    decoding="async"
+                                    fallback={
+                                      <div className="w-full h-full bg-gradient-to-br from-pink-200 via-purple-200 to-orange-200 flex items-center justify-center p-2">
+                                        <p className="text-[10px] text-black/70 font-bold line-clamp-3 text-left">
+                                          {p.texto}
+                                        </p>
+                                      </div>
+                                    }
                                   />
                                 )
                               ) : (
@@ -2387,12 +2402,15 @@ function SocialPage() {
                               p.media_tipo === "video" ? (
                                 <video src={driveVideo(p.media_url)} muted preload="metadata" className="w-full h-full object-cover" />
                               ) : (
-                                <img
-                                  src={driveImg(p.media_url)}
+                                <SmartImg
+                                  src={p.media_url}
+                                  alt=""
                                   className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                  loading="lazy"
-                                  decoding="async"
+                                  fallback={
+                                    <div className="w-full h-full bg-gradient-to-br from-[#FE2C55]/40 via-black to-[#25F4EE]/30 flex items-center justify-center p-2">
+                                      <p className="text-[10px] text-white/80 font-bold line-clamp-4 text-left">{p.texto}</p>
+                                    </div>
+                                  }
                                 />
                               )
                             ) : (
@@ -2661,7 +2679,7 @@ function SocialPage() {
                           <div className="flex items-center gap-2.5">
                             <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary">
                               {attachedMaterial.capaUrl && (
-                                <img src={driveImg(attachedMaterial.capaUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                <SmartImg src={attachedMaterial.capaUrl} alt="" className="w-full h-full object-cover" />
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -2766,10 +2784,17 @@ function SocialPage() {
                         <div className="flex items-stretch rounded-2xl border border-white/15 bg-white/[0.03] overflow-hidden">
                           <div className="size-14 shrink-0 bg-secondary flex items-center justify-center overflow-hidden">
                             {attachedMaterial.capaUrl ? (
-                              <img
-                                src={driveImg(attachedMaterial.capaUrl)}
+                              <SmartImg
+                                src={attachedMaterial.capaUrl}
+                                alt=""
                                 className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
+                                fallback={
+                                  attachedMaterial.tipo === "album" ? (
+                                    <Disc className="size-5 text-muted-foreground" />
+                                  ) : (
+                                    <Music className="size-5 text-muted-foreground" />
+                                  )
+                                }
                               />
                             ) : attachedMaterial.tipo === "album" ? (
                               <Disc className="size-5 text-muted-foreground" />
@@ -3029,7 +3054,7 @@ function SocialPage() {
                       >
                         <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
                           {t.capaUrl ? (
-                            <img src={driveImg(t.capaUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <SmartImg src={t.capaUrl} alt="" className="w-full h-full object-cover" fallback={<Music className="size-4 text-muted-foreground" />} />
                           ) : (
                             <Music className="size-4 text-muted-foreground" />
                           )}
@@ -3094,10 +3119,17 @@ function SocialPage() {
                         >
                           <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
                             {item.capaUrl ? (
-                              <img
-                                src={driveImg(item.capaUrl)}
+                              <SmartImg
+                                src={item.capaUrl}
+                                alt=""
                                 className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
+                                fallback={
+                                  materialPickerTipo === "album" ? (
+                                    <Disc className="size-4 text-muted-foreground" />
+                                  ) : (
+                                    <Music className="size-4 text-muted-foreground" />
+                                  )
+                                }
                               />
                             ) : materialPickerTipo === "album" ? (
                               <Disc className="size-4 text-muted-foreground" />
@@ -3173,7 +3205,7 @@ function SocialPage() {
                     >
                       <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
                         {item.capaUrl ? (
-                          <img src={driveImg(item.capaUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          <SmartImg src={item.capaUrl} alt="" className="w-full h-full object-cover" fallback={<Music className="size-4 text-muted-foreground" />} />
                         ) : (
                           <Music className="size-4 text-muted-foreground" />
                         )}
@@ -3436,12 +3468,15 @@ function SocialPage() {
             >
               <div className="relative h-56 sm:h-64 flex-shrink-0">
                 {selectedNews.imagem ? (
-                  <img
-                    src={driveImg(selectedNews.imagem)}
+                  <SmartImg
+                    src={selectedNews.imagem}
+                    alt=""
                     className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                    decoding="async"
+                    fallback={
+                      <div className="w-full h-full flex items-center justify-center bg-primary/10">
+                        <Newspaper className="size-16 text-muted-foreground/20" />
+                      </div>
+                    }
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-primary/10">
