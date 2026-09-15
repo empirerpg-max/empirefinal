@@ -12,7 +12,8 @@ import {
   ChevronUp,
   Search,
 } from "lucide-react";
-import { api, driveImg, type Artist } from "@/lib/api";
+import { api, type Artist } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { notify } from "@/lib/notify";
 
@@ -286,7 +287,7 @@ function AlbumAntigoPage() {
         <div className="flex items-center gap-3">
           <div className="size-20 rounded-xl bg-neutral-900 border border-white/10 overflow-hidden grid place-items-center shrink-0">
             {capaUrl ? (
-              <img src={driveImg(capaUrl, 200)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <SmartImg src={capaUrl} size={200} alt="" className="w-full h-full object-cover" fallback={<ImageIcon className="size-6 text-neutral-600" />} />
             ) : (
               <ImageIcon className="size-6 text-neutral-600" />
             )}
@@ -355,7 +356,7 @@ function AlbumAntigoPage() {
                       >
                         <div className="size-6 rounded-full bg-neutral-800 overflow-hidden shrink-0">
                           {a.foto && (
-                            <img src={driveImg(a.foto, 50)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <SmartImg src={a.foto} size={50} alt="" className="w-full h-full object-cover" />
                           )}
                         </div>
                         <span className="text-sm text-white truncate">{a.nome}</span>

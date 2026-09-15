@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Image as ImageIcon, Link2, Trash2, Loader2, GripVertical, Search } from "lucide-react";
-import { driveImg, authHeaders } from "@/lib/api";
+import { authHeaders } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 
 interface BannerRow {
   id: string;
@@ -353,7 +354,7 @@ export function BannersManager({ tgId }: { tgId: string }) {
             className="flex items-center gap-3 bg-white/[0.03] border border-white/10 rounded-2xl p-3 backdrop-blur-xl"
           >
             <GripVertical className="size-4 text-neutral-600 shrink-0" />
-            <img src={driveImg(b.imagem_url, 200)} alt="" className="w-20 aspect-[16/6] object-cover rounded-lg shrink-0" />
+            <SmartImg src={b.imagem_url} size={200} alt="" className="w-20 aspect-[16/6] object-cover rounded-lg shrink-0" />
             <div className="min-w-0 flex-1">
               {b.legenda && <p className="text-xs font-bold text-white truncate">{b.legenda}</p>}
               {b.link_destino && <p className="text-[10px] text-neutral-500 truncate">{b.link_destino}</p>}
