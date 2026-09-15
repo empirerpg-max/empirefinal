@@ -230,10 +230,16 @@ function ToursIndex() {
   const finalizados = (publicas || []).filter(
     (t) => !minhasIds.has(t.idUnico) && t.status !== "Em andamento",
   );
-  // Ranking das turnês em andamento mais rentáveis do Império inteiro
-  // (minhas + de todo mundo), como combinado.
-  const rankingRentaveis = [...(minhasTurnes || []), ...outrasEmAndamento]
-    .filter((t) => t.status === "Em andamento")
+  // Ranking histórico das turnês mais rentáveis do Império inteiro (minhas +
+  // de todo mundo, em andamento OU já finalizadas) — antes filtrava só "Em
+  // andamento", escondendo turnês que já ocorreram (ex: a do Marco). A
+  // arrecadação (arrecadacao_em_tempo_real) é um valor gravado na planilha,
+  // não recalculado ao vivo, então continua válido depois da turnê acabar —
+  // não tem motivo pra excluir turnês finalizadas desse ranking.
+  const todasTurnesConhecidas = [...(minhasTurnes || []), ...(publicas || [])].filter(
+    (t, i, arr) => arr.findIndex((o) => o.idUnico === t.idUnico) === i,
+  );
+  const rankingRentaveis = [...todasTurnesConhecidas]
     .sort((a, b) => b.arrecadacaoTempoReal - a.arrecadacaoTempoReal)
     .slice(0, 5);
 
