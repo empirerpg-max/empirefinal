@@ -63,15 +63,18 @@ const VIDEO_GIF_PREFIX = "VIDGIF::";
 type HomeTab = "home" | "arquivo" | "grade";
 type WatchTab = "chat" | "redcarpet" | "participantes" | "sobre";
 
-// TIPO_EVENTO (Agenda_TV) que habilita a aba Red Carpet na sala — comparado
-// sem acento/caixa pra não depender de digitação exata na planilha.
-const RED_CARPET_TIPOS = new Set(["EVENTOS OFICIAIS", "PREMIACOES", "SUPERBOWL"]);
+// TIPO_EVENTO (Agenda_TV) que habilita a aba Red Carpet na sala — o termo
+// usado na planilha é essa única string fixa (as 3 categorias juntas numa
+// célula só, não 3 valores separados): "EVENTOS OFICIAIS, PREMIAÇÕES,
+// SUPERBOWL". Comparado sem acento/espaço extra/caixa pra não depender de
+// digitação exata.
 function semAcento(s: string) {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
+const RED_CARPET_TIPO_EVENTO = semAcento("EVENTOS OFICIAIS, PREMIAÇÕES, SUPERBOWL".toUpperCase());
 function temRedCarpet(programa: Programa) {
-  const norm = semAcento((programa.tipo_evento || "").trim().toUpperCase());
-  return RED_CARPET_TIPOS.has(norm);
+  const norm = semAcento((programa.tipo_evento || "").trim().toUpperCase()).replace(/\s+/g, " ");
+  return norm === RED_CARPET_TIPO_EVENTO;
 }
 
 // Prefixo usado na mensagem de sistema do Chat quando um look é publicado no
