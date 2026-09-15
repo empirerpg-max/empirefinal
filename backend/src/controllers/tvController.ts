@@ -164,6 +164,7 @@ export async function getProgramasTVController(): Promise<Response> {
         id: p.id,
         titulo: p.titulo,
         categoria: p.categoria,
+        tipo_evento: p.tipoEvento,
         subtitulo: p.subtitulo,
         cover: p.cover,
         stream_url: p.stream_url,

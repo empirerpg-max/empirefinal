@@ -264,6 +264,7 @@ export type UploadFolderType =
   | "playlistTracks"
   | "tvChatGifs"
   | "turnes"
+  | "redCarpet"
   | "acervo"
   | "materiaisMusica"
   | "materiaisAlbum";
@@ -1881,7 +1882,7 @@ export async function uploadDriveController(request: Request): Promise<Response>
                           ? DRIVE_FOLDERS.playlistTracks
                           : folderType === "tvChatGifs"
                             ? DRIVE_FOLDERS.tvChatGifs
-                            : folderType === "turnes"
+                            : folderType === "turnes" || folderType === "redCarpet"
                               // Sem pasta própria ainda — reaproveita a de
                               // posts sociais (mesmo padrão do artistPhotos
                               // acima) até existir uma pasta dedicada.
