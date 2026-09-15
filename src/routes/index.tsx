@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { api, driveImg, type ChartData, type NivelJogador } from "@/lib/api";
+import { api, driveImg, driveRawImg, type ChartData, type NivelJogador } from "@/lib/api";
 import { useHomeConfig } from "@/lib/homeFlags";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -109,6 +109,10 @@ function Index() {
   const config = useHomeConfig();
   const login = getStoredLogin();
   const fotoUsuario = login?.fotoPerfil || user?.photo_url || "";
+  // "sized" → "raw" (proxy autenticado, funciona mesmo com arquivo do
+  // Drive não compartilhado publicamente) → "falhou". Mesmo fallback de
+  // perfil.tsx/__root.tsx.
+  const [fotoUsuarioStage, setFotoUsuarioStage] = useState<"sized" | "raw" | "falhou">("sized");
   const nomeUsuario = login?.nome || user?.name || "Visitante";
 
   // Prestígio/nível do jogador logado — mostrado no lugar do antigo botão de
@@ -627,14 +631,15 @@ function Index() {
       <header className="flex items-center justify-between mb-6 animate-in fade-in duration-500">
         <div className="flex items-center gap-3 min-w-0">
           <div className="size-12 shrink-0 rounded-full bg-primary/20 border border-primary/30 grid place-items-center overflow-hidden">
-            {fotoUsuario ? (
+            {fotoUsuario && fotoUsuarioStage !== "falhou" ? (
               <img
-                src={driveImg(fotoUsuario, 100)}
+                src={fotoUsuarioStage === "raw" ? driveRawImg(fotoUsuario) : driveImg(fotoUsuario, 100)}
                 className="size-12 rounded-full object-cover"
                 alt={`Foto de ${nomeUsuario}`}
                 referrerPolicy="no-referrer"
                 loading="lazy"
                 decoding="async"
+                onError={() => setFotoUsuarioStage((s) => (s === "sized" ? "raw" : "falhou"))}
               />
             ) : (
               <User className="size-5 text-primary" aria-hidden="true" />

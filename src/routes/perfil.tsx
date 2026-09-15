@@ -39,7 +39,14 @@ type LoadState<T> = { status: "loading" } | { status: "error" } | { status: "ok"
 function Perfil() {
   const { user } = useTelegramUser();
   const [login, setLogin] = useState(getStoredLogin());
-  const [fotoFalhou, setFotoFalhou] = useState(false);
+  // "sized" (thumbnail público lh3.googleusercontent.com, mais rápido) →
+  // "raw" (proxy autenticado /api/media/image, funciona mesmo se o arquivo
+  // do Drive não estiver compartilhado publicamente — caso do jogador
+  // Gilson, cuja foto foi colada manualmente na planilha sem "Qualquer
+  // pessoa com o link") → "falhou" (ícone placeholder). Mesmo padrão de
+  // fallback já usado em TopicThumbImg (Forum.tsx) e AlbumCoverImg
+  // (AlbumList.tsx).
+  const [fotoStage, setFotoStage] = useState<"sized" | "raw" | "falhou">("sized");
   const [myArtists, setMyArtists] = useState<LoadState<Artist[]>>({ status: "loading" });
   const [isEditing, setIsEditing] = useState(false);
   const [editNome, setEditNome] = useState("");
@@ -208,13 +215,17 @@ function Perfil() {
         ) : (
           <>
             <div className="size-24 rounded-full bg-primary/20 border-2 border-primary/30 grid place-items-center overflow-hidden mb-4">
-              {(login?.fotoPerfil || user?.photo_url) && !fotoFalhou ? (
+              {(login?.fotoPerfil || user?.photo_url) && fotoStage !== "falhou" ? (
                 <img
-                  src={driveImg(login?.fotoPerfil || user?.photo_url || "", 200)}
+                  src={
+                    fotoStage === "raw"
+                      ? driveRawImg(login?.fotoPerfil || user?.photo_url || "")
+                      : driveImg(login?.fotoPerfil || user?.photo_url || "", 200)
+                  }
                   className="size-24 rounded-full object-cover"
                   alt={login?.nome || user?.name || "Foto do jogador"}
                   referrerPolicy="no-referrer"
-                  onError={() => setFotoFalhou(true)}
+                  onError={() => setFotoStage((s) => (s === "sized" ? "raw" : "falhou"))}
                 />
               ) : (
                 <User className="size-10 text-primary" />

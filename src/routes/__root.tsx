@@ -38,7 +38,7 @@ import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import { useTelegramUser, haptic, useTelegramBackButton } from "@/lib/telegram";
-import { api, driveImg, type Artist } from "@/lib/api";
+import { api, driveImg, driveRawImg, type Artist } from "@/lib/api";
 import { useServiceWorkerUpdate } from "@/lib/pwa";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -489,7 +489,10 @@ function RefreshButton() {
 function BottomNav() {
   const { pathname } = useLocation();
   const perfilFoto = getStoredLogin()?.fotoPerfil || "";
-  const [fotoFalhou, setFotoFalhou] = useState(false);
+  // "sized" → "raw" (proxy autenticado, funciona mesmo com arquivo do
+  // Drive não compartilhado publicamente) → "falhou". Mesmo fallback de
+  // perfil.tsx/TopicThumbImg/AlbumCoverImg.
+  const [fotoStage, setFotoStage] = useState<"sized" | "raw" | "falhou">("sized");
   const items = [
     { to: "/", label: "Início", icon: Home },
     { to: "/empire-play", label: "Catálogo", icon: PlayCircle },
@@ -531,12 +534,12 @@ function BottomNav() {
                     : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 }`}
               >
-                {it.to === "/perfil" && perfilFoto && !fotoFalhou ? (
+                {it.to === "/perfil" && perfilFoto && fotoStage !== "falhou" ? (
                   <img
-                    src={driveImg(perfilFoto, 60)}
+                    src={fotoStage === "raw" ? driveRawImg(perfilFoto) : driveImg(perfilFoto, 60)}
                     alt=""
                     referrerPolicy="no-referrer"
-                    onError={() => setFotoFalhou(true)}
+                    onError={() => setFotoStage((s) => (s === "sized" ? "raw" : "falhou"))}
                     className={`size-[18px] rounded-full object-cover ${active ? "ring-2 ring-primary-foreground/80" : "ring-1 ring-white/20"}`}
                   />
                 ) : (
