@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X, MoreVertical } from "lucide-react";
-import { driveImg, type PlaylistTrack } from "@/lib/api";
+import { type PlaylistTrack } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 import { DynamicCoverCard, type CoverPlatform } from "@/components/EmpirePlay/DynamicCoverCard";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
@@ -397,10 +398,16 @@ function EmpirePlayInicio() {
                       {/* Capa (com fallback pra foto do artista, quando a faixa não tem capa própria) */}
                       <div className="size-11 rounded-xl bg-neutral-950 border border-white/10 overflow-hidden shrink-0 relative">
                         {item.capa_url || item.poster_url || item.artista_foto_url ? (
-                          <img
-                            src={driveImg(item.capa_url || item.poster_url || item.artista_foto_url, 150)}
+                          <SmartImg
+                            src={item.capa_url || item.poster_url || item.artista_foto_url}
+                            size={150}
                             alt={item.titulo}
                             className="size-full object-cover"
+                            fallback={
+                              <div className="size-full grid place-items-center text-neutral-600">
+                                <Music className="size-5" />
+                              </div>
+                            }
                           />
                         ) : (
                           <div className="size-full grid place-items-center text-neutral-600">
@@ -479,10 +486,16 @@ function EmpirePlayInicio() {
 
                     <div className="size-12 rounded-xl bg-neutral-950 border border-white/10 overflow-hidden shrink-0">
                       {item.capa_url ? (
-                        <img
-                          src={driveImg(item.capa_url, 150)}
+                        <SmartImg
+                          src={item.capa_url}
+                          size={150}
                           alt={item.titulo}
                           className="size-full object-cover"
+                          fallback={
+                            <div className="size-full grid place-items-center text-neutral-600">
+                              <Music className="size-5" />
+                            </div>
+                          }
                         />
                       ) : (
                         <div className="size-full grid place-items-center text-neutral-600">

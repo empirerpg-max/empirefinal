@@ -22,6 +22,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { fmtMoney, driveImg } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { Calendar } from "@/components/ui/calendar";
 
@@ -213,12 +214,16 @@ function TourDetails() {
     <main className="flex-1 pb-24 bg-background">
       <div className="relative h-[38vh] min-h-[300px] overflow-hidden">
         {tour.capaUrl ? (
-          <img
-            src={driveImg(tour.capaUrl, 800)}
+          <SmartImg
+            src={tour.capaUrl}
+            size={800}
             className="w-full h-full object-cover scale-105 blur-[2px] opacity-40 bg-black"
             alt=""
-            loading="lazy"
-            decoding="async"
+            fallback={
+              <div className="w-full h-full bg-black flex items-center justify-center opacity-30">
+                <Crown className="size-40 text-primary" />
+              </div>
+            }
           />
         ) : (
           <div className="w-full h-full bg-black flex items-center justify-center opacity-30">
@@ -248,7 +253,7 @@ function TourDetails() {
           <div className="flex flex-col items-center text-center">
             <div className="size-20 rounded-[2.5rem] overflow-hidden border-2 border-primary/30 shadow-2xl mb-4 rotate-[-3deg] bg-black">
               {tour.capaUrl ? (
-                <img src={driveImg(tour.capaUrl, 400)} className="w-full h-full object-cover" alt={tour.artista} />
+                <SmartImg src={tour.capaUrl} size={400} className="w-full h-full object-cover" alt={tour.artista} fallback={<Crown className="size-10 m-auto text-primary" />} />
               ) : (
                 <Crown className="size-10 m-auto text-primary" />
               )}
@@ -536,7 +541,7 @@ function ShowFeedPost({
       className="rounded-[2rem] bg-card border border-white/5 overflow-hidden scroll-mt-6"
     >
       {ultimaAcao?.fotoUrl && (
-        <img src={driveImg(ultimaAcao.fotoUrl, 800)} alt="" className="w-full aspect-video object-cover" />
+        <SmartImg src={ultimaAcao.fotoUrl} size={800} alt="" className="w-full aspect-video object-cover" />
       )}
       <div className="p-4 space-y-3">
         <div className="flex items-center justify-between">
@@ -772,7 +777,7 @@ function TourActionModal({
             <div className="flex items-center gap-3">
               <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 overflow-hidden shrink-0 grid place-items-center">
                 {fotoUrl ? (
-                  <img src={driveImg(fotoUrl, 200)} alt="" className="size-full object-cover" />
+                  <SmartImg src={fotoUrl} size={200} alt="" className="size-full object-cover" fallback={<ImagePlus className="size-6 text-neutral-600" />} />
                 ) : (
                   <ImagePlus className="size-6 text-neutral-600" />
                 )}
@@ -920,7 +925,7 @@ function EditAcaoModal({
           <div className="flex items-center gap-3">
             <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 overflow-hidden shrink-0 grid place-items-center">
               {fotoUrl ? (
-                <img src={driveImg(fotoUrl, 200)} alt="" className="size-full object-cover" />
+                <SmartImg src={fotoUrl} size={200} alt="" className="size-full object-cover" fallback={<ImagePlus className="size-5 text-neutral-600" />} />
               ) : (
                 <ImagePlus className="size-5 text-neutral-600" />
               )}
@@ -1056,7 +1061,17 @@ function EditTourInfoModal({
           <p className="text-[11px] font-black uppercase text-neutral-400 mb-2">Capa</p>
           <label className="block aspect-video w-full rounded-2xl bg-neutral-900 border border-white/10 overflow-hidden cursor-pointer relative">
             {capaUrl ? (
-              <img src={driveImg(capaUrl, 800)} alt="" className="w-full h-full object-cover" />
+              <SmartImg
+                src={capaUrl}
+                size={800}
+                alt=""
+                className="w-full h-full object-cover"
+                fallback={
+                  <div className="w-full h-full grid place-items-center">
+                    <ImagePlus className="size-8 text-neutral-600" />
+                  </div>
+                }
+              />
             ) : (
               <div className="w-full h-full grid place-items-center">
                 <ImagePlus className="size-8 text-neutral-600" />

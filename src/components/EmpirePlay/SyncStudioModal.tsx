@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as Re
 import { X, Play, Pause, Check, Loader2, Pencil, XCircle, Eye, Trash2, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { api, driveImg } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { haptic, useTelegramUser } from "@/lib/telegram";
 import { formatLrc, formatLrcTimestamp, parseLrc, findCurrentLrcLineIndex, type LrcLine } from "@/lib/lrc";
 import { extractDriveFileId } from "./MusicPlayer";
@@ -232,7 +233,7 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
           mais limpo/atmosférico, na linha da referência mandada. */}
       {track.capaUrl && (
         <div className="absolute inset-0 -z-10">
-          <img src={driveImg(track.capaUrl)} alt="" className="size-full object-cover blur-3xl scale-125 opacity-40" />
+          <SmartImg src={track.capaUrl} alt="" className="size-full object-cover blur-3xl scale-125 opacity-40" />
           <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/70 via-neutral-950/85 to-neutral-950" />
         </div>
       )}
@@ -251,8 +252,8 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
       <div className="flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+16px)] pb-3">
         <div className="min-w-0 flex items-center gap-3">
           {track.capaUrl && (
-            <img
-              src={driveImg(track.capaUrl)}
+            <SmartImg
+              src={track.capaUrl}
               alt=""
               className="size-9 rounded-xl object-cover shrink-0"
             />

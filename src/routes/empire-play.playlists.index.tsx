@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ListMusic, Plus, Users } from "lucide-react";
-import { api, driveImg, type PlaylistPayload } from "@/lib/api";
+import { api, type PlaylistPayload } from "@/lib/api";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+import { SmartImg } from "@/components/SmartImg";
 
 export const Route = createFileRoute("/empire-play/playlists/")({
   component: PlaylistsPage,
@@ -16,10 +17,7 @@ export const Route = createFileRoute("/empire-play/playlists/")({
 
 function playlistCover(p: PlaylistPayload): string | undefined {
   // Prioridade: capa manual → capa da 1ª faixa
-  if (p.capa_url) return driveImg(p.capa_url, 200);
-  const firstCover = p.tracks?.[0]?.capa_url;
-  if (firstCover) return driveImg(firstCover, 200);
-  return undefined;
+  return p.capa_url || p.tracks?.[0]?.capa_url || undefined;
 }
 
 function PlaylistsPage() {
@@ -110,14 +108,7 @@ function PlaylistsPage() {
               >
                 <div className="size-14 rounded-xl bg-neutral-800 overflow-hidden grid place-items-center shrink-0">
                   {cover ? (
-                    <img
-                      src={cover}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                      decoding="async"
-                      referrerPolicy="no-referrer"
-                    />
+                    <SmartImg src={cover} size={200} alt="" className="w-full h-full object-cover" fallback={<ListMusic className="size-6 text-neutral-500" />} />
                   ) : (
                     <ListMusic className="size-6 text-neutral-500" />
                   )}

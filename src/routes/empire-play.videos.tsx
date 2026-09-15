@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tv, Play, MessageSquare, Search } from "lucide-react";
-import { driveImg } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableVideo } from "@/components/EmpirePlay/VideoPlayer";
@@ -210,10 +210,12 @@ function EmpirePlayVideos() {
           >
             <div className="aspect-video rounded-xl overflow-hidden bg-neutral-950 mb-2 relative">
               {v.capa_url || v.poster_url ? (
-                <img
-                  src={driveImg(v.capa_url || v.poster_url, 400)}
+                <SmartImg
+                  src={v.capa_url || v.poster_url}
+                  size={400}
                   alt={v.titulo}
                   className="size-full object-cover group-hover:scale-105 transition-transform"
+                  fallback={<VideoThumbFallback video={v} />}
                 />
               ) : (
                 <VideoThumbFallback video={v} />

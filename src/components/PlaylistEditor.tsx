@@ -3,12 +3,12 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, ListMusic, Loader2, Plus, Trash2, Search, GripVertical, Upload, Link2 } from "lucide-react";
 import {
   api,
-  driveImg,
   type AlbumPayload,
   type PlaylistPayload,
   type PlaylistTrack,
 } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
+import { SmartImg } from "@/components/SmartImg";
 import { notify } from "@/lib/notify";
 
 type AddTab = "catalogo" | "upload" | "link";
@@ -236,11 +236,7 @@ export function PlaylistEditor({ existing }: { existing?: PlaylistPayload }) {
                 ▼
               </button>
               {t.capa_url && (
-                <img
-                  src={driveImg(t.capa_url, 80)}
-                  alt=""
-                  className="size-8 rounded object-cover"
-                  loading="lazy" decoding="async" referrerPolicy="no-referrer"/>
+                <SmartImg src={t.capa_url} size={80} alt="" className="size-8 rounded object-cover" />
               )}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold truncate">{t.titulo}</p>
