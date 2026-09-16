@@ -413,7 +413,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await reportWrongContentController(request);
-  } else if (url.pathname === "/api/empire-play/admin/fix-bad-friend-comments") {
+  } else if (url.pathname === "/api/empire-play/admin/fix-orphan-comments") {
     response = await adminFixOrphanCommentsController();
   } else if (isEditarPath) {
     if (request.method === "GET") {
