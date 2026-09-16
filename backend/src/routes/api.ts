@@ -77,6 +77,7 @@ import {
 } from "../controllers/empirePlayController";
 import { reportVideoIssueController } from "../controllers/reportVideoController";
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
+import { adminFixOrphanCommentsController } from "../controllers/adminFixOrphanCommentsController";
 import {
   loginController,
   updateProfileController,
@@ -412,6 +413,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await reportWrongContentController(request);
+  } else if (url.pathname === "/api/empire-play/admin/fix-bad-friend-comments") {
+    response = await adminFixOrphanCommentsController();
   } else if (isEditarPath) {
     if (request.method === "GET") {
       response = await getReleasesForEditController(request);
