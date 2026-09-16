@@ -32,17 +32,42 @@ export async function streamDriveFileController(request: Request): Promise<Respo
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
     if (range) headers["Range"] = range;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
-    let driveRes: Response;
-    try {
-      driveRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-        { headers, signal: controller.signal },
-      );
-    } finally {
-      clearTimeout(timeout);
+    // Sem retry nenhum aqui até 2026-09-16 — qualquer falha passageira da
+    // API do Drive (rate limit, timeout de rede, 5xx momentâneo) já mostrava
+    // "Não foi possível carregar o áudio" direto pro jogador, sem nenhuma
+    // segunda chance. Num evento ao vivo com muita gente tocando música ao
+    // mesmo tempo (mesma pressão que já causou os limites de cota do
+    // Sheets hoje), isso é justamente quando picos passageiros são mais
+    // prováveis — poucas tentativas com backoff curto cobrem exatamente
+    // esse caso sem atrasar visivelmente quem não bateu em nada.
+    const tentativas = 3;
+    let driveRes: Response | undefined;
+    let ultimoErro: unknown;
+    for (let tentativa = 1; tentativa <= tentativas; tentativa++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20_000);
+      try {
+        driveRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+          { headers, signal: controller.signal },
+        );
+        ultimoErro = undefined;
+        // 429 (rate limit) e 5xx são os únicos que valem retry — um 403
+        // (sem permissão) ou 404 (arquivo não existe/foi apagado) nunca vão
+        // se resolver tentando de novo.
+        const vale_retry = driveRes.status === 429 || driveRes.status >= 500;
+        if (driveRes.ok || !vale_retry || tentativa === tentativas) break;
+      } catch (err) {
+        ultimoErro = err;
+        driveRes = undefined;
+        if (tentativa === tentativas) break;
+      } finally {
+        clearTimeout(timeout);
+      }
+      await new Promise((resolve) => setTimeout(resolve, tentativa * 500));
     }
+
+    if (!driveRes) throw ultimoErro instanceof Error ? ultimoErro : new Error(String(ultimoErro));
 
     if (!driveRes.ok) {
       return new Response(
