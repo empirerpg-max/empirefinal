@@ -1625,6 +1625,13 @@ function EnqueteBanner({ programaId }: { programaId: string }) {
 
   useEffect(() => {
     carregar();
+    // Reconsulta periodicamente — sem isso, quem já estava com o Chat
+    // aberto antes de uma enquete ser cadastrada/ativada na planilha só
+    // veria o cartão aparecer se saísse e voltasse pra sala. 20s é rápido o
+    // bastante pra parecer "ao vivo" sem pesar na cota de leitura do Sheets
+    // (já protegida pelo cache curto de 15s do próprio backend).
+    const interval = setInterval(carregar, 20_000);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programaId]);
 
