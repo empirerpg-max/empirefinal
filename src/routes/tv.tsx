@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2 } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
@@ -1409,7 +1410,12 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                 {!own && (
                   <div className="size-7 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mb-0.5">
                     {m.userPhoto ? (
-                      <img src={driveRawImg(m.userPhoto)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <SmartImg
+                        src={m.userPhoto}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        fallback={<span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>}
+                      />
                     ) : (
                       <span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>
                     )}
