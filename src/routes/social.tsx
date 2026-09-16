@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "sonner";
 import {
   Instagram,
   Twitter,
@@ -116,12 +117,15 @@ function PostMedia({
   className,
   resolveUrl,
   muted,
+  onImageClick,
 }: {
   url?: string;
   tipo?: string;
   className?: string;
   resolveUrl: (u?: string) => string | undefined;
   muted?: boolean;
+  /** Presente só pra foto (não vídeo) — abre ela inteira em vez do card abrir comentário. */
+  onImageClick?: () => void;
 }) {
   if (!url) return null;
   if (tipo === "video") {
@@ -143,6 +147,14 @@ function PostMedia({
       src={resolveUrl(url)}
       className={className}
       referrerPolicy="no-referrer"
+      onClick={
+        onImageClick
+          ? (e) => {
+              e.stopPropagation();
+              onImageClick();
+            }
+          : undefined
+      }
     />
   );
 }
@@ -151,7 +163,15 @@ function PostMedia({
 // além do swipe já suportado pelo scroll horizontal com snap. Sem as
 // setinhas, quem usa mouse (desktop) não tinha nenhum jeito de trocar de
 // foto, só quem usa touch.
-function PostCarousel({ urls, resolveUrl }: { urls: string[]; resolveUrl: (u?: string) => string | undefined }) {
+function PostCarousel({
+  urls,
+  resolveUrl,
+  onImageClick,
+}: {
+  urls: string[];
+  resolveUrl: (u?: string) => string | undefined;
+  onImageClick?: (url: string) => void;
+}) {
   const [index, setIndex] = useState(0);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
@@ -176,7 +196,13 @@ function PostCarousel({ urls, resolveUrl }: { urls: string[]; resolveUrl: (u?: s
       >
         {urls.map((url, idx) => (
           <div key={idx} className="aspect-square w-full shrink-0 snap-center bg-secondary overflow-hidden">
-            <PostMedia url={url} tipo="imagem" resolveUrl={resolveUrl} className="w-full h-full object-cover" />
+            <PostMedia
+              url={url}
+              tipo="imagem"
+              resolveUrl={resolveUrl}
+              className="w-full h-full object-cover"
+              onImageClick={onImageClick ? () => onImageClick(url) : undefined}
+            />
           </div>
         ))}
       </div>
@@ -248,9 +274,20 @@ function PostAudioBadge({ audio }: { audio: { titulo: string; url: string; start
       setPlaying(false);
       return;
     }
+    if (!el.src) {
+      // Antes falhava calado (play() nem chegava a ser chamado de verdade
+      // com src vazio) — clicar não fazia NADA visível, parecia botão
+      // quebrado. Agora avisa o motivo real em vez de ficar em silêncio.
+      toast.error("Não foi possível carregar esse áudio.");
+      return;
+    }
     el.currentTime = audio.startSec;
-    el.play().catch(() => {});
-    setPlaying(true);
+    el.play()
+      .then(() => setPlaying(true))
+      .catch(() => {
+        toast.error("Não foi possível tocar esse áudio. Tente novamente em instantes.");
+        setPlaying(false);
+      });
   }
 
   return (
@@ -583,6 +620,10 @@ function SocialPage() {
   const [activeArtist, setActiveArtist] = useState<any | null>(null);
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  // Clicar na FOTO de um post mostra ela inteira (sem corte), em vez de
+  // abrir a caixinha de comentário — o card em volta continua abrindo
+  // comentário ao clicar em qualquer outro lugar.
+  const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [editingCommentRow, setEditingCommentRow] = useState<number | null>(null);
   const [editCommentText, setEditCommentText] = useState("");
@@ -1630,6 +1671,7 @@ function SocialPage() {
                             <PostCarousel
                               urls={[post.media_url, ...post.extra_media]}
                               resolveUrl={driveImg}
+                              onImageClick={(url) => setZoomedImageUrl(driveImg(url) || url)}
                             />
                           ) : (
                             <div className="aspect-square bg-secondary rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_50px_-25px_rgba(0,0,0,0.7)]">
@@ -1639,6 +1681,11 @@ function SocialPage() {
                                 resolveUrl={driveImg}
                                 className="w-full h-full object-cover"
                                 muted={post.tipo === "TikTok" && !!post.audio}
+                                onImageClick={
+                                  post.media_tipo !== "video"
+                                    ? () => setZoomedImageUrl(driveImg(post.media_url) || post.media_url || null)
+                                    : undefined
+                                }
                               />
                             </div>
                           ))
@@ -3836,6 +3883,31 @@ function SocialPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Clicar numa foto de post mostra ela inteira (sem o corte do
+          aspect-square do card) — fecha clicando em qualquer lugar. */}
+      {zoomedImageUrl && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setZoomedImageUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setZoomedImageUrl(null)}
+            className="absolute top-4 right-4 size-9 rounded-full bg-white/10 text-white grid place-items-center"
+            aria-label="Fechar"
+          >
+            <X className="size-5" />
+          </button>
+          <img
+            src={zoomedImageUrl}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
