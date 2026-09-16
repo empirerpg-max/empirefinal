@@ -111,6 +111,7 @@ import {
   getRedCarpetRankingController,
   deleteRedCarpetPostController,
 } from "../controllers/redCarpetController";
+import { getEnqueteController, responderEnqueteController } from "../controllers/enqueteController";
 import {
   getPontosController,
   salvarPontoCelulaController,
@@ -252,6 +253,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/tv/red-carpet/curtir",
     "/api/tv/red-carpet/ranking",
     "/api/tv/red-carpet/deletar",
+    "/api/tv/enquete",
+    "/api/tv/enquete/responder",
     "/api/artistas/vincular",
     "/api/artistas/criar",
     "/api/artistas/infos",
@@ -788,6 +791,16 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await deleteRedCarpetPostController(request);
+  } else if (url.pathname === "/api/tv/enquete") {
+    response = await getEnqueteController(request);
+  } else if (url.pathname === "/api/tv/enquete/responder") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/tv/enquete/responder." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await responderEnqueteController(request);
   } else if (url.pathname === "/api/social/perfis") {
     response =
       request.method === "GET"

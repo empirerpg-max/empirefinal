@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2 } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2, Star } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
-import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost } from "@/lib/api";
+import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost, type EnquetePayload } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
@@ -1350,11 +1350,13 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   };
 
   return (
-    // Tudo (mensagens + campo de digitar) vive dentro do MESMO container
-    // rolável. Isso é o que faz o teclado do celular se comportar direito:
-    // o navegador só consegue rolar internamente pra revelar o campo em
-    // vez de arrastar a tela inteira (e o vídeo) quando o campo focado
-    // fica fora de qualquer ancestral rolável.
+    <>
+      <EnqueteBanner programaId={programaId} />
+    {/* Tudo (mensagens + campo de digitar) vive dentro do MESMO container
+        rolável. Isso é o que faz o teclado do celular se comportar direito:
+        o navegador só consegue rolar internamente pra revelar o campo em
+        vez de arrastar a tela inteira (e o vídeo) quando o campo focado
+        fica fora de qualquer ancestral rolável. */}
     <div ref={scrollerRef} className="flex-1 overflow-y-auto min-h-0 flex flex-col">
       <div className="flex-1 px-3 py-3 space-y-2 text-sm">
         {messages.length === 0 ? (
@@ -1602,6 +1604,91 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
         </button>
       </form>
       </div>
+    </div>
+    </>
+  );
+}
+
+// Cartão fixo de enquete no topo do Chat — cadastrada à mão na aba ENQUETES
+// (planilha "Empire TV Oficial"), sem precisar de deploy pra cada pergunta
+// nova. Só aparece quando existe uma enquete ATIVA pra essa sala; unificado
+// no Chat (não no Red Carpet) porque o Chat existe em toda sala, não só
+// nas de evento.
+function EnqueteBanner({ programaId }: { programaId: string }) {
+  const login = getStoredLogin();
+  const [enquete, setEnquete] = useState<EnquetePayload | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  const carregar = () => {
+    api.buscarEnquete(programaId, login?.id).then(setEnquete);
+  };
+
+  useEffect(() => {
+    carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programaId]);
+
+  const votar = async (nota: number) => {
+    if (!enquete || !login?.id || enviando) return;
+    setEnviando(true);
+    setEnquete((prev) => (prev ? { ...prev, minhaNota: nota } : prev)); // otimista
+    try {
+      await api.responderEnquete({
+        enqueteId: enquete.id,
+        programaId,
+        tgId: login.id,
+        nome: login.nome || "Anônimo",
+        nota,
+      });
+    } finally {
+      setEnviando(false);
+      carregar(); // busca média/total atualizados
+    }
+  };
+
+  if (!enquete) return null;
+
+  const notas = Array.from(
+    { length: enquete.notaMax - enquete.notaMin + 1 },
+    (_, i) => enquete.notaMin + i,
+  );
+
+  return (
+    <div className="shrink-0 border-b border-border bg-gradient-to-br from-primary/10 via-fuchsia-500/5 to-transparent px-3 py-2.5">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <Star className="size-3.5 text-amber-400 fill-amber-400" />
+        <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Enquete</span>
+      </div>
+      <p className="text-xs font-bold mb-2 leading-snug">
+        {enquete.pergunta}
+        {enquete.alvo && <span className="text-primary"> {enquete.alvo}</span>}
+      </p>
+
+      {enquete.minhaNota !== null ? (
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="px-2 py-1 rounded-md bg-primary/15 text-primary font-bold">
+            Sua nota: {enquete.minhaNota}
+          </span>
+          <span>
+            Média: <b className="text-foreground">{enquete.media || "—"}</b> ({enquete.totalRespostas} voto
+            {enquete.totalRespostas === 1 ? "" : "s"})
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {notas.map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => votar(n)}
+              disabled={enviando || !login?.id}
+              className="size-8 rounded-lg bg-white/5 border border-white/10 hover:bg-primary hover:text-primary-foreground hover:border-primary font-black text-sm transition active:scale-95 disabled:opacity-40"
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
