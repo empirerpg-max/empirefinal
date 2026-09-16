@@ -207,7 +207,61 @@ export async function ensureSheetTab(
   );
 }
 
+// Cache curto em memória (por isolate do Worker) + coalescing de chamadas
+// simultâneas — adicionado em 2026-09-16 durante um evento ao vivo
+// (Grammys) que estourou a cota "Read requests per minute" mesmo depois de
+// cortar leituras redundantes ponto a ponto: com muita gente concorrente,
+// CADA leitura de tela (feed, ranking, lista de programas...) virava uma
+// chamada própria à API do Sheets. Só reduzir chamada por chamada não
+// segura um pico de verdade — o que resolve é várias pessoas lendo a MESMA
+// aba/range dentro de uma janela curta compartilharem UMA leitura só.
+// TTL de 15s: rápido o bastante pra parecer "ao vivo" (mesmo padrão que o
+// Social já tinha, via cache do lado do cliente), mas já corta a maior
+// parte da duplicação de leituras simultâneas. Escritas (appendRow/
+// updateValues) invalidam a entrada correspondente na hora, então um post
+// novo não fica escondido até o TTL vencer.
+const READ_CACHE_TTL_MS = 15_000;
+const readCache = new Map<string, { data: string[][]; expiresAt: number }>();
+const readInFlight = new Map<string, Promise<string[][]>>();
+
+function readCacheKeyPrefix(spreadsheetId: string, sheetName: string): string {
+  return `${spreadsheetId}::${sheetName}::`;
+}
+
+function invalidateReadCache(spreadsheetId: string, sheetName: string): void {
+  const prefix = readCacheKeyPrefix(spreadsheetId, sheetName);
+  for (const key of readCache.keys()) {
+    if (key.startsWith(prefix)) readCache.delete(key);
+  }
+}
+
 export async function readValues(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  range = "A:ZZ",
+): Promise<string[][]> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const cacheKey = `${readCacheKeyPrefix(spreadsheetId, sheetName)}${range}`;
+
+  const cached = readCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  const emAndamento = readInFlight.get(cacheKey);
+  if (emAndamento) return emAndamento;
+
+  const promise = readValuesUncached(spreadsheetKeyOrId, sheetName, range)
+    .then((data) => {
+      readCache.set(cacheKey, { data, expiresAt: Date.now() + READ_CACHE_TTL_MS });
+      return data;
+    })
+    .finally(() => {
+      readInFlight.delete(cacheKey);
+    });
+  readInFlight.set(cacheKey, promise);
+  return promise;
+}
+
+async function readValuesUncached(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   range = "A:ZZ",
@@ -381,6 +435,7 @@ export async function updateValues(
       },
       [SHEETS_READWRITE_SCOPE],
     );
+    invalidateReadCache(spreadsheetId, sheetName);
   } catch (err) {
     console.warn(
       `[googleSheetsService] Não foi possível atualizar valores na planilha (${(err as Error).message})`,
@@ -412,6 +467,7 @@ export async function appendRows(
     },
     [SHEETS_READWRITE_SCOPE],
   );
+  invalidateReadCache(spreadsheetId, sheetName);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -454,6 +510,7 @@ export async function appendRow(
         },
         [SHEETS_READWRITE_SCOPE],
       );
+      invalidateReadCache(spreadsheetId, sheetName);
       const updatedRange = result.updates?.updatedRange || "";
       // updatedRange vem tipo "'Comentarios_Musicas'!A123:D123" — extrai o 123.
       const match = updatedRange.match(/![A-Z]+(\d+)/);
