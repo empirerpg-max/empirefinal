@@ -50,6 +50,9 @@ export interface RedCarpetPost {
   likes: number;
 }
 
+// Voto secreto: o payload nunca carrega média/total de votos — só o
+// próprio app sabe se ESSE jogador já respondeu, nunca o resultado
+// agregado (isso fica só na planilha, com o dono do jogo).
 export interface EnquetePayload {
   id: string;
   programaId: string;
@@ -57,8 +60,6 @@ export interface EnquetePayload {
   alvo: string;
   notaMin: number;
   notaMax: number;
-  totalRespostas: number;
-  media: number;
   minhaNota: number | null;
 }
 

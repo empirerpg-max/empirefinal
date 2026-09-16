@@ -108,25 +108,23 @@ export async function getEnqueteController(request: Request): Promise<Response> 
       });
     }
 
-    const respostasRows = await googleSheetsService.usuarios.readValues(SHEET_RESPOSTAS).catch(() => []);
-    const respostasDaEnquete = (respostasRows.length > 1 ? respostasRows.slice(1) : []).filter(
-      (r) => (r[0] || "").trim() === enquete.id,
-    );
-    const notas = respostasDaEnquete.map((r) => Number(r[4])).filter((n) => Number.isFinite(n));
-    const media = notas.length > 0 ? notas.reduce((a, b) => a + b, 0) / notas.length : 0;
-    const minhaResposta = tgId
-      ? respostasDaEnquete.find((r) => normalizeComparison(r[2] || "") === normalizeComparison(tgId))
-      : undefined;
+    // Voto secreto: só devolve se ESSE jogador já respondeu (pra não
+    // reexibir o formulário), nunca a média/total agregado nem as notas de
+    // outros jogadores — o resultado só existe na planilha, acessível só
+    // pra quem tem a chave (o dono do jogo), não pelo app.
+    let minhaNota: number | null = null;
+    if (tgId) {
+      const respostasRows = await googleSheetsService.usuarios.readValues(SHEET_RESPOSTAS).catch(() => []);
+      const minhaResposta = (respostasRows.length > 1 ? respostasRows.slice(1) : []).find(
+        (r) => (r[0] || "").trim() === enquete.id && normalizeComparison(r[2] || "") === normalizeComparison(tgId),
+      );
+      minhaNota = minhaResposta ? Number(minhaResposta[4]) : null;
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
-        data: {
-          ...enquete,
-          totalRespostas: notas.length,
-          media: Math.round(media * 10) / 10,
-          minhaNota: minhaResposta ? Number(minhaResposta[4]) : null,
-        },
+        data: { ...enquete, minhaNota },
       }),
       { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );

@@ -1667,12 +1667,9 @@ function EnqueteBanner({ programaId }: { programaId: string }) {
       {enquete.minhaNota !== null ? (
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span className="px-2 py-1 rounded-md bg-primary/15 text-primary font-bold">
-            Sua nota: {enquete.minhaNota}
+            Você votou {enquete.minhaNota}
           </span>
-          <span>
-            Média: <b className="text-foreground">{enquete.media || "—"}</b> ({enquete.totalRespostas} voto
-            {enquete.totalRespostas === 1 ? "" : "s"})
-          </span>
+          <span>Voto secreto — obrigado por participar!</span>
         </div>
       ) : (
         <div className="flex items-center gap-1.5 flex-wrap">
