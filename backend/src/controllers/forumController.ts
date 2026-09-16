@@ -297,6 +297,17 @@ export async function createCommentController(request: Request): Promise<Respons
               .updateValues(targetSheet, `${colTopicLetter}${foundRowIndex}`, [[novoTopicId]])
               .catch((err) => console.warn("[ForumController] Falha ao gravar novo ID do tópico:", err));
             topicIdClean = novoTopicId;
+          } else if (normalizeComparison(topicIdJaTinha) !== normalizeComparison(topicIdClean)) {
+            // A linha foi achada (por ID batendo OU por fallback de título) e
+            // JÁ tem um ID de tópico próprio — mas diferente do que o
+            // cliente mandou. Sem isso, um cliente com cache velho (ex: um
+            // id_do_topico sintético antigo, tipo "videos_idx215", gerado
+            // antes da linha ganhar o ID real) salvava o comentário E
+            // disparava a notificação com o ID ERRADO — órfão pra sempre,
+            // já que a partir daqui ninguém mais casa esse id com nada.
+            // A linha da planilha é a fonte da verdade: sempre usa o ID
+            // real dela daqui pra frente (comentário e notificação).
+            topicIdClean = topicIdJaTinha;
           }
 
           // Se essa linha carrega o Código único de OUTRA música (ex: um

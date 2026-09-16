@@ -124,6 +124,7 @@ export function MusicPlayer({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
   const [audioError, setAudioError] = useState(false);
+  const [audioErrorDetail, setAudioErrorDetail] = useState<string | null>(null);
   const [reportingWrong, setReportingWrong] = useState(false);
   const [wrongReported, setWrongReported] = useState(false);
   // Espelha posição/estado no contexto global pra outras telas (Fórum)
@@ -221,6 +222,7 @@ export function MusicPlayer({
   // Reseta erro ao trocar de faixa
   useEffect(() => {
     setAudioError(false);
+    setAudioErrorDetail(null);
   }, [audioSrc]);
 
   // Fonte efetiva para a tag <audio>: áudio do Drive vai sempre pelo proxy
@@ -473,6 +475,24 @@ export function MusicPlayer({
           onError={() => {
             console.warn("[MusicPlayer] Erro na reprodução do áudio.");
             setAudioError(true);
+            // A tag <audio> só sabe que falhou, não o PORQUÊ (o navegador
+            // não expõe corpo/status de resposta pra ela) — refaz a mesma
+            // requisição via fetch só pra ler o motivo real que o proxy
+            // devolveu (403 do Drive, 404, timeout, etc) e mostrar pro
+            // jogador em vez de só "tente novamente".
+            if (effectiveAudioSrc) {
+              fetch(effectiveAudioSrc)
+                .then(async (res) => {
+                  if (res.ok) return;
+                  const body = await res.json().catch(() => null);
+                  setAudioErrorDetail(
+                    `HTTP ${res.status}${body?.message ? ` — ${body.message}` : ""}`,
+                  );
+                })
+                .catch((err) => {
+                  setAudioErrorDetail(`Falha de rede: ${err?.message || err}`);
+                });
+            }
           }}
         />
       )}
@@ -631,10 +651,15 @@ export function MusicPlayer({
                   </div>
                 )}
                 {audioError && (
-                  <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 gap-1">
                     <p className="text-xs text-center font-semibold text-red-400">
                       Não foi possível carregar o áudio. Tente novamente em instantes.
                     </p>
+                    {audioErrorDetail && (
+                      <p className="text-[10px] text-center text-red-300/70 font-mono">
+                        {audioErrorDetail}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

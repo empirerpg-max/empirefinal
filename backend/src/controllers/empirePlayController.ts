@@ -542,18 +542,31 @@ export function buildCleanItem(
   const trackOrder =
     trackOrderValue && !Number.isNaN(Number(trackOrderValue)) ? Number(trackOrderValue) : null;
 
+  // "Código único" (Musicas!Z/Albuns!L, mesma coluna usada em EDIÇÃO CHARTS)
+  // é a única outra coisa gravada na linha que não muda de posição — ao
+  // contrário do índice de leitura, que muda sozinho toda vez que uma linha
+  // é inserida/removida/reordenada antes dela.
+  const codigoUnicoParaId = getValue(record, ["codigo_unico"]);
+
   const item: EmpirePlayCleanItem = {
     // Antes era só `${sheetName}_${index+1}` (posição na leitura da planilha
     // naquele instante) — um ID fantasma que MUDA sozinho toda vez que uma
     // linha é inserida/removida/reordenada antes dela. Um link salvo (ou só
     // a navegação entre telas) podia então abrir o tópico de OUTRA música
     // completamente, misturando comentários — causa raiz confirmada (ex:
-    // "musicas_198" abrindo "Zoe Osbourne" sem bater com nada na planilha).
+    // "musicas_198"/"videos_idx215" abrindo/comentando em cima de uma música
+    // totalmente diferente, sem bater com nada na planilha — comentários de
+    // "Bad Friend" do Anníbal ficando presos num id fantasma que hoje aponta
+    // pra "Boulangerie" é exatamente esse caso).
     // Agora usa o ID real e estável do tópico (message_thread_id/
-    // id_do_topico/ref_telegram_id) sempre que existe; só cai pro índice
-    // como último recurso pra linhas que nunca tiveram tópico (ex: algumas
-    // entradas de chart puramente numéricas).
-    id: `${sheetName.toLowerCase().replace(/\s+/g, "_")}_${telegramTopicId || `idx${index + 1}`}`,
+    // id_do_topico/ref_telegram_id) sempre que existe; se não existir, cai
+    // pro "Código único" da linha (também estável, não depende de posição);
+    // só usa o índice de leitura como ÚLTIMO recurso, pra linhas que nunca
+    // tiveram nem tópico nem código (ex: algumas entradas de chart puramente
+    // numéricas) — sabendo que esse último caso ainda pode ficar instável.
+    id: `${sheetName.toLowerCase().replace(/\s+/g, "_")}_${
+      telegramTopicId || codigoUnicoParaId || `idx${index + 1}`
+    }`,
     type: sheetName.toLowerCase().replace(/\s+/g, "-"),
     title,
     artist,
@@ -1196,10 +1209,11 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
       }));
 
       return {
-        // Mesma correção de Musicas/Music Videos: ID real do tópico em vez
-        // da posição na leitura da planilha (que muda sozinha e misturava
-        // álbum/comentários errados quando uma linha era inserida/removida).
-        id: `album_${telegramTopicId || `idx${idx + 1}`}`,
+        // Mesma correção de Musicas/Music Videos: ID real do tópico (e, se
+        // faltar, o Código único — também estável) em vez da posição na
+        // leitura da planilha (que muda sozinha e misturava álbum/
+        // comentários errados quando uma linha era inserida/removida).
+        id: `album_${telegramTopicId || codigoUnico || `idx${idx + 1}`}`,
         title: displayTitle,
         artist,
         coverUrl,
