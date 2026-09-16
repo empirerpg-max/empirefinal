@@ -105,7 +105,12 @@ export async function getRedCarpetFeedController(request: Request): Promise<Resp
       });
     }
 
-    await ensureRedCarpetSheet();
+    // Sem ensureRedCarpetSheet() aqui de propósito — GET é o caminho mais
+    // usado (feed recarrega toda vez que a aba abre) e conferir/criar a aba
+    // a cada leitura soma 2 chamadas extras à API do Sheets (listSheetTabs +
+    // readValues(A1:A1)) só pra confirmar algo que só muda uma vez (na
+    // primeira publicação). Se a aba ainda não existe, o catch abaixo trata
+    // como feed vazio — igual ao Social, que nunca precisa desse "ensure".
     const rows = await googleSheetsService.agendaTV.readValues(SHEET).catch(() => []);
     const normPrograma = normalizeComparison(programaId);
     const posts = (rows.length > 1 ? rows.slice(1) : [])
@@ -234,7 +239,9 @@ export async function curtirRedCarpetPostController(request: Request): Promise<R
       });
     }
 
-    await ensureRedCarpetSheet();
+    // Sem ensureRedCarpetSheet(): só dá pra curtir/excluir um post que já
+    // existe, e se ele existe a aba já existe — a checagem só somaria
+    // leitura à toa.
     const rows = await googleSheetsService.agendaTV.readValues(SHEET);
     const rowIndex = rows.findIndex((row, i) => i > 0 && (row[0] || "").trim() === postId);
     if (rowIndex === -1) {
@@ -287,7 +294,8 @@ export async function getRedCarpetRankingController(request: Request): Promise<R
     const programaId = (url.searchParams.get("programaId") || "").trim();
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 20, 1), 100);
 
-    await ensureRedCarpetSheet();
+    // Sem ensureRedCarpetSheet() aqui — mesmo motivo do feed (GET não deve
+    // pagar o custo de conferir/criar a aba a cada leitura).
     const rows = await googleSheetsService.agendaTV.readValues(SHEET).catch(() => []);
     const normPrograma = normalizeComparison(programaId);
 
@@ -329,7 +337,9 @@ export async function deleteRedCarpetPostController(request: Request): Promise<R
       );
     }
 
-    await ensureRedCarpetSheet();
+    // Sem ensureRedCarpetSheet(): só dá pra curtir/excluir um post que já
+    // existe, e se ele existe a aba já existe — a checagem só somaria
+    // leitura à toa.
     const rows = await googleSheetsService.agendaTV.readValues(SHEET);
     const rowIndex = rows.findIndex((row, i) => i > 0 && (row[0] || "").trim() === postId);
     if (rowIndex === -1) {

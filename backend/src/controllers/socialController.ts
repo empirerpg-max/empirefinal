@@ -239,20 +239,14 @@ export async function createSocialPostController(request: Request): Promise<Resp
   const analytics = payload.analytics || { likes: 0, comments: 0, shares: 0 };
   const extraMedia = (payload.extra_media || []).filter(Boolean).slice(0, 9);
 
-  // Auto-cura definitiva, ANTES de gravar: mesmo com o range de escrita
-  // travado em "A:M", uma linha órfã que sobrou de um incidente antigo
-  // (sem id, mas com algum dado dentro de A:M — ex: só a coluna G de
-  // analytics) ainda confunde a detecção de "onde a tabela continua" do
-  // append do Sheets, e o post seguinte cai fora da coluna A. Isso já
-  // aconteceu 3x mesmo com o código de escrita correto, porque as linhas
-  // órfãs só eram limpas manualmente (endpoint que alguém precisava abrir).
-  // Rodar essa limpeza aqui, na hora de cada publicação — além do cron a
-  // cada 10 min, que cobre o resto do tempo — fecha essa lacuna de vez:
-  // nenhum post volta a cair em coluna errada só porque ninguém rodou o
-  // endpoint a tempo.
-  await limparLinhasOrfasSocialPosts(true).catch((err) =>
-    console.warn("[createSocialPostController] Falha na auto-limpeza de linhas órfãs (não bloqueia o post):", err),
-  );
+  // A auto-limpeza de linhas órfãs (limparLinhasOrfasSocialPosts) rodava
+  // aqui, ANTES de cada post — tirado em 2026-09-16 depois de um evento ao
+  // vivo (Grammys) estourar a cota de leitura da API do Sheets ("Read
+  // requests per minute per user"): com muita gente postando ao mesmo
+  // tempo, cada post disparava uma leitura extra da planilha inteira
+  // (A:CZ) só pra limpeza, multiplicando a carga bem na hora de pico. A
+  // limpeza continua 100% automática pelo cron (server.ts scheduled, a
+  // cada 10 min) — só não roda mais em cima de cada publicação individual.
 
   // appendRow tenta 3x e devolve null em caso de falha — NUNCA lança
   // exceção. Sem conferir esse retorno, o post podia "falhar" de verdade

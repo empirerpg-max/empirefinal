@@ -221,6 +221,14 @@ export async function readValues(
   // controllers engole esse erro (.catch(() => [])), fazendo a tela parecer
   // "sem dados" pro jogador mesmo os dados existindo. Escritas já tinham
   // esse retry (appendRow); leituras não tinham nenhum.
+  // "Quota exceeded... Read requests per minute" é um limite por MINUTO —
+  // um backoff curto (400ms/800ms) quase nunca sobrevive a isso, sobra pro
+  // fallback GViz (que tem cota própria, separada, mas mais lenta/instável
+  // sob pico). Detectado esse padrão específico (vs. um 429 genérico de
+  // pico passageiro), espera bem mais e tenta mais vezes — em evento ao
+  // vivo (ex: Grammys) com muita gente lendo/escrevendo ao mesmo tempo, dar
+  // mais alguns segundos de chance aqui evita cair pro GViz (ou pro erro cru
+  // que o jogador via) toda vez que o minuto de cota aperta.
   const attempts = 3;
   let ultimoErroV4: Error | null = null;
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -234,13 +242,14 @@ export async function readValues(
       return response.values || [];
     } catch (err) {
       ultimoErroV4 = err instanceof Error ? err : new Error(String(err));
-      const ehLimiteDeRequisicao = /quota|rate limit|429|resource_exhausted/i.test(ultimoErroV4.message);
+      const ehCotaPorMinuto = /quota exceeded|requests per minute/i.test(ultimoErroV4.message);
+      const ehLimiteDeRequisicao = ehCotaPorMinuto || /rate limit|429|resource_exhausted/i.test(ultimoErroV4.message);
       const isLastAttempt = attempt === attempts;
       // Só vale a pena tentar de novo em erro de limite passageiro — um 404
       // (aba não existe) ou 403 (sem permissão) nunca vai se resolver
       // tentando de novo, é desperdício de tempo antes do fallback GViz.
       if (!ehLimiteDeRequisicao || isLastAttempt) break;
-      await sleep(attempt * 400);
+      await sleep(ehCotaPorMinuto ? attempt * 1500 : attempt * 400);
     }
   }
   if (ultimoErroV4) {
