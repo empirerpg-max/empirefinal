@@ -43,6 +43,14 @@ function colLetter(zeroBasedIndex: number): string {
   return String.fromCharCode(65 + zeroBasedIndex);
 }
 
+// A aba "Music Videos" guarda o título com sufixo "(Official Music
+// Video)"/"(Lyric Video)"/etc — a notificação guarda o título "limpo",
+// sem sufixo. Sem tirar isso, um vídeo com sufixo nunca casava com o
+// título recuperado da notificação, mesmo sendo a mídia certa.
+function tituloBase(titulo: string): string {
+  return normalizeComparison(titulo).replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+
 interface NotificacaoRow {
   autorNome: string;
   tituloMedia: string;
@@ -93,10 +101,19 @@ export async function adminFixOrphanCommentsController(): Promise<Response> {
       validTopicIds.set(normalizeComparison(idReal), { titulo, idReal });
     }
     // Índice por título normalizado, pra achar o ID real a partir do
-    // título recuperado via Notificacoes.
+    // título recuperado via Notificacoes. Guarda tanto o título exato
+    // quanto a versão sem sufixo "(Official Music Video)"/"(Lyric
+    // Video)"/etc — sem duplicar a chave já existente (prefere o primeiro
+    // achado quando duas linhas, ex: MV oficial + lyric video, colapsam pro
+    // mesmo título-base).
     const idPorTitulo = new Map<string, string>();
+    const idPorTituloBase = new Map<string, string>();
     for (const { titulo, idReal } of validTopicIds.values()) {
-      if (titulo) idPorTitulo.set(normalizeComparison(titulo), idReal);
+      if (!titulo) continue;
+      const chaveExata = normalizeComparison(titulo);
+      if (!idPorTitulo.has(chaveExata)) idPorTitulo.set(chaveExata, idReal);
+      const chaveBase = tituloBase(titulo);
+      if (chaveBase && !idPorTituloBase.has(chaveBase)) idPorTituloBase.set(chaveBase, idReal);
     }
 
     const commentRows = await sheetsService.readValues(cfg.commentSheet).catch(() => []);
@@ -139,7 +156,9 @@ export async function adminFixOrphanCommentsController(): Promise<Response> {
         continue;
       }
 
-      const idRealNovo = idPorTitulo.get(normalizeComparison(candidato.tituloMedia));
+      const idRealNovo =
+        idPorTitulo.get(normalizeComparison(candidato.tituloMedia)) ||
+        idPorTituloBase.get(tituloBase(candidato.tituloMedia));
       if (!idRealNovo) {
         totalNaoRecuperaveis++;
         detalhes.push({
