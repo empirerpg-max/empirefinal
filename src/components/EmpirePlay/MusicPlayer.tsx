@@ -89,7 +89,7 @@ export function extractDriveFileId(url: string | undefined): string | null {
 // componentes montando/desmontando) — resolve assim que window.YT.Player
 // existir.
 let youtubeApiPromise: Promise<void> | null = null;
-function loadYouTubeIframeApi(): Promise<void> {
+export function loadYouTubeIframeApi(): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
   if ((window as any).YT?.Player) return Promise.resolve();
   if (youtubeApiPromise) return youtubeApiPromise;
