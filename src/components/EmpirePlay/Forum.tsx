@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Music,
   Tv,
@@ -247,6 +248,25 @@ export const Forum: React.FC<ForumProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedTopic, setSelectedTopic] = useState<ForumTopicItem | null>(null);
+  const navigate = useNavigate();
+  // Sem isso, a URL nunca mudava ao abrir um tópico — sempre ficava em
+  // /empire-play/forum, sem jeito de compartilhar/recarregar num tópico
+  // específico, e reforçando a impressão (correta, até essa correção) de
+  // que tópico não tinha uma identidade própria persistente. "replace" pra
+  // não empilhar um item de histórico por tópico aberto (só troca a URL
+  // atual), e só dispara com um ID real de tópico — nunca o id sintético
+  // baseado em índice, senão a URL herdaria a mesma instabilidade.
+  useEffect(() => {
+    navigate({
+      to: "/empire-play/forum",
+      search: {
+        tab: activeSubmenu,
+        id: selectedTopic ? selectedTopic.telegramTopicId || selectedTopic.id : undefined,
+      },
+      replace: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTopic, activeSubmenu]);
   // Capa quebrada/sem link do tópico aberto — mostra um ícone neutro em vez
   // de trocar por uma foto de banco de imagens (Unsplash) que não tem nada
   // a ver com o conteúdo real, além de vazar dado do visitante pro Unsplash.
