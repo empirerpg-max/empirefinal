@@ -60,7 +60,12 @@ interface NotificacaoRow {
 export async function adminFixOrphanCommentsController(): Promise<Response> {
   const notifRows = await sheetsService.readValues("Notificacoes").catch(() => []);
   const notifHeader = notifRows[0] || [];
-  const colNotifAutor = notifHeader.findIndex((h) => normalizeComparison(h).includes("autor"));
+  // "ID do autor" e "Nome do autor" existem as duas — sem o "nome" aqui,
+  // findIndex batia na primeira (o ID numérico) e nenhum comentário nunca
+  // casava com nenhuma notificação (autorNome virava um número).
+  const colNotifAutor = notifHeader.findIndex(
+    (h) => normalizeComparison(h).includes("nome") && normalizeComparison(h).includes("autor"),
+  );
   const colNotifTitulo = notifHeader.findIndex((h) => normalizeComparison(h).includes("titulo"));
   const colNotifTopico = notifHeader.findIndex((h) => normalizeComparison(h).includes("topico"));
   const colNotifComentario = notifHeader.findIndex((h) => normalizeComparison(h).includes("comentario"));
@@ -118,13 +123,14 @@ export async function adminFixOrphanCommentsController(): Promise<Response> {
       // Órfão — tenta recuperar via Notificacoes (autor + trecho do texto).
       const jogadorVal = normalizeText(row[colJogador] || "");
       const comentarioVal = normalizeText(row[colComentario] || "");
+      const comentarioNorm = normalizeComparison(comentarioVal);
       const candidato = notificacoes.find((n) => {
         if (n.autorNome && jogadorVal && normalizeComparison(n.autorNome) !== normalizeComparison(jogadorVal)) {
           return false;
         }
         if (!n.trechoComentario || !comentarioVal) return false;
-        const trecho = n.trechoComentario.replace(/…$/, "");
-        return comentarioVal.includes(trecho) || trecho.includes(comentarioVal);
+        const trecho = normalizeComparison(n.trechoComentario.replace(/…$/, ""));
+        return comentarioNorm.includes(trecho) || trecho.includes(comentarioNorm);
       });
 
       if (!candidato) {
