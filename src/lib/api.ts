@@ -50,6 +50,19 @@ export interface RedCarpetPost {
   likes: number;
 }
 
+// Voto secreto: o payload nunca carrega média/total de votos — só o
+// próprio app sabe se ESSE jogador já respondeu, nunca o resultado
+// agregado (isso fica só na planilha, com o dono do jogo).
+export interface EnquetePayload {
+  id: string;
+  programaId: string;
+  pergunta: string;
+  alvo: string;
+  notaMin: number;
+  notaMax: number;
+  minhaNota: number | null;
+}
+
 export interface NivelInfo {
   nivel: number;
   fase: string;
@@ -602,6 +615,28 @@ export const api = {
     } catch {
       return [];
     }
+  },
+
+  // ---- Enquete (Empire TV) — cadastrada à mão na aba ENQUETES, sem deploy ----
+  async buscarEnquete(programaId: string, tgId?: string): Promise<EnquetePayload | null> {
+    try {
+      const qs = new URLSearchParams({ programaId, ...(tgId ? { tgId } : {}) });
+      const res = await fetch(`/api/tv/enquete?${qs.toString()}`);
+      const json = await res.json().catch(() => null);
+      return json?.success ? json.data : null;
+    } catch {
+      return null;
+    }
+  },
+  async responderEnquete(payload: {
+    enqueteId: string; programaId: string; tgId: string; nome: string; nota: number;
+  }): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/tv/enquete/responder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
   },
 
   async registrarPresencaTV(p: {
