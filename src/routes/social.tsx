@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
-import { extractDriveFileId } from "@/components/EmpirePlay/MusicPlayer";
+import { extractDriveFileId, extractYouTubeId, loadYouTubeIframeApi } from "@/components/EmpirePlay/MusicPlayer";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { renderRichText } from "@/lib/richText";
@@ -261,12 +261,70 @@ function resolvePlayableAudioSrc(url?: string): string | undefined {
 
 // Badge de "toca o trecho da música anexada" numa publicação do feed —
 // clique reproduz só o pedaço escolhido (startSec..startSec+durationSec) e
-// para sozinho no fim, sem precisar de player externo.
+// para sozinho no fim, sem precisar de player externo. Algumas faixas do
+// catálogo ainda não têm arquivo de áudio no Drive cadastrado — só um link
+// do YouTube (coluna "ID do arquivo" da aba Musicas) — nesse caso toca via
+// IFrame API do YouTube (oculto, só o áudio importa aqui) em vez de um
+// <audio src> que nunca ia funcionar com uma URL de página do YouTube.
+let ytBadgeSeq = 0;
 function PostAudioBadge({ audio }: { audio: { titulo: string; url: string; startSec: number; durationSec: number } }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  const ytPlayerRef = useRef<any>(null);
+  const ytContainerId = useRef(`post-audio-yt-${++ytBadgeSeq}`);
+  const ytIntervalRef = useRef<number | null>(null);
+  const ytVideoId = useMemo(() => extractYouTubeId(audio.url), [audio.url]);
+
+  function stopYtWatcher() {
+    if (ytIntervalRef.current !== null) {
+      window.clearInterval(ytIntervalRef.current);
+      ytIntervalRef.current = null;
+    }
+  }
+
+  useEffect(() => stopYtWatcher, []);
+
+  async function toggleYoutube() {
+    if (playing) {
+      ytPlayerRef.current?.pauseVideo?.();
+      stopYtWatcher();
+      setPlaying(false);
+      return;
+    }
+    try {
+      await loadYouTubeIframeApi();
+      if (!ytPlayerRef.current) {
+        await new Promise<void>((resolve) => {
+          ytPlayerRef.current = new (window as any).YT.Player(ytContainerId.current, {
+            videoId: ytVideoId,
+            events: { onReady: () => resolve() },
+          });
+        });
+      }
+      const player = ytPlayerRef.current;
+      player.seekTo(audio.startSec, true);
+      player.playVideo();
+      setPlaying(true);
+      stopYtWatcher();
+      ytIntervalRef.current = window.setInterval(() => {
+        const current = player.getCurrentTime?.() ?? 0;
+        if (current >= audio.startSec + audio.durationSec) {
+          player.pauseVideo();
+          stopYtWatcher();
+          setPlaying(false);
+        }
+      }, 300);
+    } catch {
+      toast.error("Não foi possível tocar esse áudio. Tente novamente em instantes.");
+      setPlaying(false);
+    }
+  }
 
   function toggle() {
+    if (ytVideoId) {
+      toggleYoutube();
+      return;
+    }
     const el = audioRef.current;
     if (!el) return;
     if (playing) {
@@ -301,19 +359,23 @@ function PostAudioBadge({ audio }: { audio: { titulo: string; url: string; start
       }}
       className="flex items-center gap-2 mb-3.5 px-3 py-2 rounded-full bg-white/5 border border-white/10 w-fit max-w-full cursor-pointer"
     >
-      <audio
-        ref={audioRef}
-        src={resolvePlayableAudioSrc(audio.url)}
-        preload="none"
-        onTimeUpdate={(e) => {
-          const el = e.currentTarget;
-          if (el.currentTime >= audio.startSec + audio.durationSec) {
-            el.pause();
-            setPlaying(false);
-          }
-        }}
-        onEnded={() => setPlaying(false)}
-      />
+      {ytVideoId ? (
+        <div id={ytContainerId.current} className="w-px h-px opacity-0 pointer-events-none fixed bottom-0 right-0" />
+      ) : (
+        <audio
+          ref={audioRef}
+          src={resolvePlayableAudioSrc(audio.url)}
+          preload="none"
+          onTimeUpdate={(e) => {
+            const el = e.currentTarget;
+            if (el.currentTime >= audio.startSec + audio.durationSec) {
+              el.pause();
+              setPlaying(false);
+            }
+          }}
+          onEnded={() => setPlaying(false)}
+        />
+      )}
       <button
         type="button"
         onClick={(e) => {
