@@ -1511,7 +1511,19 @@ export async function getEmpirePlayForumTopicController(
         const fotoVal = jogadorIdVal ? fotoPorJogadorId.get(jogadorIdVal) || "" : "";
 
         return {
-          id: `comment_${idx + 1}`,
+          // Antes era só `comment_${idx+1}` (posição na lista filtrada
+          // daquela resposta específica) — usado tanto como id do próprio
+          // comentário quanto como valor de "replyTo" gravado quando
+          // alguém responde. Se a posição mudar entre o clique em
+          // "Responder" e a releitura seguinte (outro comentário chegando
+          // no meio, por exemplo), o replyTo salvo aponta pra um id que já
+          // não existe mais ali — a resposta vira órfã e aparece solta,
+          // "lá embaixo", em vez de aninhada dentro do comentário-pai.
+          // Agora usa o número real da linha na planilha (rowIndexVal, já
+          // estável) sempre que existe — só cai pra posição nos registros
+          // de fallback legados, que nunca suportaram resposta aninhada
+          // mesmo (replyTo sempre vazio pra eles, ver replyToVal acima).
+          id: rowIndexVal ? `comment_row${rowIndexVal}` : `comment_${idx + 1}`,
           data: dataVal,
           timestamp: dataVal,
           titulo: titleVal,
