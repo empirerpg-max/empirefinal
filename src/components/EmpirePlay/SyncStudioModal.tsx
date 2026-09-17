@@ -5,7 +5,7 @@ import { api, driveImg } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { haptic, useTelegramUser } from "@/lib/telegram";
 import { formatLrc, formatLrcTimestamp, parseLrc, findCurrentLrcLineIndex, type LrcLine } from "@/lib/lrc";
-import { extractDriveFileId } from "./MusicPlayer";
+import { extractDriveFileId, extractYouTubeId, loadYouTubeIframeApi } from "./MusicPlayer";
 
 export interface SyncStudioTrack {
   musicaRowIndex: number;
@@ -44,6 +44,18 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
   const driveFileId = extractDriveFileId(track.audioUrl);
   const effectiveAudioSrc = driveFileId ? `/api/media/audio?id=${driveFileId}` : track.audioUrl;
 
+  // Algumas faixas ainda não têm arquivo de áudio cadastrado no Drive, só
+  // um link do YouTube (coluna "ID do arquivo" da aba Musicas) — sem isso,
+  // o Estúdio de Sincronização abria mas o áudio nunca carregava (link do
+  // YouTube direto numa tag <audio> não funciona), então dava pra ver a
+  // letra mas não dava pra tocar nem marcar nenhum tempo. Toca via IFrame
+  // API do YouTube (oculta) nesse caso, com o mesmo play/pause/seek/tempo
+  // usados pro resto da tela.
+  const ytVideoId = useMemo(() => extractYouTubeId(track.audioUrl), [track.audioUrl]);
+  const ytPlayerRef = useRef<any>(null);
+  const ytContainerId = useRef(`sync-studio-yt-${Math.random().toString(36).slice(2)}`);
+  const ytPollRef = useRef<number | null>(null);
+
   // Linhas editáveis — não só os tempos, mas o texto em si. Dá pra remover
   // uma frase que não devia estar ali ou adicionar uma que a letra estática
   // não tinha (ex.: um "uh-uh" de fundo só perceptível ouvindo o áudio).
@@ -67,7 +79,57 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const activeIndex = selectedIndex ?? firstPendingIndex;
 
+  function stopYtPoll() {
+    if (ytPollRef.current !== null) {
+      window.clearInterval(ytPollRef.current);
+      ytPollRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    if (!ytVideoId) return;
+    let cancelled = false;
+    (async () => {
+      await loadYouTubeIframeApi();
+      if (cancelled) return;
+      ytPlayerRef.current = new (window as any).YT.Player(ytContainerId.current, {
+        videoId: ytVideoId,
+        events: {
+          onReady: () => setDuration(ytPlayerRef.current?.getDuration?.() || 0),
+          onStateChange: (e: any) => {
+            const YT = (window as any).YT;
+            if (e.data === YT.PlayerState.PLAYING) {
+              setIsPlaying(true);
+              stopYtPoll();
+              ytPollRef.current = window.setInterval(() => {
+                setCurrentTime(ytPlayerRef.current?.getCurrentTime?.() || 0);
+              }, 200);
+            } else {
+              setIsPlaying(false);
+              stopYtPoll();
+              if (e.data === YT.PlayerState.ENDED) setCurrentTime(0);
+            }
+          },
+        },
+      });
+    })();
+    return () => {
+      cancelled = true;
+      stopYtPoll();
+      ytPlayerRef.current?.destroy?.();
+      ytPlayerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ytVideoId]);
+
   function togglePlay() {
+    if (ytVideoId) {
+      const player = ytPlayerRef.current;
+      if (!player) return;
+      if (isPlaying) player.pauseVideo();
+      else player.playVideo();
+      return;
+    }
     if (!audioRef.current) return;
     if (isPlaying) audioRef.current.pause();
     else audioRef.current.play().catch(() => {});
@@ -80,7 +142,8 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
   function seekTo(time: number) {
     const clamped = Math.max(0, time);
     setCurrentTime(clamped);
-    if (audioRef.current) audioRef.current.currentTime = clamped;
+    if (ytVideoId) ytPlayerRef.current?.seekTo?.(clamped, true);
+    else if (audioRef.current) audioRef.current.currentTime = clamped;
   }
 
   // Ajuste fino (±0.2s) do tempo já marcado de uma linha, sem precisar
@@ -237,17 +300,21 @@ export function SyncStudioModal({ track, onClose, onSaved }: SyncStudioModalProp
           <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/70 via-neutral-950/85 to-neutral-950" />
         </div>
       )}
-      <audio
-        ref={audioRef}
-        src={effectiveAudioSrc}
-        preload="metadata"
-        onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
-        onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration || 0)}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onEnded={() => setIsPlaying(false)}
-        onError={() => toast.error("Não foi possível carregar o áudio dessa faixa.")}
-      />
+      {ytVideoId ? (
+        <div id={ytContainerId.current} className="w-px h-px opacity-0 pointer-events-none fixed bottom-0 right-0" />
+      ) : (
+        <audio
+          ref={audioRef}
+          src={effectiveAudioSrc}
+          preload="metadata"
+          onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
+          onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration || 0)}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+          onError={() => toast.error("Não foi possível carregar o áudio dessa faixa.")}
+        />
+      )}
 
       <div className="flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+16px)] pb-3">
         <div className="min-w-0 flex items-center gap-3">
