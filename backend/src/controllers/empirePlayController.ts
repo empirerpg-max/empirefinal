@@ -46,6 +46,15 @@ function correctArtistName(rawName: string, knownNames: string[]): string {
   return best[0].name;
 }
 
+// Tira o prefixo "Artista - " de um valor JÁ normalizado (normalizeComparison)
+// — usado pra casar título de álbum com "Album" de uma faixa mesmo quando só
+// um dos dois lados foi digitado com o prefixo do artista (convenção manual,
+// não garantida). Se não tiver o prefixo, devolve o valor como veio.
+function stripArtistPrefixNormalized(normalizedValue: string): string {
+  const match = normalizedValue.match(/^.+?\s[-–—]\s(.+)$/);
+  return match ? match[1].trim() : normalizedValue;
+}
+
 /**
  * Igual a sheetsService.readSheetObjects, mas preserva o número real da
  * linha na planilha (1-based) em cada registro — necessário pra depois
@@ -1184,7 +1193,17 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
       const matchingSongs = songs.filter((s) => {
         if (!s.album) return false;
         const normSongAlbum = normalizeComparison(s.album);
-        return normSongAlbum === normAlbumTitle || normAlbumTitle.includes(normSongAlbum);
+        if (normSongAlbum === normAlbumTitle || normAlbumTitle.includes(normSongAlbum)) return true;
+        // Falha silenciosa confirmada em 2026-09-18 (álbum SANTISSIMA da
+        // Emma some sem capa nem faixa nenhuma vinculada): a comparação
+        // acima depende de o "Nome" do álbum na aba Albuns SEMPRE vir
+        // digitado como "Artista - Título", igual a coluna "Album" de cada
+        // faixa — nessa linha especificamente faltava o prefixo do
+        // artista (só "SANTISSIMA"), e nenhuma das faixas ("Emma -
+        // SANTISSIMA") batia mais. Compara também os dois lados SEM o
+        // prefixo do artista, pra nunca mais depender dessa convenção
+        // manual de digitação.
+        return stripArtistPrefixNormalized(normSongAlbum) === stripArtistPrefixNormalized(normAlbumTitle);
       });
 
       // Ordenar faixas pela coluna Ordem
@@ -1208,15 +1227,28 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         telegramTopicId: s.telegramTopicId,
       }));
 
+      // Se a própria linha do álbum não tem capa cadastrada, usa a de
+      // alguma faixa vinculada em vez de deixar o álbum sem nenhuma —
+      // mesmo fallback que já existe no sentido inverso (faixa sem capa
+      // própria usa a do álbum).
+      const resolvedCoverUrl = coverUrl || matchingSongs.find((s) => s.coverUrl)?.coverUrl;
+
       return {
         // Mesma correção de Musicas/Music Videos: ID real do tópico (e, se
         // faltar, o Código único — também estável) em vez da posição na
         // leitura da planilha (que muda sozinha e misturava álbum/
         // comentários errados quando uma linha era inserida/removida).
-        id: `album_${telegramTopicId || codigoUnico || `idx${idx + 1}`}`,
+        // O backfill de topicId em forumController.ts já grava o ID de
+        // álbum COM o prefixo "album_" (ex: "album_1789526186644_d1fj53")
+        // — sem essa checagem, prefixava de novo aqui ("album_album_..."),
+        // visível ao vivo na URL do tópico e quebrando qualquer lookup
+        // exato por esse id.
+        id: telegramTopicId?.startsWith("album_")
+          ? telegramTopicId
+          : `album_${telegramTopicId || codigoUnico || `idx${idx + 1}`}`,
         title: displayTitle,
         artist,
-        coverUrl,
+        coverUrl: resolvedCoverUrl,
         releaseDate,
         releaseDateIso,
         metacriticAvg,
