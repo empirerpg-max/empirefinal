@@ -23,6 +23,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import { driveImg, driveRawImg } from "@/lib/api";
+import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
@@ -896,11 +897,22 @@ export const Forum: React.FC<ForumProps> = ({
                   }`}
                 >
                   {selectedTopic.cover && !heroCoverFailed ? (
-                    <img
-                      src={driveImg(selectedTopic.cover, 800)}
+                    // Antes era um <img driveImg> puro, sem fallback pro proxy
+                    // autenticado — qualquer arquivo do Drive não compartilhado
+                    // como "Qualquer pessoa com o link" (ex: capa do álbum
+                    // SANTISSIMA) mostrava o placeholder mesmo com a URL
+                    // certinha na planilha. Mesma correção já usada em
+                    // TopicThumbImg/SmartImg no resto do app.
+                    <SmartImg
+                      src={selectedTopic.cover}
+                      size={800}
                       alt={selectedTopic.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                      onError={() => setHeroCoverFailed(true)}
+                      fallback={
+                        <div className="w-full h-full grid place-items-center bg-neutral-900">
+                          <Music className="size-16 text-neutral-700" />
+                        </div>
+                      }
                     />
                   ) : (
                     <div className="w-full h-full grid place-items-center bg-neutral-900">
