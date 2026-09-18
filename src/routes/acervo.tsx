@@ -455,21 +455,25 @@ function MetacriticGridCard({ item }: { item: MetacriticItem }) {
             loading="lazy"
           />
         )}
+        {/* Selo menor no celular (era fixo em 2.25rem/h-9) — em grids de 3
+            colunas numa tela estreita, esse tamanho fixo sobrava pouco
+            espaço dentro da capa e o selo ficava espremido/cortado contra a
+            borda. Volta ao tamanho original a partir de sm. */}
         <span
-          className={`absolute bottom-2 right-2 min-w-[2.25rem] h-9 px-1.5 rounded-lg grid place-items-center text-black text-sm font-black shadow-lg leading-none ${metacriticScoreColor(item.nota)}`}
+          className={`absolute bottom-1 right-1 sm:bottom-2 sm:right-2 min-w-[1.75rem] h-7 sm:min-w-[2.25rem] sm:h-9 px-1 sm:px-1.5 rounded-md sm:rounded-lg grid place-items-center text-black text-xs sm:text-sm font-black shadow-lg leading-none ${metacriticScoreColor(item.nota)}`}
         >
           {item.nota.toFixed(0)}
         </span>
       </div>
-      <div className="p-2.5 space-y-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9px] font-black uppercase tracking-wide text-primary px-1.5 py-0.5 rounded bg-primary/15">
+      <div className="p-2 sm:p-2.5 space-y-1">
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+          <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wide text-primary px-1 sm:px-1.5 py-0.5 rounded bg-primary/15">
             {item.tipo === "albuns" ? "Álbum" : "Música"}
           </span>
-          {ano && <span className="text-[9px] font-bold text-muted-foreground">{ano}</span>}
+          {ano && <span className="text-[8px] sm:text-[9px] font-bold text-muted-foreground">{ano}</span>}
         </div>
-        <p className="text-xs font-bold leading-snug truncate">{item.titulo}</p>
-        <p className="text-[10px] text-muted-foreground font-medium truncate">{item.artista}</p>
+        <p className="text-[11px] sm:text-xs font-bold leading-snug truncate">{item.titulo}</p>
+        <p className="text-[9px] sm:text-[10px] text-muted-foreground font-medium truncate">{item.artista}</p>
       </div>
     </Link>
   );
@@ -993,7 +997,11 @@ function MetacriticTab({
     itens.length === 0 ? (
       <p className="text-xs text-muted-foreground italic px-1">Nada por aqui ainda.</p>
     ) : (
-      <div className="grid grid-cols-3 gap-3">
+      // gap menor no celular (era gap-3 fixo) — em tela estreita, 3 cards
+      // lado a lado com esse respiro sobrava pouco espaço pra cada um,
+      // apertando o selo de nota (absolute, largura mínima fixa) contra a
+      // borda da capa.
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
         {itens.map((item) => (
           <MetacriticGridCard key={item.id} item={item} />
         ))}
