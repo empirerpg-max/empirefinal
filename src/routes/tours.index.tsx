@@ -166,7 +166,7 @@ function ToursIndex() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [missoes, setMissoes] = useState<Missao[] | null>(null);
-  const [aba, setAba] = useState<"central" | "finalizados">("central");
+  const [aba, setAba] = useState<"central" | "finalizados" | "rentaveis">("central");
   const [feed, setFeed] = useState<FeedItem[] | null>(null);
 
   function loadMinhas() {
@@ -240,9 +240,11 @@ function ToursIndex() {
   const todasTurnesConhecidas = [...(minhasTurnes || []), ...(publicas || [])].filter(
     (t, i, arr) => arr.findIndex((o) => o.idUnico === t.idUnico) === i,
   );
-  const rankingRentaveis = [...todasTurnesConhecidas]
-    .sort((a, b) => b.arrecadacaoTempoReal - a.arrecadacaoTempoReal)
-    .slice(0, 5);
+  // Lista completa, sem cortar — o "top 5" saiu de dentro da Central e
+  // virou a própria aba "Mais Rentáveis", que mostra o ranking inteiro.
+  const rankingRentaveis = [...todasTurnesConhecidas].sort(
+    (a, b) => b.arrecadacaoTempoReal - a.arrecadacaoTempoReal,
+  );
 
   return (
     <main className="flex-1 mx-auto w-full max-w-2xl px-4 pt-6 pb-20">
@@ -286,15 +288,45 @@ function ToursIndex() {
         >
           Finalizados
         </button>
+        <button
+          onClick={() => setAba("rentaveis")}
+          className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition ${
+            aba === "rentaveis" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+          }`}
+        >
+          Mais Rentáveis
+        </button>
       </div>
 
-      {aba === "central" ? (
+      {aba === "rentaveis" ? (
+        <section>
+          <p className="text-xs text-muted-foreground mb-4 px-1">
+            Ranking histórico completo — minhas turnês e as de todo mundo, em andamento ou já finalizadas.
+          </p>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 opacity-50">
+              <Loader2 className="size-8 animate-spin" />
+              <p className="text-xs font-bold uppercase tracking-widest">Carregando turnês...</p>
+            </div>
+          ) : rankingRentaveis.length === 0 ? (
+            <div className="rounded-3xl bg-white/[0.03] border border-dashed border-white/10 p-12 text-center">
+              <div className="size-16 rounded-full bg-muted/20 text-muted-foreground grid place-items-center mx-auto mb-4">
+                <Trophy className="size-8" />
+              </div>
+              <h2 className="text-lg font-bold mb-1">Nada por aqui ainda</h2>
+              <p className="text-sm text-muted-foreground max-w-[240px] mx-auto text-balance">
+                Nenhuma turnê arrecadou nada ainda.
+              </p>
+            </div>
+          ) : (
+            <RankingRentaveis turnes={rankingRentaveis} />
+          )}
+        </section>
+      ) : aba === "central" ? (
         <>
           {telegramId && missoes && missoes.length > 0 && <MissoesCarousel missoes={missoes} />}
 
           <FeedGlobal feed={feed} />
-
-          {rankingRentaveis.length > 0 && <RankingRentaveis turnes={rankingRentaveis} />}
 
           {telegramId && meusArtistas.length > 0 && (
             <CollapsibleSection title="Minhas Turnês" count={minhasTurnes?.length}>
