@@ -24,6 +24,7 @@ import {
 import { fmtMoney, driveImg } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
+import { useImageCrop } from "@/hooks/use-image-crop";
 import { Calendar } from "@/components/ui/calendar";
 
 export const Route = createFileRoute("/tours/$nome")({
@@ -991,6 +992,12 @@ function EditTourInfoModal({
   const [uploading, setUploading] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  const { cropModal: capaCropModal, cropImage: cropCapa } = useImageCrop({
+    targetW: 1280,
+    targetH: 720,
+    shape: "square",
+    title: "Editar capa da turnê",
+  });
 
   async function handleUploadCapa(file: File) {
     setUploading(true);
@@ -1087,7 +1094,13 @@ function EditTourInfoModal({
               accept="image/*"
               className="hidden"
               disabled={uploading}
-              onChange={(e) => e.target.files?.[0] && handleUploadCapa(e.target.files[0])}
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                const cropped = await cropCapa(f);
+                if (cropped) handleUploadCapa(cropped);
+              }}
             />
           </label>
         </div>
@@ -1115,6 +1128,7 @@ function EditTourInfoModal({
           Salvar alterações
         </button>
       </div>
+      {capaCropModal}
     </div>
   );
 }

@@ -40,6 +40,7 @@ import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type NivelJogador } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { AwardBadge } from "@/components/AwardBadge";
+import { useImageCrop } from "@/hooks/use-image-crop";
 import { getHOFProfile, type HOFProfile } from "@/lib/charts";
 import { notify } from "@/lib/notify";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -1281,11 +1282,14 @@ function FotoModal({ nome, onClose, onDone }: { nome: string; onClose: () => voi
   const [preview, setPreview] = useState<string | null>(null);
   const [s, setS] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { cropModal, cropImage } = useImageCrop({ targetW: 512, targetH: 512, shape: "square", title: "Editar foto do artista" });
 
-  function pick(f: File | undefined) {
+  async function pick(f: File | undefined) {
     if (!f) return;
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+    const cropped = await cropImage(f);
+    if (!cropped) return;
+    setFile(cropped);
+    setPreview(URL.createObjectURL(cropped));
     setErrorMsg(null);
   }
 
@@ -1349,6 +1353,7 @@ function FotoModal({ nome, onClose, onDone }: { nome: string; onClose: () => voi
       <button onClick={go} disabled={s || !file} className={btnCls()}>
         {s && <Loader2 className="size-4 animate-spin" />} Enviar
       </button>
+      {cropModal}
     </Modal>
   );
 }

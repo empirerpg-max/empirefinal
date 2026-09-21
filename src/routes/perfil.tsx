@@ -29,6 +29,7 @@ import {
 import { getStoredLogin, setStoredLogin, clearStoredLogin } from "@/components/LoginScreen";
 import { BUILD_ID } from "@/lib/pwa";
 import { toast } from "sonner";
+import { useImageCrop } from "@/hooks/use-image-crop";
 
 export const Route = createFileRoute("/perfil")({
   component: Perfil,
@@ -57,6 +58,7 @@ function Perfil() {
   const [salvos, setSalvos] = useState<LoadState<PlaylistTrack[]>>({ status: "loading" });
   const [minhasPlaylists, setMinhasPlaylists] = useState<LoadState<PlaylistPayload[]>>({ status: "loading" });
   const [nivel, setNivel] = useState<NivelJogador | null>(null);
+  const { cropModal, cropImage } = useImageCrop({ targetW: 512, targetH: 512, shape: "circle", title: "Editar foto de perfil" });
 
   const tgId = (typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null) || user?.id || "";
 
@@ -178,9 +180,12 @@ function Perfil() {
                   accept="image/*"
                   className="hidden"
                   disabled={uploadingFoto}
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleUploadFoto(file);
+                    e.target.value = "";
+                    if (!file) return;
+                    const cropped = await cropImage(file);
+                    if (cropped) handleUploadFoto(cropped);
                   }}
                 />
               </label>
@@ -497,6 +502,7 @@ function Perfil() {
       <p className="mt-6 text-center text-[10px] font-mono text-muted-foreground/40">
         build {BUILD_ID}
       </p>
+      {cropModal}
     </div>
   );
 }
