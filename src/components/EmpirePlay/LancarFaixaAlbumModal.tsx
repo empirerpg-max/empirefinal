@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, Search, Loader2, Rocket, Disc, Upload, Image as ImageIcon, Plus, Minus } from "lucide-react";
+import { X, Search, Loader2, Rocket, Disc, Upload, Image as ImageIcon, Plus, Minus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { haptic } from "@/lib/telegram";
 import { driveImg } from "@/lib/api";
+import {
+  ExtraMaterialEditor,
+  emptyExtraMaterialEditorValue,
+  fetchExtraMaterial,
+  saveExtraMaterial,
+  type ExtraMaterialEditorValue,
+} from "./ExtraMaterial";
 
 const TIPOS_SINGLE_FAIXA = [
   "TRACKLIST ALBUM",
@@ -30,6 +37,7 @@ interface FaixaPendente {
   capaUrl: string;
   letra: string;
   participantes: string[];
+  codigoUnico: string;
 }
 
 interface LancarFaixaAlbumModalProps {
@@ -72,6 +80,7 @@ export function LancarFaixaAlbumModal({
   const [capaPreview, setCapaPreview] = useState<string | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrlInput, setAudioUrlInput] = useState("");
+  const [extraEdit, setExtraEdit] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
 
   const [publicando, setPublicando] = useState(false);
 
@@ -105,6 +114,24 @@ export function LancarFaixaAlbumModal({
     setCapaPreview(f.capaUrl || null);
     setAudioFile(null);
     setAudioUrlInput(f.audioUrl || "");
+    // Botões do tópico (Shop/Info/Visual) — mesma opção que "Nova Música"
+    // já tem, faltava aqui. Se a faixa já tem Código único (comum: faixa
+    // inédita de álbum já ganha um na criação), carrega o que já existe
+    // pra edição; senão começa vazio, igual uma música nova.
+    if (f.codigoUnico) {
+      fetchExtraMaterial(f.codigoUnico, "musica").then((data) =>
+        setExtraEdit({
+          shopAtivo: data.shop.length > 0,
+          shop: data.shop,
+          infoAtivo: !!data.info.trim(),
+          info: data.info,
+          visualAtivo: data.arte.length > 0,
+          arte: data.arte,
+        }),
+      );
+    } else {
+      setExtraEdit(emptyExtraMaterialEditorValue());
+    }
   }
 
   function handleCapaSelect(file: File) {
@@ -146,6 +173,16 @@ export function LancarFaixaAlbumModal({
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Erro ao lançar a faixa.");
+
+      const codigoUnico = data.data?.codigoUnico || "";
+      if (codigoUnico && (extraEdit.shopAtivo || extraEdit.infoAtivo || extraEdit.visualAtivo)) {
+        await saveExtraMaterial(codigoUnico, "musica", {
+          shop: extraEdit.shopAtivo ? extraEdit.shop : [],
+          info: extraEdit.infoAtivo ? extraEdit.info : "",
+          arte: extraEdit.visualAtivo ? extraEdit.arte : [],
+        }).catch(() => {});
+      }
+
       haptic.success();
       toast.success("Faixa lançada!", {
         description: `"${selecionada.titulo}" agora tem tópico próprio nos charts.`,
@@ -390,6 +427,14 @@ export function LancarFaixaAlbumModal({
                 placeholder="Cole ou digite a letra completa..."
                 className="w-full px-4 py-3 bg-neutral-900 border border-white/10 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 resize-y"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+                <Sparkles className="size-3.5 text-emerald-400" />
+                Botões do Tópico (Opcional)
+              </label>
+              <ExtraMaterialEditor value={extraEdit} onChange={setExtraEdit} folderType="materiaisMusica" />
             </div>
 
             <button
