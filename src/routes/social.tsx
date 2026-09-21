@@ -3953,10 +3953,17 @@ function SocialPage() {
           className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setZoomedImageUrl(null)}
         >
+          {/* Antes ficava fixo a 16px do topo, sem margem de segurança —
+              em celulares com notch/barra de status (ou dentro do Telegram
+              WebApp) o X ficava embaixo dessa área, quase impossível de
+              acertar o toque. Usa env(safe-area-inset-top) + um respiro
+              fixo, e nunca deixa passar de um teto máximo (clamp via min),
+              sempre visível dentro da tela. Alvo de toque maior também. */}
           <button
             type="button"
             onClick={() => setZoomedImageUrl(null)}
-            className="absolute top-4 right-4 size-9 rounded-full bg-white/10 text-white grid place-items-center"
+            style={{ top: "min(calc(env(safe-area-inset-top) + 14px), 10vh)" }}
+            className="absolute right-4 size-11 rounded-full bg-white/15 hover:bg-white/25 text-white grid place-items-center shadow-lg active:scale-90 transition"
             aria-label="Fechar"
           >
             <X className="size-5" />
