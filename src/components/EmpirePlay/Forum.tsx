@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { driveImg, driveRawImg } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
+import { EncarteViewer } from "./EncarteViewer";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
@@ -272,6 +273,8 @@ export const Forum: React.FC<ForumProps> = ({
   // de trocar por uma foto de banco de imagens (Unsplash) que não tem nada
   // a ver com o conteúdo real, além de vazar dado do visitante pro Unsplash.
   const [heroCoverFailed, setHeroCoverFailed] = useState(false);
+  // Página aberta no visualizador de encarte em tela cheia (null = fechado).
+  const [encarteAberto, setEncarteAberto] = useState<number | null>(null);
   // Evita reabrir o deep link se o jogador voltar pra lista manualmente.
   const [pendingDeepLinkId, setPendingDeepLinkId] = useState<string | undefined>(initialItemId);
   // Filtro de tag do submenu Vídeos (Music Video, Live, Video, etc).
@@ -336,6 +339,7 @@ export const Forum: React.FC<ForumProps> = ({
 
   useEffect(() => {
     setHeroCoverFailed(false);
+    setEncarteAberto(null);
   }, [selectedTopic?.id]);
 
   const handleVideoPlay = (topic: ForumTopicItem) => {
@@ -1176,13 +1180,19 @@ export const Forum: React.FC<ForumProps> = ({
                       <FileText className="size-4" />
                       Encarte
                     </h3>
+                    {/* Antes abria a imagem crua em nova aba (target=_blank)
+                        — agora abre um visualizador de página dentro do
+                        próprio app, com a experiência de folhear (swipe/
+                        setas), pedido desde o início. */}
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {selectedTopic.encarte.map((url, i) => (
-                        <a
+                        <button
+                          type="button"
                           key={i}
-                          href={driveImg(url, 1200) || url}
-                          target="_blank"
-                          rel="noreferrer"
+                          onClick={() => {
+                            haptic.selection();
+                            setEncarteAberto(i);
+                          }}
                           className="aspect-square rounded-lg overflow-hidden bg-neutral-900 border border-white/5"
                         >
                           <img
@@ -1190,11 +1200,19 @@ export const Forum: React.FC<ForumProps> = ({
                             alt={`Encarte ${i + 1}`}
                             className="w-full h-full object-cover hover:scale-105 transition"
                           />
-                        </a>
+                        </button>
                       ))}
                     </div>
                   </div>
                 )}
+
+              {encarteAberto !== null && selectedTopic.encarte && (
+                <EncarteViewer
+                  paginas={selectedTopic.encarte}
+                  indiceInicial={encarteAberto}
+                  onClose={() => setEncarteAberto(null)}
+                />
+              )}
 
               {/* CASO MÚSICA: EXIBIR LETRA COMPLETA (ou karaoke, se essa é a
                   faixa tocando agora e o dono do artista sincronizou) */}

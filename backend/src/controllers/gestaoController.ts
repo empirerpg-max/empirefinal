@@ -1154,8 +1154,14 @@ async function processarFaixasDoAlbum(
 export async function getMeusAlbunsController(): Promise<Response> {
   try {
     const rows = await googleSheetsService.principal.readValues("Albuns");
-    const albuns: { topicId: string; label: string; artist: string; title: string; capaUrl: string }[] =
-      [];
+    const albuns: {
+      topicId: string;
+      label: string;
+      artist: string;
+      title: string;
+      capaUrl: string;
+      encarte: string[];
+    }[] = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const label = (row[6] || "").trim(); // G
@@ -1168,6 +1174,14 @@ export async function getMeusAlbunsController(): Promise<Response> {
         artist: sepIdx >= 0 ? label.slice(0, sepIdx).trim() : label,
         title: sepIdx >= 0 ? label.slice(sepIdx + 3).trim() : "",
         capaUrl: (row[2] || "").trim(), // C
+        // Pra jogador poder ver/remover encarte já cadastrado antes de
+        // trocar — sem isso, "Substituir Álbum" só sabia UPLOADAR encarte
+        // novo, cego (nunca mostrava o que já existia nem dava pra tirar
+        // uma imagem específica sem trocar todas).
+        encarte: (row[9] || "")
+          .split(",")
+          .map((u) => u.trim())
+          .filter(Boolean), // J
       });
     }
     return new Response(JSON.stringify({ success: true, data: albuns }), {
@@ -1512,7 +1526,7 @@ export async function substituirAlbumController(request: Request): Promise<Respo
     const {
       albumTopicId,
       novaCapaUrl = "",
-      novosEncartesUrls = [],
+      novosEncartesUrls,
       novasFaixas = [],
       nomeJogador,
       jogadorId = "",
@@ -1560,7 +1574,11 @@ export async function substituirAlbumController(request: Request): Promise<Respo
       }
     }
 
-    if (novosEncartesUrls.length > 0) {
+    // undefined = campo nem foi enviado (não mexe no encarte); [] enviado
+    // de propósito = jogador removeu todo o encarte que tinha, precisa
+    // conseguir limpar a coluna. Antes só gravava com length > 0, então
+    // não tinha como esvaziar o encarte pela tela.
+    if (novosEncartesUrls !== undefined) {
       try {
         await googleSheetsService.principal.updateValues("Albuns", `J${rowIndex}`, [
           [novosEncartesUrls.join(", ")],
