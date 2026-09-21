@@ -44,6 +44,29 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const comentarioRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // Rascunho salvo automaticamente no localStorage enquanto a pessoa digita
+  // — protege contra perder um comentário grande por causa de reload
+  // (deploy novo, queda de conexão, fechar a aba sem querer etc). Chave por
+  // tópico+resposta pra não misturar rascunho de um comentário com o de
+  // outro. Caso real que motivou isso: jogador Gilson perdeu um comentário
+  // enorme no álbum SANTISSIMA porque o app recarregou sozinho no meio da
+  // digitação, logo após um deploy.
+  const draftKey = `empire_comment_draft:${topicId || tituloMedia}:${replyTo || "root"}`;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const salvo = localStorage.getItem(draftKey);
+    if (salvo) setComentario(salvo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, draftKey]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (comentario.trim()) localStorage.setItem(draftKey, comentario);
+    else localStorage.removeItem(draftKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comentario, draftKey]);
+
   // Nome do jogador logado — mesmo padrão usado em toda a Ponto/Header/etc:
   // getStoredLogin()?.nome (login próprio) primeiro, telegramUser.name como
   // fallback só pra quem ainda não migrou pro login novo. Sempre automático,
@@ -113,6 +136,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
 
       // Reset fields
       setComentario("");
+      localStorage.removeItem(draftKey);
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || "Erro de conexão ao enviar comentário.");
