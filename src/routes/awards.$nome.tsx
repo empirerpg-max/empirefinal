@@ -110,8 +110,8 @@ function AwardDetalhePage() {
             <ChevronLeft className="size-5 text-white" />
           </button>
 
-          <div className="absolute inset-x-0 bottom-0 px-5 pb-6">
-            <h1 className="text-3xl font-black uppercase tracking-tight leading-none text-white drop-shadow">
+          <div className="absolute inset-x-0 bottom-0 px-5 pb-6 max-w-lg mx-auto w-full">
+            <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight leading-none text-white drop-shadow">
               {data?.nome || nome}
             </h1>
             {data && edicaoAtual && (
@@ -130,8 +130,8 @@ function AwardDetalhePage() {
                     onClick={() => irParaSegmento(segmento)}
                     className="shrink-0 flex flex-col items-center gap-1.5 active:scale-95 transition"
                   >
-                    <span className="size-12 rounded-full bg-white/10 border border-white/20 backdrop-blur grid place-items-center">
-                      <Trophy className="size-4.5 text-white" />
+                    <span className="size-11 sm:size-12 rounded-full bg-white/10 border border-white/20 backdrop-blur grid place-items-center">
+                      <Trophy className="size-4 sm:size-4.5 text-white" />
                     </span>
                     <span className="text-[9px] font-bold text-white/80 uppercase tracking-wide max-w-14 truncate">
                       {segmento}
@@ -144,7 +144,7 @@ function AwardDetalhePage() {
         </div>
       </div>
 
-      <div className="relative -mt-6 rounded-t-[32px] bg-background min-h-[40vh] px-5 pt-6 shadow-[0_-20px_40px_-20px_rgba(0,0,0,0.6)]">
+      <div className="relative -mt-6 rounded-t-[32px] bg-background min-h-[40vh] px-5 pt-6 shadow-[0_-20px_40px_-20px_rgba(0,0,0,0.6)] max-w-lg mx-auto">
         {!data && !erro && (
           <div className="flex items-center justify-center p-20">
             <Loader2 className="size-8 text-primary animate-spin" />
@@ -233,18 +233,29 @@ function AwardDetalhePage() {
                         )}
 
                         {grupo.indicados.length > 0 && (
-                          <div className="flex items-center gap-2.5 flex-wrap">
+                          <div className="grid grid-cols-2 gap-2">
                             {grupo.indicados.map((n, i) => (
                               <div
                                 key={i}
-                                title={`${nomeExibicao(n)}${n.titulo && n.artista ? ` · ${n.artista}` : ""}`}
-                                className="size-10 shrink-0 rounded-full overflow-hidden bg-secondary grid place-items-center ring-1 ring-white/10"
+                                className="flex items-center gap-2 min-w-0 p-1.5 rounded-xl bg-white/[0.06] border border-white/10 backdrop-blur-md"
                               >
-                                {n.capa ? (
-                                  <SmartImg src={n.capa} size={120} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  <Trophy className="size-3.5 text-muted-foreground/30" />
-                                )}
+                                <div className="size-8 shrink-0 rounded-lg overflow-hidden bg-secondary grid place-items-center">
+                                  {n.capa ? (
+                                    <SmartImg src={n.capa} size={100} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <Trophy className="size-3 text-muted-foreground/30" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[11px] font-semibold leading-tight truncate">
+                                    {nomeExibicao(n)}
+                                  </p>
+                                  {n.titulo && n.artista && (
+                                    <p className="text-[10px] text-muted-foreground leading-tight truncate">
+                                      {n.artista}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>
