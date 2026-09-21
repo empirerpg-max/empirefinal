@@ -23,6 +23,7 @@ import {
   Link2,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
+import { driveImg } from "@/lib/api";
 import { EditModal } from "./EditModal";
 import { BannersManager } from "./BannersManager";
 import { getStoredLogin } from "@/components/LoginScreen";
@@ -82,6 +83,7 @@ export interface MeuAlbum {
   artist: string;
   title: string;
   capaUrl: string;
+  encarte?: string[];
 }
 
 const TIPOS_ALBUM = ["EP", "Álbum", "Deluxe"];
@@ -533,6 +535,12 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [albumSubstSelecionado, setAlbumSubstSelecionado] = useState<MeuAlbum | null>(null);
   const [substNovasFaixasCount, setSubstNovasFaixasCount] = useState<number>(0);
   const [substNovasFaixas, setSubstNovasFaixas] = useState<TrackConfig[]>([]);
+  // Encarte já cadastrado do álbum selecionado, editável aqui — antes só
+  // dava pra ANEXAR encarte novo às cegas (sem ver o que já existia nem
+  // conseguir tirar uma imagem específica); agora mostra as imagens atuais
+  // com botão de remover, e o que sobrar + o que for enviado de novo vira
+  // a lista final gravada.
+  const [encarteAtual, setEncarteAtual] = useState<string[]>([]);
 
   // Submissão
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -1206,7 +1214,11 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         );
       }
 
-      const novosEncartesUrls: string[] = [];
+      // Lista final = o que sobrou do encarte atual (jogador pode ter
+      // removido alguma imagem na tela) + o que for enviado de novo agora —
+      // nunca mais um upload "cego" que substitui tudo sem o jogador ver o
+      // que já existia.
+      const novosEncartesUrls: string[] = [...encarteAtual];
       if (encartesFiles.length > 0) {
         for (let i = 0; i < encartesFiles.length; i++) {
           setUploadProgress(`Fazendo upload do encarte ${i + 1} de ${encartesFiles.length}...`);
@@ -1275,6 +1287,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setCapaFile(null);
       setCapaPreview(null);
       setEncartesFiles([]);
+      setEncarteAtual([]);
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro inesperado ao substituir álbum.");
@@ -2436,6 +2449,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                       onClick={() => {
                         setAlbumSubstSelecionado(null);
                         setAlbumSubstQuery("");
+                        setEncarteAtual([]);
                       }}
                       className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
                     >
@@ -2465,6 +2479,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                               onClick={() => {
                                 setAlbumSubstSelecionado(a);
                                 setAlbumSubstQuery("");
+                                setEncarteAtual(a.encarte || []);
                               }}
                               className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
                             >
@@ -2554,7 +2569,31 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                        Novos Encartes (Opcional — substitui os atuais)
+                        Encarte
+                      </label>
+                      {encarteAtual.length > 0 && (
+                        <div className="grid grid-cols-4 gap-2 mb-2">
+                          {encarteAtual.map((url, i) => (
+                            <div key={`${url}-${i}`} className="relative aspect-square rounded-lg overflow-hidden border border-white/10 bg-neutral-900">
+                              <img
+                                src={driveImg(url, 200)}
+                                alt={`Encarte ${i + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setEncarteAtual((prev) => prev.filter((_, idx) => idx !== i))}
+                                className="absolute top-1 right-1 size-6 rounded-full bg-black/70 text-red-400 grid place-items-center hover:bg-black/90"
+                                title="Remover essa imagem do encarte"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <label className="text-[11px] text-neutral-500 block">
+                        Adicionar imagens novas:
                       </label>
                       <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
                         <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
