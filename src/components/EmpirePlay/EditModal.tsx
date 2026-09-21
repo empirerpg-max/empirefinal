@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { driveImg } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { useBackClose } from "@/hooks/use-back-close";
+import { useImageCrop } from "@/hooks/use-image-crop";
 import {
   ExtraMaterialEditor,
   emptyExtraMaterialEditorValue,
@@ -1532,6 +1533,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           }}
         />
       )}
+      {capaVideoCropModal}
     </div>
   );
 };
