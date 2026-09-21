@@ -1,6 +1,15 @@
-import { driveRawImg, AWARD_BADGE_ICON_VENCEDOR_URL, AWARD_BADGE_ICON_INDICADO_URL } from "@/lib/api";
-
 export type AwardBadgeInfo = { award: string; ano: string; status: "vencedor" | "indicado" };
+
+// Os arquivos originais (SVG exportado do Figma/Canva) na verdade embrulham
+// uma imagem rasterizada opaca com uma máscara de luminância simulando
+// transparência — renderizava com fundo branco sólido em vez de
+// transparente (o SVG em si não tem bug, mas depender do Drive/proxy pra
+// servir esse formato específico é frágil). Composto localmente uma vez só
+// (extraindo a imagem + máscara de dentro do SVG) num PNG de verdade com
+// canal alfa, e serve como asset estático do próprio app — sem depender do
+// Drive pra esses dois ícones específicos.
+const ICON_VENCEDOR = "/badges/vencedor.png";
+const ICON_INDICADO = "/badges/indicado.png";
 
 /**
  * Selo "Vencedor do X (ano)" / "Indicado ao X (ano)" — usa os símbolos
@@ -10,7 +19,7 @@ export type AwardBadgeInfo = { award: string; ano: string; status: "vencedor" | 
  */
 export function AwardBadge({ award, ano, status, className = "" }: AwardBadgeInfo & { className?: string }) {
   const label = status === "vencedor" ? `Vencedor do ${award} ${ano}` : `Indicado ao ${award} ${ano}`;
-  const icone = status === "vencedor" ? AWARD_BADGE_ICON_VENCEDOR_URL : AWARD_BADGE_ICON_INDICADO_URL;
+  const icone = status === "vencedor" ? ICON_VENCEDOR : ICON_INDICADO;
   return (
     <span
       className={`inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border backdrop-blur-md max-w-full ${
@@ -20,11 +29,7 @@ export function AwardBadge({ award, ano, status, className = "" }: AwardBadgeInf
       } ${className}`}
       title={label}
     >
-      {/* driveRawImg (não driveImg): os SVGs desses selos têm fundo
-          transparente, mas o proxy de thumbnail do Drive rasteriza pra PNG e
-          preenche a transparência com branco — o proxy autenticado devolve
-          o arquivo cru, preservando a transparência de verdade. */}
-      <img src={driveRawImg(icone)} alt="" className="size-4 shrink-0" />
+      <img src={icone} alt="" className="size-4 shrink-0" />
       <span className="text-[10px] font-bold truncate">{label}</span>
     </span>
   );

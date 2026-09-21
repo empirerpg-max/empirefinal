@@ -362,14 +362,6 @@ export interface CommonResponse {
   id?: string;
 }
 
-// Símbolos oficiais de vencedor/indicado (criados pelo dono do app
-// especificamente pra esse selo) — link do Drive fornecido direto, mesmo
-// arquivo aplicado em qualquer badge de premiação no app.
-export const AWARD_BADGE_ICON_VENCEDOR_URL =
-  "https://drive.google.com/file/d/140V337NTPtXWeREBxYjgsbSU_vMGzIxS/view?usp=sharing";
-export const AWARD_BADGE_ICON_INDICADO_URL =
-  "https://drive.google.com/file/d/1Khjsf-LV-ezutYsLojrTWUX_ruR0mSIT/view?usp=sharing";
-
 export const api = {
   // chamada genérica de baixo nível (mantida para compatibilidade com chamadas diretas)
   call: <T = unknown>(params: Record<string, unknown>, opts: { cache?: boolean } = {}) =>
