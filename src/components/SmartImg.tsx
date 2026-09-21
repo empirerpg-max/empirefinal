@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { driveImg, driveRawImg } from "@/lib/api";
+import { driveImg, driveImgWide, driveRawImg } from "@/lib/api";
 
 /**
  * <img> com fallback em cascata pra links do Google Drive: tenta o
@@ -20,6 +20,7 @@ export function SmartImg({
   size,
   fallback,
   loading = "lazy",
+  wide = false,
 }: {
   src?: string | null;
   alt: string;
@@ -27,6 +28,11 @@ export function SmartImg({
   size?: number;
   fallback?: React.ReactNode;
   loading?: "lazy" | "eager";
+  /** Imagem que NÃO é quadrada por natureza (ex: página de encarte, pôster,
+   * banner) — usa driveImgWide em vez de driveImg, que sempre força um
+   * recorte quadrado (bug confirmado: encarte retangular aparecia cortado
+   * em quadrado no visualizador). */
+  wide?: boolean;
 }) {
   const [stage, setStage] = useState<"sized" | "raw" | "falhou">("sized");
   useEffect(() => {
@@ -35,7 +41,7 @@ export function SmartImg({
 
   if (!src || stage === "falhou") return fallback ? <>{fallback}</> : null;
 
-  const sizedSrc = driveImg(src, size);
+  const sizedSrc = wide ? driveImgWide(src, size) : driveImg(src, size);
   const rawSrc = driveRawImg(src);
   const finalSrc = stage === "raw" ? rawSrc : sizedSrc;
   if (!finalSrc) return fallback ? <>{fallback}</> : null;
