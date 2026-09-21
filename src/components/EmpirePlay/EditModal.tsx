@@ -120,6 +120,15 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [extraEdit, setExtraEdit] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
   const [capaFile, setCapaFile] = useState<File | null>(null);
   const [capaPreview, setCapaPreview] = useState<string | null>(null);
+  // Só pra Thumb de VÍDEO — capa de música/álbum fica de fora do editor de
+  // recorte, por pedido explícito. Vídeo é 16:9 (aba "Videografia" do
+  // artista, estilo YouTube), não quadrado.
+  const { cropModal: capaVideoCropModal, cropImage: cropCapaVideo } = useImageCrop({
+    targetW: 1280,
+    targetH: 720,
+    shape: "square",
+    title: "Editar thumb do vídeo",
+  });
   // Áudio da música em edição — tela de editar lançamento nunca teve como
   // inserir/trocar o áudio (só tinha na criação e no álbum), mesmo já
   // existindo faixa sem áudio nenhum ou com link quebrado.
@@ -1327,11 +1336,14 @@ export const EditModal: React.FC<EditModalProps> = ({
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const f = e.target.files?.[0];
-                          if (f) {
-                            setCapaFile(f);
-                            setCapaPreview(URL.createObjectURL(f));
+                          e.target.value = "";
+                          if (!f) return;
+                          const finalFile = category === "videos" ? await cropCapaVideo(f) : f;
+                          if (finalFile) {
+                            setCapaFile(finalFile);
+                            setCapaPreview(URL.createObjectURL(finalFile));
                           }
                         }}
                         className="hidden"

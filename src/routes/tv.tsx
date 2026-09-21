@@ -7,6 +7,7 @@ import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, t
 import { SmartImg } from "@/components/SmartImg";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
+import { useImageCrop } from "@/hooks/use-image-crop";
 import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
 import { resolveStreamEmbed, kickChannelFromUrl, forceUnmuteIframe, hasUnmutedThisSession } from "@/lib/tvEmbed";
 
@@ -1820,6 +1821,14 @@ function RedCarpetComposer({
   const [uploading, setUploading] = useState(false);
   const [posting, setPosting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // O carrossel do red carpet exibe as fotos em aspect-[4/5] (retrato),
+  // não quadrado — ver RedCarpetCarousel.
+  const { cropModal: fotoCropModal, cropImage: cropFoto } = useImageCrop({
+    targetW: 960,
+    targetH: 1200,
+    shape: "square",
+    title: "Editar foto",
+  });
 
   const addFotos = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -1828,7 +1837,10 @@ function RedCarpetComposer({
     if (escolhidas.length === 0) return;
     setUploading(true);
     try {
-      for (const file of escolhidas) {
+      for (const original of escolhidas) {
+        const cropped = await cropFoto(original);
+        if (!cropped) continue; // pulou essa foto
+        const file = cropped;
         const formData = new FormData();
         formData.append("file", file);
         formData.append("fileName", file.name);
@@ -1942,7 +1954,11 @@ function RedCarpetComposer({
             accept="image/*"
             multiple
             hidden
-            onChange={(e) => addFotos(e.target.files)}
+            onChange={(e) => {
+              const files = e.target.files;
+              e.target.value = "";
+              addFotos(files);
+            }}
           />
         </div>
 
@@ -1957,6 +1973,7 @@ function RedCarpetComposer({
           />
         </div>
       </div>
+      {fotoCropModal}
     </div>
   );
 }
