@@ -27,6 +27,7 @@ import {
   MessageCircle,
   ExternalLink,
   Send,
+  Trophy,
 } from "lucide-react";
 import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
@@ -259,6 +260,13 @@ function AcervoPage() {
           {tab === "pitchfork" && <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
           <Newspaper className="relative z-10 size-3.5" /> <span className="relative z-10">Empirefork</span>
         </button>
+        <Link
+          to="/awards"
+          onClick={() => haptic.selection()}
+          className="relative shrink-0 px-4 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all active:scale-95 text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
+        >
+          <Trophy className="size-3.5" /> <span>Awards</span>
+        </Link>
       </div>
 
       <div className="px-4">
