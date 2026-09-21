@@ -19,6 +19,7 @@ import {
   X,
   Check,
   ChevronDown,
+  SlidersHorizontal,
   ExternalLink,
   Maximize2,
 } from "lucide-react";
@@ -85,6 +86,10 @@ interface ForumTopicItem {
   link: string | null;
   videoSource?: string | null;
   releaseDate: string | null;
+  // Formato ISO (YYYY-MM-DD) — usado pro filtro por data (comparação de
+  // string funciona direto nesse formato); releaseDate acima fica como
+  // veio da planilha (BR, só pra exibir).
+  releaseDateIso?: string | null;
   telegramTopicId: string | null;
   // Tag do vídeo (coluna "Tipo de vídeo") — null pra músicas/álbuns.
   tipoVideo: string | null;
@@ -249,6 +254,13 @@ export const Forum: React.FC<ForumProps> = ({
   const [items, setItems] = useState<ForumTopicItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  // Filtros avançados do Fórum (data/artista/não comentado) — separados da
+  // busca livre de título acima, que já existia.
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  const [filtroArtista, setFiltroArtista] = useState<string>("");
+  const [filtroDataDe, setFiltroDataDe] = useState<string>("");
+  const [filtroDataAte, setFiltroDataAte] = useState<string>("");
+  const [filtroNaoComentado, setFiltroNaoComentado] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState<ForumTopicItem | null>(null);
   const navigate = useNavigate();
   // Sem isso, a URL nunca mudava ao abrir um tópico — sempre ficava em
@@ -376,6 +388,10 @@ export const Forum: React.FC<ForumProps> = ({
     setLoading(true);
     setSelectedTopic(null);
     setActiveVideoTag("Todos");
+    // O artista escolhido no filtro não existe necessariamente na aba nova
+    // (Músicas/Vídeos/Álbuns têm listas diferentes) — reseta pra não
+    // esconder tudo silenciosamente ao trocar de aba.
+    setFiltroArtista("");
 
     const endpointMap: Record<ForumSubmenu, string> = {
       musicas: "/api/empire-play/musicas",
@@ -424,6 +440,7 @@ export const Forum: React.FC<ForumProps> = ({
             null,
           videoSource: item.videoSource || null,
           releaseDate: item.releaseDate || item.data_lancamento || item.data || null,
+          releaseDateIso: item.releaseDateIso || null,
           telegramTopicId: item.telegramTopicId || null,
           tipoVideo: item.category || item.tipo_video || null,
           lyrics: item.lyrics || item.letra || item.fields?.letra || null,
@@ -721,21 +738,61 @@ export const Forum: React.FC<ForumProps> = ({
     }
   }
 
-  // Filtragem por busca + tag (Vídeos)
+  // Lista de artistas pra popular o filtro — só os que realmente aparecem
+  // na aba atual, em ordem alfabética.
+  const artistasDoSubmenu = useMemo(() => {
+    const nomes = new Set<string>();
+    for (const item of items) {
+      if (item.artist && item.artist !== "Artista não informado") nomes.add(item.artist);
+    }
+    return Array.from(nomes).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [items]);
+
+  // Filtragem por busca (título/artista/álbum) + tag (Vídeos) + filtros
+  // avançados (data, artista específico, "não comentei ainda").
   const filteredItems = useMemo(() => {
     let list = items;
     if (activeSubmenu === "videos" && activeVideoTag !== "Todos") {
       list = list.filter((item) => item.tipoVideo === activeVideoTag);
     }
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter(
-      (item) =>
-        item.title?.toLowerCase().includes(q) ||
-        item.artist?.toLowerCase().includes(q) ||
-        item.album?.toLowerCase().includes(q),
-    );
-  }, [items, searchQuery, activeSubmenu, activeVideoTag]);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (item) =>
+          item.title?.toLowerCase().includes(q) ||
+          item.artist?.toLowerCase().includes(q) ||
+          item.album?.toLowerCase().includes(q),
+      );
+    }
+    if (filtroArtista) {
+      list = list.filter((item) => item.artist === filtroArtista);
+    }
+    if (filtroDataDe) {
+      list = list.filter((item) => !!item.releaseDateIso && item.releaseDateIso >= filtroDataDe);
+    }
+    if (filtroDataAte) {
+      list = list.filter((item) => !!item.releaseDateIso && item.releaseDateIso <= filtroDataAte);
+    }
+    if (filtroNaoComentado) {
+      list = list.filter(
+        (item) => !item.telegramTopicId || !commentedTopicIds.has(item.telegramTopicId),
+      );
+    }
+    return list;
+  }, [
+    items,
+    searchQuery,
+    activeSubmenu,
+    activeVideoTag,
+    filtroArtista,
+    filtroDataDe,
+    filtroDataAte,
+    filtroNaoComentado,
+    commentedTopicIds,
+  ]);
+
+  const filtrosAtivos =
+    !!filtroArtista || !!filtroDataDe || !!filtroDataAte || filtroNaoComentado;
 
   // Extrai nota ou likes dos campos do item — sem dado real, retorna vazio
   // (nunca inventa um número; o ScoreBadge simplesmente não renderiza).
@@ -1578,6 +1635,102 @@ export const Forum: React.FC<ForumProps> = ({
               placeholder={`Pesquisar tópicos em ${activeSubmenu}...`}
               className="w-full pl-10 pr-4 py-2.5 sm:py-3.5 bg-neutral-900/80 border border-white/10 rounded-xl sm:rounded-2xl text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition shadow-lg"
             />
+          </div>
+
+          {/* FILTROS AVANÇADOS (data, artista, não comentado) — pedido
+              explícito: além da busca livre por título, filtro estruturado
+              por artista, faixa de data de lançamento e só tópicos em que o
+              jogador ainda não comentou. */}
+          <div className="space-y-2.5">
+            <button
+              type="button"
+              onClick={() => setFiltrosAbertos((v) => !v)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider border transition ${
+                filtrosAtivos
+                  ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400"
+                  : "bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:border-white/20"
+              }`}
+            >
+              <SlidersHorizontal className="size-3.5" />
+              Filtros
+              {filtrosAtivos && (
+                <span className="size-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
+              )}
+              <ChevronDown className={`size-3.5 transition-transform ${filtrosAbertos ? "rotate-180" : ""}`} />
+            </button>
+
+            {filtrosAbertos && (
+              <div className="rounded-2xl bg-neutral-900/80 border border-white/10 p-3.5 sm:p-4 space-y-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                      Artista
+                    </label>
+                    <select
+                      value={filtroArtista}
+                      onChange={(e) => setFiltroArtista(e.target.value)}
+                      className="w-full px-3 py-2 bg-neutral-950 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="">Todos</option>
+                      {artistasDoSubmenu.map((nome) => (
+                        <option key={nome} value={nome}>
+                          {nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                      Lançado de
+                    </label>
+                    <input
+                      type="date"
+                      value={filtroDataDe}
+                      onChange={(e) => setFiltroDataDe(e.target.value)}
+                      className="w-full px-3 py-2 bg-neutral-950 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                      Até
+                    </label>
+                    <input
+                      type="date"
+                      value={filtroDataAte}
+                      onChange={(e) => setFiltroDataAte(e.target.value)}
+                      className="w-full px-3 py-2 bg-neutral-950 border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2.5 cursor-pointer w-fit">
+                  <input
+                    type="checkbox"
+                    checked={filtroNaoComentado}
+                    onChange={(e) => setFiltroNaoComentado(e.target.checked)}
+                    className="size-4 rounded accent-emerald-500"
+                  />
+                  <span className="text-xs font-bold text-neutral-300">
+                    Só tópicos que eu ainda não comentei
+                  </span>
+                </label>
+
+                {filtrosAtivos && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFiltroArtista("");
+                      setFiltroDataDe("");
+                      setFiltroDataAte("");
+                      setFiltroNaoComentado(false);
+                    }}
+                    className="text-[11px] font-bold text-neutral-500 hover:text-white"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* FILTRO DE TAG (só no submenu Vídeos) */}
