@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image as ImageIcon, Link2, Trash2, Loader2, GripVertical, Search } from "lucide-react";
+import { Image as ImageIcon, Link2, Trash2, Loader2, GripVertical, Search, Pencil, X } from "lucide-react";
 import { authHeaders } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { useImageCrop } from "@/hooks/use-image-crop";
@@ -96,6 +96,10 @@ export function BannersManager({ tgId }: { tgId: string }) {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  // Editar um banner já publicado (não só apagar e recriar) — guarda o
+  // banner original sendo editado pra reaproveitar imagem/ordem quando a
+  // pessoa não troca a foto, só ajusta legenda/link.
+  const [editando, setEditando] = useState<BannerRow | null>(null);
 
   const carregar = () => {
     setLoading(true);
@@ -129,7 +133,7 @@ export function BannersManager({ tgId }: { tgId: string }) {
   );
 
   const handleSalvar = async () => {
-    if (!imageFile) {
+    if (!imageFile && !editando) {
       setErrorMsg("Escolha uma imagem para o banner.");
       return;
     }
@@ -146,34 +150,59 @@ export function BannersManager({ tgId }: { tgId: string }) {
     setErrorMsg(null);
     setSuccessMsg(null);
     try {
-      const imagem_url = await uploadBannerImage(imageFile);
+      // Editando sem trocar a foto: mantém a imagem original em vez de
+      // exigir reenviar de novo só pra mudar legenda/link.
+      const imagem_url = imageFile ? await uploadBannerImage(imageFile) : editando!.imagem_url;
       const res = await fetch("/api/social/banners", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
+          id: editando?.id,
           imagem_url,
           link_destino: link_destino || undefined,
           legenda: legenda.trim() || undefined,
-          ordem: banners.length,
+          ordem: editando?.ordem ?? banners.length,
           tgId,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "Erro ao salvar banner.");
 
-      setSuccessMsg("Banner publicado!");
+      setSuccessMsg(editando ? "Banner atualizado!" : "Banner publicado!");
       setImageFile(null);
       setImagePreview(null);
       setDestinoSelecionado(null);
       setDestinoBusca("");
       setLinkManual("");
       setLegenda("");
+      setEditando(null);
       carregar();
     } catch (err: any) {
       setErrorMsg(err.message || "Erro inesperado ao salvar o banner.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleEditar = (banner: BannerRow) => {
+    setEditando(banner);
+    setImageFile(null);
+    setImagePreview(banner.imagem_url);
+    setLegenda(banner.legenda || "");
+    setDestinoTipo("manual");
+    setLinkManual(banner.link_destino || "");
+    setDestinoSelecionado(null);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+  };
+
+  const handleCancelarEdicao = () => {
+    setEditando(null);
+    setImageFile(null);
+    setImagePreview(null);
+    setLegenda("");
+    setLinkManual("");
+    setDestinoSelecionado(null);
   };
 
   const handleApagar = async (id: string) => {
@@ -199,6 +228,17 @@ export function BannersManager({ tgId }: { tgId: string }) {
       )}
 
       <div className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40">
+        {editando && (
+          <div className="flex items-center justify-between gap-2 p-3 rounded-xl bg-primary/10 border border-primary/20">
+            <p className="text-xs font-bold text-primary">Editando banner existente</p>
+            <button
+              onClick={handleCancelarEdicao}
+              className="size-6 rounded-full bg-white/10 text-white grid place-items-center shrink-0"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
             <ImageIcon className="size-4 text-emerald-400" />
@@ -345,7 +385,7 @@ export function BannersManager({ tgId }: { tgId: string }) {
           className="w-full py-3.5 rounded-2xl bg-emerald-500 text-black font-black text-xs uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {saving && <Loader2 className="size-4 animate-spin" />}
-          Publicar Banner
+          {editando ? "Salvar alterações" : "Publicar Banner"}
         </button>
       </div>
 
@@ -364,6 +404,12 @@ export function BannersManager({ tgId }: { tgId: string }) {
               {b.legenda && <p className="text-xs font-bold text-white truncate">{b.legenda}</p>}
               {b.link_destino && <p className="text-[10px] text-neutral-500 truncate">{b.link_destino}</p>}
             </div>
+            <button
+              onClick={() => handleEditar(b)}
+              className="size-8 rounded-full bg-white/5 border border-white/10 text-neutral-300 hover:text-white grid place-items-center shrink-0"
+            >
+              <Pencil className="size-3.5" />
+            </button>
             <button
               onClick={() => handleApagar(b.id)}
               className="size-8 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 grid place-items-center shrink-0"
