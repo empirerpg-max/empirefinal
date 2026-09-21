@@ -40,6 +40,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useTelegramUser, haptic, useTelegramBackButton } from "@/lib/telegram";
 import { api, driveImg, driveRawImg, type Artist } from "@/lib/api";
 import { useServiceWorkerUpdate } from "@/lib/pwa";
+import { useImageCrop } from "@/hooks/use-image-crop";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationBell } from "@/components/NotificationBell";
 import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
@@ -65,10 +66,18 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
   const [novoGravadora, setNovoGravadora] = useState("");
   const [creating, setCreating] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
+  const { cropModal: novoFotoCropModal, cropImage: cropNovaFoto } = useImageCrop({
+    targetW: 400,
+    targetH: 400,
+    shape: "square",
+    title: "Editar foto do artista",
+  });
 
-  const handleNovoFotoSelect = (file: File) => {
-    setNovoFotoFile(file);
-    setNovoFotoPreview(URL.createObjectURL(file));
+  const handleNovoFotoSelect = async (file: File) => {
+    const cropped = await cropNovaFoto(file);
+    if (!cropped) return;
+    setNovoFotoFile(cropped);
+    setNovoFotoPreview(URL.createObjectURL(cropped));
   };
 
   useEffect(() => {
@@ -292,7 +301,11 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && handleNovoFotoSelect(e.target.files[0])}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) handleNovoFotoSelect(f);
+                    }}
                     className="hidden"
                   />
                 </label>
@@ -330,6 +343,7 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </motion.div>
+      {novoFotoCropModal}
     </div>
   );
 }

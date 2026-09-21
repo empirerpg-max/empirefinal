@@ -671,6 +671,12 @@ function TourActionModal({
   const [uploading, setUploading] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  const { cropModal: fotoCropModal, cropImage: cropFoto } = useImageCrop({
+    targetW: 800,
+    targetH: 800,
+    shape: "square",
+    title: "Editar foto",
+  });
 
   const config = TIPOS_ACAO.find((t) => t.tipo === tipo)!;
 
@@ -790,9 +796,12 @@ function TourActionModal({
                   accept="image/*"
                   className="hidden"
                   disabled={uploading}
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const f = e.target.files?.[0];
-                    if (f) handleUploadFoto(f);
+                    e.target.value = "";
+                    if (!f) return;
+                    const cropped = await cropFoto(f);
+                    if (cropped) handleUploadFoto(cropped);
                   }}
                 />
               </label>
@@ -829,6 +838,7 @@ function TourActionModal({
           Publicar
         </button>
       </div>
+      {fotoCropModal}
     </div>
   );
 }
@@ -852,6 +862,12 @@ function EditAcaoModal({
   const [uploading, setUploading] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  const { cropModal: fotoCropModal, cropImage: cropFoto } = useImageCrop({
+    targetW: 800,
+    targetH: 800,
+    shape: "square",
+    title: "Editar foto",
+  });
 
   async function handleUploadFoto(file: File) {
     setUploading(true);
@@ -938,7 +954,13 @@ function EditAcaoModal({
                 accept="image/*"
                 className="hidden"
                 disabled={uploading}
-                onChange={(e) => e.target.files?.[0] && handleUploadFoto(e.target.files[0])}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!f) return;
+                  const cropped = await cropFoto(f);
+                  if (cropped) handleUploadFoto(cropped);
+                }}
               />
             </label>
           </div>
@@ -968,6 +990,7 @@ function EditAcaoModal({
           Salvar edição
         </button>
       </div>
+      {fotoCropModal}
     </div>
   );
 }
