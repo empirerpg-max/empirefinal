@@ -691,6 +691,23 @@ function MusicasTab({ nome }: { nome: string }) {
   );
 }
 
+// Texto relativo tipo "há 3 dias"/"há 2 meses" — mesma linguagem usada no
+// estilo YouTube pedido como referência.
+function formatarDataRelativa(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const data = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(data.getTime())) return null;
+  const diasPassados = Math.floor((Date.now() - data.getTime()) / (1000 * 60 * 60 * 24));
+  if (diasPassados < 0) return null;
+  if (diasPassados === 0) return "hoje";
+  if (diasPassados === 1) return "há 1 dia";
+  if (diasPassados < 30) return `há ${diasPassados} dias`;
+  const meses = Math.floor(diasPassados / 30);
+  if (meses < 12) return meses === 1 ? "há 1 mês" : `há ${meses} meses`;
+  const anos = Math.floor(meses / 12);
+  return anos === 1 ? "há 1 ano" : `há ${anos} anos`;
+}
+
 // ---------- Aba: Vídeos ----------
 function VideosTab({ nome }: { nome: string }) {
   const { playVideo } = useEmpirePlayer();
@@ -706,34 +723,80 @@ function VideosTab({ nome }: { nome: string }) {
     return () => { alive = false; };
   }, [nome]);
 
+  // Mais recente primeiro — o backend já devolve ordenado, mas reforça
+  // aqui (defensivo) já que era exatamente essa ordem que estava
+  // aparecendo errada na tela. Itens sem data ficam por último.
+  const videosOrdenados = useMemo(() => {
+    if (!videos) return null;
+    return [...videos].sort((a, b) => {
+      const isoA = a.releaseDateIso || paraDataIso(a.releaseDate);
+      const isoB = b.releaseDateIso || paraDataIso(b.releaseDate);
+      if (isoA && isoB) return isoB.localeCompare(isoA);
+      if (isoA) return -1;
+      if (isoB) return 1;
+      return 0;
+    });
+  }, [videos]);
+
   return (
     <section>
       <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4 px-1 flex items-center gap-1.5">
         <Video className="size-3.5" /> Vídeos no catálogo
       </h2>
-      {videos === null ? (
-        <div className="h-14 rounded-2xl bg-card animate-pulse" />
-      ) : videos.length === 0 ? (
+      {videosOrdenados === null ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-5">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <div className="aspect-video rounded-xl bg-card animate-pulse" />
+              <div className="h-3 w-4/5 rounded bg-card animate-pulse" />
+              <div className="h-2.5 w-1/2 rounded bg-card animate-pulse" />
+            </div>
+          ))}
+        </div>
+      ) : videosOrdenados.length === 0 ? (
         <p className="text-[10px] text-muted-foreground italic px-1">Nenhum vídeo no catálogo ainda.</p>
       ) : (
-        <div className="space-y-1.5">
-          {videos.map((v, i) => {
+        // Grid estilo YouTube (referência trazida pelo usuário): capa 16:9
+        // com duração no canto, título até 2 linhas, artista com selo de
+        // verificado, e a data relativa embaixo.
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-5">
+          {videosOrdenados.map((v, i) => {
+            const dataRelativa = formatarDataRelativa(v.releaseDateIso || paraDataIso(v.releaseDate));
             return (
               <button
                 key={i}
                 onClick={() => playVideo(toPlayableVideo(v))}
-                className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors text-left"
+                className="text-left group"
               >
-                <div className="size-9 rounded-lg overflow-hidden bg-secondary shrink-0 grid place-items-center">
-                  {v.coverUrl ? <SmartImg src={v.coverUrl} alt="" className="w-full h-full object-cover" fallback={<Video className="size-4 text-muted-foreground" />} /> : <Video className="size-4 text-muted-foreground" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium break-words leading-tight">{v.title || v.titulo || "—"}</p>
-                  {v.displayArtists && (
-                    <p className="text-[11px] text-muted-foreground break-words mt-0.5">{v.displayArtists}</p>
+                <div className="aspect-video rounded-xl overflow-hidden bg-secondary relative">
+                  {v.coverUrl ? (
+                    <SmartImg
+                      src={v.coverUrl}
+                      alt=""
+                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                      fallback={<div className="w-full h-full grid place-items-center"><Video className="size-6 text-muted-foreground" /></div>}
+                    />
+                  ) : (
+                    <div className="w-full h-full grid place-items-center"><Video className="size-6 text-muted-foreground" /></div>
                   )}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors grid place-items-center">
+                    <Play className="size-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                  </div>
                 </div>
-                <Play className="size-3.5 text-muted-foreground shrink-0" />
+                <div className="mt-2 flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-bold leading-snug line-clamp-2">
+                      {v.title || v.titulo || "—"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1 truncate">
+                      <span className="truncate">{v.displayArtists || v.artist || nome}</span>
+                      <VerifiedBadge className="size-3 shrink-0 not-italic" />
+                    </p>
+                    {dataRelativa && (
+                      <p className="text-[10px] text-muted-foreground/70 mt-0.5">{dataRelativa}</p>
+                    )}
+                  </div>
+                </div>
               </button>
             );
           })}
