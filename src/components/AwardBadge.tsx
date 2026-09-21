@@ -12,10 +12,9 @@ const ICON_VENCEDOR = "/badges/vencedor.png";
 const ICON_INDICADO = "/badges/indicado.png";
 
 /**
- * Selo "Vencedor do X (ano)" / "Indicado ao X (ano)" — usa os símbolos
- * oficiais (um pra cada status) criados pelo dono do app pra esse fim.
- * Sempre um elemento à parte da capa/thumb (nunca sobreposto), pra capa
- * continuar sendo sempre a prioridade visual.
+ * Cardzinho "Vencedor do X (ano)" / "Indicado ao X (ano)" com ícone+texto —
+ * usado onde NÃO há capa/thumb por perto pra disputar espaço (ex: aba
+ * Awards do artista, linha de info abaixo do título no Fórum).
  */
 export function AwardBadge({ award, ano, status, className = "" }: AwardBadgeInfo & { className?: string }) {
   const label = status === "vencedor" ? `Vencedor do ${award} ${ano}` : `Indicado ao ${award} ${ano}`;
@@ -31,6 +30,27 @@ export function AwardBadge({ award, ano, status, className = "" }: AwardBadgeInf
     >
       <img src={icone} alt="" className="size-4 shrink-0" />
       <span className="text-[10px] font-bold truncate">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * Selinho de CANTO, só o ícone — pra sobrepor diretamente em cima de uma
+ * capa/thumb (estilo badge de notificação num ícone de app: fica por cima
+ * de tudo, na ponta, sem nunca substituir ou empurrar a imagem). O
+ * posicionamento (absolute + qual canto) é responsabilidade de quem usa.
+ */
+export function AwardCornerBadge({ award, ano, status, className = "" }: AwardBadgeInfo & { className?: string }) {
+  const label = status === "vencedor" ? `Vencedor do ${award} ${ano}` : `Indicado ao ${award} ${ano}`;
+  const icone = status === "vencedor" ? ICON_VENCEDOR : ICON_INDICADO;
+  return (
+    <span
+      title={label}
+      className={`grid place-items-center rounded-full shadow-lg ring-2 ring-black/50 p-1 ${
+        status === "vencedor" ? "bg-amber-400" : "bg-white"
+      } ${className}`}
+    >
+      <img src={icone} alt="" className="w-full h-full object-contain" />
     </span>
   );
 }
