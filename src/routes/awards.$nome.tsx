@@ -212,9 +212,11 @@ function AwardDetalhePage() {
                               ) : (
                                 <Trophy className="size-6 text-muted-foreground/40" />
                               )}
-                              <div className="absolute -top-1.5 -right-1.5 size-7 rounded-full bg-amber-400 grid place-items-center shadow p-1">
-                                <img src="/badges/vencedor.png" alt="" className="w-full h-full object-contain" />
-                              </div>
+                              <img
+                                src="/badges/vencedor.png"
+                                alt=""
+                                className="absolute -top-2 -right-2 size-9 drop-shadow-lg"
+                              />
                             </div>
                             <div className="min-w-0 flex-1">
                               <span className="text-[9px] font-black uppercase text-amber-400 tracking-widest">

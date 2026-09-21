@@ -43,14 +43,9 @@ export function AwardBadge({ award, ano, status, className = "" }: AwardBadgeInf
 export function AwardCornerBadge({ award, ano, status, className = "" }: AwardBadgeInfo & { className?: string }) {
   const label = status === "vencedor" ? `Vencedor do ${award} ${ano}` : `Indicado ao ${award} ${ano}`;
   const icone = status === "vencedor" ? ICON_VENCEDOR : ICON_INDICADO;
-  return (
-    <span
-      title={label}
-      className={`grid place-items-center rounded-full shadow-lg ring-2 ring-black/50 p-1 ${
-        status === "vencedor" ? "bg-amber-400" : "bg-white"
-      } ${className}`}
-    >
-      <img src={icone} alt="" className="w-full h-full object-contain" />
-    </span>
-  );
+  // Sem círculo de fundo por trás: o próprio selo já é um "sticker"
+  // fechado (contorno próprio desenhado nele) — colocar outro círculo
+  // atrás ficava redundante e, em tamanho pequeno, o contorno do sticker
+  // parecia um fundo branco sólido.
+  return <img src={icone} alt="" title={label} className={`object-contain drop-shadow-lg ${className}`} />;
 }
