@@ -671,9 +671,11 @@ function TourActionModal({
   const [uploading, setUploading] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  // A foto da ação do dia é exibida em aspect-video (16:9) no feed da
+  // turnê, não quadrada — o corte precisa bater com isso.
   const { cropModal: fotoCropModal, cropImage: cropFoto } = useImageCrop({
-    targetW: 800,
-    targetH: 800,
+    targetW: 1280,
+    targetH: 720,
     shape: "square",
     title: "Editar foto",
   });
@@ -862,9 +864,11 @@ function EditAcaoModal({
   const [uploading, setUploading] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  // A foto da ação do dia é exibida em aspect-video (16:9) no feed da
+  // turnê, não quadrada — o corte precisa bater com isso.
   const { cropModal: fotoCropModal, cropImage: cropFoto } = useImageCrop({
-    targetW: 800,
-    targetH: 800,
+    targetW: 1280,
+    targetH: 720,
     shape: "square",
     title: "Editar foto",
   });
@@ -1015,9 +1019,11 @@ function EditTourInfoModal({
   const [uploading, setUploading] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  // Card de turnê na listagem exibe a capa em aspect-[16/8.5], não 16:9 —
+  // o corte precisa bater com essa proporção exata.
   const { cropModal: capaCropModal, cropImage: cropCapa } = useImageCrop({
     targetW: 1280,
-    targetH: 720,
+    targetH: 680,
     shape: "square",
     title: "Editar capa da turnê",
   });
