@@ -96,6 +96,27 @@ const DADOS: Record<string, Indicado[]> = {
   "BEST ELECTRONIC/DANCE ALBUM": [{ artista: "Angela", titulo: "ANGELA", vencedor: true }],
 };
 
+// Fallback de Segmento pra categoria que não existe em NENHUM ano ainda
+// (nem 2026, nem anterior) — categoria nova de verdade, sem nenhuma linha
+// pra copiar o Segmento. Mapeado pelo agrupamento real do Grammy.
+const SEGMENTO_FALLBACK: Record<string, string> = {
+  "BEST RECORDING PACKAGE": "Packaging/Notes",
+  "BEST MUSIC FILM": "Music Video/Film",
+  "BEST MUSIC VIDEO": "Music Video/Film",
+  "BEST LATIN SONG": "Latin",
+  "BEST LATIN PERFORMANCE": "Latin",
+  "BEST RAP ALBUM": "Rap",
+  "BEST RAP SONG": "Rap",
+  "BEST RAP/SUNG PERFORMANCE": "Rap",
+  "BEST RAP PERFORMANCE": "Rap",
+  "BEST R&B SONG": "R&B",
+  "BEST R&B PERFORMANCE": "R&B",
+  "BEST ROCK/ALTERNATIVE ALBUM": "Rock",
+  "BEST ROCK/ALTERNATIVE SONG": "Rock",
+  "BEST ROCK/ALTERNATIVE PERFORMANCE": "Rock",
+  "BEST ELECTRONIC/DANCE ALBUM": "Dance/Electronic",
+};
+
 export async function adminFillGrammy2026Controller(): Promise<Response> {
   const rows = await readValues(SPREADSHEET_KEY, SHEET, "A:F");
   const resultados: any[] = [];
@@ -103,13 +124,17 @@ export async function adminFillGrammy2026Controller(): Promise<Response> {
   for (const [categoriaAlvo, indicados] of Object.entries(DADOS)) {
     const normAlvo = normalizeComparison(categoriaAlvo);
     let segmento = "";
-    let templateRowIndex = -1; // 0-based no array `rows`
+    let templateRowIndex = -1; // 0-based no array `rows`, só válido se for do ano 2026
 
+    // Primeira passada: procura o Segmento em QUALQUER ano (a categoria já
+    // existe em edições anteriores, só não tinha linha própria pra 2026
+    // ainda) e, se achar uma linha vazia já existente PRA 2026, marca como
+    // template a reaproveitar em vez de criar linha nova.
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      if (normalizeText(row[0]) !== ANO) continue;
       if (normalizeComparison(row[2]) !== normAlvo) continue;
-      segmento = normalizeText(row[1]);
+      if (!segmento) segmento = normalizeText(row[1]);
+      if (normalizeText(row[0]) !== ANO) continue;
       const jaPreenchida = !!(normalizeText(row[4]) || normalizeText(row[5]));
       if (!jaPreenchida) {
         templateRowIndex = i;
@@ -117,10 +142,7 @@ export async function adminFillGrammy2026Controller(): Promise<Response> {
       }
     }
 
-    if (!segmento) {
-      resultados.push({ categoria: categoriaAlvo, ok: false, motivo: "Categoria não encontrada na aba pro ano 2026." });
-      continue;
-    }
+    if (!segmento) segmento = SEGMENTO_FALLBACK[categoriaAlvo] || "Geral";
 
     let escritos = 0;
     for (const nom of indicados) {
