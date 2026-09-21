@@ -318,7 +318,7 @@ export function invalidateCache() {
 // ARTISTAS (fonte de verdade do vínculo) podia não bater com a grafia
 // vinda do catálogo geral (Apps Script) e sumir da lista "meus artistas"
 // mesmo estando corretamente vinculado.
-function normalizeNome(v: string): string {
+export function normalizeNome(v: string): string {
   return (v || "")
     .trim()
     .normalize("NFD")
@@ -361,6 +361,12 @@ export interface CommonResponse {
   message?: string;
   id?: string;
 }
+
+// Símbolo oficial de vencedor/indicado (criado pelo dono do app
+// especificamente pra esse selo) — link do Drive fornecido direto, mesmo
+// arquivo aplicado em qualquer badge de premiação no app.
+export const AWARD_BADGE_ICON_URL =
+  "https://drive.google.com/file/d/140V337NTPtXWeREBxYjgsbSU_vMGzIxS/view?usp=sharing";
 
 export const api = {
   // chamada genérica de baixo nível (mantida para compatibilidade com chamadas diretas)
@@ -950,6 +956,26 @@ export const api = {
     } catch {
       return { success: false, error: "Tempo esgotado ao carregar. Tente novamente." };
     }
+  },
+
+  async getArtistAwards(nome: string): Promise<{
+    success: boolean;
+    error?: string;
+    data?: {
+      totalIndicacoes: number;
+      totalVencedor: number;
+      porAward: { award: string; indicacoes: number; vencedor: number }[];
+      detalhes: { award: string; ano: string; categoria: string; status: "vencedor" | "indicado"; titulo?: string; artista: string }[];
+    };
+  }> {
+    const res = await fetch(`/api/awards/artista?nome=${encodeURIComponent(nome)}`).then((r) => r.json());
+    return res;
+  },
+  async listarAwardsTodos(): Promise<
+    { award: string; ano: string; categoria: string; status: "vencedor" | "indicado"; titulo?: string; artista: string }[]
+  > {
+    const res = await fetch("/api/awards/todos").then((r) => r.json());
+    return res?.data || [];
   },
 
   // ---- Empire Market (prestígio) ----

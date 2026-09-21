@@ -23,8 +23,9 @@ import {
   ExternalLink,
   Maximize2,
 } from "lucide-react";
-import { driveImg, driveRawImg } from "@/lib/api";
+import { driveImg, driveRawImg, api, normalizeNome } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
+import { AwardBadge, type AwardBadgeInfo } from "@/components/AwardBadge";
 import { EncarteViewer } from "./EncarteViewer";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
@@ -294,6 +295,12 @@ export const Forum: React.FC<ForumProps> = ({
   // IDs de tópico (telegramTopicId) em que EU já comentei — pra marcar um
   // "✓ você comentou" na listagem, sem precisar abrir cada tópico.
   const [commentedTopicIds, setCommentedTopicIds] = useState<Set<string>>(new Set());
+  // Todo resultado de premiação (todas as abas de award), buscado 1x só —
+  // usado pra achar o badge de vencedor/indicado de cada tópico, sem 1
+  // requisição por item.
+  const [premiacoes, setPremiacoes] = useState<
+    { award: string; ano: string; categoria: string; status: "vencedor" | "indicado"; titulo?: string; artista: string }[]
+  >([]);
 
   // State para comentários do tópico selecionado
   const [topicComments, setTopicComments] = useState<CommentItem[]>([]);
@@ -497,6 +504,44 @@ export const Forum: React.FC<ForumProps> = ({
       isMounted = false;
     };
   }, [myId]);
+
+  // 1.3 Carrega toda a base de premiações 1x só, pra casar cada tópico com
+  // seu badge de vencedor/indicado.
+  useEffect(() => {
+    let isMounted = true;
+    api.listarAwardsTodos().then((data) => {
+      if (isMounted) setPremiacoes(data);
+    }).catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Pra cada tópico, acha a melhor premiação pra exibir (título+artista;
+  // se não bater por título, tenta só pelo artista — cobre o caso de vídeo
+  // ao vivo etc. cujo título na planilha de awards é livre). Prioriza
+  // vencedor > indicado, e a edição mais recente em caso de empate.
+  const premioDoTopico = (item: { title: string; artist: string }): AwardBadgeInfo | null => {
+    if (!premiacoes.length) return null;
+    const t = normalizeNome(item.title);
+    const a = normalizeNome(item.artist);
+    // Só casa quando tem Título na planilha de award batendo com o
+    // tópico — categoria sem título (ex: "Best New Artist", ligada só ao
+    // artista) não tem como saber qual material específico badgear, então
+    // não entra aqui (evita badgear TODA música de um artista premiado).
+    const candidatos = premiacoes.filter(
+      (p) => !!p.titulo && normalizeNome(p.titulo) === t && normalizeNome(p.artista).includes(a),
+    );
+    if (!candidatos.length) return null;
+    candidatos.sort((x, y) => {
+      if ((x.status === "vencedor") !== (y.status === "vencedor")) {
+        return x.status === "vencedor" ? -1 : 1;
+      }
+      return (y.ano || "").localeCompare(x.ano || "");
+    });
+    const melhor = candidatos[0];
+    return { award: melhor.award, ano: melhor.ano, status: melhor.status };
+  };
 
   // 1.1 Deep link (player/catálogo → fórum): assim que os itens da aba
   // inicial carregam, abre direto o tópico pedido.
@@ -1079,6 +1124,11 @@ export const Forum: React.FC<ForumProps> = ({
                   <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400 mt-3">
                     <Calendar className="size-3.5" />
                     <span>Lançamento: {selectedTopic.releaseDate}</span>
+                  </div>
+                )}
+                {!visualAberto && premioDoTopico(selectedTopic) && (
+                  <div className="mt-2.5">
+                    <AwardBadge {...premioDoTopico(selectedTopic)!} />
                   </div>
                 )}
                 {(activeSubmenu === "musicas" || activeSubmenu === "albuns") && (
@@ -1822,6 +1872,11 @@ export const Forum: React.FC<ForumProps> = ({
                       <p className="text-[10px] sm:text-xs text-neutral-400 line-clamp-1 mt-0.5">
                         {item.artist}
                       </p>
+                      {premioDoTopico(item) && (
+                        <div className="mt-1.5">
+                          <AwardBadge {...premioDoTopico(item)!} className="!px-2 !py-0.5" />
+                        </div>
+                      )}
                     </div>
                   </div>
 
