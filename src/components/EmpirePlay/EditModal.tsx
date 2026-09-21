@@ -125,6 +125,13 @@ export const EditModal: React.FC<EditModalProps> = ({
   // existindo faixa sem áudio nenhum ou com link quebrado.
   const [editAudioFile, setEditAudioFile] = useState<File | null>(null);
   const [editAudioUrlInput, setEditAudioUrlInput] = useState<string>("");
+  // Encarte (só categoria "albuns") — a edição existia antes só na tela
+  // separada "Substituir nos Charts" (Gestão), pouco descoberta ("não deu
+  // a opção" foi o feedback). Agora fica direto aqui, no mesmo lugar onde
+  // título/capa já são editados.
+  const [editEncarte, setEditEncarte] = useState<string[]>([]);
+  const [editEncarteNewFiles, setEditEncarteNewFiles] = useState<File[]>([]);
+  const [uploadingEncarte, setUploadingEncarte] = useState(false);
 
   const [saving, setSaving] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -253,6 +260,12 @@ export const EditModal: React.FC<EditModalProps> = ({
     setEditAudioUrlInput(item.fields?.audioUrl || "");
     setCapaFile(null);
     setCapaPreview(item.capaUrl || null);
+    setEditEncarte(
+      item.fields?.encarte
+        ? item.fields.encarte.split(",").map((u) => u.trim()).filter(Boolean)
+        : [],
+    );
+    setEditEncarteNewFiles([]);
     setSuccessMsg(null);
     setErrorMsg(null);
     setAlbumFaixas([]);
@@ -526,6 +539,23 @@ export const EditModal: React.FC<EditModalProps> = ({
     throw new Error("Não foi possível fazer upload do áudio.");
   };
 
+  const handleUploadEncarteImageToDrive = async (file: File, customName: string): Promise<string> => {
+    const base64 = await fileToBase64(file);
+    const res = await fetch("/api/gestao/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: customName,
+        mimeType: file.type || "image/jpeg",
+        base64Data: base64,
+        folderType: "album",
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (data?.data?.fileUrl) return data.data.fileUrl;
+    throw new Error("Não foi possível fazer upload da imagem do encarte.");
+  };
+
   // Converte imagem para base64
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -566,6 +596,23 @@ export const EditModal: React.FC<EditModalProps> = ({
         }
       }
 
+      // Encarte — o que sobrou depois de remover (editEncarte) + o que for
+      // enviado agora (editEncarteNewFiles), nessa ordem.
+      let encarteFinal: string[] | undefined = undefined;
+      if (category === "albuns") {
+        setUploadingEncarte(true);
+        try {
+          const novasUrls = await Promise.all(
+            editEncarteNewFiles.map((f, i) =>
+              handleUploadEncarteImageToDrive(f, `ENCARTE_${i + 1}_${selectedArtist}_${editTitulo.trim()}_${Date.now()}.jpg`),
+            ),
+          );
+          encarteFinal = [...editEncarte, ...novasUrls];
+        } finally {
+          setUploadingEncarte(false);
+        }
+      }
+
       const payload = {
         tipo: category,
         rowIndex: editingItem.rowIndex,
@@ -574,6 +621,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         descricao: editDescricao.trim(),
         artista: selectedArtist,
         oldCapaUrl: editingItem.capaUrl,
+        ...(encarteFinal ? { encarte: encarteFinal } : {}),
         capaBase64,
         capaMimeType,
         ...(category === "musicas" ? { letra: editLetra } : {}),
@@ -613,7 +661,9 @@ export const EditModal: React.FC<EditModalProps> = ({
                 fields:
                   category === "musicas"
                     ? { ...r.fields, letra: editLetra, ...(audioUrl ? { audioUrl } : {}) }
-                    : r.fields,
+                    : category === "albuns" && encarteFinal
+                      ? { ...r.fields, encarte: encarteFinal.join(", ") }
+                      : r.fields,
               }
             : r,
         ),
@@ -622,6 +672,7 @@ export const EditModal: React.FC<EditModalProps> = ({
       setTimeout(() => {
         setEditingItem(null);
         setSuccessMsg(null);
+        setEditEncarteNewFiles([]);
       }, 1200);
     } catch (err: any) {
       setErrorMsg(err.message || "Erro durante o salvamento.");
@@ -749,6 +800,50 @@ export const EditModal: React.FC<EditModalProps> = ({
                   required
                 />
               </div>
+
+              {/* ENCARTE — apenas Álbuns. Antes só dava pra editar numa tela
+                  separada ("Substituir nos Charts"), pouco descoberta.
+                  Agora fica direto aqui, junto de título/capa/faixas. */}
+              {category === "albuns" && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="size-3.5 text-amber-400" />
+                    Encarte
+                  </label>
+                  {editEncarte.length > 0 && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {editEncarte.map((url, i) => (
+                        <div key={`${url}-${i}`} className="relative aspect-square rounded-lg overflow-hidden border border-white/10 bg-neutral-900">
+                          <img src={driveImg(url)} alt={`Encarte ${i + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setEditEncarte((prev) => prev.filter((_, idx) => idx !== i))}
+                            className="absolute top-1 right-1 size-6 rounded-full bg-black/70 text-red-400 grid place-items-center hover:bg-black/90"
+                            title="Remover essa imagem do encarte"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {editEncarteNewFiles.length > 0 && (
+                    <p className="text-[11px] text-emerald-400">
+                      {editEncarteNewFiles.length} imagem(ns) nova(s) selecionada(s) — soma às de cima ao salvar.
+                    </p>
+                  )}
+                  <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition">
+                    <span>Adicionar imagens</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => e.target.files && setEditEncarteNewFiles(Array.from(e.target.files))}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              )}
 
               {/* FAIXAS DO ÁLBUM (reordenar + adicionar) — apenas Álbuns */}
               {category === "albuns" && (

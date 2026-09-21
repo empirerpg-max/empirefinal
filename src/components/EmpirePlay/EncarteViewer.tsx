@@ -73,6 +73,7 @@ export function EncarteViewer({ paginas, indiceInicial, onClose }: EncarteViewer
             <SmartImg
               src={url}
               size={1600}
+              wide
               alt={`Encarte, página ${i + 1}`}
               className="max-w-full max-h-full object-contain"
               fallback={

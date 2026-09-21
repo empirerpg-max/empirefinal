@@ -184,7 +184,7 @@ export async function getReleasesForEditController(request: Request): Promise<Re
           capaUrl: normalizeText(cover),
           fields:
             tipoParam === "albuns"
-              ? { topicId: normalizeText(row[1]) }
+              ? { topicId: normalizeText(row[1]), encarte: normalizeText(row[9]) }
               : tipoParam === "musicas"
                 ? {
                     letra: normalizeText(row[4]),
@@ -234,6 +234,7 @@ export async function updateReleaseController(request: Request): Promise<Respons
       oldTitulo: oldTituloRaw,
       letra,
       audioUrl,
+      encarte,
     } = body;
 
     const tipoClean = (tipo || "musicas").toLowerCase() as EditCategory;
@@ -391,6 +392,14 @@ export async function updateReleaseController(request: Request): Promise<Respons
       if (finalCapaUrl) {
         await googleSheetsService.principal.updateValues(sheetName, `C${rowIndex}`, [
           [finalCapaUrl],
+        ]);
+      }
+      // Encarte (Coluna J) — só grava quando vier no body (undefined = tela
+      // de editar não mexeu nisso). Array vazio é intencional (jogador
+      // removeu tudo), então grava mesmo vazio nesse caso.
+      if (Array.isArray(encarte)) {
+        await googleSheetsService.principal.updateValues(sheetName, `J${rowIndex}`, [
+          [encarte.filter((u: unknown) => typeof u === "string" && u.trim()).join(", ")],
         ]);
       }
     }
