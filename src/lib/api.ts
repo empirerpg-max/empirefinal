@@ -942,8 +942,14 @@ export const api = {
       }[];
     };
   }> {
-    const res = await fetch(`/api/awards/detalhe?nome=${encodeURIComponent(nome)}`).then((r) => r.json());
-    return res;
+    try {
+      const res = await fetch(`/api/awards/detalhe?nome=${encodeURIComponent(nome)}`, {
+        signal: AbortSignal.timeout(15000),
+      }).then((r) => r.json());
+      return res;
+    } catch {
+      return { success: false, error: "Tempo esgotado ao carregar. Tente novamente." };
+    }
   },
 
   // ---- Empire Market (prestígio) ----

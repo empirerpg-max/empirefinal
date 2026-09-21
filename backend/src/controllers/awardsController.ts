@@ -18,6 +18,18 @@ const AWARDS_MASTER_SHEET = "Awards";
 const ARTISTAS_SHEET = "ARTISTAS";
 const INFOS_ACTS_SHEET = "INFOS ACTS";
 
+// Nunca deixa a página de detalhe do award travada esperando a resolução de
+// capa (que lê o catálogo inteiro de Músicas/Álbuns/Artistas) — se essa
+// busca auxiliar demorar demais, segue sem capa em vez de travar a resposta
+// inteira (o essencial é a lista de vencedores/indicados, não a imagem).
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -115,8 +127,8 @@ export async function getAwardDetalheController(request: Request): Promise<Respo
     const [awardsRows, tabRows, capaPorTitulo, fotoPorArtista] = await Promise.all([
       readValues(SPREADSHEET_KEY, AWARDS_MASTER_SHEET, "A:B"),
       readValues(SPREADSHEET_KEY, nome, "A:F").catch(() => null),
-      buildCapaPorTitulo(),
-      buildFotoPorArtista(),
+      withTimeout(buildCapaPorTitulo().catch(() => new Map<string, string>()), 6000, new Map<string, string>()),
+      withTimeout(buildFotoPorArtista().catch(() => new Map<string, string>()), 6000, new Map<string, string>()),
     ]);
 
     const awardInfo = awardsRows
