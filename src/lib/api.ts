@@ -917,6 +917,35 @@ export const api = {
     return res.json();
   },
 
+  // ---- Awards ----
+  async listarAwards(): Promise<{ nome: string; foto: string }[]> {
+    const res = await fetch("/api/awards").then((r) => r.json());
+    return res?.data || [];
+  },
+  async getAwardDetalhe(nome: string): Promise<{
+    success: boolean;
+    error?: string;
+    data?: {
+      nome: string;
+      foto?: string;
+      edicoes: {
+        ano: string;
+        categorias: {
+          ano: string;
+          segmento?: string;
+          categoria: string;
+          status: "vencedor" | "indicado";
+          titulo?: string;
+          artista?: string;
+          capa?: string;
+        }[];
+      }[];
+    };
+  }> {
+    const res = await fetch(`/api/awards/detalhe?nome=${encodeURIComponent(nome)}`).then((r) => r.json());
+    return res;
+  },
+
   // ---- Empire Market (prestígio) ----
   async listarMarketProdutos(
     telegramId: string,

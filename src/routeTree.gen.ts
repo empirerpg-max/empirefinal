@@ -26,6 +26,8 @@ import { Route as AcoesCinemaRouteImport } from './routes/acoes.cinema'
 import { Route as AcoesTourRouteImport } from './routes/acoes.tour'
 import { Route as AlbumIdRouteImport } from './routes/album.$id'
 import { Route as ArtistasIndexRouteImport } from './routes/artistas.index'
+import { Route as AwardsIndexRouteImport } from './routes/awards.index'
+import { Route as AwardsNomeRouteImport } from './routes/awards.$nome'
 import { Route as EmpirePlayIndexRouteImport } from './routes/empire-play.index'
 import { Route as EmpirePlayAlbunsRouteImport } from './routes/empire-play.albuns'
 import { Route as EmpirePlayAlbunsAntigosRouteImport } from './routes/empire-play.albuns-antigos'
@@ -137,6 +139,16 @@ const AlbumIdRoute = AlbumIdRouteImport.update({
 const ArtistasIndexRoute = ArtistasIndexRouteImport.update({
   id: '/artistas/',
   path: '/artistas/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AwardsIndexRoute = AwardsIndexRouteImport.update({
+  id: '/awards/',
+  path: '/awards/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AwardsNomeRoute = AwardsNomeRouteImport.update({
+  id: '/awards/$nome',
+  path: '/awards/$nome',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EmpirePlayIndexRoute = EmpirePlayIndexRouteImport.update({
@@ -297,6 +309,7 @@ export interface FileRoutesByFullPath {
   '/acoes/cinema': typeof AcoesCinemaRoute
   '/acoes/tour': typeof AcoesTourRoute
   '/album/$id': typeof AlbumIdRouteWithChildren
+  '/awards/$nome': typeof AwardsNomeRoute
   '/empire-play/albuns': typeof EmpirePlayAlbunsRoute
   '/empire-play/albuns-antigos': typeof EmpirePlayAlbunsAntigosRouteWithChildren
   '/empire-play/forum': typeof EmpirePlayForumRoute
@@ -308,6 +321,7 @@ export interface FileRoutesByFullPath {
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas/': typeof ArtistasIndexRoute
+  '/awards/': typeof AwardsIndexRoute
   '/empire-play/': typeof EmpirePlayIndexRoute
   '/ponto/': typeof PontoIndexRoute
   '/tours/': typeof ToursIndexRoute
@@ -342,6 +356,7 @@ export interface FileRoutesByTo {
   '/acoes/cinema': typeof AcoesCinemaRoute
   '/acoes/tour': typeof AcoesTourRoute
   '/album/$id': typeof AlbumIdRouteWithChildren
+  '/awards/$nome': typeof AwardsNomeRoute
   '/empire-play/albuns': typeof EmpirePlayAlbunsRoute
   '/empire-play/forum': typeof EmpirePlayForumRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
@@ -349,6 +364,7 @@ export interface FileRoutesByTo {
   '/market/regras': typeof MarketRegrasRoute
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas': typeof ArtistasIndexRoute
+  '/awards': typeof AwardsIndexRoute
   '/empire-play': typeof EmpirePlayIndexRoute
   '/ponto': typeof PontoIndexRoute
   '/tours': typeof ToursIndexRoute
@@ -385,6 +401,7 @@ export interface FileRoutesById {
   '/acoes/cinema': typeof AcoesCinemaRoute
   '/acoes/tour': typeof AcoesTourRoute
   '/album/$id': typeof AlbumIdRouteWithChildren
+  '/awards/$nome': typeof AwardsNomeRoute
   '/empire-play/albuns': typeof EmpirePlayAlbunsRoute
   '/empire-play/albuns-antigos': typeof EmpirePlayAlbunsAntigosRouteWithChildren
   '/empire-play/forum': typeof EmpirePlayForumRoute
@@ -396,6 +413,7 @@ export interface FileRoutesById {
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas/': typeof ArtistasIndexRoute
+  '/awards/': typeof AwardsIndexRoute
   '/empire-play/': typeof EmpirePlayIndexRoute
   '/ponto/': typeof PontoIndexRoute
   '/tours/': typeof ToursIndexRoute
@@ -433,6 +451,7 @@ export interface FileRouteTypes {
     | '/acoes/cinema'
     | '/acoes/tour'
     | '/album/$id'
+    | '/awards/$nome'
     | '/empire-play/albuns'
     | '/empire-play/albuns-antigos'
     | '/empire-play/forum'
@@ -444,6 +463,7 @@ export interface FileRouteTypes {
     | '/ponto/playlists'
     | '/tours/$nome'
     | '/artistas/'
+    | '/awards/'
     | '/empire-play/'
     | '/ponto/'
     | '/tours/'
@@ -478,6 +498,7 @@ export interface FileRouteTypes {
     | '/acoes/cinema'
     | '/acoes/tour'
     | '/album/$id'
+    | '/awards/$nome'
     | '/empire-play/albuns'
     | '/empire-play/forum'
     | '/empire-play/musicas'
@@ -485,6 +506,7 @@ export interface FileRouteTypes {
     | '/market/regras'
     | '/tours/$nome'
     | '/artistas'
+    | '/awards'
     | '/empire-play'
     | '/ponto'
     | '/tours'
@@ -520,6 +542,7 @@ export interface FileRouteTypes {
     | '/acoes/cinema'
     | '/acoes/tour'
     | '/album/$id'
+    | '/awards/$nome'
     | '/empire-play/albuns'
     | '/empire-play/albuns-antigos'
     | '/empire-play/forum'
@@ -531,6 +554,7 @@ export interface FileRouteTypes {
     | '/ponto/playlists'
     | '/tours/$nome'
     | '/artistas/'
+    | '/awards/'
     | '/empire-play/'
     | '/ponto/'
     | '/tours/'
@@ -567,10 +591,12 @@ export interface RootRouteChildren {
   AcoesCinemaRoute: typeof AcoesCinemaRoute
   AcoesTourRoute: typeof AcoesTourRoute
   AlbumIdRoute: typeof AlbumIdRouteWithChildren
+  AwardsNomeRoute: typeof AwardsNomeRoute
   PontoDistribuirRoute: typeof PontoDistribuirRouteWithChildren
   PontoPlaylistsRoute: typeof PontoPlaylistsRouteWithChildren
   ToursNomeRoute: typeof ToursNomeRoute
   ArtistasIndexRoute: typeof ArtistasIndexRoute
+  AwardsIndexRoute: typeof AwardsIndexRoute
   PontoIndexRoute: typeof PontoIndexRoute
   ToursIndexRoute: typeof ToursIndexRoute
   ArtistasNomeIndexRoute: typeof ArtistasNomeIndexRoute
@@ -695,6 +721,20 @@ declare module '@tanstack/react-router' {
       path: '/artistas'
       fullPath: '/artistas/'
       preLoaderRoute: typeof ArtistasIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/awards/': {
+      id: '/awards/'
+      path: '/awards'
+      fullPath: '/awards/'
+      preLoaderRoute: typeof AwardsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/awards/$nome': {
+      id: '/awards/$nome'
+      path: '/awards/$nome'
+      fullPath: '/awards/$nome'
+      preLoaderRoute: typeof AwardsNomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/empire-play/': {
@@ -1028,10 +1068,12 @@ const rootRouteChildren: RootRouteChildren = {
   AcoesCinemaRoute: AcoesCinemaRoute,
   AcoesTourRoute: AcoesTourRoute,
   AlbumIdRoute: AlbumIdRouteWithChildren,
+  AwardsNomeRoute: AwardsNomeRoute,
   PontoDistribuirRoute: PontoDistribuirRouteWithChildren,
   PontoPlaylistsRoute: PontoPlaylistsRouteWithChildren,
   ToursNomeRoute: ToursNomeRoute,
   ArtistasIndexRoute: ArtistasIndexRoute,
+  AwardsIndexRoute: AwardsIndexRoute,
   PontoIndexRoute: PontoIndexRoute,
   ToursIndexRoute: ToursIndexRoute,
   ArtistasNomeIndexRoute: ArtistasNomeIndexRoute,
