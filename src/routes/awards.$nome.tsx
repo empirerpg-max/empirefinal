@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, Trophy, Loader2, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, Trophy, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 
@@ -33,7 +33,7 @@ function AwardDetalhePage() {
   const [data, setData] = useState<AwardData | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [anoSelecionado, setAnoSelecionado] = useState<string | null>(null);
-  const [categoriasAbertas, setCategoriasAbertas] = useState<Set<string>>(new Set());
+  const segmentoRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   useEffect(() => {
     setData(null);
@@ -52,16 +52,13 @@ function AwardDetalhePage() {
       .catch(() => setErro("Erro de conexão."));
   }, [nome]);
 
-  useEffect(() => setCategoriasAbertas(new Set()), [anoSelecionado]);
-
   const edicaoAtual = useMemo(
     () => data?.edicoes.find((e) => e.ano === anoSelecionado) || null,
     [data, anoSelecionado],
   );
 
   // Agrupa Segmento > Categoria > (vencedor + indicados) — cada categoria
-  // vira UM card só, com todos os nomeados dela dentro, em vez de repetir o
-  // nome da categoria a cada linha.
+  // vira UM card só, com todos os nomeados dela dentro.
   const grupos = useMemo<SegmentoAgrupado[]>(() => {
     if (!edicaoAtual) return [];
     const porSegmento = new Map<string, Map<string, CategoriaAgrupada>>();
@@ -86,36 +83,68 @@ function AwardDetalhePage() {
     ? new Set(edicaoAtual.categorias.map((c) => c.categoria)).size
     : 0;
 
-  const toggleCategoria = (chave: string) => {
-    setCategoriasAbertas((prev) => {
-      const next = new Set(prev);
-      if (next.has(chave)) next.delete(chave);
-      else next.add(chave);
-      return next;
-    });
+  const irParaSegmento = (segmento: string) => {
+    segmentoRefs.current.get(segmento)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   return (
     <div className="pb-24 min-h-screen bg-black">
-      <div className="relative h-72 overflow-hidden">
-        {data?.foto && (
-          <img
-            src={data.foto}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/30 to-black" />
-        <button
-          onClick={() => navigate({ to: "/awards" })}
-          className="absolute top-4 left-4 size-10 rounded-full bg-black/40 border border-white/15 backdrop-blur grid place-items-center"
-        >
-          <ChevronLeft className="size-5 text-white" />
-        </button>
+      {/* Hero: imagem cheia, com título + fileira de ícones SOBRE a imagem
+          (não abaixo, no card claro) — mesma estrutura do print de referência. */}
+      <div className="relative overflow-hidden">
+        <div className="relative h-[26rem]">
+          {data?.foto && (
+            <img
+              src={data.foto}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/20 to-black/95" />
+
+          <button
+            onClick={() => navigate({ to: "/awards" })}
+            className="absolute top-4 left-4 size-10 rounded-full bg-black/40 border border-white/15 backdrop-blur grid place-items-center"
+          >
+            <ChevronLeft className="size-5 text-white" />
+          </button>
+
+          <div className="absolute inset-x-0 bottom-0 px-5 pb-6">
+            <h1 className="text-3xl font-black uppercase tracking-tight leading-none text-white drop-shadow">
+              {data?.nome || nome}
+            </h1>
+            {data && edicaoAtual && (
+              <p className="mt-2 text-[12px] text-white/70 font-medium">
+                {data.edicoes.length} edições · {totalCategorias} categorias em {anoSelecionado}
+              </p>
+            )}
+
+            {/* Fileira de ícones (segmentos do ano selecionado), sobre a
+                imagem — toque leva direto pro bloco daquele segmento. */}
+            {grupos.length > 0 && (
+              <div className="flex gap-4 overflow-x-auto pt-5 -mx-5 px-5 scrollbar-none">
+                {grupos.map(({ segmento }) => (
+                  <button
+                    key={segmento}
+                    onClick={() => irParaSegmento(segmento)}
+                    className="shrink-0 flex flex-col items-center gap-1.5 active:scale-95 transition"
+                  >
+                    <span className="size-12 rounded-full bg-white/10 border border-white/20 backdrop-blur grid place-items-center">
+                      <Trophy className="size-4.5 text-white" />
+                    </span>
+                    <span className="text-[9px] font-bold text-white/80 uppercase tracking-wide max-w-14 truncate">
+                      {segmento}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="relative -mt-16 rounded-t-[32px] bg-background min-h-[60vh] px-5 pt-6 shadow-[0_-20px_40px_-20px_rgba(0,0,0,0.6)]">
+      <div className="relative -mt-6 rounded-t-[32px] bg-background min-h-[40vh] px-5 pt-6 shadow-[0_-20px_40px_-20px_rgba(0,0,0,0.6)]">
         {!data && !erro && (
           <div className="flex items-center justify-center p-20">
             <Loader2 className="size-8 text-primary animate-spin" />
@@ -123,24 +152,6 @@ function AwardDetalhePage() {
         )}
 
         {erro && <p className="text-center text-sm text-muted-foreground py-16">{erro}</p>}
-
-        {data && (
-          <>
-            <h1 className="text-2xl font-black uppercase tracking-tight leading-none flex items-center gap-2">
-              <Trophy className="size-5 text-primary shrink-0" />
-              {data.nome}
-            </h1>
-            {edicaoAtual && (
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                <span>{data.edicoes.length} edições</span>
-                <span className="opacity-40">·</span>
-                <span className="flex items-center gap-1 text-amber-400">
-                  <Sparkles className="size-3.5" /> {totalCategorias} categorias em {anoSelecionado}
-                </span>
-              </p>
-            )}
-          </>
-        )}
 
         {data && data.edicoes.length === 0 && (
           <p className="text-center text-sm text-muted-foreground py-16">
@@ -150,7 +161,7 @@ function AwardDetalhePage() {
 
         {data && data.edicoes.length > 0 && (
           <>
-            <div className="flex gap-2 overflow-x-auto py-4 -mx-5 px-5 scrollbar-none">
+            <div className="flex gap-2 overflow-x-auto pb-5 -mx-5 px-5 scrollbar-none">
               {data.edicoes.map((e) => (
                 <button
                   key={e.ano}
@@ -166,98 +177,80 @@ function AwardDetalhePage() {
               ))}
             </div>
 
-            <div className="space-y-7 mt-1">
+            <div className="space-y-7">
               {grupos.map(({ segmento, categorias }) => (
-                <div key={segmento}>
+                <div
+                  key={segmento}
+                  ref={(el) => {
+                    if (el) segmentoRefs.current.set(segmento, el);
+                  }}
+                  className="scroll-mt-4"
+                >
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">
                     {segmento}
                   </p>
-                  <div className="space-y-3">
-                    {categorias.map((grupo) => {
-                      const chave = `${anoSelecionado}-${segmento}-${grupo.categoria}`;
-                      const aberto = categoriasAbertas.has(chave);
-                      return (
-                        <div
-                          key={chave}
-                          className="rounded-3xl border border-white/10 bg-white/[0.03] overflow-hidden"
-                        >
-                          <div className="px-4 pt-3.5 pb-1">
-                            <p className="text-[11px] font-black uppercase tracking-wide text-muted-foreground">
-                              {grupo.categoria}
-                            </p>
-                          </div>
+                  <div className="space-y-4">
+                    {categorias.map((grupo) => (
+                      <div
+                        key={grupo.categoria}
+                        className="rounded-3xl border border-white/10 bg-white/[0.03] p-4"
+                      >
+                        <p className="text-[11px] font-black uppercase tracking-wide text-muted-foreground mb-3">
+                          {grupo.categoria}
+                        </p>
 
-                          {grupo.vencedor && (
-                            <div className="px-4 py-3 flex items-center gap-3">
-                              <div className="relative size-14 shrink-0 rounded-2xl overflow-hidden bg-secondary grid place-items-center ring-2 ring-amber-400/60">
-                                {grupo.vencedor.capa ? (
-                                  <SmartImg
-                                    src={grupo.vencedor.capa}
-                                    size={200}
-                                    alt=""
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <Trophy className="size-5 text-muted-foreground/40" />
-                                )}
-                                <div className="absolute -top-1 -right-1 size-5 rounded-full bg-amber-400 grid place-items-center shadow">
-                                  <Trophy className="size-3 text-black" strokeWidth={2.5} />
-                                </div>
+                        {grupo.vencedor && (
+                          <div className="flex items-center gap-4 mb-3">
+                            <div className="relative size-20 shrink-0 rounded-2xl overflow-hidden bg-secondary grid place-items-center ring-[3px] ring-amber-400">
+                              {grupo.vencedor.capa ? (
+                                <SmartImg
+                                  src={grupo.vencedor.capa}
+                                  size={260}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <Trophy className="size-6 text-muted-foreground/40" />
+                              )}
+                              <div className="absolute -top-1.5 -right-1.5 size-6 rounded-full bg-amber-400 grid place-items-center shadow">
+                                <Trophy className="size-3.5 text-black" strokeWidth={2.5} />
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-bold leading-snug truncate">
-                                  {nomeExibicao(grupo.vencedor)}
-                                </p>
-                                {grupo.vencedor.titulo && grupo.vencedor.artista && (
-                                  <p className="text-xs text-muted-foreground truncate">{grupo.vencedor.artista}</p>
-                                )}
-                              </div>
-                              <span className="shrink-0 text-[10px] font-black uppercase text-amber-400">
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <span className="text-[9px] font-black uppercase text-amber-400 tracking-widest">
                                 Vencedor
                               </span>
-                            </div>
-                          )}
-
-                          {grupo.indicados.length > 0 && (
-                            <>
-                              <button
-                                onClick={() => toggleCategoria(chave)}
-                                className="w-full px-4 py-2.5 flex items-center justify-between text-[11px] font-bold text-muted-foreground border-t border-white/5 active:bg-white/[0.02] transition"
-                              >
-                                <span>
-                                  {aberto ? "Ocultar" : "Ver"} {grupo.indicados.length}{" "}
-                                  {grupo.indicados.length === 1 ? "indicado" : "indicados"}
-                                </span>
-                                <ChevronLeft
-                                  className={`size-3.5 transition-transform ${aberto ? "-rotate-90" : "rotate-180"}`}
-                                />
-                              </button>
-                              {aberto && (
-                                <div className="px-4 pb-3.5 space-y-2.5">
-                                  {grupo.indicados.map((n, i) => (
-                                    <div key={i} className="flex items-center gap-3">
-                                      <div className="size-9 shrink-0 rounded-xl overflow-hidden bg-secondary grid place-items-center">
-                                        {n.capa ? (
-                                          <SmartImg src={n.capa} size={120} alt="" className="w-full h-full object-cover" />
-                                        ) : (
-                                          <Trophy className="size-3.5 text-muted-foreground/30" />
-                                        )}
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-semibold truncate">{nomeExibicao(n)}</p>
-                                        {n.titulo && n.artista && (
-                                          <p className="text-[11px] text-muted-foreground truncate">{n.artista}</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                              <p className="text-base font-bold leading-snug truncate">
+                                {nomeExibicao(grupo.vencedor)}
+                              </p>
+                              {grupo.vencedor.titulo && grupo.vencedor.artista && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {grupo.vencedor.artista}
+                                </p>
                               )}
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
+                            </div>
+                          </div>
+                        )}
+
+                        {grupo.indicados.length > 0 && (
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            {grupo.indicados.map((n, i) => (
+                              <div
+                                key={i}
+                                title={`${nomeExibicao(n)}${n.titulo && n.artista ? ` · ${n.artista}` : ""}`}
+                                className="size-10 shrink-0 rounded-full overflow-hidden bg-secondary grid place-items-center ring-1 ring-white/10"
+                              >
+                                {n.capa ? (
+                                  <SmartImg src={n.capa} size={120} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <Trophy className="size-3.5 text-muted-foreground/30" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
