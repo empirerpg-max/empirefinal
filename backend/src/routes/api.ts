@@ -137,6 +137,8 @@ import {
 import {
   getAwardsListController,
   getAwardDetalheController,
+  getArtistAwardsController,
+  getAwardsFlatController,
 } from "../controllers/awardsController";
 import { adminFillGrammy2026Controller } from "../controllers/adminFillGrammy2026Controller";
 import {
@@ -354,6 +356,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/preencher",
     "/api/awards",
     "/api/awards/detalhe",
+    "/api/awards/artista",
+    "/api/awards/todos",
     "/api/premiacoes/admin/fill-grammy-2026",
     "/api/market/produtos",
     "/api/market/regras",
@@ -1350,6 +1354,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await getAwardsListController();
   } else if (url.pathname === "/api/awards/detalhe") {
     response = await getAwardDetalheController(request);
+  } else if (url.pathname === "/api/awards/artista") {
+    response = await getArtistAwardsController(request);
+  } else if (url.pathname === "/api/awards/todos") {
+    response = await getAwardsFlatController();
   } else if (url.pathname === "/api/premiacoes/admin/fill-grammy-2026") {
     response = await adminFillGrammy2026Controller();
   } else if (url.pathname === "/api/market/produtos") {

@@ -50,7 +50,7 @@ export const Route = createFileRoute("/artistas/$nome/")({
   component: ArtistDashboard,
 });
 
-type TabId = "geral" | "discografia" | "musicas" | "videos" | "charts" | "tours" | "social" | "gestao";
+type TabId = "geral" | "discografia" | "musicas" | "videos" | "charts" | "awards" | "tours" | "social" | "gestao";
 
 // Um único item de discografia, seja qual for a fonte (álbum próprio via
 // Gestao, publicado no catálogo Empire Play, ou legado/antigo) — mostrados
@@ -247,6 +247,7 @@ function ArtistDashboard() {
       { id: "musicas", label: "Músicas" },
       { id: "videos", label: "Vídeos" },
       { id: "charts", label: "Charts" },
+      { id: "awards", label: "Awards" },
       { id: "tours", label: "Turnês & Projetos" },
       { id: "social", label: "Social" },
     ];
@@ -479,6 +480,7 @@ function ArtistDashboard() {
             {activeTab === "musicas" && <MusicasTab nome={artist.nome} />}
             {activeTab === "videos" && <VideosTab nome={artist.nome} />}
             {activeTab === "charts" && <ChartsTab nome={artist.nome} />}
+            {activeTab === "awards" && <AwardsTab nome={artist.nome} />}
             {activeTab === "tours" && <ToursProjetosTab nome={artist.nome} tourData={tourData} isOwner={isOwner} />}
             {activeTab === "social" && <SocialTab nome={artist.nome} />}
             {isOwner && activeTab === "gestao" && <GestaoTab onAction={setModal} />}
@@ -972,6 +974,75 @@ function ToursProjetosTab({ nome, tourData, isOwner }: { nome: string; tourData:
             ))}
           </ul>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Aba: Awards ----------
+function AwardsTab({ nome }: { nome: string }) {
+  const [dados, setDados] = useState<Awaited<ReturnType<typeof api.getArtistAwards>>["data"] | null | undefined>(
+    undefined,
+  );
+
+  useEffect(() => {
+    let alive = true;
+    setDados(undefined);
+    api.getArtistAwards(nome).then((res) => {
+      if (alive) setDados(res.success ? res.data || null : null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [nome]);
+
+  if (dados === undefined) {
+    return <div className="h-32 rounded-2xl bg-card animate-pulse" />;
+  }
+  if (!dados || dados.totalIndicacoes === 0) {
+    return (
+      <div className="p-8 rounded-[2.5rem] border border-dashed border-white/5 text-center">
+        <Trophy className="size-8 text-muted-foreground/20 mx-auto mb-3" />
+        <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest italic opacity-40">
+          Sem indicações registradas ainda
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+          <div className="text-2xl font-black text-amber-400">{dados.totalVencedor}</div>
+          <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 mt-0.5">Vitórias</div>
+        </div>
+        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+          <div className="text-2xl font-black text-foreground">{dados.totalIndicacoes}</div>
+          <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 mt-0.5">Indicações</div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {dados.porAward.map((a) => (
+          <div key={a.award} className="p-3.5 rounded-2xl bg-card flex items-center gap-3">
+            <div className="size-9 shrink-0 rounded-xl bg-amber-500/10 grid place-items-center">
+              <Trophy className="size-4 text-amber-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold truncate">{a.award}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {a.vencedor > 0 && (
+                  <span className="text-amber-400 font-bold">
+                    {a.vencedor} {a.vencedor === 1 ? "vitória" : "vitórias"}
+                  </span>
+                )}
+                {a.vencedor > 0 && a.indicacoes > a.vencedor && " · "}
+                {a.indicacoes > a.vencedor && `${a.indicacoes} indicações no total`}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

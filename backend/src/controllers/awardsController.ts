@@ -107,6 +107,113 @@ async function buildFotoPorArtista(): Promise<Map<string, string>> {
   return mapa;
 }
 
+type EntradaFlat = {
+  award: string;
+  ano: string;
+  categoria: string;
+  status: "vencedor" | "indicado";
+  titulo?: string;
+  artista: string;
+};
+
+// Lê a aba mestre "Awards" + TODAS as abas individuais listadas nela (nunca
+// hardcoded) e devolve só as linhas com resultado de verdade (Artista
+// preenchido) — base compartilhada pro agregado por artista (aba "Awards"
+// no perfil) e pro badge de vencedor/indicado no Fórum.
+async function readAllPremiacoesFlat(): Promise<EntradaFlat[]> {
+  const awardsRows = await readValues(SPREADSHEET_KEY, AWARDS_MASTER_SHEET, "A:B");
+  const awardNames = awardsRows.slice(1).map((row) => normalizeText(row[0])).filter(Boolean);
+
+  const porAward = await Promise.all(
+    awardNames.map(async (award) => {
+      const rows = await readValues(SPREADSHEET_KEY, award, "A:F").catch(() => []);
+      return rows
+        .slice(1)
+        .map((row): EntradaFlat | null => {
+          const artista = normalizeText(row[5]);
+          if (!artista) return null;
+          const statusBruto = normalizeComparison(row[3]);
+          const vencedor = statusBruto.includes("vencedor") || !statusBruto;
+          return {
+            award,
+            ano: normalizeText(row[0]),
+            categoria: normalizeText(row[2]),
+            status: vencedor ? "vencedor" : "indicado",
+            titulo: normalizeText(row[4]) || undefined,
+            artista,
+          };
+        })
+        .filter((e): e is EntradaFlat => !!e);
+    }),
+  );
+
+  return porAward.flat();
+}
+
+// Um crédito de "Artista" pode ser uma combinação ("SA5M & Moon Girls",
+// "Anníbal Páris feat. Karol Morris") — separa em partes pra contar a
+// indicação/vitória também pro nome que aparece só como participante.
+function partesDoArtista(artista: string): string[] {
+  return artista
+    .split(/,|&| feat\.?| ft\.?| e /i)
+    .map((p) => normalizeComparison(p))
+    .filter(Boolean);
+}
+
+/**
+ * GET /api/awards/artista?nome=Rayna
+ * Agregado de premiações de um artista: total de indicações, total de
+ * vitórias, e o detalhamento por award — pra aba "Awards" no perfil.
+ */
+export async function getArtistAwardsController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const nome = (url.searchParams.get("nome") || "").trim();
+  if (!nome) {
+    return jsonResponse({ success: false, error: "Parâmetro 'nome' é obrigatório." }, 400);
+  }
+
+  try {
+    const normNome = normalizeComparison(nome);
+    const todas = await readAllPremiacoesFlat();
+    const doArtista = todas.filter((e) => partesDoArtista(e.artista).includes(normNome));
+
+    const porAward = new Map<string, { award: string; indicacoes: number; vencedor: number }>();
+    for (const e of doArtista) {
+      if (!porAward.has(e.award)) porAward.set(e.award, { award: e.award, indicacoes: 0, vencedor: 0 });
+      const acc = porAward.get(e.award)!;
+      acc.indicacoes++;
+      if (e.status === "vencedor") acc.vencedor++;
+    }
+
+    return jsonResponse({
+      success: true,
+      data: {
+        totalIndicacoes: doArtista.length,
+        totalVencedor: doArtista.filter((e) => e.status === "vencedor").length,
+        porAward: Array.from(porAward.values()).sort((a, b) => b.indicacoes - a.indicacoes),
+        detalhes: doArtista,
+      },
+    });
+  } catch (error: any) {
+    return jsonResponse({ success: false, error: error?.message || "Erro ao ler premiações do artista." }, 500);
+  }
+}
+
+/**
+ * GET /api/awards/todos
+ * Lista achatada de todo resultado premiado (todas as abas) — usada pelo
+ * Fórum pra casar cada tópico/material com seu badge de vencedor/indicado,
+ * sem precisar de 1 requisição por tópico.
+ */
+export async function getAwardsFlatController(): Promise<Response> {
+  try {
+    const data = await readAllPremiacoesFlat();
+    return jsonResponse({ success: true, data });
+  } catch (error: any) {
+    return jsonResponse({ success: false, error: error?.message || "Erro ao ler premiações." }, 500);
+  }
+}
+
 /**
  * GET /api/awards/detalhe?nome=Grammy%20Awards
  * Histórico completo de um award: linhas agrupadas por ano (mais recente
