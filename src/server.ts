@@ -352,9 +352,11 @@ export default {
   async scheduled(_event: unknown, env: unknown, ctx: { waitUntil: (p: Promise<unknown>) => void }) {
     injectRuntimeEnv(env);
     const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
-    const { limparStoriesExpiradosScheduled, limparLinhasOrfasSocialPosts } = await import(
-      "../backend/src/controllers/socialController"
-    );
+    const {
+      limparStoriesExpiradosScheduled,
+      limparLinhasOrfasSocialPosts,
+      corrigirDesalinhamentoSocialPosts,
+    } = await import("../backend/src/controllers/socialController");
     const { preencherLikesVideosSemMediaScheduled } = await import("../backend/src/controllers/videoLikesController");
     const { atualizarSnapshotMetacriticSemanalScheduled } = await import(
       "../backend/src/controllers/metacriticController"
@@ -398,6 +400,25 @@ export default {
           }
         })
         .catch((err) => console.error("[scheduled] Erro ao limpar linhas órfãs de SOCIAL_POSTS:", err)),
+    );
+    // GAP CONFIRMADO em 2026-09-24 (desalinhamento voltou pela 4ª vez, mesmo
+    // com o cron acima ligado): limparLinhasOrfasSocialPosts só limpa
+    // linhas SEM nenhum "POST-..." sobrando (célula isolada tipo só G ou só
+    // K/M) — ela NUNCA corrige uma linha que já tem um post de verdade
+    // deslocado pra colunas erradas (o sintoma real que o usuário via: post
+    // sumido do app). Essa correção (corrigirDesalinhamentoSocialPosts)
+    // sempre existiu, mas só rodava se alguém abrisse manualmente o
+    // endpoint admin — nunca era chamada automaticamente. Era exatamente
+    // por isso que o usuário precisava sempre corrigir na mão de novo.
+    // Agora roda no mesmo ciclo do cron (10 min), com confirmar=true.
+    ctx.waitUntil(
+      corrigirDesalinhamentoSocialPosts(true)
+        .then((r) => {
+          if (r.itens.length > 0) {
+            console.log(`[scheduled] SOCIAL_POSTS: ${r.itens.length} post(s) desalinhado(s) realinhados automaticamente.`);
+          }
+        })
+        .catch((err) => console.error("[scheduled] Erro ao realinhar SOCIAL_POSTS:", err)),
     );
     ctx.waitUntil(
       preencherLikesVideosSemMediaScheduled((env as { FLAGS?: FlagsKv }).FLAGS)
