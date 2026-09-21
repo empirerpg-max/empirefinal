@@ -201,21 +201,27 @@ function AwardDetalhePage() {
 
                         {grupo.vencedor && (
                           <div className="flex items-center gap-4 mb-3">
-                            <div className="relative size-20 shrink-0 rounded-2xl overflow-hidden bg-secondary grid place-items-center ring-[3px] ring-amber-400">
-                              {grupo.vencedor.capa ? (
-                                <SmartImg
-                                  src={grupo.vencedor.capa}
-                                  size={260}
-                                  alt=""
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <Trophy className="size-6 text-muted-foreground/40" />
-                              )}
+                            {/* O selo fica FORA do container com overflow-hidden
+                                da capa (senão o corte de borda arredondada
+                                cortava o selo junto) — wrapper externo só
+                                pra ancorar o posicionamento absoluto. */}
+                            <div className="relative size-20 shrink-0">
+                              <div className="size-20 rounded-2xl overflow-hidden bg-secondary grid place-items-center ring-[3px] ring-amber-400">
+                                {grupo.vencedor.capa ? (
+                                  <SmartImg
+                                    src={grupo.vencedor.capa}
+                                    size={260}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Trophy className="size-6 text-muted-foreground/40" />
+                                )}
+                              </div>
                               <img
                                 src="/badges/vencedor.png"
                                 alt=""
-                                className="absolute -top-2 -right-2 size-9 drop-shadow-lg"
+                                className="absolute -top-2 -right-2 size-9 drop-shadow-lg z-10"
                               />
                             </div>
                             <div className="min-w-0 flex-1">
