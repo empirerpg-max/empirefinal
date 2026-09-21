@@ -2668,6 +2668,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           nomeJogador={profile?.playerName || telegramUser?.name || "Jogador"}
           jogadorId={telegramUser?.id ? String(telegramUser.id) : ""}
           onClose={() => setLancarFaixaAlbumOpen(false)}
+          uploadToDrive={handleUploadToDrive}
         />
       )}
 

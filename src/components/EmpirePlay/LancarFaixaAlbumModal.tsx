@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, Search, Loader2, Rocket, Disc } from "lucide-react";
+import { X, Search, Loader2, Rocket, Disc, Upload, Image as ImageIcon, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { haptic } from "@/lib/telegram";
+import { driveImg } from "@/lib/api";
 
 const TIPOS_SINGLE_FAIXA = [
   "TRACKLIST ALBUM",
@@ -17,12 +18,18 @@ const TIPOS_SINGLE_FAIXA = [
   "LEAD SINGLE REMIX",
   "INTERLUDE",
 ];
+const TIPOS_MUSICA_FAIXA = ["SOLO", "PARCERIA", "DUETO", "CONJUNTO"];
 
 interface FaixaPendente {
   musicaRowIndex: number;
   titulo: string;
   album: string;
   tipoSingleAtual: string;
+  tipoMusicaAtual: string;
+  audioUrl: string;
+  capaUrl: string;
+  letra: string;
+  participantes: string[];
 }
 
 interface LancarFaixaAlbumModalProps {
@@ -31,26 +38,41 @@ interface LancarFaixaAlbumModalProps {
   nomeJogador: string;
   jogadorId: string;
   onClose: () => void;
+  /** Reaproveita o mesmo upload já usado no resto da Gestão (Drive, com fallback FormData/Base64). */
+  uploadToDrive: (file: File, folderType: "musica" | "musicaAudio", customName?: string) => Promise<string>;
 }
 
 // Botão próprio em Gestão pra centralizar o caminho de "lançar uma faixa de
 // álbum que ficou pendente" — antes só dava pra fazer isso abrindo Editar >
-// Álbuns > achando o álbum certo > rolando até a faixa. Junta os 3 passos
+// Álbuns > achando o álbum certo > rolando até a faixa. Junta os passos
 // (escolher a faixa pendente, entre TODOS os álbuns do artista de uma vez;
-// virar tópico; escolher o tipo de lançamento) numa tela só, reaproveitando
-// o mesmo publicarFaixaPendenteController que já existia.
+// virar tópico; ajustar as MESMAS opções que um lançamento normal de
+// música permite — tipo de single, tipo de música, participantes, capa,
+// áudio, letra) numa tela só, reaproveitando o mesmo
+// publicarFaixaPendenteController que já existia (agora também aceitando
+// esses campos extras).
 export function LancarFaixaAlbumModal({
   associatedArtists,
   defaultArtist,
   nomeJogador,
   jogadorId,
   onClose,
+  uploadToDrive,
 }: LancarFaixaAlbumModalProps) {
   const [artista, setArtista] = useState(defaultArtist || associatedArtists[0] || "");
   const [faixas, setFaixas] = useState<FaixaPendente[] | null>(null);
   const [busca, setBusca] = useState("");
   const [selecionada, setSelecionada] = useState<FaixaPendente | null>(null);
+
   const [tipoSingle, setTipoSingle] = useState("LEAD SINGLE");
+  const [tipoMusica, setTipoMusica] = useState("SOLO");
+  const [participantes, setParticipantes] = useState<string[]>([""]);
+  const [letra, setLetra] = useState("");
+  const [capaFile, setCapaFile] = useState<File | null>(null);
+  const [capaPreview, setCapaPreview] = useState<string | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioUrlInput, setAudioUrlInput] = useState("");
+
   const [publicando, setPublicando] = useState(false);
 
   useEffect(() => {
@@ -72,10 +94,41 @@ export function LancarFaixaAlbumModal({
     );
   }, [faixas, busca]);
 
+  function selecionar(f: FaixaPendente) {
+    haptic.selection();
+    setSelecionada(f);
+    setTipoSingle(f.tipoSingleAtual || "LEAD SINGLE");
+    setTipoMusica(f.tipoMusicaAtual || "SOLO");
+    setParticipantes(f.participantes.length > 0 ? f.participantes : [""]);
+    setLetra(f.letra || "");
+    setCapaFile(null);
+    setCapaPreview(f.capaUrl || null);
+    setAudioFile(null);
+    setAudioUrlInput(f.audioUrl || "");
+  }
+
+  function handleCapaSelect(file: File) {
+    setCapaFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setCapaPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
   async function handlePublicar() {
     if (!selecionada) return;
     setPublicando(true);
     try {
+      let capaUrl: string | undefined = undefined;
+      if (capaFile) {
+        capaUrl = await uploadToDrive(capaFile, "musica", `CAPA_${artista}_${selecionada.titulo}_${Date.now()}.jpg`);
+      }
+      let audioUrl: string | undefined = undefined;
+      if (audioFile) {
+        audioUrl = await uploadToDrive(audioFile, "musicaAudio", `AUDIO_${artista}_${selecionada.titulo}_${Date.now()}`);
+      } else if (audioUrlInput.trim() && audioUrlInput.trim() !== selecionada.audioUrl) {
+        audioUrl = audioUrlInput.trim();
+      }
+
       const res = await fetch("/api/gestao/faixa/publicar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,6 +137,11 @@ export function LancarFaixaAlbumModal({
           nomeJogador,
           jogadorId,
           tipoSingle,
+          tipoMusica,
+          participantes: tipoMusica !== "SOLO" ? participantes.filter((p) => p.trim()) : [],
+          letra,
+          ...(capaUrl ? { capaUrl } : {}),
+          ...(audioUrl ? { audioUrl } : {}),
         }),
       });
       const data = await res.json();
@@ -165,11 +223,7 @@ export function LancarFaixaAlbumModal({
                 {faixasFiltradas.map((f) => (
                   <button
                     key={f.musicaRowIndex}
-                    onClick={() => {
-                      haptic.selection();
-                      setSelecionada(f);
-                      setTipoSingle(f.tipoSingleAtual || "LEAD SINGLE");
-                    }}
+                    onClick={() => selecionar(f)}
                     className="w-full text-left flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-neutral-900 border border-white/10 hover:border-emerald-500/40 transition"
                   >
                     <div className="min-w-0">
@@ -201,24 +255,141 @@ export function LancarFaixaAlbumModal({
               <p className="text-xs text-neutral-500">{selecionada.album}</p>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-                Lançar como
-              </label>
-              <select
-                value={tipoSingle}
-                onChange={(e) => setTipoSingle(e.target.value)}
-                className="w-full px-4 py-3 bg-neutral-900 border border-white/10 rounded-2xl text-sm text-white focus:outline-none focus:border-emerald-500"
-              >
-                {TIPOS_SINGLE_FAIXA.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
+            {/* Mesmas opções que "Nova Música" permite — pedido explícito pra
+                paridade entre os dois fluxos de lançamento. */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                  Tipo de Single
+                </label>
+                <select
+                  value={tipoSingle}
+                  onChange={(e) => setTipoSingle(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-neutral-900 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                >
+                  {TIPOS_SINGLE_FAIXA.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                  Tipo de Música
+                </label>
+                <select
+                  value={tipoMusica}
+                  onChange={(e) => setTipoMusica(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-neutral-900 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                >
+                  {TIPOS_MUSICA_FAIXA.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {tipoMusica !== "SOLO" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                  Participantes (feat)
+                </label>
+                {participantes.map((part, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={part}
+                      onChange={(e) => {
+                        const next = [...participantes];
+                        next[idx] = e.target.value;
+                        setParticipantes(next);
+                      }}
+                      placeholder="Nome do artista"
+                      className="flex-1 px-3 py-2.5 bg-neutral-900 border border-white/10 rounded-xl text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500"
+                    />
+                    {participantes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setParticipantes(participantes.filter((_, i) => i !== idx))}
+                        className="size-8 shrink-0 rounded-lg bg-neutral-900 border border-white/10 text-neutral-400 hover:text-red-400 grid place-items-center"
+                      >
+                        <Minus className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
                 ))}
-              </select>
-              <p className="text-[11px] text-neutral-500">
-                Vira tópico de verdade nos charts, com esse tipo de lançamento.
-              </p>
+                {participantes.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={() => setParticipantes([...participantes, ""])}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 hover:text-emerald-300"
+                  >
+                    <Plus className="size-3.5" /> Adicionar participante
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-neutral-400">Capa</label>
+              <div className="flex items-center gap-3 bg-neutral-900 p-3 rounded-2xl border border-white/10">
+                {capaPreview ? (
+                  <img
+                    src={capaFile ? capaPreview : driveImg(capaPreview, 100)}
+                    alt="Capa"
+                    className="size-14 object-cover rounded-lg border border-white/10"
+                  />
+                ) : (
+                  <div className="size-14 rounded-lg bg-neutral-800 border border-white/10 grid place-items-center text-neutral-500">
+                    <ImageIcon className="size-5" />
+                  </div>
+                )}
+                <label className="cursor-pointer px-3.5 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[11px] uppercase tracking-wide border border-white/10 transition inline-flex items-center gap-1.5">
+                  <Upload className="size-3.5 text-emerald-400" />
+                  <span>{capaPreview ? "Trocar" : "Selecionar"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => e.target.files?.[0] && handleCapaSelect(e.target.files[0])}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-neutral-400">Áudio</label>
+              <input
+                type="text"
+                value={audioUrlInput}
+                onChange={(e) => setAudioUrlInput(e.target.value)}
+                placeholder="Link do Drive ou YouTube"
+                className="w-full px-4 py-2.5 bg-neutral-900 border border-white/10 rounded-xl text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500"
+              />
+              <label className="cursor-pointer inline-flex items-center gap-1.5 text-[11px] font-bold text-neutral-400 hover:text-white">
+                <Upload className="size-3.5 text-emerald-400" />
+                <span>{audioFile ? audioFile.name : "ou envie um arquivo"}</span>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={(e) => e.target.files?.[0] && setAudioFile(e.target.files[0])}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-neutral-400">Letra</label>
+              <textarea
+                value={letra}
+                onChange={(e) => setLetra(e.target.value)}
+                rows={6}
+                placeholder="Cole ou digite a letra completa..."
+                className="w-full px-4 py-3 bg-neutral-900 border border-white/10 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 resize-y"
+              />
             </div>
 
             <button

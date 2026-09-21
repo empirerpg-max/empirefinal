@@ -1383,7 +1383,17 @@ export async function getFaixasPendentesController(request: Request): Promise<Re
 
     const rows = await googleSheetsService.principal.readValues("Musicas");
     const normArtista = normalizeComparison(artista);
-    const faixas: { musicaRowIndex: number; titulo: string; album: string; tipoSingleAtual: string }[] = [];
+    const faixas: {
+      musicaRowIndex: number;
+      titulo: string;
+      album: string;
+      tipoSingleAtual: string;
+      tipoMusicaAtual: string;
+      audioUrl: string;
+      capaUrl: string;
+      letra: string;
+      participantes: string[];
+    }[] = [];
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
@@ -1401,6 +1411,14 @@ export async function getFaixasPendentesController(request: Request): Promise<Re
         titulo,
         album,
         tipoSingleAtual: (row[8] || "").trim(),
+        tipoMusicaAtual: (row[9] || "").trim(),
+        audioUrl: (row[2] || "").trim(), // C - ID do arquivo
+        capaUrl: (row[3] || "").trim(), // D - Capa
+        letra: (row[4] || "").trim(), // E - Letra
+        // O-S - ARTISTA 2-6
+        participantes: [row[14], row[15], row[16], row[17], row[18]]
+          .map((v) => (v || "").trim())
+          .filter(Boolean),
       });
     }
 
@@ -1424,11 +1442,28 @@ export async function publicarFaixaPendenteController(request: Request): Promise
       nomeJogador?: string;
       jogadorId?: string;
       tipoSingle?: string;
+      // Mesmas opções que um lançamento de música normal permite ajustar —
+      // antes só dava pra escolher o tipo de single aqui; pedido explícito
+      // pra ter paridade com a tela de "Nova Música" na hora de publicar
+      // uma faixa de álbum pendente. Todos opcionais: undefined mantém o
+      // que a faixa já tinha desde a criação do álbum.
+      tipoMusica?: string;
+      audioUrl?: string;
+      capaUrl?: string;
+      letra?: string;
+      participantes?: string[];
     };
     const musicaRowIndex = Number(body.musicaRowIndex);
     const nomeJogador = (body.nomeJogador || "").trim();
     const jogadorId = (body.jogadorId || "").trim();
     const tipoSingleEscolhido = (body.tipoSingle || "").trim();
+    const tipoMusicaEscolhido = (body.tipoMusica || "").trim();
+    const audioUrlEscolhido = (body.audioUrl || "").trim();
+    const capaUrlEscolhida = (body.capaUrl || "").trim();
+    const letraEscolhida = typeof body.letra === "string" ? body.letra : undefined;
+    const participantesEscolhidos = Array.isArray(body.participantes)
+      ? body.participantes.map((p) => (p || "").trim()).filter(Boolean).slice(0, 5)
+      : undefined;
 
     if (!musicaRowIndex || musicaRowIndex < 2 || !nomeJogador) {
       return new Response(
@@ -1481,11 +1516,39 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     // faixa já tinha desde a criação do álbum ("TRACKLIST ALBUM"), o que não
     // refletia a intenção real de lançar aquela faixa como single.
     const tipoSingle = tipoSingleEscolhido || row[8] || "TRACKLIST ALBUM";
-    const tipoMusica = row[9] || "SOLO";
+    const tipoMusica = tipoMusicaEscolhido || row[9] || "SOLO";
     if (tipoSingleEscolhido && tipoSingleEscolhido !== row[8]) {
       await googleSheetsService.principal
         .updateValues("Musicas", `I${musicaRowIndex}`, [[tipoSingle]])
         .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar tipo em Musicas:", err));
+    }
+    if (tipoMusicaEscolhido && tipoMusicaEscolhido !== row[9]) {
+      await googleSheetsService.principal
+        .updateValues("Musicas", `J${musicaRowIndex}`, [[tipoMusica]])
+        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar tipo de música:", err));
+    }
+    const audioFinal = audioUrlEscolhido || row[2] || "";
+    if (audioUrlEscolhido && audioUrlEscolhido !== row[2]) {
+      await googleSheetsService.principal
+        .updateValues("Musicas", `C${musicaRowIndex}`, [[audioFinal]])
+        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar áudio:", err));
+    }
+    const capaFinal = capaUrlEscolhida || row[3] || "";
+    if (capaUrlEscolhida && capaUrlEscolhida !== row[3]) {
+      await googleSheetsService.principal
+        .updateValues("Musicas", `D${musicaRowIndex}`, [[capaFinal]])
+        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar capa:", err));
+    }
+    if (letraEscolhida !== undefined && letraEscolhida !== row[4]) {
+      await googleSheetsService.principal
+        .updateValues("Musicas", `E${musicaRowIndex}`, [[letraEscolhida]])
+        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar letra:", err));
+    }
+    if (participantesEscolhidos !== undefined) {
+      const padded = [0, 1, 2, 3, 4].map((i) => participantesEscolhidos[i] || "");
+      await googleSheetsService.principal
+        .updateValues("Musicas", `O${musicaRowIndex}:S${musicaRowIndex}`, [padded])
+        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar participantes:", err));
     }
     const edicaoChartsRowIndex = await atualizarFaixaNosChartsAoPublicar({
       fullTitle,
@@ -1493,7 +1556,7 @@ export async function publicarFaixaPendenteController(request: Request): Promise
       tipoMusica,
       dataFormatada,
     });
-    await registrarInfosMusicas({ fullTitle, capaUrl: row[3] || "" });
+    await registrarInfosMusicas({ fullTitle, capaUrl: capaFinal });
     // Mesma cópia de Código único feita na criação normal (createSongController)
     // — sem isso, uma faixa que nasceu pendente nunca teria o código pra
     // cruzar com comentários/REGISTRO/Shop-Info-Visual depois de publicada.
