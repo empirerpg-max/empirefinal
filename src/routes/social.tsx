@@ -712,6 +712,18 @@ function SocialPage() {
     shape: "square",
     title: "Editar capa da notícia",
   });
+  const { cropModal: postMediaCropModal, cropImage: cropPostMedia } = useImageCrop({
+    targetW: 1200,
+    targetH: 675,
+    shape: "square",
+    title: "Editar imagem do post",
+  });
+  const { cropModal: extraPhotoCropModal, cropImage: cropExtraPhoto } = useImageCrop({
+    targetW: 1080,
+    targetH: 1080,
+    shape: "square",
+    title: "Editar foto",
+  });
   const { user, ready } = useTelegramUser();
   const navigate = useNavigate();
   // "empire_tg_id" nunca é gravado em lugar nenhum do app — quem entrou pela
@@ -2978,15 +2990,26 @@ function SocialPage() {
                         className="hidden"
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
+                          e.target.value = "";
                           if (!file) return;
                           const isVideo = file.type.startsWith("video/");
                           const isStory = selectedType === "Instagram" && igMode === "Story";
-                          setUploadingImage(true);
                           const folderType: SocialFolderType = isStory ? "socialStories" : "socialPosts";
-                          // Story sempre sobe recortado no padrão vertical —
-                          // a pessoa escolhe a foto, o enquadramento é
-                          // ajustado automaticamente pro formato certo.
-                          const fileToUpload = isStory && !isVideo ? await cropImageToStoryRatio(file).catch(() => file) : file;
+                          // Story sempre sobe recortado no padrão vertical
+                          // automaticamente; fora disso (Feed/TikTok/Post),
+                          // a pessoa mesma escolhe o enquadramento no editor
+                          // de recorte antes de enviar.
+                          let fileToUpload: File = file;
+                          if (!isVideo) {
+                            if (isStory) {
+                              fileToUpload = await cropImageToStoryRatio(file).catch(() => file);
+                            } else {
+                              const cropped = await cropPostMedia(file);
+                              if (!cropped) return; // cancelou o recorte
+                              fileToUpload = cropped;
+                            }
+                          }
+                          setUploadingImage(true);
                           const url = await uploadToDrive(fileToUpload, folderType);
                           if (url) {
                             setImageUrl(url);
@@ -3034,9 +3057,12 @@ function SocialPage() {
                               className="hidden"
                               onChange={async (e) => {
                                 const file = e.target.files?.[0];
+                                e.target.value = "";
                                 if (!file) return;
+                                const cropped = await cropExtraPhoto(file);
+                                if (!cropped) return;
                                 setUploadingExtraImage(true);
-                                const url = await uploadToDrive(file, "socialPosts");
+                                const url = await uploadToDrive(cropped, "socialPosts");
                                 if (url) setExtraImageUrls((prev) => [...prev, url]);
                                 setUploadingExtraImage(false);
                               }}
@@ -3998,6 +4024,8 @@ function SocialPage() {
       )}
       {avatarCropModal}
       {newsCropModal}
+      {postMediaCropModal}
+      {extraPhotoCropModal}
     </div>
   );
 }
