@@ -39,6 +39,7 @@ import { useTelegramUser } from "@/lib/telegram";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type NivelJogador } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
+import { AwardBadge } from "@/components/AwardBadge";
 import { getHOFProfile, type HOFProfile } from "@/lib/charts";
 import { notify } from "@/lib/notify";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
@@ -1041,25 +1042,16 @@ function AwardsTab({ nome }: { nome: string }) {
                 </div>
                 <p className="text-sm font-black">{a.award}</p>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {entradas.map((e, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-card"
-                  >
-                    <div className="min-w-0 flex-1">
+                  <div key={i} className="p-3 rounded-xl bg-card space-y-2">
+                    <div className="min-w-0">
                       <p className="text-sm font-bold truncate">{e.titulo || e.categoria}</p>
                       <p className="text-[11px] text-muted-foreground truncate">
                         {e.categoria} · {e.ano}
                       </p>
                     </div>
-                    <span
-                      className={`shrink-0 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${
-                        e.status === "vencedor" ? "bg-amber-500/15 text-amber-400" : "bg-white/5 text-muted-foreground"
-                      }`}
-                    >
-                      {e.status === "vencedor" ? "Vencedor" : "Indicado"}
-                    </span>
+                    <AwardBadge award={a.award} ano={e.ano} status={e.status} />
                   </div>
                 ))}
               </div>
