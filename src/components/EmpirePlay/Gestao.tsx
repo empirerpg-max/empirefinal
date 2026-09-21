@@ -29,6 +29,7 @@ import { EditModal } from "./EditModal";
 import { LancarFaixaAlbumModal } from "./LancarFaixaAlbumModal";
 import { BannersManager } from "./BannersManager";
 import { getStoredLogin } from "@/components/LoginScreen";
+import { useImageCrop } from "@/hooks/use-image-crop";
 import {
   ExtraMaterialEditor,
   emptyExtraMaterialEditorValue,
@@ -446,6 +447,14 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [capaPreview, setCapaPreview] = useState<string | null>(null);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaUrlInput, setMediaUrlInput] = useState<string>("");
+  // Só pra capa de VÍDEO — capa de música/álbum (single/álbum de verdade)
+  // fica de fora do editor de recorte, por pedido explícito.
+  const { cropModal: capaVideoCropModal, cropImage: cropCapaVideo } = useImageCrop({
+    targetW: 800,
+    targetH: 800,
+    shape: "square",
+    title: "Editar capa do vídeo",
+  });
 
   // Material extra (botões Shop/Info/Visual do tópico) — um estado por tipo
   // porque música e álbum são formulários/submits separados nesta mesma tela.
@@ -2132,7 +2141,13 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && handleCapaSelect(e.target.files[0])}
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!f) return;
+                      const cropped = await cropCapaVideo(f);
+                      if (cropped) handleCapaSelect(cropped);
+                    }}
                     className="hidden"
                   />
                 </label>
@@ -2722,6 +2737,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           </div>
         </div>
       )}
+      {capaVideoCropModal}
     </div>
   );
 };

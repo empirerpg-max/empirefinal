@@ -41,6 +41,7 @@ export function useImageCrop(options: ImageCropOptions) {
       file={pendingFile}
       options={options}
       onCancel={() => finish(null)}
+      onUseOriginal={() => finish(pendingFile)}
       onCropped={(blob) => {
         const cropped = new File([blob], pendingFile.name.replace(/\.\w+$/, ".jpg"), {
           type: "image/jpeg",
