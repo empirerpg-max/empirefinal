@@ -1,4 +1,4 @@
-import { readValues, updateValues, appendRow, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import { readValues, appendRows, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 
 // Conserto pontual (não é rota de uso recorrente): preenche as categorias do
 // Grammy Awards 2026 que o usuário mandou manualmente via print do Alan no
@@ -117,49 +117,64 @@ const SEGMENTO_FALLBACK: Record<string, string> = {
   "BEST ELECTRONIC/DANCE ALBUM": "Dance/Electronic",
 };
 
+// Chave de dedupe: Categoria+Título+Artista (mesmo ano, 2026 fixo aqui) —
+// usada pra tornar o endpoint seguro de rodar mais de uma vez (a 1ª
+// tentativa parou no meio, no meio de "BEST MUSIC VIDEO", por causa da
+// enxurrada de chamadas sequenciais à API do Sheets; rodar de novo sem
+// dedupe duplicaria as linhas que já tinham entrado).
+function chaveNomeado(categoria: string, titulo: string, artista: string): string {
+  return `${normalizeComparison(categoria)}|${normalizeComparison(titulo)}|${normalizeComparison(artista)}`;
+}
+
 export async function adminFillGrammy2026Controller(): Promise<Response> {
   const rows = await readValues(SPREADSHEET_KEY, SHEET, "A:F");
+
+  const segmentoPorCategoria = new Map<string, string>();
+  const jaExiste = new Set<string>();
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const categoria = normalizeText(row[2]);
+    if (!categoria) continue;
+    const normCategoria = normalizeComparison(categoria);
+    if (!segmentoPorCategoria.has(normCategoria)) {
+      segmentoPorCategoria.set(normCategoria, normalizeText(row[1]));
+    }
+    if (normalizeText(row[0]) === ANO) {
+      jaExiste.add(chaveNomeado(categoria, normalizeText(row[4]), normalizeText(row[5])));
+    }
+  }
+
+  const novasLinhas: string[][] = [];
   const resultados: any[] = [];
 
   for (const [categoriaAlvo, indicados] of Object.entries(DADOS)) {
-    const normAlvo = normalizeComparison(categoriaAlvo);
-    let segmento = "";
-    let templateRowIndex = -1; // 0-based no array `rows`, só válido se for do ano 2026
-
-    // Primeira passada: procura o Segmento em QUALQUER ano (a categoria já
-    // existe em edições anteriores, só não tinha linha própria pra 2026
-    // ainda) e, se achar uma linha vazia já existente PRA 2026, marca como
-    // template a reaproveitar em vez de criar linha nova.
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (normalizeComparison(row[2]) !== normAlvo) continue;
-      if (!segmento) segmento = normalizeText(row[1]);
-      if (normalizeText(row[0]) !== ANO) continue;
-      const jaPreenchida = !!(normalizeText(row[4]) || normalizeText(row[5]));
-      if (!jaPreenchida) {
-        templateRowIndex = i;
-        break;
-      }
-    }
-
-    if (!segmento) segmento = SEGMENTO_FALLBACK[categoriaAlvo] || "Geral";
+    const segmento =
+      segmentoPorCategoria.get(normalizeComparison(categoriaAlvo)) ||
+      SEGMENTO_FALLBACK[categoriaAlvo] ||
+      "Geral";
 
     let escritos = 0;
+    let jaTinha = 0;
     for (const nom of indicados) {
-      const status = nom.vencedor ? "Vencedor" : "Indicado";
-      if (templateRowIndex >= 0) {
-        const rowNumber = templateRowIndex + 1;
-        await updateValues(SPREADSHEET_KEY, SHEET, `D${rowNumber}:F${rowNumber}`, [[status, nom.titulo, nom.artista]]);
-        templateRowIndex = -1;
-      } else {
-        await appendRow(SPREADSHEET_KEY, SHEET, [ANO, segmento, categoriaAlvo, status, nom.titulo, nom.artista], "A:F");
+      if (jaExiste.has(chaveNomeado(categoriaAlvo, nom.titulo, nom.artista))) {
+        jaTinha++;
+        continue;
       }
+      const status = nom.vencedor ? "Vencedor" : "Indicado";
+      novasLinhas.push([ANO, segmento, categoriaAlvo, status, nom.titulo, nom.artista]);
       escritos++;
     }
-    resultados.push({ categoria: categoriaAlvo, ok: true, escritos });
+    resultados.push({ categoria: categoriaAlvo, escritos, jaTinha });
   }
 
-  return new Response(JSON.stringify({ success: true, resultados }), {
+  // Uma chamada só à API pra todas as linhas novas de uma vez — a versão
+  // anterior fazia 1 chamada por indicado (dezenas seguidas) e morria no
+  // meio do caminho.
+  if (novasLinhas.length > 0) {
+    await appendRows(SPREADSHEET_KEY, SHEET, novasLinhas, "A:F");
+  }
+
+  return new Response(JSON.stringify({ success: true, totalNovasLinhas: novasLinhas.length, resultados }), {
     status: 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
