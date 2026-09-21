@@ -1,4 +1,4 @@
-import { driveImg, AWARD_BADGE_ICON_VENCEDOR_URL, AWARD_BADGE_ICON_INDICADO_URL } from "@/lib/api";
+import { driveRawImg, AWARD_BADGE_ICON_VENCEDOR_URL, AWARD_BADGE_ICON_INDICADO_URL } from "@/lib/api";
 
 export type AwardBadgeInfo = { award: string; ano: string; status: "vencedor" | "indicado" };
 
@@ -20,7 +20,11 @@ export function AwardBadge({ award, ano, status, className = "" }: AwardBadgeInf
       } ${className}`}
       title={label}
     >
-      <img src={driveImg(icone, 40)} alt="" className="size-4 shrink-0" />
+      {/* driveRawImg (não driveImg): os SVGs desses selos têm fundo
+          transparente, mas o proxy de thumbnail do Drive rasteriza pra PNG e
+          preenche a transparência com branco — o proxy autenticado devolve
+          o arquivo cru, preservando a transparência de verdade. */}
+      <img src={driveRawImg(icone)} alt="" className="size-4 shrink-0" />
       <span className="text-[10px] font-bold truncate">{label}</span>
     </span>
   );
