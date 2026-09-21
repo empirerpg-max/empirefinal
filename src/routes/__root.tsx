@@ -66,10 +66,12 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
   const [novoGravadora, setNovoGravadora] = useState("");
   const [creating, setCreating] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
+  // Foto do artista é exibida em círculo no perfil dele — mesma convenção
+  // usada em FotoModal (artistas.$nome.index.tsx).
   const { cropModal: novoFotoCropModal, cropImage: cropNovaFoto } = useImageCrop({
     targetW: 400,
     targetH: 400,
-    shape: "square",
+    shape: "circle",
     title: "Editar foto do artista",
   });
 

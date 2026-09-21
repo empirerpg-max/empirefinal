@@ -448,10 +448,11 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaUrlInput, setMediaUrlInput] = useState<string>("");
   // Só pra capa de VÍDEO — capa de música/álbum (single/álbum de verdade)
-  // fica de fora do editor de recorte, por pedido explícito.
+  // fica de fora do editor de recorte, por pedido explícito. Vídeo é 16:9
+  // (aba "Videografia" do artista, estilo YouTube), não quadrado.
   const { cropModal: capaVideoCropModal, cropImage: cropCapaVideo } = useImageCrop({
-    targetW: 800,
-    targetH: 800,
+    targetW: 1280,
+    targetH: 720,
     shape: "square",
     title: "Editar capa do vídeo",
   });

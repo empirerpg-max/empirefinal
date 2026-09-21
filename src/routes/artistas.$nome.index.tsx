@@ -1282,7 +1282,9 @@ function FotoModal({ nome, onClose, onDone }: { nome: string; onClose: () => voi
   const [preview, setPreview] = useState<string | null>(null);
   const [s, setS] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const { cropModal, cropImage } = useImageCrop({ targetW: 512, targetH: 512, shape: "square", title: "Editar foto do artista" });
+  // Foto do artista é exibida em círculo no perfil dele (size-24
+  // rounded-full) — a moldura do editor precisa mostrar isso.
+  const { cropModal, cropImage } = useImageCrop({ targetW: 512, targetH: 512, shape: "circle", title: "Editar foto do artista" });
 
   async function pick(f: File | undefined) {
     if (!f) return;

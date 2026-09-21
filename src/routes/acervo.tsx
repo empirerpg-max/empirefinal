@@ -33,6 +33,7 @@ import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
+import { useImageCrop } from "@/hooks/use-image-crop";
 
 // Transição de "capa vira detalhe" (mesmo mecanismo do card de notícia no
 // Social — layoutId + AnimatePresence) e o stagger de entrada do conteúdo
@@ -1523,6 +1524,19 @@ function CreateModal({
   const [uploadingCapa, setUploadingCapa] = useState(false);
   const [perguntas, setPerguntas] = useState<Pergunta[]>([{ pergunta: "", resposta: "" }]);
 
+  const { cropModal: paginaCropModal, cropImage: cropPagina } = useImageCrop({
+    targetW: 900,
+    targetH: 1200,
+    shape: "square",
+    title: "Editar página",
+  });
+  const { cropModal: capaCropModal, cropImage: cropCapa } = useImageCrop({
+    targetW: 1200,
+    targetH: 675,
+    shape: "square",
+    title: "Editar capa",
+  });
+
   // Toda publicação (revista ou entrevista) precisa estar vinculada a pelo
   // menos 1 música do chart do artista — vira registro em REGISTRO ao
   // publicar. Mesma fonte já usada em Editar Lançamentos (aba Pontos).
@@ -1710,9 +1724,12 @@ function CreateModal({
                   className="hidden"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
+                    e.target.value = "";
                     if (!file) return;
+                    const cropped = await cropPagina(file);
+                    if (!cropped) return;
                     setUploadingPagina(true);
-                    const url = await uploadToDrive(file);
+                    const url = await uploadToDrive(cropped);
                     if (url) setPaginas((prev) => [...prev, url]);
                     setUploadingPagina(false);
                   }}
@@ -1743,9 +1760,12 @@ function CreateModal({
                     className="hidden"
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
+                      e.target.value = "";
                       if (!file) return;
+                      const cropped = await cropCapa(file);
+                      if (!cropped) return;
                       setUploadingCapa(true);
-                      const url = await uploadToDrive(file);
+                      const url = await uploadToDrive(cropped);
                       if (url) setCapa(url);
                       setUploadingCapa(false);
                     }}
@@ -1807,6 +1827,8 @@ function CreateModal({
           </button>
         </div>
       </div>
+      {paginaCropModal}
+      {capaCropModal}
     </div>
   );
 }
