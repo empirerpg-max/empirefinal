@@ -33,19 +33,3 @@ export function AwardBadge({ award, ano, status, className = "" }: AwardBadgeInf
     </span>
   );
 }
-
-/**
- * Selinho de CANTO, só o ícone — pra sobrepor diretamente em cima de uma
- * capa/thumb (estilo badge de notificação num ícone de app: fica por cima
- * de tudo, na ponta, sem nunca substituir ou empurrar a imagem). O
- * posicionamento (absolute + qual canto) é responsabilidade de quem usa.
- */
-export function AwardCornerBadge({ award, ano, status, className = "" }: AwardBadgeInfo & { className?: string }) {
-  const label = status === "vencedor" ? `Vencedor do ${award} ${ano}` : `Indicado ao ${award} ${ano}`;
-  const icone = status === "vencedor" ? ICON_VENCEDOR : ICON_INDICADO;
-  // Sem círculo de fundo por trás: o próprio selo já é um "sticker"
-  // fechado (contorno próprio desenhado nele) — colocar outro círculo
-  // atrás ficava redundante e, em tamanho pequeno, o contorno do sticker
-  // parecia um fundo branco sólido.
-  return <img src={icone} alt="" title={label} className={`object-contain drop-shadow-lg ${className}`} />;
-}
