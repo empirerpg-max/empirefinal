@@ -27,11 +27,15 @@ export function ImageCropModal({
   options,
   onCancel,
   onCropped,
+  onUseOriginal,
 }: {
   file: File;
   options: ImageCropOptions;
   onCancel: () => void;
   onCropped: (blob: Blob) => void;
+  /** Recorte é só uma ajuda, nunca obrigatório — o app já se adapta sozinho
+   * a qualquer proporção. Deixa a pessoa seguir com a imagem como está. */
+  onUseOriginal: () => void;
 }) {
   const { targetW, targetH, shape = "square", title = "Editar imagem" } = options;
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -191,20 +195,29 @@ export function ImageCropModal({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-white/10">
+        <div className="flex items-center justify-between gap-2 px-5 py-4 border-t border-white/10">
           <button
             onClick={onCancel}
-            className="px-4 py-2.5 rounded-full text-xs font-bold text-neutral-400 hover:text-white hover:bg-white/5 transition"
+            className="px-3 py-2.5 rounded-full text-xs font-bold text-neutral-400 hover:text-white hover:bg-white/5 transition shrink-0"
           >
             Cancelar
           </button>
-          <button
-            onClick={handleSave}
-            disabled={!rawSrc || saving}
-            className="px-6 py-2.5 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider disabled:opacity-50 transition"
-          >
-            {saving ? "Salvando..." : "Salvar alterações"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onUseOriginal}
+              disabled={!rawSrc}
+              className="px-3 py-2.5 rounded-full text-xs font-bold text-neutral-400 hover:text-white hover:bg-white/5 transition disabled:opacity-50 whitespace-nowrap"
+            >
+              Usar original
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!rawSrc || saving}
+              className="px-6 py-2.5 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider disabled:opacity-50 transition whitespace-nowrap"
+            >
+              {saving ? "Salvando..." : "Salvar alterações"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
