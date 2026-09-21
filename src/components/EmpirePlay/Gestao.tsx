@@ -21,10 +21,12 @@ import {
   FileText,
   Repeat2,
   Link2,
+  Rocket,
 } from "lucide-react";
-import { useTelegramUser } from "@/lib/telegram";
+import { useTelegramUser, haptic } from "@/lib/telegram";
 import { driveImg } from "@/lib/api";
 import { EditModal } from "./EditModal";
+import { LancarFaixaAlbumModal } from "./LancarFaixaAlbumModal";
 import { BannersManager } from "./BannersManager";
 import { getStoredLogin } from "@/components/LoginScreen";
 import {
@@ -388,6 +390,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   // artista), pra não quebrar esse fluxo existente.
   const [showLanding, setShowLanding] = useState<boolean>(!initialTab);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [lancarFaixaAlbumOpen, setLancarFaixaAlbumOpen] = useState<boolean>(false);
 
   // Músicas do catálogo para seleção
   const [catalogSongs, setCatalogSongs] = useState<ExistingTrack[]>([]);
@@ -1371,6 +1374,20 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               </div>
               <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
                 Sincronizar Letra
+              </span>
+            </button>
+            <button
+              onClick={() => {
+                haptic.selection();
+                setLancarFaixaAlbumOpen(true);
+              }}
+              className="flex flex-col items-center gap-2 text-center group"
+            >
+              <div className="w-full aspect-square rounded-2xl bg-neutral-900 border border-white/10 text-neutral-200 grid place-items-center group-hover:border-white/20 transition">
+                <Rocket className="size-5" />
+              </div>
+              <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
+                Lançar Faixa de Álbum
               </span>
             </button>
             {isAdminUser && (
@@ -2643,6 +2660,16 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         associatedArtists={profile?.associatedArtists || []}
         defaultArtist={artistaResponsavel}
       />
+
+      {lancarFaixaAlbumOpen && (
+        <LancarFaixaAlbumModal
+          associatedArtists={profile?.associatedArtists || []}
+          defaultArtist={artistaResponsavel}
+          nomeJogador={profile?.playerName || telegramUser?.name || "Jogador"}
+          jogadorId={telegramUser?.id ? String(telegramUser.id) : ""}
+          onClose={() => setLancarFaixaAlbumOpen(false)}
+        />
+      )}
 
       {/* DUPLO AVISO ANTES DE PUBLICAR — música e vídeo. Mostra tudo que foi
           preenchido pro jogador conferir de olho aberto antes de publicar

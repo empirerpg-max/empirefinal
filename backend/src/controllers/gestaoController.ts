@@ -1363,6 +1363,60 @@ export async function updateFaixaLetraSincronizadaController(request: Request): 
 // Mesma regra da faixa avulsa: soma prestígio e grava Audit Log em
 // REGISTRO nesse momento — é aqui que ela vira conteúdo publicado de
 // verdade, mesmo já estando no chart desde que foi adicionada ao álbum.
+// GET /api/gestao/faixas-pendentes?artista=...
+// Lista TODAS as faixas de álbum pendentes (sem tópico publicado ainda) de
+// um artista, cruzando TODOS os álbuns dele de uma vez — antes, pra achar
+// uma faixa pendente e publicar, era preciso abrir Editar > Álbuns > achar
+// o álbum certo > rolar até a faixa. Botão próprio "Lançar Faixa de Álbum"
+// em Gestão usa isso pra listar direto, sem precisar navegar álbum por
+// álbum.
+export async function getFaixasPendentesController(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const artista = (url.searchParams.get("artista") || "").trim();
+    if (!artista) {
+      return new Response(JSON.stringify({ success: false, error: "Parâmetro 'artista' é obrigatório." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const rows = await googleSheetsService.principal.readValues("Musicas");
+    const normArtista = normalizeComparison(artista);
+    const faixas: { musicaRowIndex: number; titulo: string; album: string; tipoSingleAtual: string }[] = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const titulo = (row[7] || "").trim(); // H - Nome da música
+      const actPrincipal = (row[13] || "").trim(); // N - ACT PRINCIPAL
+      const pendente = (row[23] || "").trim(); // X - Pendente?
+      const album = (row[10] || "").trim(); // K - ALBUM
+
+      if (!titulo || !album) continue; // só faixa de álbum, não single avulso
+      if (normalizeComparison(pendente) !== "sim") continue;
+      if (normalizeComparison(actPrincipal) !== normArtista) continue;
+
+      faixas.push({
+        musicaRowIndex: i + 1,
+        titulo,
+        album,
+        tipoSingleAtual: (row[8] || "").trim(),
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, data: faixas }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[getFaixasPendentesController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao buscar faixas pendentes." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
 export async function publicarFaixaPendenteController(request: Request): Promise<Response> {
   try {
     const body = (await request.json()) as {

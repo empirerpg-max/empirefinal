@@ -51,6 +51,7 @@ import {
   getMeusAlbunsController,
   getMusicasEmChartController,
   getFaixasSemAlbumController,
+  getFaixasPendentesController,
   reordenarAlbumFaixasController,
   substituirAlbumController,
   uploadDriveController,
@@ -290,6 +291,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/gestao/faixa-letra-sincronizada",
     "/api/gestao/musicas-em-chart",
     "/api/gestao/faixas-sem-album",
+    "/api/gestao/faixas-pendentes",
     "/api/gestao/faixa/publicar",
     "/api/gestao/meus-albuns",
     "/api/gestao/upload",
@@ -1383,6 +1385,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         break;
       case "/api/gestao/faixas-sem-album":
         response = await getFaixasSemAlbumController(request);
+        break;
+      case "/api/gestao/faixas-pendentes":
+        response = await getFaixasPendentesController(request);
         break;
       case "/api/gestao/meus-albuns":
         response = await getMeusAlbunsController();
