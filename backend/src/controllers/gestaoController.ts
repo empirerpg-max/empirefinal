@@ -1393,6 +1393,7 @@ export async function getFaixasPendentesController(request: Request): Promise<Re
       capaUrl: string;
       letra: string;
       participantes: string[];
+      codigoUnico: string;
     }[] = [];
 
     for (let i = 1; i < rows.length; i++) {
@@ -1419,6 +1420,7 @@ export async function getFaixasPendentesController(request: Request): Promise<Re
         participantes: [row[14], row[15], row[16], row[17], row[18]]
           .map((v) => (v || "").trim())
           .filter(Boolean),
+        codigoUnico: (row[25] || "").trim(), // Z - Código único
       });
     }
 
@@ -1560,9 +1562,11 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     // Mesma cópia de Código único feita na criação normal (createSongController)
     // — sem isso, uma faixa que nasceu pendente nunca teria o código pra
     // cruzar com comentários/REGISTRO/Shop-Info-Visual depois de publicada.
+    let codigoUnicoFinal = (row[25] || "").trim();
     if (edicaoChartsRowIndex) {
       const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
       if (codigoGerado) {
+        codigoUnicoFinal = codigoGerado;
         await googleSheetsService.principal
           .updateValues("Musicas", `Z${musicaRowIndex}`, [[codigoGerado]])
           .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao copiar Código único:", err));
@@ -1574,7 +1578,12 @@ export async function publicarFaixaPendenteController(request: Request): Promise
 
     await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
 
-    return new Response(JSON.stringify({ success: true, data: { topicId, titulo: fullTitle } }), {
+    // codigoUnico devolvido pro front conseguir salvar Shop/Info/Visual
+    // (material extra) na hora de publicar, igual já faz "Nova Música" —
+    // sem isso o front não tinha como saber qual código usar aqui.
+    return new Response(
+      JSON.stringify({ success: true, data: { topicId, titulo: fullTitle, codigoUnico: codigoUnicoFinal } }),
+      {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
