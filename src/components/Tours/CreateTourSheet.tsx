@@ -3,6 +3,7 @@ import { X, Loader2, ImagePlus, Sparkles, Check, Wand2, ListChecks, Music2, Buil
 import { fmtMoney } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { haptic } from "@/lib/telegram";
+import { useImageCrop } from "@/hooks/use-image-crop";
 
 interface LocalTurne {
   continente: string;
@@ -160,6 +161,13 @@ export function CreateTourSheet({
     setModo("manual");
   }
 
+  const { cropModal: capaCropModal, cropImage: cropCapa } = useImageCrop({
+    targetW: 1280,
+    targetH: 720,
+    shape: "square",
+    title: "Editar capa da turnê",
+  });
+
   async function handleUploadCapa(file: File) {
     setUploadingCapa(true);
     try {
@@ -284,9 +292,12 @@ export function CreateTourSheet({
                 accept="image/*"
                 className="hidden"
                 disabled={uploadingCapa}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const f = e.target.files?.[0];
-                  if (f) handleUploadCapa(f);
+                  e.target.value = "";
+                  if (!f) return;
+                  const cropped = await cropCapa(f);
+                  if (cropped) handleUploadCapa(cropped);
                 }}
               />
             </label>
@@ -550,6 +561,7 @@ export function CreateTourSheet({
           Criar turnê
         </button>
       </div>
+      {capaCropModal}
     </div>
   );
 }

@@ -41,6 +41,7 @@ import {
   Search,
 } from "lucide-react";
 import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
+import { useImageCrop } from "@/hooks/use-image-crop";
 import { SmartImg } from "@/components/SmartImg";
 import { extractDriveFileId, extractYouTubeId, loadYouTubeIframeApi } from "@/components/EmpirePlay/MusicPlayer";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -699,6 +700,18 @@ function SocialPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingNews, setUploadingNews] = useState(false);
+  const { cropModal: avatarCropModal, cropImage: cropAvatar } = useImageCrop({
+    targetW: 400,
+    targetH: 400,
+    shape: "circle",
+    title: "Editar foto de perfil",
+  });
+  const { cropModal: newsCropModal, cropImage: cropNewsImage } = useImageCrop({
+    targetW: 1200,
+    targetH: 675,
+    shape: "square",
+    title: "Editar capa da notícia",
+  });
   const { user, ready } = useTelegramUser();
   const navigate = useNavigate();
   // "empire_tg_id" nunca é gravado em lugar nenhum do app — quem entrou pela
@@ -3399,9 +3412,12 @@ function SocialPage() {
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
+                        e.target.value = "";
                         if (!file) return;
+                        const cropped = await cropNewsImage(file);
+                        if (!cropped) return;
                         setUploadingNews(true);
-                        const url = await uploadToDrive(file, "socialNews");
+                        const url = await uploadToDrive(cropped, "socialNews");
                         if (url) setNewsImage(url);
                         setUploadingNews(false);
                       }}
@@ -3533,9 +3549,12 @@ function SocialPage() {
                         className="hidden"
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
+                          e.target.value = "";
                           if (!file) return;
+                          const cropped = await cropAvatar(file);
+                          if (!cropped) return;
                           setUploadingAvatar(true);
-                          const url = await uploadToDrive(file, "socialAvatars");
+                          const url = await uploadToDrive(cropped, "socialAvatars");
                           if (url) setProfileAvatar(url);
                           setUploadingAvatar(false);
                         }}
@@ -3977,6 +3996,8 @@ function SocialPage() {
           />
         </div>
       )}
+      {avatarCropModal}
+      {newsCropModal}
     </div>
   );
 }

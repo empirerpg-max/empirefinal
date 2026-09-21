@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Image as ImageIcon, Link2, Trash2, Loader2, GripVertical, Search } from "lucide-react";
 import { authHeaders } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
+import { useImageCrop } from "@/hooks/use-image-crop";
 
 interface BannerRow {
   id: string;
@@ -84,6 +85,7 @@ export function BannersManager({ tgId }: { tgId: string }) {
   const [loading, setLoading] = useState(true);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const { cropModal, cropImage } = useImageCrop({ targetW: 1200, targetH: 450, shape: "square", title: "Editar banner" });
   const [destinoTipo, setDestinoTipo] = useState<DestinoTipo>("musica");
   const [destinoItens, setDestinoItens] = useState<DestinoItem[]>([]);
   const [destinoLoading, setDestinoLoading] = useState(false);
@@ -215,11 +217,14 @@ export function BannersManager({ tgId }: { tgId: string }) {
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => {
+              onChange={async (e) => {
                 const file = e.target.files?.[0];
+                e.target.value = "";
                 if (!file) return;
-                setImageFile(file);
-                setImagePreview(URL.createObjectURL(file));
+                const cropped = await cropImage(file);
+                if (!cropped) return;
+                setImageFile(cropped);
+                setImagePreview(URL.createObjectURL(cropped));
               }}
             />
           </label>
@@ -371,6 +376,7 @@ export function BannersManager({ tgId }: { tgId: string }) {
           <p className="text-xs text-neutral-500">Nenhum banner ativo ainda.</p>
         )}
       </div>
+      {cropModal}
     </div>
   );
 }
