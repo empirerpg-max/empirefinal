@@ -712,9 +712,12 @@ function SocialPage() {
     shape: "square",
     title: "Editar capa da notícia",
   });
+  // Feed do Social (Instagram/TikTok) sempre exibe a mídia em quadrado
+  // (ver o card de post em aspect-square) — o corte tem que bater com isso,
+  // não com a caixa de prévia 16:9 do próprio formulário de criação.
   const { cropModal: postMediaCropModal, cropImage: cropPostMedia } = useImageCrop({
-    targetW: 1200,
-    targetH: 675,
+    targetW: 1080,
+    targetH: 1080,
     shape: "square",
     title: "Editar imagem do post",
   });
