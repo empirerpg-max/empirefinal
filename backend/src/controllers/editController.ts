@@ -372,8 +372,21 @@ export async function updateReleaseController(request: Request): Promise<Respons
       // Nome, Metacritic por jogador, Média Metacritic, Encarte, Tipo.
       // Alterar Título (Coluna G = Nome) e Capa (Coluna C = Capa). B é o ID
       // do tópico e D é a referência de comentários — nunca sobrescrever.
+      //
+      // BUG CONFIRMADO em 2026-09-21 (álbum "In Honor of Music and Life
+      // Itself" da Rayna, cadastrado por Lucas B., mostrando "Lucas B."
+      // como artista — mesmo caso do "Max Gorghan" nunca corrigido de
+      // verdade): `titulo` aqui já passou por dedupeArtistPrefix (tira o
+      // "Artista - " antes de comparar/editar), mas ao gravar de volta na
+      // coluna G só ia o título puro, sem recolocar o artista — igual já
+      // se corrige pra música (linha ~334, EDIÇÃO CHARTS). Toda vez que
+      // alguém editava título/capa de um álbum pela tela de Editar, a
+      // coluna G perdia o prefixo do artista pra sempre, e a tela do
+      // catálogo caía no fallback "Nome do criador" (o JOGADOR que
+      // cadastrou, não o artista fictício).
+      const tituloAlbumComArtista = artista ? `${String(artista).trim()} - ${titulo.trim()}` : titulo.trim();
       await googleSheetsService.principal.updateValues(sheetName, `G${rowIndex}`, [
-        [titulo.trim()],
+        [tituloAlbumComArtista],
       ]);
       if (finalCapaUrl) {
         await googleSheetsService.principal.updateValues(sheetName, `C${rowIndex}`, [
