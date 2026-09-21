@@ -1023,26 +1023,49 @@ function AwardsTab({ nome }: { nome: string }) {
         </div>
       </div>
 
-      <div className="space-y-2">
-        {dados.porAward.map((a) => (
-          <div key={a.award} className="p-3.5 rounded-2xl bg-card flex items-center gap-3">
-            <div className="size-9 shrink-0 rounded-xl bg-amber-500/10 grid place-items-center">
-              <Trophy className="size-4 text-amber-400" />
+      <div className="space-y-5">
+        {dados.porAward.map((a) => {
+          const entradas = dados.detalhes
+            .filter((d) => d.award === a.award)
+            .sort((x, y) => {
+              if ((x.status === "vencedor") !== (y.status === "vencedor")) {
+                return x.status === "vencedor" ? -1 : 1;
+              }
+              return (y.ano || "").localeCompare(x.ano || "");
+            });
+          return (
+            <div key={a.award}>
+              <div className="flex items-center gap-2.5 mb-2.5 px-1">
+                <div className="size-8 shrink-0 rounded-lg bg-amber-500/10 grid place-items-center">
+                  <Trophy className="size-3.5 text-amber-400" />
+                </div>
+                <p className="text-sm font-black">{a.award}</p>
+              </div>
+              <div className="space-y-1.5">
+                {entradas.map((e, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-card"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold truncate">{e.titulo || e.categoria}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {e.categoria} · {e.ano}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${
+                        e.status === "vencedor" ? "bg-amber-500/15 text-amber-400" : "bg-white/5 text-muted-foreground"
+                      }`}
+                    >
+                      {e.status === "vencedor" ? "Vencedor" : "Indicado"}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold truncate">{a.award}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {a.vencedor > 0 && (
-                  <span className="text-amber-400 font-bold">
-                    {a.vencedor} {a.vencedor === 1 ? "vitória" : "vitórias"}
-                  </span>
-                )}
-                {a.vencedor > 0 && a.indicacoes > a.vencedor && " · "}
-                {a.indicacoes > a.vencedor && `${a.indicacoes} indicações no total`}
-              </p>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
