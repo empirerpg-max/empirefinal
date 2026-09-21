@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { driveImg, driveRawImg, api, normalizeNome } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
-import { AwardBadge, AwardCornerBadge, type AwardBadgeInfo } from "@/components/AwardBadge";
+import { AwardBadge, type AwardBadgeInfo } from "@/components/AwardBadge";
 import { EncarteViewer } from "./EncarteViewer";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
@@ -981,12 +981,6 @@ export const Forum: React.FC<ForumProps> = ({
                       <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-950" />
                     )}
                     <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors" />
-                    {premioDoTopico(selectedTopic) && (
-                      <AwardCornerBadge
-                        {...premioDoTopico(selectedTopic)!}
-                        className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 size-7 sm:size-8 z-10"
-                      />
-                    )}
                     {selectedTopic.link ? (
                       <span className="relative size-16 sm:size-20 rounded-full bg-red-600/70 group-hover:bg-red-500/85 backdrop-blur-sm text-white flex items-center justify-center shadow-2xl shadow-red-600/20 scale-95 group-hover:scale-100 transition-all">
                         <Play className="size-7 sm:size-9 ml-0.5 sm:ml-1 fill-white" />
@@ -1032,12 +1026,6 @@ export const Forum: React.FC<ForumProps> = ({
                     </div>
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  {premioDoTopico(selectedTopic) && (
-                    <AwardCornerBadge
-                      {...premioDoTopico(selectedTopic)!}
-                      className="absolute top-2 left-2 sm:top-3 sm:left-3 size-8 sm:size-9 z-10"
-                    />
-                  )}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1875,15 +1863,6 @@ export const Forum: React.FC<ForumProps> = ({
                         </div>
                       )}
 
-                      {/* Selo de premiação: por cima da capa, na ponta —
-                          nunca substitui nem empurra a imagem, só um badge
-                          de canto (igual notificação num ícone de app). */}
-                      {premioDoTopico(item) && (
-                        <AwardCornerBadge
-                          {...premioDoTopico(item)!}
-                          className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 size-6 sm:size-7 pointer-events-none"
-                        />
-                      )}
                     </div>
 
                     {/* METADADOS */}
@@ -1894,6 +1873,11 @@ export const Forum: React.FC<ForumProps> = ({
                       <p className="text-[10px] sm:text-xs text-neutral-400 line-clamp-1 mt-0.5">
                         {item.artist}
                       </p>
+                      {premioDoTopico(item) && (
+                        <div className="mt-1.5">
+                          <AwardBadge {...premioDoTopico(item)!} className="!px-2 !py-0.5" />
+                        </div>
+                      )}
                     </div>
                   </div>
 
