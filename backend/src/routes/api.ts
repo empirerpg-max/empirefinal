@@ -80,6 +80,7 @@ import { reportVideoIssueController } from "../controllers/reportVideoController
 import { reportWrongContentController } from "../controllers/reportWrongContentController";
 import { adminFixOrphanCommentsController } from "../controllers/adminFixOrphanCommentsController";
 import { adminFixAlbumArtistController } from "../controllers/adminFixAlbumArtistController";
+import { adminFixLegacyVideoTitlesController } from "../controllers/adminFixLegacyVideoTitlesController";
 import {
   loginController,
   updateProfileController,
@@ -420,6 +421,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminFixOrphanCommentsController();
   } else if (url.pathname === "/api/empire-play/admin/fix-album-artist") {
     response = await adminFixAlbumArtistController();
+  } else if (url.pathname === "/api/empire-play/admin/fix-legacy-video-titles") {
+    response = await adminFixLegacyVideoTitlesController();
   } else if (isEditarPath) {
     if (request.method === "GET") {
       response = await getReleasesForEditController(request);
