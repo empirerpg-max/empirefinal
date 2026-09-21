@@ -141,6 +141,7 @@ import {
   getAwardsFlatController,
 } from "../controllers/awardsController";
 import { adminFillGrammy2026Controller } from "../controllers/adminFillGrammy2026Controller";
+import { adminFixBoulangerieAudioController } from "../controllers/adminFixBoulangerieAudioController";
 import {
   getMarketProdutosController,
   getMarketRegrasController,
@@ -359,6 +360,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/awards/artista",
     "/api/awards/todos",
     "/api/premiacoes/admin/fill-grammy-2026",
+    "/api/musicas/admin/fix-boulangerie-audio",
     "/api/market/produtos",
     "/api/market/regras",
     "/api/market/comprar",
@@ -1360,6 +1362,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await getAwardsFlatController();
   } else if (url.pathname === "/api/premiacoes/admin/fill-grammy-2026") {
     response = await adminFillGrammy2026Controller();
+  } else if (url.pathname === "/api/musicas/admin/fix-boulangerie-audio") {
+    response = await adminFixBoulangerieAudioController();
   } else if (url.pathname === "/api/market/produtos") {
     response = await getMarketProdutosController(request);
   } else if (url.pathname === "/api/market/regras") {
