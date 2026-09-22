@@ -41,6 +41,32 @@ import { useImageCrop } from "@/hooks/use-image-crop";
 // usuário, adaptados ao tema escuro do app.
 const STAGGER_DELAYS = [0, 0.08, 0.16, 0.24];
 
+// Páginas de revista aceitam 2 formatos dentro do mesmo array de strings
+// (zero mudança de schema): uma URL de imagem normal, ou uma página de
+// texto editorial, marcada com o prefixo abaixo + JSON. `parseJsonArray`
+// no backend é tolerante a qualquer conteúdo de string, então isso nunca
+// exige migração — cada leitor decide como renderizar.
+const TXT_PAGE_PREFIX = "TXT::";
+
+type TextoPagina = { titulo: string; corpo: string };
+
+function isTextoPagina(pagina: string): boolean {
+  return typeof pagina === "string" && pagina.startsWith(TXT_PAGE_PREFIX);
+}
+
+function parseTextoPagina(pagina: string): TextoPagina {
+  try {
+    const parsed = JSON.parse(pagina.slice(TXT_PAGE_PREFIX.length));
+    return { titulo: String(parsed.titulo || ""), corpo: String(parsed.corpo || "") };
+  } catch {
+    return { titulo: "", corpo: "" };
+  }
+}
+
+function encodeTextoPagina(t: TextoPagina): string {
+  return TXT_PAGE_PREFIX + JSON.stringify(t);
+}
+
 export const Route = createFileRoute("/acervo")({
   component: AcervoPage,
 });
@@ -131,6 +157,7 @@ function AcervoPage() {
   const [myArtists, setMyArtists] = useState<any[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedRevista, setSelectedRevista] = useState<Revista | null>(null);
+  const [editingRevista, setEditingRevista] = useState<Revista | null>(null);
   const [selectedEntrevista, setSelectedEntrevista] = useState<Entrevista | null>(null);
 
   const card = "rounded-[1.75rem] bg-white/5 border border-white/10 transition-all";
@@ -391,7 +418,15 @@ function AcervoPage() {
       )}
 
       {selectedRevista && (
-        <RevistaViewer revista={selectedRevista} onClose={() => setSelectedRevista(null)} />
+        <RevistaViewer
+          revista={selectedRevista}
+          tgId={tgId}
+          onClose={() => setSelectedRevista(null)}
+          onEdit={() => {
+            setEditingRevista(selectedRevista);
+            setSelectedRevista(null);
+          }}
+        />
       )}
       {selectedEntrevista && (
         <EntrevistaViewer entrevista={selectedEntrevista} onClose={() => setSelectedEntrevista(null)} />
@@ -405,6 +440,20 @@ function AcervoPage() {
           onClose={() => setIsCreateOpen(false)}
           onCreated={() => {
             setIsCreateOpen(false);
+            loadAll();
+          }}
+        />
+      )}
+      {editingRevista && (
+        <CreateModal
+          tab="revistas"
+          myArtists={myArtists}
+          inputCls={inputCls}
+          tgId={tgId}
+          editing={editingRevista}
+          onClose={() => setEditingRevista(null)}
+          onCreated={() => {
+            setEditingRevista(null);
             loadAll();
           }}
         />
@@ -1335,16 +1384,45 @@ function MetacriticTab({
 // (layoutId compartilhado com o card do grid) numa hero com título/artista
 // por cima e um botão "Ler revista"; ao tocar nele entra no leitor
 // página-a-página.
-function RevistaViewer({ revista, onClose }: { revista: Revista; onClose: () => void }) {
+function RevistaViewer({
+  revista,
+  tgId,
+  onClose,
+  onEdit,
+}: {
+  revista: Revista;
+  tgId: string;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
   const [lendo, setLendo] = useState(false);
   const [page, setPage] = useState(0);
   const total = revista.paginas.length;
+  const ADMIN_ID = "810141686";
+  const souDono =
+    !!tgId &&
+    !!revista.telegram_id &&
+    (String(revista.telegram_id) === String(tgId) || String(tgId) === ADMIN_ID);
+  const paginaAtual = revista.paginas[page] || "";
+  const textoAtual = isTextoPagina(paginaAtual) ? parseTextoPagina(paginaAtual) : null;
 
   return (
     <motion.div
       layoutId={`revista-card-${revista.id}`}
       className="fixed inset-0 z-[100] bg-black flex flex-col overflow-hidden"
     >
+      {souDono && !lendo && (
+        <button
+          onClick={() => {
+            haptic.light();
+            onEdit();
+          }}
+          className="absolute left-4 z-20 px-3.5 h-9 rounded-full bg-black/50 border border-white/10 flex items-center gap-1.5 active:scale-90"
+          style={{ top: "calc(env(safe-area-inset-top) + 16px)" }}
+        >
+          <span className="text-[11px] font-black uppercase tracking-wide text-white">Editar</span>
+        </button>
+      )}
       <button
         onClick={lendo ? () => setLendo(false) : onClose}
         className="absolute right-4 z-20 size-9 rounded-full bg-black/50 border border-white/10 grid place-items-center active:scale-90"
@@ -1406,11 +1484,31 @@ function RevistaViewer({ revista, onClose }: { revista: Revista; onClose: () => 
           className="flex-1 flex flex-col overflow-hidden"
         >
           <div className="flex-1 relative overflow-hidden mx-auto w-full max-w-2xl">
-            <img
-              src={resolveImg(revista.paginas[page])}
-              className="w-full h-full object-contain"
-              referrerPolicy="no-referrer"
-            />
+            {textoAtual ? (
+              <div className="w-full h-full overflow-y-auto bg-gradient-to-b from-zinc-950 to-black px-7 py-12 sm:px-12 flex flex-col">
+                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-primary mb-3">
+                  {revista.artista}
+                </span>
+                <h3 className="text-2xl sm:text-3xl font-black leading-[1.05] tracking-tight text-white mb-3 text-balance">
+                  {textoAtual.titulo}
+                </h3>
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="h-px w-8 bg-primary/60" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                    {new Date(revista.data).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
+                  </span>
+                </div>
+                <p className="text-[15px] leading-relaxed text-white/80 whitespace-pre-line font-medium">
+                  {textoAtual.corpo}
+                </p>
+              </div>
+            ) : (
+              <img
+                src={resolveImg(paginaAtual)}
+                className="w-full h-full object-contain"
+                referrerPolicy="no-referrer"
+              />
+            )}
             {page > 0 && (
               <button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
@@ -1500,6 +1598,7 @@ function CreateModal({
   myArtists,
   inputCls,
   tgId,
+  editing,
   onClose,
   onCreated,
 }: {
@@ -1507,17 +1606,19 @@ function CreateModal({
   myArtists: any[];
   inputCls: string;
   tgId: string;
+  editing?: Revista | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [artista, setArtista] = useState(myArtists[0]?.nome || "");
-  const [titulo, setTitulo] = useState("");
+  const [artista, setArtista] = useState(editing?.artista || myArtists[0]?.nome || "");
+  const [titulo, setTitulo] = useState(editing?.titulo || "");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Revista: páginas (a primeira também vira a capa da listagem)
-  const [paginas, setPaginas] = useState<string[]>([]);
+  const [paginas, setPaginas] = useState<string[]>(editing?.paginas || []);
   const [uploadingPagina, setUploadingPagina] = useState(false);
+  const [textoModal, setTextoModal] = useState<{ titulo: string; corpo: string; idx?: number } | null>(null);
 
   // Entrevista: capa opcional + perguntas/respostas
   const [capa, setCapa] = useState("");
@@ -1576,6 +1677,23 @@ function CreateModal({
     if (!artista || !titulo.trim() || submitting) return;
     setErrorMsg(null);
 
+    if (editing) {
+      if (paginas.length === 0) {
+        setErrorMsg("Envie pelo menos 1 página.");
+        return;
+      }
+      setSubmitting(true);
+      const res = await api.editarRevistaAcervo({ id: editing.id, titulo: titulo.trim(), paginas }, tgId);
+      setSubmitting(false);
+      if (res.ok) {
+        haptic.success();
+        onCreated();
+      } else {
+        setErrorMsg(res.error || "Erro ao salvar as alterações.");
+      }
+      return;
+    }
+
     if (musicasSelecionadas.size === 0) {
       setErrorMsg("Selecione ao menos 1 música do chart pra essa publicação.");
       return;
@@ -1623,7 +1741,7 @@ function CreateModal({
       <div className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-md w-full shadow-2xl max-h-[90dvh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-black uppercase">
-            Nova {tab === "revistas" ? "revista" : "entrevista"}
+            {editing ? "Editar revista" : `Nova ${tab === "revistas" ? "revista" : "entrevista"}`}
           </h2>
           <button onClick={onClose} className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90">
             <X className="size-4" />
@@ -1633,7 +1751,9 @@ function CreateModal({
         <div className="grid gap-4">
           <div className="space-y-1.5">
             <p className="text-[10px] font-black uppercase text-muted-foreground">Artista</p>
-            {myArtists.length > 0 ? (
+            {editing ? (
+              <p className={inputCls + " flex items-center opacity-70"}>{artista}</p>
+            ) : myArtists.length > 0 ? (
               <select value={artista} onChange={(e) => setArtista(e.target.value)} className={inputCls}>
                 {myArtists.map((a) => (
                   <option key={a.nome} value={a.nome}>
@@ -1646,43 +1766,45 @@ function CreateModal({
             )}
           </div>
 
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-black uppercase text-muted-foreground">
-              Sobre qual música (ou músicas) do chart?
-            </p>
-            <p className="text-[10px] text-muted-foreground/70 font-medium -mt-1 mb-1">
-              Obrigatório — vira registro no chart pra cada música marcada.
-            </p>
-            {loadingMusicas ? (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-                <Loader2 className="size-3.5 animate-spin" /> Carregando músicas do chart...
-              </div>
-            ) : musicasDoArtista.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic py-2">
-                Nenhuma música de {artista || "seu artista"} no chart ainda.
+          {!editing && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-black uppercase text-muted-foreground">
+                Sobre qual música (ou músicas) do chart?
               </p>
-            ) : (
-              <div className="max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 divide-y divide-white/5">
-                {musicasDoArtista.map((m) => {
-                  const checked = musicasSelecionadas.has(m.label);
-                  return (
-                    <label
-                      key={m.label}
-                      className="flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer active:bg-white/5"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleMusica(m.label)}
-                        className="size-4 accent-primary shrink-0"
-                      />
-                      <span className="text-sm font-medium truncate">{m.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+              <p className="text-[10px] text-muted-foreground/70 font-medium -mt-1 mb-1">
+                Obrigatório — vira registro no chart pra cada música marcada.
+              </p>
+              {loadingMusicas ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                  <Loader2 className="size-3.5 animate-spin" /> Carregando músicas do chart...
+                </div>
+              ) : musicasDoArtista.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic py-2">
+                  Nenhuma música de {artista || "seu artista"} no chart ainda.
+                </p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 divide-y divide-white/5">
+                  {musicasDoArtista.map((m) => {
+                    const checked = musicasSelecionadas.has(m.label);
+                    return (
+                      <label
+                        key={m.label}
+                        className="flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer active:bg-white/5"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleMusica(m.label)}
+                          className="size-4 accent-primary shrink-0"
+                        />
+                        <span className="text-sm font-medium truncate">{m.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <p className="text-[10px] font-black uppercase text-muted-foreground">Título</p>
@@ -1696,45 +1818,69 @@ function CreateModal({
               </p>
               {paginas.length > 0 && (
                 <div className="grid grid-cols-4 gap-2">
-                  {paginas.map((url, i) => (
-                    <div key={i} className="relative aspect-[3/4] rounded-lg overflow-hidden bg-secondary">
-                      <img src={resolveImg(url)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      <button
-                        onClick={() => setPaginas((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="absolute top-1 right-1 size-5 rounded-full bg-black/70 grid place-items-center"
-                      >
-                        <X className="size-3 text-white" />
-                      </button>
-                    </div>
-                  ))}
+                  {paginas.map((url, i) => {
+                    const txt = isTextoPagina(url) ? parseTextoPagina(url) : null;
+                    return (
+                      <div key={i} className="relative aspect-[3/4] rounded-lg overflow-hidden bg-secondary">
+                        {txt ? (
+                          <button
+                            onClick={() => setTextoModal({ ...txt, idx: i })}
+                            className="w-full h-full flex flex-col justify-center p-1.5 bg-gradient-to-b from-zinc-800 to-black text-left"
+                          >
+                            <span className="text-[7px] font-black text-primary uppercase tracking-wide">Texto</span>
+                            <span className="text-[9px] font-bold text-white leading-tight line-clamp-3 mt-0.5">
+                              {txt.titulo || "Sem título"}
+                            </span>
+                          </button>
+                        ) : (
+                          <img src={resolveImg(url)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        )}
+                        <button
+                          onClick={() => setPaginas((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="absolute top-1 right-1 size-5 rounded-full bg-black/70 grid place-items-center"
+                        >
+                          <X className="size-3 text-white" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-              <label
-                className={
-                  inputCls +
-                  " flex items-center justify-center gap-2 cursor-pointer text-center " +
-                  (uploadingPagina ? "opacity-60 pointer-events-none" : "")
-                }
-              >
-                <ImageIcon className="size-4" />
-                {uploadingPagina ? "Enviando..." : "Adicionar página"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (!file) return;
-                    const cropped = await cropPagina(file);
-                    if (!cropped) return;
-                    setUploadingPagina(true);
-                    const url = await uploadToDrive(cropped);
-                    if (url) setPaginas((prev) => [...prev, url]);
-                    setUploadingPagina(false);
-                  }}
-                />
-              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label
+                  className={
+                    inputCls +
+                    " flex items-center justify-center gap-2 cursor-pointer text-center " +
+                    (uploadingPagina ? "opacity-60 pointer-events-none" : "")
+                  }
+                >
+                  <ImageIcon className="size-4" />
+                  {uploadingPagina ? "Enviando..." : "+ Imagem"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      const cropped = await cropPagina(file);
+                      if (!cropped) return;
+                      setUploadingPagina(true);
+                      const url = await uploadToDrive(cropped);
+                      if (url) setPaginas((prev) => [...prev, url]);
+                      setUploadingPagina(false);
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setTextoModal({ titulo: "", corpo: "" })}
+                  className={inputCls + " flex items-center justify-center gap-2"}
+                >
+                  <BookOpenText className="size-4" />+ Texto
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -1820,15 +1966,68 @@ function CreateModal({
 
           <button
             onClick={handleSubmit}
-            disabled={submitting || !artista || !titulo.trim() || musicasSelecionadas.size === 0}
+            disabled={submitting || !artista || !titulo.trim() || (!editing && musicasSelecionadas.size === 0)}
             className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
           >
-            {submitting ? "Publicando..." : "Publicar"}
+            {submitting ? "Salvando..." : editing ? "Salvar alterações" : "Publicar"}
           </button>
         </div>
       </div>
       {paginaCropModal}
       {capaCropModal}
+      {textoModal && (
+        <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/80 backdrop-blur-sm">
+          <div className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-md w-full shadow-2xl max-h-[90dvh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-lg font-black uppercase">Página de texto</h3>
+              <button onClick={() => setTextoModal(null)} className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90">
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="grid gap-4">
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-black uppercase text-muted-foreground">Título</p>
+                <input
+                  value={textoModal.titulo}
+                  onChange={(e) => setTextoModal({ ...textoModal, titulo: e.target.value })}
+                  placeholder="Manchete da página"
+                  className={inputCls}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-black uppercase text-muted-foreground">Texto</p>
+                <textarea
+                  value={textoModal.corpo}
+                  onChange={(e) => setTextoModal({ ...textoModal, corpo: e.target.value })}
+                  placeholder="Escreva o texto dessa página..."
+                  className={inputCls + " h-40 resize-none"}
+                />
+              </div>
+              <button
+                onClick={() => {
+                  if (!textoModal.titulo.trim() && !textoModal.corpo.trim()) {
+                    setTextoModal(null);
+                    return;
+                  }
+                  const encoded = encodeTextoPagina({ titulo: textoModal.titulo.trim(), corpo: textoModal.corpo.trim() });
+                  setPaginas((prev) => {
+                    if (textoModal.idx !== undefined) {
+                      const next = [...prev];
+                      next[textoModal.idx] = encoded;
+                      return next;
+                    }
+                    return [...prev, encoded];
+                  });
+                  setTextoModal(null);
+                }}
+                className="p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide active:scale-95 transition-transform"
+              >
+                Salvar página
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

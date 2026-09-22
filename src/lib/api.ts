@@ -1435,6 +1435,17 @@ export const api = {
     });
     return res.json();
   },
+  async editarRevistaAcervo(
+    payload: { id: string; titulo: string; capa?: string; paginas: string[] },
+    tgId: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const res = await fetch("/api/acervo/revistas", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, tgId }),
+    });
+    return res.json();
+  },
   async listarEntrevistasAcervo(): Promise<any[]> {
     const res = await fetch("/api/acervo/entrevistas");
     const data = await res.json().catch(() => null);

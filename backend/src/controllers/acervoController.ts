@@ -167,6 +167,60 @@ export async function createAcervoRevistaController(request: Request): Promise<R
   return jsonResponse({ ok: true, id });
 }
 
+// Edição pelo dono — só título, capa e páginas (imagem ou texto) mudam;
+// artista, data original, telegram_id e músicas vinculadas em REGISTRO
+// ficam como estavam (já geraram os registros no chart ao publicar).
+export async function updateAcervoRevistaController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    id?: string;
+    titulo?: string;
+    capa?: string;
+    paginas?: string[];
+    tgId?: string;
+  };
+
+  const id = (body.id || "").trim();
+  const titulo = (body.titulo || "").trim();
+  const paginas = (body.paginas || []).filter(Boolean);
+  const tgId = (body.tgId || "").trim();
+
+  if (!id || !titulo || paginas.length === 0) {
+    return jsonResponse({ ok: false, error: "Título e ao menos 1 página são obrigatórios." }, 400);
+  }
+  if (!tgId) {
+    return jsonResponse({ ok: false, error: "Não autenticado." }, 401);
+  }
+
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.revistas);
+  if (!rows || rows.length < 2) {
+    return jsonResponse({ ok: false, error: "Revista não encontrada." }, 404);
+  }
+
+  const rowIndex = rows.slice(1).findIndex((r) => normalizeText(r[0]) === id);
+  if (rowIndex === -1) {
+    return jsonResponse({ ok: false, error: "Revista não encontrada." }, 404);
+  }
+  const row = rows[rowIndex + 1];
+  const donoId = normalizeText(row[6]);
+  const ADMIN_ID = "810141686";
+  if (normalizeComparison(donoId) !== normalizeComparison(tgId) && normalizeComparison(tgId) !== normalizeComparison(ADMIN_ID)) {
+    return jsonResponse({ ok: false, error: "Só quem publicou pode editar essa revista." }, 403);
+  }
+
+  const sheetRow = rowIndex + 2; // +1 header, +1 base-1
+  await googleSheetsService.usuarios.updateValues(SHEETS.revistas, `C${sheetRow}:E${sheetRow}`, [
+    [titulo, body.capa || paginas[0] || "", JSON.stringify(paginas)],
+  ]);
+
+  registrarLogSistema({
+    categoria: "Ação concluída",
+    oQueAconteceu: `Revista "${titulo}" editada pelo publicador.`,
+    onde: "updateAcervoRevistaController",
+  }).catch(() => {});
+
+  return jsonResponse({ ok: true });
+}
+
 // -------------------- ENTREVISTAS --------------------
 
 export interface EntrevistaPergunta {
