@@ -8,6 +8,7 @@ import { chartsApiController } from "../controllers/chartsController";
 import {
   getAcervoRevistasController,
   createAcervoRevistaController,
+  updateAcervoRevistaController,
   getAcervoEntrevistasController,
   createAcervoEntrevistaController,
 } from "../controllers/acervoController";
@@ -537,10 +538,12 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         ? await getAcervoRevistasController()
         : request.method === "POST"
           ? await createAcervoRevistaController(request)
-          : new Response(
-              JSON.stringify({ success: false, error: "Use GET ou POST para /api/acervo/revistas." }),
-              { status: 405, headers: { "Content-Type": "application/json" } },
-            );
+          : request.method === "PUT"
+            ? await updateAcervoRevistaController(request)
+            : new Response(
+                JSON.stringify({ success: false, error: "Use GET, POST ou PUT para /api/acervo/revistas." }),
+                { status: 405, headers: { "Content-Type": "application/json" } },
+              );
   } else if (url.pathname === "/api/acervo/entrevistas") {
     response =
       request.method === "GET"
