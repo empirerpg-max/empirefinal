@@ -216,6 +216,25 @@ export async function iniciarInvestimentoController(request: Request): Promise<R
   }
 
   const rows = await googleSheetsService.registrosCharts.readValues(SHEET);
+
+  // Idempotência: se esse artista+música já tem uma linha reservada e
+  // ainda sem nenhuma playlist escolhida, reaproveita ela ao invés de
+  // reservar outra — evita linhas duplicadas quando o jogador clica em
+  // "Nova" mais de uma vez (ex: resposta lenta, ou achou que não tinha
+  // funcionado) pro mesmo par artista+música.
+  const normArtista = normalizeComparison(artista);
+  const normMusica = normalizeComparison(musica);
+  for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (normalizeComparison(normalizeText(row[COL.ARTISTA])) !== normArtista) continue;
+    if (normalizeComparison(normalizeText(row[COL.MUSICA])) !== normMusica) continue;
+    const semPlaylist =
+      !normalizeText(row[COL.SPOTIFY]) && !normalizeText(row[COL.APPLE]) && !normalizeText(row[COL.YOUTUBE]);
+    if (semPlaylist) {
+      return jsonResponse({ ok: true, linha: i + 1, investimento: rowToInvestimento(row, i + 1) });
+    }
+  }
+
   let linhaLivre = -1;
   for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
     const row = rows[i] || [];
