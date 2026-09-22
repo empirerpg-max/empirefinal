@@ -2,19 +2,19 @@ import { googleSheetsService, normalizeText } from "../services/googleSheetsServ
 
 // Conserto pontual: Justino (dono de Samantha Cooper) acabou reservando 2
 // linhas na aba "ECOIN + INVESTIMENTO" pra mesma música (Samantha Cooper -
-// CURSED BLESSED), ambas sem nenhuma playlist escolhida — clássico
-// resultado de clicar "Nova" mais de uma vez achando que não tinha
-// funcionado. iniciarInvestimentoController agora é idempotente pra isso
-// não acontecer de novo (reaproveita a linha existente em vez de criar
-// outra); esse endpoint só limpa a linha duplicada que já ficou perdida,
-// liberando ela de volta pro pool comum de linhas livres da semana.
+// CURSED BLESSED). A primeira (linha 27) já foi usada com sucesso — tem
+// playlist escolhida nas 3 plataformas. A segunda (linha 28) ficou órfã:
+// artista preenchido (Samantha Cooper) mas música vazia — sobrou assim de
+// quando ele tentou de novo antes da correção de idempotência entrar no
+// ar. iniciarInvestimentoController agora reaproveita a linha existente em
+// vez de criar outra, então isso não deve se repetir; esse endpoint só
+// limpa essa linha órfã, liberando ela de volta pro pool da semana.
 const SHEET = "ECOIN + INVESTIMENTO";
-const LINHA_DUPLICADA = 28; // confirmado ao vivo: 2ª reserva de "Samantha Cooper - CURSED BLESSED"
+const LINHA_ORFA = 28; // confirmado ao vivo: sobra da 2ª tentativa pra "Samantha Cooper - CURSED BLESSED"
 const ARTISTA_ESPERADO = "Samantha Cooper";
-const MUSICA_ESPERADA = "Samantha Cooper - CURSED BLESSED";
 
 export async function adminFixDuplicataInvestimentoController(): Promise<Response> {
-  const cells = await googleSheetsService.registrosCharts.readValues(SHEET, `A${LINHA_DUPLICADA}:O${LINHA_DUPLICADA}`);
+  const cells = await googleSheetsService.registrosCharts.readValues(SHEET, `A${LINHA_ORFA}:O${LINHA_ORFA}`);
   const row = cells?.[0] || [];
 
   const artista = normalizeText(row[2]); // C
@@ -23,12 +23,12 @@ export async function adminFixDuplicataInvestimentoController(): Promise<Respons
   const apple = normalizeText(row[8]); // I
   const youtube = normalizeText(row[10]); // K
 
-  if (artista !== ARTISTA_ESPERADO || musica !== MUSICA_ESPERADA || spotify || apple || youtube) {
+  if (artista !== ARTISTA_ESPERADO || musica || spotify || apple || youtube) {
     return new Response(
       JSON.stringify({
         success: false,
-        error: "O estado atual da linha não é o duplicado esperado — abortado por segurança, nada foi alterado.",
-        linha: LINHA_DUPLICADA,
+        error: "O estado atual da linha não é o esperado (artista preenchido, resto vazio) — abortado por segurança, nada foi alterado.",
+        linha: LINHA_ORFA,
         artista,
         musica,
         spotify,
@@ -39,12 +39,12 @@ export async function adminFixDuplicataInvestimentoController(): Promise<Respons
     );
   }
 
-  // Só C e E — D é fórmula (PROCV do saldo do artista), nunca escrita.
-  await googleSheetsService.registrosCharts.updateValues(SHEET, `C${LINHA_DUPLICADA}`, [[""]]);
-  await googleSheetsService.registrosCharts.updateValues(SHEET, `E${LINHA_DUPLICADA}`, [[""]]);
+  // Só C — D é fórmula (PROCV do saldo do artista), nunca escrita; E já
+  // está vazia.
+  await googleSheetsService.registrosCharts.updateValues(SHEET, `C${LINHA_ORFA}`, [[""]]);
 
   return new Response(
-    JSON.stringify({ success: true, linha: LINHA_DUPLICADA, artista, musica }),
+    JSON.stringify({ success: true, linha: LINHA_ORFA, artista }),
     { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
   );
 }
