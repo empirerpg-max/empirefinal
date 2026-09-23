@@ -69,6 +69,11 @@ export async function registrarNaEdicaoCharts(params: {
   artistaPrincipal: string;
   participantes?: string[]; // até 5 (ARTISTA 2-6)
   albunsExtras?: string[]; // até 4 (ALBUM 2-5) — música em mais de um álbum
+  // Só pra álbum retroativo: WEEKS (F) começa já no número de semanas do
+  // álbum (calcularSemanasRetroativas) em vez de "1" — sem isso a faixa
+  // aparecia "estreando" enquanto o álbum já mostrava várias semanas de
+  // chart. Lançamento normal nunca passa isso, continua sempre "1".
+  weeksOverride?: string;
 }): Promise<number | null> {
   const participantesLimpos = (params.participantes || []).filter(Boolean).slice(0, 5);
   const albunsExtrasLimpos = (params.albunsExtras || []).filter(Boolean).slice(0, 4);
@@ -99,7 +104,7 @@ export async function registrarNaEdicaoCharts(params: {
         params.tipoSingle || "", // C - TIPO DE SINGLE
         params.tipoMusica || "", // D - TIPO DE MÚSICA
         params.album || "", // E - ALBUM
-        "1", // F - WEEKS
+        params.weeksOverride || "1", // F - WEEKS
         "", // G - não mexer
         params.artistaPrincipal, // H - ACT PRINCIPAL
         participantesLimpos[0] || "", // I - ARTISTA 2
@@ -263,7 +268,7 @@ export interface CreateAlbumPayload {
 // cron/job que incrementa essa coluna automaticamente no app (é ajustada
 // manualmente/pela planilha) — isso só faz o álbum ENTRAR já na semana
 // correta, não simula o histórico de semanas anteriores.
-function calcularSemanasRetroativas(dataLancamento: string): number {
+export function calcularSemanasRetroativas(dataLancamento: string): number {
   const [ano, mes, dia] = dataLancamento.split("-").map(Number);
   if (!ano || !mes || !dia) return 1;
   const data = new Date(ano, mes - 1, dia);
@@ -960,8 +965,9 @@ async function registrarFaixaNosCharts(params: {
   participantes: string[];
   capaUrl: string;
   pendente?: boolean;
+  weeksOverride?: string;
 }): Promise<number | null> {
-  const { dataFormatada, songTitle, tipoSingle, tipoMusica, album, artistaPrincipal, participantes, capaUrl, pendente } = params;
+  const { dataFormatada, songTitle, tipoSingle, tipoMusica, album, artistaPrincipal, participantes, capaUrl, pendente, weeksOverride } = params;
 
   const edicaoChartsRowIndex = await registrarNaEdicaoCharts({
     dataFormatada,
@@ -970,6 +976,7 @@ async function registrarFaixaNosCharts(params: {
     tipoMusica,
     album,
     artistaPrincipal,
+    weeksOverride,
     participantes,
   });
 
@@ -1064,6 +1071,10 @@ async function processarFaixasDoAlbum(
   capaUrl: string,
   jogadorId: string,
   dataFormatada: string,
+  // Só pra álbum retroativo: WEEKS (EDIÇÃO CHARTS!F) de cada faixa nova
+  // começa igual ao NÚMERO DE SEMANAS do álbum, em vez de "1". Lançamento
+  // normal nunca passa isso.
+  weeksOverride?: string,
 ) {
   const resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
   let faixasIneditasEsperadas = 0;
@@ -1120,7 +1131,7 @@ async function processarFaixasDoAlbum(
         faixa.tipoSingle || "TRACKLIST ALBUM", // I - TIPO DE SINGLE
         faixa.tipoMusica || "SOLO", // J - TIPO DE MÚSICA
         albumFullTitle, // K - ALBUM
-        "", // L - WEEKS
+        weeksOverride || "", // L - WEEKS
         "", // M - WEEKS VIDEO
         artistaAlbum, // N - ACT PRINCIPAL
         participantesLimpos[0] || "", // O - ARTISTA 2
@@ -1156,6 +1167,7 @@ async function processarFaixasDoAlbum(
       participantes: participantesLimpos,
       capaUrl,
       pendente: pendente === "Sim",
+      weeksOverride,
     });
     // Mesma cópia de Código único feita em createSongController — sem
     // isso, faixa inédita de álbum nunca tinha o código pra cruzar com
@@ -1666,6 +1678,13 @@ export interface SubstituirAlbumPayload {
   novasFaixas?: TrackItemPayload[];
   nomeJogador: string;
   jogadorId?: string;
+  // Só usado por migrarAlbunsLegadosController, ao completar faixas que
+  // faltaram numa migração anterior — data original do álbum legado, em
+  // vez de hoje (padrão pra "Substituir álbum" de verdade, usado por
+  // jogadores adicionando bônus a um álbum já lançado). Mesma regra pro
+  // WEEKS de cada faixa nova.
+  dataLancamento?: string;
+  weeksOverride?: string;
 }
 
 // Núcleo de "Substituir álbum" (troca capa/encarte e/ou adiciona faixas a
@@ -1682,6 +1701,8 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
       novasFaixas = [],
       nomeJogador,
       jogadorId = "",
+      dataLancamento = "",
+      weeksOverride,
     } = body;
 
     if (!albumTopicId || !nomeJogador) {
@@ -1707,7 +1728,12 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
       ? albumFullTitle.slice(0, albumFullTitle.indexOf(" - ")).trim()
       : albumFullTitle;
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const dataFormatada = /^\d{4}-\d{2}-\d{2}$/.test(dataLancamento)
+      ? (() => {
+          const [ano, mes, dia] = dataLancamento.split("-");
+          return `${dia}/${mes}/${ano}`;
+        })()
+      : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
     if (novaCapaUrl) {
       try {
@@ -1740,6 +1766,7 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
         novaCapaUrl,
         jogadorId,
         dataFormatada,
+        weeksOverride,
       ));
 
       // Soma a quantidade de faixas novas ao total já registrado em
@@ -1799,6 +1826,64 @@ export async function substituirAlbumController(request: Request): Promise<Respo
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
+  }
+}
+
+// Escreve a linha do álbum em "EDIÇÃO CHARTS ÁLBUMS" (gera o Código único e
+// copia pra Albuns!L) — extraído de publicarAlbum pra também ser chamado
+// por migrarAlbunsLegadosController quando acha um álbum que já existe em
+// "Albuns" mas ficou SEM entrada aqui (ex: essa escrita falhou/foi
+// interrompida numa migração anterior, antes dessa proteção existir).
+// Nunca lança erro — falha aqui não deve derrubar o resto do fluxo, só
+// devolve "" de código.
+export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
+  artistaAlbum: string;
+  albumFullTitle: string;
+  tipoAlbum: string;
+  dataFormatada: string;
+  numeroSemanas: number;
+  numeroFaixas: number;
+  albumRowIndexEmAlbuns?: number | null;
+}): Promise<string> {
+  const { artistaAlbum, albumFullTitle, tipoAlbum, dataFormatada, numeroSemanas, numeroFaixas, albumRowIndexEmAlbuns } = params;
+  try {
+    const tipoNum = tipoAlbum.trim().toUpperCase() === "EP" ? "1" : "2";
+    const codigoUnico = await gerarProximoCodigoUnico("EDIÇÃO CHARTS ÁLBUMS", "EMPALBM", 3);
+    // NÃO usa appendRow/:append (confirmado ao vivo: faixa de coluna
+    // explícita não impede o Sheets de pular pra longe por causa das
+    // colunas de cálculo à direita). Acha a última linha com NOME DO ALBUM
+    // de verdade (coluna D) e escreve direto na seguinte via updateValues.
+    const albunsRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D20000");
+    let ultimaLinhaComAlbum = 1;
+    for (let i = 0; i < albunsRows.length; i++) {
+      if ((albunsRows[i]?.[3] || "").trim()) ultimaLinhaComAlbum = i + 2;
+    }
+    const linhaAlvoAlbum = ultimaLinhaComAlbum + 1;
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `A${linhaAlvoAlbum}:R${linhaAlvoAlbum}`, [
+      [
+        artistaAlbum, // A - ARTISTA
+        dataFormatada, // B - DATA DE LANÇAMENTO
+        String(numeroSemanas), // C - NÚMERO DE SEMANAS
+        albumFullTitle, // D - NOME DO ALBUM
+        String(numeroFaixas), // E - NÚMERO DE FAIXAS
+        tipoNum, // F - TIPO DE ÁLBUM (2 = Álbum/Deluxe, 1 = EP)
+        "", "", "", "", "", "", "", "", "", "", // G-P (streams/vendas/certificação/multiplicador — calculados à parte)
+        "", // Q - CÁLCULO 1
+        codigoUnico, // R - Código único
+      ],
+    ]);
+    // Como esse código é gerado pelo próprio app (não por fórmula), já
+    // temos o valor em mãos — leva a mesma cópia pro catálogo (Albuns!L),
+    // sem precisar reler nada.
+    if (albumRowIndexEmAlbuns) {
+      await googleSheetsService.principal
+        .updateValues("Albuns", `L${albumRowIndexEmAlbuns}`, [[codigoUnico]])
+        .catch((err) => console.warn("[registrarAlbumNaEdicaoChartsAlbuns] Erro ao copiar Código único pra Albuns!L:", err));
+    }
+    return codigoUnico;
+  } catch (err) {
+    console.warn("[registrarAlbumNaEdicaoChartsAlbuns] Erro ao gravar em EDIÇÃO CHARTS ÁLBUMS:", err);
+    return "";
   }
 }
 
@@ -1884,46 +1969,15 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
     // inclui o "Código único" (coluna R, padrão EMPALBM001, EMPALBM002...)
     // — antes essa coluna ficava sempre em branco pra álbum lançado pelo
     // app, só os legados/manuais tinham código.
-    let codigoUnicoAlbum = "";
-    try {
-      const tipoNum = tipoAlbum.trim().toUpperCase() === "EP" ? "1" : "2";
-      const codigoUnico = await gerarProximoCodigoUnico("EDIÇÃO CHARTS ÁLBUMS", "EMPALBM", 3);
-      codigoUnicoAlbum = codigoUnico;
-      // NÃO usa appendRow/:append — mesmo motivo de registrarNaEdicaoCharts
-      // acima (confirmado ao vivo: faixa de coluna explícita não impede o
-      // Sheets de pular pra longe por causa das colunas de cálculo à
-      // direita). Acha a última linha com NOME DO ALBUM de verdade
-      // (coluna D) e escreve direto na seguinte via updateValues.
-      const albunsRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D20000");
-      let ultimaLinhaComAlbum = 1;
-      for (let i = 0; i < albunsRows.length; i++) {
-        if ((albunsRows[i]?.[3] || "").trim()) ultimaLinhaComAlbum = i + 2;
-      }
-      const linhaAlvoAlbum = ultimaLinhaComAlbum + 1;
-      await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `A${linhaAlvoAlbum}:R${linhaAlvoAlbum}`, [
-        [
-          artistaAlbum, // A - ARTISTA
-          dataFormatada, // B - DATA DE LANÇAMENTO
-          String(numeroSemanas), // C - NÚMERO DE SEMANAS
-          albumFullTitle, // D - NOME DO ALBUM
-          String(faixasFinal.length), // E - NÚMERO DE FAIXAS
-          tipoNum, // F - TIPO DE ÁLBUM (2 = Álbum/Deluxe, 1 = EP)
-          "", "", "", "", "", "", "", "", "", "", // G-P (streams/vendas/certificação/multiplicador — calculados à parte)
-          "", // Q - CÁLCULO 1
-          codigoUnico, // R - Código único
-        ],
-      ]);
-      // Como esse código é gerado pelo próprio app (não por fórmula), já
-      // temos o valor em mãos — leva a mesma cópia pro catálogo (Albuns!L),
-      // sem precisar reler nada.
-      if (albumRowIndexNovo) {
-        await googleSheetsService.principal
-          .updateValues("Albuns", `L${albumRowIndexNovo}`, [[codigoUnico]])
-          .catch((err) => console.warn("[createAlbumController] Erro ao copiar Código único pra Albuns!L:", err));
-      }
-    } catch (err) {
-      console.warn("[createAlbumController] Erro ao gravar em EDIÇÃO CHARTS ÁLBUMS:", err);
-    }
+    const codigoUnicoAlbum = await registrarAlbumNaEdicaoChartsAlbuns({
+      artistaAlbum,
+      albumFullTitle,
+      tipoAlbum,
+      dataFormatada,
+      numeroSemanas,
+      numeroFaixas: faixasFinal.length,
+      albumRowIndexEmAlbuns: albumRowIndexNovo,
+    });
 
     // 3. Processar cada faixa (existente ou inédita) — só depois do álbum
     // já existir de verdade em "Albuns".
@@ -1934,6 +1988,7 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
       capaUrl,
       jogadorId,
       dataFormatada,
+      retroativo ? String(numeroSemanas) : undefined,
     );
 
     // REGISTRO é só pra comentários de OUTROS jogadores (ver
