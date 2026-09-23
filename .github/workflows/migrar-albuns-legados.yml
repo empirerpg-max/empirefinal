@@ -1,0 +1,48 @@
+name: Migrar Álbuns Legados pro Fórum
+
+on:
+  workflow_dispatch:   # disparo manual pelo botão no GitHub
+
+jobs:
+  migrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Completar álbuns legados (tópico + charts + faixas pendentes)
+        run: |
+          for i in $(seq 1 60); do
+            resp=$(curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/migrar-legados?limit=3")
+            echo "=== migrar-legados #$i ==="
+            echo "$resp" | jq -c '{limite, totalPendentesAntes, migrados, completados, erros, restantes}'
+            restantes=$(echo "$resp" | jq -r '.restantes // 0')
+            if [ "$restantes" = "0" ]; then
+              echo "Migração completa."
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Corrigir data/semanas retroativas de tudo que subiu
+        run: |
+          for i in $(seq 1 60); do
+            resp=$(curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/reparar-datas-legados?limit=5")
+            echo "=== reparar-datas-legados #$i ==="
+            echo "$resp" | jq -c '{limite, totalAlbunsLegados, candidatosVarridosNestaChamada, albunsComCorrecao, totalCorrecoes, restantes}'
+            restantes=$(echo "$resp" | jq -r '.restantes // 0')
+            if [ "$restantes" = "0" ]; then
+              echo "Reparo completo."
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Diagnóstico final de duplicatas
+        run: |
+          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/diagnostico-duplicatas" | tee diagnostico-duplicatas.json | jq .
+
+      - name: Guardar diagnóstico
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostico-duplicatas
+          path: diagnostico-duplicatas.json
