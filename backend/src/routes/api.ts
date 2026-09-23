@@ -185,6 +185,7 @@ import {
   getAlbunsAntigosController,
   migrarAlbunsLegadosController,
   diagnosticoDuplicatasLegadosController,
+  mesclarTopicosMusicaController,
   apagarFaixaDuplicadaLegadoController,
   repararDatasLegadosController,
   debugLinhaEdicaoChartsController,
@@ -893,6 +894,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       response = await diagnosticoDuplicatasLegadosController();
     } else if (url.pathname === "/api/playlists/albuns/admin/apagar-faixa-duplicada") {
       response = await apagarFaixaDuplicadaLegadoController(request);
+    } else if (url.pathname === "/api/playlists/albuns/admin/mesclar-topicos-musica") {
+      response = await mesclarTopicosMusicaController(request);
     } else if (url.pathname === "/api/playlists/albuns/admin/reparar-datas-legados") {
       response = await repararDatasLegadosController(request);
     } else if (url.pathname === "/api/playlists/albuns/admin/debug-linha-edicao-charts") {
