@@ -39,7 +39,7 @@ import { Route as MarketRegrasRouteImport } from './routes/market.regras'
 import { Route as PontoIndexRouteImport } from './routes/ponto.index'
 import { Route as PontoDistribuirRouteImport } from './routes/ponto.distribuir'
 import { Route as PontoPlaylistsRouteImport } from './routes/ponto.playlists'
-import { Route as PremiacoesIndicarRouteImport } from './routes/premiacoes.indicar'
+import { Route as PremiacoesIndicarRouteImport } from './routes/premiacoes_.indicar'
 import { Route as ToursIndexRouteImport } from './routes/tours.index'
 import { Route as ToursNomeRouteImport } from './routes/tours.$nome'
 import { Route as AlbumIdEditarRouteImport } from './routes/album.$id.editar'
@@ -208,9 +208,9 @@ const PontoPlaylistsRoute = PontoPlaylistsRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const PremiacoesIndicarRoute = PremiacoesIndicarRouteImport.update({
-  id: '/indicar',
-  path: '/indicar',
-  getParentRoute: () => PremiacoesRoute,
+  id: '/premiacoes_/indicar',
+  path: '/premiacoes/indicar',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ToursIndexRoute = ToursIndexRouteImport.update({
   id: '/tours/',
@@ -307,7 +307,7 @@ export interface FileRoutesByFullPath {
   '/empire-play': typeof EmpirePlayRouteWithChildren
   '/market': typeof MarketRouteWithChildren
   '/perfil': typeof PerfilRoute
-  '/premiacoes': typeof PremiacoesRouteWithChildren
+  '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
@@ -355,7 +355,7 @@ export interface FileRoutesByTo {
   '/charts': typeof ChartsRoute
   '/market': typeof MarketRouteWithChildren
   '/perfil': typeof PerfilRoute
-  '/premiacoes': typeof PremiacoesRouteWithChildren
+  '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
@@ -401,7 +401,7 @@ export interface FileRoutesById {
   '/empire-play': typeof EmpirePlayRouteWithChildren
   '/market': typeof MarketRouteWithChildren
   '/perfil': typeof PerfilRoute
-  '/premiacoes': typeof PremiacoesRouteWithChildren
+  '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
@@ -419,7 +419,7 @@ export interface FileRoutesById {
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
-  '/premiacoes/indicar': typeof PremiacoesIndicarRoute
+  '/premiacoes_/indicar': typeof PremiacoesIndicarRoute
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas/': typeof ArtistasIndexRoute
   '/awards/': typeof AwardsIndexRoute
@@ -563,7 +563,7 @@ export interface FileRouteTypes {
     | '/market/regras'
     | '/ponto/distribuir'
     | '/ponto/playlists'
-    | '/premiacoes/indicar'
+    | '/premiacoes_/indicar'
     | '/tours/$nome'
     | '/artistas/'
     | '/awards/'
@@ -595,7 +595,7 @@ export interface RootRouteChildren {
   EmpirePlayRoute: typeof EmpirePlayRouteWithChildren
   MarketRoute: typeof MarketRouteWithChildren
   PerfilRoute: typeof PerfilRoute
-  PremiacoesRoute: typeof PremiacoesRouteWithChildren
+  PremiacoesRoute: typeof PremiacoesRoute
   SocialRoute: typeof SocialRoute
   TutorialRoute: typeof TutorialRoute
   TvRoute: typeof TvRoute
@@ -606,6 +606,7 @@ export interface RootRouteChildren {
   AwardsNomeRoute: typeof AwardsNomeRoute
   PontoDistribuirRoute: typeof PontoDistribuirRouteWithChildren
   PontoPlaylistsRoute: typeof PontoPlaylistsRouteWithChildren
+  PremiacoesIndicarRoute: typeof PremiacoesIndicarRoute
   ToursNomeRoute: typeof ToursNomeRoute
   ArtistasIndexRoute: typeof ArtistasIndexRoute
   AwardsIndexRoute: typeof AwardsIndexRoute
@@ -826,12 +827,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PontoPlaylistsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/premiacoes/indicar': {
-      id: '/premiacoes/indicar'
-      path: '/indicar'
+    '/premiacoes_/indicar': {
+      id: '/premiacoes_/indicar'
+      path: '/premiacoes/indicar'
       fullPath: '/premiacoes/indicar'
       preLoaderRoute: typeof PremiacoesIndicarRouteImport
-      parentRoute: typeof PremiacoesRoute
+      parentRoute: typeof rootRouteImport
     }
     '/tours/': {
       id: '/tours/'
@@ -1031,18 +1032,6 @@ const MarketRouteChildren: MarketRouteChildren = {
 const MarketRouteWithChildren =
   MarketRoute._addFileChildren(MarketRouteChildren)
 
-interface PremiacoesRouteChildren {
-  PremiacoesIndicarRoute: typeof PremiacoesIndicarRoute
-}
-
-const PremiacoesRouteChildren: PremiacoesRouteChildren = {
-  PremiacoesIndicarRoute: PremiacoesIndicarRoute,
-}
-
-const PremiacoesRouteWithChildren = PremiacoesRoute._addFileChildren(
-  PremiacoesRouteChildren,
-)
-
 interface AlbumIdRouteChildren {
   AlbumIdEditarRoute: typeof AlbumIdEditarRoute
 }
@@ -1091,7 +1080,7 @@ const rootRouteChildren: RootRouteChildren = {
   EmpirePlayRoute: EmpirePlayRouteWithChildren,
   MarketRoute: MarketRouteWithChildren,
   PerfilRoute: PerfilRoute,
-  PremiacoesRoute: PremiacoesRouteWithChildren,
+  PremiacoesRoute: PremiacoesRoute,
   SocialRoute: SocialRoute,
   TutorialRoute: TutorialRoute,
   TvRoute: TvRoute,
@@ -1102,6 +1091,7 @@ const rootRouteChildren: RootRouteChildren = {
   AwardsNomeRoute: AwardsNomeRoute,
   PontoDistribuirRoute: PontoDistribuirRouteWithChildren,
   PontoPlaylistsRoute: PontoPlaylistsRouteWithChildren,
+  PremiacoesIndicarRoute: PremiacoesIndicarRoute,
   ToursNomeRoute: ToursNomeRoute,
   ArtistasIndexRoute: ArtistasIndexRoute,
   AwardsIndexRoute: AwardsIndexRoute,
