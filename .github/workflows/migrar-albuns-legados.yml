@@ -10,36 +10,56 @@ jobs:
 
     steps:
       - name: Completar álbuns legados (tópico + charts + faixas pendentes)
+        # timeout duplo: --max-time no curl (nunca trava esperando resposta)
+        # e `timeout` no passo inteiro (nunca trava o step, mesmo se algo
+        # no loop bash travar por outro motivo) — sem isso, uma única
+        # chamada que não responde derruba o workflow inteiro sem aviso.
         run: |
-          for i in $(seq 1 60); do
-            resp=$(curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/migrar-legados?limit=3")
-            echo "=== migrar-legados #$i ==="
-            echo "$resp" | jq -c '{limite, totalPendentesAntes, migrados, completados, erros, restantes}'
-            restantes=$(echo "$resp" | jq -r '.restantes // 0')
-            if [ "$restantes" = "0" ]; then
-              echo "Migração completa."
-              break
-            fi
-            sleep 2
-          done
+          timeout 480 bash -c '
+            for i in $(seq 1 60); do
+              resp=$(curl -sS --max-time 45 --retry 2 --retry-delay 3 \
+                "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/migrar-legados?limit=3") || {
+                echo "Falha na chamada #$i (timeout ou erro de rede) — tentando de novo em 5s.";
+                sleep 5;
+                continue;
+              }
+              echo "=== migrar-legados #$i ==="
+              echo "$resp" | jq -c "{limite, totalPendentesAntes, migrados, completados, erros, restantes}" || echo "$resp"
+              restantes=$(echo "$resp" | jq -r ".restantes // empty")
+              if [ "$restantes" = "0" ]; then
+                echo "Migração completa."
+                break
+              fi
+              sleep 2
+            done
+          '
 
       - name: Corrigir data/semanas retroativas de tudo que subiu
         run: |
-          for i in $(seq 1 60); do
-            resp=$(curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/reparar-datas-legados?limit=5")
-            echo "=== reparar-datas-legados #$i ==="
-            echo "$resp" | jq -c '{limite, totalAlbunsLegados, candidatosVarridosNestaChamada, albunsComCorrecao, totalCorrecoes, restantes}'
-            restantes=$(echo "$resp" | jq -r '.restantes // 0')
-            if [ "$restantes" = "0" ]; then
-              echo "Reparo completo."
-              break
-            fi
-            sleep 2
-          done
+          timeout 480 bash -c '
+            for i in $(seq 1 60); do
+              resp=$(curl -sS --max-time 45 --retry 2 --retry-delay 3 \
+                "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/reparar-datas-legados?limit=5") || {
+                echo "Falha na chamada #$i (timeout ou erro de rede) — tentando de novo em 5s.";
+                sleep 5;
+                continue;
+              }
+              echo "=== reparar-datas-legados #$i ==="
+              echo "$resp" | jq -c "{limite, totalAlbunsLegados, candidatosVarridosNestaChamada, albunsComCorrecao, totalCorrecoes, restantes}" || echo "$resp"
+              restantes=$(echo "$resp" | jq -r ".restantes // empty")
+              if [ "$restantes" = "0" ]; then
+                echo "Reparo completo."
+                break
+              fi
+              sleep 2
+            done
+          '
 
       - name: Diagnóstico final de duplicatas
         run: |
-          curl -s "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/diagnostico-duplicatas" | tee diagnostico-duplicatas.json | jq .
+          curl -sS --max-time 45 --retry 2 --retry-delay 3 \
+            "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/diagnostico-duplicatas" \
+            | tee diagnostico-duplicatas.json | jq .
 
       - name: Guardar diagnóstico
         uses: actions/upload-artifact@v4
