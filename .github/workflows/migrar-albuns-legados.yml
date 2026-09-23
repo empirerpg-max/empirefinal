@@ -6,7 +6,7 @@ on:
 jobs:
   migrar:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Completar álbuns legados (tópico + charts + faixas pendentes)
@@ -15,8 +15,8 @@ jobs:
         # no loop bash travar por outro motivo) — sem isso, uma única
         # chamada que não responde derruba o workflow inteiro sem aviso.
         run: |
-          timeout 480 bash -c '
-            for i in $(seq 1 60); do
+          timeout 1500 bash -c '
+            for i in $(seq 1 200); do
               resp=$(curl -sS --max-time 45 --retry 2 --retry-delay 3 \
                 "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/migrar-legados?limit=3") || {
                 echo "Falha na chamada #$i (timeout ou erro de rede) — tentando de novo em 5s.";
@@ -36,8 +36,8 @@ jobs:
 
       - name: Corrigir data/semanas retroativas de tudo que subiu
         run: |
-          timeout 480 bash -c '
-            for i in $(seq 1 60); do
+          timeout 1200 bash -c '
+            for i in $(seq 1 200); do
               resp=$(curl -sS --max-time 45 --retry 2 --retry-delay 3 \
                 "https://tanstack-start-app.empirerpg-forum.workers.dev/api/playlists/albuns/admin/reparar-datas-legados?limit=5") || {
                 echo "Falha na chamada #$i (timeout ou erro de rede) — tentando de novo em 5s.";
