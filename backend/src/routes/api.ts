@@ -884,7 +884,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       }
       response = await deletarAlbumAntigoController(request);
     } else if (url.pathname === "/api/playlists/albuns/admin/migrar-legados") {
-      response = await migrarAlbunsLegadosController();
+      response = await migrarAlbunsLegadosController(request);
     } else if (url.pathname === "/api/playlists") {
       response =
         request.method === "GET"
