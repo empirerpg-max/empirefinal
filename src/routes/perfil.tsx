@@ -40,6 +40,7 @@ type LoadState<T> = { status: "loading" } | { status: "error" } | { status: "ok"
 function Perfil() {
   const { user } = useTelegramUser();
   const [login, setLogin] = useState(getStoredLogin());
+  const [premiacoesAberta, setPremiacoesAberta] = useState(false);
   // "sized" (thumbnail público lh3.googleusercontent.com, mais rápido) →
   // "raw" (proxy autenticado /api/media/image, funciona mesmo se o arquivo
   // do Drive não estiver compartilhado publicamente — caso do jogador
@@ -465,15 +466,38 @@ function Perfil() {
       </section>
 
       <section className="space-y-2">
-        <Link
-          to="/premiacoes"
-          onClick={() => haptic.selection()}
-          className="flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-all"
+        <button
+          type="button"
+          onClick={() => {
+            haptic.selection();
+            setPremiacoesAberta((v) => !v);
+          }}
+          className="w-full flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-all"
         >
           <Trophy className="size-5 text-primary" />
-          <span className="flex-1 font-black uppercase text-xs tracking-widest">Premiações</span>
-          <ChevronRight className="size-4 text-muted-foreground" />
-        </Link>
+          <span className="flex-1 font-black uppercase text-xs tracking-widest text-left">Premiações</span>
+          <ChevronRight className={`size-4 text-muted-foreground transition-transform ${premiacoesAberta ? "rotate-90" : ""}`} />
+        </button>
+        {premiacoesAberta && (
+          <div className="pl-3 space-y-1.5">
+            <Link
+              to="/premiacoes"
+              onClick={() => haptic.selection()}
+              className="flex items-center gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-all"
+            >
+              <span className="flex-1 font-bold text-xs">Retroativo</span>
+              <ChevronRight className="size-3.5 text-muted-foreground" />
+            </Link>
+            <Link
+              to="/premiacoes/indicar"
+              onClick={() => haptic.selection()}
+              className="flex items-center gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-all"
+            >
+              <span className="flex-1 font-bold text-xs">Indicar</span>
+              <ChevronRight className="size-3.5 text-muted-foreground" />
+            </Link>
+          </div>
+        )}
         <Link
           to="/artistas"
           search={{ filter: "all" }}
