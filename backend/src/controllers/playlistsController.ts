@@ -405,9 +405,15 @@ export async function diagnosticoDuplicatasLegadosController(): Promise<Response
 // faixa publicada de verdade (com tópico) NUNCA é apagada por esse
 // endpoint, mesmo que o título bata, por segurança.
 export async function apagarFaixaDuplicadaLegadoController(request: Request): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as { linha?: number; tituloEsperado?: string };
+  // GET com querystring (pra dar pra abrir a URL direto no navegador, sem
+  // precisar de um jeito de mandar POST) ou POST com JSON — mesmo efeito.
+  const url = new URL(request.url);
+  const body =
+    request.method === "GET"
+      ? { linha: url.searchParams.get("linha"), tituloEsperado: url.searchParams.get("tituloEsperado") }
+      : ((await request.json().catch(() => ({}))) as { linha?: number | string | null; tituloEsperado?: string | null });
   const linha = Number(body.linha);
-  const tituloEsperado = normalizeText(body.tituloEsperado);
+  const tituloEsperado = normalizeText(body.tituloEsperado || "");
   if (!linha || linha < 2 || !tituloEsperado) {
     return jsonResponse({ success: false, error: "Parâmetros 'linha' e 'tituloEsperado' são obrigatórios." }, 400);
   }
