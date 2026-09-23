@@ -5,7 +5,7 @@ import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api, resolveImg } from "@/lib/api";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/premiacoes/indicar")({
+export const Route = createFileRoute("/premiacoes_/indicar")({
   component: PremiacoesIndicarPage,
 });
 
