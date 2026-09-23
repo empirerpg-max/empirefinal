@@ -440,6 +440,62 @@ export async function diagnosticoDuplicatasLegadosController(): Promise<Response
 // esse mesmo sinal de segurança (não tem "pendente"), então só apaga se o
 // título bater e a linha for informada explicitamente — confirme pelo
 // diagnóstico antes.
+// Mescla 2 tópicos de música duplicados (mesma faixa, dois tópicos
+// diferentes) sem perder comentário: move todo comentário do tópico
+// `remover` (Comentarios_Musicas!A) pro tópico `manter`, e só depois
+// apaga a linha em Musicas do tópico `remover`. O tópico `manter` fica
+// como o único de verdade, agora com os comentários dos dois.
+// GET com querystring (mesmo padrão de apagar-faixa-duplicada — só abrir
+// o link no navegador) ou POST com JSON.
+export async function mesclarTopicosMusicaController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const body =
+    request.method === "GET"
+      ? { manter: url.searchParams.get("manter"), remover: url.searchParams.get("remover") }
+      : ((await request.json().catch(() => ({}))) as { manter?: string | null; remover?: string | null });
+  const manter = normalizeText(body.manter || "");
+  const remover = normalizeText(body.remover || "");
+  if (!manter || !remover || manter === remover) {
+    return jsonResponse(
+      { success: false, error: "Parâmetros 'manter' e 'remover' são obrigatórios e precisam ser diferentes." },
+      400,
+    );
+  }
+
+  // 1. Confirma que os dois tópicos existem em Musicas antes de mexer em
+  // qualquer coisa — evita mesclar comentário pra um tópico que nem
+  // existe (erro de digitação no ID) ou apagar a faixa errada.
+  const musicasRows = await googleSheetsService.principal.readValues("Musicas");
+  const linhaManter = musicasRows.findIndex((r, i) => i > 0 && normalizeText(r[1]) === manter);
+  const linhaRemover = musicasRows.findIndex((r, i) => i > 0 && normalizeText(r[1]) === remover);
+  if (linhaManter < 1) return jsonResponse({ success: false, error: `Tópico 'manter' (${manter}) não encontrado em Musicas.` }, 404);
+  if (linhaRemover < 1) return jsonResponse({ success: false, error: `Tópico 'remover' (${remover}) não encontrado em Musicas.` }, 404);
+
+  const tituloManter = normalizeText(musicasRows[linhaManter][7]);
+  const tituloRemover = normalizeText(musicasRows[linhaRemover][7]);
+
+  // 2. Move os comentários (Comentarios_Musicas!A = ID do tópico).
+  const comentariosRows = await googleSheetsService.principal.readValues("Comentarios_Musicas");
+  let comentariosMovidos = 0;
+  for (let i = 1; i < comentariosRows.length; i++) {
+    if (normalizeText(comentariosRows[i][0]) !== remover) continue;
+    await googleSheetsService.principal.updateValues("Comentarios_Musicas", `A${i + 1}`, [[manter]]);
+    comentariosMovidos++;
+  }
+
+  // 3. Só agora apaga a linha duplicada em Musicas (a do tópico `remover`).
+  await googleSheetsService.principal.updateValues("Musicas", `A${linhaRemover + 1}:Y${linhaRemover + 1}`, [
+    Array(25).fill(""),
+  ]);
+
+  return jsonResponse({
+    success: true,
+    manter: { topicId: manter, titulo: tituloManter },
+    removido: { topicId: remover, titulo: tituloRemover },
+    comentariosMovidos,
+  });
+}
+
 export async function apagarFaixaDuplicadaLegadoController(request: Request): Promise<Response> {
   // GET com querystring (pra dar pra abrir a URL direto no navegador, sem
   // precisar de um jeito de mandar POST) ou POST com JSON — mesmo efeito.
