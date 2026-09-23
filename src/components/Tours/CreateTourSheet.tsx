@@ -4,6 +4,8 @@ import { fmtMoney } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { haptic } from "@/lib/telegram";
 import { useImageCrop } from "@/hooks/use-image-crop";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 interface LocalTurne {
   continente: string;
@@ -64,6 +66,7 @@ export function CreateTourSheet({
   const [artista, setArtista] = useState(artistas[0] || "");
   const [nomeTurne, setNomeTurne] = useState("");
   const [locais, setLocais] = useState<LocalTurne[]>([]);
+  const locaisScroll = useDragScroll<HTMLDivElement>();
   const [loadingLocais, setLoadingLocais] = useState(true);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [intervaloDias, setIntervaloDias] = useState(3);
@@ -452,7 +455,12 @@ export function CreateTourSheet({
                 </div>
               ) : (
                 <>
-                  <div className="flex gap-2 overflow-x-auto pb-1 mb-3 -mx-1 px-1">
+                  <div
+                    ref={locaisScroll.ref}
+                    className="flex gap-2 overflow-x-auto pb-1 mb-3 -mx-1 px-1 cursor-grab active:cursor-grabbing select-none"
+                  >
+                    <StickyScrollArrowLeft show={locaisScroll.canScrollLeft} onClick={() => locaisScroll.scrollByAmount(-1)} />
+                    <StickyScrollArrowRight show={locaisScroll.canScrollRight} onClick={() => locaisScroll.scrollByAmount(1)} />
                     {continentes.map((c) => (
                       <button
                         key={c}

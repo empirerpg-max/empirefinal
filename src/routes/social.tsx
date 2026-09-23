@@ -49,6 +49,8 @@ import { getStoredLogin } from "@/components/LoginScreen";
 import { renderRichText } from "@/lib/richText";
 import { RichTextToolbar } from "@/components/EmpirePlay/RichTextToolbar";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 // Alternativa ao upload: colar direto o link de uma imagem já hospedada em
 // outro lugar (.png/.jpg/.jpeg/.webp). Só aplica se o link for válido —
@@ -619,6 +621,9 @@ type News = {
 
 function SocialPage() {
   const { postId, artist: artistParam } = Route.useSearch();
+  const interagirComoScroll = useDragScroll<HTMLDivElement>();
+  const storiesScroll = useDragScroll<HTMLDivElement>();
+  const sigaTambemScroll = useDragScroll<HTMLDivElement>();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -1534,7 +1539,12 @@ function SocialPage() {
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 px-1">
               Interagir como
             </p>
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide px-1 items-center">
+            <div
+              ref={interagirComoScroll.ref}
+              className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide px-1 items-center cursor-grab active:cursor-grabbing select-none"
+            >
+              <StickyScrollArrowLeft show={interagirComoScroll.canScrollLeft} onClick={() => interagirComoScroll.scrollByAmount(-1)} />
+              <StickyScrollArrowRight show={interagirComoScroll.canScrollRight} onClick={() => interagirComoScroll.scrollByAmount(1)} />
               {myArtists.map((art) => {
                 const isActive = activeArtist?.nome === art.nome;
                 const imgUrl = driveImg(art.foto);
@@ -1596,7 +1606,12 @@ function SocialPage() {
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Em alta agora</h4>
                   <span className="text-[9px] font-bold text-muted-foreground/60">Stories dos artistas</span>
                 </div>
-                <div className="flex gap-3.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <div
+                  ref={storiesScroll.ref}
+                  className="flex gap-3.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
+                >
+                  <StickyScrollArrowLeft show={storiesScroll.canScrollLeft} onClick={() => storiesScroll.scrollByAmount(-1)} />
+                  <StickyScrollArrowRight show={storiesScroll.canScrollRight} onClick={() => storiesScroll.scrollByAmount(1)} />
                   {activeArtist && (
                     <button
                       onClick={() => {
@@ -2218,7 +2233,12 @@ function SocialPage() {
                           <div className="flex items-baseline justify-between px-5 mb-2">
                             <h4 className="text-[11px] font-black uppercase text-black/50 tracking-wide">Siga também</h4>
                           </div>
-                          <div className="flex gap-2.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                          <div
+                            ref={sigaTambemScroll.ref}
+                            className="flex gap-2.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
+                          >
+                            <StickyScrollArrowLeft show={sigaTambemScroll.canScrollLeft} onClick={() => sigaTambemScroll.scrollByAmount(-1)} />
+                            <StickyScrollArrowRight show={sigaTambemScroll.canScrollRight} onClick={() => sigaTambemScroll.scrollByAmount(1)} />
                             {suggestions.map((s) => {
                               const sArtist = allArtists.find((a) => a.nome === s.artista);
                               const sKey = `${s.artista}|${s.rede}`;

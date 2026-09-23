@@ -28,6 +28,8 @@ import { useHomeConfig } from "@/lib/homeFlags";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ActivityTicker } from "@/components/ActivityTicker";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -105,6 +107,10 @@ function Index() {
     status: "loading",
   });
   const [syncing, setSyncing] = useState(false);
+  const postagensScroll = useDragScroll<HTMLDivElement>();
+  const lancamentosScroll = useDragScroll<HTMLDivElement>();
+  const acervoScroll = useDragScroll<HTMLDivElement>();
+  const plataformasScroll = useDragScroll<HTMLDivElement>();
   const { user, ready } = useTelegramUser();
   const config = useHomeConfig();
   const login = getStoredLogin();
@@ -370,7 +376,12 @@ function Index() {
             </p>
           </div>
         ) : (
-          <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x">
+          <div
+            ref={postagensScroll.ref}
+            className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x cursor-grab active:cursor-grabbing select-none"
+          >
+            <StickyScrollArrowLeft show={postagensScroll.canScrollLeft} onClick={() => postagensScroll.scrollByAmount(-1)} />
+            <StickyScrollArrowRight show={postagensScroll.canScrollRight} onClick={() => postagensScroll.scrollByAmount(1)} />
             {ultimasPostagens.data.map((p) => {
               const isNews = p.tipo === "News";
               const PlatformIcon = isNews
@@ -467,7 +478,12 @@ function Index() {
             </p>
           </div>
         ) : (
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 snap-x">
+          <div
+            ref={acervoScroll.ref}
+            className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 snap-x cursor-grab active:cursor-grabbing select-none"
+          >
+            <StickyScrollArrowLeft show={acervoScroll.canScrollLeft} onClick={() => acervoScroll.scrollByAmount(-1)} />
+            <StickyScrollArrowRight show={acervoScroll.canScrollRight} onClick={() => acervoScroll.scrollByAmount(1)} />
             {acervoRecente.data.map((item) => {
               const TipoIcon = item.tipo === "revista" ? BookOpen : MessageSquareText;
               return (
@@ -569,7 +585,12 @@ function Index() {
         <h2 id="platforms-h" className="text-xs font-black uppercase tracking-[0.2em] mb-4 text-muted-foreground">
           Top por plataforma
         </h2>
-        <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x">
+        <div
+          ref={plataformasScroll.ref}
+          className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x cursor-grab active:cursor-grabbing select-none"
+        >
+          <StickyScrollArrowLeft show={plataformasScroll.canScrollLeft} onClick={() => plataformasScroll.scrollByAmount(-1)} />
+          <StickyScrollArrowRight show={plataformasScroll.canScrollRight} onClick={() => plataformasScroll.scrollByAmount(1)} />
           {Object.entries(config.sections.topPlataformas.links).map(([id]) => {
             const meta = PLATFORM_META[id];
             if (!meta) return null;
@@ -688,7 +709,12 @@ function Index() {
             ))}
           </div>
         ) : lancamentosRecentes.status === "ok" && lancamentosRecentes.data.length > 0 ? (
-          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 snap-x">
+          <div
+            ref={lancamentosScroll.ref}
+            className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 snap-x cursor-grab active:cursor-grabbing select-none"
+          >
+            <StickyScrollArrowLeft show={lancamentosScroll.canScrollLeft} onClick={() => lancamentosScroll.scrollByAmount(-1)} />
+            <StickyScrollArrowRight show={lancamentosScroll.canScrollRight} onClick={() => lancamentosScroll.scrollByAmount(1)} />
             {lancamentosRecentes.data.map((l) => (
               <Link
                 key={l.id}

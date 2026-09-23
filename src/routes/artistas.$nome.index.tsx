@@ -47,6 +47,8 @@ import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { toPlayableTrack, toPlayableVideo } from "@/components/EmpirePlay/mappers";
 import { renderRichText } from "@/lib/richText";
 import { RichTextToolbar } from "@/components/EmpirePlay/RichTextToolbar";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 export const Route = createFileRoute("/artistas/$nome/")({
   component: ArtistDashboard,
@@ -91,6 +93,7 @@ function ArtistDashboard() {
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("geral");
+  const abasScroll = useDragScroll<HTMLDivElement>();
   const [modal, setModal] = useState<null | "rescisao" | "foto" | "biografia" | "capa">(null);
   const [discografia, setDiscografia] = useState<DiscoItem[]>([]);
   const [tourData, setTourData] = useState<any>(null);
@@ -462,7 +465,12 @@ function ArtistDashboard() {
         {/* ── Abas do mega perfil ── */}
         <section>
           <div className="relative mb-6">
-            <div className="flex gap-1 p-1 bg-card rounded-[1.5rem] border border-white/5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div
+              ref={abasScroll.ref}
+              className="flex gap-1 p-1 bg-card rounded-[1.5rem] border border-white/5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
+            >
+              <StickyScrollArrowLeft show={abasScroll.canScrollLeft} onClick={() => abasScroll.scrollByAmount(-1)} />
+              <StickyScrollArrowRight show={abasScroll.canScrollRight} onClick={() => abasScroll.scrollByAmount(1)} />
               {TABS.map((t) => (
                 <TabButton key={t.id} active={activeTab === t.id} onClick={() => setActiveTab(t.id)}>
                   {t.label}

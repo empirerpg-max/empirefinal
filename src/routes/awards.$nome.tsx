@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, Trophy, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { ScrollArrows } from "@/components/ScrollArrows";
 
 export const Route = createFileRoute("/awards/$nome")({
   component: AwardDetalhePage,
@@ -34,6 +36,8 @@ function AwardDetalhePage() {
   const [erro, setErro] = useState<string | null>(null);
   const [anoSelecionado, setAnoSelecionado] = useState<string | null>(null);
   const segmentoRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const segmentosScroll = useDragScroll<HTMLDivElement>();
+  const anosScroll = useDragScroll<HTMLDivElement>();
 
   useEffect(() => {
     setData(null);
@@ -123,7 +127,16 @@ function AwardDetalhePage() {
             {/* Fileira de ícones (segmentos do ano selecionado), sobre a
                 imagem — toque leva direto pro bloco daquele segmento. */}
             {grupos.length > 0 && (
-              <div className="flex gap-4 overflow-x-auto pt-5 -mx-5 px-5 scrollbar-none">
+              <div className="relative">
+                <ScrollArrows
+                  canScrollLeft={segmentosScroll.canScrollLeft}
+                  canScrollRight={segmentosScroll.canScrollRight}
+                  onScroll={segmentosScroll.scrollByAmount}
+                />
+                <div
+                  ref={segmentosScroll.ref}
+                  className="flex gap-4 overflow-x-auto pt-5 -mx-5 px-5 scrollbar-none cursor-grab active:cursor-grabbing select-none"
+                >
                 {grupos.map(({ segmento }) => (
                   <button
                     key={segmento}
@@ -138,6 +151,7 @@ function AwardDetalhePage() {
                     </span>
                   </button>
                 ))}
+                </div>
               </div>
             )}
           </div>
@@ -161,20 +175,30 @@ function AwardDetalhePage() {
 
         {data && data.edicoes.length > 0 && (
           <>
-            <div className="flex gap-2 overflow-x-auto pb-5 -mx-5 px-5 scrollbar-none">
-              {data.edicoes.map((e) => (
-                <button
-                  key={e.ano}
-                  onClick={() => setAnoSelecionado(e.ano)}
-                  className={`shrink-0 px-4 py-2 rounded-full text-xs font-black transition-all active:scale-95 ${
-                    anoSelecionado === e.ano
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-white/5 border border-white/10 text-muted-foreground"
-                  }`}
-                >
-                  {e.ano}
-                </button>
-              ))}
+            <div className="relative -mx-5 px-5">
+              <ScrollArrows
+                canScrollLeft={anosScroll.canScrollLeft}
+                canScrollRight={anosScroll.canScrollRight}
+                onScroll={anosScroll.scrollByAmount}
+              />
+              <div
+                ref={anosScroll.ref}
+                className="flex gap-2 overflow-x-auto pb-5 scrollbar-none cursor-grab active:cursor-grabbing select-none"
+              >
+                {data.edicoes.map((e) => (
+                  <button
+                    key={e.ano}
+                    onClick={() => setAnoSelecionado(e.ano)}
+                    className={`shrink-0 px-4 py-2 rounded-full text-xs font-black transition-all active:scale-95 ${
+                      anoSelecionado === e.ano
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-white/5 border border-white/10 text-muted-foreground"
+                    }`}
+                  >
+                    {e.ano}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-7">

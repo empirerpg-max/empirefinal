@@ -10,6 +10,8 @@ import { getStoredLogin } from "@/components/LoginScreen";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
 import { resolveStreamEmbed, kickChannelFromUrl, forceUnmuteIframe, hasUnmutedThisSession } from "@/lib/tvEmbed";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 
 export const Route = createFileRoute("/tv")({
@@ -740,6 +742,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   const vv = useVisualViewport();
   const [tab, setTab] = useState<WatchTab>("chat");
   const isDesktop = useIsDesktop();
+  const tabBarScroll = useDragScroll<HTMLDivElement>();
 
   // Heartbeat de presença
   useEffect(() => {
@@ -895,7 +898,12 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   );
 
   const tabBar = (
-    <div className="flex items-center gap-1 px-2 h-10 border-b border-border shrink-0 overflow-x-auto">
+    <div
+      ref={tabBarScroll.ref}
+      className="flex items-center gap-1 px-2 h-10 border-b border-border shrink-0 overflow-x-auto cursor-grab active:cursor-grabbing select-none"
+    >
+      <StickyScrollArrowLeft show={tabBarScroll.canScrollLeft} onClick={() => tabBarScroll.scrollByAmount(-1)} />
+      <StickyScrollArrowRight show={tabBarScroll.canScrollRight} onClick={() => tabBarScroll.scrollByAmount(1)} />
       {tabs.map((t) => {
         const Icon = t.icon;
         const active = tab === t.id;
@@ -1816,6 +1824,7 @@ function RedCarpetComposer({
 }) {
   const login = getStoredLogin();
   const [artista, setArtista] = useState<Artist | null>(artists[0] || null);
+  const artistasScroll = useDragScroll<HTMLDivElement>();
   const [fotos, setFotos] = useState<string[]>([]);
   const [legenda, setLegenda] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -1902,7 +1911,12 @@ function RedCarpetComposer({
         {artists.length > 1 && (
           <div>
             <div className="text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Postando como</div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div
+              ref={artistasScroll.ref}
+              className="flex gap-2 overflow-x-auto pb-1 cursor-grab active:cursor-grabbing select-none"
+            >
+              <StickyScrollArrowLeft show={artistasScroll.canScrollLeft} onClick={() => artistasScroll.scrollByAmount(-1)} />
+              <StickyScrollArrowRight show={artistasScroll.canScrollRight} onClick={() => artistasScroll.scrollByAmount(1)} />
               {artists.map((a) => (
                 <button
                   key={a.nome}
@@ -1988,6 +2002,7 @@ function RedCarpetPanel({
   onHighlightConsumed: () => void;
 }) {
   const login = getStoredLogin();
+  const storiesStripScroll = useDragScroll<HTMLDivElement>();
   const [posts, setPosts] = useState<RedCarpetPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [myArtists, setMyArtists] = useState<Artist[]>([]);
@@ -2123,7 +2138,12 @@ function RedCarpetPanel({
         </div>
       ) : (
         <>
-      <div className="flex gap-3 px-3 py-3 overflow-x-auto">
+      <div
+        ref={storiesStripScroll.ref}
+        className="flex gap-3 px-3 py-3 overflow-x-auto cursor-grab active:cursor-grabbing select-none"
+      >
+        <StickyScrollArrowLeft show={storiesStripScroll.canScrollLeft} onClick={() => storiesStripScroll.scrollByAmount(-1)} />
+        <StickyScrollArrowRight show={storiesStripScroll.canScrollRight} onClick={() => storiesStripScroll.scrollByAmount(1)} />
         <button
           type="button"
           onClick={() => setComposerOpen(true)}

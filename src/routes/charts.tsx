@@ -9,6 +9,8 @@ import {
   type ChartRow, type RealTimeData,
 } from "@/lib/charts";
 import { resolveImg } from "@/lib/api";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 type CategoryId = "hot100" | "spotify" | "apple" | "youtube" | "albums" | "sales";
 type TabId = "live" | CategoryId;
@@ -124,11 +126,17 @@ function ChartsPillActiveBg() {
 }
 
 function ChartsTabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
+  const tabsScroll = useDragScroll<HTMLDivElement>();
   return (
     <div className="relative shrink-0 border-b border-white/10 bg-background/80 backdrop-blur-xl">
       {/* linha de glow sutil no rodapé da barra — mesma paleta primary/fuchsia usada nos blobs de fundo do Charts */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-      <div className="h-12 flex items-center gap-2 px-3 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        ref={tabsScroll.ref}
+        className="h-12 flex items-center gap-2 px-3 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
+      >
+        <StickyScrollArrowLeft show={tabsScroll.canScrollLeft} onClick={() => tabsScroll.scrollByAmount(-1)} />
+        <StickyScrollArrowRight show={tabsScroll.canScrollRight} onClick={() => tabsScroll.scrollByAmount(1)} />
         <button onClick={() => onChange("live")} className={chartsPillClass(active === "live", true)}>
           {active === "live" && <ChartsPillActiveBg />}
           <Radio
