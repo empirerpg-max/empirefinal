@@ -186,6 +186,7 @@ import {
   migrarAlbunsLegadosController,
   diagnosticoDuplicatasLegadosController,
   apagarFaixaDuplicadaLegadoController,
+  repararDatasLegadosController,
   getAlbumAntigoByIdController,
 } from "../controllers/playlistsController";
 import {
@@ -891,6 +892,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       response = await diagnosticoDuplicatasLegadosController();
     } else if (url.pathname === "/api/playlists/albuns/admin/apagar-faixa-duplicada") {
       response = await apagarFaixaDuplicadaLegadoController(request);
+    } else if (url.pathname === "/api/playlists/albuns/admin/reparar-datas-legados") {
+      response = await repararDatasLegadosController(request);
     } else if (url.pathname === "/api/playlists") {
       response =
         request.method === "GET"

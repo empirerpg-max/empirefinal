@@ -513,6 +513,130 @@ export async function apagarFaixaDuplicadaLegadoController(request: Request): Pr
   return jsonResponse({ success: true, sheet: "Musicas", linha, tituloApagado: titulo });
 }
 
+// Conserto pontual: repara data e WEEKS de álbuns legados que já subiram
+// ERRADOS (data de hoje em vez da data do legado, WEEKS "1" em vez do
+// número de semanas retroativo) — resultado de completarAlbumExistente
+// ainda não aceitar essas duas coisas quando essas migrações rodaram.
+// Corrige, pra cada álbum legado: Albuns!A, EDIÇÃO CHARTS ÁLBUMS!B e C,
+// e A/L de cada faixa em Musicas + A/F de cada faixa em EDIÇÃO CHARTS
+// (casando pelo nome do álbum). Só escreve o que estiver diferente do
+// valor esperado — já certo fica intocado, então é seguro rodar de novo.
+// Processa em lote (?limit=N, padrão 5 álbuns por chamada) pelo mesmo
+// motivo da migração: evitar estourar o tempo de execução do Workers.
+export async function repararDatasLegadosController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const limite = Math.max(1, Math.min(15, Number(url.searchParams.get("limit")) || 5));
+
+  const [albunsLegadosRows, albunsAtuaisRows, edicaoChartsAlbunsRows, musicasRows, edicaoChartsRows] = await Promise.all([
+    readAlbunsAntigosRows(),
+    googleSheetsService.principal.readValues("Albuns"),
+    googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS"),
+    googleSheetsService.principal.readValues("Musicas"),
+    googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS"),
+  ]);
+
+  const candidatos = albunsLegadosRows
+    .map((row) => {
+      const artista = normalizeText(row[1]);
+      const titulo = normalizeText(row[2]);
+      const data = normalizeText(row[4]);
+      if (!artista || !titulo || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return null;
+      const [ano, mes, dia] = data.split("-");
+      return {
+        fullTitle: `${artista} - ${titulo}`,
+        dataFormatadaCorreta: `${dia}/${mes}/${ano}`,
+        semanasCorretas: String(calcularSemanasRetroativas(data)),
+      };
+    })
+    .filter((c): c is NonNullable<typeof c> => !!c);
+
+  const loteDaVez = candidatos.slice(0, limite);
+  const resultados: { titulo: string; correcoes: string[] }[] = [];
+
+  for (const c of loteDaVez) {
+    const key = normalizeComparison(c.fullTitle);
+    const correcoes: string[] = [];
+
+    // Albuns!A (Data de lançamento)
+    const albumRowIdx = albunsAtuaisRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === key);
+    if (albumRowIdx > 0) {
+      const linha = albumRowIdx + 1;
+      const dataAtual = normalizeText(albunsAtuaisRows[albumRowIdx][0]);
+      if (dataAtual !== c.dataFormatadaCorreta) {
+        await googleSheetsService.principal.updateValues("Albuns", `A${linha}`, [[c.dataFormatadaCorreta]]);
+        correcoes.push(`Albuns!A${linha}: "${dataAtual}" -> "${c.dataFormatadaCorreta}"`);
+      }
+    }
+
+    // EDIÇÃO CHARTS ÁLBUMS!B (Data) e C (Semanas)
+    const edAlbumRowIdx = edicaoChartsAlbunsRows.findIndex(
+      (r, i) => i > 0 && normalizeComparison(normalizeText(r[3])) === key,
+    );
+    if (edAlbumRowIdx > 0) {
+      const linha = edAlbumRowIdx + 1;
+      const row = edicaoChartsAlbunsRows[edAlbumRowIdx];
+      const dataAtual = normalizeText(row[1]);
+      const semanasAtuais = normalizeText(row[2]);
+      if (dataAtual !== c.dataFormatadaCorreta) {
+        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `B${linha}`, [[c.dataFormatadaCorreta]]);
+        correcoes.push(`EDIÇÃO CHARTS ÁLBUMS!B${linha}: "${dataAtual}" -> "${c.dataFormatadaCorreta}"`);
+      }
+      if (semanasAtuais !== c.semanasCorretas) {
+        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `C${linha}`, [[c.semanasCorretas]]);
+        correcoes.push(`EDIÇÃO CHARTS ÁLBUMS!C${linha}: "${semanasAtuais}" -> "${c.semanasCorretas}"`);
+      }
+    }
+
+    // Musicas!A (Data) e L (WEEKS) de toda faixa vinculada a esse álbum (K)
+    for (let i = 1; i < musicasRows.length; i++) {
+      const row = musicasRows[i];
+      if (normalizeComparison(normalizeText(row[10])) !== key) continue;
+      const linha = i + 1;
+      const dataAtual = normalizeText(row[0]);
+      const weeksAtual = normalizeText(row[11]);
+      if (dataAtual !== c.dataFormatadaCorreta) {
+        await googleSheetsService.principal.updateValues("Musicas", `A${linha}`, [[c.dataFormatadaCorreta]]);
+        correcoes.push(`Musicas!A${linha}: "${dataAtual}" -> "${c.dataFormatadaCorreta}"`);
+      }
+      if (weeksAtual !== c.semanasCorretas) {
+        await googleSheetsService.principal.updateValues("Musicas", `L${linha}`, [[c.semanasCorretas]]);
+        correcoes.push(`Musicas!L${linha}: "${weeksAtual}" -> "${c.semanasCorretas}"`);
+      }
+    }
+
+    // EDIÇÃO CHARTS!A (Data) e F (WEEKS) de toda faixa vinculada a esse álbum (E)
+    for (let i = 1; i < edicaoChartsRows.length; i++) {
+      const row = edicaoChartsRows[i];
+      if (normalizeComparison(normalizeText(row[4])) !== key) continue;
+      const linha = i + 1;
+      const dataAtual = normalizeText(row[0]);
+      const weeksAtual = normalizeText(row[5]);
+      if (dataAtual !== c.dataFormatadaCorreta) {
+        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linha}`, [[c.dataFormatadaCorreta]]);
+        correcoes.push(`EDIÇÃO CHARTS!A${linha}: "${dataAtual}" -> "${c.dataFormatadaCorreta}"`);
+      }
+      if (weeksAtual !== c.semanasCorretas) {
+        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `F${linha}`, [[c.semanasCorretas]]);
+        correcoes.push(`EDIÇÃO CHARTS!F${linha}: "${weeksAtual}" -> "${c.semanasCorretas}"`);
+      }
+    }
+
+    resultados.push({ titulo: c.fullTitle, correcoes });
+  }
+
+  const restantes = candidatos.length - loteDaVez.length;
+  return jsonResponse({
+    success: true,
+    limite,
+    totalAlbunsLegados: candidatos.length,
+    processadosAgora: resultados.length,
+    totalCorrecoes: resultados.reduce((acc, r) => acc + r.correcoes.length, 0),
+    restantes,
+    mensagem: restantes > 0 ? `Faltam ${restantes} álbum(ns) — chame de novo pra continuar.` : "Todos os álbuns legados conferidos!",
+    resultados,
+  });
+}
+
 // Migração pontual: os álbuns legados (Playlists_Albuns/Playlists_Faixas,
 // cadastro manual sem tópico/chart) viram álbuns retroativos de verdade —
 // mesmo fluxo de publicarAlbum usado por "Postar álbum retroativo" em
