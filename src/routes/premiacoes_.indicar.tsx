@@ -20,7 +20,7 @@ type MinhaIndicacao = { linha: number; categoria: string; titulo: string; artist
 // indicados que o usuário trouxe como referência.
 function ehEstiloCartaz(premiacao: string): boolean {
   const n = premiacao.toLowerCase();
-  return n.includes("vma") || n.includes("mtv");
+  return n.includes("vma") || n.includes("mtv") || n.includes("video music award");
 }
 
 const CORES_NEON = ["text-pink-400", "text-yellow-300", "text-emerald-400"];
@@ -116,7 +116,7 @@ function PremiacoesIndicarPage() {
           </button>
           <div className="min-w-0">
             <h1 className="text-base font-black uppercase tracking-tight truncate">{categoriaAtiva.categoria}</h1>
-            <p className="text-[11px] text-muted-foreground line-clamp-2">{categoriaAtiva.descritivo}</p>
+            <p className="text-[11px] text-muted-foreground">{categoriaAtiva.descritivo}</p>
           </div>
         </header>
 
@@ -245,7 +245,7 @@ function PremiacoesIndicarPage() {
                   >
                     {c.categoria}
                   </p>
-                  <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{c.descritivo}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{c.descritivo}</p>
                   {minhasNaCategoria > 0 && (
                     <p className="text-[10px] font-bold text-emerald-400 mt-1">
                       {minhasNaCategoria} indicação(ões) sua(s)

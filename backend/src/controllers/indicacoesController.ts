@@ -230,8 +230,14 @@ export async function listarCandidatosIndicarController(request: Request): Promi
       if (!(await dentroDaElegibilidade(dataVideo, detalhes.inicioElegibilidade, detalhes.terminoElegibilidade))) continue;
       const codigoUnico = normalizeText(row[30]); // AE
       if (!(await passaFiltroTipoMusica(codigoUnico, categoria.tipoMusica, cacheEdicaoCharts))) continue;
-      const titulo = normalizeText(row[3]); // D
-      if (!titulo) continue;
+      // PONTOS!D vem como "Artista - Título" completo — tira o prefixo do
+      // artista, senão o título indicado sai duplicando o nome dele.
+      const musicaCompleta = normalizeText(row[3]); // D
+      if (!musicaCompleta) continue;
+      const prefixo = `${artista} - `;
+      const titulo = musicaCompleta.toLowerCase().startsWith(prefixo.toLowerCase())
+        ? musicaCompleta.slice(prefixo.length).trim()
+        : musicaCompleta;
       candidatos.push({ titulo, artista, codigoUnico });
     }
   }
