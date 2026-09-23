@@ -1668,13 +1668,14 @@ export interface SubstituirAlbumPayload {
   jogadorId?: string;
 }
 
-// Controller para Substituir álbum já lançado: troca capa/encarte e/ou
-// adiciona faixas a um álbum existente, sem duplicar o registro em Albuns
-// nem em EDIÇÃO CHARTS ÁLBUMS (só atualiza a linha já existente).
-export async function substituirAlbumController(request: Request): Promise<Response> {
-  try {
-    const body = (await request.json()) as SubstituirAlbumPayload;
-    const {
+// Núcleo de "Substituir álbum" (troca capa/encarte e/ou adiciona faixas a
+// um álbum existente, sem duplicar o registro em Albuns nem em EDIÇÃO
+// CHARTS ÁLBUNS) — extraído pra ser reaproveitado por
+// migrarAlbunsLegadosController quando um álbum legado já foi migrado mas
+// ficou incompleto (algumas faixas não entraram, geralmente por ter
+// estourado o tempo de execução de uma migração com álbum grande demais).
+export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
+  const {
       albumTopicId,
       novaCapaUrl = "",
       novosEncartesUrls,
@@ -1684,13 +1685,7 @@ export async function substituirAlbumController(request: Request): Promise<Respo
     } = body;
 
     if (!albumTopicId || !nomeJogador) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Campos obrigatórios ausentes: albumTopicId, nomeJogador.",
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
+      throw new Error("Campos obrigatórios ausentes: albumTopicId, nomeJogador.");
     }
 
     const rows = await googleSheetsService.principal.readValues("Albuns");
@@ -1705,10 +1700,7 @@ export async function substituirAlbumController(request: Request): Promise<Respo
     }
 
     if (rowIndex === -1 || !albumFullTitle) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Álbum não encontrado." }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
-      );
+      throw new Error("Álbum não encontrado.");
     }
 
     const artistaAlbum = albumFullTitle.includes(" - ")
@@ -1785,13 +1777,19 @@ export async function substituirAlbumController(request: Request): Promise<Respo
       mensagem += ` Falha ao vincular: "${faixasFalhas.join('", "')}".`;
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        data: { titulo: albumFullTitle, mensagem, faixasCriadas, faixasFalhas },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
+    return { titulo: albumFullTitle, mensagem, faixasCriadas, faixasFalhas };
+}
+
+// Controller para Substituir álbum já lançado — fina camada HTTP em cima
+// de completarAlbumExistente.
+export async function substituirAlbumController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as SubstituirAlbumPayload;
+    const data = await completarAlbumExistente(body);
+    return new Response(JSON.stringify({ success: true, data }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (error: any) {
     console.error("[substituirAlbumController] Erro:", error);
     return new Response(
