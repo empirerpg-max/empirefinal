@@ -187,6 +187,7 @@ import {
   diagnosticoDuplicatasLegadosController,
   apagarFaixaDuplicadaLegadoController,
   repararDatasLegadosController,
+  debugLinhaEdicaoChartsController,
   getAlbumAntigoByIdController,
 } from "../controllers/playlistsController";
 import {
@@ -894,6 +895,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       response = await apagarFaixaDuplicadaLegadoController(request);
     } else if (url.pathname === "/api/playlists/albuns/admin/reparar-datas-legados") {
       response = await repararDatasLegadosController(request);
+    } else if (url.pathname === "/api/playlists/albuns/admin/debug-linha-edicao-charts") {
+      response = await debugLinhaEdicaoChartsController(request);
     } else if (url.pathname === "/api/playlists") {
       response =
         request.method === "GET"
