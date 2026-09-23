@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Target, Loader2, Sparkles, ListMusic, ChevronRight } from "lucide-react";
+import { Target, Loader2, Sparkles, ListMusic, ChevronRight, ClipboardList } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
 import { getStoredLogin } from "@/components/LoginScreen";
@@ -109,6 +109,20 @@ function PontoHome() {
           <div className="flex-1 min-w-0">
             <h2 className="font-black uppercase tracking-tight text-white text-sm">Aplicar playlists</h2>
             <p className="text-xs text-neutral-500">Conforme saldo ou manual</p>
+          </div>
+          <ChevronRight className="size-4 text-neutral-600 group-hover:text-emerald-500 transition-colors shrink-0" />
+        </Link>
+
+        <Link
+          to="/ponto/valores"
+          className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-900 border border-white/10 hover:border-emerald-500/40 hover:bg-neutral-800 transition-colors group"
+        >
+          <div className="size-12 rounded-2xl bg-emerald-500/15 text-emerald-500 grid place-items-center shrink-0 group-hover:scale-105 transition-transform">
+            <ClipboardList className="size-6" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-black uppercase tracking-tight text-white text-sm">O que vale ponto</h2>
+            <p className="text-xs text-neutral-500">Tabela de referência</p>
           </div>
           <ChevronRight className="size-4 text-neutral-600 group-hover:text-emerald-500 transition-colors shrink-0" />
         </Link>

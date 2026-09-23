@@ -312,3 +312,34 @@ export async function limparPontoCelulaController(request: Request): Promise<Res
 
   return jsonResponse({ ok: true });
 }
+
+// "O que vale ponto" — tabela de referência editada à mão pela produção na
+// aba DADOS, colunas T:W: T tipo (GERAL/EXTRA/FEATURING), U descritivo,
+// V valor em pontos, W categoria (usada só como badge extra, ex.
+// "COMENTÁRIO"/"COMENTÁRIO ÁLBUM"). Consultada ao vivo (não hardcoded)
+// porque a produção mexe nela com frequência.
+const DADOS_SHEET = "DADOS";
+const DADOS_VALORES_RANGE = "T1:W300";
+
+interface ValorPonto {
+  tipo: string;
+  descricao: string;
+  valor: string;
+  categoria: string;
+}
+
+export async function listarValoresPontoController(_request: Request): Promise<Response> {
+  const rows = await googleSheetsService.registrosCharts.readValues(DADOS_SHEET, DADOS_VALORES_RANGE);
+
+  const valores: ValorPonto[] = [];
+  for (const row of rows) {
+    const tipo = normalizeText(row?.[0]).toUpperCase();
+    const descricao = normalizeText(row?.[1]);
+    const valor = normalizeText(row?.[2]);
+    const categoria = normalizeText(row?.[3]);
+    if (!["GERAL", "EXTRA", "FEATURING"].includes(tipo) || !descricao) continue;
+    valores.push({ tipo, descricao, valor, categoria });
+  }
+
+  return jsonResponse({ valores });
+}
