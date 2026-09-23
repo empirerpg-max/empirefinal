@@ -136,6 +136,14 @@ import {
   postPremiacoesPreencherController,
 } from "../controllers/premiacoesController";
 import {
+  listarPremiacoesIndicarController,
+  listarCategoriasIndicarController,
+  listarCandidatosIndicarController,
+  criarIndicacaoController,
+  listarMinhasIndicacoesController,
+  removerIndicacaoController,
+} from "../controllers/indicacoesController";
+import {
   getAwardsListController,
   getAwardDetalheController,
   getArtistAwardsController,
@@ -363,6 +371,12 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/awards",
     "/api/premiacoes/categorias",
     "/api/premiacoes/preencher",
+    "/api/premiacoes/indicar/awards",
+    "/api/premiacoes/indicar/categorias",
+    "/api/premiacoes/indicar/candidatos",
+    "/api/premiacoes/indicar/minhas",
+    "/api/premiacoes/indicar/criar",
+    "/api/premiacoes/indicar/remover",
     "/api/awards",
     "/api/awards/detalhe",
     "/api/awards/artista",
@@ -1375,6 +1389,30 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await postPremiacoesPreencherController(request);
+  } else if (url.pathname === "/api/premiacoes/indicar/awards") {
+    response = await listarPremiacoesIndicarController();
+  } else if (url.pathname === "/api/premiacoes/indicar/categorias") {
+    response = await listarCategoriasIndicarController(request);
+  } else if (url.pathname === "/api/premiacoes/indicar/candidatos") {
+    response = await listarCandidatosIndicarController(request);
+  } else if (url.pathname === "/api/premiacoes/indicar/minhas") {
+    response = await listarMinhasIndicacoesController(request);
+  } else if (url.pathname === "/api/premiacoes/indicar/criar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/indicar/criar." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await criarIndicacaoController(request);
+  } else if (url.pathname === "/api/premiacoes/indicar/remover") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/indicar/remover." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await removerIndicacaoController(request);
   } else if (url.pathname === "/api/awards") {
     response = await getAwardsListController();
   } else if (url.pathname === "/api/awards/detalhe") {

@@ -917,6 +917,79 @@ export const api = {
     return res.json();
   },
 
+  // ---- Premiações > Indicar (retroativo por votação dos jogadores) ----
+  async listarPremiacoesIndicar(): Promise<
+    {
+      id: string;
+      premiacao: string;
+      abertura: string;
+      encerramento: string;
+      inicioElegibilidade: string;
+      terminoElegibilidade: string;
+      tipoMaterial: string;
+      capaUrl: string;
+      status: "agendado" | "aberto" | "encerrado";
+    }[]
+  > {
+    const res = await fetch("/api/premiacoes/indicar/awards").then((r) => r.json());
+    return res?.data || [];
+  },
+  async listarCategoriasIndicar(awardId: string): Promise<{
+    detalhes: {
+      id: string;
+      premiacao: string;
+      capaUrl: string;
+      status: "agendado" | "aberto" | "encerrado";
+    };
+    categorias: { categoria: string; descritivo: string; premia: string }[];
+  } | null> {
+    const res = await fetch(`/api/premiacoes/indicar/categorias?awardId=${encodeURIComponent(awardId)}`).then((r) =>
+      r.json(),
+    );
+    return res?.success ? res.data : null;
+  },
+  async listarCandidatosIndicar(
+    awardId: string,
+    categoria: string,
+    telegramId: string,
+  ): Promise<{ titulo: string; artista: string; codigoUnico: string }[]> {
+    const qs = `awardId=${encodeURIComponent(awardId)}&categoria=${encodeURIComponent(categoria)}&telegramId=${encodeURIComponent(telegramId)}`;
+    const res = await fetch(`/api/premiacoes/indicar/candidatos?${qs}`).then((r) => r.json());
+    return res?.data || [];
+  },
+  async criarIndicacao(payload: {
+    awardId: string;
+    categoria: string;
+    titulo: string;
+    artista: string;
+    codigoUnico: string;
+    telegramId: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/premiacoes/indicar/criar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+  async listarMinhasIndicacoes(
+    awardId: string,
+    telegramId: string,
+  ): Promise<{ linha: number; categoria: string; titulo: string; artista: string }[]> {
+    const res = await fetch(
+      `/api/premiacoes/indicar/minhas?awardId=${encodeURIComponent(awardId)}&telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
+    return res?.data || [];
+  },
+  async removerIndicacao(awardId: string, linha: number, telegramId: string): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/premiacoes/indicar/remover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ awardId, linha, telegramId }),
+    });
+    return res.json();
+  },
+
   // ---- Awards ----
   async listarAwards(): Promise<{ nome: string; foto: string }[]> {
     const res = await fetch("/api/awards").then((r) => r.json());
