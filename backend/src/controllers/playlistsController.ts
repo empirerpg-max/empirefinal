@@ -338,7 +338,17 @@ async function resolveNomeOficial(telegramId: string, fallback: string): Promise
 // Idempotente por título: pula qualquer álbum legado cujo "Artista -
 // Título" já exista em Albuns (permite rodar de novo com segurança se
 // algum tiver falhado no meio).
-export async function migrarAlbunsLegadosController(): Promise<Response> {
+//
+// Processa em LOTE (?limit=N na querystring, padrão 3) — cada álbum exige
+// várias escritas sequenciais na planilha (Albuns + EDIÇÃO CHARTS ÁLBUNS +
+// 1 escrita por faixa), então migrar tudo de uma vez numa única requisição
+// estourava o limite de CPU do Cloudflare Workers e travava sem resposta.
+// A resposta sempre diz quantos ainda faltam (`restantes`) — chame de novo
+// com o mesmo limite até "restantes" chegar a 0.
+export async function migrarAlbunsLegadosController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const limite = Math.max(1, Math.min(10, Number(url.searchParams.get("limit")) || 3));
+
   const [albunsRows, faixasRows, albunsExistentesRows] = await Promise.all([
     readAlbunsAntigosRows(),
     readFaixasAntigasRows(),
@@ -349,22 +359,24 @@ export async function migrarAlbunsLegadosController(): Promise<Response> {
     (albunsExistentesRows || []).slice(1).map((r) => normalizeComparison(normalizeText(r[6]))), // G - Novo Nome
   );
 
+  const pendentes = albunsRows.filter((row) => {
+    const artista = normalizeText(row[1]);
+    const titulo = normalizeText(row[2]);
+    if (!artista || !titulo) return false;
+    return !titulosExistentes.has(normalizeComparison(`${artista} - ${titulo}`));
+  });
+
+  const loteDaVez = pendentes.slice(0, limite);
   const resultados: { titulo: string; status: "migrado" | "pulado" | "erro"; detalhe?: string }[] = [];
 
-  for (const row of albunsRows) {
+  for (const row of loteDaVez) {
     const artista = normalizeText(row[1]);
     const titulo = normalizeText(row[2]);
     const data = normalizeText(row[4]);
     const capaUrl = normalizeText(row[6]);
     const contracapaUrl = normalizeText(row[7]);
     const telegramId = normalizeText(row[9]);
-    if (!artista || !titulo) continue;
-
     const fullTitle = `${artista} - ${titulo}`;
-    if (titulosExistentes.has(normalizeComparison(fullTitle))) {
-      resultados.push({ titulo: fullTitle, status: "pulado", detalhe: "já existe em Albuns" });
-      continue;
-    }
 
     const albumId = normalizeText(row[0]);
     const faixas = faixasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
@@ -403,12 +415,19 @@ export async function migrarAlbunsLegadosController(): Promise<Response> {
     }
   }
 
+  const restantes = pendentes.length - loteDaVez.length;
   return jsonResponse({
     success: true,
-    total: resultados.length,
+    limite,
+    totalPendentesAntes: pendentes.length,
+    processadosAgora: resultados.length,
     migrados: resultados.filter((r) => r.status === "migrado").length,
-    pulados: resultados.filter((r) => r.status === "pulado").length,
     erros: resultados.filter((r) => r.status === "erro").length,
+    restantes,
+    mensagem:
+      restantes > 0
+        ? `Faltam ${restantes} álbum(ns) — chame o mesmo endpoint de novo pra continuar.`
+        : "Todos os álbuns legados pendentes foram migrados!",
     resultados,
   });
 }
