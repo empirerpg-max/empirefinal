@@ -183,6 +183,7 @@ import {
   editarAlbumAntigoController,
   deletarAlbumAntigoController,
   getAlbunsAntigosController,
+  migrarAlbunsLegadosController,
   getAlbumAntigoByIdController,
 } from "../controllers/playlistsController";
 import {
@@ -882,6 +883,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         );
       }
       response = await deletarAlbumAntigoController(request);
+    } else if (url.pathname === "/api/playlists/albuns/admin/migrar-legados") {
+      response = await migrarAlbunsLegadosController();
     } else if (url.pathname === "/api/playlists") {
       response =
         request.method === "GET"
