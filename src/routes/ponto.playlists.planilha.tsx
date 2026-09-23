@@ -15,7 +15,8 @@ import {
 import { api } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { useDragScroll } from "@/lib/useDragScroll";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 export const Route = createFileRoute("/ponto/playlists/planilha")({
   component: PontoPlaylistsPlanilha,
@@ -330,10 +331,11 @@ function PontoPlaylistsPlanilha() {
             <div className="relative -mx-5">
               <div
                 ref={artistScroll.ref}
-                {...artistScroll.dragProps}
                 className="flex overflow-x-auto gap-3 scrollbar-hide px-5 pb-1 cursor-grab active:cursor-grabbing select-none"
                 style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}
               >
+                <StickyScrollArrowLeft show={artistScroll.canScrollLeft} onClick={() => artistScroll.scrollByAmount(-1)} />
+                <StickyScrollArrowRight show={artistScroll.canScrollRight} onClick={() => artistScroll.scrollByAmount(1)} />
                 {todosArtistas.map((a) => {
                   const ativo = artistaAtivo === a;
                   return (

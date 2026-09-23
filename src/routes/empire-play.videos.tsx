@@ -7,6 +7,8 @@ import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { type PlayableVideo } from "@/components/EmpirePlay/VideoPlayer";
 import { ScoreBadge } from "@/components/EmpirePlay/ScoreBadge";
 import { LoadErrorState } from "@/components/LoadErrorState";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 export const Route = createFileRoute("/empire-play/videos")({
   component: EmpirePlayVideos,
@@ -93,6 +95,7 @@ function EmpirePlayVideos() {
   const { playVideo } = useEmpirePlayer();
   const [videos, setVideos] = useState<PlayableVideo[]>([]);
   const [activeTag, setActiveTag] = useState<string>("Todos");
+  const tagsScroll = useDragScroll<HTMLDivElement>();
   // Antes não existia loading/erro nenhum aqui — a tela renderizava o grid
   // vazio desde o primeiro instante (parecendo "sem vídeos" por um
   // instante) e uma falha real de rede também virava silenciosamente "sem
@@ -166,7 +169,12 @@ function EmpirePlayVideos() {
       )}
 
       {tags.length > 1 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <div
+          ref={tagsScroll.ref}
+          className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide cursor-grab active:cursor-grabbing select-none"
+        >
+          <StickyScrollArrowLeft show={tagsScroll.canScrollLeft} onClick={() => tagsScroll.scrollByAmount(-1)} />
+          <StickyScrollArrowRight show={tagsScroll.canScrollRight} onClick={() => tagsScroll.scrollByAmount(1)} />
           {tags.map((tag) => (
             <button
               key={tag}

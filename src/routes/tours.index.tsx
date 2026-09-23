@@ -25,6 +25,8 @@ import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser } from "@/lib/telegram";
 import { CreateTourSheet } from "@/components/Tours/CreateTourSheet";
 import { LoadErrorState } from "@/components/LoadErrorState";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 export const Route = createFileRoute("/tours/")({
   component: ToursIndex,
@@ -421,7 +423,7 @@ function ToursIndex() {
 }
 
 function MissoesCarousel({ missoes }: { missoes: Missao[] }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useDragScroll<HTMLDivElement>();
 
   return (
     <section className="mb-8">
@@ -433,9 +435,11 @@ function MissoesCarousel({ missoes }: { missoes: Missao[] }) {
       </div>
       <div className="relative">
         <div
-          ref={scrollRef}
-          className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          ref={scrollRef.ref}
+          className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
         >
+          <StickyScrollArrowLeft show={scrollRef.canScrollLeft} onClick={() => scrollRef.scrollByAmount(-1)} />
+          <StickyScrollArrowRight show={scrollRef.canScrollRight} onClick={() => scrollRef.scrollByAmount(1)} />
           {missoes.map((m) => (
             <Link
               key={`${m.idUnico}-${m.showNumero}`}

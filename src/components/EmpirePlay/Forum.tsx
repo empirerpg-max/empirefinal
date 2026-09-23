@@ -36,6 +36,8 @@ import { ScoreBadge } from "./ScoreBadge";
 import { ReactionBar } from "./ReactionBar";
 import { RichTextToolbar } from "./RichTextToolbar";
 import { renderRichText } from "@/lib/richText";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 // "music-videos" foi consolidado dentro de "videos" — Vídeos e Music Videos
 // vivem na mesma aba da planilha ("Music Videos"), diferenciados por tag
@@ -252,6 +254,8 @@ export const Forum: React.FC<ForumProps> = ({
       ? (initialTab as ForumSubmenu)
       : "musicas";
   const [activeSubmenu, setActiveSubmenu] = useState<ForumSubmenu>(initialSubmenu);
+  const submenuScroll = useDragScroll<HTMLDivElement>();
+  const tagsScroll = useDragScroll<HTMLDivElement>();
   const [items, setItems] = useState<ForumTopicItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -889,7 +893,12 @@ export const Forum: React.FC<ForumProps> = ({
         </div>
 
         {/* SUBMENUS / TABS */}
-        <div className="flex items-center gap-1.5 sm:gap-2 bg-neutral-950/80 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto no-scrollbar">
+        <div
+          ref={submenuScroll.ref}
+          className="flex items-center gap-1.5 sm:gap-2 bg-neutral-950/80 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing select-none"
+        >
+          <StickyScrollArrowLeft show={submenuScroll.canScrollLeft} onClick={() => submenuScroll.scrollByAmount(-1)} />
+          <StickyScrollArrowRight show={submenuScroll.canScrollRight} onClick={() => submenuScroll.scrollByAmount(1)} />
           <button
             onClick={() => setActiveSubmenu("musicas")}
             className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold uppercase tracking-wider transition shrink-0 ${
@@ -1785,7 +1794,12 @@ export const Forum: React.FC<ForumProps> = ({
 
           {/* FILTRO DE TAG (só no submenu Vídeos) */}
           {activeSubmenu === "videos" && videoTags.length > 1 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            <div
+              ref={tagsScroll.ref}
+              className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide cursor-grab active:cursor-grabbing select-none"
+            >
+              <StickyScrollArrowLeft show={tagsScroll.canScrollLeft} onClick={() => tagsScroll.scrollByAmount(-1)} />
+              <StickyScrollArrowRight show={tagsScroll.canScrollRight} onClick={() => tagsScroll.scrollByAmount(1)} />
               {videoTags.map((tag) => (
                 <button
                   key={tag}

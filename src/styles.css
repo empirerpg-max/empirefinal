@@ -219,3 +219,15 @@
 .scrollbar-hide {
   scrollbar-width: none;
 }
+
+/* Setas de navegação de listas horizontais: só fazem sentido com mouse
+   (o dedo já arrasta nativamente no touch, e mostrar as setas lá só
+   atrapalha o layout). */
+.hscroll-arrow {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .hscroll-arrow {
+    display: grid;
+  }
+}

@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { Flame, Music, Tv, Disc3, MessageSquare, Upload, ListMusic, Mic2 } from "lucide-react";
 import { haptic } from "@/lib/telegram";
+import { useDragScroll } from "@/hooks/useDragScroll";
+import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 const TABS = [
   { to: "/empire-play", label: "Início", icon: Flame, exact: true },
@@ -14,9 +16,15 @@ const TABS = [
 ] as const;
 
 export function EmpirePlayTabNav() {
+  const tabsScroll = useDragScroll<HTMLElement>();
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-      <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide border-b border-white/10 touch-pan-x flex-nowrap flex-1">
+      <nav
+        ref={tabsScroll.ref}
+        className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide border-b border-white/10 touch-pan-x flex-nowrap flex-1 cursor-grab active:cursor-grabbing select-none"
+      >
+        <StickyScrollArrowLeft show={tabsScroll.canScrollLeft} onClick={() => tabsScroll.scrollByAmount(-1)} />
+        <StickyScrollArrowRight show={tabsScroll.canScrollRight} onClick={() => tabsScroll.scrollByAmount(1)} />
         {TABS.map((tab) => {
           const Icon = tab.icon;
           return (
