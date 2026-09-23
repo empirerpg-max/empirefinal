@@ -1,6 +1,6 @@
 import { googleSheetsService, normalizeText, normalizeComparison, dedupeHeaders, normalizeHeader } from "../services/googleSheetsService";
 import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
-import { publicarAlbum, dedupeArtistPrefix, type CreateAlbumPayload } from "./gestaoController";
+import { publicarAlbum, completarAlbumExistente, dedupeArtistPrefix, type CreateAlbumPayload } from "./gestaoController";
 
 function tituloCompletoDaFaixa(titulo: string, artista: string): string {
   const semPrefixoDuplicado = dedupeArtistPrefix(titulo, artista);
@@ -468,6 +468,14 @@ export async function apagarFaixaDuplicadaLegadoController(request: Request): Pr
 // estourava o limite de CPU do Cloudflare Workers e travava sem resposta.
 // A resposta sempre diz quantos ainda faltam (`restantes`) — chame de novo
 // com o mesmo limite até "restantes" chegar a 0.
+// Orçamento de faixas por chamada — um álbum legado grande sozinho (ex:
+// "Teoric Foundation", 14 faixas) já estourava o limite de CPU do Workers
+// no meio da própria criação, deixando o álbum "pela metade" sem nenhum
+// erro visível (a resposta simplesmente nunca chegava). `limit` (álbuns)
+// sozinho não protegia contra isso; agora corta também por total de
+// faixas processadas na chamada, faixa órfã fica pro próximo ciclo.
+const MAX_FAIXAS_POR_CHAMADA = 6;
+
 export async function migrarAlbunsLegadosController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const limite = Math.max(1, Math.min(10, Number(url.searchParams.get("limit")) || 3));
@@ -479,114 +487,161 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
     googleSheetsService.principal.readValues("Musicas").catch(() => []),
   ]);
 
-  const titulosExistentes = new Set(
-    (albunsExistentesRows || []).slice(1).map((r) => normalizeComparison(normalizeText(r[6]))), // G - Novo Nome
-  );
+  // G - Novo Nome -> B - ID do tópico, pra conseguir completar um álbum
+  // que já existe (em vez de tentar criar de novo e ser barrado pela
+  // checagem de duplicidade de título).
+  const albunsExistentesPorTitulo = new Map<string, string>();
+  for (const r of (albunsExistentesRows || []).slice(1)) {
+    const titulo = normalizeComparison(normalizeText(r[6]));
+    const topicId = normalizeText(r[1]);
+    if (titulo && topicId) albunsExistentesPorTitulo.set(titulo, topicId);
+  }
   // Toda faixa já cadastrada em Musicas (H) — tópico próprio já lançado,
   // com ou sem tópico aberto, não importa: já existe de verdade e conta
   // pra chart. Sem essa checagem, migrar um álbum legado cuja faixa já
   // tinha sido lançada avulsa (ou já migrada antes) duplicava a faixa e a
-  // entrada nos charts. Comparação por título completo (H) inteiro, e
-  // também só pelo título sem o prefixo do artista — cobre tanto faixa que
-  // já tinha "Artista - Título" salvo quanto a legada que salvou só o
-  // título puro.
+  // entrada nos charts. Comparação por título completo (H) inteiro.
   const musicasExistentesPorTituloCompleto = new Set(
     (musicasExistentesRows || []).slice(1).map((r) => normalizeComparison(normalizeText(r[7]))), // H
   );
 
-  const pendentes = albunsRows.filter((row) => {
+  // Pendente aqui não é "álbum não existe ainda" — é "tem pelo menos 1
+  // faixa que ainda não está em Musicas", seja porque o álbum nunca foi
+  // criado, seja porque foi criado incompleto numa migração anterior.
+  type Pendente = {
+    row: string[];
+    fullTitle: string;
+    todasFaixas: ReturnType<typeof faixaAntigaFromRow>[];
+    faixasNovas: ReturnType<typeof faixaAntigaFromRow>[];
+    albumExistenteTopicId: string | undefined;
+  };
+  const pendentes: Pendente[] = [];
+  for (const row of albunsRows) {
     const artista = normalizeText(row[1]);
     const titulo = normalizeText(row[2]);
-    if (!artista || !titulo) return false;
-    return !titulosExistentes.has(normalizeComparison(`${artista} - ${titulo}`));
-  });
-
-  const loteDaVez = pendentes.slice(0, limite);
-  const resultados: { titulo: string; status: "migrado" | "pulado" | "erro"; detalhe?: string }[] = [];
-
-  for (const row of loteDaVez) {
-    const artista = normalizeText(row[1]);
-    const titulo = normalizeText(row[2]);
-    const data = normalizeText(row[4]);
-    const capaUrl = normalizeText(row[6]);
-    const contracapaUrl = normalizeText(row[7]);
-    const telegramId = normalizeText(row[9]);
+    if (!artista || !titulo) continue;
     const fullTitle = `${artista} - ${titulo}`;
-
     const albumId = normalizeText(row[0]);
     const todasFaixas = faixasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
-    if (todasFaixas.length === 0) {
-      resultados.push({ titulo: fullTitle, status: "erro", detalhe: "sem faixas" });
-      continue;
-    }
-
-    // Título completo que a faixa teria em Musicas!H (mesma regra de
-    // processarFaixasDoAlbum): já vem com "Artista - " ou ganha o prefixo
-    // do artista do álbum.
-    const faixasNovas = todasFaixas.filter((f) => {
-      const tituloCompleto = tituloCompletoDaFaixa(f.titulo, artista);
-      return !musicasExistentesPorTituloCompleto.has(normalizeComparison(tituloCompleto));
+    if (todasFaixas.length === 0) continue;
+    const faixasNovas = todasFaixas.filter(
+      (f) => !musicasExistentesPorTituloCompleto.has(normalizeComparison(tituloCompletoDaFaixa(f.titulo, artista))),
+    );
+    if (faixasNovas.length === 0) continue;
+    pendentes.push({
+      row,
+      fullTitle,
+      todasFaixas,
+      faixasNovas,
+      albumExistenteTopicId: albunsExistentesPorTitulo.get(normalizeComparison(fullTitle)),
     });
-    const faixasJaExistiam = todasFaixas.length - faixasNovas.length;
-    if (faixasNovas.length === 0) {
-      resultados.push({
-        titulo: fullTitle,
-        status: "erro",
-        detalhe: `todas as ${todasFaixas.length} faixa(s) já existiam em Musicas — nada a migrar`,
-      });
-      continue;
-    }
-
-    const nomeJogador = await resolveNomeOficial(telegramId, artista);
-    const payload: CreateAlbumPayload = {
-      tituloAlbum: titulo,
-      artistaAlbum: artista,
-      tipoAlbum: "Álbum",
-      capaUrl,
-      encartesUrls: contracapaUrl ? [contracapaUrl] : [],
-      nomeJogador,
-      jogadorId: telegramId,
-      dataLancamento: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : "",
-      faixas: faixasNovas.map((f) => ({
-        num: f.numero,
-        inedita: true,
-        titulo: f.titulo,
-        tipoSingle: "TRACKLIST ALBUM",
-        tipoMusica: "SOLO",
-        mediaUrl: f.drive_url,
-        letra: f.letra,
-        abrirTopico: false,
-      })),
-    };
-
-    try {
-      await publicarAlbum(payload);
-      resultados.push({
-        titulo: fullTitle,
-        status: "migrado",
-        detalhe:
-          faixasJaExistiam > 0
-            ? `${faixasJaExistiam} faixa(s) já existiam e foram puladas (não duplicadas)`
-            : undefined,
-      });
-    } catch (err: any) {
-      resultados.push({ titulo: fullTitle, status: "erro", detalhe: err?.message || String(err) });
-    }
   }
 
-  const restantes = pendentes.length - loteDaVez.length;
+  const resultados: { titulo: string; status: "migrado" | "completado" | "erro"; detalhe?: string }[] = [];
+  let faixasProcessadasNestaChamada = 0;
+  let albunsProcessados = 0;
+
+  for (const pendente of pendentes) {
+    if (albunsProcessados >= limite || faixasProcessadasNestaChamada >= MAX_FAIXAS_POR_CHAMADA) break;
+
+    const artista = normalizeText(pendente.row[1]);
+    const titulo = normalizeText(pendente.row[2]);
+    const data = normalizeText(pendente.row[4]);
+    const capaUrl = normalizeText(pendente.row[6]);
+    const contracapaUrl = normalizeText(pendente.row[7]);
+    const telegramId = normalizeText(pendente.row[9]);
+
+    const espacoRestante = MAX_FAIXAS_POR_CHAMADA - faixasProcessadasNestaChamada;
+    const faixasDaVez = pendente.faixasNovas.slice(0, espacoRestante);
+    const faltouEspaco = faixasDaVez.length < pendente.faixasNovas.length;
+    const faixasJaExistiam = pendente.todasFaixas.length - pendente.faixasNovas.length;
+
+    const nomeJogador = await resolveNomeOficial(telegramId, artista);
+
+    try {
+      if (pendente.albumExistenteTopicId) {
+        // Álbum já existe (migrado antes, incompleto) — só completa com as
+        // faixas que ainda faltam, sem duplicar o registro do álbum.
+        await completarAlbumExistente({
+          albumTopicId: pendente.albumExistenteTopicId,
+          nomeJogador,
+          jogadorId: telegramId,
+          novasFaixas: faixasDaVez.map((f) => ({
+            num: f.numero,
+            inedita: true,
+            titulo: f.titulo,
+            tipoSingle: "TRACKLIST ALBUM",
+            tipoMusica: "SOLO",
+            mediaUrl: f.drive_url,
+            letra: f.letra,
+            abrirTopico: false,
+          })),
+        });
+        resultados.push({
+          titulo: pendente.fullTitle,
+          status: "completado",
+          detalhe: `${faixasDaVez.length} faixa(s) que faltavam foram adicionadas${
+            faltouEspaco ? ` (ainda faltam ${pendente.faixasNovas.length - faixasDaVez.length}, próxima chamada)` : ""
+          }`,
+        });
+      } else {
+        const payload: CreateAlbumPayload = {
+          tituloAlbum: titulo,
+          artistaAlbum: artista,
+          tipoAlbum: "Álbum",
+          capaUrl,
+          encartesUrls: contracapaUrl ? [contracapaUrl] : [],
+          nomeJogador,
+          jogadorId: telegramId,
+          dataLancamento: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : "",
+          faixas: faixasDaVez.map((f) => ({
+            num: f.numero,
+            inedita: true,
+            titulo: f.titulo,
+            tipoSingle: "TRACKLIST ALBUM",
+            tipoMusica: "SOLO",
+            mediaUrl: f.drive_url,
+            letra: f.letra,
+            abrirTopico: false,
+          })),
+        };
+        await publicarAlbum(payload);
+        resultados.push({
+          titulo: pendente.fullTitle,
+          status: "migrado",
+          detalhe: [
+            faixasJaExistiam > 0 ? `${faixasJaExistiam} faixa(s) já existiam e foram puladas` : "",
+            faltouEspaco
+              ? `só ${faixasDaVez.length} de ${pendente.faixasNovas.length} faixas novas entraram — chame de novo pra completar`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("; ") || undefined,
+        });
+      }
+    } catch (err: any) {
+      resultados.push({ titulo: pendente.fullTitle, status: "erro", detalhe: err?.message || String(err) });
+    }
+
+    faixasProcessadasNestaChamada += faixasDaVez.length;
+    albunsProcessados++;
+  }
+
+  const restantes = pendentes.length - albunsProcessados;
   return jsonResponse({
     success: true,
     limite,
+    maxFaixasPorChamada: MAX_FAIXAS_POR_CHAMADA,
     totalPendentesAntes: pendentes.length,
     processadosAgora: resultados.length,
     migrados: resultados.filter((r) => r.status === "migrado").length,
+    completados: resultados.filter((r) => r.status === "completado").length,
     erros: resultados.filter((r) => r.status === "erro").length,
     restantes,
     mensagem:
       restantes > 0
-        ? `Faltam ${restantes} álbum(ns) — chame o mesmo endpoint de novo pra continuar.`
-        : "Todos os álbuns legados pendentes foram migrados!",
+        ? `Faltam ${restantes} álbum(ns) (ou faixas dentro deles) — chame o mesmo endpoint de novo pra continuar.`
+        : "Todos os álbuns legados pendentes foram migrados/completados!",
     resultados,
   });
 }
