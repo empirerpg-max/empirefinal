@@ -574,10 +574,18 @@ export async function repararDatasLegadosController(request: Request): Promise<R
     })
     .filter((c): c is NonNullable<typeof c> => !!c);
 
-  const loteDaVez = candidatos.slice(0, limite);
+  // Percorre TODOS os candidatos em ordem, mas só "gasta" o limite da
+  // chamada em quem realmente precisava de alguma correção — sem isso,
+  // um corte por posição (candidatos.slice(0, limite)) reprocessava pra
+  // sempre os mesmos primeiros N álbuns (já corrigidos, virando no-op) e
+  // nunca chegava nos de trás na lista, mesmo chamando o endpoint dezenas
+  // de vezes.
   const resultados: { titulo: string; correcoes: string[] }[] = [];
+  let candidatosVarridos = 0;
 
-  for (const c of loteDaVez) {
+  for (const c of candidatos) {
+    if (resultados.length >= limite) break;
+    candidatosVarridos++;
     const key = normalizeComparison(c.fullTitle);
     const correcoes: string[] = [];
 
@@ -645,18 +653,28 @@ export async function repararDatasLegadosController(request: Request): Promise<R
       }
     }
 
-    resultados.push({ titulo: c.fullTitle, correcoes });
+    if (correcoes.length > 0) {
+      resultados.push({ titulo: c.fullTitle, correcoes });
+    }
   }
 
-  const restantes = candidatos.length - loteDaVez.length;
+  // "Sem mais nada a fazer" só quando varreu a lista inteira sem achar mais
+  // ninguém precisando de correção — enquanto sobrar candidato não
+  // verificado ainda (mesmo que os próximos N sejam todos no-op), chamar
+  // de novo pode achar mais alguém pendente mais à frente na lista.
+  const restantes = candidatos.length - candidatosVarridos;
   return jsonResponse({
     success: true,
     limite,
     totalAlbunsLegados: candidatos.length,
-    processadosAgora: resultados.length,
+    candidatosVarridosNestaChamada: candidatosVarridos,
+    albunsComCorrecao: resultados.length,
     totalCorrecoes: resultados.reduce((acc, r) => acc + r.correcoes.length, 0),
     restantes,
-    mensagem: restantes > 0 ? `Faltam ${restantes} álbum(ns) — chame de novo pra continuar.` : "Todos os álbuns legados conferidos!",
+    mensagem:
+      restantes > 0
+        ? `Verificados ${candidatosVarridos} álbum(ns) nessa chamada, ${resultados.length} tinham algo pra corrigir. Ainda restam ${restantes} pra verificar — chame de novo.`
+        : "Todos os álbuns legados foram verificados, nenhuma correção pendente!",
     resultados,
   });
 }
