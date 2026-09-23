@@ -513,6 +513,30 @@ export async function apagarFaixaDuplicadaLegadoController(request: Request): Pr
   return jsonResponse({ success: true, sheet: "Musicas", linha, tituloApagado: titulo });
 }
 
+// Diagnóstico cirúrgico: devolve o conteúdo bruto (sem normalizar) de uma
+// linha específica de "EDIÇÃO CHARTS", pra comparar byte a byte com o
+// título que o reparo espera — usado quando o reparo diz "sem pendências"
+// mas uma linha continua visivelmente errada, pra achar a causa exata em
+// vez de rodar reparo no escuro de novo.
+export async function debugLinhaEdicaoChartsController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const linha = Number(url.searchParams.get("linha"));
+  if (!linha || linha < 2) return jsonResponse({ success: false, error: "Parâmetro 'linha' obrigatório." }, 400);
+
+  const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", `A${linha}:Q${linha}`);
+  const row = rows?.[0] || [];
+  return jsonResponse({
+    success: true,
+    linha,
+    A_data: row[0] ?? null,
+    B_titulo: row[1] ?? null,
+    E_album: row[4] ?? null,
+    E_album_length: (row[4] || "").length,
+    E_album_charCodes: Array.from(String(row[4] || "")).map((ch) => ch.charCodeAt(0)),
+    F_weeks: row[5] ?? null,
+  });
+}
+
 // Conserto pontual: repara data e WEEKS de álbuns legados que já subiram
 // ERRADOS (data de hoje em vez da data do legado, WEEKS "1" em vez do
 // número de semanas retroativo) — resultado de completarAlbumExistente
