@@ -68,64 +68,61 @@ function PontoHome() {
     );
   }
 
+  const acoes = [
+    { to: "/ponto/distribuir" as const, icon: Sparkles, titulo: "Distribuir pontos", subtitulo: "Aleatório ou manual" },
+    { to: "/ponto/playlists" as const, icon: ListMusic, titulo: "Aplicar playlists", subtitulo: "Conforme saldo ou manual" },
+    { to: "/ponto/valores" as const, icon: ClipboardList, titulo: "O que vale ponto", subtitulo: "Tabela de referência" },
+  ];
+
   return (
-    <main className="flex-1 mx-auto w-full max-w-md px-6 pt-10 pb-24">
-      <header className="mb-8">
-        <div className="size-14 rounded-2xl bg-emerald-500/15 text-emerald-500 grid place-items-center mb-4">
-          <Target className="size-7" />
+    <main className="flex-1 mx-auto w-full max-w-md px-5 pt-8 pb-24">
+      {/* Cartão de topo — vidro discreto, sem cor forte: só o essencial. */}
+      <header className="mb-5 p-5 rounded-[1.75rem] bg-white/[0.025] border border-white/[0.06] backdrop-blur-xl">
+        <div className="flex items-center justify-between">
+          <div className="size-11 rounded-full bg-white/[0.06] text-white/70 grid place-items-center">
+            <Target className="size-5" strokeWidth={1.75} />
+          </div>
+          <span className="px-2.5 py-1 rounded-full border border-white/10 text-[9px] font-semibold uppercase tracking-widest text-white/40">
+            Ponto
+          </span>
         </div>
-        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Ponto</p>
-        <h1 className="text-3xl font-black italic tracking-tighter mt-1 text-white">Oi, {data.nomeOff}.</h1>
-        <p className="text-sm text-neutral-500 mt-1">O que você quer fazer?</p>
+        <h1 className="text-2xl font-semibold tracking-tight mt-4 text-white">Oi, {data.nomeOff}.</h1>
+        <p className="text-sm text-white/40 mt-0.5">O que você quer fazer?</p>
+
         {data.artistas && data.artistas.length > 0 && (
-          <p className="text-[11px] text-neutral-600 mt-3">
-            Artistas: {data.artistas.join(" · ")}
-          </p>
+          <div className="flex flex-wrap gap-1.5 mt-4">
+            {data.artistas.map((nome) => (
+              <span
+                key={nome}
+                className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.06] text-[11px] font-medium text-white/60"
+              >
+                <span className="size-4 rounded-full bg-white/[0.08] text-white/50 text-[8px] font-bold grid place-items-center shrink-0">
+                  {nome.charAt(0).toUpperCase()}
+                </span>
+                {nome}
+              </span>
+            ))}
+          </div>
         )}
       </header>
 
       <div className="space-y-2">
-        <Link
-          to="/ponto/distribuir"
-          className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-900 border border-white/10 hover:border-emerald-500/40 hover:bg-neutral-800 transition-colors group"
-        >
-          <div className="size-12 rounded-2xl bg-emerald-500/15 text-emerald-500 grid place-items-center shrink-0 group-hover:scale-105 transition-transform">
-            <Sparkles className="size-6" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="font-black uppercase tracking-tight text-white text-sm">Distribuir pontos</h2>
-            <p className="text-xs text-neutral-500">Aleatório ou manual</p>
-          </div>
-          <ChevronRight className="size-4 text-neutral-600 group-hover:text-emerald-500 transition-colors shrink-0" />
-        </Link>
-
-        <Link
-          to="/ponto/playlists"
-          className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-900 border border-white/10 hover:border-emerald-500/40 hover:bg-neutral-800 transition-colors group"
-        >
-          <div className="size-12 rounded-2xl bg-emerald-500/15 text-emerald-500 grid place-items-center shrink-0 group-hover:scale-105 transition-transform">
-            <ListMusic className="size-6" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="font-black uppercase tracking-tight text-white text-sm">Aplicar playlists</h2>
-            <p className="text-xs text-neutral-500">Conforme saldo ou manual</p>
-          </div>
-          <ChevronRight className="size-4 text-neutral-600 group-hover:text-emerald-500 transition-colors shrink-0" />
-        </Link>
-
-        <Link
-          to="/ponto/valores"
-          className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-900 border border-white/10 hover:border-emerald-500/40 hover:bg-neutral-800 transition-colors group"
-        >
-          <div className="size-12 rounded-2xl bg-emerald-500/15 text-emerald-500 grid place-items-center shrink-0 group-hover:scale-105 transition-transform">
-            <ClipboardList className="size-6" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="font-black uppercase tracking-tight text-white text-sm">O que vale ponto</h2>
-            <p className="text-xs text-neutral-500">Tabela de referência</p>
-          </div>
-          <ChevronRight className="size-4 text-neutral-600 group-hover:text-emerald-500 transition-colors shrink-0" />
-        </Link>
+        {acoes.map(({ to, icon: Icon, titulo, subtitulo }) => (
+          <Link
+            key={to}
+            to={to}
+            className="flex items-center gap-3.5 p-4 rounded-[1.5rem] bg-white/[0.025] border border-white/[0.06] backdrop-blur-xl hover:bg-white/[0.05] hover:border-white/[0.12] transition-all active:scale-[0.98] group"
+          >
+            <div className="size-10 rounded-full bg-white/[0.06] text-white/60 grid place-items-center shrink-0 group-hover:bg-white/[0.1] group-hover:text-white/80 transition-colors">
+              <Icon className="size-4.5" strokeWidth={1.75} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold text-white text-[15px] tracking-tight">{titulo}</h2>
+              <p className="text-[13px] text-white/35">{subtitulo}</p>
+            </div>
+            <ChevronRight className="size-4 text-white/25 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all shrink-0" />
+          </Link>
+        ))}
       </div>
     </main>
   );
