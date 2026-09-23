@@ -1,6 +1,13 @@
 import { googleSheetsService, normalizeText, normalizeComparison, dedupeHeaders, normalizeHeader } from "../services/googleSheetsService";
 import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
-import { publicarAlbum, completarAlbumExistente, dedupeArtistPrefix, type CreateAlbumPayload } from "./gestaoController";
+import {
+  publicarAlbum,
+  completarAlbumExistente,
+  registrarAlbumNaEdicaoChartsAlbuns,
+  calcularSemanasRetroativas,
+  dedupeArtistPrefix,
+  type CreateAlbumPayload,
+} from "./gestaoController";
 
 function tituloCompletoDaFaixa(titulo: string, artista: string): string {
   const semPrefixoDuplicado = dedupeArtistPrefix(titulo, artista);
@@ -335,18 +342,20 @@ async function resolveNomeOficial(telegramId: string, fallback: string): Promise
   }
 }
 
-// Diagnóstico pontual: acha faixas duplicadas em "Musicas" (mesmo título
-// completo aparecendo em mais de 1 linha) causadas pela migração de álbuns
-// legados ter rodado ANTES da checagem de duplicidade existir — cada
-// duplicata lista as duas linhas (a original, publicada de verdade, e a
-// que a migração criou por cima) pra decidir manualmente qual apagar.
-// Só lê, não apaga nada sozinho — apagar errado é mais perigoso que
-// deixar a duplicata até alguém confirmar qual linha é a sobra.
+// Diagnóstico pontual: acha faixas duplicadas em "Musicas" E em "EDIÇÃO
+// CHARTS" (mesmo título completo aparecendo em mais de 1 linha na mesma
+// aba) causadas pela migração de álbuns legados ter rodado ANTES da
+// checagem de duplicidade existir — cada duplicata lista as linhas (a
+// original, publicada de verdade, e a que a migração criou por cima) pra
+// decidir manualmente qual apagar. Só lê, não apaga nada sozinho — apagar
+// errado é mais perigoso que deixar a duplicata até alguém confirmar qual
+// linha é a sobra.
 export async function diagnosticoDuplicatasLegadosController(): Promise<Response> {
-  const [albunsLegadosRows, faixasLegadasRows, musicasRows] = await Promise.all([
+  const [albunsLegadosRows, faixasLegadasRows, musicasRows, edicaoChartsRows] = await Promise.all([
     readAlbunsAntigosRows(),
     readFaixasAntigasRows(),
     googleSheetsService.principal.readValues("Musicas"),
+    googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:F20000"),
   ]);
 
   // linha real na planilha = índice no array + 1 (linha 1 é cabeçalho, e
@@ -366,9 +375,24 @@ export async function diagnosticoDuplicatasLegadosController(): Promise<Response
     });
   }
 
-  const duplicatas: {
+  // "EDIÇÃO CHARTS" lido a partir de A2, então rows[i] = linha i+2.
+  const edicaoChartsPorTitulo = new Map<string, { linha: number; album: string; weeks: string }[]>();
+  for (let i = 0; i < (edicaoChartsRows || []).length; i++) {
+    const row = edicaoChartsRows[i];
+    const titulo = normalizeText(row?.[1]); // B
+    if (!titulo) continue;
+    const key = normalizeComparison(titulo);
+    if (!edicaoChartsPorTitulo.has(key)) edicaoChartsPorTitulo.set(key, []);
+    edicaoChartsPorTitulo.get(key)!.push({ linha: i + 2, album: normalizeText(row[4]), weeks: normalizeText(row[5]) });
+  }
+
+  const duplicatasMusicas: {
     titulo: string;
     ocorrencias: { linha: number; topicId: string; pendente: string; album: string }[];
+  }[] = [];
+  const duplicatasEdicaoCharts: {
+    titulo: string;
+    ocorrencias: { linha: number; album: string; weeks: string }[];
   }[] = [];
 
   for (const row of albunsLegadosRows) {
@@ -378,12 +402,19 @@ export async function diagnosticoDuplicatasLegadosController(): Promise<Response
     const faixas = faixasLegadasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
     for (const f of faixas) {
       const tituloCompleto = tituloCompletoDaFaixa(f.titulo, artista);
-      const ocorrencias = musicasPorTitulo.get(normalizeComparison(tituloCompleto));
-      if (ocorrencias && ocorrencias.length > 1) {
-        // Evita listar o mesmo título 2x se 2 álbuns legados diferentes
-        // (raro, mas possível) apontarem pra faixa igual.
-        if (!duplicatas.some((d) => normalizeComparison(d.titulo) === normalizeComparison(tituloCompleto))) {
-          duplicatas.push({ titulo: tituloCompleto, ocorrencias });
+      const key = normalizeComparison(tituloCompleto);
+
+      const ocorrenciasMusicas = musicasPorTitulo.get(key);
+      if (ocorrenciasMusicas && ocorrenciasMusicas.length > 1) {
+        if (!duplicatasMusicas.some((d) => normalizeComparison(d.titulo) === key)) {
+          duplicatasMusicas.push({ titulo: tituloCompleto, ocorrencias: ocorrenciasMusicas });
+        }
+      }
+
+      const ocorrenciasCharts = edicaoChartsPorTitulo.get(key);
+      if (ocorrenciasCharts && ocorrenciasCharts.length > 1) {
+        if (!duplicatasEdicaoCharts.some((d) => normalizeComparison(d.titulo) === key)) {
+          duplicatasEdicaoCharts.push({ titulo: tituloCompleto, ocorrencias: ocorrenciasCharts });
         }
       }
     }
@@ -391,31 +422,60 @@ export async function diagnosticoDuplicatasLegadosController(): Promise<Response
 
   return jsonResponse({
     success: true,
-    totalDuplicatas: duplicatas.length,
+    totalDuplicatas: duplicatasMusicas.length + duplicatasEdicaoCharts.length,
     comoLer:
-      "Pra cada título, 'ocorrencias' lista as linhas em Musicas que têm exatamente esse título. A linha com topicId preenchido (número, não vazio) é a original de verdade — geralmente a outra (pendente:'Sim', topicId vazio, album igual ao título do álbum legado) foi criada pela migração e pode ser apagada.",
-    duplicatas,
+      "'duplicatasMusicas': linhas em Musicas com o mesmo título — a com topicId preenchido é a original, a outra (pendente:'Sim', topicId vazio) foi criada pela migração e pode ser apagada com sheet:'Musicas'. 'duplicatasEdicaoCharts': linhas em EDIÇÃO CHARTS com o mesmo título — não dá pra saber automaticamente qual é a sobra (não tem campo 'pendente' aqui), confira manualmente pelas outras colunas antes de apagar com sheet:'EdicaoCharts'.",
+    duplicatasMusicas,
+    duplicatasEdicaoCharts,
   });
 }
 
-// Apaga (esvazia) a linha estranha de uma faixa duplicada em "Musicas" —
-// usado depois de conferir o diagnóstico acima. Só apaga se a linha bater
-// EXATAMENTE com o perfil de "criada pela migração por engano": título
-// igual ao esperado, sem tópico próprio (B vazio) e Pendente = "Sim" — uma
-// faixa publicada de verdade (com tópico) NUNCA é apagada por esse
-// endpoint, mesmo que o título bata, por segurança.
+// Apaga (esvazia) a linha estranha de uma faixa duplicada em "Musicas" ou
+// em "EDIÇÃO CHARTS" (parâmetro `sheet`) — usado depois de conferir o
+// diagnóstico acima. Em "Musicas", só apaga se a linha bater EXATAMENTE
+// com o perfil de "criada pela migração por engano": título igual ao
+// esperado, sem tópico próprio (B vazio) e Pendente = "Sim" — uma faixa
+// publicada de verdade (com tópico) NUNCA é apagada por esse endpoint,
+// mesmo que o título bata, por segurança. Em "EDIÇÃO CHARTS" não existe
+// esse mesmo sinal de segurança (não tem "pendente"), então só apaga se o
+// título bater e a linha for informada explicitamente — confirme pelo
+// diagnóstico antes.
 export async function apagarFaixaDuplicadaLegadoController(request: Request): Promise<Response> {
   // GET com querystring (pra dar pra abrir a URL direto no navegador, sem
   // precisar de um jeito de mandar POST) ou POST com JSON — mesmo efeito.
   const url = new URL(request.url);
   const body =
     request.method === "GET"
-      ? { linha: url.searchParams.get("linha"), tituloEsperado: url.searchParams.get("tituloEsperado") }
-      : ((await request.json().catch(() => ({}))) as { linha?: number | string | null; tituloEsperado?: string | null });
+      ? {
+          linha: url.searchParams.get("linha"),
+          tituloEsperado: url.searchParams.get("tituloEsperado"),
+          sheet: url.searchParams.get("sheet"),
+        }
+      : ((await request.json().catch(() => ({}))) as {
+          linha?: number | string | null;
+          tituloEsperado?: string | null;
+          sheet?: string | null;
+        });
   const linha = Number(body.linha);
   const tituloEsperado = normalizeText(body.tituloEsperado || "");
+  const sheet = normalizeText(body.sheet || "Musicas");
   if (!linha || linha < 2 || !tituloEsperado) {
     return jsonResponse({ success: false, error: "Parâmetros 'linha' e 'tituloEsperado' são obrigatórios." }, 400);
+  }
+
+  if (normalizeComparison(sheet) === normalizeComparison("EdicaoCharts")) {
+    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", `A${linha}:F${linha}`);
+    const row = rows?.[0];
+    if (!row) return jsonResponse({ success: false, error: "Linha não encontrada." }, 404);
+    const titulo = normalizeText(row[1]); // B
+    if (normalizeComparison(titulo) !== normalizeComparison(tituloEsperado)) {
+      return jsonResponse(
+        { success: false, error: "Título da linha não bate com o esperado — abortado por segurança.", titulo },
+        409,
+      );
+    }
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linha}:Q${linha}`, [Array(17).fill("")]);
+    return jsonResponse({ success: true, sheet: "EdicaoCharts", linha, tituloApagado: titulo });
   }
 
   const rows = await googleSheetsService.principal.readValues("Musicas", `A${linha}:Y${linha}`);
@@ -450,7 +510,7 @@ export async function apagarFaixaDuplicadaLegadoController(request: Request): Pr
   // sumir de toda busca/listagem que filtra por título vazio.
   await googleSheetsService.principal.updateValues("Musicas", `A${linha}:Y${linha}`, [Array(25).fill("")]);
 
-  return jsonResponse({ success: true, linha, tituloApagado: titulo });
+  return jsonResponse({ success: true, sheet: "Musicas", linha, tituloApagado: titulo });
 }
 
 // Migração pontual: os álbuns legados (Playlists_Albuns/Playlists_Faixas,
@@ -480,40 +540,57 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
   const url = new URL(request.url);
   const limite = Math.max(1, Math.min(10, Number(url.searchParams.get("limit")) || 3));
 
-  const [albunsRows, faixasRows, albunsExistentesRows, musicasExistentesRows] = await Promise.all([
-    readAlbunsAntigosRows(),
-    readFaixasAntigasRows(),
-    googleSheetsService.principal.readValues("Albuns").catch(() => []),
-    googleSheetsService.principal.readValues("Musicas").catch(() => []),
-  ]);
+  const [albunsRows, faixasRows, albunsExistentesRows, musicasExistentesRows, edicaoChartsRows, edicaoChartsAlbunsRows] =
+    await Promise.all([
+      readAlbunsAntigosRows(),
+      readFaixasAntigasRows(),
+      googleSheetsService.principal.readValues("Albuns").catch(() => []),
+      googleSheetsService.principal.readValues("Musicas").catch(() => []),
+      googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:B20000").catch(() => []),
+      googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D20000").catch(() => []),
+    ]);
 
-  // G - Novo Nome -> B - ID do tópico, pra conseguir completar um álbum
-  // que já existe (em vez de tentar criar de novo e ser barrado pela
-  // checagem de duplicidade de título).
-  const albunsExistentesPorTitulo = new Map<string, string>();
-  for (const r of (albunsExistentesRows || []).slice(1)) {
+  // G - Novo Nome -> {B - ID do tópico, linha}, pra conseguir completar um
+  // álbum que já existe (em vez de tentar criar de novo e ser barrado pela
+  // checagem de duplicidade de título) e, se for o caso, também gravar a
+  // entrada que faltou em EDIÇÃO CHARTS ÁLBUMS sem duplicar a de Albuns.
+  const albunsExistentesPorTitulo = new Map<string, { topicId: string; linhaEmAlbuns: number }>();
+  for (let i = 0; i < (albunsExistentesRows || []).length - 1; i++) {
+    const r = albunsExistentesRows[i + 1];
     const titulo = normalizeComparison(normalizeText(r[6]));
     const topicId = normalizeText(r[1]);
-    if (titulo && topicId) albunsExistentesPorTitulo.set(titulo, topicId);
+    if (titulo && topicId) albunsExistentesPorTitulo.set(titulo, { topicId, linhaEmAlbuns: i + 2 });
   }
-  // Toda faixa já cadastrada em Musicas (H) — tópico próprio já lançado,
-  // com ou sem tópico aberto, não importa: já existe de verdade e conta
-  // pra chart. Sem essa checagem, migrar um álbum legado cuja faixa já
-  // tinha sido lançada avulsa (ou já migrada antes) duplicava a faixa e a
-  // entrada nos charts. Comparação por título completo (H) inteiro.
+  // Toda faixa já cadastrada em Musicas (H) OU já com entrada em EDIÇÃO
+  // CHARTS (B) — tópico próprio já lançado, com ou sem tópico aberto, não
+  // importa: já existe de verdade e conta pra chart. Checar só Musicas não
+  // bastava: uma migração antiga podia ter gravado a linha em EDIÇÃO
+  // CHARTS e travado antes de gravar em Musicas (ou vice-versa), e sem
+  // checar as duas a faixa era duplicada na que ainda estava faltando.
   const musicasExistentesPorTituloCompleto = new Set(
     (musicasExistentesRows || []).slice(1).map((r) => normalizeComparison(normalizeText(r[7]))), // H
   );
+  const edicaoChartsExistentesPorTitulo = new Set(
+    (edicaoChartsRows || []).map((r) => normalizeComparison(normalizeText(r[1]))), // B
+  );
+  // D - Nome do álbum em EDIÇÃO CHARTS ÁLBUMS — pra saber quais álbuns já
+  // existem em "Albuns" mas ficaram sem entrada aqui (escrita que falhou
+  // ou foi cortada numa migração anterior).
+  const albunsComEntradaEmEdicaoCharts = new Set(
+    (edicaoChartsAlbunsRows || []).map((r) => normalizeComparison(normalizeText(r[3]))), // D
+  );
 
-  // Pendente aqui não é "álbum não existe ainda" — é "tem pelo menos 1
-  // faixa que ainda não está em Musicas", seja porque o álbum nunca foi
-  // criado, seja porque foi criado incompleto numa migração anterior.
+  // Pendente aqui não é só "álbum não existe ainda" — é "tem pelo menos 1
+  // faixa que ainda não está registrada" OU "o álbum em si não tem entrada
+  // em EDIÇÃO CHARTS ÁLBUMS", seja porque nunca foi criado, seja porque
+  // ficou incompleto numa migração anterior.
   type Pendente = {
     row: string[];
     fullTitle: string;
     todasFaixas: ReturnType<typeof faixaAntigaFromRow>[];
     faixasNovas: ReturnType<typeof faixaAntigaFromRow>[];
-    albumExistenteTopicId: string | undefined;
+    albumExistente: { topicId: string; linhaEmAlbuns: number } | undefined;
+    faltaEntradaEmEdicaoChartsAlbuns: boolean;
   };
   const pendentes: Pendente[] = [];
   for (const row of albunsRows) {
@@ -524,16 +601,24 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
     const albumId = normalizeText(row[0]);
     const todasFaixas = faixasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
     if (todasFaixas.length === 0) continue;
-    const faixasNovas = todasFaixas.filter(
-      (f) => !musicasExistentesPorTituloCompleto.has(normalizeComparison(tituloCompletoDaFaixa(f.titulo, artista))),
-    );
-    if (faixasNovas.length === 0) continue;
+    const faixasNovas = todasFaixas.filter((f) => {
+      const tituloCompleto = normalizeComparison(tituloCompletoDaFaixa(f.titulo, artista));
+      return (
+        !musicasExistentesPorTituloCompleto.has(tituloCompleto) &&
+        !edicaoChartsExistentesPorTitulo.has(tituloCompleto)
+      );
+    });
+    const albumExistente = albunsExistentesPorTitulo.get(normalizeComparison(fullTitle));
+    const faltaEntradaEmEdicaoChartsAlbuns =
+      !!albumExistente && !albunsComEntradaEmEdicaoCharts.has(normalizeComparison(fullTitle));
+    if (faixasNovas.length === 0 && !faltaEntradaEmEdicaoChartsAlbuns) continue;
     pendentes.push({
       row,
       fullTitle,
       todasFaixas,
       faixasNovas,
-      albumExistenteTopicId: albunsExistentesPorTitulo.get(normalizeComparison(fullTitle)),
+      albumExistente,
+      faltaEntradaEmEdicaoChartsAlbuns,
     });
   }
 
@@ -550,6 +635,8 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
     const capaUrl = normalizeText(pendente.row[6]);
     const contracapaUrl = normalizeText(pendente.row[7]);
     const telegramId = normalizeText(pendente.row[9]);
+    const dataLancamento = /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : "";
+    const numeroSemanas = dataLancamento ? calcularSemanasRetroativas(dataLancamento) : 1;
 
     const espacoRestante = MAX_FAIXAS_POR_CHAMADA - faixasProcessadasNestaChamada;
     const faixasDaVez = pendente.faixasNovas.slice(0, espacoRestante);
@@ -559,31 +646,53 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
     const nomeJogador = await resolveNomeOficial(telegramId, artista);
 
     try {
-      if (pendente.albumExistenteTopicId) {
+      if (pendente.albumExistente) {
         // Álbum já existe (migrado antes, incompleto) — só completa com as
-        // faixas que ainda faltam, sem duplicar o registro do álbum.
-        await completarAlbumExistente({
-          albumTopicId: pendente.albumExistenteTopicId,
-          nomeJogador,
-          jogadorId: telegramId,
-          novasFaixas: faixasDaVez.map((f) => ({
-            num: f.numero,
-            inedita: true,
-            titulo: f.titulo,
-            tipoSingle: "TRACKLIST ALBUM",
-            tipoMusica: "SOLO",
-            mediaUrl: f.drive_url,
-            letra: f.letra,
-            abrirTopico: false,
-          })),
-        });
-        resultados.push({
-          titulo: pendente.fullTitle,
-          status: "completado",
-          detalhe: `${faixasDaVez.length} faixa(s) que faltavam foram adicionadas${
-            faltouEspaco ? ` (ainda faltam ${pendente.faixasNovas.length - faixasDaVez.length}, próxima chamada)` : ""
-          }`,
-        });
+        // faixas que ainda faltam, sem duplicar o registro do álbum. Usa a
+        // MESMA data/semanas do álbum legado, não hoje.
+        const detalhes: string[] = [];
+        if (pendente.faltaEntradaEmEdicaoChartsAlbuns) {
+          const codigo = await registrarAlbumNaEdicaoChartsAlbuns({
+            artistaAlbum: artista,
+            albumFullTitle: pendente.fullTitle,
+            tipoAlbum: "Álbum",
+            dataFormatada: dataLancamento
+              ? (() => {
+                  const [ano, mes, dia] = dataLancamento.split("-");
+                  return `${dia}/${mes}/${ano}`;
+                })()
+              : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+            numeroSemanas,
+            numeroFaixas: pendente.todasFaixas.length,
+            albumRowIndexEmAlbuns: pendente.albumExistente.linhaEmAlbuns,
+          });
+          detalhes.push(codigo ? "entrada em EDIÇÃO CHARTS ÁLBUMS criada (estava faltando)" : "falhou ao criar entrada em EDIÇÃO CHARTS ÁLBUMS");
+        }
+        if (faixasDaVez.length > 0) {
+          await completarAlbumExistente({
+            albumTopicId: pendente.albumExistente.topicId,
+            nomeJogador,
+            jogadorId: telegramId,
+            dataLancamento,
+            weeksOverride: String(numeroSemanas),
+            novasFaixas: faixasDaVez.map((f) => ({
+              num: f.numero,
+              inedita: true,
+              titulo: f.titulo,
+              tipoSingle: "TRACKLIST ALBUM",
+              tipoMusica: "SOLO",
+              mediaUrl: f.drive_url,
+              letra: f.letra,
+              abrirTopico: false,
+            })),
+          });
+          detalhes.push(
+            `${faixasDaVez.length} faixa(s) que faltavam foram adicionadas${
+              faltouEspaco ? ` (ainda faltam ${pendente.faixasNovas.length - faixasDaVez.length}, próxima chamada)` : ""
+            }`,
+          );
+        }
+        resultados.push({ titulo: pendente.fullTitle, status: "completado", detalhe: detalhes.join("; ") || undefined });
       } else {
         const payload: CreateAlbumPayload = {
           tituloAlbum: titulo,
@@ -593,7 +702,7 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
           encartesUrls: contracapaUrl ? [contracapaUrl] : [],
           nomeJogador,
           jogadorId: telegramId,
-          dataLancamento: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : "",
+          dataLancamento,
           faixas: faixasDaVez.map((f) => ({
             num: f.numero,
             inedita: true,
