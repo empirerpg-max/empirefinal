@@ -1136,6 +1136,13 @@ export const api = {
     });
     return res.json();
   },
+  async listarValoresPonto(): Promise<{
+    valores: { tipo: string; descricao: string; valor: string; categoria: string }[];
+  }> {
+    const res = await fetch("/api/ponto/valores");
+    const data = await res.json().catch(() => null);
+    return data && Array.isArray(data.valores) ? data : { valores: [] };
+  },
 
   // ---- PONTO Playlists (ECOIN + INVESTIMENTO) ----
   async listarInvestimentos(telegramId: string): Promise<{

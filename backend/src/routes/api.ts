@@ -122,6 +122,7 @@ import {
   salvarPontoCelulaController,
   distribuirPontosAleatorioController,
   limparPontoCelulaController,
+  listarValoresPontoController,
 } from "../controllers/pontoController";
 import {
   getInvestimentosController,
@@ -340,6 +341,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/ponto/salvar",
     "/api/ponto/distribuir-aleatorio",
     "/api/ponto/limpar",
+    "/api/ponto/valores",
     "/api/ponto/playlists",
     "/api/ponto/playlists/iniciar",
     "/api/ponto/playlists/investir",
@@ -1023,6 +1025,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     }
     response = await limparPontoCelulaController(request);
+  } else if (url.pathname === "/api/ponto/valores") {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/ponto/valores." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await listarValoresPontoController(request);
   } else if (url.pathname === "/api/ponto/playlists/limpar") {
     if (request.method !== "POST") {
       return new Response(

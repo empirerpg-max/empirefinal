@@ -39,6 +39,7 @@ import { Route as MarketRegrasRouteImport } from './routes/market.regras'
 import { Route as PontoIndexRouteImport } from './routes/ponto.index'
 import { Route as PontoDistribuirRouteImport } from './routes/ponto.distribuir'
 import { Route as PontoPlaylistsRouteImport } from './routes/ponto.playlists'
+import { Route as PontoValoresRouteImport } from './routes/ponto.valores'
 import { Route as PremiacoesIndicarRouteImport } from './routes/premiacoes_.indicar'
 import { Route as ToursIndexRouteImport } from './routes/tours.index'
 import { Route as ToursNomeRouteImport } from './routes/tours.$nome'
@@ -207,6 +208,11 @@ const PontoPlaylistsRoute = PontoPlaylistsRouteImport.update({
   path: '/ponto/playlists',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PontoValoresRoute = PontoValoresRouteImport.update({
+  id: '/ponto/valores',
+  path: '/ponto/valores',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PremiacoesIndicarRoute = PremiacoesIndicarRouteImport.update({
   id: '/premiacoes_/indicar',
   path: '/premiacoes/indicar',
@@ -325,6 +331,7 @@ export interface FileRoutesByFullPath {
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
+  '/ponto/valores': typeof PontoValoresRoute
   '/premiacoes/indicar': typeof PremiacoesIndicarRoute
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas/': typeof ArtistasIndexRoute
@@ -369,6 +376,7 @@ export interface FileRoutesByTo {
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
   '/market/regras': typeof MarketRegrasRoute
+  '/ponto/valores': typeof PontoValoresRoute
   '/premiacoes/indicar': typeof PremiacoesIndicarRoute
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas': typeof ArtistasIndexRoute
@@ -419,6 +427,7 @@ export interface FileRoutesById {
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
+  '/ponto/valores': typeof PontoValoresRoute
   '/premiacoes_/indicar': typeof PremiacoesIndicarRoute
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas/': typeof ArtistasIndexRoute
@@ -470,6 +479,7 @@ export interface FileRouteTypes {
     | '/market/regras'
     | '/ponto/distribuir'
     | '/ponto/playlists'
+    | '/ponto/valores'
     | '/premiacoes/indicar'
     | '/tours/$nome'
     | '/artistas/'
@@ -514,6 +524,7 @@ export interface FileRouteTypes {
     | '/empire-play/musicas'
     | '/empire-play/videos'
     | '/market/regras'
+    | '/ponto/valores'
     | '/premiacoes/indicar'
     | '/tours/$nome'
     | '/artistas'
@@ -563,6 +574,7 @@ export interface FileRouteTypes {
     | '/market/regras'
     | '/ponto/distribuir'
     | '/ponto/playlists'
+    | '/ponto/valores'
     | '/premiacoes_/indicar'
     | '/tours/$nome'
     | '/artistas/'
@@ -606,6 +618,7 @@ export interface RootRouteChildren {
   AwardsNomeRoute: typeof AwardsNomeRoute
   PontoDistribuirRoute: typeof PontoDistribuirRouteWithChildren
   PontoPlaylistsRoute: typeof PontoPlaylistsRouteWithChildren
+  PontoValoresRoute: typeof PontoValoresRoute
   PremiacoesIndicarRoute: typeof PremiacoesIndicarRoute
   ToursNomeRoute: typeof ToursNomeRoute
   ArtistasIndexRoute: typeof ArtistasIndexRoute
@@ -825,6 +838,13 @@ declare module '@tanstack/react-router' {
       path: '/ponto/playlists'
       fullPath: '/ponto/playlists'
       preLoaderRoute: typeof PontoPlaylistsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ponto/valores': {
+      id: '/ponto/valores'
+      path: '/ponto/valores'
+      fullPath: '/ponto/valores'
+      preLoaderRoute: typeof PontoValoresRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/premiacoes_/indicar': {
@@ -1091,6 +1111,7 @@ const rootRouteChildren: RootRouteChildren = {
   AwardsNomeRoute: AwardsNomeRoute,
   PontoDistribuirRoute: PontoDistribuirRouteWithChildren,
   PontoPlaylistsRoute: PontoPlaylistsRouteWithChildren,
+  PontoValoresRoute: PontoValoresRoute,
   PremiacoesIndicarRoute: PremiacoesIndicarRoute,
   ToursNomeRoute: ToursNomeRoute,
   ArtistasIndexRoute: ArtistasIndexRoute,
