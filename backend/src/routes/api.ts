@@ -184,6 +184,8 @@ import {
   deletarAlbumAntigoController,
   getAlbunsAntigosController,
   migrarAlbunsLegadosController,
+  diagnosticoDuplicatasLegadosController,
+  apagarFaixaDuplicadaLegadoController,
   getAlbumAntigoByIdController,
 } from "../controllers/playlistsController";
 import {
@@ -885,6 +887,16 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       response = await deletarAlbumAntigoController(request);
     } else if (url.pathname === "/api/playlists/albuns/admin/migrar-legados") {
       response = await migrarAlbunsLegadosController(request);
+    } else if (url.pathname === "/api/playlists/albuns/admin/diagnostico-duplicatas") {
+      response = await diagnosticoDuplicatasLegadosController();
+    } else if (url.pathname === "/api/playlists/albuns/admin/apagar-faixa-duplicada") {
+      if (request.method !== "POST") {
+        return new Response(
+          JSON.stringify({ success: false, error: "Use POST para /api/playlists/albuns/admin/apagar-faixa-duplicada." }),
+          { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      response = await apagarFaixaDuplicadaLegadoController(request);
     } else if (url.pathname === "/api/playlists") {
       response =
         request.method === "GET"

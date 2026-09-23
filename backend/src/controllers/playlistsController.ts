@@ -1,6 +1,11 @@
 import { googleSheetsService, normalizeText, normalizeComparison, dedupeHeaders, normalizeHeader } from "../services/googleSheetsService";
 import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
-import { publicarAlbum, type CreateAlbumPayload } from "./gestaoController";
+import { publicarAlbum, dedupeArtistPrefix, type CreateAlbumPayload } from "./gestaoController";
+
+function tituloCompletoDaFaixa(titulo: string, artista: string): string {
+  const semPrefixoDuplicado = dedupeArtistPrefix(titulo, artista);
+  return semPrefixoDuplicado.includes(" - ") ? semPrefixoDuplicado : `${artista} - ${semPrefixoDuplicado}`;
+}
 
 // Playlists vivem na planilha "usuarios" (a mesma de Usuários/Social), na
 // aba "Playlists" — layout confirmado ao vivo:
@@ -330,6 +335,118 @@ async function resolveNomeOficial(telegramId: string, fallback: string): Promise
   }
 }
 
+// Diagnóstico pontual: acha faixas duplicadas em "Musicas" (mesmo título
+// completo aparecendo em mais de 1 linha) causadas pela migração de álbuns
+// legados ter rodado ANTES da checagem de duplicidade existir — cada
+// duplicata lista as duas linhas (a original, publicada de verdade, e a
+// que a migração criou por cima) pra decidir manualmente qual apagar.
+// Só lê, não apaga nada sozinho — apagar errado é mais perigoso que
+// deixar a duplicata até alguém confirmar qual linha é a sobra.
+export async function diagnosticoDuplicatasLegadosController(): Promise<Response> {
+  const [albunsLegadosRows, faixasLegadasRows, musicasRows] = await Promise.all([
+    readAlbunsAntigosRows(),
+    readFaixasAntigasRows(),
+    googleSheetsService.principal.readValues("Musicas"),
+  ]);
+
+  // linha real na planilha = índice no array + 1 (linha 1 é cabeçalho, e
+  // readValues devolve a partir da linha 1 também, então rows[i] = linha i+1)
+  const musicasPorTitulo = new Map<string, { linha: number; topicId: string; pendente: string; album: string }[]>();
+  for (let i = 1; i < musicasRows.length; i++) {
+    const row = musicasRows[i];
+    const titulo = normalizeText(row?.[7]);
+    if (!titulo) continue;
+    const key = normalizeComparison(titulo);
+    if (!musicasPorTitulo.has(key)) musicasPorTitulo.set(key, []);
+    musicasPorTitulo.get(key)!.push({
+      linha: i + 1,
+      topicId: normalizeText(row[1]),
+      pendente: normalizeText(row[23]),
+      album: normalizeText(row[10]),
+    });
+  }
+
+  const duplicatas: {
+    titulo: string;
+    ocorrencias: { linha: number; topicId: string; pendente: string; album: string }[];
+  }[] = [];
+
+  for (const row of albunsLegadosRows) {
+    const artista = normalizeText(row[1]);
+    const albumId = normalizeText(row[0]);
+    if (!artista) continue;
+    const faixas = faixasLegadasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
+    for (const f of faixas) {
+      const tituloCompleto = tituloCompletoDaFaixa(f.titulo, artista);
+      const ocorrencias = musicasPorTitulo.get(normalizeComparison(tituloCompleto));
+      if (ocorrencias && ocorrencias.length > 1) {
+        // Evita listar o mesmo título 2x se 2 álbuns legados diferentes
+        // (raro, mas possível) apontarem pra faixa igual.
+        if (!duplicatas.some((d) => normalizeComparison(d.titulo) === normalizeComparison(tituloCompleto))) {
+          duplicatas.push({ titulo: tituloCompleto, ocorrencias });
+        }
+      }
+    }
+  }
+
+  return jsonResponse({
+    success: true,
+    totalDuplicatas: duplicatas.length,
+    comoLer:
+      "Pra cada título, 'ocorrencias' lista as linhas em Musicas que têm exatamente esse título. A linha com topicId preenchido (número, não vazio) é a original de verdade — geralmente a outra (pendente:'Sim', topicId vazio, album igual ao título do álbum legado) foi criada pela migração e pode ser apagada.",
+    duplicatas,
+  });
+}
+
+// Apaga (esvazia) a linha estranha de uma faixa duplicada em "Musicas" —
+// usado depois de conferir o diagnóstico acima. Só apaga se a linha bater
+// EXATAMENTE com o perfil de "criada pela migração por engano": título
+// igual ao esperado, sem tópico próprio (B vazio) e Pendente = "Sim" — uma
+// faixa publicada de verdade (com tópico) NUNCA é apagada por esse
+// endpoint, mesmo que o título bata, por segurança.
+export async function apagarFaixaDuplicadaLegadoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { linha?: number; tituloEsperado?: string };
+  const linha = Number(body.linha);
+  const tituloEsperado = normalizeText(body.tituloEsperado);
+  if (!linha || linha < 2 || !tituloEsperado) {
+    return jsonResponse({ success: false, error: "Parâmetros 'linha' e 'tituloEsperado' são obrigatórios." }, 400);
+  }
+
+  const rows = await googleSheetsService.principal.readValues("Musicas", `A${linha}:Y${linha}`);
+  const row = rows?.[0];
+  if (!row) return jsonResponse({ success: false, error: "Linha não encontrada." }, 404);
+
+  const titulo = normalizeText(row[7]);
+  const topicId = normalizeText(row[1]);
+  const pendente = normalizeText(row[23]);
+
+  if (normalizeComparison(titulo) !== normalizeComparison(tituloEsperado)) {
+    return jsonResponse(
+      { success: false, error: "Título da linha não bate com o esperado — abortado por segurança.", titulo },
+      409,
+    );
+  }
+  if (topicId) {
+    return jsonResponse(
+      { success: false, error: "Essa linha TEM tópico próprio (B preenchido) — não parece ser a duplicata criada pela migração. Abortado por segurança." },
+      409,
+    );
+  }
+  if (normalizeComparison(pendente) !== "sim") {
+    return jsonResponse(
+      { success: false, error: "Essa linha não está marcada como Pendente — não parece ser a duplicata criada pela migração. Abortado por segurança." },
+      409,
+    );
+  }
+
+  // Esvazia a linha inteira (não dá pra remover a linha de verdade via API
+  // sem deslocar todas as de baixo) — H (título) em branco já basta pra
+  // sumir de toda busca/listagem que filtra por título vazio.
+  await googleSheetsService.principal.updateValues("Musicas", `A${linha}:Y${linha}`, [Array(25).fill("")]);
+
+  return jsonResponse({ success: true, linha, tituloApagado: titulo });
+}
+
 // Migração pontual: os álbuns legados (Playlists_Albuns/Playlists_Faixas,
 // cadastro manual sem tópico/chart) viram álbuns retroativos de verdade —
 // mesmo fluxo de publicarAlbum usado por "Postar álbum retroativo" em
@@ -349,14 +466,26 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
   const url = new URL(request.url);
   const limite = Math.max(1, Math.min(10, Number(url.searchParams.get("limit")) || 3));
 
-  const [albunsRows, faixasRows, albunsExistentesRows] = await Promise.all([
+  const [albunsRows, faixasRows, albunsExistentesRows, musicasExistentesRows] = await Promise.all([
     readAlbunsAntigosRows(),
     readFaixasAntigasRows(),
     googleSheetsService.principal.readValues("Albuns").catch(() => []),
+    googleSheetsService.principal.readValues("Musicas").catch(() => []),
   ]);
 
   const titulosExistentes = new Set(
     (albunsExistentesRows || []).slice(1).map((r) => normalizeComparison(normalizeText(r[6]))), // G - Novo Nome
+  );
+  // Toda faixa já cadastrada em Musicas (H) — tópico próprio já lançado,
+  // com ou sem tópico aberto, não importa: já existe de verdade e conta
+  // pra chart. Sem essa checagem, migrar um álbum legado cuja faixa já
+  // tinha sido lançada avulsa (ou já migrada antes) duplicava a faixa e a
+  // entrada nos charts. Comparação por título completo (H) inteiro, e
+  // também só pelo título sem o prefixo do artista — cobre tanto faixa que
+  // já tinha "Artista - Título" salvo quanto a legada que salvou só o
+  // título puro.
+  const musicasExistentesPorTituloCompleto = new Set(
+    (musicasExistentesRows || []).slice(1).map((r) => normalizeComparison(normalizeText(r[7]))), // H
   );
 
   const pendentes = albunsRows.filter((row) => {
@@ -379,9 +508,26 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
     const fullTitle = `${artista} - ${titulo}`;
 
     const albumId = normalizeText(row[0]);
-    const faixas = faixasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
-    if (faixas.length === 0) {
+    const todasFaixas = faixasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
+    if (todasFaixas.length === 0) {
       resultados.push({ titulo: fullTitle, status: "erro", detalhe: "sem faixas" });
+      continue;
+    }
+
+    // Título completo que a faixa teria em Musicas!H (mesma regra de
+    // processarFaixasDoAlbum): já vem com "Artista - " ou ganha o prefixo
+    // do artista do álbum.
+    const faixasNovas = todasFaixas.filter((f) => {
+      const tituloCompleto = tituloCompletoDaFaixa(f.titulo, artista);
+      return !musicasExistentesPorTituloCompleto.has(normalizeComparison(tituloCompleto));
+    });
+    const faixasJaExistiam = todasFaixas.length - faixasNovas.length;
+    if (faixasNovas.length === 0) {
+      resultados.push({
+        titulo: fullTitle,
+        status: "erro",
+        detalhe: `todas as ${todasFaixas.length} faixa(s) já existiam em Musicas — nada a migrar`,
+      });
       continue;
     }
 
@@ -395,7 +541,7 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
       nomeJogador,
       jogadorId: telegramId,
       dataLancamento: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : "",
-      faixas: faixas.map((f) => ({
+      faixas: faixasNovas.map((f) => ({
         num: f.numero,
         inedita: true,
         titulo: f.titulo,
@@ -409,7 +555,14 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
 
     try {
       await publicarAlbum(payload);
-      resultados.push({ titulo: fullTitle, status: "migrado" });
+      resultados.push({
+        titulo: fullTitle,
+        status: "migrado",
+        detalhe:
+          faixasJaExistiam > 0
+            ? `${faixasJaExistiam} faixa(s) já existiam e foram puladas (não duplicadas)`
+            : undefined,
+      });
     } catch (err: any) {
       resultados.push({ titulo: fullTitle, status: "erro", detalhe: err?.message || String(err) });
     }

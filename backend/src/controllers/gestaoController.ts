@@ -9,7 +9,7 @@ import { getOwnerIdForArtist } from "./artistasController";
 // faixa existente, o jogador digitando o artista de novo), colapsa
 // repetições consecutivas de volta pra uma única vez em vez de empilhar o
 // prefixo a cada gravação ("Artista - Artista - Música").
-function dedupeArtistPrefix(texto: string, artista: string): string {
+export function dedupeArtistPrefix(texto: string, artista: string): string {
   if (!artista) return texto;
   const prefixLen = artista.length + 3; // "Artista - "
   const prefixLower = `${artista.toLowerCase()} - `;
