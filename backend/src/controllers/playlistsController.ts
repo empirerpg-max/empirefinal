@@ -1,5 +1,6 @@
-import { googleSheetsService, normalizeText } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeText, normalizeComparison, dedupeHeaders, normalizeHeader } from "../services/googleSheetsService";
 import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
+import { publicarAlbum, type CreateAlbumPayload } from "./gestaoController";
 
 // Playlists vivem na planilha "usuarios" (a mesma de Usuários/Social), na
 // aba "Playlists" — layout confirmado ao vivo:
@@ -304,6 +305,112 @@ function parseEncarte(raw: string): string[] {
   } catch {
     return [];
   }
+}
+
+// Resolve o nome oficial (aba "Usuários") a partir do telegram_id gravado
+// no álbum legado — sem isso a migração publicaria tudo como "Jogador".
+async function resolveNomeOficial(telegramId: string, fallback: string): Promise<string> {
+  if (!telegramId) return fallback;
+  try {
+    const rows = await googleSheetsService.usuarios.readValues("Usuários");
+    if (!rows || rows.length < 2) return fallback;
+    const headers = dedupeHeaders(
+      "Usuários",
+      rows[0].map((h, i) => normalizeHeader(h) || `coluna_${i + 1}`),
+    );
+    const nomeCol = headers.indexOf("nome");
+    const idCol = headers.indexOf("id");
+    if (nomeCol === -1 || idCol === -1) return fallback;
+    const normId = normalizeComparison(telegramId);
+    const match = rows.slice(1).find((r) => normalizeComparison(r[idCol]) === normId);
+    const nome = match ? normalizeText(match[nomeCol]) : "";
+    return nome || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// Migração pontual: os álbuns legados (Playlists_Albuns/Playlists_Faixas,
+// cadastro manual sem tópico/chart) viram álbuns retroativos de verdade —
+// mesmo fluxo de publicarAlbum usado por "Postar álbum retroativo" em
+// Gestão, com a data original do álbum legado como data de lançamento
+// (então entram nos charts já na semana certa) e toda faixa como pendente.
+// Idempotente por título: pula qualquer álbum legado cujo "Artista -
+// Título" já exista em Albuns (permite rodar de novo com segurança se
+// algum tiver falhado no meio).
+export async function migrarAlbunsLegadosController(): Promise<Response> {
+  const [albunsRows, faixasRows, albunsExistentesRows] = await Promise.all([
+    readAlbunsAntigosRows(),
+    readFaixasAntigasRows(),
+    googleSheetsService.principal.readValues("Albuns").catch(() => []),
+  ]);
+
+  const titulosExistentes = new Set(
+    (albunsExistentesRows || []).slice(1).map((r) => normalizeComparison(normalizeText(r[6]))), // G - Novo Nome
+  );
+
+  const resultados: { titulo: string; status: "migrado" | "pulado" | "erro"; detalhe?: string }[] = [];
+
+  for (const row of albunsRows) {
+    const artista = normalizeText(row[1]);
+    const titulo = normalizeText(row[2]);
+    const data = normalizeText(row[4]);
+    const capaUrl = normalizeText(row[6]);
+    const contracapaUrl = normalizeText(row[7]);
+    const telegramId = normalizeText(row[9]);
+    if (!artista || !titulo) continue;
+
+    const fullTitle = `${artista} - ${titulo}`;
+    if (titulosExistentes.has(normalizeComparison(fullTitle))) {
+      resultados.push({ titulo: fullTitle, status: "pulado", detalhe: "já existe em Albuns" });
+      continue;
+    }
+
+    const albumId = normalizeText(row[0]);
+    const faixas = faixasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
+    if (faixas.length === 0) {
+      resultados.push({ titulo: fullTitle, status: "erro", detalhe: "sem faixas" });
+      continue;
+    }
+
+    const nomeJogador = await resolveNomeOficial(telegramId, artista);
+    const payload: CreateAlbumPayload = {
+      tituloAlbum: titulo,
+      artistaAlbum: artista,
+      tipoAlbum: "Álbum",
+      capaUrl,
+      encartesUrls: contracapaUrl ? [contracapaUrl] : [],
+      nomeJogador,
+      jogadorId: telegramId,
+      dataLancamento: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : "",
+      faixas: faixas.map((f) => ({
+        num: f.numero,
+        inedita: true,
+        titulo: f.titulo,
+        tipoSingle: "TRACKLIST ALBUM",
+        tipoMusica: "SOLO",
+        mediaUrl: f.drive_url,
+        letra: f.letra,
+        abrirTopico: false,
+      })),
+    };
+
+    try {
+      await publicarAlbum(payload);
+      resultados.push({ titulo: fullTitle, status: "migrado" });
+    } catch (err: any) {
+      resultados.push({ titulo: fullTitle, status: "erro", detalhe: err?.message || String(err) });
+    }
+  }
+
+  return jsonResponse({
+    success: true,
+    total: resultados.length,
+    migrados: resultados.filter((r) => r.status === "migrado").length,
+    pulados: resultados.filter((r) => r.status === "pulado").length,
+    erros: resultados.filter((r) => r.status === "erro").length,
+    resultados,
+  });
 }
 
 // -------------------- ÁLBUM ANTIGO (cadastro manual em Playlists_Albuns) --------------------

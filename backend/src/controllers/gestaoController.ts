@@ -247,6 +247,31 @@ export interface CreateAlbumPayload {
   nomeJogador: string;
   jogadorId?: string;
   faixas: TrackItemPayload[];
+  // Álbum retroativo ("Postar álbum retroativo" em Gestão, substitui o
+  // antigo cadastro de "álbum legado"): dataLancamento é a data real de
+  // lançamento (formato "YYYY-MM-DD", de um <input type="date">), usada no
+  // lugar de hoje pra Data de lançamento e pro NÚMERO DE SEMANAS já
+  // "correndo" no chart em vez de estrear na semana 1 — ver
+  // calcularSemanasRetroativas. Toda faixa entra pendente (nunca abre
+  // tópico próprio na hora), mesmo que o payload mande abrirTopico=true.
+  dataLancamento?: string;
+}
+
+// Semanas já "passadas" no chart pra um álbum lançado retroativamente —
+// diferença em semanas cheias entre a data registrada e hoje, sempre pelo
+// menos 1 (mesmo texto que um álbum lançado hoje já recebe). Não existe
+// cron/job que incrementa essa coluna automaticamente no app (é ajustada
+// manualmente/pela planilha) — isso só faz o álbum ENTRAR já na semana
+// correta, não simula o histórico de semanas anteriores.
+function calcularSemanasRetroativas(dataLancamento: string): number {
+  const [ano, mes, dia] = dataLancamento.split("-").map(Number);
+  if (!ano || !mes || !dia) return 1;
+  const data = new Date(ano, mes - 1, dia);
+  if (Number.isNaN(data.getTime())) return 1;
+  const hoje = new Date();
+  const diffMs = hoje.setHours(0, 0, 0, 0) - data.setHours(0, 0, 0, 0);
+  const semanas = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return Math.max(1, semanas);
 }
 
 export type UploadFolderType =
@@ -1779,12 +1804,13 @@ export async function substituirAlbumController(request: Request): Promise<Respo
   }
 }
 
-// Controller para Criar / Registrar Álbum
-export async function createAlbumController(request: Request): Promise<Response> {
-  try {
-    const body = (await request.json()) as CreateAlbumPayload;
-
-    const {
+// Núcleo do lançamento de álbum (normal ou retroativo) — extraído de
+// createAlbumController pra ser reaproveitado por
+// migrarAlbunsLegadosController (cada álbum legado antigo vira um álbum
+// retroativo de verdade, com tópico no fórum e entrada nos charts). Lança
+// erro em caso de validação/falha; quem chama decide como responder.
+export async function publicarAlbum(body: CreateAlbumPayload) {
+  const {
       tituloAlbum,
       artistaAlbum,
       tipoAlbum = "Álbum",
@@ -1793,20 +1819,26 @@ export async function createAlbumController(request: Request): Promise<Response>
       nomeJogador,
       jogadorId = "",
       faixas = [],
+      dataLancamento = "",
     } = body;
 
     if (!tituloAlbum || !artistaAlbum || !nomeJogador) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Campos obrigatórios ausentes: tituloAlbum, artistaAlbum, nomeJogador.",
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
+      throw new Error("Campos obrigatórios ausentes: tituloAlbum, artistaAlbum, nomeJogador.");
     }
 
+    const retroativo = /^\d{4}-\d{2}-\d{2}$/.test(dataLancamento);
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const dataFormatada = retroativo
+      ? (() => {
+          const [ano, mes, dia] = dataLancamento.split("-");
+          return `${dia}/${mes}/${ano}`;
+        })()
+      : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const numeroSemanas = retroativo ? calcularSemanasRetroativas(dataLancamento) : 1;
+    // Álbum retroativo: toda faixa entra pendente, mesmo que o front tenha
+    // mandado abrirTopico=true — decisão do usuário: relançar (abrir tópico
+    // próprio) é uma ação separada, feita depois via publicarFaixaPendente.
+    const faixasFinal = retroativo ? faixas.map((f) => ({ ...f, abrirTopico: false })) : faixas;
     // Mesma rede de segurança contra "Artista - Artista - Título" das
     // demais categorias.
     const albumArtistPrefix = `${artistaAlbum} - `;
@@ -1874,9 +1906,9 @@ export async function createAlbumController(request: Request): Promise<Response>
         [
           artistaAlbum, // A - ARTISTA
           dataFormatada, // B - DATA DE LANÇAMENTO
-          "1", // C - NÚMERO DE SEMANAS
+          String(numeroSemanas), // C - NÚMERO DE SEMANAS
           albumFullTitle, // D - NOME DO ALBUM
-          String(faixas.length), // E - NÚMERO DE FAIXAS
+          String(faixasFinal.length), // E - NÚMERO DE FAIXAS
           tipoNum, // F - TIPO DE ÁLBUM (2 = Álbum/Deluxe, 1 = EP)
           "", "", "", "", "", "", "", "", "", "", // G-P (streams/vendas/certificação/multiplicador — calculados à parte)
           "", // Q - CÁLCULO 1
@@ -1898,7 +1930,7 @@ export async function createAlbumController(request: Request): Promise<Response>
     // 3. Processar cada faixa (existente ou inédita) — só depois do álbum
     // já existir de verdade em "Albuns".
     const { faixasIneditasEsperadas, faixasIneditasGravadas } = await processarFaixasDoAlbum(
-      faixas,
+      faixasFinal,
       albumFullTitle,
       artistaAlbum,
       capaUrl,
@@ -1919,28 +1951,33 @@ export async function createAlbumController(request: Request): Promise<Response>
 
     registrarLogSistema({
       categoria: "Ação concluída",
-      oQueAconteceu: `Álbum "${albumFullTitle}" lançado por ${artistaAlbum} (${faixas.length} faixa(s)).`,
+      oQueAconteceu: `Álbum "${albumFullTitle}" lançado por ${artistaAlbum} (${faixasFinal.length} faixa(s)${retroativo ? ", retroativo" : ""}).`,
       onde: "createAlbumController",
     }).catch(() => {});
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        data: {
-          titulo: albumFullTitle,
-          artista: artistaAlbum,
-          totalFaixas: faixas.length,
-          faixasIneditasGravadas,
-          faixasIneditasEsperadas,
-          codigoUnico: codigoUnicoAlbum,
-          mensagem:
-            faixasIneditasFalharam > 0
-              ? `Álbum registrado, mas ${faixasIneditasFalharam} faixa(s) inédita(s) falharam ao gravar — confira e adicione de novo se precisar.`
-              : "Álbum e faixas registrados com sucesso!",
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
+    return {
+      titulo: albumFullTitle,
+      artista: artistaAlbum,
+      totalFaixas: faixasFinal.length,
+      faixasIneditasGravadas,
+      faixasIneditasEsperadas,
+      codigoUnico: codigoUnicoAlbum,
+      mensagem:
+        faixasIneditasFalharam > 0
+          ? `Álbum registrado, mas ${faixasIneditasFalharam} faixa(s) inédita(s) falharam ao gravar — confira e adicione de novo se precisar.`
+          : "Álbum e faixas registrados com sucesso!",
+    };
+}
+
+// Controller para Criar / Registrar Álbum
+export async function createAlbumController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as CreateAlbumPayload;
+    const data = await publicarAlbum(body);
+    return new Response(JSON.stringify({ success: true, data }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (error: any) {
     console.error("[createAlbumController] Erro:", error);
     // Sem isso, um álbum que falha aqui não deixa rastro nenhum no LOGS

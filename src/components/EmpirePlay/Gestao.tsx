@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "@tanstack/react-router";
 import {
   Disc,
   Music,
@@ -541,6 +540,14 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [encartesFiles, setEncartesFiles] = useState<File[]>([]);
   const [totalFaixasCount, setTotalFaixasCount] = useState<number>(3);
   const [faixasConfig, setFaixasConfig] = useState<TrackConfig[]>([]);
+  // Álbum retroativo — substitui o antigo "álbum legado": em vez de um
+  // cadastro isolado sem tópico/chart, publica pelo mesmo fluxo de álbum
+  // normal (vira tópico no fórum, entra nos charts), só que com a Data de
+  // lançamento escolhida pelo jogador em vez de hoje — o backend calcula
+  // quantas semanas o álbum já "correu" a partir dela. Toda faixa entra
+  // pendente (o jogador decide depois se quer relançar cada uma).
+  const [albumRetroativo, setAlbumRetroativo] = useState<boolean>(false);
+  const [dataLancamentoRetroativo, setDataLancamentoRetroativo] = useState<string>("");
 
   // Form Álbum — Substituir (troca capa/encarte/adiciona faixas a um álbum
   // já lançado, sem duplicar o registro nos charts)
@@ -1067,6 +1074,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setErrorMsg("Informe o Título do Álbum.");
       return;
     }
+    if (albumRetroativo && !dataLancamentoRetroativo) {
+      setErrorMsg("Informe a data de lançamento do álbum retroativo.");
+      return;
+    }
     for (const faixa of faixasConfig) {
       if (!faixa.titulo.trim()) {
         setErrorMsg(
@@ -1150,6 +1161,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           letra: f.letra,
           abrirTopico: f.abrirTopico,
         })),
+        ...(albumRetroativo ? { dataLancamento: dataLancamentoRetroativo } : {}),
       };
 
       const res = await fetch("/api/gestao/album", {
@@ -1172,12 +1184,18 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         }).catch(() => {});
       }
 
-      setSuccessMsg("Álbum e faixas publicados com sucesso!");
+      setSuccessMsg(
+        albumRetroativo
+          ? "Álbum retroativo publicado! As faixas entraram como pendentes — relance cada uma quando quiser."
+          : "Álbum e faixas publicados com sucesso!",
+      );
       setTituloAlbum("");
       setCapaFile(null);
       setCapaPreview(null);
       setEncartesFiles([]);
       setExtraAlbum(emptyExtraMaterialEditorValue());
+      setAlbumRetroativo(false);
+      setDataLancamentoRetroativo("");
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro inesperado ao publicar álbum.");
@@ -2209,15 +2227,45 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       {/* FORMULÁRIO DE ÁLBUM */}
       {activeTab === "album" && (
         <div className="space-y-6">
-          <Link
-            to="/empire-play/gestao/album-antigo"
-            className="flex items-center justify-between p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-white hover:bg-emerald-500/20 transition-colors"
+          <button
+            type="button"
+            onClick={() => {
+              setAlbumObjetivo("a");
+              setAlbumRetroativo((v) => !v);
+            }}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-colors ${
+              albumRetroativo
+                ? "bg-emerald-500/20 border-emerald-500 text-white"
+                : "bg-emerald-500/10 border-emerald-500/30 text-white hover:bg-emerald-500/20"
+            }`}
           >
-            <span className="text-xs font-bold">
-              Quer cadastrar um álbum <span className="text-emerald-400">antigo</span>? Utilize nossa ferramenta
+            <span className="text-xs font-bold text-left">
+              Tem um álbum <span className="text-emerald-400">retroativo</span> pra cadastrar? Ele vira tópico no
+              fórum e entra nos charts na semana certa.
             </span>
-            <span className="text-[11px] font-black uppercase text-emerald-400 shrink-0 ml-3">Abrir →</span>
-          </Link>
+            <span className="text-[11px] font-black uppercase text-emerald-400 shrink-0 ml-3">
+              {albumRetroativo ? "Ativado ✓" : "Ativar →"}
+            </span>
+          </button>
+
+          {albumRetroativo && (
+            <div className="p-4 rounded-2xl bg-neutral-900/90 border border-emerald-500/30 space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                Data real de lançamento
+              </label>
+              <input
+                type="date"
+                value={dataLancamentoRetroativo}
+                onChange={(e) => setDataLancamentoRetroativo(e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+                className="w-full p-3 rounded-xl bg-neutral-950/60 border border-white/10 text-white text-sm"
+              />
+              <p className="text-[11px] text-neutral-400">
+                O álbum entra nos charts já na semana correspondente a essa data (em vez de estrear na semana 1), e
+                todas as faixas entram como pendentes — você relança cada uma quando quiser.
+              </p>
+            </div>
+          )}
 
           {/* OBJETIVO */}
           <div className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-2 backdrop-blur-md">
@@ -2457,7 +2505,13 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <Sparkles className="size-5" />
-            <span>{isSubmitting ? uploadProgress || "Enviando..." : "Publicar Lançamento"}</span>
+            <span>
+              {isSubmitting
+                ? uploadProgress || "Enviando..."
+                : albumRetroativo
+                  ? "Publicar Álbum Retroativo"
+                  : "Publicar Lançamento"}
+            </span>
           </button>
         </form>
           )}
