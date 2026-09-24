@@ -712,6 +712,32 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
   });
 }
 
+// Dump bruto de um intervalo de linhas, sem NENHUM filtro por título —
+// último recurso quando o diagnóstico por título não bate com o que
+// aparece na planilha (ex: espaço/acento/caractere invisível diferente
+// faz normalizeComparison não casar duas strings que parecem idênticas
+// no olho, escondendo uma linha inteira do diagnóstico por título).
+export async function dumpLinhasController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const sheet = normalizeText(url.searchParams.get("sheet") || "");
+  const de = Number(url.searchParams.get("de")) || 1;
+  const ate = Number(url.searchParams.get("ate")) || de + 20;
+  if (!sheet) return jsonResponse({ success: false, error: "Parâmetro 'sheet' obrigatório: Albuns | EDIÇÃO CHARTS ÁLBUMS | Musicas | EDIÇÃO CHARTS." }, 400);
+
+  const isEdicaoCharts = sheet.toUpperCase().startsWith("EDIÇÃO") || sheet.toUpperCase().startsWith("EDICAO");
+  const rows = isEdicaoCharts
+    ? await googleSheetsService.edicaoCharts.readValues(sheet, `A${de}:R${ate}`)
+    : await googleSheetsService.principal.readValues(sheet, `A${de}:Z${ate}`);
+
+  return jsonResponse({
+    success: true,
+    sheet,
+    de,
+    ate,
+    linhas: rows.map((row, i) => ({ linha: de + i, valores: row })),
+  });
+}
+
 export async function apagarFaixaDuplicadaLegadoController(request: Request): Promise<Response> {
   // GET com querystring (pra dar pra abrir a URL direto no navegador, sem
   // precisar de um jeito de mandar POST) ou POST com JSON — mesmo efeito.
