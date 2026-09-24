@@ -383,6 +383,24 @@ function hojeBR(): string {
   return `${dd}/${mm}/${hoje.getFullYear()}`;
 }
 
+// Garante a aba E o cabeçalho (linha 1) — sem o cabeçalho, a primeira
+// escrita numa aba recém-criada caía na própria linha 1 (a API do Sheets
+// aponta "primeira linha livre" pra linha 1 numa aba totalmente vazia),
+// enquanto a leitura sempre partia de A2, então essa primeira linha nunca
+// era enxergada de novo (bug real: usuário clicava "já indiquei", a escrita
+// ia pra uma linha que a leitura seguinte não via, e o popup voltava a
+// aparecer). Com cabeçalho fixo em A1:C1, dado sempre começa em A2 tanto
+// pra leitura quanto pra escrita (appendRow), sem ambiguidade.
+async function ensurePopupSheetPronta(): Promise<void> {
+  await ensureSheetTab(POPUP_SPREADSHEET_KEY, POPUP_SHEET);
+  const header = await readValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, "A1:C1").catch(() => []);
+  if (!normalizeText(header?.[0]?.[0])) {
+    await updateValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, "A1:C1", [
+      ["telegramId", "status", "ultima_exibicao"],
+    ]);
+  }
+}
+
 async function lerLinhaPopup(telegramId: string): Promise<{ linha: number; status: string; ultimaExibicao: string } | null> {
   const rows = await readValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, "A2:C20000").catch(() => []);
   const idx = rows.findIndex((r) => normalizeComparison(normalizeText(r[0])) === normalizeComparison(telegramId));
@@ -406,7 +424,7 @@ export async function popupVmaStatusController(request: Request): Promise<Respon
     return jsonResponse({ success: true, data: { shouldShow: false } });
   }
 
-  await ensureSheetTab(POPUP_SPREADSHEET_KEY, POPUP_SHEET);
+  await ensurePopupSheetPronta();
   const existente = await lerLinhaPopup(telegramId);
   const hoje = hojeBR();
 
@@ -444,7 +462,7 @@ export async function popupVmaDismissController(request: Request): Promise<Respo
   const telegramId = normalizeText(body.telegramId);
   if (!telegramId) return jsonResponse({ success: false, error: "telegramId é obrigatório." }, 400);
 
-  await ensureSheetTab(POPUP_SPREADSHEET_KEY, POPUP_SHEET);
+  await ensurePopupSheetPronta();
   const existente = await lerLinhaPopup(telegramId);
   const hoje = hojeBR();
 
@@ -467,7 +485,7 @@ export async function adminPopupVmaResetController(request: Request): Promise<Re
   const telegramId = normalizeText(url.searchParams.get("telegramId"));
   if (!telegramId) return jsonResponse({ success: false, error: "telegramId é obrigatório." }, 400);
 
-  await ensureSheetTab(POPUP_SPREADSHEET_KEY, POPUP_SHEET);
+  await ensurePopupSheetPronta();
   const existente = await lerLinhaPopup(telegramId);
   if (existente) {
     await updateValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, `B${existente.linha}:C${existente.linha}`, [["", ""]]);
