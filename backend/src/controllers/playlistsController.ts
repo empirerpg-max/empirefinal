@@ -636,9 +636,23 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
     ? faixasLegadasRows.filter((r) => normalizeText(r[0]) === legadoAlbumId).map(faixaAntigaFromRow)
     : [];
 
-  // 2. Linha em Albuns.
-  const albumIdx = albunsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === key);
-  const albumRow = albumIdx >= 1 ? albunsRows[albumIdx] : null;
+  // 2. TODAS as linhas em Albuns com esse título — não só a primeira, pra
+  // não esconder duplicata (mesmo bug do findIndex que já mordeu antes:
+  // um merge anterior podia ter deixado 2+ linhas e um findIndex só
+  // reportaria a primeira, escondendo a duplicata que o usuário via na
+  // planilha).
+  const albunsOcorrencias: { linha: number; topicId: string; data: string; novoNome: string; tipo: string; codigoUnico: string }[] = [];
+  for (let i = 1; i < albunsRows.length; i++) {
+    if (normalizeComparison(normalizeText(albunsRows[i][6])) !== key) continue;
+    albunsOcorrencias.push({
+      linha: i + 1,
+      topicId: normalizeText(albunsRows[i][1]),
+      data: normalizeText(albunsRows[i][0]),
+      novoNome: normalizeText(albunsRows[i][6]),
+      tipo: normalizeText(albunsRows[i][10]),
+      codigoUnico: normalizeText(albunsRows[i][11]),
+    });
+  }
 
   // 3. Faixas em Musicas cujo ÁLBUM (coluna K) aponta pra esse título.
   const faixasEmMusicas: { linha: number; titulo: string; topicId: string }[] = [];
@@ -647,8 +661,19 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
     faixasEmMusicas.push({ linha: i + 1, titulo: normalizeText(musicasRows[i][7]), topicId: normalizeText(musicasRows[i][1]) });
   }
 
-  // 4. EDIÇÃO CHARTS ÁLBUMS.
-  const edAlbumIdx = edicaoChartsAlbunsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[3])) === key);
+  // 4. TODAS as linhas em EDIÇÃO CHARTS ÁLBUMS com esse título (mesmo
+  // motivo do item 2 acima).
+  const edicaoChartsAlbunsOcorrencias: { linha: number; data: string; semanas: string; numeroFaixas: string; codigoUnico: string }[] = [];
+  for (let i = 1; i < edicaoChartsAlbunsRows.length; i++) {
+    if (normalizeComparison(normalizeText(edicaoChartsAlbunsRows[i][3])) !== key) continue;
+    edicaoChartsAlbunsOcorrencias.push({
+      linha: i + 1,
+      data: normalizeText(edicaoChartsAlbunsRows[i][1]),
+      semanas: normalizeText(edicaoChartsAlbunsRows[i][2]),
+      numeroFaixas: normalizeText(edicaoChartsAlbunsRows[i][4]),
+      codigoUnico: normalizeText(edicaoChartsAlbunsRows[i][17]),
+    });
+  }
 
   // 5. Pra cada faixa da fonte legada, se o título completo dela ("Artista
   // - Título") já existe em EDIÇÃO CHARTS (coluna B) mesmo sem existir em
@@ -677,17 +702,9 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
           faixas: faixasLegadas.map(({ letra, ...resto }) => resto),
         }
       : { encontrado: false, obs: "Não existe em Playlists_Albuns com esse título — não tinha o que migrar." },
-    albuns: albumRow
-      ? {
-          linha: albumIdx + 1,
-          topicId: normalizeText(albumRow[1]),
-          novoNome: normalizeText(albumRow[6]),
-          tipo: normalizeText(albumRow[10]),
-          codigoUnico: normalizeText(albumRow[11]),
-        }
-      : { encontrado: false },
+    albuns: { totalOcorrencias: albunsOcorrencias.length, ocorrencias: albunsOcorrencias },
     musicas: { totalFaixasApontandoPraEsseAlbum: faixasEmMusicas.length, faixas: faixasEmMusicas },
-    edicaoChartsAlbuns: edAlbumIdx >= 1 ? { linha: edAlbumIdx + 1, numeroFaixas: normalizeText(edicaoChartsAlbunsRows[edAlbumIdx][4]) } : { encontrado: false },
+    edicaoChartsAlbuns: { totalOcorrencias: edicaoChartsAlbunsOcorrencias.length, ocorrencias: edicaoChartsAlbunsOcorrencias },
     // Se alguma faixa aqui estiver "existeEmEdicaoCharts: true" sem
     // aparecer em "musicas" acima, é a causa raiz: a migração acha que ela
     // já existe (bloqueando novas tentativas) mesmo sem ter Musicas.
