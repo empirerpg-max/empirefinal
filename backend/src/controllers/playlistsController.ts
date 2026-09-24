@@ -616,12 +616,13 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
   }
   const key = normalizeComparison(tituloCompleto);
 
-  const [albunsLegadosRows, faixasLegadasRows, albunsRows, musicasRows, edicaoChartsAlbunsRows] = await Promise.all([
+  const [albunsLegadosRows, faixasLegadasRows, albunsRows, musicasRows, edicaoChartsAlbunsRows, edicaoChartsRows] = await Promise.all([
     readAlbunsAntigosRows(),
     readFaixasAntigasRows(),
     googleSheetsService.principal.readValues("Albuns"),
     googleSheetsService.principal.readValues("Musicas"),
     googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS"),
+    googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS"),
   ]);
 
   // 1. Fonte legada.
@@ -649,6 +650,19 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
   // 4. EDIÇÃO CHARTS ÁLBUMS.
   const edAlbumIdx = edicaoChartsAlbunsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[3])) === key);
 
+  // 5. Pra cada faixa da fonte legada, se o título completo dela ("Artista
+  // - Título") já existe em EDIÇÃO CHARTS (coluna B) mesmo sem existir em
+  // Musicas — é exatamente esse comportamento que faz a migração achar
+  // "já existe, não é nova" e nunca tentar de novo, mesmo com a faixa
+  // ausente de Musicas.
+  const artistaLegado = legadoRow ? normalizeText(legadoRow[1]) : "";
+  const edicaoChartsPorFaixa = faixasLegadas.map((f) => {
+    const tituloCompletoFaixa = f.titulo.includes(" - ") ? f.titulo : `${artistaLegado} - ${f.titulo}`;
+    const keyFaixa = normalizeComparison(tituloCompletoFaixa);
+    const linha = edicaoChartsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[1])) === keyFaixa);
+    return { titulo: tituloCompletoFaixa, existeEmEdicaoCharts: linha >= 1, linhaEdicaoCharts: linha >= 1 ? linha + 1 : null };
+  });
+
   return jsonResponse({
     success: true,
     tituloBuscado: tituloCompleto,
@@ -658,7 +672,9 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
           artista: normalizeText(legadoRow[1]),
           titulo: normalizeText(legadoRow[2]),
           totalFaixasNaFonte: faixasLegadas.length,
-          faixas: faixasLegadas,
+          // Sem "letra" aqui de propósito — só polui a resposta, e não
+          // ajuda a diagnosticar onde a faixa se perdeu.
+          faixas: faixasLegadas.map(({ letra, ...resto }) => resto),
         }
       : { encontrado: false, obs: "Não existe em Playlists_Albuns com esse título — não tinha o que migrar." },
     albuns: albumRow
@@ -672,6 +688,10 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
       : { encontrado: false },
     musicas: { totalFaixasApontandoPraEsseAlbum: faixasEmMusicas.length, faixas: faixasEmMusicas },
     edicaoChartsAlbuns: edAlbumIdx >= 1 ? { linha: edAlbumIdx + 1, numeroFaixas: normalizeText(edicaoChartsAlbunsRows[edAlbumIdx][4]) } : { encontrado: false },
+    // Se alguma faixa aqui estiver "existeEmEdicaoCharts: true" sem
+    // aparecer em "musicas" acima, é a causa raiz: a migração acha que ela
+    // já existe (bloqueando novas tentativas) mesmo sem ter Musicas.
+    edicaoChartsPorFaixa,
   });
 }
 
