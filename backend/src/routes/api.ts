@@ -253,6 +253,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
 
   const supportedPaths = new Set([
     "/api/charts",
+    "/api/charts/admin/debug-realtime-covers",
     "/api/acervo/revistas",
     "/api/acervo/entrevistas",
     "/api/acervo/metacritic",
