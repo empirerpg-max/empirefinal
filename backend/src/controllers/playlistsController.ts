@@ -496,6 +496,111 @@ export async function mesclarTopicosMusicaController(request: Request): Promise<
   });
 }
 
+// Mesma ideia de mesclarTopicosMusicaController, mas pra 2 ÁLBUNS
+// duplicados (título ligeiramente diferente escapou da checagem de
+// idempotência da migração de legados, ex: "villain [deluxe]" vs "villain
+// [deluxe edition]" — títulos "quase iguais" pro humano, diferentes pro
+// normalizeComparison por causa da palavra a mais). Identifica os 2 álbuns
+// pelo título completo ("Artista - Título", coluna G de Albuns), não por
+// número de linha (mais robusto a planilha ter mudado entre o diagnóstico
+// e a chamada). Passos, nessa ordem — sempre `manter` primeiro, e só apaga
+// depois de mover tudo:
+// 1. Move comentários do álbum `remover` (Comentarios_Albuns!A = ID do
+//    tópico) pro álbum `manter`.
+// 2. Repointa (não apaga) qualquer faixa em Musicas/EDIÇÃO CHARTS cujo
+//    campo ÁLBUM apontava pro título `remover`, passando a apontar pro
+//    `manter` — protege contra o caso (não confirmado, mas não impossível)
+//    de a migração ter criado alguma faixa nova vinculada ao álbum
+//    duplicado.
+// 3. Apaga a linha do álbum `remover` em Albuns.
+// 4. Apaga a linha correspondente em EDIÇÃO CHARTS ÁLBUMS (achada pelo
+//    mesmo título, coluna D).
+export async function mesclarAlbunsDuplicadosController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const body =
+    request.method === "GET"
+      ? { manter: url.searchParams.get("manter"), remover: url.searchParams.get("remover") }
+      : ((await request.json().catch(() => ({}))) as { manter?: string | null; remover?: string | null });
+  const manter = normalizeText(body.manter || "");
+  const remover = normalizeText(body.remover || "");
+  if (!manter || !remover || normalizeComparison(manter) === normalizeComparison(remover)) {
+    return jsonResponse(
+      { success: false, error: "Parâmetros 'manter' e 'remover' são obrigatórios e precisam ser diferentes (título completo 'Artista - Título')." },
+      400,
+    );
+  }
+  const manterKey = normalizeComparison(manter);
+  const removerKey = normalizeComparison(remover);
+
+  // 1. Localiza os 2 álbuns em Albuns (coluna G = índice 6).
+  const albunsRows = await googleSheetsService.principal.readValues("Albuns");
+  const linhaManter = albunsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === manterKey);
+  const linhaRemover = albunsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === removerKey);
+  if (linhaManter < 1) return jsonResponse({ success: false, error: `Álbum 'manter' ("${manter}") não encontrado em Albuns.` }, 404);
+  if (linhaRemover < 1) return jsonResponse({ success: false, error: `Álbum 'remover' ("${remover}") não encontrado em Albuns.` }, 404);
+
+  const tituloManter = normalizeText(albunsRows[linhaManter][6]);
+  const tituloRemover = normalizeText(albunsRows[linhaRemover][6]);
+  const topicIdManter = normalizeText(albunsRows[linhaManter][1]);
+  const topicIdRemover = normalizeText(albunsRows[linhaRemover][1]);
+
+  // 2. Move comentários (Comentarios_Albuns!A = ID do tópico).
+  const comentariosRows = await googleSheetsService.principal.readValues("Comentarios_Albuns");
+  let comentariosMovidos = 0;
+  for (let i = 1; i < comentariosRows.length; i++) {
+    if (normalizeText(comentariosRows[i][0]) !== topicIdRemover) continue;
+    await googleSheetsService.principal.updateValues("Comentarios_Albuns", `A${i + 1}`, [[topicIdManter]]);
+    comentariosMovidos++;
+  }
+
+  // 3. Repointa qualquer faixa (Musicas!K / EDIÇÃO CHARTS!E) que ainda
+  // apontava pro título do álbum removido.
+  const musicasRows = await googleSheetsService.principal.readValues("Musicas");
+  let faixasRepointadasMusicas = 0;
+  for (let i = 1; i < musicasRows.length; i++) {
+    if (normalizeComparison(normalizeText(musicasRows[i][10])) !== removerKey) continue;
+    await googleSheetsService.principal.updateValues("Musicas", `K${i + 1}`, [[tituloManter]]);
+    faixasRepointadasMusicas++;
+  }
+  const edicaoChartsRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
+  let faixasRepointadasEdicaoCharts = 0;
+  for (let i = 1; i < edicaoChartsRows.length; i++) {
+    if (normalizeComparison(normalizeText(edicaoChartsRows[i][4])) !== removerKey) continue;
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `E${i + 1}`, [[tituloManter]]);
+    faixasRepointadasEdicaoCharts++;
+  }
+
+  // 4. Apaga a linha do álbum duplicado em Albuns (A:L).
+  await googleSheetsService.principal.updateValues("Albuns", `A${linhaRemover + 1}:L${linhaRemover + 1}`, [
+    Array(12).fill(""),
+  ]);
+
+  // 5. Apaga a linha correspondente em EDIÇÃO CHARTS ÁLBUMS (coluna D = índice 3).
+  const edicaoChartsAlbunsRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS");
+  const linhaEdChartsAlbum = edicaoChartsAlbunsRows.findIndex(
+    (r, i) => i > 0 && normalizeComparison(normalizeText(r[3])) === removerKey,
+  );
+  let edicaoChartsAlbunsApagada = false;
+  if (linhaEdChartsAlbum >= 1) {
+    await googleSheetsService.edicaoCharts.updateValues(
+      "EDIÇÃO CHARTS ÁLBUMS",
+      `A${linhaEdChartsAlbum + 1}:R${linhaEdChartsAlbum + 1}`,
+      [Array(18).fill("")],
+    );
+    edicaoChartsAlbunsApagada = true;
+  }
+
+  return jsonResponse({
+    success: true,
+    manter: { topicId: topicIdManter, titulo: tituloManter },
+    removido: { topicId: topicIdRemover, titulo: tituloRemover },
+    comentariosMovidos,
+    faixasRepointadasMusicas,
+    faixasRepointadasEdicaoCharts,
+    edicaoChartsAlbunsApagada,
+  });
+}
+
 export async function apagarFaixaDuplicadaLegadoController(request: Request): Promise<Response> {
   // GET com querystring (pra dar pra abrir a URL direto no navegador, sem
   // precisar de um jeito de mandar POST) ou POST com JSON — mesmo efeito.
