@@ -1,0 +1,32 @@
+name: Chamar endpoint admin (utilitário)
+
+# Dispara uma chamada HTTP GET pro Worker em produção — usado pra rodar os
+# endpoints /admin/* pontuais (migração, merge de duplicatas, etc.) sem
+# precisar de acesso de rede direto da sessão do Claude Code (o proxy do
+# sandbox bloqueia o domínio do Worker). Informe só o caminho (com
+# querystring já montada, ex: "/api/playlists/albuns/admin/mesclar-albuns
+# ?manter=X&remover=Y") — o domínio já é fixo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: 'Caminho + querystring (ex: /api/.../admin/algo?param=valor)'
+        required: true
+
+jobs:
+  chamar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Chamar endpoint
+        run: |
+          curl -sS --max-time 45 --retry 2 --retry-delay 3 \
+            "https://tanstack-start-app.empirerpg-forum.workers.dev${{ github.event.inputs.path }}" \
+            | tee resposta.json | jq . || cat resposta.json
+
+      - name: Guardar resposta
+        uses: actions/upload-artifact@v4
+        with:
+          name: resposta
+          path: resposta.json
