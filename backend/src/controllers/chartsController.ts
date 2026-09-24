@@ -215,26 +215,37 @@ async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtub
 // o cruzamento por título não está batendo (ex.: formatos diferentes,
 // "Artista - Título" vs só "Título").
 export async function debugRealtimeCoversController(): Promise<Response> {
-  const [data, musicas] = await Promise.all([
+  const [data, musicas, capaPorTitulo] = await Promise.all([
     readSheet("chartsRealtime", "EM Alta"),
     readSheet("principal", "Musicas").catch(() => [] as Row[]),
+    buildCapaPorTituloCatalogo(),
   ]);
-  const emAlta = data
-    .slice(1)
-    .filter((r) => r[1])
-    .slice(0, 15)
-    .map((r) => ({ titulo_bruto: r[1], titulo_normalizado: normalizarTitulo(r[1] || ""), colG: r[6] || "" }));
-  const musicasSample = musicas
-    .slice(1)
-    .filter((r) => r[7])
-    .slice(0, 15)
-    .map((r) => ({
-      titulo_bruto: r[7],
-      titulo_normalizado: normalizarTitulo(r[7] || ""),
-      capa: r[3] || "",
-      tipoSingle: r[8] || "",
-    }));
-  return jsonOk({ emAlta, musicasSample });
+  const linhasEmAlta = data.slice(1).filter((r) => r[1]);
+  const emAlta = linhasEmAlta.map((r) => {
+    const norm = normalizarTitulo(r[1] || "");
+    const achouNoCatalogo = capaPorTitulo.has(norm);
+    // Pra cada título que NÃO bateu no catálogo, procura por ocorrência
+    // parcial em Musicas!H (contém/é contido) pra ver se existe uma linha
+    // parecida com grafia diferente.
+    const parecido = achouNoCatalogo
+      ? null
+      : musicas
+          .slice(1)
+          .map((m) => (m[7] || "").trim())
+          .filter(Boolean)
+          .find((t) => {
+            const nt = normalizarTitulo(t);
+            return nt.includes(norm) || norm.includes(nt);
+          }) || null;
+    return {
+      titulo_bruto: r[1],
+      titulo_normalizado: norm,
+      colG: r[6] || "",
+      achou_no_catalogo: achouNoCatalogo,
+      titulo_parecido_em_musicas: parecido,
+    };
+  });
+  return jsonOk({ total_em_alta: linhasEmAlta.length, total_musicas: musicas.length - 1, emAlta });
 }
 
 // ---- HOF LIST / PROFILE ----
