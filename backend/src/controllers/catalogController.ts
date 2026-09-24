@@ -20,6 +20,10 @@ export interface CatalogItem {
   sheetName: string;
   title: string;
   artist: string;
+  // "Artista, Feat 1, Feat 2" (padrão Spotify) quando a faixa tem
+  // participantes (colunas ARTISTA 2-6) — só pra exibição, `artist`
+  // continua sendo o principal sozinho.
+  displayArtists: string | null;
   album: string | null;
   cover: string | null;
   link: string | null;
@@ -125,6 +129,16 @@ function buildCatalogItem(
   const artist =
     getValue(record, ["act_principal", "artista", "nome_do_criador", "nome_do_artista"]) || "";
 
+  // ARTISTA 2-6 — mesma convenção de empirePlayController.ts buildCleanItem.
+  const featArtists = [
+    getValue(record, ["artista_2"]),
+    getValue(record, ["artista_3"]),
+    getValue(record, ["artista_4"]),
+    getValue(record, ["artista_5"]),
+    getValue(record, ["artista_6"]),
+  ].filter((v): v is string => !!v);
+  const displayArtists = featArtists.length > 0 ? [artist, ...featArtists].join(", ") : null;
+
   const album = getValue(record, ["album", "nome_do_album", "album_nome"]);
   const cover = getValue(record, [
     "capa_da_musica",
@@ -147,6 +161,7 @@ function buildCatalogItem(
     sheetName,
     title,
     artist,
+    displayArtists,
     album,
     cover,
     link,
