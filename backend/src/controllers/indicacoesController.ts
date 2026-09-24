@@ -458,3 +458,19 @@ export async function popupVmaDismissController(request: Request): Promise<Respo
 
   return jsonResponse({ success: true });
 }
+
+// GET /api/premiacoes/indicar/admin/popup-reset?telegramId=... — one-off de
+// teste: limpa o estado do popup pra esse jogador (volta a valer "nunca
+// visto"), útil pra validar o popup sem esperar o dia seguinte virar.
+export async function adminPopupVmaResetController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const telegramId = normalizeText(url.searchParams.get("telegramId"));
+  if (!telegramId) return jsonResponse({ success: false, error: "telegramId é obrigatório." }, 400);
+
+  await ensureSheetTab(POPUP_SPREADSHEET_KEY, POPUP_SHEET);
+  const existente = await lerLinhaPopup(telegramId);
+  if (existente) {
+    await updateValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, `B${existente.linha}:C${existente.linha}`, [["", ""]]);
+  }
+  return jsonResponse({ success: true, reset: !!existente });
+}

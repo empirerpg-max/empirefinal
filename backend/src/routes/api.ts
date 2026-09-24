@@ -145,6 +145,7 @@ import {
   removerIndicacaoController,
   popupVmaStatusController,
   popupVmaDismissController,
+  adminPopupVmaResetController,
 } from "../controllers/indicacoesController";
 import {
   getAwardsListController,
@@ -388,6 +389,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/indicar/remover",
     "/api/premiacoes/indicar/popup-status",
     "/api/premiacoes/indicar/popup-dismiss",
+    "/api/premiacoes/indicar/admin/popup-reset",
     "/api/awards",
     "/api/awards/detalhe",
     "/api/awards/artista",
@@ -1452,6 +1454,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await popupVmaDismissController(request);
+  } else if (url.pathname === "/api/premiacoes/indicar/admin/popup-reset") {
+    response = await adminPopupVmaResetController(request);
   } else if (url.pathname === "/api/awards") {
     response = await getAwardsListController();
   } else if (url.pathname === "/api/awards/detalhe") {
