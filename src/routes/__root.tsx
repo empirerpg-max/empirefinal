@@ -973,7 +973,12 @@ function RootInner() {
       {vmaPopup && (
         <VmaNominationPopup
           award={vmaPopup}
-          onIndicarJa={() => setVmaPopup(null)}
+          onIndicarJa={() => {
+            setVmaPopup(null);
+            // Quem já foi indicar não precisa ver o lembrete de novo — só
+            // "me lembrar mais tarde" deve voltar a aparecer no dia seguinte.
+            if (user && user.id !== "guest") api.dispensarPopupVma(user.id).catch(() => {});
+          }}
           onLembrarMaisTarde={() => setVmaPopup(null)}
           onJaIndiquei={() => {
             setVmaPopup(null);
