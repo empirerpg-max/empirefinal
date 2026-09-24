@@ -68,7 +68,15 @@ export function normalizeComparison(value: unknown): string {
   return normalizeText(value)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+    .toLowerCase()
+    // Edi\u00e7\u00e3o manual na planilha (copiar/colar de outro app, autocorretor do
+    // celular etc.) \u00e0s vezes deixa caracteres invis\u00edveis (zero-width,
+    // espa\u00e7o n\u00e3o-quebr\u00e1vel) ou espa\u00e7o duplo no meio do valor \u2014 sem isso, um
+    // "usuario"/"id" que parece id\u00eantico visualmente falhava em bater no
+    // match por igualdade estrita, fazendo telas como o heartbeat de perfil
+    // n\u00e3o encontrarem a linha certa (ou nenhuma) pro usu\u00e1rio.
+    .replace(/[\u200b-\u200d\ufeff]/g, "")
+    .replace(/\s+/g, " ");
 }
 
 export function normalizeHeader(value: unknown): string {

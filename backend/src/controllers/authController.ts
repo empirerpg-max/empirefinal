@@ -122,11 +122,20 @@ export async function authHeartbeatController(request: Request): Promise<Respons
     const rows = await readUsuariosWithRowIndex();
     const normId = normalizeComparison(telegramId);
     const normUsuario = normalizeComparison(usuario);
-    const match = rows.find((r) => {
+    const candidatos = rows.filter((r) => {
       const matchId = !!normId && normalizeComparison(r.rec["id"] || "") === normId;
       const matchUsuario = !!normUsuario && normalizeComparison(r.rec["usuario"] || "") === normUsuario;
       return matchId || matchUsuario;
     });
+    // A aba Usuários pode ter mais de uma linha batendo pro mesmo jogador
+    // (linha antiga duplicada, editada por engano etc.) — pegar sempre a
+    // PRIMEIRA (comportamento antigo) podia devolver uma linha desatualizada
+    // com a foto antiga, mesmo já existindo uma linha mais nova/completa com
+    // a foto certa. Usa a última linha (mais recente na planilha) que tenha
+    // a foto de perfil preenchida, senão cai pra última linha que bateu.
+    const match =
+      [...candidatos].reverse().find((r) => (r.rec["foto_do_perfil"] || "").trim()) ??
+      candidatos[candidatos.length - 1];
     if (match) {
       await concederPrestigioLoginDiario(match, usuario);
     }
