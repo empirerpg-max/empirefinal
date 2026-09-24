@@ -1,4 +1,11 @@
-import { readValues, updateValues, appendRow, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import {
+  readValues,
+  updateValues,
+  appendRow,
+  normalizeText,
+  normalizeComparison,
+  ensureSheetTab,
+} from "../services/googleSheetsService";
 import { getArtistNamesForOwner } from "./artistasController";
 import { resolveNomeOficial } from "./forumController";
 
@@ -352,5 +359,102 @@ export async function removerIndicacaoController(request: Request): Promise<Resp
   }
 
   await updateValues(awardId, "Indicações", `A${linha}:F${linha}`, [["", "", "", "", "", ""]]);
+  return jsonResponse({ success: true });
+}
+
+// ---- Popup diário de lembrete de indicação (VMA) ----
+// Aba própria "VMA_POPUP_STATUS" na planilha registrosCharts (mesma
+// planilha de outras abas auxiliares como INFOS ACTS e PONTOS) —
+// A telegramId | B status ("" ou "indicado", permanente) |
+// C última exibição (DD/MM/AAAA, controla o "1x por dia").
+const POPUP_SPREADSHEET_KEY = "registrosCharts";
+const POPUP_SHEET = "VMA_POPUP_STATUS";
+// A premiação que o popup promove é sempre a primeira (e, por ora, única)
+// entrada de PREMIACOES_INDICAR — se um dia existir mais de uma premiação
+// aberta simultaneamente, decidir qual delas o popup deve trazer.
+const POPUP_AWARD_ID = PREMIACOES_INDICAR[0];
+
+function hojeBR(): string {
+  // Horário de Brasília (UTC-3) — mesmo ajuste usado no crédito de
+  // login_diario, pra "hoje" não virar o dia seguinte cedo demais.
+  const hoje = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const dd = String(hoje.getDate()).padStart(2, "0");
+  const mm = String(hoje.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${hoje.getFullYear()}`;
+}
+
+async function lerLinhaPopup(telegramId: string): Promise<{ linha: number; status: string; ultimaExibicao: string } | null> {
+  const rows = await readValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, "A2:C20000").catch(() => []);
+  const idx = rows.findIndex((r) => normalizeComparison(normalizeText(r[0])) === normalizeComparison(telegramId));
+  if (idx === -1) return null;
+  const row = rows[idx];
+  return { linha: idx + 2, status: normalizeText(row[1]), ultimaExibicao: normalizeText(row[2]) };
+}
+
+// GET /api/premiacoes/indicar/popup-status?telegramId=...
+// Decide se o popup diário de lembrete deve aparecer pra esse jogador e,
+// se sim, já marca como "exibido hoje" nessa mesma chamada (evita reexibir
+// no mesmo dia mesmo se o jogador só fechar o popup sem clicar em nada).
+export async function popupVmaStatusController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const telegramId = normalizeText(url.searchParams.get("telegramId"));
+  if (!telegramId) return jsonResponse({ success: false, error: "telegramId é obrigatório." }, 400);
+  if (!POPUP_AWARD_ID) return jsonResponse({ success: true, data: { shouldShow: false } });
+
+  const detalhes = await lerDetalhes(POPUP_AWARD_ID);
+  if (!detalhes || detalhes.status !== "aberto") {
+    return jsonResponse({ success: true, data: { shouldShow: false } });
+  }
+
+  await ensureSheetTab(POPUP_SPREADSHEET_KEY, POPUP_SHEET);
+  const existente = await lerLinhaPopup(telegramId);
+  const hoje = hojeBR();
+
+  if (existente?.status === "indicado") {
+    return jsonResponse({ success: true, data: { shouldShow: false } });
+  }
+  if (existente?.ultimaExibicao === hoje) {
+    return jsonResponse({ success: true, data: { shouldShow: false } });
+  }
+
+  if (existente) {
+    await updateValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, `C${existente.linha}`, [[hoje]]);
+  } else {
+    await appendRow(POPUP_SPREADSHEET_KEY, POPUP_SHEET, [telegramId, "", hoje], "A:C");
+  }
+
+  return jsonResponse({
+    success: true,
+    data: {
+      shouldShow: true,
+      award: {
+        id: detalhes.id,
+        premiacao: detalhes.premiacao,
+        capaUrl: detalhes.capaUrl,
+        encerramento: detalhes.encerramento,
+      },
+    },
+  });
+}
+
+// POST /api/premiacoes/indicar/popup-dismiss — "Já indiquei": não mostra
+// mais o popup pra esse jogador (permanente, não só por hoje).
+export async function popupVmaDismissController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { telegramId?: string };
+  const telegramId = normalizeText(body.telegramId);
+  if (!telegramId) return jsonResponse({ success: false, error: "telegramId é obrigatório." }, 400);
+
+  await ensureSheetTab(POPUP_SPREADSHEET_KEY, POPUP_SHEET);
+  const existente = await lerLinhaPopup(telegramId);
+  const hoje = hojeBR();
+
+  if (existente) {
+    await updateValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, `B${existente.linha}:C${existente.linha}`, [
+      ["indicado", hoje],
+    ]);
+  } else {
+    await appendRow(POPUP_SPREADSHEET_KEY, POPUP_SHEET, [telegramId, "indicado", hoje], "A:C");
+  }
+
   return jsonResponse({ success: true });
 }

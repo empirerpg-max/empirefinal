@@ -143,6 +143,8 @@ import {
   criarIndicacaoController,
   listarMinhasIndicacoesController,
   removerIndicacaoController,
+  popupVmaStatusController,
+  popupVmaDismissController,
 } from "../controllers/indicacoesController";
 import {
   getAwardsListController,
@@ -384,6 +386,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/indicar/minhas",
     "/api/premiacoes/indicar/criar",
     "/api/premiacoes/indicar/remover",
+    "/api/premiacoes/indicar/popup-status",
+    "/api/premiacoes/indicar/popup-dismiss",
     "/api/awards",
     "/api/awards/detalhe",
     "/api/awards/artista",
@@ -1438,6 +1442,16 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     }
     response = await removerIndicacaoController(request);
+  } else if (url.pathname === "/api/premiacoes/indicar/popup-status") {
+    response = await popupVmaStatusController(request);
+  } else if (url.pathname === "/api/premiacoes/indicar/popup-dismiss") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/indicar/popup-dismiss." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await popupVmaDismissController(request);
   } else if (url.pathname === "/api/awards") {
     response = await getAwardsListController();
   } else if (url.pathname === "/api/awards/detalhe") {
