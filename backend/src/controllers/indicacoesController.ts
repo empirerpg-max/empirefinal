@@ -492,3 +492,18 @@ export async function adminPopupVmaResetController(request: Request): Promise<Re
   }
   return jsonResponse({ success: true, reset: !!existente });
 }
+
+// GET /api/premiacoes/indicar/admin/popup-limpar-tudo — one-off de
+// migração: apaga TODO o conteúdo de VMA_POPUP_STATUS (linhas escritas
+// antes do fix do cabeçalho, que podiam estar na linha 1 sem serem vistas
+// nunca mais pela leitura, que sempre partia de A2). Depois disso a
+// próxima checagem recria o cabeçalho certinho em A1:C1.
+export async function adminPopupVmaLimparTudoController(): Promise<Response> {
+  await updateValues(
+    POPUP_SPREADSHEET_KEY,
+    POPUP_SHEET,
+    "A1:C200",
+    Array.from({ length: 200 }, () => ["", "", ""]),
+  ).catch(() => {});
+  return jsonResponse({ success: true });
+}
