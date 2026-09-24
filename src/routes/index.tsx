@@ -119,6 +119,12 @@ function Index() {
   // Drive não compartilhado publicamente) → "falhou". Mesmo fallback de
   // perfil.tsx/__root.tsx.
   const [fotoUsuarioStage, setFotoUsuarioStage] = useState<"sized" | "raw" | "falhou">("sized");
+  // Mesmo motivo de perfil.tsx/__root.tsx: sem isso, uma foto trocada
+  // (heartbeat ou edição manual na planilha) ficava presa no estágio da
+  // foto ANTERIOR.
+  useEffect(() => {
+    setFotoUsuarioStage("sized");
+  }, [fotoUsuario]);
   const nomeUsuario = login?.nome || user?.name || "Visitante";
 
   // Prestígio/nível do jogador logado — mostrado no lugar do antigo botão de

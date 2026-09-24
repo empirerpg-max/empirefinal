@@ -49,10 +49,23 @@ function Perfil() {
   // fallback já usado em TopicThumbImg (Forum.tsx) e AlbumCoverImg
   // (AlbumList.tsx).
   const [fotoStage, setFotoStage] = useState<"sized" | "raw" | "falhou">("sized");
+  // Sem isso, salvar uma foto nova (ou o heartbeat trazer uma trocada na
+  // planilha) ficava preso no estágio da foto ANTERIOR — o cascata só
+  // reagia a erro de carregamento, nunca a troca de URL.
+  useEffect(() => {
+    setFotoStage("sized");
+  }, [login?.fotoPerfil]);
   const [myArtists, setMyArtists] = useState<LoadState<Artist[]>>({ status: "loading" });
   const [isEditing, setIsEditing] = useState(false);
   const [editNome, setEditNome] = useState("");
   const [editFoto, setEditFoto] = useState("");
+  // Mesmo cascata, mas pro preview da foto sendo editada (editFoto) — antes
+  // era um <img> sem fallback nenhum, então uma foto colada manualmente na
+  // planilha sem "qualquer pessoa com o link" aparecia quebrada no editor.
+  const [editFotoStage, setEditFotoStage] = useState<"sized" | "raw" | "falhou">("sized");
+  useEffect(() => {
+    setEditFotoStage("sized");
+  }, [editFoto]);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [savingPerfil, setSavingPerfil] = useState(false);
   const [libTab, setLibTab] = useState<"salvos" | "playlists">("salvos");
@@ -159,12 +172,13 @@ function Perfil() {
           <>
             <div className="relative mb-4">
               <div className="size-24 rounded-full bg-primary/20 border-2 border-primary/30 grid place-items-center overflow-hidden">
-                {editFoto ? (
+                {editFoto && editFotoStage !== "falhou" ? (
                   <img
-                    src={driveImg(editFoto, 200)}
+                    src={editFotoStage === "raw" ? driveRawImg(editFoto) : driveImg(editFoto, 200)}
                     className="size-24 rounded-full object-cover"
                     alt=""
                     referrerPolicy="no-referrer"
+                    onError={() => setEditFotoStage((s) => (s === "sized" ? "raw" : "falhou"))}
                   />
                 ) : (
                   <User className="size-10 text-primary" />

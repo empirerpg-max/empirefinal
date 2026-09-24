@@ -139,7 +139,24 @@ export async function authHeartbeatController(request: Request): Promise<Respons
     const sessionId = match?.rec["id"] || telegramId;
     const token = await issueSessionToken(sessionUsuario, sessionId);
 
-    return new Response(JSON.stringify({ success: true, token }), {
+    // Devolve o perfil atualizado (nome/foto/tipo/prestígio) igual o login
+    // devolve — sem isso, o app só via edições manuais na planilha (foto de
+    // perfil, principalmente) depois de sair e entrar de novo, porque a
+    // sessão salva no localStorage nunca era atualizada de novo depois do
+    // login inicial. O heartbeat já roda toda vez que o app abre, então é o
+    // lugar natural pra also refrescar esses dados.
+    const data = match
+      ? {
+          id: match.rec["id"] || "",
+          nome: match.rec["usuario"] || usuario,
+          usuario: match.rec["usuario"] || usuario,
+          tipoPerfil: match.rec["tipo_de_perfil"] || "Usuário",
+          fotoPerfil: match.rec["foto_do_perfil"] || "",
+          prestigio: match.rec["prestigio"] || "",
+        }
+      : null;
+
+    return new Response(JSON.stringify({ success: true, token, data }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
