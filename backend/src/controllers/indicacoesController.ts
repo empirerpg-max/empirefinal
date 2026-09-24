@@ -438,7 +438,14 @@ export async function popupVmaStatusController(request: Request): Promise<Respon
   if (existente) {
     await updateValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, `C${existente.linha}`, [[hoje]]);
   } else {
-    await appendRow(POPUP_SPREADSHEET_KEY, POPUP_SHEET, [telegramId, "", hoje], "A:C");
+    // "OVERWRITE" (não o padrão "INSERT_ROWS"): o modo padrão insere e
+    // EMPURRA linhas existentes pra baixo — em chamadas concorrentes
+    // (vários jogadores abrindo o app ao mesmo tempo) isso desalinhava
+    // linha/coluna de escritas anteriores (bug real observado: telegramId
+    // numa linha, "indicado" e a data em linhas/colunas diferentes).
+    // OVERWRITE sempre escreve na próxima linha vazia de verdade, sem
+    // deslocar nada.
+    await appendRow(POPUP_SPREADSHEET_KEY, POPUP_SHEET, [telegramId, "", hoje], "A:C", "OVERWRITE");
   }
 
   return jsonResponse({
@@ -471,7 +478,7 @@ export async function popupVmaDismissController(request: Request): Promise<Respo
       ["indicado", hoje],
     ]);
   } else {
-    await appendRow(POPUP_SPREADSHEET_KEY, POPUP_SHEET, [telegramId, "indicado", hoje], "A:C");
+    await appendRow(POPUP_SPREADSHEET_KEY, POPUP_SHEET, [telegramId, "indicado", hoje], "A:C", "OVERWRITE");
   }
 
   return jsonResponse({ success: true });
