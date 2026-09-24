@@ -2771,17 +2771,12 @@ function SocialPage() {
                       <p className="text-[10px] font-black uppercase text-muted-foreground">Postar como:</p>
                       <div className={inputCls + " flex items-center gap-2 text-muted-foreground"}>
                         <div className="size-5 rounded-full bg-white/10 flex items-center justify-center font-black text-[11px] overflow-hidden shrink-0">
-                          {activeArtist?.foto ? (
-                            <img
-                              src={driveImg(activeArtist.foto)}
-                              className="w-full h-full object-cover"
-                              referrerPolicy="no-referrer"
-                              loading="lazy"
-                              decoding="async"
-                            />
-                          ) : (
-                            activeArtist?.nome[0]
-                          )}
+                          <SmartImg
+                            src={activeArtist?.foto}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            fallback={<>{activeArtist?.nome[0]}</>}
+                          />
                         </div>
                         <span className="truncate">{activeArtist?.nome || "Magnata"}</span>
                       </div>
@@ -3478,17 +3473,12 @@ function SocialPage() {
                 {!editingNews && (
                   <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl flex items-center gap-2.5">
                     <div className="size-7 rounded-full bg-white/10 overflow-hidden shrink-0">
-                      {activeArtist?.foto ? (
-                        <img
-                          src={driveImg(activeArtist.foto)}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <UserCircle className="size-full text-muted-foreground/40" />
-                      )}
+                      <SmartImg
+                        src={activeArtist?.foto}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        fallback={<UserCircle className="size-full text-muted-foreground/40" />}
+                      />
                     </div>
                     <p className="text-[10px] font-black uppercase text-muted-foreground truncate">
                       Publicar como <span className="text-foreground">{activeArtist?.nome}</span>
@@ -3571,17 +3561,12 @@ function SocialPage() {
                   <p className="text-[10px] font-black uppercase text-muted-foreground">Foto de perfil:</p>
                   <div className="flex gap-2.5 items-center">
                     <div className="size-12 rounded-xl overflow-hidden flex-shrink-0 bg-secondary border border-white/10">
-                      {profileAvatar ? (
-                        <img
-                          src={driveImg(profileAvatar)}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <UserCircle className="size-full text-muted-foreground/40" />
-                      )}
+                      <SmartImg
+                        src={profileAvatar}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        fallback={<UserCircle className="size-full text-muted-foreground/40" />}
+                      />
                     </div>
                     <label
                       className={
@@ -3826,11 +3811,12 @@ function SocialPage() {
                   style={{ paddingTop: `calc(env(safe-area-inset-top) + ${group.items.length > 1 ? "22px" : "14px"})` }}
                 >
                   <div className="size-9 rounded-full overflow-hidden bg-secondary border border-white/20 shrink-0 grid place-items-center">
-                    {story.avatar ? (
-                      <img src={driveImg(story.avatar)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <span className="text-[10px] font-black uppercase">{story.autor[0]}</span>
-                    )}
+                    <SmartImg
+                      src={story.avatar}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      fallback={<span className="text-[10px] font-black uppercase">{story.autor[0]}</span>}
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black text-white truncate flex items-center gap-1">
@@ -3926,17 +3912,12 @@ function SocialPage() {
                   {comments.map((c, idx) => (
                     <div key={idx} className="flex gap-3">
                       <div className="size-8 rounded-full bg-white/10 border border-white/10 flex items-center justify-center font-black text-[10px] flex-shrink-0 overflow-hidden">
-                        {c.avatar ? (
-                          <img
-                            src={driveImg(c.avatar)}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        ) : (
-                          c.autor[0]
-                        )}
+                        <SmartImg
+                          src={c.avatar}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          fallback={<>{c.autor[0]}</>}
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[10px] font-black leading-none truncate">{c.autor}</p>

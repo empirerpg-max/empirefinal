@@ -28,6 +28,7 @@ import { useHomeConfig } from "@/lib/homeFlags";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ActivityTicker } from "@/components/ActivityTicker";
+import { SmartImg } from "@/components/SmartImg";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
@@ -406,13 +407,11 @@ function Index() {
                   className="min-w-[150px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all flex flex-col"
                 >
                   <div className="aspect-square bg-secondary overflow-hidden relative">
-                    <img
-                      src={driveImg(p.media_url, 300)}
+                    <SmartImg
+                      src={p.media_url}
+                      size={300}
                       className="w-full h-full object-cover"
                       alt={p.autor}
-                      loading="lazy"
-                      decoding="async"
-                      referrerPolicy="no-referrer"
                     />
                     {isNews && (
                       <span className="absolute top-2 left-2 size-6 rounded-full bg-black/60 backdrop-blur-md grid place-items-center border border-white/10">
@@ -500,20 +499,17 @@ function Index() {
                   className="min-w-[150px] max-w-[150px] snap-center rounded-xl bg-white/5 border border-white/10 active:scale-95 transition-all flex items-center gap-2 p-2"
                 >
                   <div className="size-8 shrink-0 rounded-md bg-secondary overflow-hidden relative">
-                    {item.capa ? (
-                      <img
-                        src={driveImg(item.capa, 80)}
-                        className="w-full h-full object-cover"
-                        alt={item.titulo}
-                        loading="lazy"
-                        decoding="async"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="w-full h-full grid place-items-center opacity-30">
-                        <TipoIcon className="size-3.5" aria-hidden="true" />
-                      </div>
-                    )}
+                    <SmartImg
+                      src={item.capa}
+                      size={80}
+                      className="w-full h-full object-cover"
+                      alt={item.titulo}
+                      fallback={
+                        <div className="w-full h-full grid place-items-center opacity-30">
+                          <TipoIcon className="size-3.5" aria-hidden="true" />
+                        </div>
+                      }
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-[10px] font-black uppercase leading-tight line-clamp-1">{item.titulo}</h3>
@@ -543,21 +539,18 @@ function Index() {
             onClick={() => haptic.light()}
             className="group relative block w-full aspect-[16/10] rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl bg-white/5 text-left"
           >
-            {data?.foto ? (
-              <img
-                src={driveImg(data.foto, 800)}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                alt={data.musica ? `Capa: ${data.musica}` : "Billboard Hot 100"}
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4 opacity-20">
-                <TrendingUp className="size-20" aria-hidden="true" />
-                <span className="text-xs font-black uppercase tracking-[0.3em]">Global Chart</span>
-              </div>
-            )}
+            <SmartImg
+              src={data?.foto}
+              size={800}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+              alt={data?.musica ? `Capa: ${data.musica}` : "Billboard Hot 100"}
+              fallback={
+                <div className="w-full h-full flex flex-col items-center justify-center gap-4 opacity-20">
+                  <TrendingUp className="size-20" aria-hidden="true" />
+                  <span className="text-xs font-black uppercase tracking-[0.3em]">Global Chart</span>
+                </div>
+              }
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
 
             <div className="absolute inset-x-4 bottom-4 p-4 rounded-[1.5rem] bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl">
@@ -612,21 +605,18 @@ function Index() {
                 className="min-w-[104px] snap-center group relative overflow-hidden rounded-[1.25rem] border border-white/10 bg-white/5 backdrop-blur-md active:scale-95 transition-all shadow-xl text-left"
               >
                 <div className="aspect-square overflow-hidden relative">
-                  {data?.foto ? (
-                    <img
-                      src={driveImg(data.foto, 250)}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      alt={`${meta.label} #1`}
-                      loading="lazy"
-                      decoding="async"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-secondary flex flex-col items-center justify-center p-2">
-                      <Icon className={`size-7 ${meta.color} opacity-30 mb-1`} aria-hidden="true" />
-                      <span className="text-[9px] font-bold uppercase opacity-50 text-center">Abrir</span>
-                    </div>
-                  )}
+                  <SmartImg
+                    src={data?.foto}
+                    size={250}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    alt={`${meta.label} #1`}
+                    fallback={
+                      <div className="w-full h-full bg-secondary flex flex-col items-center justify-center p-2">
+                        <Icon className={`size-7 ${meta.color} opacity-30 mb-1`} aria-hidden="true" />
+                        <span className="text-[9px] font-bold uppercase opacity-50 text-center">Abrir</span>
+                      </div>
+                    }
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                   <div className="absolute top-2 left-2 size-6 rounded-full bg-black/60 backdrop-blur-md grid place-items-center border border-white/10">
                     <Icon className={`size-3.5 ${meta.color}`} aria-hidden="true" />
@@ -730,20 +720,17 @@ function Index() {
                 className="min-w-[140px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all"
               >
                 <div className="aspect-square bg-secondary overflow-hidden">
-                  {l.coverUrl ? (
-                    <img
-                      src={driveImg(l.coverUrl, 300)}
-                      className="w-full h-full object-cover"
-                      alt={l.titulo}
-                      loading="lazy"
-                      decoding="async"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="w-full h-full grid place-items-center opacity-20">
-                      <Music className="size-8" aria-hidden="true" />
-                    </div>
-                  )}
+                  <SmartImg
+                    src={l.coverUrl}
+                    size={300}
+                    className="w-full h-full object-cover"
+                    alt={l.titulo}
+                    fallback={
+                      <div className="w-full h-full grid place-items-center opacity-20">
+                        <Music className="size-8" aria-hidden="true" />
+                      </div>
+                    }
+                  />
                 </div>
                 <div className="p-2.5">
                   {/* Sem line-clamp/truncate — título completo sempre visível,

@@ -97,14 +97,13 @@ function AwardDetalhePage() {
           (não abaixo, no card claro) — mesma estrutura do print de referência. */}
       <div className="relative overflow-hidden">
         <div className="relative h-[26rem]">
-          {data?.foto && (
-            <img
-              src={data.foto}
-              alt=""
-              referrerPolicy="no-referrer"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          )}
+          <SmartImg
+            src={data?.foto}
+            size={1200}
+            wide
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+          />
           <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/20 to-black/95" />
 
           <button
