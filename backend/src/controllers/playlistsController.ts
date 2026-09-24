@@ -601,6 +601,80 @@ export async function mesclarAlbunsDuplicadosController(request: Request): Promi
   });
 }
 
+// Diagnóstico pontual: por que um álbum específico (identificado pelo
+// título completo "Artista - Título") ficou sem faixas depois da migração
+// de legados. Mostra os 4 lugares que importam, lado a lado, pra achar
+// exatamente em qual etapa a faixa se perdeu: (1) a fonte legada
+// (Playlists_Albuns/Playlists_Faixas), (2) a linha em Albuns, (3) qualquer
+// linha em Musicas cujo ÁLBUM aponte pra esse título, (4) a entrada em
+// EDIÇÃO CHARTS ÁLBUMS.
+export async function diagnosticoAlbumLegadoController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const tituloCompleto = normalizeText(url.searchParams.get("titulo") || "");
+  if (!tituloCompleto) {
+    return jsonResponse({ success: false, error: "Parâmetro 'titulo' (completo, 'Artista - Título') é obrigatório." }, 400);
+  }
+  const key = normalizeComparison(tituloCompleto);
+
+  const [albunsLegadosRows, faixasLegadasRows, albunsRows, musicasRows, edicaoChartsAlbunsRows] = await Promise.all([
+    readAlbunsAntigosRows(),
+    readFaixasAntigasRows(),
+    googleSheetsService.principal.readValues("Albuns"),
+    googleSheetsService.principal.readValues("Musicas"),
+    googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS"),
+  ]);
+
+  // 1. Fonte legada.
+  const legadoRow = albunsLegadosRows.find((r) => {
+    const artista = normalizeText(r[1]);
+    const titulo = normalizeText(r[2]);
+    return artista && titulo && normalizeComparison(`${artista} - ${titulo}`) === key;
+  });
+  const legadoAlbumId = legadoRow ? normalizeText(legadoRow[0]) : null;
+  const faixasLegadas = legadoAlbumId
+    ? faixasLegadasRows.filter((r) => normalizeText(r[0]) === legadoAlbumId).map(faixaAntigaFromRow)
+    : [];
+
+  // 2. Linha em Albuns.
+  const albumIdx = albunsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === key);
+  const albumRow = albumIdx >= 1 ? albunsRows[albumIdx] : null;
+
+  // 3. Faixas em Musicas cujo ÁLBUM (coluna K) aponta pra esse título.
+  const faixasEmMusicas: { linha: number; titulo: string; topicId: string }[] = [];
+  for (let i = 1; i < musicasRows.length; i++) {
+    if (normalizeComparison(normalizeText(musicasRows[i][10])) !== key) continue;
+    faixasEmMusicas.push({ linha: i + 1, titulo: normalizeText(musicasRows[i][7]), topicId: normalizeText(musicasRows[i][1]) });
+  }
+
+  // 4. EDIÇÃO CHARTS ÁLBUMS.
+  const edAlbumIdx = edicaoChartsAlbunsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[3])) === key);
+
+  return jsonResponse({
+    success: true,
+    tituloBuscado: tituloCompleto,
+    legado: legadoRow
+      ? {
+          albumId: legadoAlbumId,
+          artista: normalizeText(legadoRow[1]),
+          titulo: normalizeText(legadoRow[2]),
+          totalFaixasNaFonte: faixasLegadas.length,
+          faixas: faixasLegadas,
+        }
+      : { encontrado: false, obs: "Não existe em Playlists_Albuns com esse título — não tinha o que migrar." },
+    albuns: albumRow
+      ? {
+          linha: albumIdx + 1,
+          topicId: normalizeText(albumRow[1]),
+          novoNome: normalizeText(albumRow[6]),
+          tipo: normalizeText(albumRow[10]),
+          codigoUnico: normalizeText(albumRow[11]),
+        }
+      : { encontrado: false },
+    musicas: { totalFaixasApontandoPraEsseAlbum: faixasEmMusicas.length, faixas: faixasEmMusicas },
+    edicaoChartsAlbuns: edAlbumIdx >= 1 ? { linha: edAlbumIdx + 1, numeroFaixas: normalizeText(edicaoChartsAlbunsRows[edAlbumIdx][4]) } : { encontrado: false },
+  });
+}
+
 export async function apagarFaixaDuplicadaLegadoController(request: Request): Promise<Response> {
   // GET com querystring (pra dar pra abrir a URL direto no navegador, sem
   // precisar de um jeito de mandar POST) ou POST com JSON — mesmo efeito.
