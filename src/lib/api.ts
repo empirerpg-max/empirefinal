@@ -981,6 +981,23 @@ export const api = {
     ).then((r) => r.json());
     return res?.data || [];
   },
+  async checarPopupVma(telegramId: string): Promise<{
+    shouldShow: boolean;
+    award?: { id: string; premiacao: string; capaUrl: string; encerramento: string };
+  }> {
+    const res = await fetch(`/api/premiacoes/indicar/popup-status?telegramId=${encodeURIComponent(telegramId)}`).then(
+      (r) => r.json(),
+    );
+    return res?.success ? res.data : { shouldShow: false };
+  },
+  async dispensarPopupVma(telegramId: string): Promise<{ success: boolean }> {
+    const res = await fetch("/api/premiacoes/indicar/popup-dismiss", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramId }),
+    });
+    return res.json();
+  },
   async removerIndicacao(awardId: string, linha: number, telegramId: string): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/premiacoes/indicar/remover", {
       method: "POST",

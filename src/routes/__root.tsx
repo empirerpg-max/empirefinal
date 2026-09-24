@@ -44,6 +44,7 @@ import { useImageCrop } from "@/hooks/use-image-crop";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationBell } from "@/components/NotificationBell";
 import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
+import { VmaNominationPopup } from "@/components/VmaNominationPopup";
 import { EmpirePlayerProvider, useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { MusicPlayer } from "@/components/EmpirePlay/MusicPlayer";
 import { VideoPlayer } from "@/components/EmpirePlay/VideoPlayer";
@@ -700,6 +701,27 @@ function RootInner() {
     (window as any).setShowLinkModal = setShowLinkModal;
   }, []);
 
+  // Popup diário lembrando de indicar pro VMA — checarPopupVma já decide
+  // no backend se deve aparecer (1x/dia, nunca mais se o jogador marcou
+  // "já indiquei") e marca como "exibido hoje" na mesma chamada.
+  const [vmaPopup, setVmaPopup] = useState<{
+    id: string;
+    premiacao: string;
+    capaUrl: string;
+    encerramento: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!user || user.id === "guest") return;
+    api
+      .checarPopupVma(user.id)
+      .then((res) => {
+        if (res.shouldShow && res.award) setVmaPopup(res.award);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const { updateAvailable, applyUpdate } = useServiceWorkerUpdate();
 
   useEffect(() => {
@@ -947,6 +969,18 @@ function RootInner() {
 
         {showLinkModal && <GlobalLinkModal onClose={() => setShowLinkModal(false)} />}
       </AnimatePresence>
+
+      {vmaPopup && (
+        <VmaNominationPopup
+          award={vmaPopup}
+          onIndicarJa={() => setVmaPopup(null)}
+          onLembrarMaisTarde={() => setVmaPopup(null)}
+          onJaIndiquei={() => {
+            setVmaPopup(null);
+            if (user && user.id !== "guest") api.dispensarPopupVma(user.id).catch(() => {});
+          }}
+        />
+      )}
 
       <RouteTransitionOverlay />
 
