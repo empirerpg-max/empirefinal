@@ -4,7 +4,7 @@ import {
   getTopPlaylistsController,
 } from "../controllers/catalogController";
 import { getUserMeController } from "../controllers/userController";
-import { chartsApiController } from "../controllers/chartsController";
+import { chartsApiController, debugRealtimeCoversController } from "../controllers/chartsController";
 import {
   getAcervoRevistasController,
   createAcervoRevistaController,
@@ -1191,6 +1191,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await loginController(request);
   } else if (url.pathname === "/api/charts") {
     response = await chartsApiController(request);
+  } else if (url.pathname === "/api/charts/admin/debug-realtime-covers") {
+    response = await debugRealtimeCoversController();
   } else if (url.pathname === "/api/auth/heartbeat") {
     if (request.method !== "POST") {
       return new Response(
