@@ -84,6 +84,9 @@ interface ForumTopicItem {
   sheetName: string;
   title: string;
   artist: string;
+  // "Artista, Feat 1, Feat 2" (padrão Spotify) — só pra EXIBIÇÃO. `artist`
+  // continua sendo só o principal, porque filtro/posse dependem dele.
+  displayArtists?: string;
   album: string | null;
   cover: string | null;
   link: string | null;
@@ -427,6 +430,7 @@ export const Forum: React.FC<ForumProps> = ({
           title:
             item.title || item.titulo || item.nome_da_musica || item.nome_do_video || "Sem título",
           artist: item.artist || item.artista || item.act_principal || "Artista não informado",
+          displayArtists: item.displayArtists || undefined,
           album: item.album || item.nome_do_album || null,
           cover:
             item.coverUrl ||
@@ -1072,7 +1076,7 @@ export const Forum: React.FC<ForumProps> = ({
                           {
                             id: selectedTopic.id,
                             titulo: selectedTopic.title,
-                            artista: selectedTopic.artist,
+                            artista: selectedTopic.displayArtists || selectedTopic.artist,
                             capa_url: selectedTopic.cover || undefined,
                             url: selectedTopic.link || undefined,
                             telegramTopicId: selectedTopic.telegramTopicId || selectedTopic.id,
@@ -1127,7 +1131,7 @@ export const Forum: React.FC<ForumProps> = ({
                   {selectedTopic.title}
                 </h1>
                 <p className={visualAberto ? "text-sm font-bold text-emerald-400 mt-1" : "text-base sm:text-xl font-bold text-emerald-400 mt-2"}>
-                  {selectedTopic.artist}
+                  {selectedTopic.displayArtists || selectedTopic.artist}
                 </p>
                 {selectedTopic.releaseDate && !visualAberto && (
                   <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400 mt-3">
@@ -1885,7 +1889,7 @@ export const Forum: React.FC<ForumProps> = ({
                         {item.title}
                       </h3>
                       <p className="text-[10px] sm:text-xs text-neutral-400 line-clamp-1 mt-0.5">
-                        {item.artist}
+                        {item.displayArtists || item.artist}
                       </p>
                       {premioDoTopico(item) && (
                         <div className="mt-1.5">

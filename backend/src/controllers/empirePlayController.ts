@@ -1104,7 +1104,10 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
       lancamentos.push({
         id: match.id,
         titulo: match.title,
-        artista: match.artist,
+        // "Artista, Feat 1, Feat 2" quando a faixa tem participantes — antes
+        // caía sempre pro artista principal sozinho, sumindo com o feat na
+        // Home mesmo quando o catálogo já tinha esse dado calculado.
+        artista: match.displayArtists || match.artist,
         coverUrl: match.coverUrl || null,
         dataIso: c.dataIso,
       });
