@@ -1046,9 +1046,20 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
   const resultados: { titulo: string; status: "migrado" | "completado" | "erro"; detalhe?: string }[] = [];
   let faixasProcessadasNestaChamada = 0;
   let albunsProcessados = 0;
+  // Bug real corrigido aqui: antes, "restantes" contava um álbum como
+  // resolvido assim que o loop TOCAVA nele (albunsProcessados++), mesmo
+  // quando o orçamento de faixas da chamada (MAX_FAIXAS_POR_CHAMADA) cortou
+  // no meio e só uma fração das faixas novas entrou (faltouEspaco=true).
+  // Se essa fosse a última iteração da chamada com restantes calculado em
+  // 0, o workflow parava de chamar de novo achando que tinha terminado —
+  // foi exatamente o que aconteceu com "The Dutchess - Les Lumières"
+  // (10 faixas na fonte, só 1 chegou a entrar). Agora um álbum só conta
+  // como processado de verdade quando TODAS as faixas novas dele couberam
+  // no orçamento da chamada.
+  let albunsIncompletos = 0;
 
   for (const pendente of pendentes) {
-    if (albunsProcessados >= limite || faixasProcessadasNestaChamada >= MAX_FAIXAS_POR_CHAMADA) break;
+    if (albunsProcessados + albunsIncompletos >= limite || faixasProcessadasNestaChamada >= MAX_FAIXAS_POR_CHAMADA) break;
 
     const artista = normalizeText(pendente.row[1]);
     const titulo = normalizeText(pendente.row[2]);
@@ -1154,9 +1165,16 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
     }
 
     faixasProcessadasNestaChamada += faixasDaVez.length;
-    albunsProcessados++;
+    if (faltouEspaco) {
+      albunsIncompletos++;
+    } else {
+      albunsProcessados++;
+    }
   }
 
+  // Só álbum TOTALMENTE processado (todas as faixas novas couberam no
+  // orçamento) sai da conta — um incompleto continua contando como
+  // restante, pra próxima chamada tentar completar ele de novo.
   const restantes = pendentes.length - albunsProcessados;
   return jsonResponse({
     success: true,
