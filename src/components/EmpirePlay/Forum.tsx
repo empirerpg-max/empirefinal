@@ -949,10 +949,10 @@ export const Forum: React.FC<ForumProps> = ({
           {/* Fundo desfocado (capa ampliada + blur + degradê escuro por cima) */}
           {selectedTopic.cover && (
             <div className="absolute inset-0 -z-10">
-              <img
-                src={driveImg(selectedTopic.cover, 100) || undefined}
+              <SmartImg
+                src={selectedTopic.cover}
+                size={100}
                 alt=""
-                aria-hidden="true"
                 className="w-full h-full object-cover scale-125 blur-3xl opacity-40 saturate-150"
               />
               <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/60 via-neutral-950/85 to-neutral-950" />
@@ -984,15 +984,13 @@ export const Forum: React.FC<ForumProps> = ({
                     disabled={!selectedTopic.link}
                     className="w-full max-w-md sm:max-w-none mx-auto aspect-video bg-black rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 relative shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 group flex items-center justify-center disabled:cursor-not-allowed"
                   >
-                    {selectedTopic.cover ? (
-                      <img
-                        src={driveImg(selectedTopic.cover, 800) || undefined}
-                        alt={selectedTopic.title}
-                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-950" />
-                    )}
+                    <SmartImg
+                      src={selectedTopic.cover}
+                      size={800}
+                      alt={selectedTopic.title}
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                      fallback={<div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-950" />}
+                    />
                     <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors" />
                     {selectedTopic.link ? (
                       <span className="relative size-16 sm:size-20 rounded-full bg-red-600/70 group-hover:bg-red-500/85 backdrop-blur-sm text-white flex items-center justify-center shadow-2xl shadow-red-600/20 scale-95 group-hover:scale-100 transition-all">
@@ -1315,8 +1313,9 @@ export const Forum: React.FC<ForumProps> = ({
                           }}
                           className="aspect-square rounded-lg overflow-hidden bg-neutral-900 border border-white/5"
                         >
-                          <img
-                            src={driveImg(url, 300) || undefined}
+                          <SmartImg
+                            src={url}
+                            size={300}
                             alt={`Encarte ${i + 1}`}
                             className="w-full h-full object-cover hover:scale-105 transition"
                           />

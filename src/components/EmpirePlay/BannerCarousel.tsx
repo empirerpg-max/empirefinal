@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { driveImgWide } from "@/lib/api";
 import { haptic } from "@/lib/telegram";
+import { SmartImg } from "@/components/SmartImg";
 
 interface Banner {
   id: string;
@@ -57,11 +57,12 @@ export function BannerCarousel() {
         className="relative w-full aspect-[16/6] rounded-2xl overflow-hidden shadow-xl active:scale-[0.99] transition-transform"
       >
         {banners.map((b, i) => (
-          <img
+          <SmartImg
             key={b.id}
-            src={driveImgWide(b.imagem_url, 1200)}
+            src={b.imagem_url}
+            size={1200}
+            wide
             alt=""
-            referrerPolicy="no-referrer"
             className={`absolute inset-0 size-full object-cover transition-opacity duration-700 ${
               i === index ? "opacity-100" : "opacity-0"
             }`}
