@@ -130,15 +130,19 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
     );
 }
 
-// Normaliza título pra cruzamento robusto: remove acentos, "(feat. ...)" e
-// qualquer pontuação/espaçamento extra que faça duas grafias da mesma
-// música (ex.: espaço duplo, aspas curvas) não baterem no Map.
+// Normaliza título pra cruzamento robusto: remove acentos, qualquer trecho
+// entre parênteses (feat., remix, edit etc. — abas de origem e Musicas às
+// vezes discordam se incluem isso no título) e "feat./ft. ..." mesmo quando
+// vem SEM parênteses (achado no diagnóstico: "TED - Mind Maze (feat. Rayna)"
+// em "EM Alta" vs "TED - Mind Maze feat. Rayna" em Musicas — sem parênteses
+// dos dois lados, ou só de um, o corte tem que valer em ambos os casos).
 function normalizarTitulo(s: string): string {
   return s
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
-    .replace(/\(feat\.[^)]*\)/gi, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\b(feat|ft)\.?\s+.*/i, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
