@@ -83,7 +83,7 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
   const isA = tab === "DADOS ÁLBUNS";
   const isC = tab.includes("COUNTRIES");
   const key = isA ? "chartsAlbums" : isC ? "chartsCountries" : "chartsBase";
-  const data = await readSheet(key, tab);
+  const [data, capaPorTitulo] = await Promise.all([readSheet(key, tab), buildCapaPorTituloCatalogo()]);
   if (data.length === 0) return [];
 
   if (isC) {
@@ -98,7 +98,7 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
         val: fmt(r[4]),
         mes: r[5],
         art: r[6],
-        capa: fixImg(r[7]),
+        capa: fixImg(r[7]) || fixImg(capaPorTitulo.get(normalizarTitulo(r[3] || ""))),
       }));
   }
 
@@ -113,7 +113,7 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
             val: fmt(r[4]),
             valTotal: fmt(r[5]),
             st: r[7],
-            capa: fixImg(r[10]),
+            capa: fixImg(r[10]) || fixImg(capaPorTitulo.get(normalizarTitulo(r[3] || ""))),
             art: r[12],
             style: r[11],
           }
@@ -124,7 +124,7 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
             valTotal: fmt(r[5]),
             art: r[7],
             st: r[13],
-            capa: fixImg(r[15]),
+            capa: fixImg(r[15]) || fixImg(capaPorTitulo.get(normalizarTitulo(r[3] || ""))),
             style: r[17],
           },
     );
@@ -143,16 +143,13 @@ function normalizarTitulo(s: string): string {
     .trim();
 }
 
-// ---- REAL TIME ----
-async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtube: unknown[] }> {
-  const [data, musicas] = await Promise.all([
-    readSheet("chartsRealtime", "EM Alta"),
-    // A aba "EM Alta" quase nunca vem com a própria coluna de capa (G)
-    // preenchida — cruza por título com o catálogo real (Musicas, planilha
-    // principal) pra herdar a capa de verdade, mesmo padrão já usado pros
-    // cards de Apple Music/YouTube do Catálogo (ver empirePlayController).
-    readSheet("principal", "Musicas").catch(() => [] as Row[]),
-  ]);
+// Musicas!H guarda "Artista - Título" (não só o título) — o cruzamento por
+// título puro (ex.: "EM Alta"!B, só o nome da faixa) nunca batia com isso,
+// então indexa tanto a string completa quanto só a parte depois do
+// "Artista - " (quando existir), cobrindo os dois formatos usados nas
+// diferentes abas de origem (EM Alta, BILLBOARD HOT 100, SPOTIFY, etc.).
+async function buildCapaPorTituloCatalogo(): Promise<Map<string, string>> {
+  const musicas = await readSheet("principal", "Musicas").catch(() => [] as Row[]);
   // Uma mesma faixa pode existir em duas linhas da planilha Musicas: a
   // original (single) e a versão dentro de um álbum ("TRACKLIST ALBUM",
   // coluna I). Quando isso acontece, a capa do SINGLE deve vencer — senão
@@ -160,18 +157,39 @@ async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtub
   // (bug relatado: "Rose Thompson - Boulangerie" mostrando capa do álbum).
   const capaPorTitulo = new Map<string, string>();
   const tipoPorTitulo = new Map<string, string>();
-  musicas.slice(1).forEach((r) => {
-    const titulo = normalizarTitulo(r[7] || "");
-    const capa = (r[3] || "").trim();
-    if (!titulo || !capa) return;
-    const tipoSingle = (r[8] || "").trim().toUpperCase();
+  const registra = (chave: string, capa: string, tipoSingle: string) => {
+    if (!chave || !capa) return;
     const ehFaixaDeAlbum = tipoSingle === "TRACKLIST ALBUM";
-    const tipoAtual = tipoPorTitulo.get(titulo);
-    if (!capaPorTitulo.has(titulo) || (tipoAtual === "TRACKLIST ALBUM" && !ehFaixaDeAlbum)) {
-      capaPorTitulo.set(titulo, capa);
-      tipoPorTitulo.set(titulo, tipoSingle);
+    const tipoAtual = tipoPorTitulo.get(chave);
+    if (!capaPorTitulo.has(chave) || (tipoAtual === "TRACKLIST ALBUM" && !ehFaixaDeAlbum)) {
+      capaPorTitulo.set(chave, capa);
+      tipoPorTitulo.set(chave, tipoSingle);
+    }
+  };
+  musicas.slice(1).forEach((r) => {
+    const nomeCompleto = (r[7] || "").trim();
+    const capa = (r[3] || "").trim();
+    if (!nomeCompleto || !capa) return;
+    const tipoSingle = (r[8] || "").trim().toUpperCase();
+    registra(normalizarTitulo(nomeCompleto), capa, tipoSingle);
+    const partes = nomeCompleto.split(" - ");
+    if (partes.length > 1) {
+      registra(normalizarTitulo(partes.slice(1).join(" - ")), capa, tipoSingle);
     }
   });
+  return capaPorTitulo;
+}
+
+// ---- REAL TIME ----
+async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtube: unknown[] }> {
+  const [data, capaPorTitulo] = await Promise.all([
+    readSheet("chartsRealtime", "EM Alta"),
+    // A aba "EM Alta" quase nunca vem com a própria coluna de capa (G)
+    // preenchida — cruza por título com o catálogo real (Musicas, planilha
+    // principal) pra herdar a capa de verdade, mesmo padrão já usado pros
+    // cards de Apple Music/YouTube do Catálogo (ver empirePlayController).
+    buildCapaPorTituloCatalogo(),
+  ]);
 
   const out: { spotify: unknown[]; apple: unknown[]; youtube: unknown[] } = { spotify: [], apple: [], youtube: [] };
   data.slice(1).forEach((r) => {
@@ -189,6 +207,34 @@ async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtub
     else out.youtube.push(item);
   });
   return out;
+}
+
+// ---- ADMIN DIAGNÓSTICO (temporário) ----
+// GET /api/charts/admin/debug-realtime-covers — compara o título bruto de
+// "EM Alta" com o título bruto da coluna H de Musicas, pra descobrir por que
+// o cruzamento por título não está batendo (ex.: formatos diferentes,
+// "Artista - Título" vs só "Título").
+export async function debugRealtimeCoversController(): Promise<Response> {
+  const [data, musicas] = await Promise.all([
+    readSheet("chartsRealtime", "EM Alta"),
+    readSheet("principal", "Musicas").catch(() => [] as Row[]),
+  ]);
+  const emAlta = data
+    .slice(1)
+    .filter((r) => r[1])
+    .slice(0, 15)
+    .map((r) => ({ titulo_bruto: r[1], titulo_normalizado: normalizarTitulo(r[1] || ""), colG: r[6] || "" }));
+  const musicasSample = musicas
+    .slice(1)
+    .filter((r) => r[7])
+    .slice(0, 15)
+    .map((r) => ({
+      titulo_bruto: r[7],
+      titulo_normalizado: normalizarTitulo(r[7] || ""),
+      capa: r[3] || "",
+      tipoSingle: r[8] || "",
+    }));
+  return jsonOk({ emAlta, musicasSample });
 }
 
 // ---- HOF LIST / PROFILE ----
@@ -328,6 +374,11 @@ async function fetchBannerN1s(): Promise<Record<string, unknown>> {
     { key: "sales", tab: "DIGITAL SALES" },
   ];
   const result: Record<string, unknown> = {};
+  // Mesmo cruzamento com o catálogo (Musicas) usado em fetchRT — essas abas
+  // de origem (BILLBOARD HOT 100, SPOTIFY etc.) raramente têm as colunas de
+  // capa (P/Q) preenchidas, então os cards "Top por plataforma" da Início
+  // ficavam sem nenhuma imagem.
+  const capaPorTitulo = await buildCapaPorTituloCatalogo();
 
   await Promise.all(
     platforms.map(async ({ key, tab }) => {
@@ -335,7 +386,9 @@ async function fetchBannerN1s(): Promise<Record<string, unknown>> {
       if (data.length === 0) return;
       const row = latestRow(data.slice(1));
       if (row) {
-        result[key] = { tit: row[3] || "", art: row[7] || "", capa: fixImg(row[15] || row[16] || "") };
+        const capaPropria = fixImg(row[15] || row[16] || "");
+        const capaCatalogo = fixImg(capaPorTitulo.get(normalizarTitulo(row[3] || "")));
+        result[key] = { tit: row[3] || "", art: row[7] || "", capa: capaPropria || capaCatalogo };
       }
     }),
   );
@@ -345,7 +398,9 @@ async function fetchBannerN1s(): Promise<Record<string, unknown>> {
     if (data.length > 0) {
       const row = latestRow(data.slice(1));
       if (row) {
-        result["bb200"] = { tit: row[3] || "", art: row[11] || "", capa: fixImg(row[10] || "") };
+        const capaPropria = fixImg(row[10] || "");
+        const capaCatalogo = fixImg(capaPorTitulo.get(normalizarTitulo(row[3] || "")));
+        result["bb200"] = { tit: row[3] || "", art: row[11] || "", capa: capaPropria || capaCatalogo };
       }
     }
   } catch {
