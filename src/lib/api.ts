@@ -1,7 +1,7 @@
 // Empire Hub — Apps Script API client
 // Mantém Apps Script + Google Sheets como backend.
 
-import { getStoredSessionToken, setStoredSessionToken } from "@/components/LoginScreen";
+import { getStoredSessionToken, setStoredSessionToken, getStoredLogin, setStoredLogin, type LoginResult } from "@/components/LoginScreen";
 
 // Anexa o token de sessão (quando existe) como Authorization: Bearer — só
 // as ações admin-gated no backend (bypass do ID hardcoded) exigem que ele
@@ -1327,7 +1327,7 @@ export const api = {
     });
     return res.json();
   },
-  async authHeartbeat(telegramId: string, usuario: string): Promise<void> {
+  async authHeartbeat(telegramId: string, usuario: string): Promise<LoginResult | null> {
     try {
       const res = await fetch("/api/auth/heartbeat", {
         method: "POST",
@@ -1336,8 +1336,20 @@ export const api = {
       });
       const json = await res.json().catch(() => null);
       if (json?.token) setStoredSessionToken(json.token);
+      // Refresca a sessão salva (nome/foto/tipo/prestígio) com o que está
+      // AGORA na planilha — antes disso só acontecia no login, então uma
+      // edição manual na aba Usuários (ex: trocar a foto de perfil) nunca
+      // aparecia no app sem sair e entrar de novo.
+      if (json?.data) {
+        const atual = getStoredLogin();
+        const atualizado: LoginResult = { ...(atual || ({} as LoginResult)), ...json.data };
+        setStoredLogin(atualizado);
+        return atualizado;
+      }
+      return null;
     } catch {
       // Silencioso — não é crítico pro app abrir mesmo se isso falhar.
+      return null;
     }
   },
   async editarPostSocial(

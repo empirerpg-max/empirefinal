@@ -509,6 +509,12 @@ function BottomNav() {
   // Drive não compartilhado publicamente) → "falhou". Mesmo fallback de
   // perfil.tsx/TopicThumbImg/AlbumCoverImg.
   const [fotoStage, setFotoStage] = useState<"sized" | "raw" | "falhou">("sized");
+  // Sem isso, uma foto nova (trocada pelo heartbeat ou editada na planilha)
+  // ficava presa no estágio da foto ANTERIOR (ex: "falhou") — o cascata
+  // sized→raw→falhou só reagia a erro de carregamento, nunca a troca de URL.
+  useEffect(() => {
+    setFotoStage("sized");
+  }, [perfilFoto]);
   const items = [
     { to: "/", label: "Início", icon: Home },
     { to: "/empire-play", label: "Catálogo", icon: PlayCircle },
@@ -629,7 +635,12 @@ function AuthGate() {
   // vez que o app abre.
   useEffect(() => {
     if (authUser) {
-      api.authHeartbeat(authUser.id, authUser.usuario).catch(() => {});
+      api
+        .authHeartbeat(authUser.id, authUser.usuario)
+        .then((atualizado) => {
+          if (atualizado) setLoggedInUser(atualizado);
+        })
+        .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
