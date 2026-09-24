@@ -419,7 +419,11 @@ export async function getArtistInfoController(request: Request): Promise<Respons
       JSON.stringify({
         success: true,
         data: {
-          foto: row ? normalizeText(row[2]) : "",
+          // C é a foto "oficial" (curada a mão); se vazia, cai pro upload
+          // mais recente do dono em I — antes ficava parado ali sem nunca
+          // ser lido, então a troca de foto do artista nunca refletia no
+          // app até alguém copiar manualmente de I pra C.
+          foto: row ? normalizeText(row[2]) || normalizeText(row[8]) : "",
           biografia: row ? normalizeText(row[4]) : "",
           capa: row ? normalizeText(row[17]) : "",
           capaMobile: row ? normalizeText(row[18]) : "",
@@ -677,7 +681,9 @@ export async function getAllArtistasController(): Promise<Response> {
       const fotoPorNome = new Map<string, string>();
       for (const row of infosRows.slice(1)) {
         const nome = normalizeComparison(row[0]);
-        const foto = normalizeText(row[2]);
+        // C = foto oficial curada; I = upload mais recente do dono, ainda
+        // sem revisão manual — mesma prioridade usada em getArtistInfoController.
+        const foto = normalizeText(row[2]) || normalizeText(row[8]);
         if (nome && foto && !fotoPorNome.has(nome)) fotoPorNome.set(nome, foto);
       }
       data = data.map((a) =>

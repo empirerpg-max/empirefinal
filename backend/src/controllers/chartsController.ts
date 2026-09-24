@@ -130,6 +130,19 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
     );
 }
 
+// Normaliza título pra cruzamento robusto: remove acentos, "(feat. ...)" e
+// qualquer pontuação/espaçamento extra que faça duas grafias da mesma
+// música (ex.: espaço duplo, aspas curvas) não baterem no Map.
+function normalizarTitulo(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\(feat\.[^)]*\)/gi, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 // ---- REAL TIME ----
 async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtube: unknown[] }> {
   const [data, musicas] = await Promise.all([
@@ -140,19 +153,36 @@ async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtub
     // cards de Apple Music/YouTube do Catálogo (ver empirePlayController).
     readSheet("principal", "Musicas").catch(() => [] as Row[]),
   ]);
+  // Uma mesma faixa pode existir em duas linhas da planilha Musicas: a
+  // original (single) e a versão dentro de um álbum ("TRACKLIST ALBUM",
+  // coluna I). Quando isso acontece, a capa do SINGLE deve vencer — senão
+  // o card mostra a capa do álbum pra uma faixa que é, na verdade, single
+  // (bug relatado: "Rose Thompson - Boulangerie" mostrando capa do álbum).
   const capaPorTitulo = new Map<string, string>();
+  const tipoPorTitulo = new Map<string, string>();
   musicas.slice(1).forEach((r) => {
-    const titulo = (r[7] || "").trim().toLowerCase();
+    const titulo = normalizarTitulo(r[7] || "");
     const capa = (r[3] || "").trim();
-    if (titulo && capa && !capaPorTitulo.has(titulo)) capaPorTitulo.set(titulo, capa);
+    if (!titulo || !capa) return;
+    const tipoSingle = (r[8] || "").trim().toUpperCase();
+    const ehFaixaDeAlbum = tipoSingle === "TRACKLIST ALBUM";
+    const tipoAtual = tipoPorTitulo.get(titulo);
+    if (!capaPorTitulo.has(titulo) || (tipoAtual === "TRACKLIST ALBUM" && !ehFaixaDeAlbum)) {
+      capaPorTitulo.set(titulo, capa);
+      tipoPorTitulo.set(titulo, tipoSingle);
+    }
   });
 
   const out: { spotify: unknown[]; apple: unknown[]; youtube: unknown[] } = { spotify: [], apple: [], youtube: [] };
   data.slice(1).forEach((r) => {
     if (!r[1]) return;
     const capaPlanilha = fixImg(r[6]);
-    const capaCatalogo = capaPorTitulo.get((r[1] || "").trim().toLowerCase());
-    const item = { t: r[1], s: fmt(r[3]), p: r[5], c: capaPlanilha || fixImg(capaCatalogo) };
+    const capaCatalogo = capaPorTitulo.get(normalizarTitulo(r[1] || ""));
+    // Catálogo (capa real da música/álbum) tem prioridade sobre a coluna G
+    // da própria "EM Alta": quando essa coluna vem preenchida, geralmente é
+    // com a foto do ARTISTA (não da capa), o que gerava o bug relatado de
+    // charts mostrando foto de artista em vez da capa do material.
+    const item = { t: r[1], s: fmt(r[3]), p: r[5], c: fixImg(capaCatalogo) || capaPlanilha };
     const plat = (r[4] || "").toLowerCase();
     if (plat.includes("spotify")) out.spotify.push(item);
     else if (plat.includes("apple")) out.apple.push(item);
