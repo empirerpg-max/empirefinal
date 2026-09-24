@@ -712,6 +712,55 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
   });
 }
 
+// Conserto pontual: "The Dutchess - Les Lumières" acabou com 2 problemas
+// nessa mesma investigação (achados via dump-linhas):
+// 1. Albuns!linha 100 — resto de uma tentativa de criação que saiu
+//    deslocada de coluna (bug conhecido do appendRow do Sheets quando há
+//    colunas calculadas à direita da tabela): as 11 células do álbum
+//    foram escritas a partir da coluna J em vez de A. Puro lixo (o álbum
+//    de verdade já existe certinho na linha 99) — só apaga.
+// 2. EDIÇÃO CHARTS ÁLBUMS — 2 linhas pro mesmo álbum: linha 89 tem
+//    data/semanas corretas (21/09/2019, 365) mas Número de Faixas
+//    desatualizado ("1") e Código único vazio; linha 90 tem
+//    data/semanas erradas (hoje, 1) mas tem Código único (EMPALBM089,
+//    que nem bate com o Albuns!L real, EMPALBM088). Mescla: linha 89
+//    fica com Número de Faixas=10 e Código=EMPALBM088 (o mesmo já
+//    gravado em Albuns!L), linha 90 é apagada.
+// Cada escrita só acontece se o valor atual bater com o esperado —
+// abortado por segurança se a planilha já tiver sido mexida.
+export async function fixDutchessLesLumieresController(): Promise<Response> {
+  const acoes: string[] = [];
+
+  // 1. Albuns!linha 100 — só apaga se ainda tiver o código da tentativa
+  // deslocada em algum lugar da linha (checagem de segurança).
+  const albunsRow100 = await googleSheetsService.principal.readValues("Albuns", "A100:Z100");
+  const row100 = albunsRow100?.[0] || [];
+  if (row100.some((c) => normalizeText(c) === "EMPALBM089")) {
+    await googleSheetsService.principal.updateValues("Albuns", "A100:Z100", [Array(26).fill("")]);
+    acoes.push("Albuns!linha 100 apagada (resto deslocado de coluna da tentativa de criação duplicada)");
+  } else {
+    acoes.push("Albuns!linha 100 NÃO apagada — não bateu com o esperado (planilha já mudou?)");
+  }
+
+  // 2. EDIÇÃO CHARTS ÁLBUMS!linha 89 e 90.
+  const edRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A89:R90");
+  const row89 = edRows?.[0] || [];
+  const row90 = edRows?.[1] || [];
+  const row89Ok = normalizeText(row89[3]) === "The Dutchess - Les Lumières" && normalizeText(row89[1]) === "21/09/2019";
+  const row90Ok = normalizeText(row90[3]) === "The Dutchess - Les Lumières" && normalizeText(row90[17]) === "EMPALBM089";
+
+  if (row89Ok && row90Ok) {
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", "E89", [["10"]]);
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", "R89", [["EMPALBM088"]]);
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", "A90:R90", [Array(18).fill("")]);
+    acoes.push("EDIÇÃO CHARTS ÁLBUMS!89 corrigida (Número de Faixas=10, Código=EMPALBM088) e !90 apagada");
+  } else {
+    acoes.push(`EDIÇÃO CHARTS ÁLBUMS!89/90 NÃO mexidas — não bateram com o esperado (linha89 ok: ${row89Ok}, linha90 ok: ${row90Ok})`);
+  }
+
+  return jsonResponse({ success: true, acoes });
+}
+
 // Dump bruto de um intervalo de linhas, sem NENHUM filtro por título —
 // último recurso quando o diagnóstico por título não bate com o que
 // aparece na planilha (ex: espaço/acento/caractere invisível diferente
