@@ -573,6 +573,10 @@ export async function getSocialPerfisController(): Promise<Response> {
       avatar_url: avatarUrl,
       avatar: avatarUrl,
       foto: avatarUrl,
+      // "Todos" (em vez de um telegram_id numérico) marca um perfil de uso
+      // compartilhado — qualquer jogador pode postar em nome dele, não só
+      // quem o cadastrou. Ver seleção "Interagir como" no front (social.tsx).
+      telegramId: normalizeText(row[5]),
       seguidores: Number(normalizeText(row[6])) || 0,
       seguindo: Number(normalizeText(row[7])) || 0,
     };

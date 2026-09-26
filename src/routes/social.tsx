@@ -39,6 +39,7 @@ import {
   Volume2,
   VolumeX,
   Search,
+  Tv,
 } from "lucide-react";
 import { api, resolveImg, isDirectImageUrl, driveVideo } from "@/lib/api";
 import { useImageCrop } from "@/hooks/use-image-crop";
@@ -599,6 +600,7 @@ type SocialProfile = {
   avatar_url?: string;
   avatar?: string;
   foto?: string;
+  telegramId?: string;
   seguidores?: number;
   seguindo?: number;
 };
@@ -667,7 +669,7 @@ function SocialPage() {
   const [blackoutUsername, setBlackoutUsername] = useState("");
   const [myArtists, setMyArtists] = useState<any[]>([]);
   const [selectedArtist, setSelectedArtist] = useState("");
-  const [viewMode, setViewMode] = useState<"Feed" | "Settings" | "News" | "Industry">("Feed");
+  const [viewMode, setViewMode] = useState<"Feed" | "Settings" | "News" | "Industry" | "Midia">("Feed");
   const [profiles, setProfiles] = useState<SocialProfile[]>([]);
   const [allArtists, setAllArtists] = useState<any[]>([]);
   const [selectedIndustryArtist, setSelectedIndustryArtist] = useState<any | null>(null);
@@ -675,6 +677,33 @@ function SocialPage() {
   const [news, setNews] = useState<News[]>([]);
   const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
   const [editingNews, setEditingNews] = useState<News | null>(null);
+
+  // Perfis de uso compartilhado (SOCIAL_PERFIS com telegram_id = "Todos") —
+  // qualquer jogador pode postar/comentar/interagir em nome deles, além dos
+  // próprios artistas. Um por "artista" (dedupe, já que a mesma linha se
+  // repete por rede/Instagram-Twitter-TikTok). Só entra pra QUEM PODE
+  // POSTAR COMO (seletor "Interagir como") — a aba de gerenciar handle/bio
+  // de rede social continua restrita aos artistas de verdade do jogador.
+  const perfisPublicos = useMemo(() => {
+    const vistos = new Set<string>();
+    const out: { nome: string; foto: string }[] = [];
+    for (const p of profiles) {
+      if ((p.telegramId || "").trim().toLowerCase() !== "todos") continue;
+      const chave = p.artista.trim().toLowerCase();
+      if (!chave || vistos.has(chave)) continue;
+      vistos.add(chave);
+      out.push({ nome: p.artista, foto: p.avatar_url || p.avatar || p.foto || "" });
+    }
+    return out;
+  }, [profiles]);
+
+  // myArtists (donos de verdade) + perfis públicos, sem duplicar quem já
+  // aparece nos dois (ex: um perfil "Todos" com o mesmo nome de um artista
+  // que o jogador também possui).
+  const interagirComoOpcoes = useMemo(() => {
+    const nomesProprios = new Set(myArtists.map((a) => a.nome));
+    return [...myArtists, ...perfisPublicos.filter((p) => !nomesProprios.has(p.nome))];
+  }, [myArtists, perfisPublicos]);
 
   // News form
   const [newsTitle, setNewsTitle] = useState("");
@@ -796,6 +825,17 @@ function SocialPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artistParam, allArtists]);
+
+  // Fallback de seleção inicial pra quem não tem artista próprio nenhum,
+  // mas tem ao menos um perfil público ("Todos") disponível — sem isso, um
+  // jogador sem artista ficava sem ninguém selecionado mesmo podendo postar
+  // como um desses perfis compartilhados.
+  useEffect(() => {
+    if (activeArtist || myArtists.length > 0 || perfisPublicos.length === 0) return;
+    setActiveArtist(perfisPublicos[0]);
+    setSelectedArtist(perfisPublicos[0].nome);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfisPublicos, myArtists, activeArtist]);
 
   async function loadContext() {
     const tgId = user?.id || "";
@@ -997,10 +1037,11 @@ function SocialPage() {
     setPostText(post.texto);
     setImageUrl(post.media_url || "");
     setMediaTipo(post.media_tipo === "video" ? "video" : "imagem");
-    // Se o nome no post não bate com nenhum dos seus artistas, ele foi
-    // publicado em Blackout Mode — reabre já no modo certo, com o nome
-    // fictício pronto pra editar (ou voltar ao normal).
-    const eraBlackout = !!post.autor && !myArtists.some((a) => a.nome === post.autor);
+    // Se o nome no post não bate com nenhum dos seus artistas nem com um
+    // perfil público, ele foi publicado em Blackout Mode — reabre já no
+    // modo certo, com o nome fictício pronto pra editar (ou voltar ao
+    // normal).
+    const eraBlackout = !!post.autor && !interagirComoOpcoes.some((a) => a.nome === post.autor);
     setBlackoutMode(eraBlackout);
     setBlackoutUsername(eraBlackout ? post.autor : "");
     setIsModalOpen(true);
@@ -1500,10 +1541,11 @@ function SocialPage() {
             Empire <span className="text-primary">Social</span>
           </h1>
 
-          <div className="grid grid-cols-4 gap-1 bg-white/5 border border-white/10 rounded-2xl p-1 w-full">
+          <div className="grid grid-cols-5 gap-1 bg-white/5 border border-white/10 rounded-2xl p-1 w-full">
             {(
               [
                 { id: "Feed", label: "Feed", icon: Rss },
+                { id: "Midia", label: "Tá na Mídia", icon: Tv },
                 { id: "Industry", label: "Perfis", icon: Users },
                 { id: "News", label: "News", icon: Newspaper },
                 { id: "Settings", label: "Config", icon: Settings2 },
@@ -1534,7 +1576,7 @@ function SocialPage() {
           </div>
         </div>
 
-        {myArtists.length > 0 && (
+        {interagirComoOpcoes.length > 0 && (
           <div className="mb-4 max-w-md mx-auto">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 px-1">
               Interagir como
@@ -1545,7 +1587,7 @@ function SocialPage() {
             >
               <StickyScrollArrowLeft show={interagirComoScroll.canScrollLeft} onClick={() => interagirComoScroll.scrollByAmount(-1)} />
               <StickyScrollArrowRight show={interagirComoScroll.canScrollRight} onClick={() => interagirComoScroll.scrollByAmount(1)} />
-              {myArtists.map((art) => {
+              {interagirComoOpcoes.map((art) => {
                 const isActive = activeArtist?.nome === art.nome;
                 const imgUrl = driveImg(art.foto);
                 return (
@@ -1886,7 +1928,7 @@ function SocialPage() {
                         </button>
                         {post.telegram_id && String(post.telegram_id) === String(user?.id || "") && (
                           <div className="flex items-center gap-3 ml-auto">
-                            {!myArtists.some((a) => a.nome === post.autor) && (
+                            {!interagirComoOpcoes.some((a) => a.nome === post.autor) && (
                               <span className="flex items-center gap-1 text-[9px] font-black uppercase text-muted-foreground">
                                 <EyeOff className="size-3" /> Blackout
                               </span>
@@ -1923,6 +1965,54 @@ function SocialPage() {
               </div>
             )}
           </>
+        ) : viewMode === "Midia" ? (
+          <div className="grid gap-6 pb-20">
+            <h2 className="text-xl font-black uppercase tracking-tight text-center">
+              Tá na <span className="text-primary">Mídia</span>
+            </h2>
+            {perfisPublicos.length === 0 ? (
+              <p className="text-center font-medium text-muted-foreground py-10 text-sm">
+                Nenhum perfil de mídia disponível ainda.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {perfisPublicos.map((perfil) => (
+                  <motion.button
+                    key={perfil.nome}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      haptic.selection();
+                      setSelectedIndustryArtist(perfil);
+                      setIndustryViewTab(null);
+                      setViewMode("Industry");
+                    }}
+                    className={`${card} p-4 flex flex-col items-center gap-2.5 text-center`}
+                  >
+                    <div className="size-16 rounded-full overflow-hidden bg-secondary border border-white/10 flex items-center justify-center shrink-0">
+                      {perfil.foto ? (
+                        <img
+                          loading="lazy"
+                          decoding="async"
+                          src={driveImg(perfil.foto)}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          crossOrigin="anonymous"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.onerror = null;
+                            target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(perfil.nome)}&background=111&color=fff&size=128&bold=true`;
+                          }}
+                        />
+                      ) : (
+                        <UserCircle className="size-8 text-muted-foreground/40" />
+                      )}
+                    </div>
+                    <span className="font-black text-xs uppercase truncate w-full">{perfil.nome}</span>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : viewMode === "News" ? (
           <div className="grid gap-6 pb-20">
             <div className="flex items-center justify-between mb-1">
