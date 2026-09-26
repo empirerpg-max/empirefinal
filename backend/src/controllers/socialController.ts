@@ -561,6 +561,18 @@ export async function comentarSocialPostController(request: Request): Promise<Re
 
 // -------------------- PERFIS --------------------
 
+// Planilha usa "10.000.000" (ponto como separador de milhar, igual o
+// resto da planilha) — Number() puro não entende esse formato e devolve
+// NaN pra qualquer valor de 4+ dígitos com ponto, sempre caindo no
+// fallback "|| 0". Foi exatamente esse o motivo dos perfis públicos
+// (Pitchfork, TMZ, MTV etc, cadastrados com "10.000.000" seguidores)
+// mostrarem "0 seguidores" mesmo com o valor preenchido certinho na
+// planilha.
+function parseNumeroBR(v: string): number {
+  const cleaned = normalizeText(v).replace(/\./g, "").replace(",", ".");
+  return parseFloat(cleaned) || 0;
+}
+
 export async function getSocialPerfisController(): Promise<Response> {
   const rows = await readRows(SHEETS.perfis);
   const perfis = rows.map((row) => {
@@ -577,8 +589,8 @@ export async function getSocialPerfisController(): Promise<Response> {
       // compartilhado — qualquer jogador pode postar em nome dele, não só
       // quem o cadastrou. Ver seleção "Interagir como" no front (social.tsx).
       telegramId: normalizeText(row[5]),
-      seguidores: Number(normalizeText(row[6])) || 0,
-      seguindo: Number(normalizeText(row[7])) || 0,
+      seguidores: parseNumeroBR(row[6]),
+      seguindo: parseNumeroBR(row[7]),
     };
   });
   return jsonResponse(perfis);

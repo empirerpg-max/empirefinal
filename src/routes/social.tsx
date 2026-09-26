@@ -1589,7 +1589,13 @@ function SocialPage() {
               <StickyScrollArrowRight show={interagirComoScroll.canScrollRight} onClick={() => interagirComoScroll.scrollByAmount(1)} />
               {interagirComoOpcoes.map((art) => {
                 const isActive = activeArtist?.nome === art.nome;
-                const imgUrl = driveImg(art.foto);
+                // Perfis públicos ("Tá na Mídia") têm foto em URL externa,
+                // não do Drive — driveImg() só faz sentido pra link do
+                // Drive de verdade (ver mesmo fix no card de "Tá na Mídia").
+                const imgUrl =
+                  art.foto && (art.foto.includes("drive.google.com") || art.foto.includes("googleusercontent.com"))
+                    ? driveImg(art.foto)
+                    : art.foto;
                 return (
                   <button
                     key={art.nome}
@@ -1613,7 +1619,6 @@ function SocialPage() {
                           src={imgUrl}
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"
-                          crossOrigin="anonymous"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.onerror = null;
@@ -1756,10 +1761,14 @@ function SocialPage() {
                                 <img
                                   loading="lazy"
                                   decoding="async"
-                                  src={driveImg(post.avatar)}
+                                  src={
+                                    post.avatar.includes("drive.google.com") ||
+                                    post.avatar.includes("googleusercontent.com")
+                                      ? driveImg(post.avatar)
+                                      : post.avatar
+                                  }
                                   className="w-full h-full object-cover"
                                   referrerPolicy="no-referrer"
-                                  crossOrigin="anonymous"
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement;
                                     target.style.display = "none";
@@ -2238,7 +2247,11 @@ function SocialPage() {
                   .slice(0, 6);
 
                 const profileAvatarStr = perfil?.avatar_url || perfil?.avatar || perfil?.foto;
-                const avatarSrc = profileAvatarStr ? driveImg(profileAvatarStr) : undefined;
+                const avatarSrc = !profileAvatarStr
+                  ? undefined
+                  : profileAvatarStr.includes("drive.google.com") || profileAvatarStr.includes("googleusercontent.com")
+                    ? driveImg(profileAvatarStr)
+                    : profileAvatarStr;
 
                 const avatarFallback = (
                   <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-700 to-zinc-900 text-white font-black text-2xl">
@@ -2252,7 +2265,6 @@ function SocialPage() {
                         src={avatarSrc}
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
-                        crossOrigin="anonymous"
                         loading="lazy"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = "none";
