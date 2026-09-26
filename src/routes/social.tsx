@@ -623,6 +623,7 @@ type News = {
 
 function SocialPage() {
   const { postId, artist: artistParam } = Route.useSearch();
+  const socialTabsScroll = useDragScroll<HTMLDivElement>();
   const interagirComoScroll = useDragScroll<HTMLDivElement>();
   const storiesScroll = useDragScroll<HTMLDivElement>();
   const sigaTambemScroll = useDragScroll<HTMLDivElement>();
@@ -1541,38 +1542,52 @@ function SocialPage() {
             Empire <span className="text-primary">Social</span>
           </h1>
 
-          <div className="grid grid-cols-5 gap-1 bg-white/5 border border-white/10 rounded-2xl p-1 w-full">
-            {(
-              [
-                { id: "Feed", label: "Feed", icon: Rss },
-                { id: "Midia", label: "Tá na Mídia", icon: Tv },
-                { id: "Industry", label: "Perfis", icon: Users },
-                { id: "News", label: "News", icon: Newspaper },
-                { id: "Settings", label: "Config", icon: Settings2 },
-              ] as const
-            ).map((tab) => {
-              const Icon = tab.icon;
-              const active = viewMode === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    haptic.selection();
-                    setViewMode(tab.id);
-                    if (tab.id === "Industry") setSelectedIndustryArtist(null);
-                  }}
-                  className={`relative min-w-0 px-1 py-1.5 min-h-8 font-black text-[10px] uppercase rounded-xl transition-all flex flex-row items-center justify-center gap-1 active:scale-95 ${
-                    active
-                      ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
-                      : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06] hover:text-foreground"
-                  }`}
-                >
-                  {active && <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
-                  <Icon className="relative z-10 size-3 shrink-0" />
-                  <span className="relative z-10 truncate min-w-0">{tab.label}</span>
-                </button>
-              );
-            })}
+          {/* Linha de tabs rolável (não grid de largura fixa) — um label
+              longo como "Tá na Mídia" nunca cabia nas mesmas 5 colunas
+              apertadas que "Feed"/"News" em tela estreita, e ficava cortado
+              com "...". Cada tab agora tem a largura do próprio conteúdo
+              (shrink-0 + padding real) e a fileira rola horizontalmente
+              quando não cabe tudo — nunca trunca, em qualquer tamanho de
+              tela. */}
+          <div className="relative">
+            <StickyScrollArrowLeft show={socialTabsScroll.canScrollLeft} onClick={() => socialTabsScroll.scrollByAmount(-1)} />
+            <StickyScrollArrowRight show={socialTabsScroll.canScrollRight} onClick={() => socialTabsScroll.scrollByAmount(1)} />
+            <div
+              ref={socialTabsScroll.ref}
+              className="flex gap-1.5 overflow-x-auto scrollbar-hide bg-white/5 border border-white/10 rounded-2xl p-1 w-full cursor-grab active:cursor-grabbing select-none"
+            >
+              {(
+                [
+                  { id: "Feed", label: "Feed", icon: Rss },
+                  { id: "Midia", label: "Tá na Mídia", icon: Tv },
+                  { id: "Industry", label: "Perfis", icon: Users },
+                  { id: "News", label: "News", icon: Newspaper },
+                  { id: "Settings", label: "Config", icon: Settings2 },
+                ] as const
+              ).map((tab) => {
+                const Icon = tab.icon;
+                const active = viewMode === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      haptic.selection();
+                      setViewMode(tab.id);
+                      if (tab.id === "Industry") setSelectedIndustryArtist(null);
+                    }}
+                    className={`relative shrink-0 px-3 py-1.5 min-h-8 font-black text-[10px] uppercase rounded-xl transition-all flex flex-row items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap ${
+                      active
+                        ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+                        : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06] hover:text-foreground"
+                    }`}
+                  >
+                    {active && <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
+                    <Icon className="relative z-10 size-3 shrink-0" />
+                    <span className="relative z-10">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
