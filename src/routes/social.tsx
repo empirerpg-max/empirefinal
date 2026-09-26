@@ -1561,15 +1561,15 @@ function SocialPage() {
                     setViewMode(tab.id);
                     if (tab.id === "Industry") setSelectedIndustryArtist(null);
                   }}
-                  className={`relative py-1.5 min-h-8 font-black text-[10px] uppercase rounded-xl transition-all flex flex-row items-center justify-center gap-1.5 active:scale-95 ${
+                  className={`relative min-w-0 px-1 py-1.5 min-h-8 font-black text-[10px] uppercase rounded-xl transition-all flex flex-row items-center justify-center gap-1 active:scale-95 ${
                     active
                       ? "text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
                       : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06] hover:text-foreground"
                   }`}
                 >
                   {active && <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
-                  <Icon className="relative z-10 size-3" />
-                  <span className="relative z-10 truncate">{tab.label}</span>
+                  <Icon className="relative z-10 size-3 shrink-0" />
+                  <span className="relative z-10 truncate min-w-0">{tab.label}</span>
                 </button>
               );
             })}
@@ -1993,10 +1993,26 @@ function SocialPage() {
                         <img
                           loading="lazy"
                           decoding="async"
-                          src={driveImg(perfil.foto)}
+                          // driveImg() só faz sentido pra link do Drive — em
+                          // cima de uma URL externa qualquer (logo de mídia
+                          // hospedado fora, ex.: Pitchfork/TMZ/MTV) ele podia
+                          // achar um token de 25+ caracteres por coincidência
+                          // (UUID, hash) dentro do próprio link e reescrever
+                          // pra um link quebrado do Google. E crossOrigin=
+                          // "anonymous" exige CORS do servidor de origem —
+                          // a maioria desses sites externos não manda esse
+                          // header, e o navegador recusa renderizar a imagem
+                          // inteira (não só falha silenciosa). Combinados,
+                          // isso deixava a maioria dos avatares de perfis
+                          // públicos quebrada. Nenhum dos dois é necessário
+                          // aqui (não fazemos crop/canvas com essa imagem).
+                          src={
+                            perfil.foto.includes("drive.google.com") || perfil.foto.includes("googleusercontent.com")
+                              ? driveImg(perfil.foto)
+                              : perfil.foto
+                          }
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"
-                          crossOrigin="anonymous"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.onerror = null;
