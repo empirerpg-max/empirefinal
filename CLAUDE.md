@@ -18,3 +18,22 @@ Todo botão, pill ou tab que tem texto (label, nome, título) precisa:
 
 Isso vale sempre que um botão/tab for adicionado ou um label for trocado
 por um mais longo — não é preciso o usuário pedir de novo a cada vez.
+
+### Barra de tabs com N itens de largura fixa (ex.: `grid-cols-N`)
+
+**Regra explícita: texto nunca pode aparecer cortado com "..." numa barra
+de tabs.** Um `grid-cols-N` de largura igual quebra assim que qualquer
+label for mais longo que os outros (ex.: "Tá na Mídia" ao lado de "Feed",
+"News") — em tela estreita, `truncate`+`min-w-0` só evita o texto
+estourar o card, mas ainda corta a palavra, o que também não é aceitável.
+
+Nesses casos, troca `grid-cols-N` por uma fileira ROLÁVEL horizontal (o
+padrão já usado em várias telas do app: `useDragScroll` +
+`StickyScrollArrowLeft`/`StickyScrollArrowRight`, ver exemplo em
+`src/routes/social.tsx`, barra de tabs do Empire Social). Cada tab fica
+com `shrink-0` + padding real (largura do próprio conteúdo, sem
+truncar/cortar nada) e a fileira rola quando não cabe tudo. Isso garante
+o texto sempre legível por inteiro, em qualquer tamanho de tela — é a
+forma "ajustável, responsiva e bonita" que já foi pedida e deve ser
+aplicada por padrão em qualquer barra de tabs nova ou quando um label
+novo for adicionado a uma existente.
