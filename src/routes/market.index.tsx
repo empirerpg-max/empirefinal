@@ -487,8 +487,8 @@ function MarketPage() {
             </div>
             <h3 className="text-lg font-black uppercase tracking-tight mb-1">Spotlight Banner</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Fica em destaque na home por 4 dias. Quem comentar no tópico através do clique no banner libera uma
-              playlist mínima bônus na plataforma escolhida.
+              Destaque o seu single ou álbum por até 4 dias. Ao receber um comentário que veio desse clique, você
+              receberá um impulso em sua música em um dos charts escolhidos abaixo.
             </p>
 
             {artistas.length > 1 && (
