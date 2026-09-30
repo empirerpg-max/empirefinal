@@ -1150,6 +1150,10 @@ export const api = {
     const res = await fetch("/api/gestao/musicas-em-chart").then((r) => r.json());
     return res?.data || [];
   },
+  async listarAlbunsEmChart(): Promise<{ label: string; artist: string; title: string }[]> {
+    const res = await fetch("/api/gestao/albuns-em-chart").then((r) => r.json());
+    return res?.data || [];
+  },
   async registrarCliqueBanner(payload: { telegramId: string; bannerId: string }): Promise<{ success: boolean }> {
     const res = await fetch("/api/market/banners/clique", {
       method: "POST",

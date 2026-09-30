@@ -34,7 +34,7 @@ const PLATAFORMAS_BANNER: { valor: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE"; label:
   { valor: "YOUTUBE", label: "YouTube", preco: 200000 },
 ];
 
-const PLATAFORMAS_MUSIC_BOOST: { valor: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE"; label: string }[] = [
+const PLATAFORMAS_BOOST: { valor: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE"; label: string }[] = [
   { valor: "SPOTIFY", label: "Spotify" },
   { valor: "APPLE MUSIC", label: "Apple Music" },
   { valor: "YOUTUBE", label: "YouTube" },
@@ -135,11 +135,13 @@ function MusicaSelect({
   value,
   onChange,
   placeholder,
+  vazioLabel,
 }: {
   opcoes: string[];
   value: string;
   onChange: (titulo: string) => void;
   placeholder?: string;
+  vazioLabel?: string;
 }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
@@ -160,7 +162,7 @@ function MusicaSelect({
         className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition disabled:opacity-50"
       >
         <span className="flex-1 min-w-0 text-left truncate">
-          {value || (opcoes.length === 0 ? "Nenhuma música desse artista nos charts" : placeholder || "Selecione")}
+          {value || (opcoes.length === 0 ? vazioLabel || "Nenhuma música desse artista nos charts" : placeholder || "Selecione")}
         </span>
         <ChevronDown className={`size-4 text-muted-foreground shrink-0 transition-transform ${aberto ? "rotate-180" : ""}`} />
       </button>
@@ -215,7 +217,8 @@ function MarketPage() {
   const [artistaSelecionado, setArtistaSelecionado] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [musicasEmChart, setMusicasEmChart] = useState<{ label: string; artist: string; title: string }[]>([]);
-  const [musicBoostPlataforma, setMusicBoostPlataforma] = useState<"SPOTIFY" | "APPLE MUSIC" | "YOUTUBE" | "">("");
+  const [albunsEmChart, setAlbunsEmChart] = useState<{ label: string; artist: string; title: string }[]>([]);
+  const [boostPlataforma, setBoostPlataforma] = useState<"SPOTIFY" | "APPLE MUSIC" | "YOUTUBE" | "">("");
 
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
   const [bannerArtista, setBannerArtista] = useState("");
@@ -268,8 +271,13 @@ function MarketPage() {
     return musicasEmChart.filter((m) => m.artist.trim().toLowerCase() === alvo).map((m) => m.title);
   }, [musicasEmChart, artistaSelecionado]);
 
+  const albunsDoArtistaSelecionado = useMemo(() => {
+    const alvo = artistaSelecionado.trim().toLowerCase();
+    return albunsEmChart.filter((a) => a.artist.trim().toLowerCase() === alvo).map((a) => a.title);
+  }, [albunsEmChart, artistaSelecionado]);
+
   useEffect(() => {
-    if (comprando?.id === "music_boost") setDetalhe("");
+    if (comprando?.id === "music_boost" || comprando?.id === "album_boost") setDetalhe("");
   }, [artistaSelecionado, comprando?.id]);
 
   const abrirCompra = (item: MarketItem) => {
@@ -285,11 +293,14 @@ function MarketPage() {
     }
     haptic.selection();
     setDetalhe("");
-    setMusicBoostPlataforma("");
+    setBoostPlataforma("");
     setArtistaSelecionado(item.moeda === "ecoin" ? artistas[0]?.nome || "" : "");
     setComprando(item);
     if (item.id === "music_boost" && musicasEmChart.length === 0) {
       api.listarMusicasEmChart().then(setMusicasEmChart);
+    }
+    if (item.id === "album_boost" && albunsEmChart.length === 0) {
+      api.listarAlbunsEmChart().then(setAlbunsEmChart);
     }
   };
 
@@ -370,7 +381,7 @@ function MarketPage() {
       toast.error("Selecione o artista.");
       return;
     }
-    if (comprando.id === "music_boost" && !musicBoostPlataforma) {
+    if ((comprando.id === "music_boost" || comprando.id === "album_boost") && !boostPlataforma) {
       toast.error("Escolha em qual plataforma impulsionar.");
       return;
     }
@@ -386,7 +397,8 @@ function MarketPage() {
         usuario: user?.name || "",
         artista: comprando.moeda === "ecoin" ? artistaSelecionado : undefined,
         detalhe: detalhe.trim(),
-        plataforma: comprando.id === "music_boost" ? musicBoostPlataforma : undefined,
+        plataforma:
+          comprando.id === "music_boost" || comprando.id === "album_boost" ? boostPlataforma : undefined,
       });
       if (res.success) {
         haptic.success();
@@ -545,19 +557,19 @@ function MarketPage() {
               />
             )}
 
-            {comprando.id === "music_boost" && (
+            {(comprando.id === "music_boost" || comprando.id === "album_boost") && (
               <>
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
                   Plataforma
                 </p>
                 <div className="grid grid-cols-3 gap-1.5 mb-3">
-                  {PLATAFORMAS_MUSIC_BOOST.map((p) => (
+                  {PLATAFORMAS_BOOST.map((p) => (
                     <button
                       key={p.valor}
                       type="button"
-                      onClick={() => setMusicBoostPlataforma(p.valor)}
+                      onClick={() => setBoostPlataforma(p.valor)}
                       className={`py-2.5 px-1 rounded-xl text-[10px] font-black uppercase tracking-wide text-center truncate transition ${
-                        musicBoostPlataforma === p.valor
+                        boostPlataforma === p.valor
                           ? "bg-primary text-primary-foreground"
                           : "bg-white/5 border border-white/10 text-muted-foreground"
                       }`}
@@ -575,6 +587,14 @@ function MarketPage() {
                 value={detalhe}
                 onChange={setDetalhe}
                 placeholder="Selecione a música"
+              />
+            ) : comprando.pedeDetalhe && comprando.id === "album_boost" ? (
+              <MusicaSelect
+                opcoes={albunsDoArtistaSelecionado}
+                value={detalhe}
+                onChange={setDetalhe}
+                placeholder="Selecione o álbum"
+                vazioLabel="Nenhum álbum desse artista nos charts"
               />
             ) : (
               comprando.pedeDetalhe && (
@@ -610,7 +630,7 @@ function MarketPage() {
                   submitting ||
                   (comprando.pedeDetalhe && !detalhe.trim()) ||
                   (comprando.moeda === "ecoin" && !artistaSelecionado) ||
-                  (comprando.id === "music_boost" && !musicBoostPlataforma) ||
+                  ((comprando.id === "music_boost" || comprando.id === "album_boost") && !boostPlataforma) ||
                   saldoAtivo < comprando.preco
                 }
                 className="py-3 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider disabled:opacity-40 flex items-center justify-center gap-1.5"
