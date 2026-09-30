@@ -166,6 +166,12 @@ import {
   diagnosticoMarketItensController,
 } from "../controllers/marketController";
 import {
+  getBannersAtivosController,
+  getBannerOpcoesController,
+  postComprarBannerController,
+  postCliqueBannerController,
+} from "../controllers/bannerController";
+import {
   getSocialPostsController,
   createSocialPostController,
   corrigirDesalinhamentoSocialPosts,
@@ -410,6 +416,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/market/regras",
     "/api/market/comprar",
     "/api/market/admin/diagnostico-itens",
+    "/api/market/banners/ativos",
+    "/api/market/banners/opcoes",
+    "/api/market/banners/comprar",
+    "/api/market/banners/clique",
   ]);
 
   if (
@@ -1502,6 +1512,26 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await postMarketComprarController(request);
   } else if (url.pathname === "/api/market/admin/diagnostico-itens") {
     response = await diagnosticoMarketItensController();
+  } else if (url.pathname === "/api/market/banners/ativos") {
+    response = await getBannersAtivosController();
+  } else if (url.pathname === "/api/market/banners/opcoes") {
+    response = await getBannerOpcoesController(request);
+  } else if (url.pathname === "/api/market/banners/comprar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/market/banners/comprar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await postComprarBannerController(request);
+  } else if (url.pathname === "/api/market/banners/clique") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/market/banners/clique." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await postCliqueBannerController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(

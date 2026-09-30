@@ -80,7 +80,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 // Devolve a data (AAAA-MM-DD) da quarta-feira que abre a semana vigente —
 // chave estável pra saber a quais "Award +minutos"/Week Off/leilão uma
 // compra pertence, mesmo sem hora exata guardada em todo lugar.
-function semanaAtual(): string {
+export function semanaAtual(): string {
   const agora = new Date(Date.now() - 3 * 60 * 60 * 1000); // Brasília (UTC-3)
   const diaSemana = agora.getUTCDay(); // 0=domingo..6=sábado
   const diasDesdeQuarta = (diaSemana - 3 + 7) % 7; // 3 = quarta
@@ -95,7 +95,7 @@ function semanaAtual(): string {
 // DADOS!AC (nome do artista) / AD (saldo ECoin) — mesmo saldo "ao vivo"
 // já exibido e debitado automaticamente em Ponto > Playlists (planilha
 // registrosCharts, ver playlistsInvestimentoController.ts).
-async function getSaldosEcoin(nomesArtistas: string[]): Promise<Map<string, number>> {
+export async function getSaldosEcoin(nomesArtistas: string[]): Promise<Map<string, number>> {
   const mapa = new Map<string, number>();
   if (nomesArtistas.length === 0) return mapa;
   const rows = await googleSheetsService.registrosCharts.readValues("DADOS", "AC1:AD5000").catch(() => []);

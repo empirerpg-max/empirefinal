@@ -1111,6 +1111,48 @@ export const api = {
     return res.json();
   },
 
+  // ---- Spotlight Banner (Market) ----
+  async listarBannersAtivos(): Promise<
+    { id: string; artista: string; titulo: string; imagemUrl: string; topicoId: string; tab: string }[]
+  > {
+    const res = await fetch("/api/market/banners/ativos").then((r) => r.json());
+    return res?.data || [];
+  },
+  async listarBannerOpcoes(
+    telegramId: string,
+    artista: string,
+  ): Promise<{ titulo: string; topicoId: string; capa: string | null; tipo: string }[]> {
+    const res = await fetch(
+      `/api/market/banners/opcoes?telegramId=${encodeURIComponent(telegramId)}&artista=${encodeURIComponent(artista)}`,
+    ).then((r) => r.json());
+    return res?.data || [];
+  },
+  async comprarBanner(payload: {
+    telegramId: string;
+    usuario?: string;
+    artista: string;
+    plataforma: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE";
+    musicaOuAlbum: string;
+    topicoId: string;
+    imagemUrl: string;
+    tab: "musicas" | "albuns";
+  }): Promise<{ success: boolean; error?: string; data?: { id: string; dataExpira: string } }> {
+    const res = await fetch("/api/market/banners/comprar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+  async registrarCliqueBanner(payload: { telegramId: string; bannerId: string }): Promise<{ success: boolean }> {
+    const res = await fetch("/api/market/banners/clique", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
   // ---- Ponto ----
   async listarPontos(telegramId: string): Promise<{
     artistas: string[];

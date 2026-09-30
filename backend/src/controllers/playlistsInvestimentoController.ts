@@ -349,3 +349,72 @@ export async function limparInvestimentoController(request: Request): Promise<Re
 
   return jsonResponse({ ok: true, investimento: rowToInvestimento(rowAtualizada, linha) });
 }
+
+// Playlist mínima (mais barata) de cada plataforma — mesma tabela de
+// PLATAFORMAS acima, é o que o Spotlight Banner usa como preço/entrega.
+export const PLAYLIST_MINIMA: Record<string, string> = {
+  SPOTIFY: Object.entries(PRECOS_SPOTIFY).sort((a, b) => a[1] - b[1])[0][0],
+  "APPLE MUSIC": Object.entries(PRECOS_APPLE_MUSIC).sort((a, b) => a[1] - b[1])[0][0],
+  YOUTUBE: Object.entries(PRECOS_YOUTUBE).sort((a, b) => a[1] - b[1])[0][0],
+};
+
+export const PRECO_PLAYLIST_MINIMA: Record<string, number> = {
+  SPOTIFY: PRECOS_SPOTIFY[PLAYLIST_MINIMA.SPOTIFY],
+  "APPLE MUSIC": PRECOS_APPLE_MUSIC[PLAYLIST_MINIMA["APPLE MUSIC"]],
+  YOUTUBE: PRECOS_YOUTUBE[PLAYLIST_MINIMA.YOUTUBE],
+};
+
+/**
+ * Investimento automático (não vem de um POST do jogador): usado pelo
+ * Spotlight Banner do Market quando um comentário feito através do banner
+ * libera o bônus de playlist mínima. Reaproveita EXATAMENTE a mesma lógica
+ * de reserva/reuso de linha de `iniciarInvestimentoController` +
+ * `investirPlaylistController` (idempotente por artista+música), só que
+ * chamada como função direta em vez de handler HTTP.
+ */
+export async function registrarInvestimentoAutomatico(
+  artista: string,
+  musica: string,
+  plataforma: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE",
+): Promise<{ ok: boolean; linha?: number; error?: string }> {
+  const config = PLATAFORMAS[plataforma];
+  if (!config) return { ok: false, error: "Plataforma inválida." };
+  const playlist = PLAYLIST_MINIMA[plataforma];
+
+  const rows = await googleSheetsService.registrosCharts.readValues(SHEET);
+  const normArtista = normalizeComparison(artista);
+  const normMusica = normalizeComparison(musica);
+
+  let linhaAlvo = -1;
+  for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (normalizeComparison(normalizeText(row[COL.ARTISTA])) !== normArtista) continue;
+    if (normalizeComparison(normalizeText(row[COL.MUSICA])) !== normMusica) continue;
+    const semPlaylist =
+      !normalizeText(row[COL.SPOTIFY]) && !normalizeText(row[COL.APPLE]) && !normalizeText(row[COL.YOUTUBE]);
+    if (semPlaylist) {
+      linhaAlvo = i + 1;
+      break;
+    }
+  }
+
+  if (linhaAlvo === -1) {
+    for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (!normalizeText(row[COL.ARTISTA])) {
+        linhaAlvo = i + 1;
+        break;
+      }
+    }
+    if (linhaAlvo === -1) {
+      return { ok: false, error: "Sem linha disponível em ECOIN + INVESTIMENTO essa semana." };
+    }
+    await googleSheetsService.registrosCharts.updateValues(SHEET, `C${linhaAlvo}`, [[artista]]);
+    await googleSheetsService.registrosCharts.updateValues(SHEET, `E${linhaAlvo}`, [[musica]]);
+  }
+
+  const colLetter = colIndexToA1Letter(config.col);
+  await googleSheetsService.registrosCharts.updateValues(SHEET, `${colLetter}${linhaAlvo}`, [[playlist]]);
+
+  return { ok: true, linha: linhaAlvo };
+}

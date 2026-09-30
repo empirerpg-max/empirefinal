@@ -18,10 +18,19 @@ import {
   Check,
   Coins,
   Sparkles,
+  Radio,
+  ImageIcon,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api } from "@/lib/api";
+import { useImageCrop } from "@/hooks/use-image-crop";
 import { toast } from "sonner";
+
+const PLATAFORMAS_BANNER: { valor: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE"; label: string; preco: number }[] = [
+  { valor: "SPOTIFY", label: "Spotify", preco: 100000 },
+  { valor: "APPLE MUSIC", label: "Apple Music", preco: 60000 },
+  { valor: "YOUTUBE", label: "YouTube", preco: 200000 },
+];
 
 export const Route = createFileRoute("/market")({
   head: () => ({ meta: [{ title: "Empire Market — Empire Hub" }] }),
@@ -73,6 +82,23 @@ function MarketPage() {
   const [artistaSelecionado, setArtistaSelecionado] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [bannerModalOpen, setBannerModalOpen] = useState(false);
+  const [bannerArtista, setBannerArtista] = useState("");
+  const [bannerPlataforma, setBannerPlataforma] = useState<"SPOTIFY" | "APPLE MUSIC" | "YOUTUBE" | "">("");
+  const [bannerOpcoes, setBannerOpcoes] = useState<
+    { titulo: string; topicoId: string; capa: string | null; tipo: string }[]
+  >([]);
+  const [bannerOpcaoTopicoId, setBannerOpcaoTopicoId] = useState("");
+  const [bannerImageFile, setBannerImageFile] = useState<File | null>(null);
+  const [bannerImagePreview, setBannerImagePreview] = useState<string | null>(null);
+  const [bannerSubmitting, setBannerSubmitting] = useState(false);
+  const { cropModal: bannerCropModal, cropImage: cropBannerImage } = useImageCrop({
+    targetW: 1200,
+    targetH: 400,
+    shape: "square",
+    title: "Editar banner",
+  });
+
   const load = () => {
     if (!tgId || tgId === "guest") return;
     api.listarMarketProdutos(tgId).then((d) => {
@@ -111,6 +137,75 @@ function MarketPage() {
     setDetalhe("");
     setArtistaSelecionado(item.moeda === "ecoin" ? artistas[0]?.nome || "" : "");
     setComprando(item);
+  };
+
+  const abrirBannerModal = () => {
+    if (artistas.length === 0) {
+      toast.error("Você precisa ter um artista pra divulgar.");
+      return;
+    }
+    haptic.selection();
+    setBannerArtista(artistas[0].nome);
+    setBannerPlataforma("");
+    setBannerOpcaoTopicoId("");
+    setBannerOpcoes([]);
+    setBannerImageFile(null);
+    setBannerImagePreview(null);
+    setBannerModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (!bannerModalOpen || !bannerArtista || !tgId) return;
+    api.listarBannerOpcoes(tgId, bannerArtista).then(setBannerOpcoes);
+    setBannerOpcaoTopicoId("");
+  }, [bannerModalOpen, bannerArtista, tgId]);
+
+  const bannerOpcaoSelecionada = bannerOpcoes.find((o) => o.topicoId === bannerOpcaoTopicoId);
+  const bannerPreco = PLATAFORMAS_BANNER.find((p) => p.valor === bannerPlataforma)?.preco ?? 0;
+  const bannerSaldoArtista = artistas.find((a) => a.nome === bannerArtista)?.saldoEcoin ?? 0;
+
+  const confirmarCompraBanner = async () => {
+    if (bannerSubmitting) return;
+    if (!bannerPlataforma || !bannerOpcaoSelecionada || !bannerImageFile) {
+      toast.error("Preencha plataforma, música/álbum e a imagem do banner.");
+      return;
+    }
+    if (bannerSaldoArtista < bannerPreco) {
+      toast.error("ECoin insuficiente.");
+      return;
+    }
+    setBannerSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", bannerImageFile);
+      formData.append("fileName", `SPOTLIGHT_${Date.now()}_${bannerImageFile.name}`);
+      formData.append("folderType", "socialPosts");
+      const uploadRes = await fetch("/api/gestao/upload", { method: "POST", body: formData }).then((r) => r.json());
+      if (!uploadRes?.success || !uploadRes?.data?.fileUrl) throw new Error("Falha ao enviar a imagem.");
+
+      const res = await api.comprarBanner({
+        telegramId: tgId,
+        usuario: user?.name || "",
+        artista: bannerArtista,
+        plataforma: bannerPlataforma,
+        musicaOuAlbum: bannerOpcaoSelecionada.titulo,
+        topicoId: bannerOpcaoSelecionada.topicoId,
+        imagemUrl: uploadRes.data.fileUrl,
+        tab: bannerOpcaoSelecionada.tipo === "albuns" ? "albuns" : "musicas",
+      });
+      if (res.success) {
+        haptic.success();
+        toast.success("Spotlight ativado! Seu banner já entrou na fila da home.");
+        setBannerModalOpen(false);
+        load();
+      } else {
+        toast.error(res.error || "Não foi possível comprar o banner.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro de conexão.");
+    } finally {
+      setBannerSubmitting(false);
+    }
   };
 
   const confirmarCompra = async () => {
@@ -198,6 +293,23 @@ function MarketPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {artistas.length > 0 && (
+        <button
+          onClick={abrirBannerModal}
+          className="w-full flex items-center gap-4 p-4 mb-6 rounded-2xl bg-gradient-to-r from-amber-500/15 to-primary/10 border border-amber-400/25 hover:border-amber-400/40 transition-all text-left"
+        >
+          <div className="size-12 rounded-xl bg-amber-400/20 text-amber-300 grid place-items-center shrink-0">
+            <Radio className="size-6" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-black uppercase tracking-tight">Spotlight Banner</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Banner em destaque na home por 4 dias — comentários vindos dele geram playlist bônus.
+            </p>
+          </div>
+        </button>
       )}
 
       <div className="space-y-6">
@@ -313,6 +425,139 @@ function MarketPage() {
           </div>
         </div>
       )}
+
+      {bannerModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm grid place-items-end sm:place-items-center p-0 sm:p-4"
+          onClick={() => !bannerSubmitting && setBannerModalOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-card rounded-t-3xl sm:rounded-3xl p-6 border border-white/10 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="size-12 rounded-xl bg-amber-400/20 text-amber-300 grid place-items-center mb-3">
+              <Radio className="size-6" />
+            </div>
+            <h3 className="text-lg font-black uppercase tracking-tight mb-1">Spotlight Banner</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Fica em destaque na home por 4 dias. Quem comentar no tópico através do clique no banner libera uma
+              playlist mínima bônus na plataforma escolhida.
+            </p>
+
+            {artistas.length > 1 && (
+              <select
+                value={bannerArtista}
+                onChange={(e) => setBannerArtista(e.target.value)}
+                className="w-full mb-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition"
+              >
+                {artistas.map((a) => (
+                  <option key={a.nome} value={a.nome}>
+                    {a.nome} — R$ {formatMoeda(a.saldoEcoin)}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">Plataforma</p>
+            <div className="grid grid-cols-3 gap-1.5 mb-3">
+              {PLATAFORMAS_BANNER.map((p) => (
+                <button
+                  key={p.valor}
+                  onClick={() => setBannerPlataforma(p.valor)}
+                  className={`py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wide text-center transition ${
+                    bannerPlataforma === p.valor
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-white/5 border border-white/10 text-muted-foreground"
+                  }`}
+                >
+                  {p.label}
+                  <br />
+                  R$ {formatMoeda(p.preco)}
+                </button>
+              ))}
+            </div>
+
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
+              Música ou álbum
+            </p>
+            <select
+              value={bannerOpcaoTopicoId}
+              onChange={(e) => setBannerOpcaoTopicoId(e.target.value)}
+              className="w-full mb-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition"
+            >
+              <option value="" disabled>
+                {bannerOpcoes.length === 0 ? "Nenhum lançamento com tópico ainda" : "Selecione"}
+              </option>
+              {bannerOpcoes.map((o) => (
+                <option key={o.topicoId} value={o.topicoId}>
+                  {o.titulo} {o.tipo === "albuns" ? "(álbum)" : ""}
+                </option>
+              ))}
+            </select>
+
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
+              Imagem do banner (corte 3:1)
+            </p>
+            <label className="block border-2 border-dashed border-white/15 rounded-2xl p-4 text-center cursor-pointer hover:border-white/25 transition mb-4">
+              {bannerImagePreview ? (
+                <img src={bannerImagePreview} alt="" className="w-full aspect-[3/1] object-cover rounded-xl" />
+              ) : (
+                <div className="flex flex-col items-center gap-1.5 py-3">
+                  <ImageIcon className="size-5 text-muted-foreground" />
+                  <p className="text-xs font-bold text-muted-foreground">Toque para enviar a imagem</p>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  const cropped = await cropBannerImage(file);
+                  if (!cropped) return;
+                  setBannerImageFile(cropped);
+                  setBannerImagePreview(URL.createObjectURL(cropped));
+                }}
+              />
+            </label>
+
+            <div className="flex items-center justify-between mb-4 p-3 rounded-xl bg-white/5">
+              <span className="text-xs font-bold text-muted-foreground">Custo</span>
+              <span className="flex items-center gap-1 text-sm font-black text-primary">
+                <Coins className="size-4" />
+                R$ {formatMoeda(bannerPreco)}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setBannerModalOpen(false)}
+                disabled={bannerSubmitting}
+                className="py-3 rounded-full bg-white/5 border border-white/10 font-black text-xs uppercase tracking-wider disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarCompraBanner}
+                disabled={
+                  bannerSubmitting ||
+                  !bannerPlataforma ||
+                  !bannerOpcaoSelecionada ||
+                  !bannerImageFile ||
+                  bannerSaldoArtista < bannerPreco
+                }
+                className="py-3 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider disabled:opacity-40 flex items-center justify-center gap-1.5"
+              >
+                {bannerSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                Ativar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {bannerCropModal}
     </div>
   );
 }
