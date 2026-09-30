@@ -425,6 +425,22 @@ export async function postMarketComprarController(request: Request): Promise<Res
 // principal) e devolve o cabeçalho + total de linhas + as 3 primeiras e 3
 // últimas linhas de cada uma que encontrar, pra confirmar onde foi colada
 // e se o formato bateu.
+// GET /api/market/admin/diagnostico-usuarios — one-off: dump do cabeçalho +
+// 3 primeiras linhas de "Usuários", pra confirmar o header real da coluna M
+// (data de aniversário) antes de implementar a validação do item Aniversário.
+export async function diagnosticoUsuariosController(): Promise<Response> {
+  const rows = await googleSheetsService.usuarios.readValues("Usuários").catch(() => []);
+  return jsonResponse({
+    success: true,
+    data: {
+      totalLinhas: rows.length,
+      cabecalho: rows[0] || [],
+      colunaM_header: (rows[0] || [])[12] || null,
+      primeiras: rows.slice(1, 4),
+    },
+  });
+}
+
 export async function diagnosticoMarketItensController(): Promise<Response> {
   const candidatos: Array<"usuarios" | "registrosCharts" | "principal"> = [
     "usuarios",
