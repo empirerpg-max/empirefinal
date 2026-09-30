@@ -1,16 +1,18 @@
 import { googleSheetsService, normalizeText } from "../services/googleSheetsService";
 
-// Reversão de emergência: uma correção anterior (mal informada — achava
-// que a linha "Fuori Rotta" original estava sem ID de tópico, quando na
-// verdade só os remixes é que estavam) escreveu por engano o MESMO ID de
-// tópico órfão ("musica_1788994568297_j04lhl") nas 4 linhas de remix
-// (440-443), fazendo elas compartilharem indevidamente o mesmo tópico de
-// comentários. Essa rota limpa de volta a coluna B (ID do tópico) só
-// dessas 4 linhas específicas, restaurando o estado "vazio" original —
-// deixa o próprio forumController gerar um ID novo e único da próxima vez
-// que alguém comentar em cada uma, que é o comportamento correto.
-const LINHAS_PARA_REVERTER = [440, 441, 442, 443];
-const ID_ESCRITO_POR_ENGANO = "musica_1788994568297_j04lhl";
+// Causa raiz real do bug "Fuori Rotta sem comentários": a linha 421 de
+// Musicas guarda o título como só "Fuori Rotta" em H, sem o prefixo
+// "Artista - " que toda linha da aba deveria ter (ver dedupeArtistPrefix
+// em gestaoController.ts, comentário confirma a convenção). Por isso
+// adminFixOrphanCommentsController nunca conseguia casar essa música com
+// as notificações registradas como "Max Gorghan - Fuori Rotta" — o título
+// buscado não batia com o título real da linha — e os comentários
+// antigos ficaram órfãos pra sempre. Corrige só o título (não mexe no ID
+// do tópico, que já está correto: musica_1790123495658_2ev9gn); depois
+// disso, rodar de novo /api/empire-play/admin/fix-orphan-comments religa
+// os comentários automaticamente.
+const LINHA = 421;
+const TITULO_ESPERADO = "Max Gorghan - Fuori Rotta";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -20,17 +22,19 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 export async function adminFixFuoriRottaTopicoController(): Promise<Response> {
-  const resultados = [];
-  for (const linha of LINHAS_PARA_REVERTER) {
-    const atual = await googleSheetsService.principal.readValues("Musicas", `B${linha}:H${linha}`);
-    const valorAtual = normalizeText(atual?.[0]?.[0] || "");
-    const titulo = normalizeText(atual?.[0]?.[6] || "");
-    if (valorAtual !== ID_ESCRITO_POR_ENGANO) {
-      resultados.push({ linha, titulo, valorAtual, acao: "nada_a_fazer" });
-      continue;
-    }
-    await googleSheetsService.principal.updateValues("Musicas", `B${linha}`, [[""]]);
-    resultados.push({ linha, titulo, valorAtual, acao: "revertido_para_vazio" });
+  const atual = await googleSheetsService.principal.readValues("Musicas", `A${LINHA}:H${LINHA}`);
+  const row = atual?.[0] || [];
+  const tituloAtual = normalizeText(row[7] || "");
+  const topicIdAtual = normalizeText(row[1] || "");
+
+  if (tituloAtual === TITULO_ESPERADO) {
+    return jsonResponse({ success: true, data: { linha: LINHA, tituloAtual, topicIdAtual, acao: "ja_estava_correto" } });
   }
-  return jsonResponse({ success: true, data: resultados });
+
+  await googleSheetsService.principal.updateValues("Musicas", `H${LINHA}`, [[TITULO_ESPERADO]]);
+
+  return jsonResponse({
+    success: true,
+    data: { linha: LINHA, tituloAntigo: tituloAtual, tituloNovo: TITULO_ESPERADO, topicIdAtual, acao: "titulo_corrigido" },
+  });
 }
