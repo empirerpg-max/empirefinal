@@ -72,6 +72,57 @@ function formatMoeda(valor: number): string {
   return valor.toLocaleString("pt-BR");
 }
 
+function ArtistaSelect({
+  artistas,
+  value,
+  onChange,
+  placeholder,
+}: {
+  artistas: { nome: string; saldoEcoin: number }[];
+  value: string;
+  onChange: (nome: string) => void;
+  placeholder?: string;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const selecionado = artistas.find((a) => a.nome === value);
+
+  return (
+    <div className="relative mb-3">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition"
+      >
+        <span className="flex-1 min-w-0 text-left truncate">
+          {selecionado ? `${selecionado.nome} — R$ ${formatMoeda(selecionado.saldoEcoin)}` : placeholder || "Selecione"}
+        </span>
+        <ChevronDown className={`size-4 text-muted-foreground shrink-0 transition-transform ${aberto ? "rotate-180" : ""}`} />
+      </button>
+
+      {aberto && (
+        <div className="absolute z-10 top-full left-0 right-0 mt-1.5 max-h-56 overflow-y-auto rounded-2xl border border-white/10 bg-[#11141c] shadow-xl shadow-black/40 py-1.5">
+          {artistas.map((a) => (
+            <button
+              key={a.nome}
+              type="button"
+              onClick={() => {
+                onChange(a.nome);
+                setAberto(false);
+              }}
+              className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-white/5 transition ${
+                a.nome === value ? "bg-primary/10" : ""
+              }`}
+            >
+              <span className="truncate">{a.nome}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">R$ {formatMoeda(a.saldoEcoin)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MarketPage() {
   const { user } = useTelegramUser();
   const tgId = user?.id || "";
@@ -370,20 +421,12 @@ function MarketPage() {
             <p className="text-sm text-muted-foreground mb-4">{comprando.descricao}</p>
 
             {comprando.moeda === "ecoin" && (
-              <select
+              <ArtistaSelect
+                artistas={artistas}
                 value={artistaSelecionado}
-                onChange={(e) => setArtistaSelecionado(e.target.value)}
-                className="w-full mb-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition"
-              >
-                <option value="" disabled>
-                  Selecione o artista
-                </option>
-                {artistas.map((a) => (
-                  <option key={a.nome} value={a.nome}>
-                    {a.nome} — R$ {formatMoeda(a.saldoEcoin)}
-                  </option>
-                ))}
-              </select>
+                onChange={setArtistaSelecionado}
+                placeholder="Selecione o artista"
+              />
             )}
 
             {comprando.pedeDetalhe && (
@@ -449,17 +492,7 @@ function MarketPage() {
             </p>
 
             {artistas.length > 1 && (
-              <select
-                value={bannerArtista}
-                onChange={(e) => setBannerArtista(e.target.value)}
-                className="w-full mb-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition"
-              >
-                {artistas.map((a) => (
-                  <option key={a.nome} value={a.nome}>
-                    {a.nome} — R$ {formatMoeda(a.saldoEcoin)}
-                  </option>
-                ))}
-              </select>
+              <ArtistaSelect artistas={artistas} value={bannerArtista} onChange={setBannerArtista} />
             )}
 
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">Plataforma</p>
@@ -489,15 +522,9 @@ function MarketPage() {
                 type="button"
                 onClick={() => bannerOpcoes.length > 0 && setBannerOpcaoAberto((v) => !v)}
                 disabled={bannerOpcoes.length === 0}
-                className="w-full flex items-center gap-3 px-3 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition disabled:opacity-50"
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition disabled:opacity-50"
               >
-                <div className="size-9 rounded-lg bg-white/10 overflow-hidden shrink-0 grid place-items-center">
-                  {bannerOpcaoSelecionada?.capa ? (
-                    <img src={bannerOpcaoSelecionada.capa} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <Disc className="size-4 text-muted-foreground" />
-                  )}
-                </div>
+                <Disc className="size-4 text-muted-foreground shrink-0" />
                 <span className="flex-1 min-w-0 text-left truncate">
                   {bannerOpcaoSelecionada
                     ? bannerOpcaoSelecionada.titulo
@@ -520,17 +547,11 @@ function MarketPage() {
                         setBannerOpcaoTopicoId(o.topicoId);
                         setBannerOpcaoAberto(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/5 transition ${
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-white/5 transition ${
                         o.topicoId === bannerOpcaoTopicoId ? "bg-primary/10" : ""
                       }`}
                     >
-                      <div className="size-9 rounded-lg bg-white/10 overflow-hidden shrink-0 grid place-items-center">
-                        {o.capa ? (
-                          <img src={o.capa} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <Disc className="size-4 text-muted-foreground" />
-                        )}
-                      </div>
+                      <Disc className="size-4 text-muted-foreground shrink-0" />
                       <span className="flex-1 min-w-0 truncate text-sm">{o.titulo}</span>
                       {o.tipo === "albuns" && (
                         <span className="shrink-0 text-[9px] font-black uppercase tracking-wide text-muted-foreground bg-white/10 px-2 py-0.5 rounded-full">
