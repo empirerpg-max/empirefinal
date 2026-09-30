@@ -9,6 +9,7 @@ export interface LoginResult {
   tipoPerfil: string;
   fotoPerfil: string;
   prestigio: string;
+  aniversario?: string;
 }
 
 const STORAGE_KEY = "empire_login_user";

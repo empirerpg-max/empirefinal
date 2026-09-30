@@ -14,6 +14,7 @@ import {
   Heart,
   ListMusic,
   Trophy,
+  Cake,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import {
@@ -59,6 +60,7 @@ function Perfil() {
   const [isEditing, setIsEditing] = useState(false);
   const [editNome, setEditNome] = useState("");
   const [editFoto, setEditFoto] = useState("");
+  const [editAniversario, setEditAniversario] = useState("");
   // Mesmo cascata, mas pro preview da foto sendo editada (editFoto) — antes
   // era um <img> sem fallback nenhum, então uma foto colada manualmente na
   // planilha sem "qualquer pessoa com o link" aparecia quebrada no editor.
@@ -115,6 +117,7 @@ function Perfil() {
     haptic.light();
     setEditNome(login?.nome || "");
     setEditFoto(login?.fotoPerfil || "");
+    setEditAniversario(login?.aniversario || "");
     setIsEditing(true);
   };
 
@@ -146,7 +149,12 @@ function Perfil() {
       const res = await fetch("/api/auth/perfil", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ usuario: login.usuario, nome: editNome, fotoPerfil: editFoto }),
+        body: JSON.stringify({
+          usuario: login.usuario,
+          nome: editNome,
+          fotoPerfil: editFoto,
+          aniversario: login.aniversario ? undefined : editAniversario,
+        }),
       });
       const json = await res.json().catch(() => null);
       if (res.ok && json?.success && json.data) {
@@ -215,6 +223,34 @@ function Perfil() {
             <p className="text-[10px] text-muted-foreground/70 mb-3 max-w-[16rem]">
               Esse é também o usuário usado pra entrar no app — mudar aqui muda seu login.
             </p>
+
+            {login?.aniversario ? (
+              <div className="w-full max-w-[16rem] flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm mb-3">
+                <Cake className="size-4 text-primary shrink-0" />
+                <span className="flex-1">
+                  {new Date(`${login.aniversario}T00:00:00`).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "long",
+                  })}
+                </span>
+              </div>
+            ) : (
+              <div className="w-full max-w-[16rem] mb-3">
+                <label className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm focus-within:border-primary/50 transition">
+                  <Cake className="size-4 text-primary shrink-0" />
+                  <input
+                    type="date"
+                    value={editAniversario}
+                    onChange={(e) => setEditAniversario(e.target.value)}
+                    className="flex-1 bg-transparent outline-none [color-scheme:dark]"
+                  />
+                </label>
+                <p className="text-[10px] text-muted-foreground/70 mt-1.5">
+                  Preenche uma vez só — depois disso só um admin pode corrigir.
+                </p>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsEditing(false)}
@@ -257,6 +293,15 @@ function Perfil() {
             {login?.tipoPerfil && (
               <span className="mt-1 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-wider">
                 {login.tipoPerfil}
+              </span>
+            )}
+            {login?.aniversario && (
+              <span className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Cake className="size-3" />
+                {new Date(`${login.aniversario}T00:00:00`).toLocaleDateString("pt-BR", {
+                  day: "2-digit",
+                  month: "long",
+                })}
               </span>
             )}
 
