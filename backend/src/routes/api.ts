@@ -166,6 +166,7 @@ import {
   postMarketComprarController,
   diagnosticoMarketItensController,
   diagnosticoUsuariosController,
+  fixAniversarioFormatoController,
 } from "../controllers/marketController";
 import {
   getBannersAtivosController,
@@ -421,6 +422,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/market/comprar",
     "/api/market/admin/diagnostico-itens",
     "/api/market/admin/diagnostico-usuarios",
+    "/api/market/admin/fix-aniversario-formato",
     "/api/market/banners/ativos",
     "/api/market/banners/opcoes",
     "/api/market/banners/comprar",
@@ -1523,6 +1525,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await diagnosticoMarketItensController();
   } else if (url.pathname === "/api/market/admin/diagnostico-usuarios") {
     response = await diagnosticoUsuariosController();
+  } else if (url.pathname === "/api/market/admin/fix-aniversario-formato") {
+    response = await fixAniversarioFormatoController();
   } else if (url.pathname === "/api/market/banners/ativos") {
     response = await getBannersAtivosController();
   } else if (url.pathname === "/api/market/banners/opcoes") {

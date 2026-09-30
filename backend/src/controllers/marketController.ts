@@ -110,15 +110,19 @@ function limitesSemanaAtual(): { inicio: Date; fim: Date } {
   return { inicio, fim };
 }
 
-// Usuários!Aniversário guarda "AAAA-MM-DD" — o ano não importa (é a data
-// de nascimento), só mês/dia. Verdadeiro se o dia de aniversário (em
-// qualquer ano próximo, pra cobrir virada de ano) cai dentro da semana
-// Empire vigente (quarta 00:00 até terça 23:59, Brasília).
+// Usuários!Aniversário guarda "DD/MM" (sem ano, ex: "26/04", "17/9") — o
+// ano não importa pra essa checagem mesmo (é só data de nascimento).
+// Verdadeiro se o dia de aniversário (em qualquer ano próximo, pra cobrir
+// virada de ano) cai dentro da semana Empire vigente (quarta 00:00 até
+// terça 23:59, Brasília). Aceita também AAAA-MM-DD por compatibilidade
+// com qualquer linha antiga gravada nesse formato por engano.
 function estaNaSemanaDoAniversario(dataAniversario: string): boolean {
-  const m = dataAniversario.match(/^\d{4}-(\d{2})-(\d{2})$/);
-  if (!m) return false;
-  const mes = Number(m[1]);
-  const dia = Number(m[2]);
+  const iso = dataAniversario.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  const brDate = dataAniversario.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (!iso && !brDate) return false;
+  const mes = Number(iso ? iso[1] : brDate![2]);
+  const dia = Number(iso ? iso[2] : brDate![1]);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return false;
   const { inicio, fim } = limitesSemanaAtual();
   for (const ano of [inicio.getUTCFullYear() - 1, inicio.getUTCFullYear(), inicio.getUTCFullYear() + 1]) {
     const candidato = new Date(Date.UTC(ano, mes - 1, dia));
@@ -468,10 +472,11 @@ export async function postMarketComprarController(request: Request): Promise<Res
     if (item.moeda === "prestigio") {
       const novoSaldo = await gastarPrestigio({ telegramId, usuario }, item.preco);
       await registrarCompra({ item, telegramId, usuario, artista, detalhe, semana, status: "Pendente" });
-      if (item.id === "week_off") {
+      if (item.id === "week_off" || item.id === "aniversario") {
         const nomeOficial = await resolveNomeOficial(telegramId, usuario);
-        await gravarLinhaRegistro([nomeOficial, "", "WEEK OFF"]).catch((err) =>
-          console.warn("[Market] Falha ao gravar Week Off em REGISTRO:", err),
+        const tipoRegistro = item.id === "week_off" ? "WEEK OFF" : "ANIVERSÁRIO";
+        await gravarLinhaRegistro([nomeOficial, "", tipoRegistro]).catch((err) =>
+          console.warn(`[Market] Falha ao gravar ${tipoRegistro} em REGISTRO:`, err),
         );
       }
       return jsonResponse({ success: true, data: { saldoPrestigio: novoSaldo } });
@@ -542,4 +547,32 @@ export async function diagnosticoMarketItensController(): Promise<Response> {
   }
 
   return jsonResponse({ success: true, data: resultado });
+}
+
+// GET /api/market/admin/fix-aniversario-formato — one-off: converte
+// qualquer linha de Usuários!Aniversário que esteja em AAAA-MM-DD (escrito
+// por engano antes do formato ser corrigido pra "DD/MM", o padrão que a
+// coluna já usava) de volta pro formato certo.
+export async function fixAniversarioFormatoController(): Promise<Response> {
+  const rows = await googleSheetsService.usuarios.readValues("Usuários").catch(() => []);
+  if (rows.length < 2) return jsonResponse({ success: true, data: [] });
+
+  const header = rows[0].map((h) => normalizeHeader(h));
+  const colAniversario = header.indexOf("aniversario");
+  if (colAniversario === -1) return jsonResponse({ success: false, error: "Coluna Aniversário não encontrada." }, 404);
+  const colUsuario = header.indexOf("usuario");
+
+  const corrigidos: { linha: number; usuario: string; de: string; para: string }[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const valor = normalizeText(row[colAniversario]);
+    const m = valor.match(/^\d{4}-(\d{2})-(\d{2})$/);
+    if (!m) continue;
+    const novoValor = `${m[2]}/${m[1]}`;
+    const colLetter = String.fromCharCode(65 + colAniversario);
+    await googleSheetsService.usuarios.updateValues("Usuários", `${colLetter}${i + 1}`, [[novoValor]]);
+    corrigidos.push({ linha: i + 1, usuario: normalizeText(row[colUsuario]), de: valor, para: novoValor });
+  }
+
+  return jsonResponse({ success: true, data: corrigidos });
 }

@@ -443,16 +443,24 @@ export async function updateProfileController(request: Request): Promise<Respons
     // nunca sobrescrito depois de já preenchido (senão dava pra "mover" o
     // aniversário toda semana e liberar o item Aniversário do Market
     // sempre). Mudança depois disso só na mão, direto na planilha.
+    //
+    // Formato gravado é "DD/MM" (sem ano) — o padrão que a coluna já usava
+    // antes de qualquer código mexer nela (confirmado ao vivo: "26/04",
+    // "17/9" etc, nunca AAAA-MM-DD). O front manda AAAA-MM-DD (saída
+    // natural de um <input type="date">) só porque é o formato de input
+    // mais usável — convertido aqui pro formato real da planilha.
     let aniversarioAtualizado = match.rec["aniversario"] || "";
     if (body.aniversario !== undefined && !aniversarioAtualizado.trim()) {
-      const novoAniversario = body.aniversario.trim();
-      if (novoAniversario && !/^\d{4}-\d{2}-\d{2}$/.test(novoAniversario)) {
+      const novoAniversarioIso = body.aniversario.trim();
+      const m = novoAniversarioIso.match(/^\d{4}-(\d{2})-(\d{2})$/);
+      if (novoAniversarioIso && !m) {
         return new Response(JSON.stringify({ success: false, error: "Data de aniversário inválida." }), {
           status: 400,
           headers: { "Content-Type": "application/json" },
         });
       }
-      if (novoAniversario) {
+      if (m) {
+        const novoAniversario = `${m[2]}/${m[1]}`;
         const aniversarioColIndex = columnKeys.indexOf("aniversario");
         if (aniversarioColIndex !== -1) {
           const colLetter = colIndexToA1Letter(aniversarioColIndex);
