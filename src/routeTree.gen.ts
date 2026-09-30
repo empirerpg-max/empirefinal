@@ -36,6 +36,7 @@ import { Route as EmpirePlayGestaoRouteImport } from './routes/empire-play.gesta
 import { Route as EmpirePlayMusicasRouteImport } from './routes/empire-play.musicas'
 import { Route as EmpirePlayVideosRouteImport } from './routes/empire-play.videos'
 import { Route as MarketIndexRouteImport } from './routes/market.index'
+import { Route as MarketLeilaoRouteImport } from './routes/market.leilao'
 import { Route as MarketRegrasRouteImport } from './routes/market.regras'
 import { Route as PontoIndexRouteImport } from './routes/ponto.index'
 import { Route as PontoDistribuirRouteImport } from './routes/ponto.distribuir'
@@ -194,6 +195,11 @@ const MarketIndexRoute = MarketIndexRouteImport.update({
   path: '/',
   getParentRoute: () => MarketRoute,
 } as any)
+const MarketLeilaoRoute = MarketLeilaoRouteImport.update({
+  id: '/leilao',
+  path: '/leilao',
+  getParentRoute: () => MarketRoute,
+} as any)
 const MarketRegrasRoute = MarketRegrasRouteImport.update({
   id: '/regras',
   path: '/regras',
@@ -334,6 +340,7 @@ export interface FileRoutesByFullPath {
   '/empire-play/gestao': typeof EmpirePlayGestaoRouteWithChildren
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
+  '/market/leilao': typeof MarketLeilaoRoute
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
@@ -381,6 +388,7 @@ export interface FileRoutesByTo {
   '/empire-play/forum': typeof EmpirePlayForumRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
+  '/market/leilao': typeof MarketLeilaoRoute
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/valores': typeof PontoValoresRoute
   '/premiacoes/indicar': typeof PremiacoesIndicarRoute
@@ -431,6 +439,7 @@ export interface FileRoutesById {
   '/empire-play/gestao': typeof EmpirePlayGestaoRouteWithChildren
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
+  '/market/leilao': typeof MarketLeilaoRoute
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
@@ -484,6 +493,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao'
     | '/empire-play/musicas'
     | '/empire-play/videos'
+    | '/market/leilao'
     | '/market/regras'
     | '/ponto/distribuir'
     | '/ponto/playlists'
@@ -531,6 +541,7 @@ export interface FileRouteTypes {
     | '/empire-play/forum'
     | '/empire-play/musicas'
     | '/empire-play/videos'
+    | '/market/leilao'
     | '/market/regras'
     | '/ponto/valores'
     | '/premiacoes/indicar'
@@ -580,6 +591,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao'
     | '/empire-play/musicas'
     | '/empire-play/videos'
+    | '/market/leilao'
     | '/market/regras'
     | '/ponto/distribuir'
     | '/ponto/playlists'
@@ -829,6 +841,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketIndexRouteImport
       parentRoute: typeof MarketRoute
     }
+    '/market/leilao': {
+      id: '/market/leilao'
+      path: '/leilao'
+      fullPath: '/market/leilao'
+      preLoaderRoute: typeof MarketLeilaoRouteImport
+      parentRoute: typeof MarketRoute
+    }
     '/market/regras': {
       id: '/market/regras'
       path: '/regras'
@@ -1059,11 +1078,13 @@ const EmpirePlayRouteWithChildren = EmpirePlayRoute._addFileChildren(
 )
 
 interface MarketRouteChildren {
+  MarketLeilaoRoute: typeof MarketLeilaoRoute
   MarketRegrasRoute: typeof MarketRegrasRoute
   MarketIndexRoute: typeof MarketIndexRoute
 }
 
 const MarketRouteChildren: MarketRouteChildren = {
+  MarketLeilaoRoute: MarketLeilaoRoute,
   MarketRegrasRoute: MarketRegrasRoute,
   MarketIndexRoute: MarketIndexRoute,
 }

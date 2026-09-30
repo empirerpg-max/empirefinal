@@ -165,10 +165,13 @@ import {
   getMarketProdutosController,
   getMarketRegrasController,
   postMarketComprarController,
+} from "../controllers/marketController";
+import {
   diagnosticoMarketItensController,
   diagnosticoUsuariosController,
   fixAniversarioFormatoController,
 } from "../controllers/marketController";
+import { getLeilaoAtualController, postLeilaoLanceController } from "../controllers/leilaoController";
 import {
   getBannersAtivosController,
   getBannerOpcoesController,
@@ -422,6 +425,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/market/produtos",
     "/api/market/regras",
     "/api/market/comprar",
+    "/api/market/leilao",
+    "/api/market/leilao/lance",
     "/api/market/admin/diagnostico-itens",
     "/api/market/admin/diagnostico-usuarios",
     "/api/market/admin/fix-aniversario-formato",
@@ -1523,6 +1528,16 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await postMarketComprarController(request);
+  } else if (url.pathname === "/api/market/leilao") {
+    response = await getLeilaoAtualController(request);
+  } else if (url.pathname === "/api/market/leilao/lance") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/market/leilao/lance." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await postLeilaoLanceController(request);
   } else if (url.pathname === "/api/market/admin/diagnostico-itens") {
     response = await diagnosticoMarketItensController();
   } else if (url.pathname === "/api/market/admin/diagnostico-usuarios") {
