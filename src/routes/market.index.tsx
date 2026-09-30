@@ -136,12 +136,20 @@ function MusicaSelect({
   placeholder?: string;
 }) {
   const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState("");
+  const opcoesFiltradas = busca.trim()
+    ? opcoes.filter((o) => o.toLowerCase().includes(busca.trim().toLowerCase()))
+    : opcoes;
 
   return (
     <div className="relative mb-4">
       <button
         type="button"
-        onClick={() => opcoes.length > 0 && setAberto((v) => !v)}
+        onClick={() => {
+          if (opcoes.length === 0) return;
+          setBusca("");
+          setAberto((v) => !v);
+        }}
         disabled={opcoes.length === 0}
         className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition disabled:opacity-50"
       >
@@ -152,8 +160,22 @@ function MusicaSelect({
       </button>
 
       {aberto && opcoes.length > 0 && (
-        <div className="absolute z-10 top-full left-0 right-0 mt-1.5 max-h-56 overflow-y-auto rounded-2xl border border-white/10 bg-[#11141c] shadow-xl shadow-black/40 py-1.5">
-          {opcoes.map((titulo) => (
+        <div className="absolute z-10 top-full left-0 right-0 mt-1.5 rounded-2xl border border-white/10 bg-[#11141c] shadow-xl shadow-black/40 overflow-hidden">
+          <div className="p-1.5 border-b border-white/10">
+            <input
+              autoFocus
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar..."
+              className="w-full px-2.5 py-2 bg-white/5 rounded-xl text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1.5">
+            {opcoesFiltradas.length === 0 && (
+              <p className="px-3 py-2 text-xs text-muted-foreground">Nada encontrado.</p>
+            )}
+            {opcoesFiltradas.map((titulo) => (
             <button
               key={titulo}
               type="button"
@@ -167,7 +189,8 @@ function MusicaSelect({
             >
               {titulo}
             </button>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>
