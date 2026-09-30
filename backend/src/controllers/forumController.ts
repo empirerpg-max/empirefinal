@@ -61,7 +61,7 @@ export async function resolveNomeOficial(jogadorId: string, fallback: string): P
  * linha — sem depender de comparação de texto, que quebra com qualquer
  * diferença mínima (acento, espaço, feat. adicionado depois etc.).
  */
-async function resolverTituloPorCodigoUnico(codigoUnico: string): Promise<string | null> {
+export async function resolverTituloPorCodigoUnico(codigoUnico: string): Promise<string | null> {
   if (!codigoUnico) return null;
   try {
     const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");

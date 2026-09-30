@@ -1103,6 +1103,7 @@ export const api = {
     usuario?: string;
     artista?: string;
     detalhe?: string;
+    plataforma?: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE" | "";
   }): Promise<{ success: boolean; error?: string; data?: { saldoPrestigio?: number } }> {
     const res = await fetch("/api/market/comprar", {
       method: "POST",

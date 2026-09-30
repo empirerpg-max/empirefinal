@@ -10,7 +10,8 @@ import {
 import { getNivelAtual, gastarPrestigio, getNiveis, getRegrasPrestigio } from "../services/prestigioService";
 import { getArtistNamesForOwner } from "./artistasController";
 import { gravarLinhaRegistro } from "./registroLogController";
-import { resolveNomeOficial } from "./forumController";
+import { resolveNomeOficial, resolverTituloPorCodigoUnico } from "./forumController";
+import { PLAYLIST_MINIMA } from "./playlistsInvestimentoController";
 
 // -------------------- CATÁLOGO (MARKET_ITENS) --------------------
 //
@@ -390,6 +391,66 @@ async function registrarNoEcoinInvestimento(artista: string, item: MarketItem, d
   await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `E${linhaLivre}`, [[valorFinal]]);
 }
 
+// Music Boost: acha o Código único da música (Musicas!Z, casando por
+// título em H + artista em N) e resolve o nome COMPLETO dela via
+// EDIÇÃO CHARTS (mesmo caminho que resolverTituloPorCodigoUnico já usa
+// pro audit log) — nunca só o título cru, que é ambíguo entre artistas
+// diferentes com música de mesmo nome. Sem código encontrado, cai pro
+// "Artista - Título" montado na mão, pra nunca travar a compra.
+async function resolverNomeCompletoMusica(artista: string, titulo: string): Promise<string> {
+  try {
+    const rows = await googleSheetsService.principal.readValues("Musicas");
+    const normArtista = normalizeComparison(artista);
+    const normTitulo = normalizeComparison(titulo);
+    const linha = rows
+      .slice(1)
+      .find((r) => normalizeComparison(r[7]) === normTitulo && normalizeComparison(r[13]) === normArtista);
+    const codigoUnico = linha ? normalizeText(linha[25]) : "";
+    if (codigoUnico) {
+      const tituloCompleto = await resolverTituloPorCodigoUnico(codigoUnico);
+      if (tituloCompleto) return tituloCompleto;
+    }
+  } catch (err) {
+    console.warn("[Market] Falha ao resolver nome completo da música pro Music Boost:", err);
+  }
+  return `${artista} - ${titulo}`;
+}
+
+// Escreve o Music Boost em ECOIN + INVESTIMENTO: C = artista, E = nome
+// completo da música (via Código único), e G/I/K (conforme a plataforma
+// escolhida) recebem a playlist mínima daquela plataforma — mesmos
+// valores/colunas que as playlists normais já usam (PLAYLIST_MINIMA,
+// playlistsInvestimentoController.ts), só que escritos numa linha nova
+// em vez de vir de uma escolha na tela de Playlists.
+async function registrarMusicBoostInvestimento(
+  artista: string,
+  titulo: string,
+  plataforma: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE",
+): Promise<void> {
+  const nomeCompleto = await resolverNomeCompletoMusica(artista, titulo);
+
+  const rows = await googleSheetsService.registrosCharts.readValues(ECOIN_SHEET);
+  let linhaLivre = -1;
+  for (let i = ECOIN_DATA_START_ROW - 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (!normalizeText(row[ECOIN_COL_ARTISTA])) {
+      linhaLivre = i + 1;
+      break;
+    }
+  }
+  if (linhaLivre === -1) {
+    throw new Error("Sem linha disponível em ECOIN + INVESTIMENTO essa semana.");
+  }
+
+  const colPlataforma = { SPOTIFY: "G", "APPLE MUSIC": "I", YOUTUBE: "K" }[plataforma];
+
+  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `C${linhaLivre}`, [[artista]]);
+  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `E${linhaLivre}`, [[nomeCompleto]]);
+  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `${colPlataforma}${linhaLivre}`, [
+    [PLAYLIST_MINIMA[plataforma]],
+  ]);
+}
+
 /**
  * POST /api/market/comprar
  * body: { itemId, telegramId, usuario, artista?, detalhe? }
@@ -416,6 +477,7 @@ export async function postMarketComprarController(request: Request): Promise<Res
   const usuario = String(body?.usuario || "").trim();
   const artista = String(body?.artista || "").trim();
   const detalhe = String(body?.detalhe || "").trim();
+  const plataforma = String(body?.plataforma || "").trim().toUpperCase();
 
   if (!telegramId && !usuario) {
     return jsonResponse({ success: false, error: "Usuário não identificado." }, 400);
@@ -425,6 +487,12 @@ export async function postMarketComprarController(request: Request): Promise<Res
   const item = itens.find((i) => i.id === itemId);
   if (!item) {
     return jsonResponse({ success: false, error: "Item não encontrado." }, 400);
+  }
+  if (item.id === "music_boost") {
+    const PLATAFORMAS_VALIDAS = new Set(["SPOTIFY", "APPLE MUSIC", "YOUTUBE"]);
+    if (!PLATAFORMAS_VALIDAS.has(plataforma)) {
+      return jsonResponse({ success: false, error: "Escolha em qual plataforma impulsionar (Spotify, Apple Music ou YouTube)." }, 400);
+    }
   }
   if (item.tipoEspecial === "leilao") {
     return jsonResponse(
@@ -484,7 +552,11 @@ export async function postMarketComprarController(request: Request): Promise<Res
 
     // moeda === "ecoin"
     if (item.destino === "ecoin_investimento") {
-      await registrarNoEcoinInvestimento(artista, item, detalhe);
+      if (item.id === "music_boost") {
+        await registrarMusicBoostInvestimento(artista, detalhe, plataforma as "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE");
+      } else {
+        await registrarNoEcoinInvestimento(artista, item, detalhe);
+      }
     } else if (item.destino === "empirehits_compras") {
       await registrarEmpireHitsCompra({ item, telegramId, usuario, artista, detalhe, semana });
     }
