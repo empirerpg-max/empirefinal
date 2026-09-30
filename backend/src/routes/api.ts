@@ -159,6 +159,7 @@ import {
 import { adminFillGrammy2026Controller } from "../controllers/adminFillGrammy2026Controller";
 import { adminFixBoulangerieAudioController } from "../controllers/adminFixBoulangerieAudioController";
 import { adminFixDuplicataInvestimentoController } from "../controllers/adminFixDuplicataInvestimentoController";
+import { adminFixFuoriRottaTopicoController } from "../controllers/adminFixFuoriRottaTopicoController";
 import {
   getMarketProdutosController,
   getMarketRegrasController,
@@ -1498,6 +1499,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminFixVernissageEdicaoChartsController();
   } else if (url.pathname === "/api/ponto/playlists/admin/fix-duplicata-samantha-cooper") {
     response = await adminFixDuplicataInvestimentoController();
+  } else if (url.pathname === "/api/empire-play/admin/fix-fuori-rotta-topico") {
+    response = await adminFixFuoriRottaTopicoController();
   } else if (url.pathname === "/api/market/produtos") {
     response = await getMarketProdutosController(request);
   } else if (url.pathname === "/api/market/regras") {
