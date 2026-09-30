@@ -1062,25 +1062,32 @@ export const api = {
     return res?.data || [];
   },
 
-  // ---- Empire Market (prestígio) ----
+  // ---- Empire Market (prestígio + ECoin) ----
   async listarMarketProdutos(
     telegramId: string,
   ): Promise<{
-    produtos: {
+    itens: {
       id: string;
       nome: string;
       descricao: string;
+      moeda: "prestigio" | "ecoin";
       preco: number;
       icone: string;
       pedeDetalhe: boolean;
-      detalhePlaceholder?: string;
+      detalhePlaceholder: string;
+      categoria: string;
+      exclusivoGrupo: string;
+      tipoEspecial: string;
+      plataforma: string;
+      destino: string;
     }[];
-    saldo: number;
+    saldoPrestigio: number;
+    artistas: { nome: string; saldoEcoin: number }[];
   }> {
     const res = await fetch(`/api/market/produtos?telegramId=${encodeURIComponent(telegramId)}`).then(
       (r) => r.json(),
     );
-    return res?.data || { produtos: [], saldo: 0 };
+    return res?.data || { itens: [], saldoPrestigio: 0, artistas: [] };
   },
   async listarMarketRegras(): Promise<{
     niveis: { nivel: number; fase: string; nome: string; badge: string; prestigio: number }[];
@@ -1090,11 +1097,12 @@ export const api = {
     return res?.data || { niveis: [], regras: [] };
   },
   async comprarMarketProduto(payload: {
-    produtoId: string;
+    itemId: string;
     telegramId: string;
     usuario?: string;
+    artista?: string;
     detalhe?: string;
-  }): Promise<{ success: boolean; error?: string; data?: { saldo: number } }> {
+  }): Promise<{ success: boolean; error?: string; data?: { saldoPrestigio?: number } }> {
     const res = await fetch("/api/market/comprar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
