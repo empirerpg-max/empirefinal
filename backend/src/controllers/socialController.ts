@@ -1083,3 +1083,37 @@ export async function limparLinhasOrfasSocialPosts(confirmar: boolean): Promise<
 
   return { modo: confirmar ? "aplicado" : "simulacao", itens };
 }
+
+// GET /api/social/admin/dump-tail-posts?n=40 — diagnóstico one-off: devolve
+// as últimas N linhas cruas de SOCIAL_POSTS (A:M) tal como estão na
+// planilha, pra inspecionar visualmente o tipo de desalinhamento atual —
+// os dois reparos acima (corrigirDesalinhamentoSocialPosts,
+// limparLinhasOrfasSocialPosts) miram o padrão antigo (coluna A vazia +
+// "POST-..." mais adiante) e não acharam nada, então o problema relatado
+// agora ("dados empurrados pra nova coluna") pode ser um padrão diferente.
+export async function dumpTailPostsController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const n = Math.max(1, Math.min(200, Number(url.searchParams.get("n")) || 40));
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts, "A:M").catch(() => []);
+  const total = rows.length;
+  const tail = rows.slice(Math.max(1, total - n)).map((row, i) => ({
+    linha: Math.max(1, total - n) + i + 1,
+    id: row[0] || "",
+    tipo: row[1] || "",
+    subtipo: row[2] || "",
+    autor: row[3] || "",
+    texto: (row[4] || "").slice(0, 40),
+    media_url: (row[5] || "").slice(0, 60),
+    analytics: (row[6] || "").slice(0, 30),
+    data: row[7] || "",
+    telegram_id: row[8] || "",
+    media_tipo: row[9] || "",
+    material: (row[10] || "").slice(0, 30),
+    extra_media: (row[11] || "").slice(0, 30),
+    audio: (row[12] || "").slice(0, 30),
+  }));
+  return new Response(JSON.stringify({ success: true, data: { totalLinhas: total, tail } }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}

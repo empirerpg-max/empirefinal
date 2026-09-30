@@ -169,6 +169,7 @@ import {
   createSocialPostController,
   corrigirDesalinhamentoSocialPosts,
   limparLinhasOrfasSocialPosts,
+  dumpTailPostsController,
   curtirSocialPostController,
   getSocialComentariosController,
   comentarSocialPostController,
@@ -283,6 +284,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/registro/corrigir-reprocessamento-tv",
     "/api/social/corrigir-desalinhamento-posts",
     "/api/social/limpar-linhas-orfas",
+    "/api/social/admin/dump-tail-posts",
     "/api/forum/rechavear-comentarios",
     "/api/registro/reconstruir",
     "/api/tv/programas",
@@ -736,6 +738,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
+  } else if (url.pathname === "/api/social/admin/dump-tail-posts") {
+    response = await dumpTailPostsController(request);
   } else if (url.pathname === "/api/forum/rechavear-comentarios") {
     // Correção pontual (ver rechavearComentarios em forumController.ts):
     // move comentários órfãos de um "ID do tópico" antigo/instável pro ID
