@@ -163,6 +163,7 @@ import {
   getMarketProdutosController,
   getMarketRegrasController,
   postMarketComprarController,
+  diagnosticoMarketItensController,
 } from "../controllers/marketController";
 import {
   getSocialPostsController,
@@ -408,6 +409,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/market/produtos",
     "/api/market/regras",
     "/api/market/comprar",
+    "/api/market/admin/diagnostico-itens",
   ]);
 
   if (
@@ -1498,6 +1500,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await postMarketComprarController(request);
+  } else if (url.pathname === "/api/market/admin/diagnostico-itens") {
+    response = await diagnosticoMarketItensController();
   } else {
     if (request.method !== "GET") {
       return new Response(
