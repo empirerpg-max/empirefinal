@@ -635,8 +635,12 @@ export const googleSheetsService = {
     ) => findRows("usuarios", sheetName, predicate, range),
     updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
       updateValues("usuarios", sheetName, range, values),
-    appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
-      appendRow("usuarios", sheetName, values, range),
+    appendRow: (
+      sheetName: string,
+      values: GoogleSheetRow,
+      range?: string,
+      insertDataOption?: "INSERT_ROWS" | "OVERWRITE",
+    ) => appendRow("usuarios", sheetName, values, range, insertDataOption),
   },
   agendaTV: {
     readValues: (sheetName: string, range?: string) => readValues("agendaTV", sheetName, range),

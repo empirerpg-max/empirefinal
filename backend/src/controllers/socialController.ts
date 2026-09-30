@@ -263,6 +263,13 @@ export async function createSocialPostController(request: Request): Promise<Resp
   // aconteceu em 2026-09-11: um post caiu nas colunas L-X, o próximo em
   // X-AJ, o próximo em AJ-AV, cada vez 12 colunas mais pra direita. Travar
   // o range impede a tabela de "andar" pra fora de A:M de novo.
+  // "OVERWRITE" (não o padrão "INSERT_ROWS"): o modo padrão INSERE e
+  // EMPURRA linhas existentes pra baixo — sob posts concorrentes (vários
+  // jogadores postando quase ao mesmo tempo, o caso comum aqui), cada
+  // inserção deslocava o que outra chamada em andamento tinha acabado de
+  // escrever, prendendo posts em linhas erradas / fazendo eles sumirem do
+  // feed (mesma causa raiz já corrigida no popup do VMA). OVERWRITE sempre
+  // escreve na próxima linha realmente vazia, sem deslocar nada.
   const linhaGravada = await googleSheetsService.usuarios.appendRow(
     SHEETS.posts,
     [
@@ -281,6 +288,7 @@ export async function createSocialPostController(request: Request): Promise<Resp
       payload.audio ? JSON.stringify(payload.audio) : "",
     ],
     "A:M",
+    "OVERWRITE",
   );
 
   if (linhaGravada === null) {
@@ -540,10 +548,13 @@ export async function comentarSocialPostController(request: Request): Promise<Re
     return jsonResponse({ ok: false, error: "Dados incompletos para o comentário." }, 400);
   }
 
+  // OVERWRITE (não INSERT_ROWS) — mesmo motivo do post: comentários
+  // concorrentes não podem se deslocar uns aos outros.
   await googleSheetsService.usuarios.appendRow(
     SHEETS.comments,
     [payload.postId, payload.autor, payload.texto, new Date().toISOString(), body.tgId || ""],
     "A:E",
+    "OVERWRITE",
   );
 
   const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts);
@@ -636,6 +647,7 @@ export async function saveSocialPerfilController(request: Request): Promise<Resp
       SHEETS.perfis,
       [payload.artista, payload.rede, handle, bio, avatarUrl, body.tgId || "", "0", String(seguindo)],
       "A:H",
+      "OVERWRITE",
     );
   }
 
@@ -724,6 +736,7 @@ export async function publicarNewsSocial(params: {
       params.origemShow != null ? String(params.origemShow) : "",
     ],
     "A:J",
+    "OVERWRITE",
   );
   return id;
 }
@@ -914,6 +927,7 @@ export async function saveSocialBannerController(request: Request): Promise<Resp
       body.legenda?.trim() || "",
     ],
     "A:H",
+    "OVERWRITE",
   );
   if (rowIndex === null) {
     return jsonResponse({ ok: false, error: "Falha ao gravar o banner na planilha. Tente de novo." }, 500);
