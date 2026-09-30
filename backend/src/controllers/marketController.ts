@@ -167,3 +167,38 @@ export async function postMarketComprarController(request: Request): Promise<Res
     return jsonResponse({ success: false, error: error?.message || "Não foi possível comprar." }, 400);
   }
 }
+
+// GET /api/market/admin/diagnostico-itens — one-off: procura a aba
+// MARKET_ITENS nas planilhas mais prováveis (usuarios, registrosCharts,
+// principal) e devolve o cabeçalho + total de linhas + as 3 primeiras e 3
+// últimas linhas de cada uma que encontrar, pra confirmar onde foi colada
+// e se o formato bateu.
+export async function diagnosticoMarketItensController(): Promise<Response> {
+  const candidatos: Array<"usuarios" | "registrosCharts" | "principal"> = [
+    "usuarios",
+    "registrosCharts",
+    "principal",
+  ];
+  const resultado: Record<string, unknown> = {};
+
+  for (const chave of candidatos) {
+    try {
+      const rows = await (googleSheetsService as any)[chave].readValues("MARKET_ITENS");
+      if (!rows || rows.length === 0) {
+        resultado[chave] = { encontrada: false };
+        continue;
+      }
+      resultado[chave] = {
+        encontrada: true,
+        totalLinhas: rows.length,
+        cabecalho: rows[0],
+        primeiras: rows.slice(1, 4),
+        ultimas: rows.slice(-3),
+      };
+    } catch {
+      resultado[chave] = { encontrada: false, erro: true };
+    }
+  }
+
+  return jsonResponse({ success: true, data: resultado });
+}
