@@ -171,6 +171,8 @@ import {
   getBannerOpcoesController,
   postComprarBannerController,
   postCliqueBannerController,
+  getMeusBannersController,
+  postDeletarBannerController,
 } from "../controllers/bannerController";
 import {
   getSocialPostsController,
@@ -421,6 +423,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/market/banners/opcoes",
     "/api/market/banners/comprar",
     "/api/market/banners/clique",
+    "/api/market/banners/meus",
+    "/api/market/banners/deletar",
   ]);
 
   if (
@@ -1535,6 +1539,16 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await postCliqueBannerController(request);
+  } else if (url.pathname === "/api/market/banners/meus") {
+    response = await getMeusBannersController(request);
+  } else if (url.pathname === "/api/market/banners/deletar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/market/banners/deletar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await postDeletarBannerController(request);
   } else {
     if (request.method !== "GET") {
       return new Response(

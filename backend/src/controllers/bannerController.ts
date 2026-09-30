@@ -378,3 +378,67 @@ export async function processarComentarioParaBanner(telegramId: string, topicId:
     banner.plataforma as "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE",
   ).catch(() => {});
 }
+
+/**
+ * GET /api/market/banners/meus?telegramId=...
+ * Banners (ativos ou não) dos artistas que esse jogador controla — pra
+ * gerenciar em Gestão (ver status, excluir se precisar).
+ */
+export async function getMeusBannersController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const telegramId = normalizeText(url.searchParams.get("telegramId"));
+  if (!telegramId) return jsonResponse({ success: true, data: [] });
+
+  const meusArtistas = await getArtistNamesForOwner(telegramId);
+  const normMeus = new Set(meusArtistas.map(normalizeComparison));
+
+  const banners = await getTodosBanners();
+  const agora = Date.now();
+  const meus = banners
+    .filter((b) => normMeus.has(normalizeComparison(b.artista)))
+    .sort((a, b) => Date.parse(b.data) - Date.parse(a.data))
+    .map((b) => ({
+      id: b.id,
+      artista: b.artista,
+      titulo: b.musicaOuAlbum,
+      plataforma: b.plataforma,
+      imagemUrl: b.imagemUrl,
+      dataExpira: b.dataExpira,
+      ativo: b.status !== "Removido" && Number.isFinite(Date.parse(b.dataExpira)) && Date.parse(b.dataExpira) > agora,
+    }));
+
+  return jsonResponse({ success: true, data: meus });
+}
+
+/**
+ * POST /api/market/banners/deletar
+ * body: { telegramId, bannerId }
+ * Remove o banner da fila de exibição (marca Status="Removido" e expira
+ * na hora — não apaga a linha, mantém histórico pra reconciliação).
+ */
+export async function postDeletarBannerController(request: Request): Promise<Response> {
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ success: false, error: "Corpo inválido." }, 400);
+  }
+
+  const telegramId = String(body?.telegramId || "").trim();
+  const bannerId = String(body?.bannerId || "").trim();
+  if (!telegramId || !bannerId) return jsonResponse({ success: false, error: "Parâmetros inválidos." }, 400);
+
+  const banners = await getTodosBanners();
+  const banner = banners.find((b) => b.id === bannerId);
+  if (!banner) return jsonResponse({ success: false, error: "Banner não encontrado." }, 404);
+
+  const meusArtistas = await getArtistNamesForOwner(telegramId);
+  if (!meusArtistas.some((a) => normalizeComparison(a) === normalizeComparison(banner.artista))) {
+    return jsonResponse({ success: false, error: "Esse banner não é seu." }, 403);
+  }
+
+  await googleSheetsService.usuarios.updateValues(BANNERS_SHEET, `K${banner.linha}`, [["Removido"]]);
+  await googleSheetsService.usuarios.updateValues(BANNERS_SHEET, `J${banner.linha}`, [[new Date(0).toISOString()]]);
+
+  return jsonResponse({ success: true });
+}

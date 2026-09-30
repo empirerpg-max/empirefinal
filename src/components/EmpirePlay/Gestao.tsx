@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { driveImg } from "@/lib/api";
+import { MeusSpotlightBanners } from "./MeusSpotlightBanners";
 import { EditModal } from "./EditModal";
 import { LancarFaixaAlbumModal } from "./LancarFaixaAlbumModal";
 import { BannersManager } from "./BannersManager";
@@ -1440,6 +1441,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           <p className="text-[11px] text-neutral-500 leading-relaxed">
             Cadastre músicas, vídeos, music videos e álbuns para pontuação nos Charts e catálogo do Empire Play — escolha uma ação acima pra começar.
           </p>
+
+          <MeusSpotlightBanners telegramId={loginTgId} />
         </div>
       ) : (
         <>
