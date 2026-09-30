@@ -2155,3 +2155,62 @@ export async function uploadDriveController(request: Request): Promise<Response>
     );
   }
 }
+
+// GET /api/gestao/admin/diagnostico-musica?titulo=... — one-off de
+// diagnóstico: procura por título (contém, case/acento-insensível) em
+// Musicas (catálogo) e em EDIÇÃO CHARTS (aba real de cálculo dos charts),
+// pra descobrir por que uma música cadastrada não aparece nos charts —
+// caso mais comum: entrou em Musicas mas nunca foi registrada em EDIÇÃO
+// CHARTS (silenciosamente, se registrarNaEdicaoCharts falhar) ou foi
+// cadastrada como opção (c) "não é lançamento próprio" (referência a
+// outra música, nunca ganha linha própria em EDIÇÃO CHARTS de propósito).
+export async function diagnosticoMusicaController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const titulo = normalizeText(url.searchParams.get("titulo") || "");
+  if (!titulo) {
+    return new Response(JSON.stringify({ success: false, error: "titulo é obrigatório." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const alvo = normalizeComparison(titulo);
+
+  const [musicasRows, edicaoChartsRows] = await Promise.all([
+    googleSheetsService.principal.readValues("Musicas").catch(() => []),
+    googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS").catch(() => []),
+  ]);
+
+  const emMusicas = musicasRows
+    .slice(1)
+    .map((r, i) => ({ linha: i + 2, row: r }))
+    .filter(({ row }) => normalizeComparison(row[7] || "").includes(alvo))
+    .map(({ linha, row }) => ({
+      linha,
+      titulo: row[7] || "",
+      tipoSingle: row[8] || "",
+      tipoMusica: row[9] || "",
+      album: row[10] || "",
+      pendente: row[23] || "",
+      referencia: row[24] || "",
+      codigoUnico: row[25] || "",
+    }));
+
+  const emEdicaoCharts = edicaoChartsRows
+    .slice(1)
+    .map((r, i) => ({ linha: i + 2, row: r }))
+    .filter(({ row }) => normalizeComparison(row[1] || "").includes(alvo))
+    .map(({ linha, row }) => ({
+      linha,
+      titulo: row[1] || "",
+      tipoSingle: row[2] || "",
+      tipoMusica: row[3] || "",
+      album: row[4] || "",
+      weeks: row[5] || "",
+      codigoUnico: row[55] || "",
+    }));
+
+  return new Response(
+    JSON.stringify({ success: true, data: { emMusicas, emEdicaoCharts } }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
