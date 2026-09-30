@@ -38,6 +38,22 @@ export const Route = createFileRoute("/perfil")({
 
 type LoadState<T> = { status: "loading" } | { status: "error" } | { status: "ok"; data: T };
 
+const MESES_PT = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+// Usuários!Aniversário guarda "DD/MM" (sem ano) — aceita também
+// AAAA-MM-DD por compatibilidade com qualquer linha antiga nesse formato.
+function formatAniversario(valor: string): string {
+  const br = valor.match(/^(\d{1,2})\/(\d{1,2})$/);
+  const iso = valor.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  const dia = br ? Number(br[1]) : iso ? Number(iso[2]) : null;
+  const mes = br ? Number(br[2]) : iso ? Number(iso[1]) : null;
+  if (!dia || !mes || mes < 1 || mes > 12) return valor;
+  return `${dia} de ${MESES_PT[mes - 1]}`;
+}
+
 function Perfil() {
   const { user } = useTelegramUser();
   const [login, setLogin] = useState(getStoredLogin());
@@ -227,12 +243,7 @@ function Perfil() {
             {login?.aniversario ? (
               <div className="w-full max-w-[16rem] flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm mb-3">
                 <Cake className="size-4 text-primary shrink-0" />
-                <span className="flex-1">
-                  {new Date(`${login.aniversario}T00:00:00`).toLocaleDateString("pt-BR", {
-                    day: "2-digit",
-                    month: "long",
-                  })}
-                </span>
+                <span className="flex-1">{formatAniversario(login.aniversario)}</span>
               </div>
             ) : (
               <div className="w-full max-w-[16rem] mb-3">
@@ -298,10 +309,7 @@ function Perfil() {
             {login?.aniversario && (
               <span className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
                 <Cake className="size-3" />
-                {new Date(`${login.aniversario}T00:00:00`).toLocaleDateString("pt-BR", {
-                  day: "2-digit",
-                  month: "long",
-                })}
+                {formatAniversario(login.aniversario)}
               </span>
             )}
 
