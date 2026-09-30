@@ -53,6 +53,7 @@ type MarketItem = {
   tipoEspecial: string;
   plataforma: string;
   destino: string;
+  disponivel: boolean;
 };
 
 const ICONES: Record<string, React.ReactNode> = {
@@ -185,6 +186,11 @@ function MarketPage() {
     if (item.tipoEspecial === "leilao") {
       haptic.light();
       toast.info("Esse item é por leilão — a tela de lances ainda está sendo construída.");
+      return;
+    }
+    if (item.id === "aniversario" && !item.disponivel) {
+      haptic.light();
+      toast.info("Esse item só fica disponível na semana do seu aniversário.");
       return;
     }
     haptic.selection();
@@ -376,30 +382,41 @@ function MarketPage() {
                   {categoria}
                 </p>
                 <div className="space-y-3">
-                  {itensDaCategoria.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => abrirCompra(item)}
-                      className="w-full flex items-center gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.06] transition-all text-left"
-                    >
-                      <div className="size-12 rounded-xl bg-primary/15 text-primary grid place-items-center shrink-0">
-                        {ICONES[item.icone] || <ShoppingBag className="size-6" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-black uppercase tracking-tight">{item.nome}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{item.descricao}</p>
-                      </div>
-                      {item.tipoEspecial === "leilao" ? (
-                        <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 text-muted-foreground text-[10px] font-black uppercase">
-                          Leilão
+                  {itensDaCategoria.map((item) => {
+                    const bloqueadoAniversario = item.id === "aniversario" && !item.disponivel;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => abrirCompra(item)}
+                        className={`w-full flex items-center gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10 transition-all text-left ${
+                          bloqueadoAniversario ? "opacity-50" : "hover:bg-white/[0.06]"
+                        }`}
+                      >
+                        <div className="size-12 rounded-xl bg-primary/15 text-primary grid place-items-center shrink-0">
+                          {ICONES[item.icone] || <ShoppingBag className="size-6" />}
                         </div>
-                      ) : (
-                        <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/15 text-primary text-xs font-black">
-                          <Coins className="size-3.5" /> {formatMoeda(item.preco)}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-black uppercase tracking-tight">{item.nome}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {bloqueadoAniversario ? "Só na semana do seu aniversário" : item.descricao}
+                          </p>
                         </div>
-                      )}
-                    </button>
-                  ))}
+                        {item.tipoEspecial === "leilao" ? (
+                          <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 text-muted-foreground text-[10px] font-black uppercase">
+                            Leilão
+                          </div>
+                        ) : bloqueadoAniversario ? (
+                          <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 text-muted-foreground text-[10px] font-black uppercase">
+                            Bloqueado
+                          </div>
+                        ) : (
+                          <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/15 text-primary text-xs font-black">
+                            <Coins className="size-3.5" /> {formatMoeda(item.preco)}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}

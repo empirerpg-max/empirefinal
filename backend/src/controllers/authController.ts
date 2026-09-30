@@ -162,6 +162,7 @@ export async function authHeartbeatController(request: Request): Promise<Respons
           tipoPerfil: match.rec["tipo_de_perfil"] || "Usuário",
           fotoPerfil: match.rec["foto_do_perfil"] || "",
           prestigio: match.rec["prestigio"] || "",
+          aniversario: match.rec["aniversario"] || "",
         }
       : null;
 
@@ -275,6 +276,7 @@ export async function loginController(request: Request): Promise<Response> {
           tipoPerfil: match.rec["tipo_de_perfil"] || "Usuário",
           fotoPerfil: match.rec["foto_do_perfil"] || "",
           prestigio: match.rec["prestigio"] || "",
+          aniversario: match.rec["aniversario"] || "",
           precisaTrocarSenha,
         },
       }),
@@ -379,6 +381,7 @@ export interface UpdateProfileBody {
   usuario: string;
   nome?: string;
   fotoPerfil?: string;
+  aniversario?: string;
 }
 
 /**
@@ -436,6 +439,31 @@ export async function updateProfileController(request: Request): Promise<Respons
       }
     }
 
+    // Aniversário só pode ser preenchido UMA VEZ pelo próprio jogador —
+    // nunca sobrescrito depois de já preenchido (senão dava pra "mover" o
+    // aniversário toda semana e liberar o item Aniversário do Market
+    // sempre). Mudança depois disso só na mão, direto na planilha.
+    let aniversarioAtualizado = match.rec["aniversario"] || "";
+    if (body.aniversario !== undefined && !aniversarioAtualizado.trim()) {
+      const novoAniversario = body.aniversario.trim();
+      if (novoAniversario && !/^\d{4}-\d{2}-\d{2}$/.test(novoAniversario)) {
+        return new Response(JSON.stringify({ success: false, error: "Data de aniversário inválida." }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (novoAniversario) {
+        const aniversarioColIndex = columnKeys.indexOf("aniversario");
+        if (aniversarioColIndex !== -1) {
+          const colLetter = colIndexToA1Letter(aniversarioColIndex);
+          await googleSheetsService.usuarios.updateValues(USUARIOS_SHEET, `${colLetter}${match.rowIndex}`, [
+            [novoAniversario],
+          ]);
+          aniversarioAtualizado = novoAniversario;
+        }
+      }
+    }
+
     const nomeAtualizado = novoNome || match.rec["usuario"] || usuario;
 
     return new Response(
@@ -448,6 +476,7 @@ export async function updateProfileController(request: Request): Promise<Respons
           tipoPerfil: match.rec["tipo_de_perfil"] || "Usuário",
           fotoPerfil: body.fotoPerfil !== undefined ? body.fotoPerfil : match.rec["foto_do_perfil"] || "",
           prestigio: match.rec["prestigio"] || "",
+          aniversario: aniversarioAtualizado,
         },
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },

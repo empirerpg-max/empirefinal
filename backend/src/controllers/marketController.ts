@@ -5,6 +5,7 @@ import {
   appendRow,
   normalizeText,
   normalizeComparison,
+  normalizeHeader,
 } from "../services/googleSheetsService";
 import { getNivelAtual, gastarPrestigio, getNiveis, getRegrasPrestigio } from "../services/prestigioService";
 import { getArtistNamesForOwner } from "./artistasController";
@@ -94,6 +95,57 @@ export function semanaAtual(): string {
   return `${y}-${m}-${d}`;
 }
 
+// Limites [início, fim) da semana Empire vigente, em "pseudo-UTC" — os
+// campos UTC do Date já representam o horário de Brasília (mesmo truque de
+// semanaAtual() acima: sempre soma/subtrai contra Date.now() - 3h).
+function limitesSemanaAtual(): { inicio: Date; fim: Date } {
+  const agora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const diaSemana = agora.getUTCDay();
+  const diasDesdeQuarta = (diaSemana - 3 + 7) % 7;
+  const inicio = new Date(agora);
+  inicio.setUTCHours(0, 0, 0, 0);
+  inicio.setUTCDate(agora.getUTCDate() - diasDesdeQuarta);
+  const fim = new Date(inicio);
+  fim.setUTCDate(inicio.getUTCDate() + 7);
+  return { inicio, fim };
+}
+
+// Usuários!Aniversário guarda "AAAA-MM-DD" — o ano não importa (é a data
+// de nascimento), só mês/dia. Verdadeiro se o dia de aniversário (em
+// qualquer ano próximo, pra cobrir virada de ano) cai dentro da semana
+// Empire vigente (quarta 00:00 até terça 23:59, Brasília).
+function estaNaSemanaDoAniversario(dataAniversario: string): boolean {
+  const m = dataAniversario.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  if (!m) return false;
+  const mes = Number(m[1]);
+  const dia = Number(m[2]);
+  const { inicio, fim } = limitesSemanaAtual();
+  for (const ano of [inicio.getUTCFullYear() - 1, inicio.getUTCFullYear(), inicio.getUTCFullYear() + 1]) {
+    const candidato = new Date(Date.UTC(ano, mes - 1, dia));
+    if (candidato >= inicio && candidato < fim) return true;
+  }
+  return false;
+}
+
+async function getAniversarioJogador(telegramId: string, usuario: string): Promise<string> {
+  const rows = await googleSheetsService.usuarios.readValues("Usuários").catch(() => []);
+  if (rows.length < 2) return "";
+  const header = rows[0].map((h) => normalizeHeader(h));
+  const colAniversario = header.indexOf("aniversario");
+  if (colAniversario === -1) return "";
+  const colId = header.indexOf("id");
+  const colUsuario = header.indexOf("usuario");
+  const normId = normalizeComparison(telegramId);
+  const normUsuario = normalizeComparison(usuario);
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const bateId = !!normId && colId !== -1 && normalizeComparison(row[colId]) === normId;
+    const bateUsuario = !!normUsuario && colUsuario !== -1 && normalizeComparison(row[colUsuario]) === normUsuario;
+    if (bateId || bateUsuario) return normalizeText(row[colAniversario]);
+  }
+  return "";
+}
+
 // DADOS!AC (nome do artista) .. AI ("SALDO FINAL" — saldo ao vivo, já
 // descontando depósito/investimento da semana) — mesma coluna que a
 // fórmula de ECOIN + INVESTIMENTO!D já usa (PROCV(C;DADOS!AC:AI;7;0), AI
@@ -133,7 +185,18 @@ export async function getMarketProdutosController(request: Request): Promise<Res
   const telegramId = url.searchParams.get("telegramId") || "";
   const usuario = url.searchParams.get("usuario") || "";
 
-  const itens = await getMarketItens();
+  const itensBase = await getMarketItens();
+
+  // Item Aniversário só é clicável na semana (Empire, quarta-terça,
+  // Brasília) em que cai o aniversário do jogador — vem de Usuários!M.
+  let podeAniversario = false;
+  if (telegramId || usuario) {
+    const dataAniversario = await getAniversarioJogador(telegramId, usuario).catch(() => "");
+    podeAniversario = dataAniversario ? estaNaSemanaDoAniversario(dataAniversario) : false;
+  }
+  const itens = itensBase.map((item) =>
+    item.id === "aniversario" ? { ...item, disponivel: podeAniversario } : { ...item, disponivel: true },
+  );
 
   let saldoPrestigio = 0;
   if (telegramId || usuario) {
@@ -384,6 +447,16 @@ export async function postMarketComprarController(request: Request): Promise<Res
       const faltam = WEEK_OFF_COOLDOWN_DIAS - dias;
       return jsonResponse(
         { success: false, error: `Você já usou Week Off recentemente. Faltam ${faltam} dia${faltam === 1 ? "" : "s"} pra poder comprar de novo.` },
+        400,
+      );
+    }
+  }
+
+  if (item.id === "aniversario") {
+    const dataAniversario = await getAniversarioJogador(telegramId, usuario).catch(() => "");
+    if (!dataAniversario || !estaNaSemanaDoAniversario(dataAniversario)) {
+      return jsonResponse(
+        { success: false, error: "Esse item só pode ser comprado na semana do seu aniversário." },
         400,
       );
     }
