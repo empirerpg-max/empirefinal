@@ -1,15 +1,16 @@
-import { googleSheetsService, normalizeComparison, normalizeText } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeText } from "../services/googleSheetsService";
 
-// Correção pontual: a música "Fuori Rotta" (Max Gorghan) está com a coluna
-// "ID do tópico" (Musicas!B) vazia — por isso comentários antigos ficaram
-// órfãos sob IDs velhos (ex: "musica_1788994568297_j04lhl") e o Fórum nunca
-// consegue casar nada com ela, então a página sempre mostra "sem
-// comentários" mesmo tendo comentários de verdade guardados. Reaproveita o
-// ID mais recente e no formato correto encontrado entre os órfãos (ver
-// diagnóstico via /api/empire-play/admin/fix-orphan-comments) em vez de
-// gerar um novo, pra já religar os comentários existentes na sequência.
-const TITULO_ALVO = "fuori rotta";
-const TOPIC_ID_CORRETO = "musica_1788994568297_j04lhl";
+// Reversão de emergência: uma correção anterior (mal informada — achava
+// que a linha "Fuori Rotta" original estava sem ID de tópico, quando na
+// verdade só os remixes é que estavam) escreveu por engano o MESMO ID de
+// tópico órfão ("musica_1788994568297_j04lhl") nas 4 linhas de remix
+// (440-443), fazendo elas compartilharem indevidamente o mesmo tópico de
+// comentários. Essa rota limpa de volta a coluna B (ID do tópico) só
+// dessas 4 linhas específicas, restaurando o estado "vazio" original —
+// deixa o próprio forumController gerar um ID novo e único da próxima vez
+// que alguém comentar em cada uma, que é o comportamento correto.
+const LINHAS_PARA_REVERTER = [440, 441, 442, 443];
+const ID_ESCRITO_POR_ENGANO = "musica_1788994568297_j04lhl";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -19,30 +20,17 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 export async function adminFixFuoriRottaTopicoController(): Promise<Response> {
-  const rows = await googleSheetsService.principal.readValues("Musicas").catch(() => []);
-  const alvo = normalizeComparison(TITULO_ALVO);
-
-  const encontradas: { linha: number; titulo: string; idAtual: string }[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i] || [];
-    const titulo = normalizeText(row[7] || "");
-    if (!normalizeComparison(titulo).includes(alvo)) continue;
-    encontradas.push({ linha: i + 1, titulo, idAtual: normalizeText(row[1] || "") });
-  }
-
-  if (encontradas.length === 0) {
-    return jsonResponse({ success: false, error: "Nenhuma linha de 'Fuori Rotta' encontrada em Musicas." }, 404);
-  }
-
   const resultados = [];
-  for (const item of encontradas) {
-    if (item.idAtual) {
-      resultados.push({ ...item, acao: "ja_tinha_id", idFinal: item.idAtual });
+  for (const linha of LINHAS_PARA_REVERTER) {
+    const atual = await googleSheetsService.principal.readValues("Musicas", `B${linha}:H${linha}`);
+    const valorAtual = normalizeText(atual?.[0]?.[0] || "");
+    const titulo = normalizeText(atual?.[0]?.[6] || "");
+    if (valorAtual !== ID_ESCRITO_POR_ENGANO) {
+      resultados.push({ linha, titulo, valorAtual, acao: "nada_a_fazer" });
       continue;
     }
-    await googleSheetsService.principal.updateValues("Musicas", `B${item.linha}`, [[TOPIC_ID_CORRETO]]);
-    resultados.push({ ...item, acao: "id_escrito", idFinal: TOPIC_ID_CORRETO });
+    await googleSheetsService.principal.updateValues("Musicas", `B${linha}`, [[""]]);
+    resultados.push({ linha, titulo, valorAtual, acao: "revertido_para_vazio" });
   }
-
   return jsonResponse({ success: true, data: resultados });
 }
