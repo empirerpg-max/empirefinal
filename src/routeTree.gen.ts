@@ -35,6 +35,7 @@ import { Route as EmpirePlayForumRouteImport } from './routes/empire-play.forum'
 import { Route as EmpirePlayGestaoRouteImport } from './routes/empire-play.gestao'
 import { Route as EmpirePlayMusicasRouteImport } from './routes/empire-play.musicas'
 import { Route as EmpirePlayVideosRouteImport } from './routes/empire-play.videos'
+import { Route as MarketIndexRouteImport } from './routes/market.index'
 import { Route as MarketRegrasRouteImport } from './routes/market.regras'
 import { Route as PontoIndexRouteImport } from './routes/ponto.index'
 import { Route as PontoDistribuirRouteImport } from './routes/ponto.distribuir'
@@ -188,6 +189,11 @@ const EmpirePlayVideosRoute = EmpirePlayVideosRouteImport.update({
   path: '/videos',
   getParentRoute: () => EmpirePlayRoute,
 } as any)
+const MarketIndexRoute = MarketIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MarketRoute,
+} as any)
 const MarketRegrasRoute = MarketRegrasRouteImport.update({
   id: '/regras',
   path: '/regras',
@@ -337,6 +343,7 @@ export interface FileRoutesByFullPath {
   '/artistas/': typeof ArtistasIndexRoute
   '/awards/': typeof AwardsIndexRoute
   '/empire-play/': typeof EmpirePlayIndexRoute
+  '/market/': typeof MarketIndexRoute
   '/ponto/': typeof PontoIndexRoute
   '/tours/': typeof ToursIndexRoute
   '/album/$id/editar': typeof AlbumIdEditarRoute
@@ -360,7 +367,6 @@ export interface FileRoutesByTo {
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
-  '/market': typeof MarketRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
@@ -382,6 +388,7 @@ export interface FileRoutesByTo {
   '/artistas': typeof ArtistasIndexRoute
   '/awards': typeof AwardsIndexRoute
   '/empire-play': typeof EmpirePlayIndexRoute
+  '/market': typeof MarketIndexRoute
   '/ponto': typeof PontoIndexRoute
   '/tours': typeof ToursIndexRoute
   '/album/$id/editar': typeof AlbumIdEditarRoute
@@ -433,6 +440,7 @@ export interface FileRoutesById {
   '/artistas/': typeof ArtistasIndexRoute
   '/awards/': typeof AwardsIndexRoute
   '/empire-play/': typeof EmpirePlayIndexRoute
+  '/market/': typeof MarketIndexRoute
   '/ponto/': typeof PontoIndexRoute
   '/tours/': typeof ToursIndexRoute
   '/album/$id/editar': typeof AlbumIdEditarRoute
@@ -485,6 +493,7 @@ export interface FileRouteTypes {
     | '/artistas/'
     | '/awards/'
     | '/empire-play/'
+    | '/market/'
     | '/ponto/'
     | '/tours/'
     | '/album/$id/editar'
@@ -508,7 +517,6 @@ export interface FileRouteTypes {
     | '/acesso-rapido'
     | '/albuns'
     | '/charts'
-    | '/market'
     | '/perfil'
     | '/premiacoes'
     | '/social'
@@ -530,6 +538,7 @@ export interface FileRouteTypes {
     | '/artistas'
     | '/awards'
     | '/empire-play'
+    | '/market'
     | '/ponto'
     | '/tours'
     | '/album/$id/editar'
@@ -580,6 +589,7 @@ export interface FileRouteTypes {
     | '/artistas/'
     | '/awards/'
     | '/empire-play/'
+    | '/market/'
     | '/ponto/'
     | '/tours/'
     | '/album/$id/editar'
@@ -812,6 +822,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EmpirePlayVideosRouteImport
       parentRoute: typeof EmpirePlayRoute
     }
+    '/market/': {
+      id: '/market/'
+      path: '/'
+      fullPath: '/market/'
+      preLoaderRoute: typeof MarketIndexRouteImport
+      parentRoute: typeof MarketRoute
+    }
     '/market/regras': {
       id: '/market/regras'
       path: '/regras'
@@ -1043,10 +1060,12 @@ const EmpirePlayRouteWithChildren = EmpirePlayRoute._addFileChildren(
 
 interface MarketRouteChildren {
   MarketRegrasRoute: typeof MarketRegrasRoute
+  MarketIndexRoute: typeof MarketIndexRoute
 }
 
 const MarketRouteChildren: MarketRouteChildren = {
   MarketRegrasRoute: MarketRegrasRoute,
+  MarketIndexRoute: MarketIndexRoute,
 }
 
 const MarketRouteWithChildren =
