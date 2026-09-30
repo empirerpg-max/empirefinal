@@ -165,6 +165,7 @@ import {
   getMarketRegrasController,
   postMarketComprarController,
   diagnosticoMarketItensController,
+  diagnosticoUsuariosController,
 } from "../controllers/marketController";
 import {
   getBannersAtivosController,
@@ -419,6 +420,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/market/regras",
     "/api/market/comprar",
     "/api/market/admin/diagnostico-itens",
+    "/api/market/admin/diagnostico-usuarios",
     "/api/market/banners/ativos",
     "/api/market/banners/opcoes",
     "/api/market/banners/comprar",
@@ -1519,6 +1521,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await postMarketComprarController(request);
   } else if (url.pathname === "/api/market/admin/diagnostico-itens") {
     response = await diagnosticoMarketItensController();
+  } else if (url.pathname === "/api/market/admin/diagnostico-usuarios") {
+    response = await diagnosticoUsuariosController();
   } else if (url.pathname === "/api/market/banners/ativos") {
     response = await getBannersAtivosController();
   } else if (url.pathname === "/api/market/banners/opcoes") {
