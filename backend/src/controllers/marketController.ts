@@ -8,6 +8,8 @@ import {
 } from "../services/googleSheetsService";
 import { getNivelAtual, gastarPrestigio, getNiveis, getRegrasPrestigio } from "../services/prestigioService";
 import { getArtistNamesForOwner } from "./artistasController";
+import { gravarLinhaRegistro } from "./registroLogController";
+import { resolveNomeOficial } from "./forumController";
 
 // -------------------- CATÁLOGO (MARKET_ITENS) --------------------
 //
@@ -229,6 +231,25 @@ async function registrarCompra(params: {
   );
 }
 
+// Week Off tem cooldown de 3 meses por jogador — verifica no próprio log
+// de Market_Compras (já é a fonte de verdade de tudo que foi comprado).
+const WEEK_OFF_COOLDOWN_DIAS = 90;
+
+async function diasDesdeUltimoWeekOff(telegramId: string): Promise<number | null> {
+  const rows = await readValues("usuarios", COMPRAS_SHEET).catch(() => []);
+  const normTg = normalizeComparison(telegramId);
+  let maisRecente = -1;
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (normalizeComparison(normalizeText(row[1])) !== normTg) continue;
+    if (normalizeText(row[3]) !== "week_off") continue;
+    const ts = Date.parse(normalizeText(row[0]));
+    if (Number.isFinite(ts) && ts > maisRecente) maisRecente = ts;
+  }
+  if (maisRecente === -1) return null;
+  return Math.floor((Date.now() - maisRecente) / (24 * 60 * 60 * 1000));
+}
+
 // EmpireHits_Compras (planilha usuarios) — itens de clipe/comercial no
 // Empire Hits (destino "empirehits_compras" em MARKET_ITENS). Fica
 // "Pendente" até alguém no time disponibilizar de verdade.
@@ -357,12 +378,29 @@ export async function postMarketComprarController(request: Request): Promise<Res
     }
   }
 
+  if (item.id === "week_off") {
+    const dias = await diasDesdeUltimoWeekOff(telegramId);
+    if (dias !== null && dias < WEEK_OFF_COOLDOWN_DIAS) {
+      const faltam = WEEK_OFF_COOLDOWN_DIAS - dias;
+      return jsonResponse(
+        { success: false, error: `Você já usou Week Off recentemente. Faltam ${faltam} dia${faltam === 1 ? "" : "s"} pra poder comprar de novo.` },
+        400,
+      );
+    }
+  }
+
   const semana = semanaAtual();
 
   try {
     if (item.moeda === "prestigio") {
       const novoSaldo = await gastarPrestigio({ telegramId, usuario }, item.preco);
       await registrarCompra({ item, telegramId, usuario, artista, detalhe, semana, status: "Pendente" });
+      if (item.id === "week_off") {
+        const nomeOficial = await resolveNomeOficial(telegramId, usuario);
+        await gravarLinhaRegistro([nomeOficial, "", "WEEK OFF"]).catch((err) =>
+          console.warn("[Market] Falha ao gravar Week Off em REGISTRO:", err),
+        );
+      }
       return jsonResponse({ success: true, data: { saldoPrestigio: novoSaldo } });
     }
 
