@@ -34,6 +34,12 @@ const PLATAFORMAS_BANNER: { valor: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE"; label:
   { valor: "YOUTUBE", label: "YouTube", preco: 200000 },
 ];
 
+const PLATAFORMAS_MUSIC_BOOST: { valor: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE"; label: string }[] = [
+  { valor: "SPOTIFY", label: "Spotify" },
+  { valor: "APPLE MUSIC", label: "Apple Music" },
+  { valor: "YOUTUBE", label: "YouTube" },
+];
+
 export const Route = createFileRoute("/market/")({
   head: () => ({ meta: [{ title: "Empire Market — Empire Hub" }] }),
   component: MarketPage,
@@ -209,6 +215,7 @@ function MarketPage() {
   const [artistaSelecionado, setArtistaSelecionado] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [musicasEmChart, setMusicasEmChart] = useState<{ label: string; artist: string; title: string }[]>([]);
+  const [musicBoostPlataforma, setMusicBoostPlataforma] = useState<"SPOTIFY" | "APPLE MUSIC" | "YOUTUBE" | "">("");
 
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
   const [bannerArtista, setBannerArtista] = useState("");
@@ -278,6 +285,7 @@ function MarketPage() {
     }
     haptic.selection();
     setDetalhe("");
+    setMusicBoostPlataforma("");
     setArtistaSelecionado(item.moeda === "ecoin" ? artistas[0]?.nome || "" : "");
     setComprando(item);
     if (item.id === "music_boost" && musicasEmChart.length === 0) {
@@ -362,6 +370,10 @@ function MarketPage() {
       toast.error("Selecione o artista.");
       return;
     }
+    if (comprando.id === "music_boost" && !musicBoostPlataforma) {
+      toast.error("Escolha em qual plataforma impulsionar.");
+      return;
+    }
     if (saldoAtivo < comprando.preco) {
       toast.error(comprando.moeda === "ecoin" ? "ECoin insuficiente." : "Prestígio insuficiente.");
       return;
@@ -374,6 +386,7 @@ function MarketPage() {
         usuario: user?.name || "",
         artista: comprando.moeda === "ecoin" ? artistaSelecionado : undefined,
         detalhe: detalhe.trim(),
+        plataforma: comprando.id === "music_boost" ? musicBoostPlataforma : undefined,
       });
       if (res.success) {
         haptic.success();
@@ -532,6 +545,30 @@ function MarketPage() {
               />
             )}
 
+            {comprando.id === "music_boost" && (
+              <>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
+                  Plataforma
+                </p>
+                <div className="grid grid-cols-3 gap-1.5 mb-3">
+                  {PLATAFORMAS_MUSIC_BOOST.map((p) => (
+                    <button
+                      key={p.valor}
+                      type="button"
+                      onClick={() => setMusicBoostPlataforma(p.valor)}
+                      className={`py-2.5 px-1 rounded-xl text-[10px] font-black uppercase tracking-wide text-center truncate transition ${
+                        musicBoostPlataforma === p.valor
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-white/5 border border-white/10 text-muted-foreground"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
             {comprando.pedeDetalhe && comprando.id === "music_boost" ? (
               <MusicaSelect
                 opcoes={musicasDoArtistaSelecionado}
@@ -573,6 +610,7 @@ function MarketPage() {
                   submitting ||
                   (comprando.pedeDetalhe && !detalhe.trim()) ||
                   (comprando.moeda === "ecoin" && !artistaSelecionado) ||
+                  (comprando.id === "music_boost" && !musicBoostPlataforma) ||
                   saldoAtivo < comprando.preco
                 }
                 className="py-3 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider disabled:opacity-40 flex items-center justify-center gap-1.5"
