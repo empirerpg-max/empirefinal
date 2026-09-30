@@ -20,6 +20,8 @@ import {
   Sparkles,
   Radio,
   ImageIcon,
+  ChevronDown,
+  Disc,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api } from "@/lib/api";
@@ -89,6 +91,7 @@ function MarketPage() {
     { titulo: string; topicoId: string; capa: string | null; tipo: string }[]
   >([]);
   const [bannerOpcaoTopicoId, setBannerOpcaoTopicoId] = useState("");
+  const [bannerOpcaoAberto, setBannerOpcaoAberto] = useState(false);
   const [bannerImageFile, setBannerImageFile] = useState<File | null>(null);
   const [bannerImagePreview, setBannerImagePreview] = useState<string | null>(null);
   const [bannerSubmitting, setBannerSubmitting] = useState(false);
@@ -148,6 +151,7 @@ function MarketPage() {
     setBannerArtista(artistas[0].nome);
     setBannerPlataforma("");
     setBannerOpcaoTopicoId("");
+    setBannerOpcaoAberto(false);
     setBannerOpcoes([]);
     setBannerImageFile(null);
     setBannerImagePreview(null);
@@ -480,20 +484,64 @@ function MarketPage() {
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
               Música ou álbum
             </p>
-            <select
-              value={bannerOpcaoTopicoId}
-              onChange={(e) => setBannerOpcaoTopicoId(e.target.value)}
-              className="w-full mb-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition"
-            >
-              <option value="" disabled>
-                {bannerOpcoes.length === 0 ? "Nenhum lançamento com tópico ainda" : "Selecione"}
-              </option>
-              {bannerOpcoes.map((o) => (
-                <option key={o.topicoId} value={o.topicoId}>
-                  {o.titulo} {o.tipo === "albuns" ? "(álbum)" : ""}
-                </option>
-              ))}
-            </select>
+            <div className="relative mb-3">
+              <button
+                type="button"
+                onClick={() => bannerOpcoes.length > 0 && setBannerOpcaoAberto((v) => !v)}
+                disabled={bannerOpcoes.length === 0}
+                className="w-full flex items-center gap-3 px-3 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition disabled:opacity-50"
+              >
+                <div className="size-9 rounded-lg bg-white/10 overflow-hidden shrink-0 grid place-items-center">
+                  {bannerOpcaoSelecionada?.capa ? (
+                    <img src={bannerOpcaoSelecionada.capa} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Disc className="size-4 text-muted-foreground" />
+                  )}
+                </div>
+                <span className="flex-1 min-w-0 text-left truncate">
+                  {bannerOpcaoSelecionada
+                    ? bannerOpcaoSelecionada.titulo
+                    : bannerOpcoes.length === 0
+                      ? "Nenhum lançamento com tópico ainda"
+                      : "Selecione"}
+                </span>
+                <ChevronDown
+                  className={`size-4 text-muted-foreground shrink-0 transition-transform ${bannerOpcaoAberto ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {bannerOpcaoAberto && bannerOpcoes.length > 0 && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1.5 max-h-56 overflow-y-auto rounded-2xl border border-white/10 bg-[#11141c] shadow-xl shadow-black/40 py-1.5">
+                  {bannerOpcoes.map((o) => (
+                    <button
+                      key={o.topicoId}
+                      type="button"
+                      onClick={() => {
+                        setBannerOpcaoTopicoId(o.topicoId);
+                        setBannerOpcaoAberto(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/5 transition ${
+                        o.topicoId === bannerOpcaoTopicoId ? "bg-primary/10" : ""
+                      }`}
+                    >
+                      <div className="size-9 rounded-lg bg-white/10 overflow-hidden shrink-0 grid place-items-center">
+                        {o.capa ? (
+                          <img src={o.capa} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <Disc className="size-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <span className="flex-1 min-w-0 truncate text-sm">{o.titulo}</span>
+                      {o.tipo === "albuns" && (
+                        <span className="shrink-0 text-[9px] font-black uppercase tracking-wide text-muted-foreground bg-white/10 px-2 py-0.5 rounded-full">
+                          Álbum
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
               Imagem do banner (corte 3:1)
