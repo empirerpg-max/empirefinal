@@ -1152,6 +1152,30 @@ export const api = {
     });
     return res.json();
   },
+  async listarMeusBanners(telegramId: string): Promise<
+    {
+      id: string;
+      artista: string;
+      titulo: string;
+      plataforma: string;
+      imagemUrl: string;
+      dataExpira: string;
+      ativo: boolean;
+    }[]
+  > {
+    const res = await fetch(`/api/market/banners/meus?telegramId=${encodeURIComponent(telegramId)}`).then((r) =>
+      r.json(),
+    );
+    return res?.data || [];
+  },
+  async deletarBanner(payload: { telegramId: string; bannerId: string }): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/market/banners/deletar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
 
   // ---- Ponto ----
   async listarPontos(telegramId: string): Promise<{
