@@ -795,6 +795,38 @@ export async function getMusicasEmChartController(): Promise<Response> {
   }
 }
 
+// Lista os álbuns disponíveis nos charts pro picker de Album Boost —
+// fonte é "EDIÇÃO CHARTS ÁLBUMS" (edicaoCharts): A = artista, D = nome
+// do álbum (já é o nome CANÔNICO, mesma coluna que buscarNomeCanonico
+// usa pra resolver título de álbum em registroLogController.ts, então
+// não precisa nenhuma resolução extra por Código único aqui).
+export async function getAlbunsEmChartController(): Promise<Response> {
+  try {
+    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D5000");
+    const seen = new Set<string>();
+    const albuns: { label: string; artist: string; title: string }[] = [];
+    for (const row of rows) {
+      const artist = (row[0] || "").trim();
+      const title = (row[3] || "").trim();
+      if (!artist || !title) continue;
+      const label = `${artist} - ${title}`;
+      if (seen.has(label)) continue;
+      seen.add(label);
+      albuns.push({ label, artist, title });
+    }
+    return new Response(JSON.stringify({ success: true, data: albuns }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[getAlbunsEmChartController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao buscar álbuns em chart." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
 // Lista faixas do artista prontas pra vincular a um álbum: precisam ter um
 // tópico de verdade no fórum (Musicas!B não vazio — senão não tem o que
 // "vincular", a música ainda nem existe como conteúdo publicado) e ainda

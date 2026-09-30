@@ -372,23 +372,9 @@ const ECOIN_COL_ARTISTA = 2; // C
 const ECOIN_COL_MUSICA = 4; // E
 
 async function registrarNoEcoinInvestimento(artista: string, item: MarketItem, detalhe: string): Promise<void> {
-  const valorFinal = item.id === "album_boost" ? `REGISTRO: (ALBUM) - ${detalhe}` : detalhe;
-
-  const rows = await googleSheetsService.registrosCharts.readValues(ECOIN_SHEET);
-  let linhaLivre = -1;
-  for (let i = ECOIN_DATA_START_ROW - 1; i < rows.length; i++) {
-    const row = rows[i] || [];
-    if (!normalizeText(row[ECOIN_COL_ARTISTA])) {
-      linhaLivre = i + 1;
-      break;
-    }
-  }
-  if (linhaLivre === -1) {
-    throw new Error("Sem linha disponível em ECOIN + INVESTIMENTO essa semana.");
-  }
-
+  const linhaLivre = await acharLinhaLivreEcoinInvestimento();
   await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `C${linhaLivre}`, [[artista]]);
-  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `E${linhaLivre}`, [[valorFinal]]);
+  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `E${linhaLivre}`, [[detalhe]]);
 }
 
 // Music Boost: acha o Código único da música (Musicas!Z, casando por
@@ -422,33 +408,51 @@ async function resolverNomeCompletoMusica(artista: string, titulo: string): Prom
 // valores/colunas que as playlists normais já usam (PLAYLIST_MINIMA,
 // playlistsInvestimentoController.ts), só que escritos numa linha nova
 // em vez de vir de uma escolha na tela de Playlists.
+async function acharLinhaLivreEcoinInvestimento(): Promise<number> {
+  const rows = await googleSheetsService.registrosCharts.readValues(ECOIN_SHEET);
+  for (let i = ECOIN_DATA_START_ROW - 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (!normalizeText(row[ECOIN_COL_ARTISTA])) return i + 1;
+  }
+  throw new Error("Sem linha disponível em ECOIN + INVESTIMENTO essa semana.");
+}
+
+async function escreverBoostEmEcoinInvestimento(
+  artista: string,
+  nomeParaColunaE: string,
+  plataforma: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE",
+): Promise<void> {
+  const linhaLivre = await acharLinhaLivreEcoinInvestimento();
+  const colPlataforma = { SPOTIFY: "G", "APPLE MUSIC": "I", YOUTUBE: "K" }[plataforma];
+
+  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `C${linhaLivre}`, [[artista]]);
+  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `E${linhaLivre}`, [[nomeParaColunaE]]);
+  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `${colPlataforma}${linhaLivre}`, [
+    [PLAYLIST_MINIMA[plataforma]],
+  ]);
+}
+
 async function registrarMusicBoostInvestimento(
   artista: string,
   titulo: string,
   plataforma: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE",
 ): Promise<void> {
   const nomeCompleto = await resolverNomeCompletoMusica(artista, titulo);
+  await escreverBoostEmEcoinInvestimento(artista, nomeCompleto, plataforma);
+}
 
-  const rows = await googleSheetsService.registrosCharts.readValues(ECOIN_SHEET);
-  let linhaLivre = -1;
-  for (let i = ECOIN_DATA_START_ROW - 1; i < rows.length; i++) {
-    const row = rows[i] || [];
-    if (!normalizeText(row[ECOIN_COL_ARTISTA])) {
-      linhaLivre = i + 1;
-      break;
-    }
-  }
-  if (linhaLivre === -1) {
-    throw new Error("Sem linha disponível em ECOIN + INVESTIMENTO essa semana.");
-  }
-
-  const colPlataforma = { SPOTIFY: "G", "APPLE MUSIC": "I", YOUTUBE: "K" }[plataforma];
-
-  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `C${linhaLivre}`, [[artista]]);
-  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `E${linhaLivre}`, [[nomeCompleto]]);
-  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET, `${colPlataforma}${linhaLivre}`, [
-    [PLAYLIST_MINIMA[plataforma]],
-  ]);
+// Album Boost: o título já vem do picker montado a partir de "EDIÇÃO
+// CHARTS ÁLBUMS" (getAlbunsEmChartController), que já é o nome CANÔNICO
+// do álbum — sem precisar resolver Código único de novo. Formato do
+// conteúdo em E é o padrão já usado em qualquer outro registro de álbum
+// no app (registroLogController.ts/reconciliacaoRegistroController.ts):
+// "(ALBUM) - <nome canônico>".
+async function registrarAlbumBoostInvestimento(
+  artista: string,
+  tituloAlbum: string,
+  plataforma: "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE",
+): Promise<void> {
+  await escreverBoostEmEcoinInvestimento(artista, `(ALBUM) - ${tituloAlbum}`, plataforma);
 }
 
 /**
@@ -488,7 +492,7 @@ export async function postMarketComprarController(request: Request): Promise<Res
   if (!item) {
     return jsonResponse({ success: false, error: "Item não encontrado." }, 400);
   }
-  if (item.id === "music_boost") {
+  if (item.id === "music_boost" || item.id === "album_boost") {
     const PLATAFORMAS_VALIDAS = new Set(["SPOTIFY", "APPLE MUSIC", "YOUTUBE"]);
     if (!PLATAFORMAS_VALIDAS.has(plataforma)) {
       return jsonResponse({ success: false, error: "Escolha em qual plataforma impulsionar (Spotify, Apple Music ou YouTube)." }, 400);
@@ -554,6 +558,8 @@ export async function postMarketComprarController(request: Request): Promise<Res
     if (item.destino === "ecoin_investimento") {
       if (item.id === "music_boost") {
         await registrarMusicBoostInvestimento(artista, detalhe, plataforma as "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE");
+      } else if (item.id === "album_boost") {
+        await registrarAlbumBoostInvestimento(artista, detalhe, plataforma as "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE");
       } else {
         await registrarNoEcoinInvestimento(artista, item, detalhe);
       }
