@@ -156,9 +156,20 @@ export async function adminFixOrphanCommentsController(): Promise<Response> {
         continue;
       }
 
+      // Terceira tentativa: algumas linhas de mídia guardam o título SEM o
+      // prefixo "Artista - " que a convenção da aba pede (bug de
+      // digitação, ex: "Fuori Rotta" em vez de "Max Gorghan - Fuori
+      // Rotta") — Notificacoes sempre registra com o prefixo, então o
+      // casamento por título exato/base falha pra essas linhas. Corta tudo
+      // até o primeiro " - " do título recuperado e tenta de novo só com o
+      // restante.
+      const separadorIdx = candidato.tituloMedia.indexOf(" - ");
+      const tituloSemArtista = separadorIdx >= 0 ? candidato.tituloMedia.slice(separadorIdx + 3).trim() : "";
+
       const idRealNovo =
         idPorTitulo.get(normalizeComparison(candidato.tituloMedia)) ||
-        idPorTituloBase.get(tituloBase(candidato.tituloMedia));
+        idPorTituloBase.get(tituloBase(candidato.tituloMedia)) ||
+        (tituloSemArtista ? idPorTitulo.get(normalizeComparison(tituloSemArtista)) : undefined);
       if (!idRealNovo) {
         totalNaoRecuperaveis++;
         detalhes.push({
