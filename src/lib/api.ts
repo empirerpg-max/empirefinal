@@ -1154,6 +1154,30 @@ export const api = {
     const res = await fetch("/api/gestao/albuns-em-chart").then((r) => r.json());
     return res?.data || [];
   },
+  async getLeilaoAtual(telegramId: string): Promise<{
+    nome: string;
+    imagem: string | null;
+    encerrado: boolean;
+    vencedor: string;
+    liderValor: number;
+    lances: { artista: string; valor: number; ts: string }[];
+    artistas: { nome: string; saldoEcoin: number }[];
+  } | null> {
+    const res = await fetch(`/api/market/leilao?telegramId=${encodeURIComponent(telegramId)}`).then((r) => r.json());
+    return res?.data ?? null;
+  },
+  async enviarLanceLeilao(payload: {
+    telegramId: string;
+    artista: string;
+    valor: number;
+  }): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/market/leilao/lance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
   async registrarCliqueBanner(payload: { telegramId: string; bannerId: string }): Promise<{ success: boolean }> {
     const res = await fetch("/api/market/banners/clique", {
       method: "POST",

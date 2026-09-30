@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
@@ -208,6 +208,7 @@ function MusicaSelect({
 function MarketPage() {
   const { user } = useTelegramUser();
   const tgId = user?.id || "";
+  const navigate = useNavigate();
 
   const [itens, setItens] = useState<MarketItem[] | null>(null);
   const [saldoPrestigio, setSaldoPrestigio] = useState(0);
@@ -282,8 +283,8 @@ function MarketPage() {
 
   const abrirCompra = (item: MarketItem) => {
     if (item.tipoEspecial === "leilao") {
-      haptic.light();
-      toast.info("Esse item é por leilão — a tela de lances ainda está sendo construída.");
+      haptic.selection();
+      navigate({ to: "/market/leilao" });
       return;
     }
     if (item.id === "aniversario" && !item.disponivel) {
