@@ -936,6 +936,26 @@ async function vincularFaixaExistenteAoAlbum(
       ]);
     }
     edicaoChartsOk = edicaoMatches.length > 0;
+    // Faixa "selecionada como existente" que, na real, nunca tinha sido
+    // cadastrada antes (`criada` = true, ramo logo acima que cria a linha
+    // pendente em Musicas do zero) também nunca teve linha em EDIÇÃO
+    // CHARTS — e sem isso ela nunca aparece nos charts, mesmo já estando
+    // no catálogo (achado investigando "Rayna - Vernissage": entrou em
+    // Musicas como pendente, mas ficou pra sempre de fora de EDIÇÃO
+    // CHARTS, porque esse caminho só TENTAVA achar uma linha já existente,
+    // nunca criava uma). Mesmo tratamento do caminho de faixa inédita
+    // (processarFaixasDoAlbum): cria a linha aqui também.
+    if (!edicaoChartsOk && criada) {
+      const novaLinha = await registrarNaEdicaoCharts({
+        dataFormatada,
+        fullTitle: musicaSelecionada,
+        tipoSingle: "TRACKLIST ALBUM",
+        tipoMusica: "SOLO",
+        album: albumFullTitle,
+        artistaPrincipal: artistaAlbum,
+      });
+      edicaoChartsOk = novaLinha !== null;
+    }
     if (!edicaoChartsOk) {
       console.warn(`[vincularFaixaExistenteAoAlbum] Música não encontrada em EDIÇÃO CHARTS: ${musicaSelecionada}`);
     }
@@ -2211,6 +2231,71 @@ export async function diagnosticoMusicaController(request: Request): Promise<Res
 
   return new Response(
     JSON.stringify({ success: true, data: { emMusicas, emEdicaoCharts } }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+// GET /api/gestao/admin/fix-vernissage-edicao-charts — one-off: "Rayna -
+// Vernissage" entrou em Musicas (linha 453, pendente) quando foi
+// selecionada como faixa "existente" pro álbum sem nunca ter sido
+// cadastrada antes — esse caminho (vincularFaixaExistenteAoAlbum) nunca
+// criava a linha correspondente em EDIÇÃO CHARTS (bug corrigido nesse
+// mesmo commit), então a música nunca apareceu nos charts mesmo estando
+// no catálogo. Cria a linha faltante agora e copia o Código único gerado
+// de volta pra Musicas!Z, mesmo padrão usado na criação normal.
+export async function adminFixVernissageEdicaoChartsController(): Promise<Response> {
+  const musicasRows = await googleSheetsService.principal.readValues("Musicas");
+  const rowIndex = musicasRows.findIndex(
+    (r, i) => i > 0 && normalizeComparison(r[7] || "") === normalizeComparison("Rayna - Vernissage"),
+  );
+  if (rowIndex === -1) {
+    return new Response(JSON.stringify({ success: false, error: '"Rayna - Vernissage" não encontrada em Musicas.' }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const row = musicasRows[rowIndex];
+  const dataFormatada = (row[0] || "").trim();
+  const fullTitle = (row[7] || "").trim();
+  const tipoSingle = (row[8] || "").trim() || "TRACKLIST ALBUM";
+  const tipoMusica = (row[9] || "").trim() || "SOLO";
+  const album = (row[10] || "").trim();
+  const artistaPrincipal = (row[13] || "").trim();
+
+  // Já corrigido / já existe — não duplica se rodar de novo.
+  const jaExiste = await googleSheetsService.edicaoCharts.findRows(
+    "EDIÇÃO CHARTS",
+    (r) => normalizeComparison(r[1] || "") === normalizeComparison(fullTitle),
+  );
+  if (jaExiste.length > 0) {
+    return new Response(JSON.stringify({ success: true, data: { jaExistia: true } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const edicaoChartsRowIndex = await registrarNaEdicaoCharts({
+    dataFormatada,
+    fullTitle,
+    tipoSingle,
+    tipoMusica,
+    album,
+    artistaPrincipal,
+  });
+  if (!edicaoChartsRowIndex) {
+    return new Response(JSON.stringify({ success: false, error: "Falha ao gravar em EDIÇÃO CHARTS." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const codigoUnico = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+  if (codigoUnico) {
+    await googleSheetsService.principal.updateValues("Musicas", `Z${rowIndex + 1}`, [[codigoUnico]]);
+  }
+
+  return new Response(
+    JSON.stringify({ success: true, data: { edicaoChartsRowIndex, codigoUnico } }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
 }

@@ -60,6 +60,7 @@ import {
   updateFaixaLetraSincronizadaController,
   publicarFaixaPendenteController,
   diagnosticoMusicaController,
+  adminFixVernissageEdicaoChartsController,
 } from "../controllers/gestaoController";
 import {
   getReleasesForEditController,
@@ -400,6 +401,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/admin/fill-grammy-2026",
     "/api/musicas/admin/fix-boulangerie-audio",
     "/api/gestao/admin/diagnostico-musica",
+    "/api/gestao/admin/fix-vernissage-edicao-charts",
     "/api/ponto/playlists/admin/fix-duplicata-samantha-cooper",
     "/api/market/produtos",
     "/api/market/regras",
@@ -1476,6 +1478,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminFixBoulangerieAudioController();
   } else if (url.pathname === "/api/gestao/admin/diagnostico-musica") {
     response = await diagnosticoMusicaController(request);
+  } else if (url.pathname === "/api/gestao/admin/fix-vernissage-edicao-charts") {
+    response = await adminFixVernissageEdicaoChartsController();
   } else if (url.pathname === "/api/ponto/playlists/admin/fix-duplicata-samantha-cooper") {
     response = await adminFixDuplicataInvestimentoController();
   } else if (url.pathname === "/api/market/produtos") {
