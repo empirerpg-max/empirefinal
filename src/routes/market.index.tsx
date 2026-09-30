@@ -124,6 +124,56 @@ function ArtistaSelect({
   );
 }
 
+function MusicaSelect({
+  opcoes,
+  value,
+  onChange,
+  placeholder,
+}: {
+  opcoes: string[];
+  value: string;
+  onChange: (titulo: string) => void;
+  placeholder?: string;
+}) {
+  const [aberto, setAberto] = useState(false);
+
+  return (
+    <div className="relative mb-4">
+      <button
+        type="button"
+        onClick={() => opcoes.length > 0 && setAberto((v) => !v)}
+        disabled={opcoes.length === 0}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition disabled:opacity-50"
+      >
+        <span className="flex-1 min-w-0 text-left truncate">
+          {value || (opcoes.length === 0 ? "Nenhuma música desse artista nos charts" : placeholder || "Selecione")}
+        </span>
+        <ChevronDown className={`size-4 text-muted-foreground shrink-0 transition-transform ${aberto ? "rotate-180" : ""}`} />
+      </button>
+
+      {aberto && opcoes.length > 0 && (
+        <div className="absolute z-10 top-full left-0 right-0 mt-1.5 max-h-56 overflow-y-auto rounded-2xl border border-white/10 bg-[#11141c] shadow-xl shadow-black/40 py-1.5">
+          {opcoes.map((titulo) => (
+            <button
+              key={titulo}
+              type="button"
+              onClick={() => {
+                onChange(titulo);
+                setAberto(false);
+              }}
+              className={`w-full px-3 py-2 text-left text-sm truncate hover:bg-white/5 transition ${
+                titulo === value ? "bg-primary/10" : ""
+              }`}
+            >
+              {titulo}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MarketPage() {
   const { user } = useTelegramUser();
   const tgId = user?.id || "";
@@ -135,6 +185,7 @@ function MarketPage() {
   const [detalhe, setDetalhe] = useState("");
   const [artistaSelecionado, setArtistaSelecionado] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [musicasEmChart, setMusicasEmChart] = useState<{ label: string; artist: string; title: string }[]>([]);
 
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
   const [bannerArtista, setBannerArtista] = useState("");
@@ -182,6 +233,15 @@ function MarketPage() {
 
   const saldoAtivo = comprando?.moeda === "ecoin" ? artistas.find((a) => a.nome === artistaSelecionado)?.saldoEcoin ?? 0 : saldoPrestigio;
 
+  const musicasDoArtistaSelecionado = useMemo(() => {
+    const alvo = artistaSelecionado.trim().toLowerCase();
+    return musicasEmChart.filter((m) => m.artist.trim().toLowerCase() === alvo).map((m) => m.title);
+  }, [musicasEmChart, artistaSelecionado]);
+
+  useEffect(() => {
+    if (comprando?.id === "music_boost") setDetalhe("");
+  }, [artistaSelecionado, comprando?.id]);
+
   const abrirCompra = (item: MarketItem) => {
     if (item.tipoEspecial === "leilao") {
       haptic.light();
@@ -197,6 +257,9 @@ function MarketPage() {
     setDetalhe("");
     setArtistaSelecionado(item.moeda === "ecoin" ? artistas[0]?.nome || "" : "");
     setComprando(item);
+    if (item.id === "music_boost" && musicasEmChart.length === 0) {
+      api.listarMusicasEmChart().then(setMusicasEmChart);
+    }
   };
 
   const abrirBannerModal = () => {
@@ -446,14 +509,23 @@ function MarketPage() {
               />
             )}
 
-            {comprando.pedeDetalhe && (
-              <input
-                type="text"
+            {comprando.pedeDetalhe && comprando.id === "music_boost" ? (
+              <MusicaSelect
+                opcoes={musicasDoArtistaSelecionado}
                 value={detalhe}
-                onChange={(e) => setDetalhe(e.target.value)}
-                placeholder={comprando.detalhePlaceholder}
-                className="w-full mb-4 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition"
+                onChange={setDetalhe}
+                placeholder="Selecione a música"
               />
+            ) : (
+              comprando.pedeDetalhe && (
+                <input
+                  type="text"
+                  value={detalhe}
+                  onChange={(e) => setDetalhe(e.target.value)}
+                  placeholder={comprando.detalhePlaceholder}
+                  className="w-full mb-4 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-primary/50 transition"
+                />
+              )
             )}
 
             <div className="flex items-center justify-between mb-4 p-3 rounded-xl bg-white/5">
