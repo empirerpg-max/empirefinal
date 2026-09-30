@@ -92,17 +92,24 @@ export function semanaAtual(): string {
   return `${y}-${m}-${d}`;
 }
 
-// DADOS!AC (nome do artista) / AD (saldo ECoin) — mesmo saldo "ao vivo"
-// já exibido e debitado automaticamente em Ponto > Playlists (planilha
-// registrosCharts, ver playlistsInvestimentoController.ts).
+// DADOS!AC (nome do artista) .. AI ("SALDO FINAL" — saldo ao vivo, já
+// descontando depósito/investimento da semana) — mesma coluna que a
+// fórmula de ECOIN + INVESTIMENTO!D já usa (PROCV(C;DADOS!AC:AI;7;0), AI
+// é a 7ª coluna a partir de AC). AD ("SALDO ORIGINAL") é só o teto fixo de
+// R$1.500.000, igual pra todo mundo — nunca é o saldo disponível de
+// verdade, por isso não pode ser usado aqui.
 export async function getSaldosEcoin(nomesArtistas: string[]): Promise<Map<string, number>> {
   const mapa = new Map<string, number>();
   if (nomesArtistas.length === 0) return mapa;
-  const rows = await googleSheetsService.registrosCharts.readValues("DADOS", "AC1:AD5000").catch(() => []);
+  const rows = await googleSheetsService.registrosCharts.readValues("DADOS", "AC1:AI5000").catch(() => []);
   for (const row of rows) {
     const nome = normalizeText(row[0]);
     if (!nome) continue;
-    const saldo = parseFloat(normalizeText(row[1]).replace(/\./g, "").replace(",", ".")) || 0;
+    // Valor vem formatado como "R$ 1.500.000" — tira tudo que não for
+    // dígito/vírgula/sinal antes de trocar separador BR pro formato que o
+    // parseFloat entende.
+    const bruto = normalizeText(row[6]).replace(/[^\d,-]/g, "");
+    const saldo = parseFloat(bruto.replace(",", ".")) || 0;
     mapa.set(normalizeComparison(nome), saldo);
   }
   const normAlvo = new Set(nomesArtistas.map(normalizeComparison));
