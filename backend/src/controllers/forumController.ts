@@ -9,6 +9,7 @@ import { registrarAuditLog } from "./registroLogController";
 import { somarPrestigio } from "../services/prestigioService";
 import { getOwnerIdForArtist } from "./artistasController";
 import { registrarNotificacaoComentario } from "./notificacoesController";
+import { processarComentarioParaBanner } from "./bannerController";
 
 const USUARIOS_SHEET = "Usuários";
 
@@ -405,6 +406,14 @@ export async function createCommentController(request: Request): Promise<Respons
         }),
     ]);
     newRowIndex = appendResult;
+
+    // Spotlight Banner (Market): se esse comentário veio de alguém que
+    // clicou num banner ligado a esse tópico, libera o bônus de playlist
+    // mínima. Nunca bloqueia nem falha o comentário — roda em paralelo,
+    // sem await, com catch próprio.
+    processarComentarioParaBanner(jogadorIdClean, topicIdClean).catch((err) => {
+      console.warn("[ForumController] Falha ao processar banner do comentário:", err);
+    });
 
     // 3. Registrar Audit Log na Planilha REGISTRO (1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg)
     // e somar prestígio — independentes entre si (cada um faz suas próprias

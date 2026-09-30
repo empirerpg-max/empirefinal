@@ -28,6 +28,7 @@ import { useHomeConfig } from "@/lib/homeFlags";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ActivityTicker } from "@/components/ActivityTicker";
+import { SpotlightBannerCarousel } from "@/components/SpotlightBannerCarousel";
 import { SmartImg } from "@/components/SmartImg";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
@@ -689,6 +690,8 @@ function Index() {
       </header>
 
       <ActivityTicker />
+
+      <SpotlightBannerCarousel />
 
       <section className="mb-10" aria-labelledby="lancamentos-recentes-h">
         <h2
