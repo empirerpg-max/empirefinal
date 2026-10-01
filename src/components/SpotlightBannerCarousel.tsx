@@ -12,7 +12,7 @@ interface Banner {
   tab: string;
 }
 
-const ROTATE_MS = 3000;
+const ROTATE_MS = 7000;
 const TAB_WIDTH = 14;
 const TAB_GAP = 5;
 
