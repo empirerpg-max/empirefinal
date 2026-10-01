@@ -160,6 +160,7 @@ import {
 import { adminFillGrammy2026Controller } from "../controllers/adminFillGrammy2026Controller";
 import { adminFixBoulangerieAudioController } from "../controllers/adminFixBoulangerieAudioController";
 import { adminFixDuplicataInvestimentoController } from "../controllers/adminFixDuplicataInvestimentoController";
+import { adminDiagMaxGorghanBannerController } from "../controllers/adminDiagMaxGorghanBannerController";
 import { adminFixFuoriRottaTopicoController } from "../controllers/adminFixFuoriRottaTopicoController";
 import {
   getMarketProdutosController,
@@ -428,6 +429,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/market/leilao",
     "/api/market/leilao/lance",
     "/api/market/admin/diagnostico-itens",
+    "/api/market/admin/diagnostico-banner-max-gorghan",
     "/api/market/admin/diagnostico-usuarios",
     "/api/market/admin/fix-aniversario-formato",
     "/api/market/banners/ativos",
@@ -1516,6 +1518,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminFixDuplicataInvestimentoController();
   } else if (url.pathname === "/api/empire-play/admin/fix-fuori-rotta-topico") {
     response = await adminFixFuoriRottaTopicoController();
+  } else if (url.pathname === "/api/market/admin/diagnostico-banner-max-gorghan") {
+    response = await adminDiagMaxGorghanBannerController();
   } else if (url.pathname === "/api/market/produtos") {
     response = await getMarketProdutosController(request);
   } else if (url.pathname === "/api/market/regras") {
