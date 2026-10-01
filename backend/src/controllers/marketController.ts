@@ -408,13 +408,37 @@ async function resolverNomeCompletoMusica(artista: string, titulo: string): Prom
 // valores/colunas que as playlists normais já usam (PLAYLIST_MINIMA,
 // playlistsInvestimentoController.ts), só que escritos numa linha nova
 // em vez de vir de uma escolha na tela de Playlists.
-async function acharLinhaLivreEcoinInvestimento(): Promise<number> {
+export async function acharLinhaLivreEcoinInvestimento(): Promise<number> {
   const rows = await googleSheetsService.registrosCharts.readValues(ECOIN_SHEET);
   for (let i = ECOIN_DATA_START_ROW - 1; i < rows.length; i++) {
     const row = rows[i] || [];
     if (!normalizeText(row[ECOIN_COL_ARTISTA])) return i + 1;
   }
   throw new Error("Sem linha disponível em ECOIN + INVESTIMENTO essa semana.");
+}
+
+// DADOS!AC (nome do artista) / AD ("SALDO ORIGINAL") — confirmado com o
+// usuário: AD é o campo onde o saldo de ECoin de fato é descontado (texto
+// solto, formatado "R$ 1.500.000"), diferente de AI (saldo ao vivo,
+// calculado por fórmula a partir de AD/AH) que só é usado pra EXIBIR o
+// saldo disponível. REGISTRO e ECOIN + INVESTIMENTO são só log/registro —
+// não afetam esse desconto. Usado por qualquer compra que precise debitar
+// de verdade na hora (leilão, Spotlight Banner), nunca pelos itens que já
+// são contados automaticamente via ECOIN + INVESTIMENTO (Music/Album
+// Boost, playlists manuais).
+export async function descontarSaldoArtista(artista: string, valor: number): Promise<void> {
+  const rows = await googleSheetsService.registrosCharts.readValues("DADOS", "AC1:AD5000");
+  const idx = rows.findIndex((r) => normalizeComparison(r?.[0]) === normalizeComparison(artista));
+  if (idx === -1) {
+    console.warn(`[Market] Artista "${artista}" não encontrado em DADOS!AC pra descontar saldo.`);
+    return;
+  }
+  const bruto = normalizeText(rows[idx][1]);
+  const temPrefixo = /r\$/i.test(bruto);
+  const numerico = parseFloat(bruto.replace(/[^\d,-]/g, "").replace(",", ".")) || 0;
+  const novoValor = numerico - valor;
+  const novoTexto = temPrefixo ? `R$ ${novoValor.toLocaleString("pt-BR")}` : String(novoValor);
+  await googleSheetsService.registrosCharts.updateValues("DADOS", `AD${idx + 1}`, [[novoTexto]]);
 }
 
 async function escreverBoostEmEcoinInvestimento(
