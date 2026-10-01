@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { api } from "@/lib/api";
+import { api, driveImg } from "@/lib/api";
 import { useTelegramUser } from "@/lib/telegram";
 
 interface Banner {
@@ -85,7 +85,7 @@ export function SpotlightBannerCarousel() {
                 transition: "all 260ms ease",
               }}
             >
-              <img src={tab.imagemUrl} alt="" className="w-full h-full object-cover" />
+              <img src={driveImg(tab.imagemUrl, 100)} alt="" className="w-full h-full object-cover" />
             </button>
           );
         })}
@@ -95,7 +95,7 @@ export function SpotlightBannerCarousel() {
           className="absolute inset-0 rounded-2xl overflow-hidden text-left"
           style={{ boxShadow: "0 8px 22px rgba(0,0,0,0.35)", transition: "all 260ms ease" }}
         >
-          <img src={active.imagemUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <img src={driveImg(active.imagemUrl, 800)} alt="" className="absolute inset-0 w-full h-full object-cover" />
           <div
             className="absolute inset-0"
             style={{
