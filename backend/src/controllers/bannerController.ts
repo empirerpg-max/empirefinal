@@ -8,25 +8,33 @@ import {
 } from "../services/googleSheetsService";
 import { getArtistNamesForOwner } from "./artistasController";
 import { getCatalog } from "./catalogController";
-import { PRECO_PLAYLIST_MINIMA, registrarInvestimentoAutomatico } from "./playlistsInvestimentoController";
-import { getSaldosEcoin, semanaAtual } from "./marketController";
+import { PRECO_PLAYLIST_MINIMA, PLAYLIST_MINIMA } from "./playlistsInvestimentoController";
+import { getSaldosEcoin, semanaAtual, acharLinhaLivreEcoinInvestimento, descontarSaldoArtista } from "./marketController";
 
 // -------------------- Spotlight Banner --------------------
 //
 // Item especial do Market: um banner rotativo na home, comprado por
 // artista (1 ativo por vez), escolhendo a plataforma (Spotify/Apple
 // Music/YouTube) — o preço é o da playlist mínima daquela plataforma.
-// A compra em si só paga o direito de aparecer em destaque por 4 dias;
-// NÃO grava nada em "ECOIN + INVESTIMENTO" ainda. O investimento de
-// verdade só acontece quando alguém clica no banner e, dentro da janela
-// de tempo, comenta no tópico de lançamento — aí sim reaproveitamos a
-// mesma lógica das playlists (registrarInvestimentoAutomatico).
+//
+// Desconto é IMEDIATO na compra, direto em DADOS!AD (descontarSaldoArtista)
+// — não espera ninguém comentar. O que só acontece quando alguém clica no
+// banner e, dentro da janela de tempo, comenta no tópico de lançamento é o
+// REGISTRO da playlist mínima em "ECOIN + INVESTIMENTO": a linha já foi
+// reservada no momento da compra (coluna C = "(BANNER)", nunca o nome do
+// artista — combinado assim pra esse registro não citar o artista), o
+// comentário só preenche E (música/álbum) e G/I/K (playlist da
+// plataforma escolhida) nessa MESMA linha reservada. Reservar na compra
+// evita que outra compra (Music Boost, Album Boost, Playlist manual)
+// reaproveite essa linha como "livre" antes do comentário acontecer —
+// toda busca de linha livre nesse pool olha só se a coluna C está vazia.
 //
 // MARKET_BANNERS (planilha usuarios):
 // A id | B data | C telegramId | D usuario | E artista | F plataforma
 // (SPOTIFY/APPLE MUSIC/YOUTUBE) | G musicaOuAlbum | H topicoId |
 // I imagemUrl | J dataExpira (ISO) | K status | L tab (musicas/albuns —
 // pra montar o link do tópico igual ao Forum: /empire-play/forum?tab=X&id=topicoId)
+// | M linhaEcoin (linha reservada em ECOIN + INVESTIMENTO na compra)
 const BANNERS_SHEET = "MARKET_BANNERS";
 const BANNERS_HEADER = [
   "Id",
@@ -41,7 +49,12 @@ const BANNERS_HEADER = [
   "DataExpira",
   "Status",
   "Tab",
+  "LinhaEcoin",
 ];
+
+const ECOIN_SHEET_BANNER = "ECOIN + INVESTIMENTO";
+const ECOIN_RESERVA_BANNER_MARCADOR = "(BANNER)";
+const COL_PLATAFORMA_ECOIN: Record<string, string> = { SPOTIFY: "G", "APPLE MUSIC": "I", YOUTUBE: "K" };
 
 // MARKET_BANNER_CLIQUES (planilha usuarios): rastreia clique -> comentário
 // pra liberar o bônus de playlist só uma vez por usuário/banner.
@@ -77,6 +90,7 @@ interface BannerRow {
   dataExpira: string;
   status: string;
   tab: string;
+  linhaEcoin: number | null;
 }
 
 async function getTodosBanners(): Promise<BannerRow[]> {
@@ -97,6 +111,7 @@ async function getTodosBanners(): Promise<BannerRow[]> {
       dataExpira: normalizeText(r[9]),
       status: normalizeText(r[10]),
       tab: normalizeText(r[11]),
+      linhaEcoin: Number(normalizeText(r[12])) || null,
     }))
     .filter((b) => b.id);
 }
@@ -260,10 +275,23 @@ export async function postComprarBannerController(request: Request): Promise<Res
   const id = `BAN_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const dataExpira = new Date(agora + DURACAO_BANNER_MS).toISOString();
 
+  // Reserva já na compra a linha em ECOIN + INVESTIMENTO que vai receber
+  // a playlist mínima SE alguém comentar depois — marca C com um valor
+  // fixo (nunca o nome do artista) só pra tirar a linha do pool de
+  // "livres" e ninguém mais pegar ela por engano antes do comentário.
+  const linhaEcoin = await acharLinhaLivreEcoinInvestimento();
+  await googleSheetsService.registrosCharts.updateValues(ECOIN_SHEET_BANNER, `C${linhaEcoin}`, [
+    [ECOIN_RESERVA_BANNER_MARCADOR],
+  ]);
+
+  // Desconto é na hora, direto do saldo do artista — independe de alguém
+  // comentar ou não.
+  await descontarSaldoArtista(artista, preco);
+
   await ensureSheetTab("usuarios", BANNERS_SHEET);
   const existentes = await readValues("usuarios", BANNERS_SHEET, "A1:A1");
   if (!existentes.length || !existentes[0]?.[0]) {
-    await appendRow("usuarios", BANNERS_SHEET, BANNERS_HEADER, "A:L", "OVERWRITE");
+    await appendRow("usuarios", BANNERS_SHEET, BANNERS_HEADER, "A:M", "OVERWRITE");
   }
   await appendRow(
     "usuarios",
@@ -281,8 +309,9 @@ export async function postComprarBannerController(request: Request): Promise<Res
       dataExpira,
       "Ativo",
       tab,
+      linhaEcoin,
     ],
-    "A:L",
+    "A:M",
     "OVERWRITE",
   );
 
@@ -372,11 +401,20 @@ export async function processarComentarioParaBanner(telegramId: string, topicId:
   // comentários muito próximos gerando bônus em dobro.
   await googleSheetsService.usuarios.updateValues(CLIQUES_SHEET, `E${linhaAlvo}`, [["TRUE"]]);
 
-  await registrarInvestimentoAutomatico(
-    banner.artista,
-    banner.musicaOuAlbum,
-    banner.plataforma as "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE",
-  ).catch(() => {});
+  if (!banner.linhaEcoin) return;
+  const colPlataforma = COL_PLATAFORMA_ECOIN[banner.plataforma];
+  const playlist = PLAYLIST_MINIMA[banner.plataforma];
+  if (!colPlataforma || !playlist) return;
+
+  // Só preenche E (música/álbum) e a coluna da plataforma na linha JÁ
+  // RESERVADA na compra — nunca reescreve C, que fica com o marcador
+  // "(BANNER)" em vez do nome do artista (combinado assim de propósito).
+  await googleSheetsService.registrosCharts
+    .updateValues(ECOIN_SHEET_BANNER, `E${banner.linhaEcoin}`, [[banner.musicaOuAlbum]])
+    .catch(() => {});
+  await googleSheetsService.registrosCharts
+    .updateValues(ECOIN_SHEET_BANNER, `${colPlataforma}${banner.linhaEcoin}`, [[playlist]])
+    .catch(() => {});
 }
 
 /**

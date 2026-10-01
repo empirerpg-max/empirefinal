@@ -1,6 +1,6 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 import { getArtistNamesForOwner } from "./artistasController";
-import { getSaldosEcoin } from "./marketController";
+import { getSaldosEcoin, descontarSaldoArtista } from "./marketController";
 
 // Aba "Leilão_Lances" (planilha usuarios, mesma do MARKET_ITENS) — criada
 // manualmente pela produção. Layout confirmado com o usuário:
@@ -56,26 +56,6 @@ async function acharLinhaLeilaoAtual(): Promise<{ linha: number; row: string[] }
     if (normalizeText(rows[i]?.[COL_NOME])) return { linha: i + 1, row: rows[i] };
   }
   return null;
-}
-
-// DADOS!AC (nome do artista) / AD ("SALDO ORIGINAL") — confirmado com o
-// usuário: AD é o campo onde o saldo de ECoin de fato é descontado (texto
-// solto, formatado "R$ 1.500.000"), diferente de AI (saldo ao vivo,
-// calculado) que só é usado pra EXIBIR o saldo disponível. REGISTRO e
-// ECOIN + INVESTIMENTO são só log/registro — não afetam esse desconto.
-async function descontarSaldoArtista(artista: string, valor: number): Promise<void> {
-  const rows = await googleSheetsService.registrosCharts.readValues("DADOS", "AC1:AD5000");
-  const idx = rows.findIndex((r) => normalizeComparison(r?.[0]) === normalizeComparison(artista));
-  if (idx === -1) {
-    console.warn(`[Leilão] Artista "${artista}" não encontrado em DADOS!AC pra descontar saldo do leilão.`);
-    return;
-  }
-  const bruto = normalizeText(rows[idx][1]);
-  const temPrefixo = /r\$/i.test(bruto);
-  const numerico = parseFloat(bruto.replace(/[^\d,-]/g, "").replace(",", ".")) || 0;
-  const novoValor = numerico - valor;
-  const novoTexto = temPrefixo ? `R$ ${novoValor.toLocaleString("pt-BR")}` : String(novoValor);
-  await googleSheetsService.registrosCharts.updateValues("DADOS", `AD${idx + 1}`, [[novoTexto]]);
 }
 
 // Se a produção acabou de marcar "Sim" em Encerrado?, processa o
