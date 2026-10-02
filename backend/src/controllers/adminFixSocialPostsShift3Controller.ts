@@ -15,9 +15,18 @@ const LARGURA = 13; // A..M
 export async function adminFixSocialPostsShift3Controller(): Promise<Response> {
   const resultados: Record<string, unknown>[] = [];
 
+  // Lê o intervalo inteiro (A:P, várias linhas) em vez de uma faixa estreita
+  // só da linha alvo — uma leitura de UMA linha isolada onde as colunas
+  // iniciais estão vazias faz a API do Sheets cortar essas células vazias
+  // do começo do array (confirmado ao vivo: linha 239 pedida como
+  // "A239:P239" voltou com só 10 valores, já começando em "POST-..." no
+  // índice 0, em vez de 13 valores com A:C vazios na frente). Pedindo o
+  // range inteiro, outras linhas no meio ANCORAM a coluna A como real,
+  // e a linha alvo volta com os índices corretos.
+  const todasAsLinhas = await googleSheetsService.usuarios.readValues(SHEET, "A:P");
+
   for (const linha of LINHAS_DESLOCADAS) {
-    const cells = await googleSheetsService.usuarios.readValues(SHEET, `A${linha}:P${linha}`);
-    const row = cells?.[0] || [];
+    const row = todasAsLinhas[linha - 1] || [];
 
     const aVazio = !normalizeText(row[0]) && !normalizeText(row[1]) && !normalizeText(row[2]);
     const idRealocado = normalizeText(row[DESLOCAMENTO]).startsWith("POST-");
