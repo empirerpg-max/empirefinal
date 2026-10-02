@@ -210,6 +210,63 @@ export async function getSocialPostsController(): Promise<Response> {
   return jsonResponse(posts);
 }
 
+// Largura fixa de SOCIAL_POSTS: A id | B tipo | C subtipo | D autor |
+// E texto | F media_url | G analytics | H data | I telegram_id |
+// J media_tipo | K material | L extra_media | M audio.
+const SOCIAL_POSTS_LARGURA_NOVOPOST = 13;
+
+/**
+ * Causa raiz definitiva do "colunas empurradas" (3º incidente, 2026-10-02):
+ * appendRow (createSocialPostController) delegava pro endpoint `:append`
+ * do Sheets a tarefa de ACHAR a próxima linha E a coluna de início — esse
+ * endpoint "adivinha" onde a tabela começa olhando o bounding box de
+ * células não-vazias dentro do range. Se UMA linha qualquer ficar com a
+ * primeira célula preenchida fora da coluna A (por qualquer motivo —
+ * corrida entre posts concorrentes, por exemplo), o endpoint passa a achar
+ * que "a tabela" começa naquela coluna, e todo post seguinte é ancorado no
+ * mesmo lugar errado — foi exatamente isso que aconteceu de novo nas
+ * linhas 239/240 (post inteiro gravado a partir da coluna D, 3 colunas
+ * deslocado, A:C ficou vazio).
+ *
+ * Travar o range em "A:M" (fix anterior) limitou até onde o desvio podia
+ * "andar", mas não impede o desvio em si — o endpoint ainda escolhe a
+ * coluna sozinho. A correção de verdade é parar de delegar essa decisão:
+ * agora o backend lê a coluna A inteira, acha a primeira linha
+ * REALMENTE vazia (checando A:M inteiro, não só A — uma linha órfã com
+ * lixo em alguma coluna do meio não pode ser reaproveitada) e escreve com
+ * updateValues num intervalo FIXO A{linha}:M{linha}, sem nenhuma adivinhação
+ * de posição. Mesmo padrão já comprovado em REGISTRO (gravarLinhaRegistro)
+ * e no leilão (postLeilaoLanceController): escreve, relê pra confirmar que
+ * ninguém colidiu, tenta de novo se colidiu.
+ */
+async function acharProximaLinhaVaziaSocialPosts(): Promise<number> {
+  const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts, "A:M");
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const vazia = !row.slice(0, SOCIAL_POSTS_LARGURA_NOVOPOST).some((c) => normalizeText(c));
+    if (vazia) return i + 1;
+  }
+  return rows.length + 1;
+}
+
+async function gravarPostSocial(valores: (string | number)[]): Promise<number | null> {
+  const MAX_TENTATIVAS = 3;
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+    const linha = await acharProximaLinhaVaziaSocialPosts();
+    await googleSheetsService.usuarios.updateValues(SHEETS.posts, `A${linha}:M${linha}`, [valores]);
+
+    const confirmacao = await googleSheetsService.usuarios.readValues(SHEETS.posts, `A${linha}`);
+    if (normalizeText(confirmacao?.[0]?.[0]) === normalizeText(String(valores[0]))) {
+      return linha;
+    }
+    console.warn(
+      `[Social] Colisão ao gravar post na linha ${linha} (tentativa ${tentativa}/${MAX_TENTATIVAS}) — tentando de novo.`,
+    );
+  }
+  console.warn("[Social] Não foi possível gravar o post após retries — colisão persistente.");
+  return null;
+}
+
 export async function createSocialPostController(request: Request): Promise<Response> {
   const body = (await request.json().catch(() => ({}))) as {
     payload?: string;
@@ -248,48 +305,31 @@ export async function createSocialPostController(request: Request): Promise<Resp
   // limpeza continua 100% automática pelo cron (server.ts scheduled, a
   // cada 10 min) — só não roda mais em cima de cada publicação individual.
 
-  // appendRow tenta 3x e devolve null em caso de falha — NUNCA lança
-  // exceção. Sem conferir esse retorno, o post podia "falhar" de verdade
-  // (linha nunca gravada em SOCIAL_POSTS) e mesmo assim a resposta dizer
+  // gravarPostSocial calcula a linha sozinho (sem depender do "adivinhador"
+  // de coluna do endpoint :append do Sheets — ver comentário na função) e
+  // confere com uma releitura que ninguém colidiu, tentando de novo se
+  // colidiu. Nunca lança — devolve null só se as 3 tentativas colidirem.
+  // Sem conferir esse retorno, o post podia "falhar" de verdade (linha
+  // nunca gravada em SOCIAL_POSTS) e mesmo assim a resposta dizer
   // {ok:true}: quem publicou via com sucesso na hora (a UI já tinha
   // inserido o post localmente), mas ele nunca existiu de fato — sumia no
   // próximo recarregamento. Era exatamente isso que fazia um Story de
   // música "nunca ir ao ar" sem erro nenhum aparecer.
-  // Range travado em "A:M" (13 colunas, id..audio_json) — SEM isso (usando
-  // o range padrão "A:ZZ"), a API de append do Sheets vai "adivinhar" em
-  // que colunas a tabela começa olhando a linha inteira, e depois de um
-  // desalinhamento (por qualquer motivo, mesmo um só) cada append seguinte
-  // encadeia a partir de onde o anterior parou — foi exatamente isso que
-  // aconteceu em 2026-09-11: um post caiu nas colunas L-X, o próximo em
-  // X-AJ, o próximo em AJ-AV, cada vez 12 colunas mais pra direita. Travar
-  // o range impede a tabela de "andar" pra fora de A:M de novo.
-  // "OVERWRITE" (não o padrão "INSERT_ROWS"): o modo padrão INSERE e
-  // EMPURRA linhas existentes pra baixo — sob posts concorrentes (vários
-  // jogadores postando quase ao mesmo tempo, o caso comum aqui), cada
-  // inserção deslocava o que outra chamada em andamento tinha acabado de
-  // escrever, prendendo posts em linhas erradas / fazendo eles sumirem do
-  // feed (mesma causa raiz já corrigida no popup do VMA). OVERWRITE sempre
-  // escreve na próxima linha realmente vazia, sem deslocar nada.
-  const linhaGravada = await googleSheetsService.usuarios.appendRow(
-    SHEETS.posts,
-    [
-      id,
-      payload.tipo,
-      payload.subtipo || "",
-      payload.autor,
-      payload.texto || "",
-      payload.media_url || "",
-      JSON.stringify(analytics),
-      new Date().toISOString(),
-      body.tgId || "",
-      payload.media_url ? payload.media_tipo || "imagem" : "",
-      payload.material ? JSON.stringify(payload.material) : "",
-      extraMedia.length ? JSON.stringify(extraMedia) : "",
-      payload.audio ? JSON.stringify(payload.audio) : "",
-    ],
-    "A:M",
-    "OVERWRITE",
-  );
+  const linhaGravada = await gravarPostSocial([
+    id,
+    payload.tipo,
+    payload.subtipo || "",
+    payload.autor,
+    payload.texto || "",
+    payload.media_url || "",
+    JSON.stringify(analytics),
+    new Date().toISOString(),
+    body.tgId || "",
+    payload.media_url ? payload.media_tipo || "imagem" : "",
+    payload.material ? JSON.stringify(payload.material) : "",
+    extraMedia.length ? JSON.stringify(extraMedia) : "",
+    payload.audio ? JSON.stringify(payload.audio) : "",
+  ]);
 
   if (linhaGravada === null) {
     return jsonResponse(
