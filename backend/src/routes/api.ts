@@ -161,6 +161,7 @@ import { adminFillGrammy2026Controller } from "../controllers/adminFillGrammy202
 import { adminFixBoulangerieAudioController } from "../controllers/adminFixBoulangerieAudioController";
 import { adminFixDuplicataInvestimentoController } from "../controllers/adminFixDuplicataInvestimentoController";
 import { adminDiagMaxGorghanBannerController } from "../controllers/adminDiagMaxGorghanBannerController";
+import { adminFixSocialPostsShift3Controller } from "../controllers/adminFixSocialPostsShift3Controller";
 import { adminFixFuoriRottaTopicoController } from "../controllers/adminFixFuoriRottaTopicoController";
 import {
   getMarketProdutosController,
@@ -430,6 +431,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/market/leilao/lance",
     "/api/market/admin/diagnostico-itens",
     "/api/market/admin/diagnostico-banner-max-gorghan",
+    "/api/social/admin/fix-posts-shift3",
     "/api/market/admin/diagnostico-usuarios",
     "/api/market/admin/fix-aniversario-formato",
     "/api/market/banners/ativos",
@@ -1520,6 +1522,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminFixFuoriRottaTopicoController();
   } else if (url.pathname === "/api/market/admin/diagnostico-banner-max-gorghan") {
     response = await adminDiagMaxGorghanBannerController();
+  } else if (url.pathname === "/api/social/admin/fix-posts-shift3") {
+    response = await adminFixSocialPostsShift3Controller();
   } else if (url.pathname === "/api/market/produtos") {
     response = await getMarketProdutosController(request);
   } else if (url.pathname === "/api/market/regras") {
