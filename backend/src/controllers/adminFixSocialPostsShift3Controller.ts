@@ -15,15 +15,16 @@ const LARGURA = 13; // A..M
 export async function adminFixSocialPostsShift3Controller(): Promise<Response> {
   const resultados: Record<string, unknown>[] = [];
 
-  // Lê o intervalo inteiro (A:P, várias linhas) em vez de uma faixa estreita
-  // só da linha alvo — uma leitura de UMA linha isolada onde as colunas
-  // iniciais estão vazias faz a API do Sheets cortar essas células vazias
-  // do começo do array (confirmado ao vivo: linha 239 pedida como
-  // "A239:P239" voltou com só 10 valores, já começando em "POST-..." no
-  // índice 0, em vez de 13 valores com A:C vazios na frente). Pedindo o
-  // range inteiro, outras linhas no meio ANCORAM a coluna A como real,
-  // e a linha alvo volta com os índices corretos.
-  const todasAsLinhas = await googleSheetsService.usuarios.readValues(SHEET, "A:P");
+  // "A:M" é o mesmo range já usado (e confirmado ao vivo, via
+  // dump-tail-posts) que devolve os índices corretos, com A:C vazios
+  // preservados na frente do array pra essas linhas deslocadas.
+  // Range mais largo ("A:P" ou uma faixa de uma linha só como "A239:P239")
+  // faz a API do Sheets cortar essas células vazias do início do jeito
+  // errado (confirmado ao vivo, 2 tentativas: array de 10 valores já
+  // começando em "POST-..." no índice 0). O dado real dessas 2 linhas
+  // nunca passou da coluna M mesmo (material/extra_media/audio vieram
+  // vazios no post original), então "A:M" já cobre tudo que existe.
+  const todasAsLinhas = await googleSheetsService.usuarios.readValues(SHEET, "A:M");
 
   for (const linha of LINHAS_DESLOCADAS) {
     const row = todasAsLinhas[linha - 1] || [];
@@ -43,9 +44,6 @@ export async function adminFixSocialPostsShift3Controller(): Promise<Response> {
 
     const bloco = Array.from({ length: LARGURA }, (_, k) => row[DESLOCAMENTO + k] ?? "");
     await googleSheetsService.usuarios.updateValues(SHEET, `A${linha}:M${linha}`, [bloco]);
-
-    // Limpa o que sobrou em N/O/P (onde a cauda do post deslocado tinha ido parar).
-    await googleSheetsService.usuarios.updateValues(SHEET, `N${linha}:P${linha}`, [["", "", ""]]);
 
     resultados.push({ linha, aplicado: true, novoId: bloco[0] });
   }
