@@ -537,6 +537,56 @@ function cropImageToStoryRatio(file: File): Promise<File> {
   });
 }
 
+// Vídeo de post/story sobe pro Drive como base64 dentro de uma única
+// requisição pro Worker (uploadDriveController) — sem isso passar por um
+// serviço de upload em partes, tem um teto real de tamanho: o corpo da
+// requisição tem limite da própria Cloudflare, e o Worker precisa montar
+// o arquivo inteiro (já em base64, ~33% maior) na memória antes de
+// mandar pro Drive. Vídeo de celular em boa qualidade estoura isso fácil
+// — a requisição cai no meio sem erro nenhum pro usuário ver, só "trava"
+// ou "quebra" sem explicação (foi exatamente o que a Emma viu tentando
+// postar Story). Essas duas checagens (duração e tamanho) travam ANTES
+// de tentar o upload, com uma mensagem que explica o que fazer, em vez
+// de deixar a pessoa descobrir sozinha que o vídeo é grande demais.
+const MAX_VIDEO_DURATION_SEC = 60;
+const MAX_VIDEO_SIZE_MB = 45;
+
+function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const duration = video.duration;
+      URL.revokeObjectURL(video.src);
+      Number.isFinite(duration) ? resolve(duration) : reject(new Error("Duração inválida."));
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src);
+      reject(new Error("Não deu pra ler esse vídeo."));
+    };
+    video.src = URL.createObjectURL(file);
+  });
+}
+
+// Validação antes do upload — devolve uma mensagem de erro (pra mostrar
+// num toast) ou null se o vídeo está dentro do limite.
+async function validarVideoAntesDeEnviar(file: File): Promise<string | null> {
+  const tamanhoMB = file.size / (1024 * 1024);
+  if (tamanhoMB > MAX_VIDEO_SIZE_MB) {
+    return `Esse vídeo tem ${tamanhoMB.toFixed(0)}MB — o máximo é ${MAX_VIDEO_SIZE_MB}MB. Grave em qualidade menor ou corte um trecho mais curto.`;
+  }
+  try {
+    const duracao = await getVideoDuration(file);
+    if (duracao > MAX_VIDEO_DURATION_SEC) {
+      return `Esse vídeo tem ${Math.round(duracao)}s — o máximo é ${MAX_VIDEO_DURATION_SEC}s. Corte um trecho mais curto antes de enviar.`;
+    }
+  } catch {
+    // Não deu pra ler a duração (formato incomum) — deixa passar, o
+    // tamanho em MB já é uma rede de segurança razoável sozinha.
+  }
+  return null;
+}
+
 function formatCount(n: number | undefined): string {
   const v = Number(n || 0);
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1).replace(/\.0$/, "") + "M";
@@ -772,6 +822,7 @@ function SocialPage() {
   type SocialFolderType = "socialPosts" | "socialStories" | "socialAvatars" | "socialNews";
 
   async function uploadToDrive(file: File, folderType: SocialFolderType): Promise<string | null> {
+    const isVideo = file.type.startsWith("video/");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -781,10 +832,19 @@ function SocialPage() {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && data?.data?.fileUrl) return data.data.fileUrl as string;
       console.error("Erro no upload:", data?.error || res.status);
+      // Mostra o motivo real que o backend devolveu, quando tem um — sem
+      // isso, qualquer falha (vídeo grande demais, Drive fora do ar, rede
+      // ruim) virava a mesma mensagem genérica, obrigando a pessoa a
+      // adivinhar o que fazer.
+      toast.error(data?.error || "Não deu pra enviar o arquivo. Tenta de novo.");
     } catch (err) {
       console.error("Erro no upload:", err);
+      toast.error(
+        isVideo
+          ? "A conexão caiu no meio do envio do vídeo. Tenta com uma rede mais estável ou um vídeo mais leve."
+          : "Não deu pra enviar o arquivo. Tenta de novo ou cola o link direto.",
+      );
     }
-    alert("Não deu pra enviar a imagem. Tente de novo ou cole o link direto.");
     return null;
   }
 
@@ -3144,6 +3204,13 @@ function SocialPage() {
                           e.target.value = "";
                           if (!file) return;
                           const isVideo = file.type.startsWith("video/");
+                          if (isVideo) {
+                            const erro = await validarVideoAntesDeEnviar(file);
+                            if (erro) {
+                              toast.error(erro);
+                              return;
+                            }
+                          }
                           const isStory = selectedType === "Instagram" && igMode === "Story";
                           const folderType: SocialFolderType = isStory ? "socialStories" : "socialPosts";
                           // Story sempre sobe recortado no padrão vertical
