@@ -1355,8 +1355,12 @@ export async function getEmpirePlayForumTopicController(
         sheetsService.readSheetObjects("Topicos_EmpirePlay").catch(() => []),
         // Foto de perfil de quem comentou (config padrão de imagem da conta,
         // não a foto do artista) — cacheada porque é a aba inteira de
-        // usuários, lida de novo a cada tópico de fórum aberto senão.
-        cachedRead("forum:usuarios_fotos", 120_000, () => googleSheetsService.usuarios.readSheetObjects("Usuários")).catch(
+        // usuários, lida de novo a cada tópico de fórum aberto senão. TTL
+        // curto (20s, não os 120s do resto deste arquivo) — essa é
+        // especificamente a leitura que decide a foto mostrada nos
+        // comentários; um TTL longo aqui fazia o upload de foto parecer
+        // "não refletir" por até 2 minutos depois de salvo.
+        cachedRead("forum:usuarios_fotos", 20_000, () => googleSheetsService.usuarios.readSheetObjects("Usuários")).catch(
           () => [],
         ),
       ]);
