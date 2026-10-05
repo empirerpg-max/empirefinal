@@ -395,13 +395,17 @@ const INFOS_ACTS_SHEET = "INFOS ACTS";
 
 /**
  * GET /api/artistas/infos?nome=<nome>
- * Biografia, foto "de origem" e capa do perfil do artista — vive numa aba
- * própria ("INFOS ACTS", planilha registrosCharts): A nome | C foto |
- * E biografia | R capa do perfil (desktop) | S capa do perfil (mobile).
+ * Biografia, foto e capa do perfil do artista — vive numa aba própria
+ * ("INFOS ACTS", planilha registrosCharts): A nome | C foto curada à mão |
+ * E biografia | G foto RESOLVIDA (fórmula da própria planilha: usa I se
+ * preenchida, senão cai pra C — confirmado com a produção) | I upload mais
+ * recente do dono | R capa do perfil (desktop) | S capa do perfil (mobile).
  * O dono do artista edita biografia e capa pelo app (ver
  * setArtistBiografiaController/setArtistCapaController) — antes só dava
  * direto na planilha. O upload de foto novo grava em I, não em C (ver
- * setArtistFotoController).
+ * setArtistFotoController) — por isso a leitura usa G (o resultado já
+ * pronto da fórmula) em vez de replicar a lógica "C se I vazio" na mão:
+ * se a fórmula mudar um dia, o código não precisa acompanhar.
  */
 export async function getArtistInfoController(request: Request): Promise<Response> {
   try {
@@ -422,11 +426,9 @@ export async function getArtistInfoController(request: Request): Promise<Respons
       JSON.stringify({
         success: true,
         data: {
-          // C é a foto "oficial" (curada a mão); se vazia, cai pro upload
-          // mais recente do dono em I — antes ficava parado ali sem nunca
-          // ser lido, então a troca de foto do artista nunca refletia no
-          // app até alguém copiar manualmente de I pra C.
-          foto: row ? normalizeText(row[2]) || normalizeText(row[8]) : "",
+          // G = foto já resolvida pela fórmula da planilha (I se tiver,
+          // senão C) — nunca mais replica essa lógica na mão aqui.
+          foto: row ? normalizeText(row[6]) || normalizeText(row[2]) : "",
           biografia: row ? normalizeText(row[4]) : "",
           capa: row ? normalizeText(row[17]) : "",
           capaMobile: row ? normalizeText(row[18]) : "",
@@ -671,28 +673,28 @@ export async function getAllArtistasController(): Promise<Response> {
     }
     let data = Array.from(porNome.values());
 
-    // A coluna "foto" da própria aba ARTISTAS é esparsa — a foto "oficial",
-    // mantida pelo dono do artista, vive em INFOS ACTS (planilha
-    // registrosCharts, ver getArtistInfoController). O antigo Apps Script
-    // legado usava essa fonte mais completa; a migração pro backend Cloudflare
-    // passou a ler só ARTISTAS!foto, deixando vários artistas sem imagem.
-    // Preenche aqui o que faltar, sem sobrescrever quem já tem foto na
-    // própria aba.
-    const semFoto = data.filter((a) => !a.foto.trim());
-    if (semFoto.length > 0) {
-      const infosRows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
-      const fotoPorNome = new Map<string, string>();
-      for (const row of infosRows.slice(1)) {
-        const nome = normalizeComparison(row[0]);
-        // C = foto oficial curada; I = upload mais recente do dono, ainda
-        // sem revisão manual — mesma prioridade usada em getArtistInfoController.
-        const foto = normalizeText(row[2]) || normalizeText(row[8]);
-        if (nome && foto && !fotoPorNome.has(nome)) fotoPorNome.set(nome, foto);
-      }
-      data = data.map((a) =>
-        a.foto.trim() ? a : { ...a, foto: fotoPorNome.get(normalizeComparison(a.nome)) || "" },
-      );
+    // ARTISTAS!foto é uma cópia estática, nunca atualizada por nenhum fluxo
+    // do app — quem mantém a foto "viva" do artista é INFOS ACTS (planilha
+    // registrosCharts, ver getArtistInfoController): o dono troca a foto
+    // pelo app (setArtistFotoController) e isso grava lá, nunca em
+    // ARTISTAS!foto. Resultado: se ARTISTAS!foto já tiver QUALQUER coisa
+    // (mesmo uma foto antiga de anos atrás), ela nunca é substituída pela
+    // mais recente — era por isso que a lista/busca de artistas mostrava
+    // foto trocada/desatualizada mesmo depois do artista atualizar pelo
+    // app. Agora INFOS ACTS!G (foto já resolvida pela fórmula da planilha)
+    // tem prioridade sobre ARTISTAS!foto sempre que existir — só cai pra
+    // ARTISTAS!foto quando o artista não tiver nenhuma linha em INFOS ACTS.
+    const infosRows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+    const fotoPorNome = new Map<string, string>();
+    for (const row of infosRows.slice(1)) {
+      const nome = normalizeComparison(row[0]);
+      const foto = normalizeText(row[6]) || normalizeText(row[2]);
+      if (nome && foto) fotoPorNome.set(nome, foto);
     }
+    data = data.map((a) => {
+      const fotoViva = fotoPorNome.get(normalizeComparison(a.nome));
+      return fotoViva ? { ...a, foto: fotoViva } : a;
+    });
 
     return new Response(JSON.stringify({ success: true, data }), {
       status: 200,

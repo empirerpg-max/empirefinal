@@ -55,6 +55,44 @@ async function readUsuariosWithRowIndex(): Promise<UsuariosRow[]> {
   return out;
 }
 
+/**
+ * Acha a linha "certa" de um jogador na aba Usuários quando existe mais de
+ * uma linha batendo (duplicata — linha antiga esquecida ao lado da atual,
+ * o mesmo problema recorrente já visto em ARTISTAS). Critério único,
+ * reaproveitado em TODO lugar que precisa da foto/dados do jogador —
+ * login, heartbeat, atualização de perfil, fórum, Pitchfork, Empire Play.
+ *
+ * Antes cada um desses escolhia a linha de um jeito diferente quando
+ * havia duplicata (login/atualização de perfil pegavam a PRIMEIRA linha
+ * que batia; heartbeat pegava a ÚLTIMA com foto preenchida; fórum/
+ * Pitchfork/Empire Play também ficavam com a última foto não-vazia, mas
+ * indexando por telegram_id em vez de usuário). Resultado: a pessoa
+ * trocava a foto (gravada na linha que login/perfil escolhiam), mas o
+ * heartbeat — que roda toda vez que o app reabre — buscava numa OUTRA
+ * linha (a última com foto preenchida) e sobrescrevia a sessão local de
+ * volta pra foto antiga, desfazendo o upload sem erro nenhum aparecer.
+ * Repetia-se a cada reabertura do app, por isso "nunca refletia".
+ *
+ * Critério: entre as linhas que batem por id OU por usuário, prefere a
+ * ÚLTIMA com foto_do_perfil preenchida (mais chance de ser a edição mais
+ * recente); se nenhuma tiver foto, cai pra última linha que bateu.
+ */
+function resolverLinhaUsuario(
+  rows: UsuariosRow[],
+  params: { telegramId?: string; usuario?: string },
+): UsuariosRow | undefined {
+  const normId = normalizeComparison(params.telegramId || "");
+  const normUsuario = normalizeComparison(params.usuario || "");
+  const candidatos = rows.filter((r) => {
+    const matchId = !!normId && normalizeComparison(r.rec["id"] || "") === normId;
+    const matchUsuario = !!normUsuario && normalizeComparison(r.rec["usuario"] || "") === normUsuario;
+    return matchId || matchUsuario;
+  });
+  return (
+    [...candidatos].reverse().find((r) => (r.rec["foto_do_perfil"] || "").trim()) ?? candidatos[candidatos.length - 1]
+  );
+}
+
 function colIndexToA1Letter(colIndex: number): string {
   let temp = colIndex;
   let letter = "";
@@ -120,22 +158,7 @@ export async function authHeartbeatController(request: Request): Promise<Respons
     }
 
     const rows = await readUsuariosWithRowIndex();
-    const normId = normalizeComparison(telegramId);
-    const normUsuario = normalizeComparison(usuario);
-    const candidatos = rows.filter((r) => {
-      const matchId = !!normId && normalizeComparison(r.rec["id"] || "") === normId;
-      const matchUsuario = !!normUsuario && normalizeComparison(r.rec["usuario"] || "") === normUsuario;
-      return matchId || matchUsuario;
-    });
-    // A aba Usuários pode ter mais de uma linha batendo pro mesmo jogador
-    // (linha antiga duplicada, editada por engano etc.) — pegar sempre a
-    // PRIMEIRA (comportamento antigo) podia devolver uma linha desatualizada
-    // com a foto antiga, mesmo já existindo uma linha mais nova/completa com
-    // a foto certa. Usa a última linha (mais recente na planilha) que tenha
-    // a foto de perfil preenchida, senão cai pra última linha que bateu.
-    const match =
-      [...candidatos].reverse().find((r) => (r.rec["foto_do_perfil"] || "").trim()) ??
-      candidatos[candidatos.length - 1];
+    const match = resolverLinhaUsuario(rows, { telegramId, usuario });
     if (match) {
       await concederPrestigioLoginDiario(match, usuario);
     }
@@ -215,8 +238,7 @@ export async function loginController(request: Request): Promise<Response> {
     }
 
     const rows = await readUsuariosWithRowIndex();
-    const normUsuario = normalizeComparison(usuario);
-    const match = rows.find((r) => normalizeComparison(r.rec["usuario"] || "") === normUsuario);
+    const match = resolverLinhaUsuario(rows, { usuario });
 
     if (!match) {
       return new Response(
@@ -325,8 +347,7 @@ export async function trocarSenhaController(request: Request): Promise<Response>
     }
 
     const rows = await readUsuariosWithRowIndex();
-    const normUsuario = normalizeComparison(usuario);
-    const match = rows.find((r) => normalizeComparison(r.rec["usuario"] || "") === normUsuario);
+    const match = resolverLinhaUsuario(rows, { usuario });
     if (!match) {
       return new Response(JSON.stringify({ success: false, error: "Usuário não encontrado." }), {
         status: 404,
@@ -402,8 +423,7 @@ export async function updateProfileController(request: Request): Promise<Respons
     }
 
     const rows = await readUsuariosWithRowIndex();
-    const normUsuario = normalizeComparison(usuario);
-    const match = rows.find((r) => normalizeComparison(r.rec["usuario"] || "") === normUsuario);
+    const match = resolverLinhaUsuario(rows, { usuario });
 
     if (!match) {
       return new Response(JSON.stringify({ success: false, error: "Usuário não encontrado." }), {
