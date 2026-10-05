@@ -96,21 +96,24 @@ export async function getOwnerIdForArtist(nomeArtista: string): Promise<string> 
 }
 
 // Soma `valor` na coluna "Fortuna Turnês" do artista (nunca sobrescreve —
-// acumula em cima do que já tiver lá). Usada quando uma turnê é finalizada,
-// pra creditar o corte do jogo em cima do arrecadado.
+// acumula em cima do que já tiver lá, inclusive de turnês anteriores já
+// creditadas). Usada quando uma turnê é finalizada, pra creditar o corte
+// do jogo em cima do arrecadado. Lança erro se não achar o artista ou se
+// a escrita falhar — o chamador (creditarFortunaTurnesSeNecessario, em
+// tourController.ts) depende disso pra saber se é seguro marcar a turnê
+// como "já creditada": engolir o erro aqui faria a turnê ser marcada como
+// paga mesmo sem o dinheiro ter sido creditado de verdade.
 export async function creditarFortunaTurnes(nomeArtista: string, valor: number): Promise<void> {
   if (!nomeArtista || !valor) return;
   const rows = await readArtistasRows();
   const normNome = normalizeComparison(nomeArtista);
   const row = rows.find((r) => normalizeComparison(r.rec["nome"]) === normNome);
-  if (!row) return;
+  if (!row) throw new Error(`Artista "${nomeArtista}" não encontrado em ARTISTAS.`);
   const atual = parseNumeroBR(row.rec["fortuna_turnes"] || "0");
   const novo = atual + valor;
   const col = colIndexToA1Letter(row.headers.indexOf("fortuna_turnes"));
   const novoFormatado = novo.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  await googleSheetsService.usuarios
-    .updateValues(ARTISTAS_SHEET, `${col}${row.rowIndex}`, [[novoFormatado]])
-    .catch(() => {});
+  await googleSheetsService.usuarios.updateValues(ARTISTAS_SHEET, `${col}${row.rowIndex}`, [[novoFormatado]]);
 }
 
 export async function getArtistNamesForOwner(telegramId: string): Promise<string[]> {
