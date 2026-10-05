@@ -22,6 +22,7 @@ import {
   SlidersHorizontal,
   ExternalLink,
   Maximize2,
+  TrendingUp,
 } from "lucide-react";
 import { driveImg, driveRawImg, api, normalizeNome } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
@@ -106,6 +107,11 @@ interface ForumTopicItem {
   // Código único (Musicas!Z / Albuns!L) — chave dos botões Shop/Info/Visual
   // (ver ExtraMaterial.tsx). Ausente em conteúdo legado sem código gerado.
   codigoUnico?: string | null;
+  // Quantidade de semanas no chart — preenchido só depois de abrir o
+  // tópico (vem de resForum.data.media em fetchTopicComments), não na
+  // listagem, porque pra vídeo/álbum isso exige um cruzamento extra que
+  // só vale a pena fazer pro item que a pessoa efetivamente abriu.
+  semanasNoChart?: number | null;
   // Letra estática e sincronizada (LRC) da faixa — usadas pro bloco de
   // letra/karaoke exibido no tópico da música.
   lyrics?: string | null;
@@ -595,6 +601,14 @@ export const Forum: React.FC<ForumProps> = ({
 
       if (myToken !== commentsFetchToken.current) return;
       setResolvedTopicId(resForum?.data?.media?.topicId || resForum?.data?.media?.id || topic.id || "");
+
+      // Semanas no chart: a listagem só traz isso de graça pra música
+      // (mesma linha). Vídeo/álbum exigem cruzar com outra aba — feito só
+      // aqui, pro item aberto, dentro de getEmpirePlayForumTopicController.
+      const semanasNoChart = resForum?.data?.media?.semanasNoChart;
+      if (typeof semanasNoChart === "number") {
+        setSelectedTopic((prev) => (prev && prev.id === topic.id ? { ...prev, semanasNoChart } : prev));
+      }
 
       if (resForum && resForum.success && resForum.data && Array.isArray(resForum.data.comments)) {
         commentsFromApi = resForum.data.comments.map((c: any, idx: number) => ({
@@ -1131,10 +1145,22 @@ export const Forum: React.FC<ForumProps> = ({
                 <p className={visualAberto ? "text-sm font-bold text-emerald-400 mt-1" : "text-base sm:text-xl font-bold text-emerald-400 mt-2"}>
                   {selectedTopic.displayArtists || selectedTopic.artist}
                 </p>
-                {selectedTopic.releaseDate && !visualAberto && (
-                  <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400 mt-3">
-                    <Calendar className="size-3.5" />
-                    <span>Lançamento: {selectedTopic.releaseDate}</span>
+                {!visualAberto && (selectedTopic.releaseDate || !!selectedTopic.semanasNoChart) && (
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    {selectedTopic.releaseDate && (
+                      <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400">
+                        <Calendar className="size-3.5" />
+                        <span>Lançamento: {selectedTopic.releaseDate}</span>
+                      </div>
+                    )}
+                    {!!selectedTopic.semanasNoChart && (
+                      <span className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border backdrop-blur-md max-w-full bg-emerald-500/10 border-emerald-400/30 text-emerald-300">
+                        <TrendingUp className="size-3.5 shrink-0" />
+                        <span className="text-[10px] font-bold truncate">
+                          {selectedTopic.semanasNoChart} semana{selectedTopic.semanasNoChart === 1 ? "" : "s"} no chart
+                        </span>
+                      </span>
+                    )}
                   </div>
                 )}
                 {!visualAberto && premioDoTopico(selectedTopic) && (
