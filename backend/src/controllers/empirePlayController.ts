@@ -1439,42 +1439,92 @@ export async function getEmpirePlayForumTopicController(
     const rawMedia = mediaRecords[targetMediaIndex];
     const mediaItem = rawMedia ? buildCleanItem(sheetIdLabel, rawMedia, targetMediaIndex) : null;
 
-    // Semanas no chart pra vídeo/álbum — não existe coluna própria nessas
-    // duas abas (confirmado: "Music Videos" e "Albuns" não têm WEEKS), só
-    // pra música (já preenchido dentro de buildCleanItem, Musicas!L). Cruza
-    // aqui, só pro item que efetivamente abriu, em vez de carregar a aba
-    // inteira em toda chamada de catálogo.
-    if (mediaItem && rawMedia && sheetIdLabel === "Videos") {
-      // Vídeo não tem WEEKS próprio — usa o "WEEKS VIDEO" (Musicas!M) da
-      // música vinculada, achada pela "Nome original nos charts" (coluna P).
-      const nomeOriginalNosCharts = getValue(rawMedia, ["nome_original_nos_charts"]);
-      if (nomeOriginalNosCharts) {
-        const musicasRows = await googleSheetsService.principal
-          .readValues("Musicas")
+    // Semanas no chart — fonte de verdade é a aba de EDIÇÃO (EDIÇÃO CHARTS/
+    // EDIÇÃO CHARTS ÁLBUMS), não a cópia em Musicas!L/Albuns: é lá que a
+    // contagem real de semanas é mantida, e o cruzamento certo é pelo
+    // "Código único" (chave estável), não por título (título quebra com
+    // qualquer diferença de acento/"feat."/espaço — mesmo problema já visto
+    // no bug do álbum SANTISSIMA). Musicas!L/M só entra como fallback se o
+    // código único não bater com nada.
+    if (mediaItem && rawMedia && sheetIdLabel === "Musicas") {
+      // EDIÇÃO CHARTS: BD (índice 55) = Código único, F (índice 5) = WEEKS.
+      const codigoUnico = normalizeComparison(getValue(rawMedia, ["codigo_unico"]) || "");
+      if (codigoUnico) {
+        const edicaoChartsRows = await googleSheetsService.edicaoCharts
+          .readValues("EDIÇÃO CHARTS", "A2:BD5000")
           .catch(() => []);
-        const alvo = normalizeComparison(nomeOriginalNosCharts.split(";")[0] || "");
-        for (const row of musicasRows.slice(1)) {
-          // H = Nome(fullTitle), M = WEEKS VIDEO
-          if (alvo && normalizeComparison(row[7] || "") === alvo) {
-            const weeksVideo = Number(row[12]);
-            if (!Number.isNaN(weeksVideo) && row[12]) mediaItem.semanasNoChart = weeksVideo;
+        for (const row of edicaoChartsRows) {
+          if (normalizeComparison(row[55] || "") === codigoUnico) {
+            const semanas = Number(row[5]);
+            if (!Number.isNaN(semanas) && row[5]) mediaItem.semanasNoChart = semanas;
             break;
           }
         }
       }
-    } else if (mediaItem && sheetIdLabel === "Album") {
-      // Álbum não tem WEEKS próprio — usa "EDIÇÃO CHARTS ÁLBUMS"!C, casado
-      // pelo nome do álbum (coluna D).
+    } else if (mediaItem && rawMedia && sheetIdLabel === "Videos") {
+      // Vídeo não tem Código único nem WEEKS próprios — sempre usa o da
+      // música vinculada (achada pela "Nome original nos charts", coluna P).
+      // Acha o Código único dessa música em Musicas e cruza com EDIÇÃO
+      // CHARTS!F, igual música; cai pro WEEKS VIDEO (Musicas!M) só se não
+      // achar o código único de nenhum dos dois lados.
+      const nomeOriginalNosCharts = getValue(rawMedia, ["nome_original_nos_charts"]);
+      if (nomeOriginalNosCharts) {
+        const alvo = normalizeComparison(nomeOriginalNosCharts.split(";")[0] || "");
+        const musicasRows = await googleSheetsService.principal
+          .readValues("Musicas")
+          .catch(() => []);
+        let codigoUnicoMusica = "";
+        let weeksVideoFallback: number | null = null;
+        for (const row of musicasRows.slice(1)) {
+          // H = Nome(fullTitle), M = WEEKS VIDEO, Z (índice 25) = Código único.
+          if (alvo && normalizeComparison(row[7] || "") === alvo) {
+            codigoUnicoMusica = normalizeComparison(row[25] || "");
+            const weeksVideo = Number(row[12]);
+            if (!Number.isNaN(weeksVideo) && row[12]) weeksVideoFallback = weeksVideo;
+            break;
+          }
+        }
+        if (codigoUnicoMusica) {
+          const edicaoChartsRows = await googleSheetsService.edicaoCharts
+            .readValues("EDIÇÃO CHARTS", "A2:BD5000")
+            .catch(() => []);
+          for (const row of edicaoChartsRows) {
+            if (normalizeComparison(row[55] || "") === codigoUnicoMusica) {
+              const semanas = Number(row[5]);
+              if (!Number.isNaN(semanas) && row[5]) mediaItem.semanasNoChart = semanas;
+              break;
+            }
+          }
+        }
+        if (mediaItem.semanasNoChart == null && weeksVideoFallback !== null) {
+          mediaItem.semanasNoChart = weeksVideoFallback;
+        }
+      }
+    } else if (mediaItem && rawMedia && sheetIdLabel === "Album") {
+      // EDIÇÃO CHARTS ÁLBUMS: R (índice 17) = Código único, C (índice 2) =
+      // Semanas, D (índice 3) = nome do álbum (usado só de fallback).
+      const codigoUnico = normalizeComparison(getValue(rawMedia, ["codigo_unico"]) || "");
       const edicaoAlbunsRows = await googleSheetsService.edicaoCharts
-        .readValues("EDIÇÃO CHARTS ÁLBUMS")
+        .readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000")
         .catch(() => []);
-      const alvoTitulo = normalizeComparison(mediaItem.title || "");
-      for (const row of edicaoAlbunsRows.slice(1)) {
-        const nomeAlbum = normalizeComparison(row[3] || "");
-        if (nomeAlbum && (nomeAlbum === alvoTitulo || alvoTitulo.endsWith(nomeAlbum))) {
-          const semanas = Number(row[2]);
-          if (!Number.isNaN(semanas) && row[2]) mediaItem.semanasNoChart = semanas;
-          break;
+      if (codigoUnico) {
+        for (const row of edicaoAlbunsRows) {
+          if (normalizeComparison(row[17] || "") === codigoUnico) {
+            const semanas = Number(row[2]);
+            if (!Number.isNaN(semanas) && row[2]) mediaItem.semanasNoChart = semanas;
+            break;
+          }
+        }
+      }
+      if (mediaItem.semanasNoChart == null) {
+        const alvoTitulo = normalizeComparison(mediaItem.title || "");
+        for (const row of edicaoAlbunsRows) {
+          const nomeAlbum = normalizeComparison(row[3] || "");
+          if (nomeAlbum && (nomeAlbum === alvoTitulo || alvoTitulo.endsWith(nomeAlbum))) {
+            const semanas = Number(row[2]);
+            if (!Number.isNaN(semanas) && row[2]) mediaItem.semanasNoChart = semanas;
+            break;
+          }
         }
       }
     }
