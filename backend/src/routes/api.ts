@@ -163,6 +163,7 @@ import { adminFixDuplicataInvestimentoController } from "../controllers/adminFix
 import { adminDiagMaxGorghanBannerController } from "../controllers/adminDiagMaxGorghanBannerController";
 import { adminDiagTurneArtistaController } from "../controllers/adminDiagTurneArtistaController";
 import { adminDiagInfosActsController } from "../controllers/adminDiagInfosActsController";
+import { adminDiagSemanasChartController } from "../controllers/adminDiagSemanasChartController";
 import { adminFixSocialPostsShift3Controller } from "../controllers/adminFixSocialPostsShift3Controller";
 import { adminFixFuoriRottaTopicoController } from "../controllers/adminFixFuoriRottaTopicoController";
 import {
@@ -1530,6 +1531,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminDiagTurneArtistaController(request);
   } else if (url.pathname === "/api/artistas/admin/diagnostico-infos-acts") {
     response = await adminDiagInfosActsController();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-semanas-chart") {
+    response = await adminDiagSemanasChartController();
   } else if (url.pathname === "/api/social/admin/fix-posts-shift3") {
     response = await adminFixSocialPostsShift3Controller();
   } else if (url.pathname === "/api/market/produtos") {
