@@ -23,8 +23,11 @@ const COMENTARIOS_SHEET = "Turnes_Comentarios";
 // ID usuário | Artista | ID único | Nome da turnê | Porte | Total de shows |
 // Data início | Data término | Agenda | Arrecadação em tempo real | Status |
 // Show atual | Show anterior
-// Acrescentamos 2 colunas novas no fim (compatível com as linhas antigas,
-// que só ficam com essas células em branco): Capa | Meta de lucro
+// Acrescentamos colunas novas no fim (compatível com as linhas antigas,
+// que só ficam com essas células em branco): Capa | Meta de lucro |
+// Fortuna turnês creditada (TRUE depois que o crédito de 65% da
+// arrecadação já foi somado em ARTISTAS!Fortuna Turnês pra essa turnê —
+// ver creditarFortunaTurnesSeNecessario).
 const TOUR_HEADERS = [
   "id_usuario",
   "artista",
@@ -41,6 +44,7 @@ const TOUR_HEADERS = [
   "show_anterior",
   "capa",
   "meta_de_lucro",
+  "fortuna_turnes_creditada",
 ] as const;
 
 function colIndexToA1Letter(colIndex: number): string {
@@ -153,6 +157,7 @@ export interface Tour {
   capaUrl: string;
   metaLucro: number;
   sistemaNovo: boolean;
+  fortunaTurnesCreditada: boolean;
 }
 
 async function readToursRaw(): Promise<{ rowIndex: number; row: string[] }[]> {
@@ -210,6 +215,7 @@ function rowToTour(row: string[]): Tour {
     // Turnês antigas (pré-reforma) não têm capa nem hype nos shows — ficam
     // marcadas como histórico read-only, sem receber novas ações.
     sistemaNovo: !!capaUrl,
+    fortunaTurnesCreditada: get("fortuna_turnes_creditada").toUpperCase() === "TRUE",
   };
 }
 
@@ -307,13 +313,12 @@ export async function getTurnesController(request: Request): Promise<Response> {
         }
         const dinamico = statusDinamico(tour);
         if (dinamico !== tour.status) {
-          const statusAnterior = tour.status;
           tour.status = dinamico;
           await googleSheetsService.usuarios
             .updateValues(TOURS_SHEET, `${statusCol}${rowIndex}`, [[dinamico]])
             .catch(() => {});
-          await creditarFortunaTurnesDaTurne(tour, dinamico, statusAnterior);
         }
+        await creditarFortunaTurnesSeNecessario(tour, rowIndex);
       }),
     );
 
@@ -343,14 +348,13 @@ export async function getTurneDetalheController(request: Request): Promise<Respo
     }
     const dinamico = statusDinamico(tour);
     if (dinamico !== tour.status) {
-      const statusAnterior = tour.status;
       tour.status = dinamico;
       const statusCol = colIndexToA1Letter(TOUR_HEADERS.indexOf("status"));
       await googleSheetsService.usuarios
         .updateValues(TOURS_SHEET, `${statusCol}${found.rowIndex}`, [[dinamico]])
         .catch(() => {});
-      await creditarFortunaTurnesDaTurne(tour, dinamico, statusAnterior);
     }
+    await creditarFortunaTurnesSeNecessario(tour, found.rowIndex);
 
     return jsonOk(tour);
   } catch (err) {
@@ -733,22 +737,46 @@ function statusDinamico(tour: Tour): string {
   return STATUS_EM_ANDAMENTO;
 }
 
-// Credita a Fortuna Turnês do artista quando a turnê acabou de transicionar
-// PRA "Finalizada" (nunca em outras transições, e nunca de novo depois —
-// uma vez que o status vira "Finalizada" na planilha, essa condição não bate
-// mais nas próximas leituras). Só turnês do sistema novo entram aqui: as
-// antigas (sem capa) sempre calculam como "Finalizada" mesmo sem ter
-// transicionado de verdade agora, então não fazem sentido pro crédito.
-async function creditarFortunaTurnesDaTurne(
-  tour: Tour,
-  statusNovo: string,
-  statusAnterior: string,
-): Promise<void> {
+// Credita a Fortuna Turnês do artista sempre que a turnê está "Finalizada"
+// e ainda não foi creditada — marcada por uma coluna própria
+// ("fortuna_turnes_creditada"), não mais por "pegar a transição de status
+// no ato". A versão antiga só creditava se ESSA MESMA leitura detectasse
+// a mudança de status (comparando com o valor lido antes); se o status já
+// tivesse virado "Finalizada" por qualquer outro motivo antes do crédito
+// rodar (ex: uma leitura anterior já tinha gravado o status mas falhado
+// silenciosamente no crédito, ou duas abas concorrentes disputando a
+// mesma escrita), a condição nunca mais batia de novo pra aquela turnê —
+// o dinheiro ficava perdido pra sempre (foi exatamente o que aconteceu
+// com a turnê da Rayna, "In Honor of the Dancefloor": status já
+// "Finalizada" na planilha, arrecadação real positiva, Fortuna Turnês
+// nunca creditada). Agora, em vez de depender de pegar o momento exato
+// da virada, cada leitura confere "já está Finalizada E ainda não tem a
+// marca de creditada?" — se sim, credita e grava a marca. Idempotente
+// (a marca impede creditar duas vezes) e nunca mais perde a janela.
+// Só turnês do sistema novo entram aqui: as antigas (sem capa) sempre
+// calculam como "Finalizada" mesmo sem ter acontecido de verdade agora,
+// então não fazem sentido pro crédito.
+async function creditarFortunaTurnesSeNecessario(tour: Tour, rowIndex: number): Promise<void> {
   if (!tour.sistemaNovo) return;
-  if (statusNovo !== STATUS_FINALIZADA || statusAnterior === STATUS_FINALIZADA) return;
+  if (tour.status !== STATUS_FINALIZADA) return;
+  if (tour.fortunaTurnesCreditada) return;
   if (!tour.arrecadacaoTempoReal) return;
+
   const valor = tour.arrecadacaoTempoReal * PERCENTUAL_FORTUNA_TURNES;
-  await creditarFortunaTurnes(tour.artista, valor).catch(() => {});
+  try {
+    // creditarFortunaTurnes SOMA no valor que já existe em Fortuna Turnês
+    // do artista (nunca sobrescreve) — importante porque um mesmo artista
+    // pode já ter Fortuna Turnês de uma turnê anterior creditada.
+    await creditarFortunaTurnes(tour.artista, valor);
+    tour.fortunaTurnesCreditada = true;
+    const col = colIndexToA1Letter(TOUR_HEADERS.indexOf("fortuna_turnes_creditada"));
+    await googleSheetsService.usuarios.updateValues(TOURS_SHEET, `${col}${rowIndex}`, [["TRUE"]]);
+  } catch (err) {
+    // Não marca como creditada se a escrita falhou — assim a próxima
+    // leitura tenta de novo, em vez de "perder" o crédito silenciosamente
+    // como acontecia antes.
+    console.error(`[Turnês] Falha ao creditar Fortuna Turnês da turnê ${tour.idUnico} (${tour.artista}):`, err);
+  }
 }
 
 interface AcaoDiaPayload {
