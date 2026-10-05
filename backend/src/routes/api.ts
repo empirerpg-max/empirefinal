@@ -1532,7 +1532,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   } else if (url.pathname === "/api/artistas/admin/diagnostico-infos-acts") {
     response = await adminDiagInfosActsController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-semanas-chart") {
-    response = await adminDiagSemanasChartController();
+    response = await adminDiagSemanasChartController(request);
   } else if (url.pathname === "/api/social/admin/fix-posts-shift3") {
     response = await adminFixSocialPostsShift3Controller();
   } else if (url.pathname === "/api/market/produtos") {
