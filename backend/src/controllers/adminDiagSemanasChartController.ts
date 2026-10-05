@@ -44,6 +44,9 @@ export async function adminDiagSemanasChartController(request: Request): Promise
         semanas_C: normalizeText(r[2]),
         nome_album_D: normalizeText(r[3]).slice(0, 40),
         codigo_unico_R: normalizeText(r[17]),
+        // Linha crua completa (todas as colunas, sem assumir índice) — pra
+        // descartar de vez qualquer erro de mapeamento de coluna.
+        rawRow: r,
       }))
       .filter(
         (a) =>
