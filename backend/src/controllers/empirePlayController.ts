@@ -127,6 +127,13 @@ export interface EmpirePlayCleanItem {
   // Código único (Musicas!Z / Albuns!L) — usado pros botões Shop/Info/Visual
   // (ver extraMaterialController.ts). Ausente em conteúdo legado sem código.
   codigoUnico?: string | null;
+  // Quantidade de semanas no chart. Pra música vem direto da própria linha
+  // (Musicas!L, "WEEKS"); pra vídeo e álbum não existe coluna própria —
+  // é cruzado depois de buildCleanItem (ver getEmpirePlayForumTopicController):
+  // vídeo usa Musicas!M ("WEEKS VIDEO") da música vinculada via "Nome
+  // original nos charts"; álbum usa "EDIÇÃO CHARTS ÁLBUMS"!C casado pelo
+  // título do álbum.
+  semanasNoChart?: number | null;
 }
 
 export interface EmpirePlayCleanAlbumTrack {
@@ -557,6 +564,14 @@ export function buildCleanItem(
   // é inserida/removida/reordenada antes dela.
   const codigoUnicoParaId = getValue(record, ["codigo_unico"]);
 
+  // Semanas no chart — só existe de graça aqui pra música (Musicas!L,
+  // "WEEKS"), já que é a própria linha lida. Vídeo/álbum não têm essa
+  // coluna na própria aba e são cruzados depois (ver
+  // getEmpirePlayForumTopicController).
+  const weeksValue = sheetName === "Musicas" ? getValue(record, ["weeks"]) : null;
+  const semanasNoChart =
+    weeksValue && !Number.isNaN(Number(weeksValue)) ? Number(weeksValue) : null;
+
   const item: EmpirePlayCleanItem = {
     // Antes era só `${sheetName}_${index+1}` (posição na leitura da planilha
     // naquele instante) — um ID fantasma que MUDA sozinho toda vez que uma
@@ -607,6 +622,7 @@ export function buildCleanItem(
   if (category) item.category = category;
   if (genero) item.genero = genero;
   if (trackOrder !== null) item.trackOrder = trackOrder;
+  if (semanasNoChart !== null) item.semanasNoChart = semanasNoChart;
 
   // Código único (Musicas!Z / Albuns!L) — chave de cruzamento com
   // EDIÇÃO CHARTS/EDIÇÃO CHARTS ÁLBUMS e agora também com Extra_Musicas/
@@ -1422,6 +1438,46 @@ export async function getEmpirePlayForumTopicController(
 
     const rawMedia = mediaRecords[targetMediaIndex];
     const mediaItem = rawMedia ? buildCleanItem(sheetIdLabel, rawMedia, targetMediaIndex) : null;
+
+    // Semanas no chart pra vídeo/álbum — não existe coluna própria nessas
+    // duas abas (confirmado: "Music Videos" e "Albuns" não têm WEEKS), só
+    // pra música (já preenchido dentro de buildCleanItem, Musicas!L). Cruza
+    // aqui, só pro item que efetivamente abriu, em vez de carregar a aba
+    // inteira em toda chamada de catálogo.
+    if (mediaItem && rawMedia && sheetIdLabel === "Videos") {
+      // Vídeo não tem WEEKS próprio — usa o "WEEKS VIDEO" (Musicas!M) da
+      // música vinculada, achada pela "Nome original nos charts" (coluna P).
+      const nomeOriginalNosCharts = getValue(rawMedia, ["nome_original_nos_charts"]);
+      if (nomeOriginalNosCharts) {
+        const musicasRows = await googleSheetsService.principal
+          .readValues("Musicas")
+          .catch(() => []);
+        const alvo = normalizeComparison(nomeOriginalNosCharts.split(";")[0] || "");
+        for (const row of musicasRows.slice(1)) {
+          // H = Nome(fullTitle), M = WEEKS VIDEO
+          if (alvo && normalizeComparison(row[7] || "") === alvo) {
+            const weeksVideo = Number(row[12]);
+            if (!Number.isNaN(weeksVideo) && row[12]) mediaItem.semanasNoChart = weeksVideo;
+            break;
+          }
+        }
+      }
+    } else if (mediaItem && sheetIdLabel === "Album") {
+      // Álbum não tem WEEKS próprio — usa "EDIÇÃO CHARTS ÁLBUMS"!C, casado
+      // pelo nome do álbum (coluna D).
+      const edicaoAlbunsRows = await googleSheetsService.edicaoCharts
+        .readValues("EDIÇÃO CHARTS ÁLBUMS")
+        .catch(() => []);
+      const alvoTitulo = normalizeComparison(mediaItem.title || "");
+      for (const row of edicaoAlbunsRows.slice(1)) {
+        const nomeAlbum = normalizeComparison(row[3] || "");
+        if (nomeAlbum && (nomeAlbum === alvoTitulo || alvoTitulo.endsWith(nomeAlbum))) {
+          const semanas = Number(row[2]);
+          if (!Number.isNaN(semanas) && row[2]) mediaItem.semanasNoChart = semanas;
+          break;
+        }
+      }
+    }
 
     // ID do tópico REAL da planilha (não o id sintético gerado pelo app) — é
     // esse valor que deve ser usado como chave nas abas Comentarios_*.
