@@ -1517,10 +1517,24 @@ export async function getEmpirePlayForumTopicController(
         }
       }
       if (mediaItem.semanasNoChart == null) {
+        // Bug do mesmo tipo do SANTISSIMA (ver stripArtistPrefixNormalized
+        // acima): EDIÇÃO CHARTS ÁLBUMS!D guarda "Artista - Título" completo,
+        // mas o título do app (mediaItem.title) já vem SEM o prefixo do
+        // artista — "santissima".endsWith("emma - santissima") nunca bate.
+        // Compara também os dois lados sem prefixo, igual já é feito pro
+        // cruzamento de faixa/álbum.
         const alvoTitulo = normalizeComparison(mediaItem.title || "");
+        const alvoTituloSemArtista = stripArtistPrefixNormalized(alvoTitulo);
         for (const row of edicaoAlbunsRows) {
           const nomeAlbum = normalizeComparison(row[3] || "");
-          if (nomeAlbum && (nomeAlbum === alvoTitulo || alvoTitulo.endsWith(nomeAlbum))) {
+          const nomeAlbumSemArtista = stripArtistPrefixNormalized(nomeAlbum);
+          if (
+            nomeAlbum &&
+            (nomeAlbum === alvoTitulo ||
+              alvoTitulo.endsWith(nomeAlbum) ||
+              nomeAlbum.endsWith(alvoTitulo) ||
+              nomeAlbumSemArtista === alvoTituloSemArtista)
+          ) {
             const semanas = Number(row[2]);
             if (!Number.isNaN(semanas) && row[2]) mediaItem.semanasNoChart = semanas;
             break;
