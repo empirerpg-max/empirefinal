@@ -605,9 +605,23 @@ export const Forum: React.FC<ForumProps> = ({
       // Semanas no chart: a listagem só traz isso de graça pra música
       // (mesma linha). Vídeo/álbum exigem cruzar com outra aba — feito só
       // aqui, pro item aberto, dentro de getEmpirePlayForumTopicController.
+      //
+      // BUG CONFIRMADO em 2026-10-06 (comentários "piscando e sumindo"):
+      // esse setSelectedTopic criava um objeto NOVO a cada busca — e o
+      // useEffect que chama fetchTopicComments depende de [selectedTopic]
+      // por referência (linha ~672). Resultado: toda busca de comentários
+      // trocava a referência de selectedTopic, o que disparava o efeito de
+      // novo, que buscava de novo, que trocava a referência nde novo — loop
+      // infinito de requisições, cada uma reiniciando loadingComments (tela
+      // "pisca" entre vazio/carregando/populado sem parar). Só atualiza
+      // (e só então troca a referência) quando o valor realmente muda.
       const semanasNoChart = resForum?.data?.media?.semanasNoChart;
       if (typeof semanasNoChart === "number") {
-        setSelectedTopic((prev) => (prev && prev.id === topic.id ? { ...prev, semanasNoChart } : prev));
+        setSelectedTopic((prev) =>
+          prev && prev.id === topic.id && prev.semanasNoChart !== semanasNoChart
+            ? { ...prev, semanasNoChart }
+            : prev,
+        );
       }
 
       if (resForum && resForum.success && resForum.data && Array.isArray(resForum.data.comments)) {
