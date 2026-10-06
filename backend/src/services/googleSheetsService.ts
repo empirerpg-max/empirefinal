@@ -423,32 +423,49 @@ export async function findRows(
   return matches;
 }
 
+// Retorna se a escrita realmente aconteceu (true) — ANTES só engolia erro
+// com console.warn e nunca contava pro caller, o que fazia loops como o
+// backfill de IDs (adminBackfillTopicIdsController) contarem uma linha como
+// "atualizada" mesmo quando a chamada à API falhou (rate limit em rajada de
+// escritas sequenciais sem espaçamento, confirmado ao vivo em 2026-10-06: só
+// uma fração das linhas "atualizadas" reportadas realmente persistiu). 2
+// tentativas extras com backoff curto, mesmo padrão já usado em appendRow.
 export async function updateValues(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   range: string,
   values: GoogleSheetMatrix,
-): Promise<void> {
+): Promise<boolean> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
-  try {
-    const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
-    await sheetsRequest(
-      `/${spreadsheetId}/values/${a1Range}?valueInputOption=USER_ENTERED`,
-      {
-        method: "PUT",
-        body: JSON.stringify({
-          majorDimension: "ROWS",
-          values,
-        }),
-      },
-      [SHEETS_READWRITE_SCOPE],
-    );
-    invalidateReadCache(spreadsheetId, sheetName);
-  } catch (err) {
-    console.warn(
-      `[googleSheetsService] Não foi possível atualizar valores na planilha (${(err as Error).message})`,
-    );
+  const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
+  const attempts = 3;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await sheetsRequest(
+        `/${spreadsheetId}/values/${a1Range}?valueInputOption=USER_ENTERED`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            majorDimension: "ROWS",
+            values,
+          }),
+        },
+        [SHEETS_READWRITE_SCOPE],
+      );
+      invalidateReadCache(spreadsheetId, sheetName);
+      return true;
+    } catch (err) {
+      const isLastAttempt = attempt === attempts;
+      const mensagem = (err as Error).message;
+      console.warn(
+        `[googleSheetsService] Falha ao atualizar valores (tentativa ${attempt}/${attempts}, ${sheetName}!${range}): ${mensagem}`,
+      );
+      if (isLastAttempt) return false;
+      await sleep(300 * attempt);
+    }
   }
+  return false;
 }
 
 interface GoogleSheetsAppendResponse {
