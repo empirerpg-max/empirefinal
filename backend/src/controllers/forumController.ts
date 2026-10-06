@@ -95,6 +95,15 @@ export interface CreateCommentBody {
  * Play), então NÃO dá pra usar a mesma ordem [data, titulo, jogador,
  * comentario, nota] para todas, como o código antigo fazia (isso corrompia
  * a planilha real a cada comentário).
+ *
+ * BUG CONFIRMADO (diagnóstico ao vivo, 2026-10-06): a coluna de "ID do
+ * comentário-pai" (replyTo) SEMPRE caía na MESMA coluna usada por
+ * toggleCommentReactionController pra gravar reações (E em
+ * Comentarios_Musicas, F em Comentarios_MV/Comentarios_Albuns — ver
+ * REACTION_COLUMN abaixo). Qualquer reação numa resposta sobrescrevia o ID
+ * do comentário-pai dela (a resposta "soltava" do tópico certo, virando
+ * órfã/achatada), e vice-versa. Agora replyTo tem coluna PRÓPRIA (G, nova,
+ * igual nas 3 abas) — nunca mais colide com reações.
  */
 function buildCommentRow(
   tipoMedia: CreateCommentBody["tipoMedia"],
@@ -103,18 +112,63 @@ function buildCommentRow(
   const { topicId, jogadorId, playerClean, comentario, nowStr, replyTo } = params;
 
   if (tipoMedia === "musica") {
-    // Comentarios_Musicas: ID do tópico, ID do jogador, Nome do jogador,
-    // Comentário, [E] ID do comentário-pai (resposta), [F] Data/Hora — essa
-    // aba nunca teve coluna de data (diferente de Comentarios_MV/Albuns),
-    // o que impossibilitava qualquer reconciliação por período depois do
-    // fato. Coluna nova no fim, não mexe nas existentes.
-    return [topicId, jogadorId, playerClean, comentario, replyTo, nowStr];
+    // Comentarios_Musicas: A ID do tópico, B ID do jogador, C Nome do
+    // jogador, D Comentário, E Reações (deixa vazio aqui — só
+    // toggleCommentReactionController escreve ali, numa linha JÁ
+    // existente), F Data/Hora, G ID do comentário-pai (nova, dedicada).
+    return [topicId, jogadorId, playerClean, comentario, "", nowStr, replyTo];
   }
   // Comentarios_MV (vídeos — a antiga Comentarios_Videos não existe mais,
   // Vídeos e Music Videos foram consolidados) / Comentarios_Albuns:
-  // ID do tópico, ID do jogador, Nome do jogador, Comentário, Data,
-  // [F] ID do comentário-pai (resposta)
-  return [topicId, jogadorId, playerClean, comentario, nowStr, replyTo];
+  // A ID do tópico, B ID do jogador, C Nome do jogador, D Comentário,
+  // E Data, F Reações (idem, deixa vazio), G ID do comentário-pai (nova).
+  return [topicId, jogadorId, playerClean, comentario, nowStr, "", replyTo];
+}
+
+// Largura fixa das 3 abas de comentário agora que replyTo ganhou coluna
+// própria: A-G (7 colunas) nas três, sem exceção.
+const COMMENT_ROW_WIDTH = 7;
+
+/**
+ * Mesmo padrão já comprovado em SOCIAL_POSTS (ver socialController.ts,
+ * "colunas empurradas") — appendRow delega pro endpoint `:append` do Sheets
+ * a tarefa de ACHAR a próxima linha E a coluna de início, que "adivinha"
+ * onde a tabela começa pelo bounding box de células não vazias. Uma linha
+ * qualquer com a primeira célula fora da coluna A (corrida entre dois
+ * comentários simultâneos, por exemplo) faz todo comentário seguinte ser
+ * ancorado no lugar errado — o "ID do tópico" (chave de busca do
+ * comentário) fica vazio/deslocado, e o comentário nunca mais aparece pra
+ * ninguém, mesmo existindo fisicamente na planilha. Em vez de delegar,
+ * acha a próxima linha REALMENTE vazia (A:G inteiro, não só A) e escreve
+ * num intervalo FIXO A{linha}:G{linha}, relendo pra confirmar que ninguém
+ * colidiu antes de considerar salvo.
+ */
+async function acharProximaLinhaVaziaComentarios(sheet: string): Promise<number> {
+  const rows = await googleSheetsService.principal.readValues(sheet, "A:G");
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const vazia = !row.slice(0, COMMENT_ROW_WIDTH).some((c) => normalizeText(c));
+    if (vazia) return i + 1;
+  }
+  return rows.length + 1;
+}
+
+async function gravarComentario(sheet: string, valores: string[]): Promise<number | null> {
+  const MAX_TENTATIVAS = 3;
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+    const linha = await acharProximaLinhaVaziaComentarios(sheet);
+    await googleSheetsService.principal.updateValues(sheet, `A${linha}:G${linha}`, [valores]);
+
+    const confirmacao = await googleSheetsService.principal.readValues(sheet, `A${linha}`);
+    if (normalizeText(confirmacao?.[0]?.[0]) === normalizeText(String(valores[0]))) {
+      return linha;
+    }
+    console.warn(
+      `[ForumController] Colisão ao gravar comentário em ${sheet} na linha ${linha} (tentativa ${tentativa}/${MAX_TENTATIVAS}) — tentando de novo.`,
+    );
+  }
+  console.warn(`[ForumController] Não foi possível gravar comentário em ${sheet} após retries — colisão persistente.`);
+  return null;
 }
 
 export function rollRandomScore(intervaloStr: string): number {
@@ -388,22 +442,20 @@ export async function createCommentController(request: Request): Promise<Respons
     let newRowIndex: number | null = null;
     const [, appendResult] = await Promise.all([
       notifyPromise,
-      googleSheetsService.principal
-        .appendRow(
-          commentSheet,
-          buildCommentRow(tipoMedia, {
-            topicId: topicIdClean,
-            jogadorId: jogadorIdClean,
-            playerClean,
-            comentario: comentario.trim(),
-            nowStr,
-            replyTo: (replyTo || "").trim(),
-          }),
-        )
-        .catch((err) => {
-          console.warn(`[ForumController] Não foi possível salvar em ${commentSheet}:`, err);
-          return null;
+      gravarComentario(
+        commentSheet,
+        buildCommentRow(tipoMedia, {
+          topicId: topicIdClean,
+          jogadorId: jogadorIdClean,
+          playerClean,
+          comentario: comentario.trim(),
+          nowStr,
+          replyTo: (replyTo || "").trim(),
         }),
+      ).catch((err) => {
+        console.warn(`[ForumController] Não foi possível salvar em ${commentSheet}:`, err);
+        return null;
+      }),
     ]);
     newRowIndex = appendResult;
 
@@ -496,12 +548,13 @@ export async function getCommentsController(request: Request): Promise<Response>
 
     // Cada aba tem seu próprio schema de colunas (ver buildCommentRow acima) —
     // o parse precisa respeitar isso, não dá pra usar posições genéricas.
-    const formatMusicaOrAlbumStyle = (rows: string[][], tipo: string, hasData: boolean) => {
+    // replyTo agora SEMPRE em G (índice 6, dedicada) nas 3 abas — antes
+    // colidia com a coluna de Reações (bug confirmado em 2026-10-06, ver
+    // buildCommentRow). Data fica em F pra Comentarios_Musicas, E pras
+    // outras duas.
+    const formatMusicaOrAlbumStyle = (rows: string[][], tipo: string, dataIndex: number) => {
       if (!rows || rows.length <= 1) return [];
-      // Coluna do ID do comentário-pai (resposta) fica sempre no fim da
-      // linha — E (índice 4) pra Comentarios_Musicas (sem Data), F (índice
-      // 5) pra Comentarios_MV/Comentarios_Albuns (com Data).
-      const replyToIndex = hasData ? 5 : 4;
+      const replyToIndex = 6; // G
       return rows.slice(1).map((r, idx) => {
         const jogadorId = r[1] || "";
         return {
@@ -511,7 +564,7 @@ export async function getCommentsController(request: Request): Promise<Response>
           jogadorId,
           jogador: r[2] || "",
           comentario: r[3] || "",
-          data: hasData ? r[4] || "" : "",
+          data: r[dataIndex] || "",
           replyTo: r[replyToIndex] || "",
           foto: fotoPorJogadorId.get(jogadorId) || "",
         };
@@ -519,9 +572,9 @@ export async function getCommentsController(request: Request): Promise<Response>
     };
 
     let allComments = [
-      ...formatMusicaOrAlbumStyle(musicaComments, "musica", false),
-      ...formatMusicaOrAlbumStyle(mvComments, "video", true),
-      ...formatMusicaOrAlbumStyle(albumComments, "album", true),
+      ...formatMusicaOrAlbumStyle(musicaComments, "musica", 5), // F
+      ...formatMusicaOrAlbumStyle(mvComments, "video", 4), // E
+      ...formatMusicaOrAlbumStyle(albumComments, "album", 4), // E
     ];
 
     if (topicIdParam) {
