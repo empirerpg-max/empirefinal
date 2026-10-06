@@ -89,29 +89,53 @@ export function buildComentarioInsertStatement(db: D1DatabaseLike, c: Comentario
     .bind(c.midiaId, c.jogadorId, c.jogadorNome, c.texto, c.nota ?? null, c.replyTo ?? null);
 }
 
+export interface ItemComRotulo {
+  statement: D1PreparedStatement;
+  rotulo: string;
+}
+
 /**
  * Executa um lote de declarações já montadas em pedaços de até `tamanho`
  * (db.batch tem limite prático de tamanho de payload — pedaços menores
  * evitam estourar isso em tabelas grandes) — usado só pela migração em
  * lote; gravação em tempo real (upsertMidiaD1/insertComentarioD1) continua
  * uma de cada vez, que é rápido o bastante pra uma linha só.
+ *
+ * db.batch() do D1 é atômico por chamada: se UMA declaração do pedaço falhar
+ * (ex: CHECK/FK/UNIQUE), o pedaço inteiro é descartado — confirmado ao vivo
+ * em 2026-10-06 (31 mídias "migradas" no contador de leitura nunca
+ * apareceram no D1). Em caso de falha do lote, reexecuta cada declaração
+ * ISOLADA (sequencial, só nesse pedaço problemático) pra salvar as boas e
+ * identificar exatamente qual(is) falharam e por quê.
  */
 export async function executarEmLotes(
   db: D1DatabaseLike,
-  statements: D1PreparedStatement[],
+  itens: ItemComRotulo[],
   tamanho = 50,
-): Promise<number> {
+): Promise<{ executados: number; falhas: { rotulo: string; erro: string }[] }> {
   let executados = 0;
-  for (let i = 0; i < statements.length; i += tamanho) {
-    const pedaco = statements.slice(i, i + tamanho);
+  const falhas: { rotulo: string; erro: string }[] = [];
+  for (let i = 0; i < itens.length; i += tamanho) {
+    const pedaco = itens.slice(i, i + tamanho);
     try {
-      await db.batch(pedaco);
+      await db.batch(pedaco.map((it) => it.statement));
       executados += pedaco.length;
     } catch (err) {
-      console.warn(`[catalogoDbService] Falha num lote de ${pedaco.length} (ignorado):`, err);
+      console.warn(
+        `[catalogoDbService] Lote de ${pedaco.length} falhou, reexecutando um por um pra isolar o culpado:`,
+        err,
+      );
+      for (const item of pedaco) {
+        try {
+          await item.statement.run();
+          executados++;
+        } catch (errItem) {
+          falhas.push({ rotulo: item.rotulo, erro: (errItem as Error).message });
+        }
+      }
     }
   }
-  return executados;
+  return { executados, falhas };
 }
 
 export interface MidiaUpsert {

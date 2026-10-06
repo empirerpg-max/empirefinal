@@ -131,13 +131,16 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     resultado.albuns.migradas++;
   }
 
-  const midiaExecutadas = await executarEmLotes(
+  const { executados: midiaExecutadas, falhas: midiaFalhas } = await executarEmLotes(
     db,
-    midiaItems.map((item) => buildMidiaUpsertStatement(db, item)),
+    midiaItems.map((item) => ({
+      statement: buildMidiaUpsertStatement(db, item),
+      rotulo: `${item.tipo}:${item.id}:${item.titulo}`,
+    })),
   );
   if (midiaExecutadas < midiaItems.length) {
     console.warn(
-      `[migrar-catalogo-d1] Só ${midiaExecutadas}/${midiaItems.length} mídias confirmadas (algum lote falhou).`,
+      `[migrar-catalogo-d1] Só ${midiaExecutadas}/${midiaItems.length} mídias confirmadas. Falhas: ${JSON.stringify(midiaFalhas)}`,
     );
   }
 
@@ -178,19 +181,30 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
   await coletarComentarios("Comentarios_MV", 0, 1, 2, 3, resultado.comentariosVideos);
   await coletarComentarios("Comentarios_Albuns", 0, 1, 2, 3, resultado.comentariosAlbuns);
 
-  const comentariosExecutados = await executarEmLotes(
+  const { executados: comentariosExecutados, falhas: comentariosFalhas } = await executarEmLotes(
     db,
-    comentarioItems.map((c) => buildComentarioInsertStatement(db, c)),
+    comentarioItems.map((c) => ({
+      statement: buildComentarioInsertStatement(db, c),
+      rotulo: `${c.midiaId}:${c.jogadorId}:${c.texto.slice(0, 40)}`,
+    })),
   );
   if (comentariosExecutados < comentarioItems.length) {
     console.warn(
-      `[migrar-catalogo-d1] Só ${comentariosExecutados}/${comentarioItems.length} comentários confirmados (algum lote falhou — provavelmente mídia ainda não migrada, FK).`,
+      `[migrar-catalogo-d1] Só ${comentariosExecutados}/${comentarioItems.length} comentários confirmados. Falhas: ${JSON.stringify(comentariosFalhas.slice(0, 50))}`,
     );
   }
 
   return new Response(
     JSON.stringify(
-      { success: true, resultado, midiaExecutadas, comentariosExecutados },
+      {
+        success: true,
+        resultado,
+        midiaExecutadas,
+        midiaFalhas,
+        comentariosExecutados,
+        totalComentariosFalhas: comentariosFalhas.length,
+        comentariosFalhas: comentariosFalhas.slice(0, 50),
+      },
       null,
       2,
     ),
