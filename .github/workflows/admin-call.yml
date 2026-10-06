@@ -17,11 +17,16 @@ on:
 jobs:
   chamar:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Chamar endpoint
+        # 280s (sem retry) em vez de 45s/3 tentativas: endpoints de
+        # diagnóstico/migração que processam centenas de linhas (ex.
+        # migrar-catalogo-d1 reexecutando lotes falhos item a item) passam
+        # fácil dos 45s — e repetir do zero 3x só multiplicava o tempo sem
+        # nunca terminar (confirmado ao vivo, 2026-10-06).
         run: |
-          curl -sS --max-time 45 --retry 2 --retry-delay 3 \
+          curl -sS --max-time 280 \
             "https://tanstack-start-app.empirerpg-forum.workers.dev${{ github.event.inputs.path }}" \
             | tee resposta.json | jq . || cat resposta.json
 
