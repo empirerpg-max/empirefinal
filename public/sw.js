@@ -1,4 +1,4 @@
-const CACHE = "empire-shell-v1";
+const CACHE = "empire-shell-v2";
 // "/" não entra mais aqui — navegação nunca serve HTML cacheado (ver
 // comentário no listener de "fetch"), então pré-cachear a home só ocuparia
 // espaço à toa.
@@ -24,6 +24,33 @@ self.addEventListener("message", (event) => {
   if (event.data === "SKIP_WAITING") self.skipWaiting();
 });
 
+// BUG CONFIRMADO em 2026-10-06 (incidente ao vivo): um fetch() dentro do
+// Service Worker que nunca resolve NEM rejeita (ex: engasgo de rede, worker
+// em estado inconsistente após várias atualizações seguidas) deixa
+// event.respondWith() esperando pra sempre — a tela trava em "Carregando..."
+// permanentemente, pra sempre, até o usuário saber (sem orientação nenhuma
+// na hora) que precisa desregistrar o Service Worker manualmente. Nenhum
+// fetch interceptado aqui pode ficar sem resposta — todo um corre contra um
+// timeout, e quando estoura, cai pro fetch "cru" (sem passar pelo SW) como
+// último recurso antes de deixar o erro real aparecer.
+const FETCH_TIMEOUT_MS = 10000;
+
+function fetchComTimeout(request) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("sw_fetch_timeout")), FETCH_TIMEOUT_MS);
+    fetch(request).then(
+      (res) => {
+        clearTimeout(timer);
+        resolve(res);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -41,7 +68,7 @@ self.addEventListener("fetch", (event) => {
     // deixa o erro de rede real aparecer — nunca substitui pelo conteúdo
     // errado.
     event.respondWith(
-      fetch(request).catch(() => fetch(request))
+      fetchComTimeout(request).catch(() => fetchComTimeout(request))
     );
     return;
   }
@@ -50,7 +77,7 @@ self.addEventListener("fetch", (event) => {
     caches.match(request).then(
       (cached) =>
         cached ||
-        fetch(request).then((res) => {
+        fetchComTimeout(request).then((res) => {
           if (res.ok && (request.destination === "style" || request.destination === "script" || request.destination === "image")) {
             const clone = res.clone();
             caches.open(CACHE).then((cache) => cache.put(request, clone));
