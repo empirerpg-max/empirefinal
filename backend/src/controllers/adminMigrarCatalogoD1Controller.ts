@@ -30,6 +30,23 @@ function parseDateToIso(dataBR: string | null): string | null {
   return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
+// CAUSA RAIZ CONFIRMADA (2026-10-06, 31 mídias "fantasma" na migração):
+// "ID do tópico" numérico PURO (de antes do formato musica_/video_/
+// album_... existir) foi atribuído de forma independente em cada
+// aba/chat de origem (cada um numerando seus próprios tópicos a partir
+// de 1) — então o mesmo número, ex. "61", é ao mesmo tempo uma música
+// ("SA5M - Supermodel") e um vídeo ("Sabine - The Last Song") em linhas
+// completamente diferentes do Sheets. midia.id é PRIMARY KEY global
+// (sem tipo), então as duas colidiam e uma sobrescrevia a outra no
+// upsert. Namespacing só os IDs legados (os que já têm prefixo musica_/
+// video_/album_/arquivo_ ficam como estão — são garantidamente únicos)
+// resolve sem tocar no Sheets nem em nenhum outro código que já
+// consome esse "ID do tópico" bruto fora do D1.
+function idMidiaParaD1(tipo: string, topicId: string): string {
+  if (/^(musica|video|album|arquivo)_/.test(topicId)) return topicId;
+  return `${tipo}_legado_${topicId}`;
+}
+
 export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
   const db = getCatalogoDb();
   if (!db) {
@@ -66,7 +83,7 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       .map((v) => normalizeText(v))
       .filter((v): v is string => !!v);
     midiaItems.push({
-      id: topicId,
+      id: idMidiaParaD1("musica", topicId),
       tipo: "musica",
       titulo: normalizeText(row[7]) || "Sem título", // H
       artista: normalizeText(row[13]) || "Artista não informado", // N — ACT PRINCIPAL
@@ -94,7 +111,7 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     if (!topicId) continue;
     const dataEnvio = normalizeText(row[9]) || null; // J
     midiaItems.push({
-      id: topicId,
+      id: idMidiaParaD1("video", topicId),
       tipo: "video",
       titulo: normalizeText(row[1]) || "Sem título", // B
       artista: "", // Music Videos não tem coluna própria de artista — resolvido via "Nome original nos charts" (P) quando necessário
@@ -119,7 +136,7 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     const dashMatch = nomeAlbum.match(/^(.+?)\s[-–—]\s(.+)$/);
     const dataLancamento = normalizeText(row[0]) || null; // A
     midiaItems.push({
-      id: topicId,
+      id: idMidiaParaD1("album", topicId),
       tipo: "album",
       titulo: dashMatch ? dashMatch[2].trim() : nomeAlbum,
       artista: dashMatch ? dashMatch[1].trim() : normalizeText(row[5]) || "Artista não informado", // F — Nome do criador (fallback)
@@ -182,6 +199,7 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
   const comentarioItems: ComentarioInsert[] = [];
   const coletarComentarios = async (
     sheet: string,
+    tipoMidia: string,
     colTopicId: number,
     colJogadorId: number,
     colJogador: number,
@@ -197,7 +215,11 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       const texto = normalizeText(row[colTexto]);
       if (!topicId || !texto) continue;
       comentarioItems.push({
-        midiaId: topicId,
+        // Mesma transformação do ID de mídia (idMidiaParaD1) — senão um
+        // comentário numa música/vídeo/álbum com ID legado numérico
+        // aponta pro id "nu" errado (que já foi renomeado no upsert de
+        // mídia) e cai como órfão por FK.
+        midiaId: idMidiaParaD1(tipoMidia, topicId),
         jogadorId: normalizeText(row[colJogadorId]) || "desconhecido",
         jogadorNome: normalizeText(row[colJogador]) || "Anônimo",
         texto,
@@ -206,9 +228,9 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     }
   };
 
-  await coletarComentarios("Comentarios_Musicas", 0, 1, 2, 3, resultado.comentariosMusicas);
-  await coletarComentarios("Comentarios_MV", 0, 1, 2, 3, resultado.comentariosVideos);
-  await coletarComentarios("Comentarios_Albuns", 0, 1, 2, 3, resultado.comentariosAlbuns);
+  await coletarComentarios("Comentarios_Musicas", "musica", 0, 1, 2, 3, resultado.comentariosMusicas);
+  await coletarComentarios("Comentarios_MV", "video", 0, 1, 2, 3, resultado.comentariosVideos);
+  await coletarComentarios("Comentarios_Albuns", "album", 0, 1, 2, 3, resultado.comentariosAlbuns);
 
   const { executados: comentariosExecutados, falhas: comentariosFalhas } = await executarEmLotes(
     db,
