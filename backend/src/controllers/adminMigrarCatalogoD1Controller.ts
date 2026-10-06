@@ -1,5 +1,12 @@
 import { googleSheetsService, normalizeText } from "../services/googleSheetsService";
-import { upsertMidiaD1, insertComentarioD1 } from "../services/catalogoDbService";
+import {
+  getCatalogoDb,
+  buildMidiaUpsertStatement,
+  buildComentarioInsertStatement,
+  executarEmLotes,
+  type MidiaUpsert,
+  type ComentarioInsert,
+} from "../services/catalogoDbService";
 
 // Fase 1 da migração Google Sheets -> D1: migração em LOTE de tudo que já
 // existe hoje (músicas/vídeos/álbuns + seus comentários) pro banco D1
@@ -7,6 +14,13 @@ import { upsertMidiaD1, insertComentarioD1 } from "../services/catalogoDbService
 // Idempotente: roda de novo sem duplicar nada (midia usa INSERT ... ON
 // CONFLICT DO UPDATE; comentario é limpo e regravado do zero a cada rodada,
 // já que não tem um ID estável vindo do Sheets pra fazer upsert por linha).
+//
+// BUG CORRIGIDO (2026-10-06): a primeira versão gravava uma linha de cada
+// vez (await sequencial, ~3235 idas-e-voltas ao D1 numa chamada só) —
+// estourou os 45s de timeout do admin-call.yml nas 3 tentativas, sem
+// nenhuma linha migrada. Agora monta todas as declarações primeiro e grava
+// em LOTES via db.batch() (uma viagem de rede por lote de 50), centenas de
+// vezes mais rápido.
 //
 // GET /api/empire-play/admin/migrar-catalogo-d1
 function parseDateToIso(dataBR: string | null): string | null {
@@ -17,6 +31,14 @@ function parseDateToIso(dataBR: string | null): string | null {
 }
 
 export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
+  const db = getCatalogoDb();
+  if (!db) {
+    return new Response(JSON.stringify({ success: false, error: "Binding CATALOGO_DB não disponível." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  }
+
   const resultado = {
     musicas: { lidas: 0, migradas: 0 },
     videos: { lidas: 0, migradas: 0 },
@@ -26,34 +48,39 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     comentariosAlbuns: { lidas: 0, migradas: 0 },
   };
 
+  const midiaItems: MidiaUpsert[] = [];
+
   // --- Músicas ---
   const musicasRows = await googleSheetsService.principal.readValues("Musicas", "A:AA").catch(() => []);
-  const idsPorTituloMusica = new Map<string, string>(); // título normalizado -> id (pra resolver comentário -> midia_id)
   for (let i = 1; i < musicasRows.length; i++) {
     const row = musicasRows[i];
     if (!row || !row.some((c) => normalizeText(c))) continue;
     resultado.musicas.lidas++;
     const topicId = normalizeText(row[1]); // B
     if (!topicId) continue; // sem ID estável ainda — fica pra próxima rodada depois de comentado/backfillado
-    const titulo = normalizeText(row[7]) || "Sem título"; // H
     const dataLancamento = normalizeText(row[0]) || null; // A
-    await upsertMidiaD1({
-      id: `musica_${topicId}`.startsWith("musica_") ? topicId : topicId, // topicId já vem com prefixo "musica_" quando gerado pelo app; preserva como está
+    // ARTISTA 2-6 (colunas O-S, índices 14-18) — feats além do ACT
+    // PRINCIPAL. Faltava no script original (gap confirmado pelo usuário:
+    // feat_artistas chegava sempre vazio no D1).
+    const featArtistas = [row[14], row[15], row[16], row[17], row[18]]
+      .map((v) => normalizeText(v))
+      .filter((v): v is string => !!v);
+    midiaItems.push({
+      id: topicId,
       tipo: "musica",
-      titulo,
+      titulo: normalizeText(row[7]) || "Sem título", // H
       artista: normalizeText(row[13]) || "Artista não informado", // N — ACT PRINCIPAL
+      featArtistas: featArtistas.length ? featArtistas : undefined,
       capaUrl: normalizeText(row[3]) || null, // D
       audioUrl: normalizeText(row[2]) || null, // C
       letra: normalizeText(row[4]) || null, // E
       dataLancamento,
       dataLancamentoIso: parseDateToIso(dataLancamento),
       codigoUnico: normalizeText(row[25]) || null, // Z
-      descricao: null,
       genero: normalizeText(row[19]) || null, // T
       trackOrder: Number(normalizeText(row[20])) || null, // U
       pendente: normalizeText(row[23]).toLowerCase() === "sim",
     });
-    idsPorTituloMusica.set(titulo.toLowerCase(), topicId);
     resultado.musicas.migradas++;
   }
 
@@ -65,12 +92,11 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     resultado.videos.lidas++;
     const topicId = normalizeText(row[5]); // F — message_thread_id
     if (!topicId) continue;
-    const titulo = normalizeText(row[1]) || "Sem título"; // B
     const dataEnvio = normalizeText(row[9]) || null; // J
-    await upsertMidiaD1({
+    midiaItems.push({
       id: topicId,
       tipo: "video",
-      titulo,
+      titulo: normalizeText(row[1]) || "Sem título", // B
       artista: "", // Music Videos não tem coluna própria de artista — resolvido via "Nome original nos charts" (P) quando necessário
       videoUrl: normalizeText(row[12]) || null, // M
       categoria: normalizeText(row[7]) || null, // H — Tipo de vídeo
@@ -92,7 +118,7 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     const nomeAlbum = normalizeText(row[6]) || "Sem título"; // G — Novo Nome
     const dashMatch = nomeAlbum.match(/^(.+?)\s[-–—]\s(.+)$/);
     const dataLancamento = normalizeText(row[0]) || null; // A
-    await upsertMidiaD1({
+    midiaItems.push({
       id: topicId,
       tipo: "album",
       titulo: dashMatch ? dashMatch[2].trim() : nomeAlbum,
@@ -105,17 +131,24 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     resultado.albuns.migradas++;
   }
 
-  // --- Comentários (limpa e regrava do zero a cada rodada — idempotente) ---
-  const limparComentarios = async () => {
-    const db = (globalThis as Record<string, unknown>).__CATALOGO_DB__ as
-      | { prepare: (q: string) => { run: () => Promise<unknown> } }
-      | undefined;
-    if (!db) return;
-    await db.prepare("DELETE FROM comentario").run();
-  };
-  await limparComentarios();
+  const midiaExecutadas = await executarEmLotes(
+    db,
+    midiaItems.map((item) => buildMidiaUpsertStatement(db, item)),
+  );
+  if (midiaExecutadas < midiaItems.length) {
+    console.warn(
+      `[migrar-catalogo-d1] Só ${midiaExecutadas}/${midiaItems.length} mídias confirmadas (algum lote falhou).`,
+    );
+  }
 
-  const migrarComentarios = async (
+  // --- Comentários (limpa e regrava do zero a cada rodada — idempotente) ---
+  await db
+    .prepare("DELETE FROM comentario")
+    .run()
+    .catch((err) => console.warn("[migrar-catalogo-d1] Falha ao limpar comentario:", err));
+
+  const comentarioItems: ComentarioInsert[] = [];
+  const coletarComentarios = async (
     sheet: string,
     colTopicId: number,
     colJogadorId: number,
@@ -131,7 +164,7 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       const topicId = normalizeText(row[colTopicId]);
       const texto = normalizeText(row[colTexto]);
       if (!topicId || !texto) continue;
-      await insertComentarioD1({
+      comentarioItems.push({
         midiaId: topicId,
         jogadorId: normalizeText(row[colJogadorId]) || "desconhecido",
         jogadorNome: normalizeText(row[colJogador]) || "Anônimo",
@@ -141,12 +174,26 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     }
   };
 
-  await migrarComentarios("Comentarios_Musicas", 0, 1, 2, 3, resultado.comentariosMusicas);
-  await migrarComentarios("Comentarios_MV", 0, 1, 2, 3, resultado.comentariosVideos);
-  await migrarComentarios("Comentarios_Albuns", 0, 1, 2, 3, resultado.comentariosAlbuns);
+  await coletarComentarios("Comentarios_Musicas", 0, 1, 2, 3, resultado.comentariosMusicas);
+  await coletarComentarios("Comentarios_MV", 0, 1, 2, 3, resultado.comentariosVideos);
+  await coletarComentarios("Comentarios_Albuns", 0, 1, 2, 3, resultado.comentariosAlbuns);
 
-  return new Response(JSON.stringify({ success: true, resultado }, null, 2), {
-    status: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-  });
+  const comentariosExecutados = await executarEmLotes(
+    db,
+    comentarioItems.map((c) => buildComentarioInsertStatement(db, c)),
+  );
+  if (comentariosExecutados < comentarioItems.length) {
+    console.warn(
+      `[migrar-catalogo-d1] Só ${comentariosExecutados}/${comentarioItems.length} comentários confirmados (algum lote falhou — provavelmente mídia ainda não migrada, FK).`,
+    );
+  }
+
+  return new Response(
+    JSON.stringify(
+      { success: true, resultado, midiaExecutadas, comentariosExecutados },
+      null,
+      2,
+    ),
+    { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
+  );
 }
