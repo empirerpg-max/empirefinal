@@ -31,6 +31,29 @@ CREATE TABLE midia (
   genero TEXT,
   track_order INTEGER,
   pendente INTEGER NOT NULL DEFAULT 0, -- 0/1 — substitui "Pendente? Sim/Não"
+  -- Colunas adicionadas 2026-10-06 (ALTER TABLE, aplicadas à meia-noite UTC
+  -- junto com o reset da cota do D1) — cobrem o restante das colunas reais
+  -- de Musicas/Music Videos/Albuns/Extra_Musicas/Extra_Albuns que a Fase 1
+  -- não migrou.
+  weeks INTEGER,                       -- WEEKS (músicas nos charts)
+  weeks_video INTEGER,                 -- WEEKS VIDEO
+  id_criador TEXT,                     -- ID do Criador (jogador que lançou)
+  comentarios_para TEXT,               -- "Comentários para" (redireciona comentário pra outro tópico)
+  metacritic_por_jogador TEXT,         -- JSON {jogadorId: nota}
+  reportado_incorreto INTEGER NOT NULL DEFAULT 0,
+  album_id_2 TEXT REFERENCES midia(id),-- música pode estar em até 5 álbuns (ALBUM 2-5)
+  album_id_3 TEXT REFERENCES midia(id),
+  album_id_4 TEXT REFERENCES midia(id),
+  album_id_5 TEXT REFERENCES midia(id),
+  likes_por_jogador TEXT,              -- JSON {jogadorId: likes} (Music Videos)
+  media_likes REAL,                    -- Média Likes (Music Videos)
+  nome_original_charts TEXT,           -- Nome original nos charts (Music Videos)
+  thumb_url TEXT,                      -- Thumb (Music Videos)
+  encarte_url TEXT,                    -- Encarte (Albuns)
+  tipo_album TEXT,                     -- Tipo (Albuns: LP/EP/Single)
+  shop_url TEXT,                       -- Extra_Musicas/Extra_Albuns: Shop
+  loja_info TEXT,                      -- Extra_Musicas/Extra_Albuns: Info
+  arte_extra_url TEXT,                 -- Extra_Musicas/Extra_Albuns: Arte
   criado_em TEXT NOT NULL DEFAULT (datetime('now')),
   atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );

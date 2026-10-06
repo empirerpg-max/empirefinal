@@ -91,18 +91,30 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       capaUrl: normalizeText(row[3]) || null, // D
       audioUrl: normalizeText(row[2]) || null, // C
       letra: normalizeText(row[4]) || null, // E
+      letraSincronizada: normalizeText(row[30]) || null,
       dataLancamento,
       dataLancamentoIso: parseDateToIso(dataLancamento),
       codigoUnico: normalizeText(row[25]) || null, // Z
       genero: normalizeText(row[19]) || null, // T
       trackOrder: Number(normalizeText(row[20])) || null, // U
       pendente: normalizeText(row[23]).toLowerCase() === "sim",
+      metacriticAvg: Number(normalizeText(row[22])) || null,
+      weeks: Number(normalizeText(row[11])) || null,
+      weeksVideo: Number(normalizeText(row[12])) || null,
+      idCriador: normalizeText(row[6]) || null,
+      comentariosPara: normalizeText(row[5]) || null,
+      metacriticPorJogador: normalizeText(row[21]) || null,
+      reportadoIncorreto: normalizeText(row[24]).toLowerCase() === "sim",
+      // ALBUM/ALBUM 2-5 (índices 10, 26-29) não vinculados ainda — formato
+      // real da célula (ID do tópico do álbum ou outra coisa) precisa ser
+      // confirmado antes de usar como album_id, senão uma suposição errada
+      // quebra a linha inteira por violação de FK.
     });
     resultado.musicas.migradas++;
   }
 
   // --- Music Videos ---
-  const videosRows = await googleSheetsService.principal.readValues("Music Videos", "A:T").catch(() => []);
+  const videosRows = await googleSheetsService.principal.readValues("Music Videos", "A:U").catch(() => []);
   for (let i = 1; i < videosRows.length; i++) {
     const row = videosRows[i];
     if (!row || !row.some((c) => normalizeText(c))) continue;
@@ -120,6 +132,11 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       descricao: normalizeText(row[8]) || null, // I
       dataLancamento: dataEnvio,
       dataLancamentoIso: parseDateToIso(dataEnvio),
+      codigoUnico: normalizeText(row[20]) || null,
+      likesPorJogador: normalizeText(row[13]) || null,
+      mediaLikes: Number(normalizeText(row[14])) || null,
+      nomeOriginalCharts: normalizeText(row[15]) || null,
+      thumbUrl: normalizeText(row[19]) || null,
     });
     resultado.videos.migradas++;
   }
@@ -144,8 +161,40 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       dataLancamento,
       dataLancamentoIso: parseDateToIso(dataLancamento),
       codigoUnico: normalizeText(row[11]) || null, // L
+      comentariosPara: normalizeText(row[3]) || null,
+      idCriador: normalizeText(row[4]) || null,
+      metacriticPorJogador: normalizeText(row[7]) || null,
+      metacriticAvg: Number(normalizeText(row[8])) || null,
+      encarteUrl: normalizeText(row[9]) || null,
+      tipoAlbum: normalizeText(row[10]) || null,
     });
     resultado.albuns.migradas++;
+  }
+
+  // --- Extra_Musicas / Extra_Albuns (Shop/Info/Arte, casadas por código
+  // único — não têm "ID do tópico" próprio) ---
+  const extraPorCodigoUnico = new Map<string, { shop: string | null; info: string | null; arte: string | null }>();
+  for (const sheet of ["Extra_Musicas", "Extra_Albuns"]) {
+    const rows = await googleSheetsService.principal.readValues(sheet, "A:D").catch(() => []);
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || !row.some((c) => normalizeText(c))) continue;
+      const codigoUnico = normalizeText(row[0]);
+      if (!codigoUnico) continue;
+      extraPorCodigoUnico.set(codigoUnico, {
+        shop: normalizeText(row[1]) || null,
+        info: normalizeText(row[2]) || null,
+        arte: normalizeText(row[3]) || null,
+      });
+    }
+  }
+  for (const item of midiaItems) {
+    if (!item.codigoUnico) continue;
+    const extra = extraPorCodigoUnico.get(item.codigoUnico);
+    if (!extra) continue;
+    item.shopUrl = extra.shop;
+    item.lojaInfo = extra.info;
+    item.arteExtraUrl = extra.arte;
   }
 
   // Detecta IDs duplicados ENTRE linhas diferentes do Sheets. midia.id é
