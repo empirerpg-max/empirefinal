@@ -167,6 +167,7 @@ import { adminDiagSemanasChartController } from "../controllers/adminDiagSemanas
 import { adminDiagComentariosController } from "../controllers/adminDiagComentariosController";
 import { adminBackfillTopicIdsController } from "../controllers/adminBackfillTopicIdsController";
 import { adminDiagComentarioPerdidoController } from "../controllers/adminDiagComentarioPerdidoController";
+import { adminDiagTamanhoDadosController } from "../controllers/adminDiagTamanhoDadosController";
 import { adminFixSocialPostsShift3Controller } from "../controllers/adminFixSocialPostsShift3Controller";
 import { adminFixFuoriRottaTopicoController } from "../controllers/adminFixFuoriRottaTopicoController";
 import {
@@ -1542,6 +1543,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminBackfillTopicIdsController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-comentario-perdido") {
     response = await adminDiagComentarioPerdidoController(request);
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-tamanho-dados") {
+    response = await adminDiagTamanhoDadosController();
   } else if (url.pathname === "/api/social/admin/fix-posts-shift3") {
     response = await adminFixSocialPostsShift3Controller();
   } else if (url.pathname === "/api/market/produtos") {
