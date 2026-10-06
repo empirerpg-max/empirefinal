@@ -169,6 +169,7 @@ import { adminBackfillTopicIdsController } from "../controllers/adminBackfillTop
 import { adminDiagComentarioPerdidoController } from "../controllers/adminDiagComentarioPerdidoController";
 import { adminDiagTamanhoDadosController } from "../controllers/adminDiagTamanhoDadosController";
 import { adminMigrarCatalogoD1Controller } from "../controllers/adminMigrarCatalogoD1Controller";
+import { adminDiagIdsDuplicadosD1Controller } from "../controllers/adminDiagIdsDuplicadosD1Controller";
 import { adminFixSocialPostsShift3Controller } from "../controllers/adminFixSocialPostsShift3Controller";
 import { adminFixFuoriRottaTopicoController } from "../controllers/adminFixFuoriRottaTopicoController";
 import {
@@ -1548,6 +1549,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminDiagTamanhoDadosController();
   } else if (url.pathname === "/api/empire-play/admin/migrar-catalogo-d1") {
     response = await adminMigrarCatalogoD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {
+    response = await adminDiagIdsDuplicadosD1Controller();
   } else if (url.pathname === "/api/social/admin/fix-posts-shift3") {
     response = await adminFixSocialPostsShift3Controller();
   } else if (url.pathname === "/api/market/produtos") {
