@@ -19,15 +19,14 @@ export function useServiceWorkerUpdate() {
 
     let registration: ServiceWorkerRegistration | null = null;
 
-    // INCIDENTE 2026-10-06: um Service Worker com o fetch handler travando
-    // (ver sw.js, fetchComTimeout) deixava sessões já abertas presas pra
-    // sempre em "Carregando..." — e o único jeito de sair disso era um aviso
-    // de "nova versão" que o usuário podia nunca notar/clicar, já que o
-    // app inteiro parecia travado. Pra uma correção desse tipo chegar em
-    // todo mundo rápido (dentro do próximo recheck de 3min), aplica a
-    // atualização sozinho assim que o novo worker termina de instalar, em
-    // vez de esperar clique manual — ainda guarda updateAvailable/
-    // waitingWorker pra quem quiser mostrar um aviso, mas não depende disso.
+    // Tentativa anterior (2026-10-06) de aplicar a atualização sozinho
+    // (SKIP_WAITING automático) causou um problema NOVO: numa janela com
+    // vários deploys seguidos (ex: uma sessão de correções em sequência,
+    // como essa mesma), cada deploy detectado recarregava a página na hora
+    // — para quem estava navegando bem no meio disso, a tela "piscava e
+    // sumia" repetidamente, uma recarga atrás da outra. Voltou a esperar o
+    // clique no aviso de "nova versão" (ver __root.tsx) — menos agressivo,
+    // nunca interrompe o usuário no meio de uma ação.
     const handleUpdateFound = (reg: ServiceWorkerRegistration) => {
       const installing = reg.installing;
       if (!installing) return;
@@ -35,7 +34,6 @@ export function useServiceWorkerUpdate() {
         if (installing.state === "installed" && navigator.serviceWorker.controller) {
           setWaitingWorker(installing);
           setUpdateAvailable(true);
-          installing.postMessage("SKIP_WAITING");
         }
       });
     };
@@ -45,7 +43,6 @@ export function useServiceWorkerUpdate() {
       if (reg.waiting && navigator.serviceWorker.controller) {
         setWaitingWorker(reg.waiting);
         setUpdateAvailable(true);
-        reg.waiting.postMessage("SKIP_WAITING");
       }
       reg.addEventListener("updatefound", () => handleUpdateFound(reg));
     }).catch(() => {});
