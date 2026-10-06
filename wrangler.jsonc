@@ -10,6 +10,17 @@
       "id": "4abe95776fd846ab8a861101692d034f"
     }
   ],
+  // Fase 0 da migração Google Sheets -> D1 (Empire Catálogo): banco criado,
+  // schema aplicado (ver d1/schema.sql), ainda SEM nenhum controller lendo/
+  // escrevendo aqui — só o binding pronto pra começar a Fase 1 sem precisar
+  // de mais nenhum passo de infra.
+  "d1_databases": [
+    {
+      "binding": "CATALOGO_DB",
+      "database_name": "empire-hub-catalogo",
+      "database_id": "3abdc744-c320-4aaf-8565-1944e4b216ae"
+    }
+  ],
   "vars": {
     "TELEGRAM_MEDIA_SERVICE_URL": "https://empire-telegram-media.onrender.com"
   },
