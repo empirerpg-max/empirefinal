@@ -13,11 +13,15 @@ import { googleSheetsService, normalizeText, normalizeComparison } from "../serv
 export async function adminDiagComentarioPerdidoController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const termo = normalizeComparison(url.searchParams.get("musica") || "");
-  if (!termo) {
-    return new Response(JSON.stringify({ success: false, error: "Use ?musica=<título ou trecho>" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
+  // Busca exata por ID do tópico — necessária pra achar o comentário mesmo
+  // quando o texto dele não menciona o nome da música (ex: "VELHO SAFADO!"
+  // em "Reckoning", nenhuma palavra do título aparece no comentário).
+  const topicIdBusca = normalizeComparison(url.searchParams.get("topicId") || "");
+  if (!termo && !topicIdBusca) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Use ?musica=<título ou trecho> ou ?topicId=<id exato>" }),
+      { status: 400, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
   }
 
   const [musicasHeader, musicasRows, comentariosRows] = await Promise.all([
@@ -34,7 +38,7 @@ export async function adminDiagComentarioPerdidoController(request: Request): Pr
   const linhasMusica: { linha: number; colunas: Record<string, string> }[] = [];
   musicasRows.forEach((row, i) => {
     const titulo = normalizeComparison(row[7] || "");
-    if (titulo.includes(termo)) {
+    if (termo && titulo.includes(termo)) {
       const colunas: Record<string, string> = {};
       header.forEach((h, idx) => {
         const label = normalizeText(h) || `coluna_${idx + 1}`;
@@ -49,15 +53,20 @@ export async function adminDiagComentarioPerdidoController(request: Request): Pr
   // menção ao termo buscado no texto do comentário ou no nome do jogador —
   // não filtra por topicId, pra achar comentário mesmo que o vínculo esteja
   // quebrado/apontando pra um ID que não existe mais em lugar nenhum.
-  const comentariosEncontrados: { linha: number; topicId: string; jogador: string; comentarioTrecho: string }[] = [];
+  const comentariosEncontrados: { linha: number; topicIdRaw: string; topicIdNormalizado: string; jogador: string; comentarioTrecho: string }[] = [];
   for (let i = 1; i < comentariosRows.length; i++) {
     const row = comentariosRows[i] || [];
+    const topicIdRaw = row[0] || "";
+    const topicIdNorm = normalizeComparison(topicIdRaw);
     const comentario = normalizeComparison(row[3] || "");
     const jogador = normalizeComparison(row[2] || "");
-    if (comentario.includes(termo) || jogador.includes(termo)) {
+    const bateTexto = termo && (comentario.includes(termo) || jogador.includes(termo));
+    const bateTopicId = topicIdBusca && topicIdNorm === topicIdBusca;
+    if (bateTexto || bateTopicId) {
       comentariosEncontrados.push({
         linha: i + 1,
-        topicId: normalizeText(row[0]),
+        topicIdRaw,
+        topicIdNormalizado: topicIdNorm,
         jogador: normalizeText(row[2]),
         comentarioTrecho: normalizeText(row[3]).slice(0, 200),
       });
@@ -65,7 +74,7 @@ export async function adminDiagComentarioPerdidoController(request: Request): Pr
   }
 
   return new Response(
-    JSON.stringify({ success: true, termo, linhasMusica, comentariosEncontrados }, null, 2),
+    JSON.stringify({ success: true, termo, topicIdBusca, linhasMusica, comentariosEncontrados }, null, 2),
     { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
   );
 }
