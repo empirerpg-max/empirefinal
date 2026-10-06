@@ -131,23 +131,23 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     resultado.albuns.migradas++;
   }
 
-  // Detecta IDs duplicados ENTRE linhas diferentes do Sheets (ex: dois
-  // tópicos distintos acabaram com o mesmo "ID do tópico") — midia.id é
-  // PRIMARY KEY, então duas linhas-fonte com o mesmo id colapsam em UMA
-  // linha no D1 via ON CONFLICT DO UPDATE (a última processada "ganha"),
-  // o que faz midiaExecutadas (declarações que rodaram com sucesso) ficar
-  // maior que o COUNT(*) real na tabela — sem isso parecer silenciosamente
-  // com perda de dado quando na verdade é duplicidade na fonte.
-  const idsVistos = new Map<string, string[]>();
+  // Detecta IDs duplicados ENTRE linhas diferentes do Sheets. midia.id é
+  // PRIMARY KEY (só a coluna id, SEM tipo) — então um "ID do tópico"
+  // numérico legado de uma MÚSICA pode colidir com o mesmo número usado
+  // por um VÍDEO (ou álbum), já que vêm de "chats"/abas distintas que
+  // numeram seus próprios tópicos a partir de 1. BUG CONFIRMADO: a
+  // primeira versão desta checagem comparava por `${tipo}:${id}`, o que
+  // NUNCA detecta esse tipo de colisão entre tipos diferentes — por isso
+  // reportava 0 duplicados mesmo com 31 mídias colapsando de verdade.
+  const idsVistos = new Map<string, { tipo: string; titulo: string }[]>();
   for (const item of midiaItems) {
-    const chave = `${item.tipo}:${item.id}`;
-    const lista = idsVistos.get(chave) ?? [];
-    lista.push(item.titulo);
-    idsVistos.set(chave, lista);
+    const lista = idsVistos.get(item.id) ?? [];
+    lista.push({ tipo: item.tipo, titulo: item.titulo });
+    idsVistos.set(item.id, lista);
   }
   const idsDuplicados = Array.from(idsVistos.entries())
-    .filter(([, titulos]) => titulos.length > 1)
-    .map(([chave, titulos]) => ({ chave, titulos }));
+    .filter(([, ocorrencias]) => ocorrencias.length > 1)
+    .map(([id, ocorrencias]) => ({ id, ocorrencias }));
 
   const { executados: midiaExecutadas, falhas: midiaFalhas } = await executarEmLotes(
     db,
