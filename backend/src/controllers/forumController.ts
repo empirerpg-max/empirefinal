@@ -10,6 +10,7 @@ import { somarPrestigio } from "../services/prestigioService";
 import { getOwnerIdForArtist } from "./artistasController";
 import { registrarNotificacaoComentario } from "./notificacoesController";
 import { processarComentarioParaBanner } from "./bannerController";
+import { insertComentarioD1 } from "../services/catalogoDbService";
 
 const USUARIOS_SHEET = "Usuários";
 
@@ -458,6 +459,17 @@ export async function createCommentController(request: Request): Promise<Respons
       }),
     ]);
     newRowIndex = appendResult;
+
+    // Espelha no D1 (Fase 1 da migração, ver catalogoDbService.ts) — nunca
+    // bloqueia nem falha o comentário (Sheets já é a resposta real acima);
+    // só funciona se a mídia já tiver sido migrada pro D1 (FK), senão
+    // ignora silenciosamente.
+    insertComentarioD1({
+      midiaId: topicIdClean,
+      jogadorId: jogadorIdClean,
+      jogadorNome: playerClean,
+      texto: comentario.trim(),
+    }).catch(() => {});
 
     // Spotlight Banner (Market): se esse comentário veio de alguém que
     // clicou num banner ligado a esse tópico, libera o bônus de playlist
