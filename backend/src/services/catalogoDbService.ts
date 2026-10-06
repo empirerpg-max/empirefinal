@@ -101,12 +101,17 @@ export interface ItemComRotulo {
  * lote; gravação em tempo real (upsertMidiaD1/insertComentarioD1) continua
  * uma de cada vez, que é rápido o bastante pra uma linha só.
  *
- * db.batch() do D1 é atômico por chamada: se UMA declaração do pedaço falhar
- * (ex: CHECK/FK/UNIQUE), o pedaço inteiro é descartado — confirmado ao vivo
- * em 2026-10-06 (31 mídias "migradas" no contador de leitura nunca
- * apareceram no D1). Em caso de falha do lote, reexecuta cada declaração
- * ISOLADA (sequencial, só nesse pedaço problemático) pra salvar as boas e
- * identificar exatamente qual(is) falharam e por quê.
+ * db.batch() do D1 NÃO lança erro quando uma declaração do pedaço falha
+ * (ex: violação de CHECK) — ela só vem com `success: false` dentro do
+ * array de resultados que o batch devolve, um resultado por declaração.
+ * BUG CONFIRMADO AO VIVO em 2026-10-06: o código antes só checava se a
+ * Promise de batch() rejeitava; como não rejeitava, 31 declarações eram
+ * contadas como "executadas" (nenhum erro, nenhuma falha detectada) mas
+ * nunca apareciam no D1 — a falha estava silenciosa dentro do array de
+ * resultados, nunca inspecionado. Agora cada resultado do lote é checado
+ * individualmente; qualquer `success: false` conta como falha (e, se o
+ * batch TAMBÉM lançar — outro caminho de falha possível — cai no catch e
+ * reexecuta cada declaração isolada pra identificar qual(is) falharam).
  */
 export async function executarEmLotes(
   db: D1DatabaseLike,
@@ -118,8 +123,17 @@ export async function executarEmLotes(
   for (let i = 0; i < itens.length; i += tamanho) {
     const pedaco = itens.slice(i, i + tamanho);
     try {
-      await db.batch(pedaco.map((it) => it.statement));
-      executados += pedaco.length;
+      const resultados = await db.batch(pedaco.map((it) => it.statement));
+      resultados.forEach((resultado, idx) => {
+        if (resultado.success) {
+          executados++;
+        } else {
+          falhas.push({
+            rotulo: pedaco[idx].rotulo,
+            erro: "D1 retornou success:false pra essa declaração dentro do lote (sem lançar erro).",
+          });
+        }
+      });
     } catch (err) {
       console.warn(
         `[catalogoDbService] Lote de ${pedaco.length} falhou, reexecutando um por um pra isolar o culpado:`,
