@@ -1354,12 +1354,22 @@ export async function getEmpirePlayForumTopicController(
     sheetIdLabel = "Videos";
   }
 
-  // Coluna nova (sem cabeçalho na planilha ainda) com o ID do comentário-pai
-  // — só existe pra saber se um comentário é resposta a outro. Sem título,
-  // readSheetObjects expõe ela como "coluna_N" (N = posição, 1-based):
-  // Comentarios_Musicas tem 4 colunas (A-D), então a nova é a 5ª; as outras
-  // duas abas (com "Data" a mais) têm 5, então a nova é a 6ª.
-  const replyToColumnKey = sheetComments === "Comentarios_Musicas" ? "coluna_5" : "coluna_6";
+  // Coluna G, nova, sem cabeçalho na planilha (readSheetObjects expõe como
+  // "coluna_7", posição 1-based) com o ID do comentário-pai — só existe pra
+  // saber se um comentário é resposta a outro.
+  //
+  // BUG CONFIRMADO em 2026-10-06 (diagnóstico ao vivo): essa coluna antes
+  // era deduzida como "coluna_5"/"coluna_6" (E/F) — exatamente a MESMA
+  // coluna onde toggleCommentReactionController grava reações (ver
+  // REACTION_COLUMN em forumController.ts). Como "Reações" TEM cabeçalho
+  // próprio na planilha (vira a chave "reacoes", não "coluna_N"), essa
+  // busca nunca achava nada — replyTo sempre vinha vazio aqui, achatando
+  // toda resposta em comentário raiz nessa tela. E pior: quando alguém
+  // reagia a uma resposta de verdade, a reação sobrescrevia o ID do
+  // comentário-pai gravado na mesma célula, soltando a resposta do tópico
+  // pra sempre. Agora replyTo tem coluna própria (G) nas 3 abas, dedicada,
+  // nunca mais dividida com reações.
+  const replyToColumnKey = "coluna_7";
 
   try {
     const [mediaRecords, commentRecordsWithRow, genericComments, empireComments, topicCommentsSheet, usuariosRecords] =
@@ -1611,7 +1621,11 @@ export async function getEmpirePlayForumTopicController(
         return false;
       })
       .map((rec, idx) => {
-        const dataVal = getValue(rec, ["timestamp", "data_hora", "data", "date"]) || "";
+        // "coluna_6" cobre Comentarios_Musicas!F — tem dado (Data/Hora) mas
+        // nunca teve cabeçalho próprio na planilha, então readSheetObjects
+        // nunca expõe como "data" pra essa aba especificamente; sem esse
+        // fallback a data do comentário de música sempre vinha vazia aqui.
+        const dataVal = getValue(rec, ["timestamp", "data_hora", "data", "date", "coluna_6"]) || "";
         const titleVal =
           getValue(rec, ["titulo", "title", "info"]) || (mediaItem ? mediaItem.title : "");
         let playerVal =
