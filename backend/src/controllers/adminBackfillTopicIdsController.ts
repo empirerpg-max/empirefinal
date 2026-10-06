@@ -27,8 +27,7 @@ export async function adminBackfillTopicIdsController(request: Request): Promise
   const colTopicIdIndex = 1; // B — "ID do tópico"
   const colTituloIndex = 7; // H — "Nome da música"
 
-  const atualizadas: { linha: number; titulo: string; novoId: string }[] = [];
-  const falharam: { linha: number; titulo: string }[] = [];
+  const pendentes: { linha: number; titulo: string; novoId: string }[] = [];
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] || [];
     if (!row.some((c) => normalizeText(c))) continue; // linha vazia, ignora
@@ -37,22 +36,32 @@ export async function adminBackfillTopicIdsController(request: Request): Promise
 
     const titulo = normalizeText(row[colTituloIndex]) || `linha_${i + 1}`;
     const novoId = `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    pendentes.push({ linha: i + 1, titulo, novoId });
+  }
 
-    if (confirmar) {
-      // updateValues agora devolve se a escrita de fato persistiu (com
-      // retry) — só conta como "atualizada" quando confirmado. Rajada
-      // anterior sem isso perdia escritas silenciosamente por rate limit
-      // da API do Sheets (confirmado ao vivo: 509 reportadas, menos da
-      // metade realmente gravadas).
-      const ok = await googleSheetsService.principal.updateValues("Musicas", `B${i + 1}`, [[novoId]]);
+  const atualizadas: { linha: number; titulo: string; novoId: string }[] = [];
+  const falharam: { linha: number; titulo: string }[] = [];
+
+  if (confirmar) {
+    // Grava em LOTES via values:batchUpdate (uma viagem de rede por lote de
+    // 100, em vez de uma por linha) — uma escrita de cada vez pra ~460
+    // linhas nunca termina dentro dos 45s do admin-call.yml (confirmado ao
+    // vivo, 2026-10-06: 3 tentativas, todas "0 bytes received" por timeout).
+    // Mesma lição já aplicada na migração pro D1 (db.batch()).
+    const tamanhoLote = 100;
+    for (let i = 0; i < pendentes.length; i += tamanhoLote) {
+      const lote = pendentes.slice(i, i + tamanhoLote);
+      const ok = await googleSheetsService.principal.updateValuesBatch(
+        lote.map((p) => ({ sheetName: "Musicas", range: `B${p.linha}`, values: [[p.novoId]] })),
+      );
       if (ok) {
-        atualizadas.push({ linha: i + 1, titulo, novoId });
+        atualizadas.push(...lote);
       } else {
-        falharam.push({ linha: i + 1, titulo });
+        falharam.push(...lote.map((p) => ({ linha: p.linha, titulo: p.titulo })));
       }
-    } else {
-      atualizadas.push({ linha: i + 1, titulo, novoId });
     }
+  } else {
+    atualizadas.push(...pendentes);
   }
 
   return new Response(

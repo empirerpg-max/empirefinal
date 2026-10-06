@@ -468,6 +468,58 @@ export async function updateValues(
   return false;
 }
 
+/**
+ * Atualiza várias células/ranges de uma vez (uma viagem de rede só, via
+ * values:batchUpdate) — usado quando é preciso gravar N linhas isoladas
+ * (ex.: um ID estável por linha) sem cair no problema de N chamadas
+ * sequenciais a updateValues: além de lento, ultrapassa os 45s do
+ * admin-call.yml bem antes de terminar (confirmado ao vivo, 2026-10-06, com
+ * ~460 linhas). Retorna quantas das entradas foram de fato confirmadas
+ * (todas, se a chamada única teve sucesso; nenhuma, caso contrário — o
+ * batchUpdate do Sheets é atômico por requisição).
+ */
+export async function updateValuesBatch(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[],
+): Promise<boolean> {
+  if (entries.length === 0) return true;
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const attempts = 3;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await sheetsRequest(
+        `/${spreadsheetId}/values:batchUpdate`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            valueInputOption: "USER_ENTERED",
+            data: entries.map((e) => ({
+              range: buildA1Range(e.sheetName, e.range),
+              majorDimension: "ROWS",
+              values: e.values,
+            })),
+          }),
+        },
+        [SHEETS_READWRITE_SCOPE],
+      );
+      for (const sheetName of new Set(entries.map((e) => e.sheetName))) {
+        invalidateReadCache(spreadsheetId, sheetName);
+      }
+      return true;
+    } catch (err) {
+      const isLastAttempt = attempt === attempts;
+      const mensagem = (err as Error).message;
+      console.warn(
+        `[googleSheetsService] Falha no batchUpdate (tentativa ${attempt}/${attempts}, ${entries.length} entradas): ${mensagem}`,
+      );
+      if (isLastAttempt) return false;
+      await sleep(300 * attempt);
+    }
+  }
+  return false;
+}
+
 interface GoogleSheetsAppendResponse {
   updates?: {
     updatedRange?: string;
@@ -579,6 +631,7 @@ export const googleSheetsService = {
   readSheetObjects,
   findRows,
   updateValues,
+  updateValuesBatch,
   appendRow,
   principal: {
     readValues: (sheetName: string, range?: string) => readValues("principal", sheetName, range),
@@ -591,6 +644,8 @@ export const googleSheetsService = {
     ) => findRows("principal", sheetName, predicate, range),
     updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
       updateValues("principal", sheetName, range, values),
+    updateValuesBatch: (entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[]) =>
+      updateValuesBatch("principal", entries),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("principal", sheetName, values, range),
   },
