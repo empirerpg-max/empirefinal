@@ -162,6 +162,17 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     );
   }
 
+  // Verificação final: relê o D1 de verdade e compara com o que devia estar
+  // lá — em vez de confiar em qualquer contador intermediário (migradas,
+  // executadas, falhas, duplicados), que já se mostraram incompletos pelo
+  // menos uma vez cada nesta investigação (2026-10-06).
+  const idsNoD1 = new Set<string>();
+  const { results: linhasD1 } = await db.prepare("SELECT id FROM midia").all<{ id: string }>();
+  for (const row of linhasD1) idsNoD1.add(row.id);
+  const midiaAusenteDoD1 = midiaItems
+    .filter((item) => !idsNoD1.has(item.id))
+    .map((item) => ({ tipo: item.tipo, id: item.id, titulo: item.titulo }));
+
   // --- Comentários (limpa e regrava do zero a cada rodada — idempotente) ---
   await db
     .prepare("DELETE FROM comentario")
@@ -221,6 +232,8 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
         midiaFalhas,
         totalIdsDuplicados: idsDuplicados.length,
         idsDuplicados,
+        totalMidiaAusenteDoD1: midiaAusenteDoD1.length,
+        midiaAusenteDoD1,
         comentariosExecutados,
         totalComentariosFalhas: comentariosFalhas.length,
         comentariosFalhas: comentariosFalhas.slice(0, 50),
