@@ -28,6 +28,7 @@ export async function adminBackfillTopicIdsController(request: Request): Promise
   const colTituloIndex = 7; // H — "Nome da música"
 
   const atualizadas: { linha: number; titulo: string; novoId: string }[] = [];
+  const falharam: { linha: number; titulo: string }[] = [];
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] || [];
     if (!row.some((c) => normalizeText(c))) continue; // linha vazia, ignora
@@ -36,13 +37,21 @@ export async function adminBackfillTopicIdsController(request: Request): Promise
 
     const titulo = normalizeText(row[colTituloIndex]) || `linha_${i + 1}`;
     const novoId = `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    atualizadas.push({ linha: i + 1, titulo, novoId });
 
     if (confirmar) {
-      await googleSheetsService.principal.updateValues("Musicas", `B${i + 1}`, [[novoId]]);
-      // Pequeno espaçamento no gerador (Date.now() dentro do loop já muda a
-      // cada iteração, mas um await entre escritas evita qualquer colisão
-      // de timing entre linhas consecutivas escritas rápido demais).
+      // updateValues agora devolve se a escrita de fato persistiu (com
+      // retry) — só conta como "atualizada" quando confirmado. Rajada
+      // anterior sem isso perdia escritas silenciosamente por rate limit
+      // da API do Sheets (confirmado ao vivo: 509 reportadas, menos da
+      // metade realmente gravadas).
+      const ok = await googleSheetsService.principal.updateValues("Musicas", `B${i + 1}`, [[novoId]]);
+      if (ok) {
+        atualizadas.push({ linha: i + 1, titulo, novoId });
+      } else {
+        falharam.push({ linha: i + 1, titulo });
+      }
+    } else {
+      atualizadas.push({ linha: i + 1, titulo, novoId });
     }
   }
 
@@ -51,6 +60,8 @@ export async function adminBackfillTopicIdsController(request: Request): Promise
       success: true,
       modo: confirmar ? "aplicado" : "simulacao",
       totalAtualizadas: atualizadas.length,
+      totalFalharam: falharam.length,
+      falharam: falharam.slice(0, 30),
       amostra: atualizadas.slice(0, 30),
     }),
     { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },

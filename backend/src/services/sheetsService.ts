@@ -39,7 +39,7 @@ export async function updateValues(
   sheetName: string,
   range: string,
   values: GoogleSheetMatrix,
-): Promise<void> {
+): Promise<boolean> {
   return updateValuesFor(PRINCIPAL_SPREADSHEET_ID, sheetName, range, values);
 }
 
