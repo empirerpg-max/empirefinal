@@ -131,6 +131,24 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     resultado.albuns.migradas++;
   }
 
+  // Detecta IDs duplicados ENTRE linhas diferentes do Sheets (ex: dois
+  // tópicos distintos acabaram com o mesmo "ID do tópico") — midia.id é
+  // PRIMARY KEY, então duas linhas-fonte com o mesmo id colapsam em UMA
+  // linha no D1 via ON CONFLICT DO UPDATE (a última processada "ganha"),
+  // o que faz midiaExecutadas (declarações que rodaram com sucesso) ficar
+  // maior que o COUNT(*) real na tabela — sem isso parecer silenciosamente
+  // com perda de dado quando na verdade é duplicidade na fonte.
+  const idsVistos = new Map<string, string[]>();
+  for (const item of midiaItems) {
+    const chave = `${item.tipo}:${item.id}`;
+    const lista = idsVistos.get(chave) ?? [];
+    lista.push(item.titulo);
+    idsVistos.set(chave, lista);
+  }
+  const idsDuplicados = Array.from(idsVistos.entries())
+    .filter(([, titulos]) => titulos.length > 1)
+    .map(([chave, titulos]) => ({ chave, titulos }));
+
   const { executados: midiaExecutadas, falhas: midiaFalhas } = await executarEmLotes(
     db,
     midiaItems.map((item) => ({
@@ -201,6 +219,8 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
         resultado,
         midiaExecutadas,
         midiaFalhas,
+        totalIdsDuplicados: idsDuplicados.length,
+        idsDuplicados,
         comentariosExecutados,
         totalComentariosFalhas: comentariosFalhas.length,
         comentariosFalhas: comentariosFalhas.slice(0, 50),
