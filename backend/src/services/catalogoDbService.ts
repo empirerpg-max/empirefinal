@@ -33,8 +33,13 @@ const MIDIA_UPSERT_SQL = `INSERT INTO midia (
     id, tipo, titulo, artista, feat_artistas, album_id, capa_url, audio_url,
     video_url, video_source, letra, letra_sincronizada, data_lancamento,
     data_lancamento_iso, codigo_unico, metacritic_avg, descricao, categoria,
-    genero, track_order, pendente, atualizado_em
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    genero, track_order, pendente,
+    weeks, weeks_video, id_criador, comentarios_para, metacritic_por_jogador,
+    reportado_incorreto, album_id_2, album_id_3, album_id_4, album_id_5,
+    likes_por_jogador, media_likes, nome_original_charts, thumb_url,
+    encarte_url, tipo_album, shop_url, loja_info, arte_extra_url,
+    atualizado_em
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   ON CONFLICT(id) DO UPDATE SET
     tipo = excluded.tipo, titulo = excluded.titulo, artista = excluded.artista,
     feat_artistas = excluded.feat_artistas, album_id = excluded.album_id,
@@ -45,6 +50,17 @@ const MIDIA_UPSERT_SQL = `INSERT INTO midia (
     codigo_unico = excluded.codigo_unico, metacritic_avg = excluded.metacritic_avg,
     descricao = excluded.descricao, categoria = excluded.categoria, genero = excluded.genero,
     track_order = excluded.track_order, pendente = excluded.pendente,
+    weeks = excluded.weeks, weeks_video = excluded.weeks_video,
+    id_criador = excluded.id_criador, comentarios_para = excluded.comentarios_para,
+    metacritic_por_jogador = excluded.metacritic_por_jogador,
+    reportado_incorreto = excluded.reportado_incorreto,
+    album_id_2 = excluded.album_id_2, album_id_3 = excluded.album_id_3,
+    album_id_4 = excluded.album_id_4, album_id_5 = excluded.album_id_5,
+    likes_por_jogador = excluded.likes_por_jogador, media_likes = excluded.media_likes,
+    nome_original_charts = excluded.nome_original_charts, thumb_url = excluded.thumb_url,
+    encarte_url = excluded.encarte_url, tipo_album = excluded.tipo_album,
+    shop_url = excluded.shop_url, loja_info = excluded.loja_info,
+    arte_extra_url = excluded.arte_extra_url,
     atualizado_em = datetime('now')`;
 
 /**
@@ -77,6 +93,25 @@ export function buildMidiaUpsertStatement(db: D1DatabaseLike, item: MidiaUpsert)
     item.genero ?? null,
     item.trackOrder ?? null,
     item.pendente ? 1 : 0,
+    item.weeks ?? null,
+    item.weeksVideo ?? null,
+    item.idCriador ?? null,
+    item.comentariosPara ?? null,
+    item.metacriticPorJogador ?? null,
+    item.reportadoIncorreto ? 1 : 0,
+    item.albumId2 ?? null,
+    item.albumId3 ?? null,
+    item.albumId4 ?? null,
+    item.albumId5 ?? null,
+    item.likesPorJogador ?? null,
+    item.mediaLikes ?? null,
+    item.nomeOriginalCharts ?? null,
+    item.thumbUrl ?? null,
+    item.encarteUrl ?? null,
+    item.tipoAlbum ?? null,
+    item.shopUrl ?? null,
+    item.lojaInfo ?? null,
+    item.arteExtraUrl ?? null,
   );
 }
 
@@ -174,6 +209,25 @@ export interface MidiaUpsert {
   genero?: string | null;
   trackOrder?: number | null;
   pendente?: boolean;
+  weeks?: number | null;
+  weeksVideo?: number | null;
+  idCriador?: string | null;
+  comentariosPara?: string | null;
+  metacriticPorJogador?: string | null;
+  reportadoIncorreto?: boolean;
+  albumId2?: string | null;
+  albumId3?: string | null;
+  albumId4?: string | null;
+  albumId5?: string | null;
+  likesPorJogador?: string | null;
+  mediaLikes?: number | null;
+  nomeOriginalCharts?: string | null;
+  thumbUrl?: string | null;
+  encarteUrl?: string | null;
+  tipoAlbum?: string | null;
+  shopUrl?: string | null;
+  lojaInfo?: string | null;
+  arteExtraUrl?: string | null;
 }
 
 /**
