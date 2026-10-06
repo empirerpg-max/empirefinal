@@ -245,6 +245,14 @@ function injectRuntimeEnv(env: unknown): void {
   if (runtimeEnv.FLAGS && typeof runtimeEnv.FLAGS === "object") {
     (globalThis as Record<string, unknown>).__FLAGS_KV__ = runtimeEnv.FLAGS;
   }
+
+  // CATALOGO_DB é o binding D1 (Fase 0/1 da migração Empire Catálogo —
+  // Google Sheets continua sendo a fonte de verdade; isso só expõe o banco
+  // pros controllers que já começaram a gravar em paralelo, mesmo padrão
+  // de exposição via globalThis já usado pro FLAGS acima).
+  if (runtimeEnv.CATALOGO_DB && typeof runtimeEnv.CATALOGO_DB === "object") {
+    (globalThis as Record<string, unknown>).__CATALOGO_DB__ = runtimeEnv.CATALOGO_DB;
+  }
 }
 
 const DEFAULT_HOME_CONFIG = {
