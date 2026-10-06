@@ -19,6 +19,15 @@ export function useServiceWorkerUpdate() {
 
     let registration: ServiceWorkerRegistration | null = null;
 
+    // INCIDENTE 2026-10-06: um Service Worker com o fetch handler travando
+    // (ver sw.js, fetchComTimeout) deixava sessões já abertas presas pra
+    // sempre em "Carregando..." — e o único jeito de sair disso era um aviso
+    // de "nova versão" que o usuário podia nunca notar/clicar, já que o
+    // app inteiro parecia travado. Pra uma correção desse tipo chegar em
+    // todo mundo rápido (dentro do próximo recheck de 3min), aplica a
+    // atualização sozinho assim que o novo worker termina de instalar, em
+    // vez de esperar clique manual — ainda guarda updateAvailable/
+    // waitingWorker pra quem quiser mostrar um aviso, mas não depende disso.
     const handleUpdateFound = (reg: ServiceWorkerRegistration) => {
       const installing = reg.installing;
       if (!installing) return;
@@ -26,6 +35,7 @@ export function useServiceWorkerUpdate() {
         if (installing.state === "installed" && navigator.serviceWorker.controller) {
           setWaitingWorker(installing);
           setUpdateAvailable(true);
+          installing.postMessage("SKIP_WAITING");
         }
       });
     };
@@ -35,6 +45,7 @@ export function useServiceWorkerUpdate() {
       if (reg.waiting && navigator.serviceWorker.controller) {
         setWaitingWorker(reg.waiting);
         setUpdateAvailable(true);
+        reg.waiting.postMessage("SKIP_WAITING");
       }
       reg.addEventListener("updatefound", () => handleUpdateFound(reg));
     }).catch(() => {});
