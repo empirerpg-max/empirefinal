@@ -3,6 +3,7 @@ import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService
 import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { getOwnerIdForArtist } from "./artistasController";
+import { upsertMidiaD1 } from "../services/catalogoDbService";
 
 // Coluna H de Musicas sempre guarda "Artista - Título" junto — se algum
 // texto de entrada já vier com esse prefixo (autopreenchimento, busca de
@@ -387,6 +388,22 @@ export async function createSongController(request: Request): Promise<Response> 
         pendente, // X - Pendente?
         musicaReferencia || "", // Y - Referência (Substituição/Vínculo)
       ]);
+      // Espelha pro D1 em tempo real — combinado: toda escrita nova vai pros
+      // dois lugares, não só no backfill/migração em lote.
+      upsertMidiaD1({
+        id: topicId,
+        tipo: "musica",
+        titulo: fullTitle,
+        artista: artistaPrincipal,
+        featArtistas: participantesLimpos.length ? participantesLimpos : undefined,
+        audioUrl: mediaUrl || null,
+        capaUrl: capaUrl || null,
+        letra: letra || null,
+        dataLancamento: dataFormatada,
+        idCriador: jogadorId || null,
+        comentariosPara: topicId,
+        pendente: pendente === "Sim",
+      }).catch(() => {});
     } catch (err) {
       console.warn("[createSongController] Erro ao gravar em Musicas (Principal):", err);
     }
@@ -680,6 +697,17 @@ export async function createVideoController(request: Request): Promise<Response>
         rowValues,
       ]);
       videoRowIndexNovo = linhaLivre;
+      upsertMidiaD1({
+        id: topicId,
+        tipo: "video",
+        titulo: fullTitle,
+        artista: "",
+        videoUrl: mediaUrl || null,
+        categoria: tipo,
+        dataLancamento: dataFormatada,
+        nomeOriginalCharts: musicasVinculadas.join("; "),
+        thumbUrl: capaUrl || null,
+      }).catch(() => {});
     } catch (err) {
       console.warn("[createVideoController] Erro ao gravar em Music Videos:", err);
     }
@@ -1127,6 +1155,9 @@ async function processarFaixasDoAlbum(
   // começa igual ao NÚMERO DE SEMANAS do álbum, em vez de "1". Lançamento
   // normal nunca passa isso.
   weeksOverride?: string,
+  // "ID do tópico" do álbum (já no formato que o D1 usa como id) — pra
+  // linkar album_id na faixa espelhada, já na criação.
+  albumId?: string,
 ) {
   const resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
   let faixasIneditasEsperadas = 0;
@@ -1198,6 +1229,24 @@ async function processarFaixasDoAlbum(
         pendente, // X - Pendente?
       ]);
       faixasIneditasGravadas++;
+      if (trackTopicId) {
+        upsertMidiaD1({
+          id: trackTopicId,
+          tipo: "musica",
+          titulo: songTitle,
+          artista: artistaAlbum,
+          featArtistas: participantesLimpos.length ? participantesLimpos : undefined,
+          audioUrl: faixa.mediaUrl || null,
+          capaUrl: capaUrl || null,
+          letra: faixa.letra || null,
+          dataLancamento: dataFormatada,
+          idCriador: jogadorId || null,
+          comentariosPara: trackTopicId,
+          albumId: albumId || null,
+          trackOrder: faixa.num || null,
+          pendente: pendente === "Sim",
+        }).catch(() => {});
+      }
     } catch (faixaErr) {
       console.warn("[processarFaixasDoAlbum] Erro ao registrar faixa inédita em Musicas:", faixaErr);
       continue;
@@ -1819,6 +1868,7 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
         jogadorId,
         dataFormatada,
         weeksOverride,
+        albumTopicId,
       ));
 
       // Soma a quantidade de faixas novas ao total já registrado em
@@ -2015,6 +2065,18 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
       ],
       "A:K",
     );
+    upsertMidiaD1({
+      id: albumTopicId,
+      tipo: "album",
+      titulo: albumFullTitle,
+      artista: artistaAlbum,
+      capaUrl: capaUrl || null,
+      dataLancamento: dataFormatada,
+      idCriador: jogadorId || null,
+      comentariosPara: albumTopicId,
+      encarteUrl: encartesStr || null,
+      tipoAlbum,
+    }).catch(() => {});
 
     // 2. Gravar em "EDIÇÃO CHARTS ÁLBUMS" (edicaoCharts) — aba separada da
     // "EDIÇÃO CHARTS" usada pelas faixas, confirmada via dump ao vivo. Já
@@ -2041,6 +2103,7 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
       jogadorId,
       dataFormatada,
       retroativo ? String(numeroSemanas) : undefined,
+      albumTopicId,
     );
 
     // REGISTRO é só pra comentários de OUTROS jogadores (ver
