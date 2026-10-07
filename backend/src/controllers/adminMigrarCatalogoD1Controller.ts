@@ -1,4 +1,4 @@
-import { googleSheetsService, normalizeText } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 import {
   getCatalogoDb,
   buildMidiaUpsertStatement,
@@ -67,8 +67,14 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
 
   const midiaItems: MidiaUpsert[] = [];
 
+  // Vínculo música -> álbum é feito por NOME (colunas ALBUM/ALBUM 2-5 de
+  // Musicas guardam o título do álbum, não um ID) — resolvido num passe
+  // separado, depois que os álbuns também tiverem sido lidos e tiverem seu
+  // id de D1 definido.
+  const vinculosAlbumPendentes: { item: MidiaUpsert; nomes: string[] }[] = [];
+
   // --- Músicas ---
-  const musicasRows = await googleSheetsService.principal.readValues("Musicas", "A:AA").catch(() => []);
+  const musicasRows = await googleSheetsService.principal.readValues("Musicas", "A:AE").catch(() => []);
   for (let i = 1; i < musicasRows.length; i++) {
     const row = musicasRows[i];
     if (!row || !row.some((c) => normalizeText(c))) continue;
@@ -76,13 +82,16 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     const topicId = normalizeText(row[1]); // B
     if (!topicId) continue; // sem ID estável ainda — fica pra próxima rodada depois de comentado/backfillado
     const dataLancamento = normalizeText(row[0]) || null; // A
+    const nomesAlbum = [row[10], row[26], row[27], row[28], row[29]] // K, AA, AB, AC, AD
+      .map((v) => normalizeText(v))
+      .filter((v): v is string => !!v);
     // ARTISTA 2-6 (colunas O-S, índices 14-18) — feats além do ACT
     // PRINCIPAL. Faltava no script original (gap confirmado pelo usuário:
     // feat_artistas chegava sempre vazio no D1).
     const featArtistas = [row[14], row[15], row[16], row[17], row[18]]
       .map((v) => normalizeText(v))
       .filter((v): v is string => !!v);
-    midiaItems.push({
+    const musicaItem: MidiaUpsert = {
       id: idMidiaParaD1("musica", topicId),
       tipo: "musica",
       titulo: normalizeText(row[7]) || "Sem título", // H
@@ -105,11 +114,9 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       comentariosPara: normalizeText(row[5]) || null,
       metacriticPorJogador: normalizeText(row[21]) || null,
       reportadoIncorreto: normalizeText(row[24]).toLowerCase() === "sim",
-      // ALBUM/ALBUM 2-5 (índices 10, 26-29) não vinculados ainda — formato
-      // real da célula (ID do tópico do álbum ou outra coisa) precisa ser
-      // confirmado antes de usar como album_id, senão uma suposição errada
-      // quebra a linha inteira por violação de FK.
-    });
+    };
+    midiaItems.push(musicaItem);
+    if (nomesAlbum.length) vinculosAlbumPendentes.push({ item: musicaItem, nomes: nomesAlbum });
     resultado.musicas.migradas++;
   }
 
@@ -169,6 +176,27 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       tipoAlbum: normalizeText(row[10]) || null,
     });
     resultado.albuns.migradas++;
+  }
+
+  // Resolve os vínculos música -> álbum coletados acima, por nome
+  // (normalizado — sem acento/caixa — pra não falhar por diferença boba
+  // de formatação entre a célula ALBUM e o título gravado em Albuns).
+  const albumIdPorNome = new Map<string, string>();
+  for (const item of midiaItems) {
+    if (item.tipo === "album") albumIdPorNome.set(normalizeComparison(item.titulo), item.id);
+  }
+  const albunsNaoEncontrados: { musicaId: string; nomeAlbum: string }[] = [];
+  for (const { item, nomes } of vinculosAlbumPendentes) {
+    const idsResolvidos = nomes.map((nome) => {
+      const id = albumIdPorNome.get(normalizeComparison(nome));
+      if (!id) albunsNaoEncontrados.push({ musicaId: item.id, nomeAlbum: nome });
+      return id ?? null;
+    });
+    item.albumId = idsResolvidos[0] ?? null;
+    item.albumId2 = idsResolvidos[1] ?? null;
+    item.albumId3 = idsResolvidos[2] ?? null;
+    item.albumId4 = idsResolvidos[3] ?? null;
+    item.albumId5 = idsResolvidos[4] ?? null;
   }
 
   // --- Extra_Musicas / Extra_Albuns (Shop/Info/Arte, casadas por código
@@ -305,6 +333,8 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
         idsDuplicados,
         totalMidiaAusenteDoD1: midiaAusenteDoD1.length,
         midiaAusenteDoD1,
+        totalAlbunsNaoEncontrados: albunsNaoEncontrados.length,
+        albunsNaoEncontrados: albunsNaoEncontrados.slice(0, 50),
         comentariosExecutados,
         totalComentariosFalhas: comentariosFalhas.length,
         comentariosFalhas: comentariosFalhas.slice(0, 50),
