@@ -2380,6 +2380,77 @@ export async function diagnosticoMusicaController(request: Request): Promise<Res
   );
 }
 
+// GET /api/gestao/admin/backfill-vinculo-video?musicaVinculada=...&data=DD/MM/AAAA
+// — conserta retroativamente um vídeo já publicado ANTES da correção em
+// resolverLinhaEdicaoCharts: acha a linha mais recente em "Music Videos"
+// cuja coluna P (música vinculada) contenha o nome dado, e repete os
+// mesmos dois passos que createVideoController faz na hora de publicar
+// (copiar Código único pra Music Videos!U, marcar a caixinha em "Pontos")
+// — só quando ainda estiverem faltando, nunca sobrescreve o que já existe.
+export async function backfillVinculoVideoController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const musicaVinculada = (url.searchParams.get("musicaVinculada") || "").trim();
+  const dataFormatada = (url.searchParams.get("data") || "").trim();
+  if (!musicaVinculada || !dataFormatada) {
+    return new Response(
+      JSON.stringify({ success: false, error: "musicaVinculada e data são obrigatórios." }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  const alvo = normalizeComparison(musicaVinculada);
+  const musicVideosRows = await googleSheetsService.principal.readValues("Music Videos");
+  const candidatos = musicVideosRows
+    .slice(1)
+    .map((r, i) => ({ linha: i + 2, row: r }))
+    .filter(({ row }) => normalizeComparison(row[15] || "").includes(alvo));
+
+  if (candidatos.length === 0) {
+    return new Response(
+      JSON.stringify({ success: false, error: `Nenhuma linha em Music Videos com "${musicaVinculada}" na coluna de música vinculada.` }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  const { linha } = candidatos[candidatos.length - 1];
+
+  const resultado: { linhaMusicVideos: number; codigoUnicoCopiado: boolean; pontosMarcado: boolean; aviso?: string } = {
+    linhaMusicVideos: linha,
+    codigoUnicoCopiado: false,
+    pontosMarcado: false,
+  };
+
+  try {
+    const linhaEdicaoCharts = await resolverLinhaEdicaoCharts(musicaVinculada);
+    if (!linhaEdicaoCharts?.codigoUnico) {
+      resultado.aviso = `Não achei "${musicaVinculada}" em EDIÇÃO CHARTS (nem por Código único) — nada foi gravado.`;
+      return new Response(JSON.stringify({ success: true, data: resultado }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const uAtual = (musicVideosRows[linha - 1]?.[20] || "").trim();
+    if (!uAtual) {
+      await googleSheetsService.principal.updateValues("Music Videos", `U${linha}`, [[linhaEdicaoCharts.codigoUnico]]);
+      resultado.codigoUnicoCopiado = true;
+    } else {
+      resultado.aviso = `Music Videos!U${linha} já tinha valor ("${uAtual}") — não sobrescrevi.`;
+    }
+
+    resultado.pontosMarcado = await marcarVideoclipeNaPontos(linhaEdicaoCharts.titulo, dataFormatada);
+  } catch (err: any) {
+    return new Response(JSON.stringify({ success: false, error: err.message || "Falha no backfill." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  return new Response(JSON.stringify({ success: true, data: resultado }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 // GET /api/gestao/admin/fix-vernissage-edicao-charts — one-off: "Rayna -
 // Vernissage" entrou em Musicas (linha 453, pendente) quando foi
 // selecionada como faixa "existente" pro álbum sem nunca ter sido

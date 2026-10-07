@@ -61,6 +61,7 @@ import {
   updateFaixaLetraSincronizadaController,
   publicarFaixaPendenteController,
   diagnosticoMusicaController,
+  backfillVinculoVideoController,
   adminFixVernissageEdicaoChartsController,
 } from "../controllers/gestaoController";
 import {
@@ -1525,6 +1526,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminFixBoulangerieAudioController();
   } else if (url.pathname === "/api/gestao/admin/diagnostico-musica") {
     response = await diagnosticoMusicaController(request);
+  } else if (url.pathname === "/api/gestao/admin/backfill-vinculo-video") {
+    response = await backfillVinculoVideoController(request);
   } else if (url.pathname === "/api/gestao/admin/fix-vernissage-edicao-charts") {
     response = await adminFixVernissageEdicaoChartsController();
   } else if (url.pathname === "/api/ponto/playlists/admin/fix-duplicata-samantha-cooper") {
