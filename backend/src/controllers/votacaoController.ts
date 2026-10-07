@@ -76,6 +76,20 @@ interface MidiaResumo {
   tab: "musicas" | "videos" | "albuns";
   titulo: string;
   imagem: string;
+  videoUrl: string;
+}
+
+// Frame extraído do próprio vídeo pelo serviço de thumbnail do Google (o
+// mesmo CDN que já serve as capas de imagem do app, driveImgWide em
+// src/lib/api.ts) — funciona pra vídeo também, não só imagem: dado o ID do
+// arquivo no Drive, devolve um frame renderizado do clipe. Só usado quando
+// a mídia NÃO tem thumb/capa própria preenchida (combinado com o usuário).
+// Largura grande (1000) pra sair em boa qualidade mesmo em tela de
+// densidade alta.
+function extrairFrameClipe(videoUrl: string, largura = 1000): string {
+  const m = videoUrl.match(/[-\w]{25,}/);
+  if (!m) return "";
+  return `https://lh3.googleusercontent.com/d/${m[0]}=w${largura}`;
 }
 
 // Busca em lote (D1, índice em codigo_unico) TODOS os registros com aquele
@@ -95,9 +109,19 @@ async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<strin
   try {
     const placeholders = unicos.map(() => "?").join(",");
     const result = await db
-      .prepare(`SELECT codigo_unico, id, tipo, titulo, capa_url, thumb_url FROM midia WHERE codigo_unico IN (${placeholders})`)
+      .prepare(
+        `SELECT codigo_unico, id, tipo, titulo, capa_url, thumb_url, video_url FROM midia WHERE codigo_unico IN (${placeholders})`,
+      )
       .bind(...unicos)
-      .all<{ codigo_unico: string; id: string; tipo: string; titulo: string; capa_url: string | null; thumb_url: string | null }>();
+      .all<{
+        codigo_unico: string;
+        id: string;
+        tipo: string;
+        titulo: string;
+        capa_url: string | null;
+        thumb_url: string | null;
+        video_url: string | null;
+      }>();
     for (const row of result.results) {
       const chave = normalizeComparison(row.codigo_unico);
       const lista = mapa.get(chave) || [];
@@ -106,6 +130,7 @@ async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<strin
         tab: TIPO_D1_PARA_TAB[row.tipo] || "musicas",
         titulo: row.titulo,
         imagem: row.thumb_url || row.capa_url || "",
+        videoUrl: row.video_url || "",
       });
       mapa.set(chave, lista);
     }
@@ -123,6 +148,30 @@ function escolherMelhorCandidato(candidatos: MidiaResumo[]): MidiaResumo | undef
   return candidatos[0];
 }
 
+// Cache em memória (por isolate) dos dois fallbacks de imagem mais caros —
+// cada um lê uma planilha inteira (Musicas+Albuns / Usuários+INFOS ACTS).
+// Sem isso, trocar de categoria (até 21 numa premiação só) pagava essa
+// leitura de novo toda vez, o que deixava a tela lenta. TTL curto (1 min)
+// só pra não ficar servindo dado desatualizado por muito tempo se alguém
+// subir uma capa nova durante a votação.
+const CACHE_IMAGENS_TTL_MS = 60_000;
+let capaPorTituloCache: { data: Map<string, string>; expiresAt: number } | null = null;
+let fotoPorArtistaCache: { data: Map<string, string>; expiresAt: number } | null = null;
+
+async function getCapaPorTituloCached(): Promise<Map<string, string>> {
+  if (capaPorTituloCache && capaPorTituloCache.expiresAt > Date.now()) return capaPorTituloCache.data;
+  const data = await buildCapaPorTitulo().catch(() => new Map<string, string>());
+  capaPorTituloCache = { data, expiresAt: Date.now() + CACHE_IMAGENS_TTL_MS };
+  return data;
+}
+
+async function getFotoPorArtistaCached(): Promise<Map<string, string>> {
+  if (fotoPorArtistaCache && fotoPorArtistaCache.expiresAt > Date.now()) return fotoPorArtistaCache.data;
+  const data = await buildFotoPorArtista().catch(() => new Map<string, string>());
+  fotoPorArtistaCache = { data, expiresAt: Date.now() + CACHE_IMAGENS_TTL_MS };
+  return data;
+}
+
 // Indicados de categoria ARTIST/GRUPO não têm Código único (o "material" é
 // o próprio artista) — usa a foto oficial dele, mesma fonte que Retroativo
 // já usa pros awards sem capa de música/álbum.
@@ -138,8 +187,8 @@ async function anexarImagens<T extends { titulo: string; artista: string; codigo
 
   const [porCodigo, capaPorTitulo, fotoPorArtista] = await Promise.all([
     buscarMidiaPorCodigosUnicos(codigos),
-    buildCapaPorTitulo().catch(() => new Map<string, string>()),
-    buildFotoPorArtista().catch(() => new Map<string, string>()),
+    getCapaPorTituloCached(),
+    getFotoPorArtistaCached(),
   ]);
 
   return indicados.map((ind) => {
@@ -147,6 +196,13 @@ async function anexarImagens<T extends { titulo: string; artista: string; codigo
     const melhor = escolherMelhorCandidato(candidatos);
     if (melhor?.imagem) {
       return { ...ind, imagem: melhor.imagem, topicId: melhor.topicId, tab: melhor.tab };
+    }
+    // Sem thumb/capa cadastrada pra esse vídeo — extrai um frame do próprio
+    // clipe (combinado com o usuário), em vez de já cair pra capa de outra
+    // coisa (título/artista).
+    if (melhor?.videoUrl) {
+      const frame = extrairFrameClipe(melhor.videoUrl);
+      if (frame) return { ...ind, imagem: frame, topicId: melhor.topicId, tab: melhor.tab };
     }
     const capaPeloTitulo = capaPorTitulo.get(normalizeComparison(ind.titulo)) || "";
     if (capaPeloTitulo) {
