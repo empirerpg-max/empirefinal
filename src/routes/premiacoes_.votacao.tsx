@@ -36,6 +36,7 @@ function PremiacoesVotacaoPage() {
   const [salvando, setSalvando] = useState(false);
 
   const [confirmSair, setConfirmSair] = useState<{ topicId: string; tab: string } | null>(null);
+  const [notaAtivo, setNotaAtivo] = useState<string | null>(null);
 
   useEffect(() => {
     api.listarPremiacoesVotacao().then(setAwards);
@@ -56,6 +57,7 @@ function PremiacoesVotacaoPage() {
     if (!awardId || !categorias || !categorias[idx] || !telegramId) return;
     setCatIndex(idx);
     setIndicados(null);
+    setNotaAtivo(null);
     api.listarIndicadosVotacao(awardId, categorias[idx].categoria, telegramId).then((data) => {
       setTipoAtual(data.tipo);
       setIndicados(data.indicados);
@@ -209,105 +211,133 @@ function PremiacoesVotacaoPage() {
             <Loader2 className="size-6 animate-spin text-primary" />
           </div>
         ) : (
-          <div className={tipoAtual === "voto" ? "grid grid-cols-2 gap-3" : "space-y-3"}>
-            {indicados.map((ind) => {
-              const img = resolveImg(ind.imagem);
-              const notaValor = valores[ind.titulo] || "";
-              const marcado = !!valores[ind.titulo];
-              return (
-                <div
-                  key={ind.titulo}
-                  className={`rounded-2xl border overflow-hidden transition-all ${
-                    tipoAtual === "voto"
-                      ? marcado
-                        ? "bg-primary/10 border-primary/40"
-                        : "bg-white/[0.03] border-white/10"
-                      : "bg-white/[0.03] border-white/10"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (tipoAtual !== "voto") return;
-                      haptic.selection();
-                      setValores((v) => ({ ...v, [ind.titulo]: v[ind.titulo] ? "" : "X" }));
-                    }}
-                    className="relative w-full aspect-square bg-white/5 flex items-center justify-center"
+          <>
+            <div className="grid grid-cols-3 gap-2">
+              {indicados.map((ind) => {
+                const img = resolveImg(ind.imagem);
+                const notaValor = valores[ind.titulo] || "";
+                const marcado = !!valores[ind.titulo];
+                const selecionadoNota = tipoAtual === "nota" && notaAtivo === ind.titulo;
+                return (
+                  <div
+                    key={ind.titulo}
+                    className={`relative rounded-xl border overflow-hidden transition-all ${
+                      marcado || selecionadoNota ? "bg-primary/10 border-primary/50" : "bg-white/[0.03] border-white/10"
+                    }`}
                   >
-                    {img ? (
-                      <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                    ) : (
-                      <Trophy className="size-8 text-muted-foreground" />
-                    )}
-                    {tipoAtual === "voto" && (
-                      <div
-                        className={`absolute top-2 right-2 size-6 rounded-full border grid place-items-center ${
-                          marcado ? "bg-primary border-primary" : "bg-black/40 border-white/30"
-                        }`}
-                      >
-                        {marcado && <Check className="size-3.5 text-primary-foreground" />}
-                      </div>
-                    )}
-                  </button>
-                  <div className="p-3">
-                    <p className="text-xs font-bold truncate">{ind.titulo}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{ind.artista}</p>
-
-                    {tipoAtual === "nota" && (
-                      <div className="mt-2.5">
-                        {notaValor ? (
-                          <div className="space-y-1.5">
-                            <div className="flex items-center justify-between">
-                              <span className="flex items-center gap-1 text-sm font-black text-primary">
-                                <Star className="size-3.5 fill-primary" /> {notaValor}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setValores((v) => ({ ...v, [ind.titulo]: "" }))}
-                                className="text-[10px] font-bold text-muted-foreground"
-                              >
-                                Remover
-                              </button>
-                            </div>
-                            <input
-                              type="range"
-                              min={NOTA_MIN}
-                              max={NOTA_MAX}
-                              step={0.1}
-                              value={notaValor}
-                              onChange={(e) => setValores((v) => ({ ...v, [ind.titulo]: e.target.value }))}
-                              className="w-full accent-primary"
-                            />
-                          </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        haptic.selection();
+                        if (tipoAtual === "voto") {
+                          setValores((v) => ({ ...v, [ind.titulo]: v[ind.titulo] ? "" : "X" }));
+                        } else {
+                          setNotaAtivo((cur) => (cur === ind.titulo ? null : ind.titulo));
+                        }
+                      }}
+                      className="block w-full text-left"
+                    >
+                      <div className="relative w-full aspect-square bg-white/5 flex items-center justify-center">
+                        {img ? (
+                          <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" />
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              haptic.selection();
-                              setValores((v) => ({ ...v, [ind.titulo]: NOTA_PADRAO }));
-                            }}
-                            className="w-full py-2 rounded-xl bg-white/5 border border-white/10 text-[11px] font-black uppercase tracking-wide"
-                          >
-                            Dar nota
-                          </button>
+                          <Trophy className="size-5 text-muted-foreground" />
+                        )}
+                        {tipoAtual === "voto" && marcado && (
+                          <div className="absolute top-1 right-1 size-4 rounded-full bg-primary border border-primary grid place-items-center">
+                            <Check className="size-2.5 text-primary-foreground" />
+                          </div>
+                        )}
+                        {tipoAtual === "nota" && notaValor && (
+                          <div className="absolute bottom-1 left-1 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/60 text-[9px] font-black text-primary">
+                            <Star className="size-2.5 fill-primary" /> {notaValor}
+                          </div>
                         )}
                       </div>
-                    )}
-
-                    {ind.topicId && (
+                      <div className="p-1.5">
+                        <p className="text-[10px] font-bold leading-tight line-clamp-2">{ind.titulo}</p>
+                        <p className="text-[9px] text-muted-foreground truncate">{ind.artista}</p>
+                      </div>
+                    </button>
+                    {tipoAtual === "voto" && ind.topicId && (
                       <button
                         type="button"
                         onClick={() => pedirVisitarForum(ind)}
-                        className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-wide text-muted-foreground"
+                        aria-label="Visitar fórum"
+                        className="absolute top-1 left-1 size-4 rounded-full bg-black/55 grid place-items-center"
                       >
-                        <ExternalLink className="size-3" /> Visitar fórum
+                        <ExternalLink className="size-2.5 text-white" />
                       </button>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+
+            {tipoAtual === "nota" &&
+              notaAtivo &&
+              (() => {
+                const ind = indicados.find((i) => i.titulo === notaAtivo);
+                if (!ind) return null;
+                const notaValor = valores[ind.titulo] || "";
+                return (
+                  <div className="sticky bottom-20 mt-3 p-3.5 rounded-2xl bg-card border border-primary/30 shadow-xl shadow-black/40">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold truncate">{ind.titulo}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{ind.artista}</p>
+                      </div>
+                      {ind.topicId && (
+                        <button
+                          type="button"
+                          onClick={() => pedirVisitarForum(ind)}
+                          className="shrink-0 size-7 rounded-full bg-white/5 border border-white/10 grid place-items-center"
+                          aria-label="Visitar fórum"
+                        >
+                          <ExternalLink className="size-3.5 text-muted-foreground" />
+                        </button>
+                      )}
+                    </div>
+                    {notaValor ? (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-1 text-base font-black text-primary">
+                            <Star className="size-4 fill-primary" /> {notaValor}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setValores((v) => ({ ...v, [ind.titulo]: "" }))}
+                            className="text-[10px] font-bold text-muted-foreground"
+                          >
+                            Remover nota
+                          </button>
+                        </div>
+                        <input
+                          type="range"
+                          min={NOTA_MIN}
+                          max={NOTA_MAX}
+                          step={0.1}
+                          value={notaValor}
+                          onChange={(e) => setValores((v) => ({ ...v, [ind.titulo]: e.target.value }))}
+                          className="w-full accent-primary"
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          haptic.selection();
+                          setValores((v) => ({ ...v, [ind.titulo]: NOTA_PADRAO }));
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-[11px] font-black uppercase tracking-wide"
+                      >
+                        Dar nota
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+          </>
         )}
 
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent">
