@@ -58,17 +58,11 @@ async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<strin
 }
 
 // Entre as várias linhas do D1 que compartilham o mesmo Código único,
-// escolhe a que é de fato o indicado: primeiro por título batendo (o
-// vídeo específico que foi indicado, não "qualquer um com esse código"),
-// senão a primeira que tiver alguma imagem, senão a primeira mesmo.
-function escolherMelhorCandidato(candidatos: MidiaResumo[], tituloAlvo: string): MidiaResumo | undefined {
-  if (candidatos.length === 0) return undefined;
-  const alvo = normalizeComparison(tituloAlvo);
-  const porTitulo = candidatos.find((c) => {
-    const t = normalizeComparison(c.titulo);
-    return t === alvo || t.includes(alvo) || alvo.includes(t);
-  });
-  return porTitulo || candidatos.find((c) => c.imagem) || candidatos[0];
+// pega sempre a primeira — combinado com o usuário: quando o código é de
+// vários vídeos de verdade (clipe oficial, versão acústica, etc.), não dá
+// pra adivinhar qual foi o indicado só pelo título, então não tenta.
+function escolherMelhorCandidato(candidatos: MidiaResumo[]): MidiaResumo | undefined {
+  return candidatos[0];
 }
 
 // Indicados de categoria ARTIST/GRUPO não têm Código único (o "material" é
@@ -92,7 +86,7 @@ async function anexarImagens<T extends { titulo: string; artista: string; codigo
 
   return indicados.map((ind) => {
     const candidatos = ind.codigoUnico ? porCodigo.get(normalizeComparison(ind.codigoUnico)) || [] : [];
-    const melhor = escolherMelhorCandidato(candidatos, ind.titulo);
+    const melhor = escolherMelhorCandidato(candidatos);
     if (melhor?.imagem) {
       return { ...ind, imagem: melhor.imagem, topicId: melhor.topicId, tab: melhor.tab };
     }
