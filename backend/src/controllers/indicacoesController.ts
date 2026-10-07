@@ -514,3 +514,29 @@ export async function adminPopupVmaLimparTudoController(): Promise<Response> {
   ).catch(() => {});
   return jsonResponse({ success: true });
 }
+
+// GET /api/premiacoes/indicar/admin/dump?awardId=...&abas=Detalhes,Categorias
+// — one-off de diagnóstico: dump cru (cabeçalho + algumas linhas) de
+// qualquer aba da planilha de uma premiação, pra conferir ao vivo o layout
+// real antes de implementar algo em cima (ex: a Votação, que depende das
+// abas novas Indicações_VotoPorNota/Indicações_Voto e das novas colunas de
+// Detalhes).
+export async function adminDumpPremiacaoController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const awardId = normalizeText(url.searchParams.get("awardId")) || PREMIACOES_INDICAR[0];
+  const abasParam = normalizeText(url.searchParams.get("abas"));
+  const abas = abasParam
+    ? abasParam.split(",").map((a) => a.trim()).filter(Boolean)
+    : ["Detalhes", "Categorias", "Indicações", "Indicações_VotoPorNota", "Indicações_Voto"];
+
+  const resultado: Record<string, unknown> = {};
+  for (const aba of abas) {
+    try {
+      const rows = await readValues(awardId, aba, "A1:P30");
+      resultado[aba] = { encontrada: true, totalLinhas: rows.length, linhas: rows };
+    } catch (err: any) {
+      resultado[aba] = { encontrada: false, erro: err?.message || String(err) };
+    }
+  }
+  return jsonResponse({ success: true, data: { awardId, abas: resultado } });
+}
