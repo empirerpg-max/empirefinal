@@ -46,6 +46,11 @@ function PremiacoesVotacaoPage() {
   const [perfAceite, setPerfAceite] = useState(false);
   const [perfEnviando, setPerfEnviando] = useState(false);
 
+  type TermoVoto = Awaited<ReturnType<typeof api.statusTermoVoto>>;
+  const [termoVoto, setTermoVoto] = useState<TermoVoto>(null);
+  const [termoVotoCheck, setTermoVotoCheck] = useState(false);
+  const [termoVotoEnviando, setTermoVotoEnviando] = useState(false);
+
   useEffect(() => {
     api.listarPremiacoesVotacao().then(setAwards);
   }, []);
@@ -58,6 +63,8 @@ function PremiacoesVotacaoPage() {
     setPerfGateStep(null);
     setPerfArtistasSel([]);
     setPerfAceite(false);
+    setTermoVoto(null);
+    setTermoVotoCheck(false);
     api.listarCategoriasVotacao(a.id).then((data) => {
       if (!data) return;
       setDetalhes(data.detalhes as AwardResumo);
@@ -75,8 +82,26 @@ function PremiacoesVotacaoPage() {
           // segue sem perguntar.
           setPerfStatus({ statusFase: "aberto", termoTexto: "", artistas: [], respondido: true, resposta: null });
         });
+      api
+        .statusTermoVoto(a.id, telegramId)
+        .then(setTermoVoto)
+        .catch(() => setTermoVoto({ aceito: true, texto: "" }));
     } else {
       setPerfStatus({ statusFase: "aberto", termoTexto: "", artistas: [], respondido: true, resposta: null });
+      setTermoVoto({ aceito: true, texto: "" });
+    }
+  };
+
+  const aceitarTermoVoto = async () => {
+    if (!awardId || !telegramId || !termoVotoCheck) return;
+    setTermoVotoEnviando(true);
+    const res = await api.aceitarTermoVoto(awardId, telegramId);
+    setTermoVotoEnviando(false);
+    if (res.success) {
+      haptic.success();
+      setTermoVoto((t) => (t ? { ...t, aceito: true } : t));
+    } else {
+      toast.error(res.error || "Erro ao registrar aceite.");
     }
   };
 
@@ -617,9 +642,57 @@ function PremiacoesVotacaoPage() {
     );
   }
 
+  // === VIEW 1.75: termo de integridade do voto (obrigatório, uma vez só) ===
+  if (awardId && perfGateStep === null && termoVoto !== null && !termoVoto.aceito) {
+    return (
+      <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen">
+        <header className="flex items-center gap-3 mb-6">
+          <button
+            onClick={() => {
+              setAwardId(null);
+              setDetalhes(null);
+              setCategorias(null);
+            }}
+            className="size-9 rounded-full bg-white/5 border border-white/10 grid place-items-center shrink-0"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+          <h1 className="text-lg font-black uppercase tracking-tight truncate">{detalhes?.premiacao || "Votação"}</h1>
+        </header>
+
+        <div className="space-y-5">
+          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+            <p className="text-xs leading-relaxed text-muted-foreground">{termoVoto.texto}</p>
+          </div>
+          <button
+            onClick={() => setTermoVotoCheck((v) => !v)}
+            className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 text-left"
+          >
+            <div
+              className={`size-5 rounded-md border shrink-0 grid place-items-center ${
+                termoVotoCheck ? "bg-primary border-primary" : "border-white/20"
+              }`}
+            >
+              {termoVotoCheck && <Check className="size-3.5 text-primary-foreground" />}
+            </div>
+            <span className="text-xs font-bold">Aceito</span>
+          </button>
+          <button
+            onClick={aceitarTermoVoto}
+            disabled={!termoVotoCheck || termoVotoEnviando}
+            className="w-full py-3.5 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider disabled:opacity-40 flex items-center justify-center gap-1.5"
+          >
+            {termoVotoEnviando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            Continuar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // === VIEW 2: categorias do award ===
   if (awardId) {
-    if (categorias !== null && perfStatus === null) {
+    if (categorias !== null && (perfStatus === null || termoVoto === null)) {
       return (
         <div className="flex justify-center py-16">
           <Loader2 className="size-6 animate-spin text-primary" />
