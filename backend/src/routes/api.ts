@@ -432,6 +432,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/admin/fill-grammy-2026",
     "/api/musicas/admin/fix-boulangerie-audio",
     "/api/gestao/admin/diagnostico-musica",
+    "/api/gestao/admin/backfill-vinculo-video",
     "/api/gestao/admin/fix-vernissage-edicao-charts",
     "/api/ponto/playlists/admin/fix-duplicata-samantha-cooper",
     "/api/market/produtos",
