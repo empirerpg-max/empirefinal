@@ -140,11 +140,20 @@ async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<strin
   return mapa;
 }
 
-// Entre as várias linhas do D1 que compartilham o mesmo Código único,
-// pega sempre a primeira — combinado com o usuário: quando o código é de
-// vários vídeos de verdade (clipe oficial, versão acústica, etc.), não dá
-// pra adivinhar qual foi o indicado só pelo título, então não tenta.
+// Entre as várias linhas do D1 que compartilham o mesmo Código único, a
+// ordem de retorno do banco não indica qual é "a certa" — confirmado ao
+// vivo (EMP659): a linha tipo "musica" vinha primeiro mas com capa_url
+// apontando pra um arquivo apagado do Drive (404), enquanto a linha tipo
+// "video" do MESMO código tinha a thumb real cadastrada na coluna Thumb
+// da planilha. Por isso: entre as candidatas, prioriza a primeira que já
+// tem uma imagem (thumb_url/capa_url) de verdade; só se nenhuma tiver,
+// cai pra primeira com video_url (pro fallback de frame); por último,
+// index 0 mesmo sem imagem nem vídeo.
 function escolherMelhorCandidato(candidatos: MidiaResumo[]): MidiaResumo | undefined {
+  const comImagem = candidatos.find((c) => c.imagem);
+  if (comImagem) return comImagem;
+  const comVideo = candidatos.find((c) => c.videoUrl);
+  if (comVideo) return comVideo;
   return candidatos[0];
 }
 
