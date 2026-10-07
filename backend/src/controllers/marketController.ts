@@ -26,7 +26,8 @@ import { PLAYLIST_MINIMA } from "./playlistsInvestimentoController";
 // item de Performance Especial, vazio nos outros) | N plataforma
 // (Spotify/Apple Music/YouTube, só nos itens de playlist) | O destino
 // (pra onde a compra é registrada: market_compras / ecoin_investimento /
-// empirehits_compras / leilao).
+// empirehits_compras / leilao) | P imagem (link do Google Drive ou URL
+// direta — arte do card no Market; vazio cai no placeholder em gradiente).
 const ITENS_SHEET = "MARKET_ITENS";
 
 export interface MarketItem {
@@ -45,6 +46,7 @@ export interface MarketItem {
   tipoEspecial: string;
   plataforma: string;
   destino: string;
+  imagem: string;
 }
 
 async function getMarketItens(): Promise<MarketItem[]> {
@@ -68,6 +70,7 @@ async function getMarketItens(): Promise<MarketItem[]> {
       tipoEspecial: normalizeText(r[12]),
       plataforma: normalizeText(r[13]),
       destino: normalizeText(r[14]) || "market_compras",
+      imagem: normalizeText(r[15]),
     }))
     .filter((item) => item.ativo)
     .sort((a, b) => a.ordem - b.ordem);

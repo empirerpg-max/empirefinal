@@ -24,7 +24,7 @@ import {
   Disc,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { api } from "@/lib/api";
+import { api, resolveImg } from "@/lib/api";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import { toast } from "sonner";
 
@@ -59,6 +59,7 @@ type MarketItem = {
   tipoEspecial: string;
   plataforma: string;
   destino: string;
+  imagem: string;
   disponivel: boolean;
 };
 
@@ -557,6 +558,7 @@ function MarketPage() {
                     const bloqueadoAniversario = item.id === "aniversario" && !item.disponivel;
                     const ehLeilao = item.tipoEspecial === "leilao";
                     const art = ITEM_ART[item.icone] || ART_PADRAO;
+                    const imgSrc = resolveImg(item.imagem);
                     return (
                       <button
                         key={item.id}
@@ -567,18 +569,24 @@ function MarketPage() {
                       >
                         <div
                           className={`relative flex items-center justify-center px-1 ${ehLeilao ? "aspect-[21/9]" : "aspect-[4/3]"}`}
-                          style={{ background: `linear-gradient(135deg, ${art.from}, ${art.to})` }}
+                          style={imgSrc ? undefined : { background: `linear-gradient(135deg, ${art.from}, ${art.to})` }}
                         >
-                          <span style={{ color: art.stroke }}>
-                            {ICONES[item.icone]
-                              ? React.cloneElement(ICONES[item.icone], {
-                                  className: ehLeilao ? "size-9 opacity-90" : "size-7 opacity-90",
-                                })
-                              : <ShoppingBag className="size-7 opacity-90" />}
-                          </span>
-                          <span className="absolute top-2 left-2 text-[8px] font-black uppercase tracking-wide text-white/50 bg-black/30 px-1.5 py-0.5 rounded-full">
-                            Arte
-                          </span>
+                          {imgSrc ? (
+                            <img src={imgSrc} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                          ) : (
+                            <>
+                              <span style={{ color: art.stroke }}>
+                                {ICONES[item.icone]
+                                  ? React.cloneElement(ICONES[item.icone], {
+                                      className: ehLeilao ? "size-9 opacity-90" : "size-7 opacity-90",
+                                    })
+                                  : <ShoppingBag className="size-7 opacity-90" />}
+                              </span>
+                              <span className="absolute top-2 left-2 text-[8px] font-black uppercase tracking-wide text-white/50 bg-black/30 px-1.5 py-0.5 rounded-full">
+                                Arte
+                              </span>
+                            </>
+                          )}
                           {ehLeilao ? (
                             <span className="absolute top-2 right-2 flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/55 text-white text-[10px] font-black uppercase">
                               <Gavel className="size-3" /> Leilão
@@ -616,8 +624,12 @@ function MarketPage() {
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md bg-card rounded-t-3xl sm:rounded-3xl p-6 border border-white/10"
           >
-            <div className="size-12 rounded-xl bg-primary/15 text-primary grid place-items-center mb-3">
-              {ICONES[comprando.icone] || <ShoppingBag className="size-6" />}
+            <div className="size-12 rounded-xl bg-primary/15 text-primary grid place-items-center mb-3 overflow-hidden">
+              {resolveImg(comprando.imagem) ? (
+                <img src={resolveImg(comprando.imagem)} alt="" className="w-full h-full object-cover" />
+              ) : (
+                ICONES[comprando.icone] || <ShoppingBag className="size-6" />
+              )}
             </div>
             <h3 className="text-lg font-black uppercase tracking-tight mb-1">{comprando.nome}</h3>
             <p className="text-sm text-muted-foreground mb-4">{comprando.descricao}</p>
