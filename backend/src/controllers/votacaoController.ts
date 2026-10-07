@@ -16,16 +16,20 @@ const TIPO_D1_PARA_TAB: Record<string, "musicas" | "videos" | "albuns"> = {
 interface MidiaResumo {
   topicId: string;
   tab: "musicas" | "videos" | "albuns";
+  titulo: string;
   imagem: string;
 }
 
-// Busca em lote (D1, índice em codigo_unico) a imagem (thumb do vídeo, ou
-// capa quando não há thumb própria) e o topicId de cada indicado — é por
-// isso que o usuário colocou o Código único nas abas de voto: não precisa
-// resolver título/artista ambíguo, o código já aponta direto pro registro
-// certo no catálogo.
-async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<string, MidiaResumo>> {
-  const mapa = new Map<string, MidiaResumo>();
+// Busca em lote (D1, índice em codigo_unico) TODOS os registros com aquele
+// código — confirmado ao vivo: um Código único NÃO é 1:1 com um vídeo. Uma
+// música pode ter vários clipes com o mesmo código (clipe oficial, versão
+// acústica, apresentação ao vivo, aparição em TV...), cada um sua própria
+// linha no D1, e nem todos têm thumb cadastrada. Pegar só "a primeira linha
+// que achar" (como a versão anterior fazia) às vezes pegava uma versão sem
+// capa enquanto outra do mesmo código tinha — não é dado faltando, é
+// escolha errada entre as várias linhas candidatas.
+async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<string, MidiaResumo[]>> {
+  const mapa = new Map<string, MidiaResumo[]>();
   const unicos = Array.from(new Set(codigos.map((c) => normalizeText(c)).filter(Boolean)));
   if (unicos.length === 0) return mapa;
   const db = getCatalogoDb();
@@ -33,16 +37,19 @@ async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<strin
   try {
     const placeholders = unicos.map(() => "?").join(",");
     const result = await db
-      .prepare(`SELECT codigo_unico, id, tipo, capa_url, thumb_url FROM midia WHERE codigo_unico IN (${placeholders})`)
+      .prepare(`SELECT codigo_unico, id, tipo, titulo, capa_url, thumb_url FROM midia WHERE codigo_unico IN (${placeholders})`)
       .bind(...unicos)
-      .all<{ codigo_unico: string; id: string; tipo: string; capa_url: string | null; thumb_url: string | null }>();
+      .all<{ codigo_unico: string; id: string; tipo: string; titulo: string; capa_url: string | null; thumb_url: string | null }>();
     for (const row of result.results) {
-      const tab = TIPO_D1_PARA_TAB[row.tipo] || "musicas";
-      mapa.set(normalizeComparison(row.codigo_unico), {
+      const chave = normalizeComparison(row.codigo_unico);
+      const lista = mapa.get(chave) || [];
+      lista.push({
         topicId: row.id,
-        tab,
+        tab: TIPO_D1_PARA_TAB[row.tipo] || "musicas",
+        titulo: row.titulo,
         imagem: row.thumb_url || row.capa_url || "",
       });
+      mapa.set(chave, lista);
     }
   } catch (err) {
     console.warn("[votacaoController] Falha ao buscar mídia por código único no D1:", err);
@@ -50,18 +57,28 @@ async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<strin
   return mapa;
 }
 
+// Entre as várias linhas do D1 que compartilham o mesmo Código único,
+// escolhe a que é de fato o indicado: primeiro por título batendo (o
+// vídeo específico que foi indicado, não "qualquer um com esse código"),
+// senão a primeira que tiver alguma imagem, senão a primeira mesmo.
+function escolherMelhorCandidato(candidatos: MidiaResumo[], tituloAlvo: string): MidiaResumo | undefined {
+  if (candidatos.length === 0) return undefined;
+  const alvo = normalizeComparison(tituloAlvo);
+  const porTitulo = candidatos.find((c) => {
+    const t = normalizeComparison(c.titulo);
+    return t === alvo || t.includes(alvo) || alvo.includes(t);
+  });
+  return porTitulo || candidatos.find((c) => c.imagem) || candidatos[0];
+}
+
 // Indicados de categoria ARTIST/GRUPO não têm Código único (o "material" é
 // o próprio artista) — usa a foto oficial dele, mesma fonte que Retroativo
 // já usa pros awards sem capa de música/álbum.
 //
-// Vídeos "legado" (migrados pro D1 antes de existir coluna de thumb, ou que
-// nunca tiveram thumb própria enviada) não têm capa_url/thumb_url no D1 —
-// confirmado ao vivo: ~12 de 19 indicados de "Best Visual Effects" vieram
-// sem imagem nenhuma. Pra esses, tenta achar a capa pelo TÍTULO em
-// Musicas/Albuns (mesmo fallback que Retroativo já usa) antes de desistir e
-// cair no placeholder — só não busca foto de artista (buildFotoPorArtista,
-// que lê Usuários inteiro) quando ninguém precisa dela, pra não pagar esse
-// custo em toda categoria à toa (era a maior fonte de lentidão da tela).
+// Além da linha certa não achada (acima), alguns vídeos "legado" realmente
+// não têm capa_url/thumb_url em NENHUMA das suas linhas — pra esses, tenta
+// achar a capa pelo TÍTULO em Musicas/Albuns (mesmo fallback que Retroativo
+// já usa) antes de desistir e cair no placeholder.
 async function anexarImagens<T extends { titulo: string; artista: string; codigoUnico?: string }>(
   indicados: T[],
 ): Promise<(T & { imagem: string; topicId: string; tab: string })[]> {
@@ -74,20 +91,21 @@ async function anexarImagens<T extends { titulo: string; artista: string; codigo
   ]);
 
   return indicados.map((ind) => {
-    const porCodigoInfo = ind.codigoUnico ? porCodigo.get(normalizeComparison(ind.codigoUnico)) : undefined;
-    if (porCodigoInfo?.imagem) {
-      return { ...ind, imagem: porCodigoInfo.imagem, topicId: porCodigoInfo.topicId, tab: porCodigoInfo.tab };
+    const candidatos = ind.codigoUnico ? porCodigo.get(normalizeComparison(ind.codigoUnico)) || [] : [];
+    const melhor = escolherMelhorCandidato(candidatos, ind.titulo);
+    if (melhor?.imagem) {
+      return { ...ind, imagem: melhor.imagem, topicId: melhor.topicId, tab: melhor.tab };
     }
     const capaPeloTitulo = capaPorTitulo.get(normalizeComparison(ind.titulo)) || "";
     if (capaPeloTitulo) {
-      return { ...ind, imagem: capaPeloTitulo, topicId: porCodigoInfo?.topicId || "", tab: porCodigoInfo?.tab || "" };
+      return { ...ind, imagem: capaPeloTitulo, topicId: melhor?.topicId || "", tab: melhor?.tab || "" };
     }
     // Sem capa achada — tenta a foto do artista (cobre categoria
     // ARTIST/GRUPO, que nunca tem código único, e serve de último recurso
     // pros vídeos sem nenhuma imagem cadastrada em lugar nenhum).
     const nomeArtista = ind.artista || ind.titulo;
     const foto = fotoPorArtista.get(normalizeComparison(nomeArtista)) || "";
-    return { ...ind, imagem: foto, topicId: porCodigoInfo?.topicId || "", tab: porCodigoInfo?.tab || "" };
+    return { ...ind, imagem: foto, topicId: melhor?.topicId || "", tab: melhor?.tab || "" };
   });
 }
 

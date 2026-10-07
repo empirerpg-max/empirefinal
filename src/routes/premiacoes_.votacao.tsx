@@ -237,7 +237,6 @@ function PremiacoesVotacaoPage() {
   // === VIEW 3: categoria ativa (ballot paginado, estilo MTV) ===
   if (awardId && categorias && catIndex !== null) {
     const categoriaAtiva = categorias[catIndex];
-    const ultima = catIndex === categorias.length - 1;
     return (
       <div className="pb-28 px-4 pt-6 max-w-md mx-auto min-h-screen">
         <header className="flex items-center gap-3 mb-2">
@@ -426,21 +425,15 @@ function PremiacoesVotacaoPage() {
               disabled={salvando}
               className="py-3.5 rounded-full bg-white/5 border border-white/10 font-black text-xs uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
-              <Save className="size-4" /> Continuar depois
+              <Save className="size-4" /> Salvar pra mais tarde
             </button>
             <button
               onClick={enviarEAvancar}
               disabled={salvando}
               className="py-3.5 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider disabled:opacity-40 flex items-center justify-center gap-1.5"
             >
-              {salvando ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : ultima ? (
-                <Send className="size-4" />
-              ) : (
-                <ChevronRight className="size-4" />
-              )}
-              {ultima ? "Enviar" : "Próxima"}
+              {salvando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              Enviar
             </button>
           </div>
         </div>
