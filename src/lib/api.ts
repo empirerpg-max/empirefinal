@@ -1045,7 +1045,8 @@ export const api = {
   }> {
     const qs = `awardId=${encodeURIComponent(awardId)}&categoria=${encodeURIComponent(categoria)}&telegramId=${encodeURIComponent(telegramId)}`;
     const res = await fetch(`/api/premiacoes/votacao/indicados?${qs}`).then((r) => r.json());
-    return res?.success ? res.data : { tipo: "voto", indicados: [] };
+    if (!res?.success) throw new Error(res?.error || "Falha ao carregar indicados.");
+    return res.data;
   },
   async registrarNotaVotacao(payload: {
     awardId: string;
@@ -1068,6 +1069,57 @@ export const api = {
     telegramId: string;
   }): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/premiacoes/votacao/voto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  // ---- Premiações > Performance Award ----
+  async statusPerformance(
+    awardId: string,
+    telegramId: string,
+  ): Promise<{
+    statusFase: "agendado" | "aberto" | "encerrado";
+    termoTexto: string;
+    artistas: string[];
+    respondido: boolean;
+    resposta: "sim" | "nao" | null;
+  } | null> {
+    const res = await fetch(
+      `/api/premiacoes/performance/status?awardId=${encodeURIComponent(awardId)}&telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
+    return res?.success ? res.data : null;
+  },
+  async responderPerformance(payload: {
+    awardId: string;
+    telegramId: string;
+    resposta: "sim" | "nao";
+    artistas?: string[];
+  }): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/premiacoes/performance/responder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+  async listarPendenciasPerformance(
+    telegramId: string,
+  ): Promise<{ awardId: string; premiacao: string; linha: number; artista: string }[]> {
+    const res = await fetch(`/api/premiacoes/performance/pendentes?telegramId=${encodeURIComponent(telegramId)}`).then(
+      (r) => r.json(),
+    );
+    return res?.data || [];
+  },
+  async enviarPerformance(payload: {
+    awardId: string;
+    artista: string;
+    telegramId: string;
+    link: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/premiacoes/performance/enviar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

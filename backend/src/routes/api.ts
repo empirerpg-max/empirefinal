@@ -161,6 +161,12 @@ import {
   registrarVotoVotacaoController,
 } from "../controllers/votacaoController";
 import {
+  statusPerformanceController,
+  responderPerformanceController,
+  pendentesPerformanceController,
+  enviarPerformanceController,
+} from "../controllers/performanceController";
+import {
   getAwardsListController,
   getAwardDetalheController,
   getArtistAwardsController,
@@ -439,6 +445,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/votacao/indicados",
     "/api/premiacoes/votacao/nota",
     "/api/premiacoes/votacao/voto",
+    "/api/premiacoes/performance/status",
+    "/api/premiacoes/performance/responder",
+    "/api/premiacoes/performance/pendentes",
+    "/api/premiacoes/performance/enviar",
     "/api/awards",
     "/api/awards/detalhe",
     "/api/awards/artista",
@@ -1551,6 +1561,26 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     }
     response = await registrarVotoVotacaoController(request);
+  } else if (url.pathname === "/api/premiacoes/performance/status") {
+    response = await statusPerformanceController(request);
+  } else if (url.pathname === "/api/premiacoes/performance/responder") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/performance/responder." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await responderPerformanceController(request);
+  } else if (url.pathname === "/api/premiacoes/performance/pendentes") {
+    response = await pendentesPerformanceController(request);
+  } else if (url.pathname === "/api/premiacoes/performance/enviar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/performance/enviar." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await enviarPerformanceController(request);
   } else if (url.pathname === "/api/awards") {
     response = await getAwardsListController();
   } else if (url.pathname === "/api/awards/detalhe") {

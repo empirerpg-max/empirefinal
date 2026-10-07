@@ -21,12 +21,14 @@ import {
   Repeat2,
   Link2,
   Rocket,
+  Mic2,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { driveImg } from "@/lib/api";
+import { driveImg, api } from "@/lib/api";
 import { MeusSpotlightBanners } from "./MeusSpotlightBanners";
 import { EditModal } from "./EditModal";
 import { LancarFaixaAlbumModal } from "./LancarFaixaAlbumModal";
+import { PerformanceAwardModal } from "./PerformanceAwardModal";
 import { BannersManager } from "./BannersManager";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { useImageCrop } from "@/hooks/use-image-crop";
@@ -392,6 +394,13 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [showLanding, setShowLanding] = useState<boolean>(!initialTab);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [lancarFaixaAlbumOpen, setLancarFaixaAlbumOpen] = useState<boolean>(false);
+  const [performanceAwardOpen, setPerformanceAwardOpen] = useState<boolean>(false);
+  const [temPerformancePendente, setTemPerformancePendente] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!loginTgId) return;
+    api.listarPendenciasPerformance(loginTgId).then((data) => setTemPerformancePendente(data.length > 0));
+  }, [loginTgId]);
 
   // Músicas do catálogo para seleção
   const [catalogSongs, setCatalogSongs] = useState<ExistingTrack[]>([]);
@@ -1419,6 +1428,22 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 Lançar Faixa de Álbum
               </span>
             </button>
+            {temPerformancePendente && (
+              <button
+                onClick={() => {
+                  haptic.selection();
+                  setPerformanceAwardOpen(true);
+                }}
+                className="flex flex-col items-center gap-2 text-center group"
+              >
+                <div className="w-full aspect-square rounded-2xl bg-neutral-900 border border-white/10 text-neutral-200 grid place-items-center group-hover:border-white/20 transition">
+                  <Mic2 className="size-5" />
+                </div>
+                <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
+                  Performance Award
+                </span>
+              </button>
+            )}
             {isAdminUser && (
               <button
                 onClick={() => {
@@ -2742,6 +2767,14 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           jogadorId={telegramUser?.id ? String(telegramUser.id) : ""}
           onClose={() => setLancarFaixaAlbumOpen(false)}
           uploadToDrive={handleUploadToDrive}
+        />
+      )}
+
+      {performanceAwardOpen && (
+        <PerformanceAwardModal
+          telegramId={loginTgId}
+          onClose={() => setPerformanceAwardOpen(false)}
+          onSubmitted={() => api.listarPendenciasPerformance(loginTgId).then((data) => setTemPerformancePendente(data.length > 0))}
         />
       )}
 

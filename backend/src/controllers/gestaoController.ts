@@ -298,7 +298,8 @@ export type UploadFolderType =
   | "redCarpet"
   | "acervo"
   | "materiaisMusica"
-  | "materiaisAlbum";
+  | "materiaisAlbum"
+  | "performanceAward";
 
 export interface UploadPayload {
   fileName: string;
@@ -2292,7 +2293,11 @@ export async function uploadDriveController(request: Request): Promise<Response>
                                   ? DRIVE_FOLDERS.materiaisMusica
                                   : folderType === "materiaisAlbum"
                                     ? DRIVE_FOLDERS.materiaisAlbum
-                                    : DRIVE_FOLDERS.musicas;
+                                    : folderType === "performanceAward"
+                                      // Sem pasta própria ainda — reaproveita a de
+                                      // Music Videos (mesmo padrão do "videos" acima).
+                                      ? DRIVE_FOLDERS.musicVideos
+                                      : DRIVE_FOLDERS.musicas;
 
     const fileUrl = base64Data
       ? await uploadFileToDrive(fileName, folderId, mimeType, base64Data)
