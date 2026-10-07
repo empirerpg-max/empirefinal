@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ShoppingBag,
@@ -62,7 +62,7 @@ type MarketItem = {
   disponivel: boolean;
 };
 
-const ICONES: Record<string, React.ReactNode> = {
+const ICONES: Record<string, React.ReactElement<{ className?: string }>> = {
   week_off: <CalendarOff className="size-6" />,
   aniversario: <PartyPopper className="size-6" />,
   music_boost: <Music className="size-6" />,
@@ -74,6 +74,23 @@ const ICONES: Record<string, React.ReactNode> = {
   estreia_hits: <Tv className="size-6" />,
   playlist: <ListMusic className="size-6" />,
 };
+
+// Fundo em gradiente + cor do ícone de cada item no card do Market — varia
+// por tipo só pra dar identidade visual ao card (não é imagem real do
+// item, por isso o selo "ARTE"); leilão fica de fora porque ganha um card
+// em destaque próprio.
+const ITEM_ART: Record<string, { from: string; to: string; stroke: string }> = {
+  week_off: { from: "#1e3a5f", to: "transparent", stroke: "#9fc2ff" },
+  aniversario: { from: "#4a1f3d", to: "transparent", stroke: "#ff9ad1" },
+  music_boost: { from: "#1f4a3a", to: "transparent", stroke: "#9affc9" },
+  album_boost: { from: "#1f4a3a", to: "transparent", stroke: "#9affc9" },
+  award_minuto: { from: "#4a3a1f", to: "transparent", stroke: "#ffd79a" },
+  premiere_clipe: { from: "#3d1f4a", to: "transparent", stroke: "#d79aff" },
+  comercial: { from: "#2a1f4a", to: "transparent", stroke: "#b8a9ff" },
+  estreia_hits: { from: "#4a3a1f", to: "transparent", stroke: "#ffd79a" },
+  playlist: { from: "#1f3a4a", to: "transparent", stroke: "#9adfff" },
+};
+const ART_PADRAO = { from: "#2a2a2a", to: "transparent", stroke: "currentColor" };
 
 function formatMoeda(valor: number): string {
   return valor.toLocaleString("pt-BR");
@@ -421,35 +438,55 @@ function MarketPage() {
   };
 
   return (
-    <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen">
-      <header className="flex items-center gap-3 mb-6">
-        <Link to="/" className="size-9 rounded-full bg-white/5 border border-white/10 grid place-items-center">
+    <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen relative overflow-x-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[420px] h-[280px] rounded-full bg-primary/15 blur-3xl"
+      />
+
+      <header className="relative flex items-center gap-3 mb-5">
+        <Link to="/" className="size-9 rounded-full bg-white/5 border border-white/10 grid place-items-center shrink-0">
           <ChevronLeft className="size-5" />
         </Link>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <h1 className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
-            <ShoppingBag className="size-5 text-primary" /> Empire Market
+            <ShoppingBag className="size-5 text-primary shrink-0" /> <span className="truncate">Empire Market</span>
           </h1>
-          <p className="text-[11px] text-muted-foreground">Troque prestígio e ECoin por vantagens.</p>
-        </div>
-      </header>
-
-      <div className="mb-4 grid grid-cols-2 gap-2">
-        <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20">
-          <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
-            <Coins className="size-3" /> Prestígio
-          </p>
-          <p className="text-lg font-black text-primary">{formatMoeda(saldoPrestigio)}</p>
+          <p className="text-[11px] text-muted-foreground truncate">Troque prestígio e ECoin por vantagens</p>
         </div>
         <Link
           to="/market/regras"
           onClick={() => haptic.selection()}
-          className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-center items-start hover:bg-white/10 transition"
+          aria-label="Entenda os prestígios"
+          className="size-9 rounded-full bg-white/5 border border-white/10 grid place-items-center shrink-0 hover:bg-white/10 transition"
         >
-          <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider">
-            <Info className="size-3.5" /> Entenda os prestígios
-          </span>
+          <Info className="size-4" />
         </Link>
+      </header>
+
+      {/* Hero de saldo */}
+      <div className="relative mb-6 p-5 rounded-[28px] bg-gradient-to-br from-primary/15 via-transparent to-transparent border border-primary/25 overflow-hidden">
+        <Sparkles className="size-20 absolute -right-3 -top-3 text-primary/25" />
+        <p className="relative text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+          <Coins className="size-3.5" /> Seu saldo
+        </p>
+        <div className="relative flex items-stretch gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-2xl font-black text-primary truncate">{formatMoeda(saldoPrestigio)}</p>
+            <p className="text-[11px] text-muted-foreground font-bold mt-0.5">Prestígio</p>
+          </div>
+          {artistas.length > 0 && (
+            <>
+              <div className="w-px bg-white/10 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-2xl font-black truncate">{formatMoeda(artistas.reduce((s, a) => s + a.saldoEcoin, 0))}</p>
+                <p className="text-[11px] text-muted-foreground font-bold mt-0.5 truncate">
+                  ECoin ({artistas.length} {artistas.length === 1 ? "artista" : "artistas"})
+                </p>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {artistas.length > 0 && (
@@ -459,12 +496,29 @@ function MarketPage() {
           </p>
           <div className="flex flex-col gap-1.5">
             {artistas.map((a) => (
-              <div key={a.nome} className="flex items-center justify-between text-sm">
-                <span className="font-bold truncate">{a.nome}</span>
+              <div key={a.nome} className="flex items-center justify-between text-sm gap-2">
+                <span className="font-bold truncate min-w-0">{a.nome}</span>
                 <span className="font-black text-primary shrink-0">R$ {formatMoeda(a.saldoEcoin)}</span>
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Categorias — fileira rolável (nunca corta o nome da categoria) */}
+      {grupos.length > 1 && (
+        <div className="mb-6 flex gap-2 overflow-x-auto -mx-4 px-4" style={{ scrollbarWidth: "none" }}>
+          {grupos.map(({ categoria, itens: itensDaCategoria }) => (
+            <a
+              key={categoria}
+              href={`#cat-${categoria}`}
+              onClick={() => haptic.selection()}
+              className="shrink-0 flex flex-col items-center gap-1.5 w-[68px] px-1 py-3 rounded-2xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.06] transition text-center"
+            >
+              <span className="text-primary">{ICONES[itensDaCategoria[0]?.icone] || <ShoppingBag className="size-6" />}</span>
+              <span className="text-[9px] font-black uppercase tracking-wide leading-tight truncate w-full">{categoria}</span>
+            </a>
+          ))}
         </div>
       )}
 
@@ -485,47 +539,66 @@ function MarketPage() {
         </button>
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-7">
         {itens === null
-          ? [1, 2, 3, 4].map((i) => <div key={i} className="h-24 rounded-2xl bg-white/5 animate-pulse" />)
+          ? [1, 2, 3, 4].map((i) => (
+              <div key={i} className="grid grid-cols-2 gap-3">
+                <div className="aspect-[4/3] rounded-2xl bg-white/5 animate-pulse" />
+                <div className="aspect-[4/3] rounded-2xl bg-white/5 animate-pulse" />
+              </div>
+            ))
           : grupos.map(({ categoria, itens: itensDaCategoria }) => (
-              <div key={categoria}>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 px-1">
+              <div key={categoria} id={`cat-${categoria}`} className="scroll-mt-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2.5 px-1">
                   {categoria}
                 </p>
-                <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
                   {itensDaCategoria.map((item) => {
                     const bloqueadoAniversario = item.id === "aniversario" && !item.disponivel;
+                    const ehLeilao = item.tipoEspecial === "leilao";
+                    const art = ITEM_ART[item.icone] || ART_PADRAO;
                     return (
                       <button
                         key={item.id}
                         onClick={() => abrirCompra(item)}
-                        className={`w-full flex items-center gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10 transition-all text-left ${
-                          bloqueadoAniversario ? "opacity-50" : "hover:bg-white/[0.06]"
-                        }`}
+                        className={`text-left rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden transition-all ${
+                          ehLeilao ? "col-span-2" : ""
+                        } ${bloqueadoAniversario ? "opacity-50" : "hover:bg-white/[0.06]"}`}
                       >
-                        <div className="size-12 rounded-xl bg-primary/15 text-primary grid place-items-center shrink-0">
-                          {ICONES[item.icone] || <ShoppingBag className="size-6" />}
+                        <div
+                          className={`relative flex items-center justify-center px-1 ${ehLeilao ? "aspect-[21/9]" : "aspect-[4/3]"}`}
+                          style={{ background: `linear-gradient(135deg, ${art.from}, ${art.to})` }}
+                        >
+                          <span style={{ color: art.stroke }}>
+                            {ICONES[item.icone]
+                              ? React.cloneElement(ICONES[item.icone], {
+                                  className: ehLeilao ? "size-9 opacity-90" : "size-7 opacity-90",
+                                })
+                              : <ShoppingBag className="size-7 opacity-90" />}
+                          </span>
+                          <span className="absolute top-2 left-2 text-[8px] font-black uppercase tracking-wide text-white/50 bg-black/30 px-1.5 py-0.5 rounded-full">
+                            Arte
+                          </span>
+                          {ehLeilao ? (
+                            <span className="absolute top-2 right-2 flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/55 text-white text-[10px] font-black uppercase">
+                              <Gavel className="size-3" /> Leilão
+                            </span>
+                          ) : bloqueadoAniversario ? (
+                            <span className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-black/55 text-muted-foreground text-[9px] font-black uppercase">
+                              Bloqueado
+                            </span>
+                          ) : (
+                            <span className="absolute bottom-2 left-2 flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black">
+                              <Coins className="size-3" /> {formatMoeda(item.preco)}
+                            </span>
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-black uppercase tracking-tight">{item.nome}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                        <div className="p-2.5">
+                          <p className="text-[11px] font-black uppercase tracking-tight leading-tight truncate">{item.nome}</p>
+                          <p className="text-[9px] text-muted-foreground font-bold mt-0.5 truncate">
                             {bloqueadoAniversario ? "Só na semana do seu aniversário" : item.descricao}
                           </p>
                         </div>
-                        {item.tipoEspecial === "leilao" ? (
-                          <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 text-muted-foreground text-[10px] font-black uppercase">
-                            Leilão
-                          </div>
-                        ) : bloqueadoAniversario ? (
-                          <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 text-muted-foreground text-[10px] font-black uppercase">
-                            Bloqueado
-                          </div>
-                        ) : (
-                          <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/15 text-primary text-xs font-black">
-                            <Coins className="size-3.5" /> {formatMoeda(item.preco)}
-                          </div>
-                        )}
                       </button>
                     );
                   })}
