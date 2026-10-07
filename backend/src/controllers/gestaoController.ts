@@ -561,6 +561,40 @@ export async function createSongController(request: Request): Promise<Response> 
 // CURSED BLESSED passaram batido: o tipo selecionado não era "Music Video",
 // então essa função nem chegava a rodar, e o formulário dizia "sucesso"
 // mesmo assim).
+// Acha a linha da música vinculada em EDIÇÃO CHARTS pra pegar o Código
+// único — primeiro por título exato (caminho normal), e se não achar,
+// cai pro Código único já gravado em Musicas!Z (coluna 25) e busca por
+// ELE em EDIÇÃO CHARTS!BD (coluna 55) em vez do título. Isso cobre o caso
+// confirmado ao vivo (vídeo de "Matthew - Reckoning"): o título gravado em
+// Musicas ("Matthew - Reckoning") e o título gravado em EDIÇÃO CHARTS
+// ("Matthew - Reckoning (feat. SA5M)") divergiram depois do lançamento —
+// o Código único, uma vez gerado, nunca muda, então é a chave confiável
+// pra reconectar os dois lados mesmo quando o texto do título já não bate
+// mais. O título resolvido aqui (EDIÇÃO CHARTS!B) também é reaproveitado
+// pra achar a linha em "Pontos", que espelha o título de lá, não o de
+// Musicas.
+async function resolverLinhaEdicaoCharts(
+  musicaVinculada: string,
+): Promise<{ titulo: string; codigoUnico: string } | null> {
+  const nomeNosCharts = normalizeComparison(musicaVinculada);
+  const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
+  const porTitulo = rows.slice(1).find((r) => normalizeComparison(r[1] || "") === nomeNosCharts);
+  if (porTitulo) {
+    return { titulo: (porTitulo[1] || "").trim(), codigoUnico: (porTitulo[55] || "").trim() };
+  }
+  try {
+    const musicasRows = await googleSheetsService.principal.readValues("Musicas");
+    const porTituloMusicas = musicasRows.slice(1).find((r) => normalizeComparison(r[7] || "") === nomeNosCharts);
+    const codigoUnicoMusicas = porTituloMusicas ? (porTituloMusicas[25] || "").trim() : "";
+    if (!codigoUnicoMusicas) return null;
+    const porCodigo = rows.slice(1).find((r) => (r[55] || "").trim() === codigoUnicoMusicas);
+    return porCodigo ? { titulo: (porCodigo[1] || "").trim(), codigoUnico: codigoUnicoMusicas } : null;
+  } catch (err) {
+    console.warn("[resolverLinhaEdicaoCharts] Erro no fallback por Código único:", err);
+    return null;
+  }
+}
+
 async function marcarVideoclipeNaPontos(musicaVinculada: string, dataFormatada: string): Promise<boolean> {
   if (!musicaVinculada.trim()) return false;
   try {
@@ -723,15 +757,13 @@ export async function createVideoController(request: Request): Promise<Response>
     // batiam, então o código único ficava vazio, sem nenhum aviso). Agora
     // música vinculada é sempre obrigatória, então isso não deve mais
     // acontecer — mas o aviso continua aqui como rede de segurança.
+    let linhaEdicaoCharts: { titulo: string; codigoUnico: string } | null = null;
     if (videoRowIndexNovo) {
       try {
-        const nomeNosCharts = normalizeComparison(musicasVinculadas[0]);
-        const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
-        const linhaMusica = rows.slice(1).find((r) => normalizeComparison(r[1]) === nomeNosCharts);
-        const codigoDaMusica = linhaMusica ? (linhaMusica[55] || "").trim() : "";
-        if (codigoDaMusica) {
+        linhaEdicaoCharts = await resolverLinhaEdicaoCharts(musicasVinculadas[0]);
+        if (linhaEdicaoCharts?.codigoUnico) {
           await googleSheetsService.principal
-            .updateValues("Music Videos", `U${videoRowIndexNovo}`, [[codigoDaMusica]])
+            .updateValues("Music Videos", `U${videoRowIndexNovo}`, [[linhaEdicaoCharts.codigoUnico]])
             .catch((err) => console.warn("[createVideoController] Erro ao copiar Código único pra Music Videos!U:", err));
         } else {
           warnings.push(
@@ -753,7 +785,8 @@ export async function createVideoController(request: Request): Promise<Response>
     // Music Video só aceita 1 música vinculada (validado lá em cima), então
     // sempre existe exatamente uma pra marcar aqui.
     if (isMusicVideoTipo) {
-      const marcou = await marcarVideoclipeNaPontos(musicasVinculadas[0], dataFormatada);
+      const tituloParaPontos = linhaEdicaoCharts?.titulo || musicasVinculadas[0];
+      const marcou = await marcarVideoclipeNaPontos(tituloParaPontos, dataFormatada);
       if (!marcou) {
         warnings.push(`Vídeo cadastrado, mas não achei "${musicasVinculadas[0]}" na aba Pontos — a caixinha de lançamento não foi marcada, confira o vínculo.`);
       }
