@@ -181,13 +181,27 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
   // Resolve os vínculos música -> álbum coletados acima, por nome
   // (normalizado — sem acento/caixa — pra não falhar por diferença boba
   // de formatação entre a célula ALBUM e o título gravado em Albuns).
+  //
+  // BUG CONFIRMADO (2026-10-07, 659/765 músicas sem vínculo na 1ª
+  // tentativa): midia.titulo do álbum é só a parte depois do "Artista -"
+  // (dashMatch[2] no bloco de Álbuns acima), mas a célula ALBUM/ALBUM 2-5
+  // de Musicas guarda a string CHEIA "Artista - Nome" (ex: "Angela -
+  // ANGELA"). Comparar só pelo titulo (sem artista) não batia quase nada.
+  // Chave agora é "artista - titulo", igual ao que a célula realmente tem.
   const albumIdPorNome = new Map<string, string>();
   for (const item of midiaItems) {
-    if (item.tipo === "album") albumIdPorNome.set(normalizeComparison(item.titulo), item.id);
+    if (item.tipo === "album") {
+      albumIdPorNome.set(normalizeComparison(`${item.artista} - ${item.titulo}`), item.id);
+    }
   }
+  // "Playlists Avulsas" é um texto-placeholder usado em Musicas pra single
+  // sem álbum de verdade (confirmado: não existe nenhuma linha com esse
+  // título em Albuns) — não é um vínculo quebrado, é o esperado.
+  const NOMES_SEM_ALBUM_REAL = new Set([normalizeComparison("Playlists Avulsas")]);
   const albunsNaoEncontrados: { musicaId: string; nomeAlbum: string }[] = [];
   for (const { item, nomes } of vinculosAlbumPendentes) {
     const idsResolvidos = nomes.map((nome) => {
+      if (NOMES_SEM_ALBUM_REAL.has(normalizeComparison(nome))) return null;
       const id = albumIdPorNome.get(normalizeComparison(nome));
       if (!id) albunsNaoEncontrados.push({ musicaId: item.id, nomeAlbum: nome });
       return id ?? null;
