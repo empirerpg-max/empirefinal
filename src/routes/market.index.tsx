@@ -513,10 +513,10 @@ function MarketPage() {
               key={categoria}
               href={`#cat-${categoria}`}
               onClick={() => haptic.selection()}
-              className="shrink-0 flex flex-col items-center gap-1.5 w-[68px] px-1 py-3 rounded-2xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.06] transition text-center"
+              className="shrink-0 flex flex-col items-center gap-1.5 min-w-[68px] max-w-[96px] px-2 py-3 rounded-2xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.06] transition text-center"
             >
-              <span className="text-primary">{ICONES[itensDaCategoria[0]?.icone] || <ShoppingBag className="size-6" />}</span>
-              <span className="text-[9px] font-black uppercase tracking-wide leading-tight truncate w-full">{categoria}</span>
+              <span className="text-primary shrink-0">{ICONES[itensDaCategoria[0]?.icone] || <ShoppingBag className="size-6" />}</span>
+              <span className="text-[9px] font-black uppercase tracking-wide leading-tight">{categoria}</span>
             </a>
           ))}
         </div>
@@ -594,8 +594,8 @@ function MarketPage() {
                           )}
                         </div>
                         <div className="p-2.5">
-                          <p className="text-[11px] font-black uppercase tracking-tight leading-tight truncate">{item.nome}</p>
-                          <p className="text-[9px] text-muted-foreground font-bold mt-0.5 truncate">
+                          <p className="text-[11px] font-black uppercase tracking-tight leading-tight">{item.nome}</p>
+                          <p className="text-[9px] text-muted-foreground font-bold mt-0.5 leading-snug">
                             {bloqueadoAniversario ? "Só na semana do seu aniversário" : item.descricao}
                           </p>
                         </div>

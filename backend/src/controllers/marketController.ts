@@ -299,6 +299,41 @@ async function registrarCompra(params: {
   );
 }
 
+// Itens com o mesmo "exclusivoGrupo" (coluna L de MARKET_ITENS — ex: os 5
+// níveis de Award +Minutos) são mutuamente exclusivos por artista/jogador
+// na mesma semana Empire: comprar um nível bloqueia os outros do mesmo
+// grupo até a semana virar. Devolve o nome do item já comprado (pra
+// mensagem de erro) ou null se não há conflito. Verifica no próprio log
+// de Market_Compras — mesma fonte de verdade que o cooldown do Week Off já
+// usa — cruzando o ProdutoID de cada linha com os ids que pertencem a esse
+// grupo (resolvidos a partir da lista de itens ativos).
+async function jaComprouNoGrupoExclusivo(
+  itens: MarketItem[],
+  grupo: string,
+  semana: string,
+  telegramId: string,
+  artista: string,
+): Promise<string | null> {
+  if (!grupo) return null;
+  const idsDoGrupo = new Set(itens.filter((i) => i.exclusivoGrupo === grupo).map((i) => i.id));
+  if (idsDoGrupo.size === 0) return null;
+
+  const rows = await readValues("usuarios", COMPRAS_SHEET).catch(() => []);
+  const normTg = normalizeComparison(telegramId);
+  const normArtista = normalizeComparison(artista);
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (normalizeText(row[10]) !== semana) continue; // Semana (K)
+    if (!idsDoGrupo.has(normalizeText(row[3]))) continue; // ProdutoID (D)
+    const bateuArtista = artista && normalizeComparison(normalizeText(row[9])) === normArtista; // Artista (J)
+    const bateuJogador = !artista && normalizeComparison(normalizeText(row[1])) === normTg; // TelegramID (B)
+    if (bateuArtista || bateuJogador) {
+      return normalizeText(row[4]) || null; // Produto (E)
+    }
+  }
+  return null;
+}
+
 // Week Off tem cooldown de 3 meses por jogador — verifica no próprio log
 // de Market_Compras (já é a fonte de verdade de tudo que foi comprado).
 const WEEK_OFF_COOLDOWN_DIAS = 90;
@@ -319,8 +354,10 @@ async function diasDesdeUltimoWeekOff(telegramId: string): Promise<number | null
 }
 
 // EmpireHits_Compras (planilha usuarios) — itens de clipe/comercial no
-// Empire Hits (destino "empirehits_compras" em MARKET_ITENS). Fica
-// "Pendente" até alguém no time disponibilizar de verdade.
+// Empire Hits (destino "empirehits_compras" em MARKET_ITENS). A compra em
+// si já está concluída (foi paga); "Concluído" aqui só significa isso —
+// quem organiza o Empire Hits ainda agenda o clipe/comercial manualmente
+// a partir dessa aba, só não é mais um status de cobrança pendente.
 const EMPIREHITS_SHEET = "EmpireHits_Compras";
 const EMPIREHITS_HEADER = [
   "Data",
@@ -351,7 +388,7 @@ async function registrarEmpireHitsCompra(params: {
   await appendRow(
     "usuarios",
     EMPIREHITS_SHEET,
-    [new Date().toISOString(), telegramId, usuario, artista, item.id, item.nome, detalhe, "Pendente", semana],
+    [new Date().toISOString(), telegramId, usuario, artista, item.id, item.nome, detalhe, "Concluído", semana],
     "A:I",
     "OVERWRITE",
   );
@@ -488,9 +525,14 @@ async function registrarAlbumBoostInvestimento(
  * não do jogador. destino=ecoin_investimento grava em ECOIN + INVESTIMENTO
  * (mesmo mecanismo das playlists, sem debitar nada à parte — quem
  * calcula o gasto é a própria planilha). destino=empirehits_compras grava
- * em EmpireHits_Compras. Os demais (market_compras) e o item de leilão
- * ficam registrados como "Pendente" pra aplicação manual — mesmo padrão
- * que já existia antes pro Week Off/Boost.
+ * em EmpireHits_Compras. Toda compra feita aqui já é cobrada na hora —
+ * fica registrada em Market_Compras como "Concluído" (quem comprou,
+ * comprou; não existe aplicação manual pendente pra esses itens). O único
+ * caso que fica "Pendente" é o leilão (tipoEspecial="leilao"), que nem
+ * passa por aqui — tem fluxo próprio em /market/leilao por causa do tempo
+ * de atividade do lance. Itens com `exclusivoGrupo` preenchido (ex: os 5
+ * níveis de Award +Minutos) são bloqueados se o artista/jogador já comprou
+ * outro item do mesmo grupo nessa semana Empire.
  */
 export async function postMarketComprarController(request: Request): Promise<Response> {
   let body: any;
@@ -564,10 +606,26 @@ export async function postMarketComprarController(request: Request): Promise<Res
 
   const semana = semanaAtual();
 
+  if (item.exclusivoGrupo) {
+    const jaComprado = await jaComprouNoGrupoExclusivo(
+      itens,
+      item.exclusivoGrupo,
+      semana,
+      telegramId,
+      item.moeda === "ecoin" ? artista : "",
+    );
+    if (jaComprado) {
+      return jsonResponse(
+        { success: false, error: `Você já comprou "${jaComprado}" essa semana — só dá pra ter um item desse grupo por vez.` },
+        400,
+      );
+    }
+  }
+
   try {
     if (item.moeda === "prestigio") {
       const novoSaldo = await gastarPrestigio({ telegramId, usuario }, item.preco);
-      await registrarCompra({ item, telegramId, usuario, artista, detalhe, semana, status: "Pendente" });
+      await registrarCompra({ item, telegramId, usuario, artista, detalhe, semana, status: "Concluído" });
       if (item.id === "week_off" || item.id === "aniversario") {
         const nomeOficial = await resolveNomeOficial(telegramId, usuario);
         const tipoRegistro = item.id === "week_off" ? "WEEK OFF" : "ANIVERSÁRIO";
@@ -592,7 +650,7 @@ export async function postMarketComprarController(request: Request): Promise<Res
     }
     // Sempre também loga em Market_Compras — é o registro central que
     // permite conferir/repor manualmente qualquer cobrança.
-    await registrarCompra({ item, telegramId, usuario, artista, detalhe, semana, status: "Pendente" });
+    await registrarCompra({ item, telegramId, usuario, artista, detalhe, semana, status: "Concluído" });
 
     return jsonResponse({ success: true, data: {} });
   } catch (error: any) {
