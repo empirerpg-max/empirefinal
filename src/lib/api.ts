@@ -1007,6 +1007,74 @@ export const api = {
     return res.json();
   },
 
+  // ---- Premiações > Votação (nota ou múltipla escolha, por categoria) ----
+  async listarPremiacoesVotacao(): Promise<
+    {
+      id: string;
+      premiacao: string;
+      abertura: string;
+      encerramento: string;
+      capaUrl: string;
+      status: "agendado" | "aberto" | "encerrado";
+    }[]
+  > {
+    const res = await fetch("/api/premiacoes/votacao/awards").then((r) => r.json());
+    return res?.data || [];
+  },
+  async listarCategoriasVotacao(awardId: string): Promise<{
+    detalhes: {
+      id: string;
+      premiacao: string;
+      capaUrl: string;
+      status: "agendado" | "aberto" | "encerrado";
+    };
+    categorias: { categoria: string; descritivo: string; tipo: "nota" | "voto" }[];
+  } | null> {
+    const res = await fetch(`/api/premiacoes/votacao/categorias?awardId=${encodeURIComponent(awardId)}`).then((r) =>
+      r.json(),
+    );
+    return res?.success ? res.data : null;
+  },
+  async listarIndicadosVotacao(
+    awardId: string,
+    categoria: string,
+    telegramId: string,
+  ): Promise<{
+    tipo: "nota" | "voto";
+    indicados: { titulo: string; artista: string; codigoUnico: string; meuValor: string; imagem: string; topicId: string; tab: string }[];
+  }> {
+    const qs = `awardId=${encodeURIComponent(awardId)}&categoria=${encodeURIComponent(categoria)}&telegramId=${encodeURIComponent(telegramId)}`;
+    const res = await fetch(`/api/premiacoes/votacao/indicados?${qs}`).then((r) => r.json());
+    return res?.success ? res.data : { tipo: "voto", indicados: [] };
+  },
+  async registrarNotaVotacao(payload: {
+    awardId: string;
+    categoria: string;
+    titulo: string;
+    nota: string;
+    telegramId: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/premiacoes/votacao/nota", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+  async registrarVotoVotacao(payload: {
+    awardId: string;
+    categoria: string;
+    selecoes: string[];
+    telegramId: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/premiacoes/votacao/voto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
   // ---- Awards ----
   async listarAwards(): Promise<{ nome: string; foto: string }[]> {
     const res = await fetch("/api/awards").then((r) => r.json());
