@@ -1,9 +1,67 @@
-import { readValues, updateValues, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import { readValues, updateValues, appendRow, normalizeText, normalizeComparison, ensureSheetTab } from "../services/googleSheetsService";
 import { colIndexToA1Letter } from "./pontoController";
 import { resolveNomeOficial } from "./forumController";
 import { PREMIACOES_INDICAR, parseDataBR, calcularStatus } from "./indicacoesController";
 import { getCatalogoDb } from "../services/catalogoDbService";
 import { buildFotoPorArtista, buildCapaPorTitulo } from "./awardsController";
+
+// Termo de integridade do voto — obrigatório, mostrado uma vez só por
+// jogador, antes de liberar a lista de categorias (depois do gate de
+// Performance). Diferente do termo de Performance (esse é condicional, só
+// pra quem quer performar); este aqui é obrigatório pra TODO mundo que
+// for votar, sem opção de recusar — só "Aceito". Texto fixo (não veio de
+// nenhuma aba/coluna, diferente do termo de Performance).
+export const TERMO_INTEGRIDADE_VOTO =
+  'Estou ciente de que não devo votar em mim mesmo e nem dar notas baixas para me sobressair aos demais. Caso eu faça isso, irei perder metade das vendas do meu material mais recente - irão para uma doação anônima.';
+
+const TERMO_VOTO_STATUS_SHEET = "Votacao_Status";
+
+function hojeBR(): string {
+  const hoje = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const dd = String(hoje.getDate()).padStart(2, "0");
+  const mm = String(hoje.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${hoje.getFullYear()}`;
+}
+
+async function ensureTermoVotoSheetPronta(awardId: string): Promise<void> {
+  await ensureSheetTab(awardId, TERMO_VOTO_STATUS_SHEET);
+  const header = await readValues(awardId, TERMO_VOTO_STATUS_SHEET, "A1:C1").catch(() => []);
+  if (!normalizeText(header?.[0]?.[0])) {
+    await updateValues(awardId, TERMO_VOTO_STATUS_SHEET, "A1:C1", [["TelegramId", "Aceite", "Data"]]);
+  }
+}
+
+async function jogadorAceitouTermoVoto(awardId: string, telegramId: string): Promise<boolean> {
+  const rows = await readValues(awardId, TERMO_VOTO_STATUS_SHEET, "A2:C20000").catch(() => []);
+  return rows.some((r) => normalizeComparison(normalizeText(r[0])) === normalizeComparison(telegramId));
+}
+
+// GET /api/premiacoes/votacao/termo-status?awardId=...&telegramId=...
+export async function statusTermoVotoController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const awardId = normalizeText(url.searchParams.get("awardId"));
+  const telegramId = normalizeText(url.searchParams.get("telegramId"));
+  if (!awardId || !telegramId) return jsonResponse({ success: false, error: "awardId e telegramId são obrigatórios." }, 400);
+
+  const aceito = await jogadorAceitouTermoVoto(awardId, telegramId);
+  return jsonResponse({ success: true, data: { aceito, texto: TERMO_INTEGRIDADE_VOTO } });
+}
+
+// POST /api/premiacoes/votacao/termo-aceitar
+// body: { awardId, telegramId }
+export async function aceitarTermoVotoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { awardId?: string; telegramId?: string };
+  const awardId = normalizeText(body.awardId);
+  const telegramId = normalizeText(body.telegramId);
+  if (!awardId || !telegramId) return jsonResponse({ success: false, error: "awardId e telegramId são obrigatórios." }, 400);
+
+  await ensureTermoVotoSheetPronta(awardId);
+  const jaAceitou = await jogadorAceitouTermoVoto(awardId, telegramId);
+  if (!jaAceitou) {
+    await appendRow(awardId, TERMO_VOTO_STATUS_SHEET, [telegramId, "sim", hojeBR()], "A:C", "OVERWRITE");
+  }
+  return jsonResponse({ success: true });
+}
 
 // Mapeia o `tipo` do D1 (midia.tipo) pro nome de aba que o Fórum usa na URL
 // (/empire-play/forum?tab=...&id=...) — "Visitar fórum" no card do indicado.

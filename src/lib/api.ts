@@ -1127,6 +1127,22 @@ export const api = {
     return res.json();
   },
 
+  // ---- Premiações > Votação > termo de integridade do voto (obrigatório) ----
+  async statusTermoVoto(awardId: string, telegramId: string): Promise<{ aceito: boolean; texto: string } | null> {
+    const res = await fetch(
+      `/api/premiacoes/votacao/termo-status?awardId=${encodeURIComponent(awardId)}&telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
+    return res?.success ? res.data : null;
+  },
+  async aceitarTermoVoto(awardId: string, telegramId: string): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch("/api/premiacoes/votacao/termo-aceitar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ awardId, telegramId }),
+    });
+    return res.json();
+  },
+
   // ---- Awards ----
   async listarAwards(): Promise<{ nome: string; foto: string }[]> {
     const res = await fetch("/api/awards").then((r) => r.json());

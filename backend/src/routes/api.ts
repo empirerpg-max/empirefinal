@@ -159,6 +159,8 @@ import {
   listarIndicadosVotacaoController,
   registrarNotaVotacaoController,
   registrarVotoVotacaoController,
+  statusTermoVotoController,
+  aceitarTermoVotoController,
 } from "../controllers/votacaoController";
 import {
   statusPerformanceController,
@@ -445,6 +447,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/votacao/indicados",
     "/api/premiacoes/votacao/nota",
     "/api/premiacoes/votacao/voto",
+    "/api/premiacoes/votacao/termo-status",
+    "/api/premiacoes/votacao/termo-aceitar",
     "/api/premiacoes/performance/status",
     "/api/premiacoes/performance/responder",
     "/api/premiacoes/performance/pendentes",
@@ -1561,6 +1565,16 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     }
     response = await registrarVotoVotacaoController(request);
+  } else if (url.pathname === "/api/premiacoes/votacao/termo-status") {
+    response = await statusTermoVotoController(request);
+  } else if (url.pathname === "/api/premiacoes/votacao/termo-aceitar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/termo-aceitar." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await aceitarTermoVotoController(request);
   } else if (url.pathname === "/api/premiacoes/performance/status") {
     response = await statusPerformanceController(request);
   } else if (url.pathname === "/api/premiacoes/performance/responder") {
