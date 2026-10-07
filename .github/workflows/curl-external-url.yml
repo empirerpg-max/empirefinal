@@ -1,0 +1,28 @@
+name: Checar URL externa (diagnóstico)
+
+# Diagnóstico pontual: confirma ao vivo se uma URL externa (ex: o CDN de
+# thumbnail do Google) realmente serve o conteúdo esperado, sem depender do
+# sandbox do Claude Code (que bloqueia a maioria dos domínios externos).
+# Só reporta status/content-type/tamanho — nunca expõe o conteúdo binário.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL completa a testar (ex: https://lh3.googleusercontent.com/d/ID=w1000)'
+        required: true
+
+jobs:
+  checar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checar URL
+        run: |
+          curl -sS --max-time 30 -D headers.txt -o corpo.bin "${{ github.event.inputs.url }}"
+          echo "--- HEADERS ---"
+          cat headers.txt
+          echo "--- TAMANHO DO CORPO ---"
+          wc -c < corpo.bin
+          echo "--- PRIMEIROS BYTES (hex) ---"
+          head -c 32 corpo.bin | xxd
