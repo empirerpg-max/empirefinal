@@ -76,6 +76,8 @@ interface MidiaResumo {
   tab: "musicas" | "videos" | "albuns";
   titulo: string;
   imagem: string;
+  thumbUrl: string;
+  capaUrl: string;
   videoUrl: string;
 }
 
@@ -130,6 +132,8 @@ async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<strin
         tab: TIPO_D1_PARA_TAB[row.tipo] || "musicas",
         titulo: row.titulo,
         imagem: row.thumb_url || row.capa_url || "",
+        thumbUrl: row.thumb_url || "",
+        capaUrl: row.capa_url || "",
         videoUrl: row.video_url || "",
       });
       mapa.set(chave, lista);
@@ -142,18 +146,20 @@ async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<strin
 
 // Entre as várias linhas do D1 que compartilham o mesmo Código único, a
 // ordem de retorno do banco não indica qual é "a certa" — confirmado ao
-// vivo (EMP659): a linha tipo "musica" vinha primeiro mas com capa_url
-// apontando pra um arquivo apagado do Drive (404), enquanto a linha tipo
-// "video" do MESMO código tinha a thumb real cadastrada na coluna Thumb
-// da planilha. Por isso: entre as candidatas, prioriza a primeira que já
-// tem uma imagem (thumb_url/capa_url) de verdade; só se nenhuma tiver,
-// cai pra primeira com video_url (pro fallback de frame); por último,
-// index 0 mesmo sem imagem nem vídeo.
+// vivo (EMP659): a linha tipo "musica" vinha primeiro e TINHA capa_url
+// preenchida, mas apontando pra um arquivo já apagado do Drive (404). A
+// linha tipo "video" do MESMO código tinha a thumb real na coluna Thumb
+// da planilha (thumb_url). capa_url sozinho não é confiável — por isso
+// a prioridade é estritamente: 1) primeira candidata com thumb_url (a
+// coluna "Thumb" de verdade); 2) primeira com video_url (fallback de
+// frame do clipe); 3) primeira com capa_url; 4) index 0.
 function escolherMelhorCandidato(candidatos: MidiaResumo[]): MidiaResumo | undefined {
-  const comImagem = candidatos.find((c) => c.imagem);
-  if (comImagem) return comImagem;
+  const comThumb = candidatos.find((c) => c.thumbUrl);
+  if (comThumb) return comThumb;
   const comVideo = candidatos.find((c) => c.videoUrl);
   if (comVideo) return comVideo;
+  const comCapa = candidatos.find((c) => c.capaUrl);
+  if (comCapa) return comCapa;
   return candidatos[0];
 }
 
@@ -203,15 +209,20 @@ async function anexarImagens<T extends { titulo: string; artista: string; codigo
   return indicados.map((ind) => {
     const candidatos = ind.codigoUnico ? porCodigo.get(normalizeComparison(ind.codigoUnico)) || [] : [];
     const melhor = escolherMelhorCandidato(candidatos);
-    if (melhor?.imagem) {
-      return { ...ind, imagem: melhor.imagem, topicId: melhor.topicId, tab: melhor.tab };
+    // thumb_url de verdade (coluna "Thumb" da planilha) sempre primeiro —
+    // capa_url sozinho pode apontar pra arquivo já apagado do Drive.
+    if (melhor?.thumbUrl) {
+      return { ...ind, imagem: melhor.thumbUrl, topicId: melhor.topicId, tab: melhor.tab };
     }
-    // Sem thumb/capa cadastrada pra esse vídeo — extrai um frame do próprio
+    // Sem thumb cadastrada pra esse vídeo — extrai um frame do próprio
     // clipe (combinado com o usuário), em vez de já cair pra capa de outra
     // coisa (título/artista).
     if (melhor?.videoUrl) {
       const frame = extrairFrameClipe(melhor.videoUrl);
       if (frame) return { ...ind, imagem: frame, topicId: melhor.topicId, tab: melhor.tab };
+    }
+    if (melhor?.capaUrl) {
+      return { ...ind, imagem: melhor.capaUrl, topicId: melhor.topicId, tab: melhor.tab };
     }
     const capaPeloTitulo = capaPorTitulo.get(normalizeComparison(ind.titulo)) || "";
     if (capaPeloTitulo) {
