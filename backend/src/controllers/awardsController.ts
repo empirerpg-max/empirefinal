@@ -81,7 +81,7 @@ async function buildCapaPorTitulo(): Promise<Map<string, string>> {
 // Fallback: foto "oficial" do artista, mesma fonte usada no resto do app
 // (aba ARTISTAS, com fallback pra INFOS ACTS quando a própria aba estiver
 // sem foto) — ver getAllArtistasController em artistasController.ts.
-async function buildFotoPorArtista(): Promise<Map<string, string>> {
+export async function buildFotoPorArtista(): Promise<Map<string, string>> {
   const mapa = new Map<string, string>();
   const rows = await googleSheetsService.usuarios.readValues(ARTISTAS_SHEET).catch(() => []);
   if (rows.length > 1) {

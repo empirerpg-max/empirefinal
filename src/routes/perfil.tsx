@@ -563,6 +563,14 @@ function Perfil() {
               <span className="flex-1 font-bold text-xs">Indicar</span>
               <ChevronRight className="size-3.5 text-muted-foreground" />
             </Link>
+            <Link
+              to="/premiacoes/votacao"
+              onClick={() => haptic.selection()}
+              className="flex items-center gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-all"
+            >
+              <span className="flex-1 font-bold text-xs">Votação</span>
+              <ChevronRight className="size-3.5 text-muted-foreground" />
+            </Link>
           </div>
         )}
         <Link

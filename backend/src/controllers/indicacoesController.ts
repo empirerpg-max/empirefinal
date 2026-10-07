@@ -34,11 +34,11 @@ import { resolveNomeOficial } from "./forumController";
 //
 // Registry das planilhas "Indicar" ativas — cada nova premiação desse tipo
 // que o usuário criar entra aqui (mesmo formato, nova linha).
-const PREMIACOES_INDICAR: string[] = [
+export const PREMIACOES_INDICAR: string[] = [
   "1d6lwyAjkLfgJz9ffhxfxPT1UYJ6eonjvRzascptU_Ao",
 ];
 
-const ADMIN_ID = "810141686";
+export const ADMIN_ID = "810141686";
 
 interface DetalhesAward {
   id: string;
@@ -67,13 +67,13 @@ function jsonResponse(body: unknown, status = 200): Response {
 // Datas nessas planilhas vêm como texto "DD/MM/AAAA" (confirmado ao vivo) —
 // converte pra Date comparável. Encerramento é INCLUSIVO até o fim do dia
 // (confirmado: "se é até 30/09, quando virar o dia 1 não pode mais").
-function parseDataBR(str: string): Date | null {
+export function parseDataBR(str: string): Date | null {
   const m = normalizeText(str).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!m) return null;
   return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
 }
 
-function calcularStatus(abertura: string, encerramento: string): DetalhesAward["status"] {
+export function calcularStatus(abertura: string, encerramento: string): DetalhesAward["status"] {
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
   const dAbertura = parseDataBR(abertura);

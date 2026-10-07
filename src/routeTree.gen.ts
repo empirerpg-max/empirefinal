@@ -43,6 +43,7 @@ import { Route as PontoDistribuirRouteImport } from './routes/ponto.distribuir'
 import { Route as PontoPlaylistsRouteImport } from './routes/ponto.playlists'
 import { Route as PontoValoresRouteImport } from './routes/ponto.valores'
 import { Route as PremiacoesIndicarRouteImport } from './routes/premiacoes_.indicar'
+import { Route as PremiacoesVotacaoRouteImport } from './routes/premiacoes_.votacao'
 import { Route as ToursIndexRouteImport } from './routes/tours.index'
 import { Route as ToursNomeRouteImport } from './routes/tours.$nome'
 import { Route as AlbumIdEditarRouteImport } from './routes/album.$id.editar'
@@ -230,6 +231,11 @@ const PremiacoesIndicarRoute = PremiacoesIndicarRouteImport.update({
   path: '/premiacoes/indicar',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PremiacoesVotacaoRoute = PremiacoesVotacaoRouteImport.update({
+  id: '/premiacoes_/votacao',
+  path: '/premiacoes/votacao',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ToursIndexRoute = ToursIndexRouteImport.update({
   id: '/tours/',
   path: '/tours/',
@@ -346,6 +352,7 @@ export interface FileRoutesByFullPath {
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
   '/ponto/valores': typeof PontoValoresRoute
   '/premiacoes/indicar': typeof PremiacoesIndicarRoute
+  '/premiacoes/votacao': typeof PremiacoesVotacaoRoute
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas/': typeof ArtistasIndexRoute
   '/awards/': typeof AwardsIndexRoute
@@ -392,6 +399,7 @@ export interface FileRoutesByTo {
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/valores': typeof PontoValoresRoute
   '/premiacoes/indicar': typeof PremiacoesIndicarRoute
+  '/premiacoes/votacao': typeof PremiacoesVotacaoRoute
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas': typeof ArtistasIndexRoute
   '/awards': typeof AwardsIndexRoute
@@ -445,6 +453,7 @@ export interface FileRoutesById {
   '/ponto/playlists': typeof PontoPlaylistsRouteWithChildren
   '/ponto/valores': typeof PontoValoresRoute
   '/premiacoes_/indicar': typeof PremiacoesIndicarRoute
+  '/premiacoes_/votacao': typeof PremiacoesVotacaoRoute
   '/tours/$nome': typeof ToursNomeRoute
   '/artistas/': typeof ArtistasIndexRoute
   '/awards/': typeof AwardsIndexRoute
@@ -499,6 +508,7 @@ export interface FileRouteTypes {
     | '/ponto/playlists'
     | '/ponto/valores'
     | '/premiacoes/indicar'
+    | '/premiacoes/votacao'
     | '/tours/$nome'
     | '/artistas/'
     | '/awards/'
@@ -545,6 +555,7 @@ export interface FileRouteTypes {
     | '/market/regras'
     | '/ponto/valores'
     | '/premiacoes/indicar'
+    | '/premiacoes/votacao'
     | '/tours/$nome'
     | '/artistas'
     | '/awards'
@@ -597,6 +608,7 @@ export interface FileRouteTypes {
     | '/ponto/playlists'
     | '/ponto/valores'
     | '/premiacoes_/indicar'
+    | '/premiacoes_/votacao'
     | '/tours/$nome'
     | '/artistas/'
     | '/awards/'
@@ -642,6 +654,7 @@ export interface RootRouteChildren {
   PontoPlaylistsRoute: typeof PontoPlaylistsRouteWithChildren
   PontoValoresRoute: typeof PontoValoresRoute
   PremiacoesIndicarRoute: typeof PremiacoesIndicarRoute
+  PremiacoesVotacaoRoute: typeof PremiacoesVotacaoRoute
   ToursNomeRoute: typeof ToursNomeRoute
   ArtistasIndexRoute: typeof ArtistasIndexRoute
   AwardsIndexRoute: typeof AwardsIndexRoute
@@ -888,6 +901,13 @@ declare module '@tanstack/react-router' {
       path: '/premiacoes/indicar'
       fullPath: '/premiacoes/indicar'
       preLoaderRoute: typeof PremiacoesIndicarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/premiacoes_/votacao': {
+      id: '/premiacoes_/votacao'
+      path: '/premiacoes/votacao'
+      fullPath: '/premiacoes/votacao'
+      preLoaderRoute: typeof PremiacoesVotacaoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tours/': {
@@ -1153,6 +1173,7 @@ const rootRouteChildren: RootRouteChildren = {
   PontoPlaylistsRoute: PontoPlaylistsRouteWithChildren,
   PontoValoresRoute: PontoValoresRoute,
   PremiacoesIndicarRoute: PremiacoesIndicarRoute,
+  PremiacoesVotacaoRoute: PremiacoesVotacaoRoute,
   ToursNomeRoute: ToursNomeRoute,
   ArtistasIndexRoute: ArtistasIndexRoute,
   AwardsIndexRoute: AwardsIndexRoute,

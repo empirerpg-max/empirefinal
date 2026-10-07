@@ -154,6 +154,13 @@ import {
   adminDumpPremiacaoController,
 } from "../controllers/indicacoesController";
 import {
+  listarPremiacoesVotacaoController,
+  listarCategoriasVotacaoController,
+  listarIndicadosVotacaoController,
+  registrarNotaVotacaoController,
+  registrarVotoVotacaoController,
+} from "../controllers/votacaoController";
+import {
   getAwardsListController,
   getAwardDetalheController,
   getArtistAwardsController,
@@ -427,6 +434,11 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/indicar/admin/popup-reset",
     "/api/premiacoes/indicar/admin/popup-limpar-tudo",
     "/api/premiacoes/indicar/admin/dump",
+    "/api/premiacoes/votacao/awards",
+    "/api/premiacoes/votacao/categorias",
+    "/api/premiacoes/votacao/indicados",
+    "/api/premiacoes/votacao/nota",
+    "/api/premiacoes/votacao/voto",
     "/api/awards",
     "/api/awards/detalhe",
     "/api/awards/artista",
@@ -1517,6 +1529,28 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminPopupVmaLimparTudoController();
   } else if (url.pathname === "/api/premiacoes/indicar/admin/dump") {
     response = await adminDumpPremiacaoController(request);
+  } else if (url.pathname === "/api/premiacoes/votacao/awards") {
+    response = await listarPremiacoesVotacaoController();
+  } else if (url.pathname === "/api/premiacoes/votacao/categorias") {
+    response = await listarCategoriasVotacaoController(request);
+  } else if (url.pathname === "/api/premiacoes/votacao/indicados") {
+    response = await listarIndicadosVotacaoController(request);
+  } else if (url.pathname === "/api/premiacoes/votacao/nota") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/nota." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await registrarNotaVotacaoController(request);
+  } else if (url.pathname === "/api/premiacoes/votacao/voto") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/voto." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await registrarVotoVotacaoController(request);
   } else if (url.pathname === "/api/awards") {
     response = await getAwardsListController();
   } else if (url.pathname === "/api/awards/detalhe") {
