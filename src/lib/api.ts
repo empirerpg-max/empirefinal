@@ -1080,6 +1080,7 @@ export const api = {
       tipoEspecial: string;
       plataforma: string;
       destino: string;
+      imagem: string;
       disponivel: boolean;
     }[];
     saldoPrestigio: number;
