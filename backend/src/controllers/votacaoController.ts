@@ -3,7 +3,7 @@ import { colIndexToA1Letter } from "./pontoController";
 import { resolveNomeOficial } from "./forumController";
 import { PREMIACOES_INDICAR, parseDataBR, calcularStatus } from "./indicacoesController";
 import { getCatalogoDb } from "../services/catalogoDbService";
-import { buildFotoPorArtista } from "./awardsController";
+import { buildFotoPorArtista, buildCapaPorTitulo } from "./awardsController";
 
 // Mapeia o `tipo` do D1 (midia.tipo) pro nome de aba que o Fórum usa na URL
 // (/empire-play/forum?tab=...&id=...) — "Visitar fórum" no card do indicado.
@@ -53,23 +53,41 @@ async function buscarMidiaPorCodigosUnicos(codigos: string[]): Promise<Map<strin
 // Indicados de categoria ARTIST/GRUPO não têm Código único (o "material" é
 // o próprio artista) — usa a foto oficial dele, mesma fonte que Retroativo
 // já usa pros awards sem capa de música/álbum.
+//
+// Vídeos "legado" (migrados pro D1 antes de existir coluna de thumb, ou que
+// nunca tiveram thumb própria enviada) não têm capa_url/thumb_url no D1 —
+// confirmado ao vivo: ~12 de 19 indicados de "Best Visual Effects" vieram
+// sem imagem nenhuma. Pra esses, tenta achar a capa pelo TÍTULO em
+// Musicas/Albuns (mesmo fallback que Retroativo já usa) antes de desistir e
+// cair no placeholder — só não busca foto de artista (buildFotoPorArtista,
+// que lê Usuários inteiro) quando ninguém precisa dela, pra não pagar esse
+// custo em toda categoria à toa (era a maior fonte de lentidão da tela).
 async function anexarImagens<T extends { titulo: string; artista: string; codigoUnico?: string }>(
   indicados: T[],
 ): Promise<(T & { imagem: string; topicId: string; tab: string })[]> {
   const codigos = indicados.map((i) => i.codigoUnico || "").filter(Boolean);
-  const [porCodigo, fotoPorArtista] = await Promise.all([
+
+  const [porCodigo, capaPorTitulo, fotoPorArtista] = await Promise.all([
     buscarMidiaPorCodigosUnicos(codigos),
+    buildCapaPorTitulo().catch(() => new Map<string, string>()),
     buildFotoPorArtista().catch(() => new Map<string, string>()),
   ]);
+
   return indicados.map((ind) => {
     const porCodigoInfo = ind.codigoUnico ? porCodigo.get(normalizeComparison(ind.codigoUnico)) : undefined;
-    if (porCodigoInfo) {
+    if (porCodigoInfo?.imagem) {
       return { ...ind, imagem: porCodigoInfo.imagem, topicId: porCodigoInfo.topicId, tab: porCodigoInfo.tab };
     }
-    // Sem código único — indicado é o próprio artista/grupo.
+    const capaPeloTitulo = capaPorTitulo.get(normalizeComparison(ind.titulo)) || "";
+    if (capaPeloTitulo) {
+      return { ...ind, imagem: capaPeloTitulo, topicId: porCodigoInfo?.topicId || "", tab: porCodigoInfo?.tab || "" };
+    }
+    // Sem capa achada — tenta a foto do artista (cobre categoria
+    // ARTIST/GRUPO, que nunca tem código único, e serve de último recurso
+    // pros vídeos sem nenhuma imagem cadastrada em lugar nenhum).
     const nomeArtista = ind.artista || ind.titulo;
     const foto = fotoPorArtista.get(normalizeComparison(nomeArtista)) || "";
-    return { ...ind, imagem: foto, topicId: "", tab: "" };
+    return { ...ind, imagem: foto, topicId: porCodigoInfo?.topicId || "", tab: porCodigoInfo?.tab || "" };
   });
 }
 
@@ -100,7 +118,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-interface FaseVotacao {
+export interface FaseVotacao {
   id: string;
   premiacao: string;
   abertura: string;
@@ -111,7 +129,7 @@ interface FaseVotacao {
   status: "agendado" | "aberto" | "encerrado";
 }
 
-async function lerFaseVotacao(awardId: string): Promise<FaseVotacao | null> {
+export async function lerFaseVotacao(awardId: string): Promise<FaseVotacao | null> {
   const rows = await readValues(awardId, "Detalhes", "A2:I200").catch(() => []);
   const row = rows.find((r) => normalizeComparison(r[7]) === "votacao");
   if (!row || !normalizeText(row[0])) return null;

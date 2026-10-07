@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Trophy, Loader2, Check, Star, ExternalLink, Send, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trophy, Loader2, Check, Star, ExternalLink, Send, Save, Mic2 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api, resolveImg } from "@/lib/api";
 import { toast } from "sonner";
@@ -37,6 +37,14 @@ function PremiacoesVotacaoPage() {
 
   const [confirmSair, setConfirmSair] = useState<{ topicId: string; tab: string } | null>(null);
   const [notaAtivo, setNotaAtivo] = useState<string | null>(null);
+  const [erroCategoria, setErroCategoria] = useState(false);
+
+  type PerfStatus = Awaited<ReturnType<typeof api.statusPerformance>>;
+  const [perfStatus, setPerfStatus] = useState<PerfStatus>(null);
+  const [perfGateStep, setPerfGateStep] = useState<"pergunta" | "artistas" | "termo" | null>(null);
+  const [perfArtistasSel, setPerfArtistasSel] = useState<string[]>([]);
+  const [perfAceite, setPerfAceite] = useState(false);
+  const [perfEnviando, setPerfEnviando] = useState(false);
 
   useEffect(() => {
     api.listarPremiacoesVotacao().then(setAwards);
@@ -46,11 +54,66 @@ function PremiacoesVotacaoPage() {
     haptic.selection();
     setAwardId(a.id);
     setCategorias(null);
+    setPerfStatus(null);
+    setPerfGateStep(null);
+    setPerfArtistasSel([]);
+    setPerfAceite(false);
     api.listarCategoriasVotacao(a.id).then((data) => {
       if (!data) return;
       setDetalhes(data.detalhes as AwardResumo);
       setCategorias(data.categorias);
     });
+    if (telegramId) {
+      api
+        .statusPerformance(a.id, telegramId)
+        .then((status) => {
+          setPerfStatus(status);
+          if (status && !status.respondido) setPerfGateStep("pergunta");
+        })
+        .catch(() => {
+          // Nunca trava a votação por causa dessa etapa extra — se falhar,
+          // segue sem perguntar.
+          setPerfStatus({ statusFase: "aberto", termoTexto: "", artistas: [], respondido: true, resposta: null });
+        });
+    } else {
+      setPerfStatus({ statusFase: "aberto", termoTexto: "", artistas: [], respondido: true, resposta: null });
+    }
+  };
+
+  const responderPerformanceNao = async () => {
+    if (!awardId || !telegramId) return;
+    haptic.selection();
+    setPerfEnviando(true);
+    const res = await api.responderPerformance({ awardId, telegramId, resposta: "nao" });
+    setPerfEnviando(false);
+    if (res.success) {
+      setPerfStatus((s) => (s ? { ...s, respondido: true, resposta: "nao" } : s));
+      setPerfGateStep(null);
+    } else {
+      toast.error(res.error || "Erro ao registrar.");
+    }
+  };
+
+  const enviarAceitePerformance = async () => {
+    if (!awardId || !telegramId || !perfAceite || perfArtistasSel.length === 0) return;
+    setPerfEnviando(true);
+    const res = await api.responderPerformance({ awardId, telegramId, resposta: "sim", artistas: perfArtistasSel });
+    setPerfEnviando(false);
+    if (res.success) {
+      haptic.success();
+      setPerfStatus((s) => (s ? { ...s, respondido: true, resposta: "sim" } : s));
+      setPerfGateStep(null);
+      toast.success("Inscrição de performance registrada!");
+    } else {
+      toast.error(res.error || "Erro ao enviar.");
+    }
+  };
+
+  const meArrependiPerformance = () => {
+    haptic.selection();
+    setPerfArtistasSel([]);
+    setPerfAceite(false);
+    setPerfGateStep("artistas");
   };
 
   const carregarCategoria = (idx: number) => {
@@ -58,16 +121,23 @@ function PremiacoesVotacaoPage() {
     setCatIndex(idx);
     setIndicados(null);
     setNotaAtivo(null);
-    api.listarIndicadosVotacao(awardId, categorias[idx].categoria, telegramId).then((data) => {
-      setTipoAtual(data.tipo);
-      setIndicados(data.indicados);
-      const base: Record<string, string> = {};
-      data.indicados.forEach((i) => {
-        base[i.titulo] = i.meuValor || "";
+    setErroCategoria(false);
+    api
+      .listarIndicadosVotacao(awardId, categorias[idx].categoria, telegramId)
+      .then((data) => {
+        setTipoAtual(data.tipo);
+        setIndicados(data.indicados);
+        const base: Record<string, string> = {};
+        data.indicados.forEach((i) => {
+          base[i.titulo] = i.meuValor || "";
+        });
+        setValores(base);
+        setOriginais(base);
+      })
+      .catch(() => {
+        setErroCategoria(true);
+        toast.error("Não consegui carregar essa categoria. Toque pra tentar de novo.");
       });
-      setValores(base);
-      setOriginais(base);
-    });
   };
 
   const sujo = useMemo(() => {
@@ -206,7 +276,16 @@ function PremiacoesVotacaoPage() {
           </p>
         )}
 
-        {indicados === null ? (
+        {indicados === null && erroCategoria ? (
+          <button
+            onClick={() => carregarCategoria(catIndex)}
+            className="w-full p-6 rounded-2xl bg-white/[0.03] border border-white/10 text-center text-xs text-muted-foreground"
+          >
+            Não consegui carregar essa categoria.
+            <br />
+            <span className="text-primary font-bold">Toque pra tentar de novo</span>
+          </button>
+        ) : indicados === null ? (
           <div className="flex justify-center py-16">
             <Loader2 className="size-6 animate-spin text-primary" />
           </div>
@@ -415,8 +494,145 @@ function PremiacoesVotacaoPage() {
     );
   }
 
+  // === VIEW 1.5: pergunta de performance (antes de liberar as categorias) ===
+  if (awardId && perfGateStep) {
+    return (
+      <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen">
+        <header className="flex items-center gap-3 mb-6">
+          <button
+            onClick={() => {
+              if (perfGateStep === "artistas") setPerfGateStep("pergunta");
+              else if (perfGateStep === "termo") setPerfGateStep("artistas");
+              else {
+                setAwardId(null);
+                setDetalhes(null);
+                setCategorias(null);
+              }
+            }}
+            className="size-9 rounded-full bg-white/5 border border-white/10 grid place-items-center shrink-0"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+          <h1 className="text-lg font-black uppercase tracking-tight truncate">{detalhes?.premiacao || "Performance"}</h1>
+        </header>
+
+        {perfGateStep === "pergunta" && (
+          <div className="space-y-5">
+            <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 text-center">
+              <Mic2 className="size-8 text-primary mx-auto mb-3" />
+              <p className="text-sm font-bold mb-1">Algum artista seu vai performar?</p>
+              <p className="text-xs text-muted-foreground">
+                Você pode registrar a performance de um ou mais dos seus artistas nessa premiação.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={responderPerformanceNao}
+                disabled={perfEnviando}
+                className="py-3.5 rounded-full bg-white/5 border border-white/10 font-black text-xs uppercase tracking-wider disabled:opacity-50"
+              >
+                Não
+              </button>
+              <button
+                onClick={() => {
+                  haptic.selection();
+                  setPerfGateStep("artistas");
+                }}
+                disabled={perfEnviando}
+                className="py-3.5 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider disabled:opacity-40"
+              >
+                Sim
+              </button>
+            </div>
+          </div>
+        )}
+
+        {perfGateStep === "artistas" && (
+          <div className="space-y-5">
+            <p className="text-xs text-muted-foreground">Selecione quais dos seus artistas vão performar (pode marcar mais de um):</p>
+            <div className="space-y-2">
+              {(perfStatus?.artistas || []).map((nome) => {
+                const marcado = perfArtistasSel.includes(nome);
+                return (
+                  <button
+                    key={nome}
+                    onClick={() => {
+                      haptic.selection();
+                      setPerfArtistasSel((prev) => (marcado ? prev.filter((n) => n !== nome) : [...prev, nome]));
+                    }}
+                    className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all ${
+                      marcado ? "bg-primary/10 border-primary/50" : "bg-white/[0.03] border-white/10"
+                    }`}
+                  >
+                    <div
+                      className={`size-5 rounded-md border shrink-0 grid place-items-center ${
+                        marcado ? "bg-primary border-primary" : "border-white/20"
+                      }`}
+                    >
+                      {marcado && <Check className="size-3.5 text-primary-foreground" />}
+                    </div>
+                    <span className="text-sm font-bold">{nome}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => {
+                if (perfArtistasSel.length === 0) {
+                  toast.error("Selecione pelo menos um artista.");
+                  return;
+                }
+                haptic.selection();
+                setPerfGateStep("termo");
+              }}
+              className="w-full py-3.5 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider"
+            >
+              Continuar
+            </button>
+          </div>
+        )}
+
+        {perfGateStep === "termo" && (
+          <div className="space-y-5">
+            <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+              <p className="text-xs leading-relaxed text-muted-foreground">{perfStatus?.termoTexto}</p>
+            </div>
+            <button
+              onClick={() => setPerfAceite((v) => !v)}
+              className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 text-left"
+            >
+              <div
+                className={`size-5 rounded-md border shrink-0 grid place-items-center ${
+                  perfAceite ? "bg-primary border-primary" : "border-white/20"
+                }`}
+              >
+                {perfAceite && <Check className="size-3.5 text-primary-foreground" />}
+              </div>
+              <span className="text-xs font-bold">Aceito</span>
+            </button>
+            <button
+              onClick={enviarAceitePerformance}
+              disabled={!perfAceite || perfEnviando}
+              className="w-full py-3.5 rounded-full bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider disabled:opacity-40 flex items-center justify-center gap-1.5"
+            >
+              {perfEnviando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              Enviar
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // === VIEW 2: categorias do award ===
   if (awardId) {
+    if (categorias !== null && perfStatus === null) {
+      return (
+        <div className="flex justify-center py-16">
+          <Loader2 className="size-6 animate-spin text-primary" />
+        </div>
+      );
+    }
     return (
       <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen">
         <header className="flex items-center gap-3 mb-6">
@@ -430,8 +646,17 @@ function PremiacoesVotacaoPage() {
           >
             <ChevronLeft className="size-5" />
           </button>
-          <h1 className="text-lg font-black uppercase tracking-tight truncate">{detalhes?.premiacao || "Votação"}</h1>
+          <h1 className="text-lg font-black uppercase tracking-tight truncate flex-1">{detalhes?.premiacao || "Votação"}</h1>
         </header>
+
+        {perfStatus?.resposta === "nao" && (
+          <button
+            onClick={meArrependiPerformance}
+            className="w-full flex items-center justify-center gap-1.5 mb-4 py-2.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-300 text-[11px] font-black uppercase tracking-wider"
+          >
+            <Mic2 className="size-3.5" /> Me arrependi, quero performar
+          </button>
+        )}
 
         {detalhes?.status !== "aberto" && (
           <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300">

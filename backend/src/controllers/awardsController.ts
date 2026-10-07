@@ -63,7 +63,7 @@ export async function getAwardsListController(): Promise<Response> {
 // planilha principal e reusando buildCleanItem (mesma limpeza de
 // título/artista/capa já usada em todo o Empire Play) — evita reimplementar
 // a lógica de qual coluna é o título/a capa de verdade em cada aba.
-async function buildCapaPorTitulo(): Promise<Map<string, string>> {
+export async function buildCapaPorTitulo(): Promise<Map<string, string>> {
   const mapa = new Map<string, string>();
   const abas: Array<"Musicas" | "Albuns"> = ["Musicas", "Albuns"];
   for (const aba of abas) {
