@@ -14,6 +14,37 @@ import { insertComentarioD1 } from "../services/catalogoDbService";
 
 const USUARIOS_SHEET = "Usuários";
 
+// Cache em memória (por isolate) da lista processada de TODOS os
+// comentários (música+vídeo+álbum, com foto do jogador já resolvida) —
+// sem isso, getCommentsController relia só no cache de 15s do
+// readValues (que só evita reler o Sheets, não refaz o trabalho de
+// montar ~2000+ objetos + o mapa de fotos a cada chamada). Confirmado ao
+// vivo em 2026-10-07: "Worker exceeded resource limits" (erro 1102)
+// batendo em vários jogadores ao abrir pra comentar — esse reprocessamento
+// cresce junto com o histórico de comentários e, sob uso concorrente,
+// estourava o limite de CPU do Worker. TTL curto (igual ao de leitura)
+// pra parecer "ao vivo"; invalidado na hora certa logo após qualquer
+// escrita (novo comentário, edição, reação) pra quem acabou de agir ver
+// o resultado na mesma hora.
+const COMENTARIOS_CACHE_TTL_MS = 15_000;
+let comentariosProcessadosCache: { data: ComentarioProcessado[]; expiresAt: number } | null = null;
+
+export function invalidarCacheComentariosForum(): void {
+  comentariosProcessadosCache = null;
+}
+
+interface ComentarioProcessado {
+  id: string;
+  tipo: string;
+  topicId: string;
+  jogadorId: string;
+  jogador: string;
+  comentario: string;
+  data: string;
+  replyTo: string;
+  foto: string;
+}
+
 /**
  * Resolve o nome "oficial" do jogador — coluna A ("Nome") da aba Usuários,
  * o nome padrão de registro — a partir do ID (jogadorId) ou, se não achar,
@@ -459,6 +490,7 @@ export async function createCommentController(request: Request): Promise<Respons
       }),
     ]);
     newRowIndex = appendResult;
+    invalidarCacheComentariosForum();
 
     // Espelha no D1 (Fase 1 da migração, ver catalogoDbService.ts) — nunca
     // bloqueia nem falha o comentário (Sheets já é a resposta real acima);
@@ -529,65 +561,76 @@ export async function createCommentController(request: Request): Promise<Respons
   }
 }
 
+async function carregarTodosComentariosProcessados(): Promise<ComentarioProcessado[]> {
+  if (comentariosProcessadosCache && comentariosProcessadosCache.expiresAt > Date.now()) {
+    return comentariosProcessadosCache.data;
+  }
+
+  // "Comentarios_Videos" não existe mais — Vídeos e Music Videos foram
+  // consolidados em "Comentarios_MV".
+  const [musicaComments, mvComments, albumComments, usuariosRows] = await Promise.all([
+    googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
+    googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
+    googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
+    // Foto de perfil de quem comentou — mesma coluna usada no login
+    // (getArtistInfoController usa outra fonte; essa é a config de conta
+    // de verdade, aba "Usuários", colunas A id / ... / foto_do_perfil).
+    googleSheetsService.usuarios.readValues("Usuários").catch(() => []),
+  ]);
+  const usuariosHeaders = usuariosRows[0] || [];
+  const idColIdx = usuariosHeaders.findIndex((h) => normalizeHeader(h) === "id");
+  const fotoColIdx = usuariosHeaders.findIndex((h) => normalizeHeader(h) === "foto_do_perfil");
+  const fotoPorJogadorId = new Map<string, string>();
+  if (idColIdx !== -1 && fotoColIdx !== -1) {
+    for (const r of usuariosRows.slice(1)) {
+      const id = normalizeText(r[idColIdx]);
+      const foto = normalizeText(r[fotoColIdx]);
+      if (id && foto) fotoPorJogadorId.set(id, foto);
+    }
+  }
+
+  // Cada aba tem seu próprio schema de colunas (ver buildCommentRow acima) —
+  // o parse precisa respeitar isso, não dá pra usar posições genéricas.
+  // replyTo agora SEMPRE em G (índice 6, dedicada) nas 3 abas — antes
+  // colidia com a coluna de Reações (bug confirmado em 2026-10-06, ver
+  // buildCommentRow). Data fica em F pra Comentarios_Musicas, E pras
+  // outras duas.
+  const formatMusicaOrAlbumStyle = (rows: string[][], tipo: string, dataIndex: number) => {
+    if (!rows || rows.length <= 1) return [];
+    const replyToIndex = 6; // G
+    return rows.slice(1).map((r, idx) => {
+      const jogadorId = r[1] || "";
+      return {
+        id: `${tipo}_${idx + 1}`,
+        tipo,
+        topicId: r[0] || "",
+        jogadorId,
+        jogador: r[2] || "",
+        comentario: r[3] || "",
+        data: r[dataIndex] || "",
+        replyTo: r[replyToIndex] || "",
+        foto: fotoPorJogadorId.get(jogadorId) || "",
+      };
+    });
+  };
+
+  const allComments = [
+    ...formatMusicaOrAlbumStyle(musicaComments, "musica", 5), // F
+    ...formatMusicaOrAlbumStyle(mvComments, "video", 4), // E
+    ...formatMusicaOrAlbumStyle(albumComments, "album", 4), // E
+  ];
+
+  comentariosProcessadosCache = { data: allComments, expiresAt: Date.now() + COMENTARIOS_CACHE_TTL_MS };
+  return allComments;
+}
+
 export async function getCommentsController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const tituloParam = url.searchParams.get("titulo") || "";
   const topicIdParam = url.searchParams.get("topicId") || "";
 
   try {
-    // "Comentarios_Videos" não existe mais — Vídeos e Music Videos foram
-    // consolidados em "Comentarios_MV".
-    const [musicaComments, mvComments, albumComments, usuariosRows] = await Promise.all([
-      googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
-      googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
-      googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
-      // Foto de perfil de quem comentou — mesma coluna usada no login
-      // (getArtistInfoController usa outra fonte; essa é a config de conta
-      // de verdade, aba "Usuários", colunas A id / ... / foto_do_perfil).
-      googleSheetsService.usuarios.readValues("Usuários").catch(() => []),
-    ]);
-    const usuariosHeaders = usuariosRows[0] || [];
-    const idColIdx = usuariosHeaders.findIndex((h) => normalizeHeader(h) === "id");
-    const fotoColIdx = usuariosHeaders.findIndex((h) => normalizeHeader(h) === "foto_do_perfil");
-    const fotoPorJogadorId = new Map<string, string>();
-    if (idColIdx !== -1 && fotoColIdx !== -1) {
-      for (const r of usuariosRows.slice(1)) {
-        const id = normalizeText(r[idColIdx]);
-        const foto = normalizeText(r[fotoColIdx]);
-        if (id && foto) fotoPorJogadorId.set(id, foto);
-      }
-    }
-
-    // Cada aba tem seu próprio schema de colunas (ver buildCommentRow acima) —
-    // o parse precisa respeitar isso, não dá pra usar posições genéricas.
-    // replyTo agora SEMPRE em G (índice 6, dedicada) nas 3 abas — antes
-    // colidia com a coluna de Reações (bug confirmado em 2026-10-06, ver
-    // buildCommentRow). Data fica em F pra Comentarios_Musicas, E pras
-    // outras duas.
-    const formatMusicaOrAlbumStyle = (rows: string[][], tipo: string, dataIndex: number) => {
-      if (!rows || rows.length <= 1) return [];
-      const replyToIndex = 6; // G
-      return rows.slice(1).map((r, idx) => {
-        const jogadorId = r[1] || "";
-        return {
-          id: `${tipo}_${idx + 1}`,
-          tipo,
-          topicId: r[0] || "",
-          jogadorId,
-          jogador: r[2] || "",
-          comentario: r[3] || "",
-          data: r[dataIndex] || "",
-          replyTo: r[replyToIndex] || "",
-          foto: fotoPorJogadorId.get(jogadorId) || "",
-        };
-      });
-    };
-
-    let allComments = [
-      ...formatMusicaOrAlbumStyle(musicaComments, "musica", 5), // F
-      ...formatMusicaOrAlbumStyle(mvComments, "video", 4), // E
-      ...formatMusicaOrAlbumStyle(albumComments, "album", 4), // E
-    ];
+    let allComments = await carregarTodosComentariosProcessados();
 
     if (topicIdParam) {
       const norm = normalizeComparison(topicIdParam);
@@ -709,6 +752,7 @@ export async function editCommentController(request: Request): Promise<Response>
     await googleSheetsService.principal.updateValues(sheetComments, `${col}${rowIndex}`, [
       [novoTexto.trim()],
     ]);
+    invalidarCacheComentariosForum();
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
