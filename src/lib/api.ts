@@ -2008,6 +2008,16 @@ export function resolveImg(url: string | undefined | null): string | undefined {
   if (!url) return undefined;
   const trimmed = String(url).trim();
   if (!trimmed) return undefined;
+  // Já é uma URL direta e carregável como está (thumbnail do Google, ou o
+  // próprio proxy /api/media/image) — NUNCA reproxiar: driveRawImg extrai
+  // qualquer token de 25+ caracteres da string e monta /api/media/image?id=
+  // em cima dele, o que destrói uma URL de thumbnail pronta (ex: o frame de
+  // clipe extraído em votacaoController.ts, lh3.googleusercontent.com/d/
+  // <id>=w1000 — o token batia na regex e virava um pedido pro arquivo cru
+  // do Drive, não pro thumbnail).
+  if (trimmed.includes("lh3.googleusercontent.com") || trimmed.startsWith("/api/media/")) {
+    return trimmed;
+  }
   const isDriveLink = trimmed.includes("drive.google.com") || trimmed.includes("docs.google.com");
   if (!isDriveLink && /\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(trimmed)) {
     return trimmed;

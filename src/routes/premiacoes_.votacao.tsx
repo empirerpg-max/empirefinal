@@ -178,6 +178,30 @@ function PremiacoesVotacaoPage() {
     [indicados, valores],
   );
 
+  // Salva a nota de UM indicado na hora, direto do painel — não depende da
+  // barra fixa lá embaixo (que já causou dado perdido quando ficou coberta
+  // pela navegação do app). É o jeito mais seguro: confirma na hora, sem
+  // esperar o jogador sair da categoria.
+  const salvarNotaImediata = async (titulo: string) => {
+    if (!awardId || !categorias || catIndex === null || !telegramId) return;
+    const categoria = categorias[catIndex].categoria;
+    setSalvando(true);
+    try {
+      const res = await api.registrarNotaVotacao({ awardId, categoria, titulo, nota: valores[titulo] || "", telegramId });
+      if (res.success) {
+        setOriginais((o) => ({ ...o, [titulo]: valores[titulo] || "" }));
+        haptic.success();
+        toast.success("Nota salva!");
+      } else {
+        toast.error(res.error || "Erro ao salvar nota.");
+      }
+    } catch {
+      toast.error("Erro de conexão ao salvar a nota.");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
   const salvarCategoriaAtual = async (): Promise<boolean> => {
     if (!awardId || !categorias || catIndex === null || !indicados || !telegramId) return true;
     if (!sujo) return true;
@@ -263,7 +287,7 @@ function PremiacoesVotacaoPage() {
   if (awardId && categorias && catIndex !== null) {
     const categoriaAtiva = categorias[catIndex];
     return (
-      <div className="pb-28 px-4 pt-6 max-w-md mx-auto min-h-screen">
+      <div className="pb-44 px-4 pt-6 max-w-md mx-auto min-h-screen">
         <header className="flex items-center gap-3 mb-2">
           <button
             onClick={() => {
@@ -384,7 +408,10 @@ function PremiacoesVotacaoPage() {
                 if (!ind) return null;
                 const notaValor = valores[ind.titulo] || "";
                 return (
-                  <div className="sticky bottom-20 mt-3 p-3.5 rounded-2xl bg-card border border-primary/30 shadow-xl shadow-black/40">
+                  <div
+                    className="sticky z-40 mt-3 p-3.5 rounded-2xl bg-card border border-primary/30 shadow-xl shadow-black/40"
+                    style={{ bottom: "calc(9.5rem + env(safe-area-inset-bottom))" }}
+                  >
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="min-w-0">
                         <p className="text-xs font-bold truncate">{ind.titulo}</p>
@@ -424,6 +451,15 @@ function PremiacoesVotacaoPage() {
                           onChange={(e) => setValores((v) => ({ ...v, [ind.titulo]: e.target.value }))}
                           className="w-full accent-primary"
                         />
+                        <button
+                          type="button"
+                          onClick={() => salvarNotaImediata(ind.titulo)}
+                          disabled={salvando || (originais[ind.titulo] || "") === notaValor}
+                          className="w-full mt-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-[11px] font-black uppercase tracking-wide disabled:opacity-40 flex items-center justify-center gap-1.5"
+                        >
+                          {salvando ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                          {(originais[ind.titulo] || "") === notaValor ? "Nota salva" : "Salvar nota"}
+                        </button>
                       </div>
                     ) : (
                       <button
@@ -443,7 +479,10 @@ function PremiacoesVotacaoPage() {
           </>
         )}
 
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent">
+        <div
+          className="fixed left-0 right-0 z-50 p-4 bg-gradient-to-t from-background via-background to-transparent"
+          style={{ bottom: "calc(4.75rem + env(safe-area-inset-bottom))" }}
+        >
           <div className="max-w-md mx-auto grid grid-cols-2 gap-2">
             <button
               onClick={continuarDepois}
