@@ -247,20 +247,26 @@ async function getVideoPorCodigoETituloCached(): Promise<{
 // o próprio artista) — usa a foto oficial dele, mesma fonte que Retroativo
 // já usa pros awards sem capa de música/álbum.
 //
-// Prioridade de resolução (confirmado ao vivo com o usuário, inclusive o
-// caso de "Hasta La Vista" / EMP589 sem NENHUMA linha no D1): sempre
-// vídeo antes de single/álbum — categoria de vídeo não pode acabar
-// mostrando a capa do single só porque o D1 não tinha o código.
-//   1. D1: thumb_url de verdade
-//   2. D1: frame extraído do video_url
-//   3. Aba "Music Videos" por Código único (capa ou frame do vídeo)
-//   4. Aba "Music Videos" por título (idem)
-//   5. D1: capa_url (capa do single, último recurso de "ainda é vídeo")
-//   6. capaPorTitulo em Musicas/Albuns (capa do single/álbum)
-//   7. foto do artista (cobre ARTIST/GRUPO, sem código único)
+// Prioridade de resolução — confirmado ao vivo com o usuário (imagem
+// errada/trocada em "Never Enough" e "CURSED BLESSED", mesmo com D1 tendo
+// thumb_url cadastrado pra ambos): a tabela D1 (CATALOGO_DB) foi povoada
+// por uma migração MANUAL, de uma vez só (ver
+// /api/empire-play/admin/migrar-catalogo-d1) — não é resincronizada toda
+// vez que alguém edita a coluna Thumb na planilha. A planilha "Music
+// Videos" é a fonte viva, editada direto pelo time; o D1 pode estar
+// parado numa foto antiga/errada. Por isso a planilha vem SEMPRE antes do
+// D1 agora:
+//   1. Aba "Music Videos" por Código único: capa/thumb de verdade
+//   2. D1: thumb_url
+//   3. Aba "Music Videos" por Código único: frame extraído do vídeo
+//   4. D1: frame extraído do video_url
+//   5. D1: capa_url (capa do single, ainda assim "é vídeo")
+//   6. Aba "Music Videos" por título (capa, depois frame)
+//   7. capaPorTitulo em Musicas/Albuns (capa do single/álbum)
+//   8. foto do artista (cobre ARTIST/GRUPO, sem código único)
 async function anexarImagens<T extends { titulo: string; artista: string; codigoUnico?: string }>(
   indicados: T[],
-): Promise<(T & { imagem: string; topicId: string; tab: string })[]> {
+): Promise<(T & { imagem: string; imagemFallback: string; topicId: string; tab: string })[]> {
   const codigos = indicados.map((i) => i.codigoUnico || "").filter(Boolean);
 
   const [porCodigo, videoFallback, capaPorTitulo, fotoPorArtista] = await Promise.all([
@@ -273,44 +279,59 @@ async function anexarImagens<T extends { titulo: string; artista: string; codigo
   return indicados.map((ind) => {
     const candidatos = ind.codigoUnico ? porCodigo.get(normalizeComparison(ind.codigoUnico)) || [] : [];
     const melhor = escolherMelhorCandidato(candidatos);
-    // thumb_url de verdade (coluna "Thumb" da planilha) sempre primeiro —
-    // capa_url sozinho pode apontar pra arquivo já apagado do Drive.
-    if (melhor?.thumbUrl) {
-      return { ...ind, imagem: melhor.thumbUrl, topicId: melhor.topicId, tab: melhor.tab };
-    }
-    // Sem thumb cadastrada pra esse vídeo — extrai um frame do próprio
-    // clipe (combinado com o usuário), em vez de já cair pra capa de outra
-    // coisa (título/artista).
-    if (melhor?.videoUrl) {
-      const frame = extrairFrameClipe(melhor.videoUrl);
-      if (frame) return { ...ind, imagem: frame, topicId: melhor.topicId, tab: melhor.tab };
-    }
-    // D1 não tem esse código (ou não tem thumb/video_url em nenhuma linha)
-    // — tenta achar o VÍDEO de verdade na aba "Music Videos" antes de cair
-    // pra capa de single/álbum.
     const videoPeloCodigo = ind.codigoUnico ? videoFallback.porCodigo.get(normalizeComparison(ind.codigoUnico)) : undefined;
     const videoPeloTitulo = videoFallback.porTitulo.get(normalizeComparison(ind.titulo));
     const videoAchado = videoPeloCodigo || videoPeloTitulo;
-    if (videoAchado?.coverUrl) {
-      return { ...ind, imagem: videoAchado.coverUrl, topicId: videoAchado.topicId, tab: "videos" };
+    const capaPeloTitulo = capaPorTitulo.get(normalizeComparison(ind.titulo)) || "";
+    const nomeArtista = ind.artista || ind.titulo;
+    const fotoDoArtista = fotoPorArtista.get(normalizeComparison(nomeArtista)) || "";
+    // Reserva pro frontend trocar automaticamente se a imagem principal
+    // falhar ao carregar (link do Drive morto, frame que não gerou) — o
+    // usuário pediu explicitamente capa do single nesse caso, não um
+    // ícone genérico. capa_url do D1 é um single/álbum de verdade,
+    // capaPeloTitulo idem; foto do artista só entra se não tiver capa
+    // nenhuma pra oferecer.
+    const imagemFallback = melhor?.capaUrl || capaPeloTitulo || fotoDoArtista || "";
+
+    // 1. Planilha "Music Videos" por Código único — fonte viva, sempre
+    // antes do D1 (que pode estar parado numa migração antiga).
+    if (videoPeloCodigo?.coverUrl) {
+      return { ...ind, imagem: videoPeloCodigo.coverUrl, imagemFallback, topicId: videoPeloCodigo.topicId, tab: "videos" };
+    }
+    // 2. D1: thumb_url de verdade.
+    if (melhor?.thumbUrl) {
+      return { ...ind, imagem: melhor.thumbUrl, imagemFallback, topicId: melhor.topicId, tab: melhor.tab };
+    }
+    // 3. Planilha "Music Videos" por Código único — frame do vídeo.
+    if (videoPeloCodigo?.videoUrl) {
+      const frame = extrairFrameClipe(videoPeloCodigo.videoUrl);
+      if (frame) return { ...ind, imagem: frame, imagemFallback, topicId: videoPeloCodigo.topicId, tab: "videos" };
+    }
+    // 4. D1: frame extraído do video_url.
+    if (melhor?.videoUrl) {
+      const frame = extrairFrameClipe(melhor.videoUrl);
+      if (frame) return { ...ind, imagem: frame, imagemFallback, topicId: melhor.topicId, tab: melhor.tab };
+    }
+    // 5. D1: capa_url (capa do single, ainda assim "é vídeo").
+    if (melhor?.capaUrl) {
+      return { ...ind, imagem: melhor.capaUrl, imagemFallback, topicId: melhor.topicId, tab: melhor.tab };
+    }
+    // 6. Planilha "Music Videos" por TÍTULO (código não achado em lugar
+    // nenhum) — capa, depois frame.
+    if (videoPeloTitulo?.coverUrl) {
+      return { ...ind, imagem: videoPeloTitulo.coverUrl, imagemFallback, topicId: videoPeloTitulo.topicId, tab: "videos" };
     }
     if (videoAchado?.videoUrl) {
       const frame = extrairFrameClipe(videoAchado.videoUrl);
-      if (frame) return { ...ind, imagem: frame, topicId: videoAchado.topicId, tab: "videos" };
+      if (frame) return { ...ind, imagem: frame, imagemFallback, topicId: videoAchado.topicId, tab: "videos" };
     }
-    if (melhor?.capaUrl) {
-      return { ...ind, imagem: melhor.capaUrl, topicId: melhor.topicId, tab: melhor.tab };
-    }
-    const capaPeloTitulo = capaPorTitulo.get(normalizeComparison(ind.titulo)) || "";
     if (capaPeloTitulo) {
-      return { ...ind, imagem: capaPeloTitulo, topicId: melhor?.topicId || "", tab: melhor?.tab || "" };
+      return { ...ind, imagem: capaPeloTitulo, imagemFallback, topicId: melhor?.topicId || "", tab: melhor?.tab || "" };
     }
     // Sem capa achada — tenta a foto do artista (cobre categoria
     // ARTIST/GRUPO, que nunca tem código único, e serve de último recurso
     // pros vídeos sem nenhuma imagem cadastrada em lugar nenhum).
-    const nomeArtista = ind.artista || ind.titulo;
-    const foto = fotoPorArtista.get(normalizeComparison(nomeArtista)) || "";
-    return { ...ind, imagem: foto, topicId: melhor?.topicId || "", tab: melhor?.tab || "" };
+    return { ...ind, imagem: fotoDoArtista, imagemFallback, topicId: melhor?.topicId || "", tab: melhor?.tab || "" };
   });
 }
 

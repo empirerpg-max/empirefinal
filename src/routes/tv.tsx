@@ -1285,6 +1285,14 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
       // envio da mensagem por causa da contagem.
       const id = fileId || url.match(/[?&]id=([\w-]+)/)?.[1];
       if (id) {
+        // Atualiza o contador local na hora (otimista) — sem isso, a lista
+        // já carregada na memória (gifs !== null evita reconsultar a API
+        // toda vez que o seletor reabre) nunca refletia o novo uso, e dois
+        // envios seguidos do mesmo GIF não mudavam a ordem em "Mais usados"
+        // até a aba ser fechada/reaberta de verdade (confirmado ao vivo).
+        setGifs((prev) =>
+          prev ? prev.map((g) => (g.id === id ? { ...g, usos: (g.usos || 0) + 1 } : g)) : prev,
+        );
         fetch("/api/empire-tv/gifs/usar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

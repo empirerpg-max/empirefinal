@@ -1041,7 +1041,7 @@ export const api = {
     telegramId: string,
   ): Promise<{
     tipo: "nota" | "voto";
-    indicados: { titulo: string; artista: string; codigoUnico: string; meuValor: string; imagem: string; topicId: string; tab: string }[];
+    indicados: { titulo: string; artista: string; codigoUnico: string; meuValor: string; imagem: string; imagemFallback?: string; topicId: string; tab: string }[];
   }> {
     const qs = `awardId=${encodeURIComponent(awardId)}&categoria=${encodeURIComponent(categoria)}&telegramId=${encodeURIComponent(telegramId)}`;
     const res = await fetch(`/api/premiacoes/votacao/indicados?${qs}`).then((r) => r.json());
