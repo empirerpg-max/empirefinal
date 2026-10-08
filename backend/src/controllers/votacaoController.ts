@@ -1,9 +1,10 @@
-import { readValues, updateValues, appendRow, normalizeText, normalizeComparison, ensureSheetTab } from "../services/googleSheetsService";
+import { readValues, updateValues, appendRow, normalizeText, normalizeComparison, ensureSheetTab, googleSheetsService } from "../services/googleSheetsService";
 import { colIndexToA1Letter } from "./pontoController";
 import { resolveNomeOficial } from "./forumController";
 import { PREMIACOES_INDICAR, parseDataBR, calcularStatus } from "./indicacoesController";
 import { getCatalogoDb } from "../services/catalogoDbService";
 import { buildFotoPorArtista, buildCapaPorTitulo } from "./awardsController";
+import { buildCleanItem } from "./empirePlayController";
 
 // Termo de integridade do voto — obrigatório, mostrado uma vez só por
 // jogador, antes de liberar a lista de categorias (depois do gate de
@@ -163,15 +164,18 @@ function escolherMelhorCandidato(candidatos: MidiaResumo[]): MidiaResumo | undef
   return candidatos[0];
 }
 
-// Cache em memória (por isolate) dos dois fallbacks de imagem mais caros —
-// cada um lê uma planilha inteira (Musicas+Albuns / Usuários+INFOS ACTS).
-// Sem isso, trocar de categoria (até 21 numa premiação só) pagava essa
-// leitura de novo toda vez, o que deixava a tela lenta. TTL curto (1 min)
-// só pra não ficar servindo dado desatualizado por muito tempo se alguém
-// subir uma capa nova durante a votação.
+// Cache em memória (por isolate) dos fallbacks de imagem mais caros — cada
+// um lê uma planilha inteira (Musicas+Albuns / Usuários+INFOS ACTS / Music
+// Videos). Sem isso, trocar de categoria (até 21 numa premiação só) pagava
+// essa leitura de novo toda vez, o que deixava a tela lenta. TTL curto
+// (1 min) só pra não ficar servindo dado desatualizado por muito tempo se
+// alguém subir uma capa nova durante a votação.
 const CACHE_IMAGENS_TTL_MS = 60_000;
 let capaPorTituloCache: { data: Map<string, string>; expiresAt: number } | null = null;
 let fotoPorArtistaCache: { data: Map<string, string>; expiresAt: number } | null = null;
+let videoPorCodigoETituloCache:
+  | { data: { porCodigo: Map<string, VideoResumo>; porTitulo: Map<string, VideoResumo> }; expiresAt: number }
+  | null = null;
 
 async function getCapaPorTituloCached(): Promise<Map<string, string>> {
   if (capaPorTituloCache && capaPorTituloCache.expiresAt > Date.now()) return capaPorTituloCache.data;
@@ -187,21 +191,81 @@ async function getFotoPorArtistaCached(): Promise<Map<string, string>> {
   return data;
 }
 
+interface VideoResumo {
+  coverUrl: string;
+  videoUrl: string;
+  topicId: string;
+}
+
+// Fallback específico de VÍDEO — confirmado ao vivo pelo usuário: quando o
+// D1 não tem nenhuma linha pro Código único do indicado (ex: EMP589,
+// "Hasta La Vista"), o fallback por título caía em buildCapaPorTitulo, que
+// só olha Musicas/Albuns — ou seja, a capa do SINGLE, não do vídeo. Pra
+// categoria de vídeo isso é visivelmente errado ("tá olhando dos SINGLES").
+// A aba "Music Videos" (planilha principal) é o catálogo de vídeos de
+// verdade — busca primeiro por Código único, depois por título, igual o
+// fallback de single já fazia, mas na aba certa.
+async function buildVideoPorCodigoETitulo(): Promise<{
+  porCodigo: Map<string, VideoResumo>;
+  porTitulo: Map<string, VideoResumo>;
+}> {
+  const porCodigo = new Map<string, VideoResumo>();
+  const porTitulo = new Map<string, VideoResumo>();
+  const registros = await googleSheetsService.principal.readSheetObjects("Music Videos").catch(() => []);
+  registros.forEach((rec, i) => {
+    const item = buildCleanItem("Music Videos", rec, i);
+    if (!item.coverUrl && !item.videoUrl) return;
+    const resumo: VideoResumo = {
+      coverUrl: item.coverUrl || "",
+      videoUrl: item.videoUrl || "",
+      topicId: item.id,
+    };
+    const codigo = normalizeComparison(rec["codigo_unico"] || "");
+    if (codigo && !porCodigo.has(codigo)) porCodigo.set(codigo, resumo);
+    const titulo = normalizeComparison(item.title || "");
+    if (titulo && !porTitulo.has(titulo)) porTitulo.set(titulo, resumo);
+  });
+  return { porCodigo, porTitulo };
+}
+
+async function getVideoPorCodigoETituloCached(): Promise<{
+  porCodigo: Map<string, VideoResumo>;
+  porTitulo: Map<string, VideoResumo>;
+}> {
+  if (videoPorCodigoETituloCache && videoPorCodigoETituloCache.expiresAt > Date.now()) {
+    return videoPorCodigoETituloCache.data;
+  }
+  const data = await buildVideoPorCodigoETitulo().catch(() => ({
+    porCodigo: new Map<string, VideoResumo>(),
+    porTitulo: new Map<string, VideoResumo>(),
+  }));
+  videoPorCodigoETituloCache = { data, expiresAt: Date.now() + CACHE_IMAGENS_TTL_MS };
+  return data;
+}
+
 // Indicados de categoria ARTIST/GRUPO não têm Código único (o "material" é
 // o próprio artista) — usa a foto oficial dele, mesma fonte que Retroativo
 // já usa pros awards sem capa de música/álbum.
 //
-// Além da linha certa não achada (acima), alguns vídeos "legado" realmente
-// não têm capa_url/thumb_url em NENHUMA das suas linhas — pra esses, tenta
-// achar a capa pelo TÍTULO em Musicas/Albuns (mesmo fallback que Retroativo
-// já usa) antes de desistir e cair no placeholder.
+// Prioridade de resolução (confirmado ao vivo com o usuário, inclusive o
+// caso de "Hasta La Vista" / EMP589 sem NENHUMA linha no D1): sempre
+// vídeo antes de single/álbum — categoria de vídeo não pode acabar
+// mostrando a capa do single só porque o D1 não tinha o código.
+//   1. D1: thumb_url de verdade
+//   2. D1: frame extraído do video_url
+//   3. Aba "Music Videos" por Código único (capa ou frame do vídeo)
+//   4. Aba "Music Videos" por título (idem)
+//   5. D1: capa_url (capa do single, último recurso de "ainda é vídeo")
+//   6. capaPorTitulo em Musicas/Albuns (capa do single/álbum)
+//   7. foto do artista (cobre ARTIST/GRUPO, sem código único)
 async function anexarImagens<T extends { titulo: string; artista: string; codigoUnico?: string }>(
   indicados: T[],
 ): Promise<(T & { imagem: string; topicId: string; tab: string })[]> {
   const codigos = indicados.map((i) => i.codigoUnico || "").filter(Boolean);
 
-  const [porCodigo, capaPorTitulo, fotoPorArtista] = await Promise.all([
+  const [porCodigo, videoFallback, capaPorTitulo, fotoPorArtista] = await Promise.all([
     buscarMidiaPorCodigosUnicos(codigos),
+    getVideoPorCodigoETituloCached(),
     getCapaPorTituloCached(),
     getFotoPorArtistaCached(),
   ]);
@@ -220,6 +284,19 @@ async function anexarImagens<T extends { titulo: string; artista: string; codigo
     if (melhor?.videoUrl) {
       const frame = extrairFrameClipe(melhor.videoUrl);
       if (frame) return { ...ind, imagem: frame, topicId: melhor.topicId, tab: melhor.tab };
+    }
+    // D1 não tem esse código (ou não tem thumb/video_url em nenhuma linha)
+    // — tenta achar o VÍDEO de verdade na aba "Music Videos" antes de cair
+    // pra capa de single/álbum.
+    const videoPeloCodigo = ind.codigoUnico ? videoFallback.porCodigo.get(normalizeComparison(ind.codigoUnico)) : undefined;
+    const videoPeloTitulo = videoFallback.porTitulo.get(normalizeComparison(ind.titulo));
+    const videoAchado = videoPeloCodigo || videoPeloTitulo;
+    if (videoAchado?.coverUrl) {
+      return { ...ind, imagem: videoAchado.coverUrl, topicId: videoAchado.topicId, tab: "videos" };
+    }
+    if (videoAchado?.videoUrl) {
+      const frame = extrairFrameClipe(videoAchado.videoUrl);
+      if (frame) return { ...ind, imagem: frame, topicId: videoAchado.topicId, tab: "videos" };
     }
     if (melhor?.capaUrl) {
       return { ...ind, imagem: melhor.capaUrl, topicId: melhor.topicId, tab: melhor.tab };
