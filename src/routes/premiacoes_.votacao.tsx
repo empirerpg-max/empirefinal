@@ -38,6 +38,13 @@ function PremiacoesVotacaoPage() {
   const [confirmSair, setConfirmSair] = useState<{ topicId: string; tab: string } | null>(null);
   const [notaAtivo, setNotaAtivo] = useState<string | null>(null);
   const [erroCategoria, setErroCategoria] = useState(false);
+  // Garante que uma imagem/frame que falha ao carregar (link do Drive
+  // morto, frame que o thumbnail service não conseguiu gerar) nunca fica
+  // em branco pro jogador (confirmado ao vivo: ficava um quadrado preto/
+  // vazio, sem aviso nenhum). 1ª falha troca pra `imagemFallback` (capa
+  // do single, vinda do backend — pedido explícito do usuário, não um
+  // ícone genérico); só cai pro troféu se ATÉ a capa do single falhar.
+  const [imagensComErro, setImagensComErro] = useState<Record<string, number>>({});
 
   type PerfStatus = Awaited<ReturnType<typeof api.statusPerformance>>;
   const [perfStatus, setPerfStatus] = useState<PerfStatus>(null);
@@ -147,6 +154,7 @@ function PremiacoesVotacaoPage() {
     setIndicados(null);
     setNotaAtivo(null);
     setErroCategoria(false);
+    setImagensComErro({});
     api
       .listarIndicadosVotacao(awardId, categorias[idx].categoria, telegramId)
       .then((data) => {
@@ -341,7 +349,13 @@ function PremiacoesVotacaoPage() {
           <>
             <div className="grid grid-cols-3 gap-2">
               {indicados.map((ind) => {
-                const img = resolveImg(ind.imagem);
+                const nivelErro = imagensComErro[ind.titulo] || 0;
+                const img =
+                  nivelErro >= 2
+                    ? undefined
+                    : nivelErro === 1
+                      ? resolveImg(ind.imagemFallback)
+                      : resolveImg(ind.imagem);
                 const notaValor = valores[ind.titulo] || "";
                 const marcado = !!valores[ind.titulo];
                 const selecionadoNota = tipoAtual === "nota" && notaAtivo === ind.titulo;
@@ -366,7 +380,14 @@ function PremiacoesVotacaoPage() {
                     >
                       <div className="relative w-full aspect-square bg-white/5 flex items-center justify-center">
                         {img ? (
-                          <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                          <img
+                            src={img}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover"
+                            onError={() =>
+                              setImagensComErro((prev) => ({ ...prev, [ind.titulo]: (prev[ind.titulo] || 0) + 1 }))
+                            }
+                          />
                         ) : (
                           <Trophy className="size-5 text-muted-foreground" />
                         )}
