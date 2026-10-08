@@ -689,3 +689,119 @@ export async function registrarVotoVotacaoController(request: Request): Promise<
 
   return jsonResponse({ success: true });
 }
+
+// ---- Popup diário de lembrete de votação — mesmo mecanismo do VMA
+// (indicacoesController.ts: popupVmaStatusController/popupVmaDismissController),
+// só que pra fase de VOTAÇÃO. Aba própria "VOTACAO_POPUP_STATUS" na
+// planilha registrosCharts (mesma planilha auxiliar usada pro popup de
+// indicação) — A telegramId | B status ("" ou "votou", permanente) |
+// C última exibição (DD/MM/AAAA, controla o "1x por dia").
+const POPUP_VOTACAO_SPREADSHEET_KEY = "registrosCharts";
+const POPUP_VOTACAO_SHEET = "VOTACAO_POPUP_STATUS";
+const POPUP_VOTACAO_AWARD_ID = PREMIACOES_INDICAR[0];
+
+async function ensurePopupVotacaoSheetPronta(): Promise<void> {
+  await ensureSheetTab(POPUP_VOTACAO_SPREADSHEET_KEY, POPUP_VOTACAO_SHEET);
+  const header = await readValues(POPUP_VOTACAO_SPREADSHEET_KEY, POPUP_VOTACAO_SHEET, "A1:C1").catch(() => []);
+  if (!normalizeText(header?.[0]?.[0])) {
+    await updateValues(POPUP_VOTACAO_SPREADSHEET_KEY, POPUP_VOTACAO_SHEET, "A1:C1", [
+      ["telegramId", "status", "ultima_exibicao"],
+    ]);
+  }
+}
+
+async function lerLinhaPopupVotacao(
+  telegramId: string,
+): Promise<{ linha: number; status: string; ultimaExibicao: string } | null> {
+  const rows = await readValues(POPUP_VOTACAO_SPREADSHEET_KEY, POPUP_VOTACAO_SHEET, "A2:C20000").catch(() => []);
+  const idx = rows.findIndex((r) => normalizeComparison(normalizeText(r[0])) === normalizeComparison(telegramId));
+  if (idx === -1) return null;
+  const row = rows[idx];
+  return { linha: idx + 2, status: normalizeText(row[1]), ultimaExibicao: normalizeText(row[2]) };
+}
+
+// GET /api/premiacoes/votacao/popup-status?telegramId=...
+export async function popupVotacaoStatusController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const telegramId = normalizeText(url.searchParams.get("telegramId"));
+  if (!telegramId) return jsonResponse({ success: false, error: "telegramId é obrigatório." }, 400);
+  if (!POPUP_VOTACAO_AWARD_ID) return jsonResponse({ success: true, data: { shouldShow: false } });
+
+  const detalhes = await lerFaseVotacao(POPUP_VOTACAO_AWARD_ID);
+  if (!detalhes || detalhes.status !== "aberto") {
+    return jsonResponse({ success: true, data: { shouldShow: false } });
+  }
+
+  await ensurePopupVotacaoSheetPronta();
+  const existente = await lerLinhaPopupVotacao(telegramId);
+  const hoje = hojeBR();
+
+  if (existente?.status === "votou") {
+    return jsonResponse({ success: true, data: { shouldShow: false } });
+  }
+  if (existente?.ultimaExibicao === hoje) {
+    return jsonResponse({ success: true, data: { shouldShow: false } });
+  }
+
+  if (existente) {
+    await updateValues(POPUP_VOTACAO_SPREADSHEET_KEY, POPUP_VOTACAO_SHEET, `C${existente.linha}`, [[hoje]]);
+  } else {
+    // "OVERWRITE" (não o padrão "INSERT_ROWS"): evita desalinhar linha/
+    // coluna de escritas concorrentes (vários jogadores abrindo o app ao
+    // mesmo tempo) — mesmo motivo documentado no popup de indicação.
+    await appendRow(POPUP_VOTACAO_SPREADSHEET_KEY, POPUP_VOTACAO_SHEET, [telegramId, "", hoje], "A:C", "OVERWRITE");
+  }
+
+  return jsonResponse({
+    success: true,
+    data: {
+      shouldShow: true,
+      award: {
+        id: detalhes.id,
+        premiacao: detalhes.premiacao,
+        capaUrl: detalhes.capaUrl,
+        encerramento: detalhes.encerramento,
+      },
+    },
+  });
+}
+
+// POST /api/premiacoes/votacao/popup-dismiss — "Já votei": não mostra mais
+// o popup pra esse jogador (permanente, não só por hoje).
+export async function popupVotacaoDismissController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { telegramId?: string };
+  const telegramId = normalizeText(body.telegramId);
+  if (!telegramId) return jsonResponse({ success: false, error: "telegramId é obrigatório." }, 400);
+
+  await ensurePopupVotacaoSheetPronta();
+  const existente = await lerLinhaPopupVotacao(telegramId);
+  const hoje = hojeBR();
+
+  if (existente) {
+    await updateValues(POPUP_VOTACAO_SPREADSHEET_KEY, POPUP_VOTACAO_SHEET, `B${existente.linha}:C${existente.linha}`, [
+      ["votou", hoje],
+    ]);
+  } else {
+    await appendRow(POPUP_VOTACAO_SPREADSHEET_KEY, POPUP_VOTACAO_SHEET, [telegramId, "votou", hoje], "A:C", "OVERWRITE");
+  }
+
+  return jsonResponse({ success: true });
+}
+
+// GET /api/premiacoes/votacao/admin/popup-reset?telegramId=... — one-off de
+// teste: limpa o estado do popup pra esse jogador (volta a valer "nunca
+// visto"), útil pra validar o popup sem esperar o dia seguinte virar.
+export async function adminPopupVotacaoResetController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const telegramId = normalizeText(url.searchParams.get("telegramId"));
+  if (!telegramId) return jsonResponse({ success: false, error: "telegramId é obrigatório." }, 400);
+
+  await ensurePopupVotacaoSheetPronta();
+  const existente = await lerLinhaPopupVotacao(telegramId);
+  if (existente) {
+    await updateValues(POPUP_VOTACAO_SPREADSHEET_KEY, POPUP_VOTACAO_SHEET, `B${existente.linha}:C${existente.linha}`, [
+      ["", ""],
+    ]);
+  }
+  return jsonResponse({ success: true, reset: !!existente });
+}

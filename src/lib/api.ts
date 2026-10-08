@@ -1008,6 +1008,23 @@ export const api = {
   },
 
   // ---- Premiações > Votação (nota ou múltipla escolha, por categoria) ----
+  async checarPopupVotacao(telegramId: string): Promise<{
+    shouldShow: boolean;
+    award?: { id: string; premiacao: string; capaUrl: string; encerramento: string };
+  }> {
+    const res = await fetch(`/api/premiacoes/votacao/popup-status?telegramId=${encodeURIComponent(telegramId)}`).then(
+      (r) => r.json(),
+    );
+    return res?.success ? res.data : { shouldShow: false };
+  },
+  async dispensarPopupVotacao(telegramId: string): Promise<{ success: boolean }> {
+    const res = await fetch("/api/premiacoes/votacao/popup-dismiss", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramId }),
+    });
+    return res.json();
+  },
   async listarPremiacoesVotacao(): Promise<
     {
       id: string;

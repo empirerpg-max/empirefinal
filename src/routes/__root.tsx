@@ -45,6 +45,7 @@ import { InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationBell } from "@/components/NotificationBell";
 import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
 import { VmaNominationPopup } from "@/components/VmaNominationPopup";
+import { VotacaoReminderPopup } from "@/components/VotacaoReminderPopup";
 import { EmpirePlayerProvider, useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { MusicPlayer } from "@/components/EmpirePlay/MusicPlayer";
 import { VideoPlayer } from "@/components/EmpirePlay/VideoPlayer";
@@ -711,12 +712,30 @@ function RootInner() {
     encerramento: string;
   } | null>(null);
 
+  // Mesmo mecanismo pro popup de VOTAÇÃO (fase seguinte da mesma
+  // premiação) — como as duas fases nunca ficam abertas ao mesmo tempo
+  // (ver calcularStatus), encadear depois do VMA em vez de disparar em
+  // paralelo é só pra nunca arriscar os dois popups empilhados na tela.
+  const [votacaoPopup, setVotacaoPopup] = useState<{
+    id: string;
+    premiacao: string;
+    capaUrl: string;
+    encerramento: string;
+  } | null>(null);
+
   useEffect(() => {
     if (!user || user.id === "guest") return;
     api
       .checarPopupVma(user.id)
       .then((res) => {
-        if (res.shouldShow && res.award) setVmaPopup(res.award);
+        if (res.shouldShow && res.award) {
+          setVmaPopup(res.award);
+          return null;
+        }
+        return api.checarPopupVotacao(user.id);
+      })
+      .then((res) => {
+        if (res?.shouldShow && res.award) setVotacaoPopup(res.award);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -983,6 +1002,23 @@ function RootInner() {
           onJaIndiquei={() => {
             setVmaPopup(null);
             if (user && user.id !== "guest") api.dispensarPopupVma(user.id).catch(() => {});
+          }}
+        />
+      )}
+
+      {votacaoPopup && (
+        <VotacaoReminderPopup
+          award={votacaoPopup}
+          onVotarJa={() => {
+            setVotacaoPopup(null);
+            // Quem já foi votar não precisa ver o lembrete de novo — só
+            // "me lembrar mais tarde" deve voltar a aparecer no dia seguinte.
+            if (user && user.id !== "guest") api.dispensarPopupVotacao(user.id).catch(() => {});
+          }}
+          onLembrarMaisTarde={() => setVotacaoPopup(null)}
+          onJaVotei={() => {
+            setVotacaoPopup(null);
+            if (user && user.id !== "guest") api.dispensarPopupVotacao(user.id).catch(() => {});
           }}
         />
       )}
