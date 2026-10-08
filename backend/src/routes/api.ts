@@ -161,6 +161,9 @@ import {
   registrarVotoVotacaoController,
   statusTermoVotoController,
   aceitarTermoVotoController,
+  popupVotacaoStatusController,
+  popupVotacaoDismissController,
+  adminPopupVotacaoResetController,
 } from "../controllers/votacaoController";
 import {
   statusPerformanceController,
@@ -450,6 +453,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/premiacoes/votacao/voto",
     "/api/premiacoes/votacao/termo-status",
     "/api/premiacoes/votacao/termo-aceitar",
+    "/api/premiacoes/votacao/popup-status",
+    "/api/premiacoes/votacao/popup-dismiss",
+    "/api/premiacoes/votacao/admin/popup-reset",
     "/api/premiacoes/performance/status",
     "/api/premiacoes/performance/responder",
     "/api/premiacoes/performance/pendentes",
@@ -1584,6 +1590,18 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     }
     response = await aceitarTermoVotoController(request);
+  } else if (url.pathname === "/api/premiacoes/votacao/popup-status") {
+    response = await popupVotacaoStatusController(request);
+  } else if (url.pathname === "/api/premiacoes/votacao/popup-dismiss") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/popup-dismiss." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await popupVotacaoDismissController(request);
+  } else if (url.pathname === "/api/premiacoes/votacao/admin/popup-reset") {
+    response = await adminPopupVotacaoResetController(request);
   } else if (url.pathname === "/api/premiacoes/performance/status") {
     response = await statusPerformanceController(request);
   } else if (url.pathname === "/api/premiacoes/performance/responder") {
