@@ -245,6 +245,179 @@ function PostCarousel({
   );
 }
 
+// Player vertical 9:16 em tela cheia dos vídeos do TikTok — scroll-snap
+// vertical (um vídeo por "página", igual o app original), autoplay só do
+// vídeo que está de fato visível (IntersectionObserver, nunca mais de um
+// tocando ao mesmo tempo) e toque no vídeo pausa/retoma. `ids` é a lista
+// congelada no momento da abertura; cada post é lido ao vivo de `posts`
+// pra curtida/comentário feito aqui refletir na hora.
+function TikTokFeedViewer({
+  posts,
+  ids,
+  startIndex,
+  myTgId,
+  onClose,
+  onLike,
+  onOpenComments,
+}: {
+  posts: Post[];
+  ids: string[];
+  startIndex: number;
+  myTgId: string;
+  onClose: () => void;
+  onLike: (postId: string) => void;
+  onOpenComments: (post: Post) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const [activeId, setActiveId] = useState<string | null>(ids[startIndex] || null);
+  const [muted, setMuted] = useState(true);
+  const [paused, setPaused] = useState(false);
+
+  // Começa já rolado no vídeo que foi tocado no feed, sem animação.
+  useEffect(() => {
+    const el = containerRef.current;
+    const slide = el?.children[startIndex] as HTMLElement | undefined;
+    if (el && slide) el.scrollTo({ top: slide.offsetTop, behavior: "auto" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const video = entry.target as HTMLVideoElement;
+          const id = video.dataset.postId;
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+            if (id) setActiveId(id);
+            setPaused(false);
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+          }
+        }
+      },
+      { root: el, threshold: [0, 0.6, 1] },
+    );
+    videoRefs.current.forEach((video) => observer.observe(video));
+    return () => observer.disconnect();
+  }, [ids]);
+
+  const togglePlay = (video: HTMLVideoElement) => {
+    if (video.paused) {
+      video.play().catch(() => {});
+      setPaused(false);
+    } else {
+      video.pause();
+      setPaused(true);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[130] bg-black">
+      <div
+        ref={containerRef}
+        className="h-full w-full overflow-y-scroll snap-y snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {ids.map((id) => {
+          const post = posts.find((p) => p.id === id);
+          if (!post) return null;
+          const liked = !!myTgId && !!post.analytics.likedBy?.includes(myTgId);
+          return (
+            <div key={id} className="relative h-full w-full snap-start flex items-center justify-center">
+              <video
+                ref={(el) => {
+                  if (el) videoRefs.current.set(id, el);
+                  else videoRefs.current.delete(id);
+                }}
+                data-post-id={id}
+                src={driveVideo(post.media_url)}
+                loop
+                playsInline
+                muted={muted}
+                preload="metadata"
+                className="absolute inset-0 w-full h-full object-cover"
+                onClick={(e) => togglePlay(e.currentTarget)}
+              />
+
+              {activeId === id && paused && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="size-16 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                    <Play className="size-7 text-white fill-white ml-1" />
+                  </div>
+                </div>
+              )}
+
+              <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70 pointer-events-none" />
+
+              <div className="absolute top-0 inset-x-0 pt-[max(1rem,env(safe-area-inset-top))] px-4 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="size-9 rounded-full bg-black/40 text-white grid place-items-center"
+                  aria-label="Fechar"
+                >
+                  <X className="size-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMuted((m) => !m)}
+                  className="size-9 rounded-full bg-black/40 text-white grid place-items-center"
+                  aria-label={muted ? "Ativar som" : "Mutar"}
+                >
+                  {muted ? <VolumeX className="size-4.5" /> : <Volume2 className="size-4.5" />}
+                </button>
+              </div>
+
+              <div className="absolute bottom-0 inset-x-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pl-4 pr-20 flex flex-col gap-1.5 text-white">
+                <div className="flex items-center gap-2">
+                  <div className="size-9 rounded-full overflow-hidden bg-secondary border border-white/20 flex items-center justify-center font-black shrink-0">
+                    {post.avatar ? (
+                      <img
+                        src={resolveImg(post.avatar) || post.avatar}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <span className="text-[11px]">{post.autor[0]}</span>
+                    )}
+                  </div>
+                  <span className="font-black text-sm truncate">{post.autor}</span>
+                </div>
+                {post.texto && <p className="text-sm leading-snug line-clamp-3 break-words">{post.texto}</p>}
+              </div>
+
+              <div className="absolute bottom-24 right-3 flex flex-col items-center gap-5 text-white">
+                <button
+                  type="button"
+                  onClick={() => onLike(post.id)}
+                  className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+                >
+                  <Heart className={`size-7 ${liked ? "fill-primary text-primary" : "text-white"}`} />
+                  <span className="text-[11px] font-black">{post.analytics.likes}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenComments(post)}
+                  className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+                >
+                  <MessageCircle className="size-7" />
+                  <span className="text-[11px] font-black">{post.analytics.comments}</span>
+                </button>
+                <button type="button" className="flex flex-col items-center gap-1 active:scale-90 transition-transform">
+                  <Share2 className="size-7" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
 // Fonte tocável de verdade pra tag <audio>: link do Drive precisa passar
 // pelo proxy /api/media/audio do backend (suporta Range, contorna CORS) —
 // usar o link "cru" do Drive, ou pior, a URL de /preview (feita pra
@@ -537,19 +710,23 @@ function cropImageToStoryRatio(file: File): Promise<File> {
   });
 }
 
-// Vídeo de post/story sobe pro Drive como base64 dentro de uma única
-// requisição pro Worker (uploadDriveController) — sem isso passar por um
-// serviço de upload em partes, tem um teto real de tamanho: o corpo da
-// requisição tem limite da própria Cloudflare, e o Worker precisa montar
-// o arquivo inteiro (já em base64, ~33% maior) na memória antes de
-// mandar pro Drive. Vídeo de celular em boa qualidade estoura isso fácil
-// — a requisição cai no meio sem erro nenhum pro usuário ver, só "trava"
-// ou "quebra" sem explicação (foi exatamente o que a Emma viu tentando
-// postar Story). Essas duas checagens (duração e tamanho) travam ANTES
-// de tentar o upload, com uma mensagem que explica o que fazer, em vez
-// de deixar a pessoa descobrir sozinha que o vídeo é grande demais.
-const MAX_VIDEO_DURATION_SEC = 60;
-const MAX_VIDEO_SIZE_MB = 45;
+// Vídeo de post/story sobe pro Drive via multipart/form-data (uploadToDrive
+// abaixo, endpoint uploadDriveController) — sem upload em partes/streaming,
+// tem um teto real de tamanho: o corpo da requisição tem limite da própria
+// Cloudflare, e o Worker ainda monta o arquivo inteiro em base64 na memória
+// antes de mandar pro Drive. Vídeo de celular em boa qualidade estoura isso
+// fácil — a requisição cai no meio sem erro nenhum pro usuário ver, só
+// "trava" ou "quebra" sem explicação (foi exatamente o que a Emma viu
+// tentando postar Story). Essas duas checagens (duração e tamanho) travam
+// ANTES de tentar o upload, com uma mensagem que explica o que fazer, em
+// vez de deixar a pessoa descobrir sozinha que o vídeo é grande demais.
+// Teto real não é duração, é tamanho de corpo de requisição — subimos pra
+// 95MB (abaixo do limite de 100MB de corpo de requisição do Cloudflare
+// Workers, com folga pro overhead do multipart) e 3min de duração (TikTok
+// de verdade permite até 10min, mas nosso teto de tamanho não sustenta
+// vídeo tão longo em boa qualidade — 3min já cobre o uso real do app).
+const MAX_VIDEO_DURATION_SEC = 180;
+const MAX_VIDEO_SIZE_MB = 95;
 
 function getVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -1577,6 +1754,14 @@ function SocialPage() {
     [posts],
   );
   const [viewingStoryGroup, setViewingStoryGroup] = useState<{ autor: string; index: number } | null>(null);
+  // Player vertical 9:16 em tela cheia dos posts de vídeo do TikTok, com
+  // autoplay + scroll um vídeo por vez (igual o app original) — aberto ao
+  // tocar num post de vídeo do TikTok no feed. Guarda só os IDs (ordem
+  // congelada no momento da abertura, pra rolar o feed por trás não
+  // reordenar o que já está sendo visto) — o post de cada slide é sempre
+  // lido ao vivo de `posts`, assim like/comentário atualiza na hora dentro
+  // do viewer também.
+  const [tiktokViewer, setTiktokViewer] = useState<{ ids: string[]; startIndex: number } | null>(null);
   // Marca o story atualmente aberto como visto — cobre tanto o primeiro
   // (aberto direto pela bolinha) quanto cada avanço via goTo.
   useEffect(() => {
@@ -1896,6 +2081,37 @@ function SocialPage() {
                               </span>
                             </div>
                           </div>
+                        ) : post.tipo === "TikTok" && post.media_tipo === "video" && post.media_url ? (
+                          // Vídeo do TikTok abre no player vertical 9:16 em
+                          // tela cheia (igual o app original) em vez do
+                          // player padrão do navegador num card quadrado —
+                          // o preview aqui já mostra o corte vertical certo.
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              haptic.selection();
+                              const ids = feedPosts
+                                .filter((p) => p.tipo === "TikTok" && p.media_tipo === "video" && p.media_url)
+                                .map((p) => p.id);
+                              const startIndex = Math.max(0, ids.indexOf(post.id));
+                              setTiktokViewer({ ids, startIndex });
+                            }}
+                            className="relative w-full aspect-[9/16] max-h-[30rem] bg-black rounded-[1.25rem] overflow-hidden mb-3.5 border border-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_50px_-25px_rgba(0,0,0,0.7)]"
+                          >
+                            <video
+                              src={driveVideo(post.media_url)}
+                              muted
+                              playsInline
+                              preload="metadata"
+                              className="absolute inset-0 w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/10 flex items-center justify-center">
+                              <div className="size-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                                <Play className="size-6 text-white fill-white ml-0.5" />
+                              </div>
+                            </div>
+                          </button>
                         ) : (
                           post.media_url &&
                           (post.extra_media?.length ? (
@@ -3911,6 +4127,26 @@ function SocialPage() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Player vertical 9:16 em tela cheia dos vídeos do TikTok — ver
+          TikTokFeedViewer acima. */}
+      <AnimatePresence>
+        {tiktokViewer && (
+          <TikTokFeedViewer
+            posts={posts}
+            ids={tiktokViewer.ids}
+            startIndex={tiktokViewer.startIndex}
+            myTgId={myTgId}
+            onClose={() => setTiktokViewer(null)}
+            onLike={handleLike}
+            onOpenComments={(post) => {
+              setSelectedPost(post);
+              loadComments(post.id);
+              setIsCommentModalOpen(true);
+            }}
+          />
         )}
       </AnimatePresence>
 

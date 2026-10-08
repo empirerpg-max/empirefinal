@@ -2219,17 +2219,20 @@ export async function uploadDriveController(request: Request): Promise<Response>
       mimeType = file?.type || "image/jpeg";
 
       // Defesa em profundidade — o front já barra vídeo grande demais antes
-      // de tentar o upload, mas um arquivo gigante aqui (base64 já fica uns
-      // 33% maior, e tudo isso vira uma única string gigante na memória do
-      // Worker antes de ir pro Drive) pode travar sem erro nenhum voltar
-      // pro navegador. Rejeitar com uma mensagem clara é melhor que deixar
-      // a requisição morrer no meio do caminho.
-      const MAX_UPLOAD_BYTES = 60 * 1024 * 1024; // 60MB
+      // de tentar o upload (ver MAX_VIDEO_SIZE_MB em social.tsx, mesmo
+      // teto), mas um arquivo gigante aqui (base64 já fica uns 33% maior, e
+      // tudo isso vira uma única string gigante na memória do Worker antes
+      // de ir pro Drive) pode travar sem erro nenhum voltar pro navegador.
+      // Rejeitar com uma mensagem clara é melhor que deixar a requisição
+      // morrer no meio do caminho. 95MB fica logo abaixo do teto de 100MB
+      // de corpo de requisição do Cloudflare Workers, com folga pro
+      // overhead do multipart.
+      const MAX_UPLOAD_BYTES = 95 * 1024 * 1024; // 95MB
       if (file && file.size > MAX_UPLOAD_BYTES) {
         return new Response(
           JSON.stringify({
             success: false,
-            error: `Arquivo de ${(file.size / (1024 * 1024)).toFixed(0)}MB é grande demais (máximo 60MB). Envie um arquivo menor.`,
+            error: `Arquivo de ${(file.size / (1024 * 1024)).toFixed(0)}MB é grande demais (máximo 95MB). Envie um arquivo menor.`,
           }),
           { status: 413, headers: { "Content-Type": "application/json" } },
         );
