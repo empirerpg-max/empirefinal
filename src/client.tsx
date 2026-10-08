@@ -67,21 +67,41 @@ function reloadOnStaleChunk() {
   window.location.reload();
 }
 
+// "Load failed" é a mensagem GENÉRICA do WebKit (Safari/iOS — inclusive a
+// WebView do Telegram Mini App em iPhone) pra QUALQUER fetch() que falhe,
+// não só import de chunk JS — uma chamada de API comum engasgando na rede
+// 4G do celular lança o mesmo texto que um chunk desatualizado. Sem
+// distinguir os dois, o app recarregava do nada em qualquer soluço de rede
+// no mobile (confirmado em reclamações reais de usuário: "o app atualiza
+// do nada às vezes"). Only os erros de "Importing a module script
+// failed"/"dynamically imported module" já são específicos o bastante
+// (só acontecem em import() de verdade); pro "Load failed" genérico, exige
+// que o stack trace realmente referencie um chunk JS do nosso build
+// (sempre servido de "/assets/...js") antes de recarregar — uma falha de
+// fetch comum da API (ex: /api/...) nunca aparece no stack apontando pra
+// um asset.
+function pareceFalhaDeChunkJs(stack: string | undefined): boolean {
+  return /\/assets\/[^"'\s)]+\.js/i.test(stack || "");
+}
+
 window.addEventListener("vite:preloadError", reloadOnStaleChunk);
 window.addEventListener("error", (event) => {
-  // "Load failed" é a mensagem genérica do WebKit (Safari/iOS — inclusive
-  // a WebView do Telegram Mini App em iPhone) pra fetch/import que falhou;
-  // sem isso, só o Chrome ("Importing a module script failed"/"dynamically
-  // imported module") se recuperava sozinho, e usuários de iPhone ficavam
-  // com a tela quebrada (parecendo "sumiram meus dados") até fechar e abrir
-  // o app de novo manualmente.
-  if (/importing a module script failed|dynamically imported module|^load failed$/i.test(event.message || "")) {
+  const msg = event.message || "";
+  if (/importing a module script failed|dynamically imported module/i.test(msg)) {
+    reloadOnStaleChunk();
+    return;
+  }
+  if (/^load failed$/i.test(msg) && pareceFalhaDeChunkJs(event.error?.stack)) {
     reloadOnStaleChunk();
   }
 });
 window.addEventListener("unhandledrejection", (event) => {
   const msg = event.reason?.message || String(event.reason || "");
-  if (/importing a module script failed|dynamically imported module|failed to fetch dynamically|^load failed$/i.test(msg)) {
+  if (/importing a module script failed|dynamically imported module|failed to fetch dynamically/i.test(msg)) {
+    reloadOnStaleChunk();
+    return;
+  }
+  if (/^load failed$/i.test(msg) && pareceFalhaDeChunkJs(event.reason?.stack)) {
     reloadOnStaleChunk();
   }
 });

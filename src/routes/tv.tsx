@@ -997,7 +997,8 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [sending, setSending] = useState(false);
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
-  const [gifs, setGifs] = useState<Array<{ id: string; name: string; url: string; isVideo?: boolean }> | null>(null);
+  const [gifPickerTab, setGifPickerTab] = useState<"usados" | "recentes">("usados");
+  const [gifs, setGifs] = useState<Array<{ id: string; name: string; url: string; isVideo?: boolean; usos?: number }> | null>(null);
   const [uploadingGif, setUploadingGif] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1274,11 +1275,22 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
     }
   };
 
-  const sendGif = async (url: string, isVideo?: boolean) => {
+  const sendGif = async (url: string, isVideo?: boolean, fileId?: string) => {
     setGifPickerOpen(false);
     setSending(true);
     try {
       await sendRaw(`${isVideo ? VIDEO_GIF_PREFIX : GIF_PREFIX}${url}`);
+      // Conta uso de verdade (não só quando o seletor é aberto) — base do
+      // ranking "Mais usados". Fire-and-forget: nunca atrasa nem bloqueia o
+      // envio da mensagem por causa da contagem.
+      const id = fileId || url.match(/[?&]id=([\w-]+)/)?.[1];
+      if (id) {
+        fetch("/api/empire-tv/gifs/usar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileId: id }),
+        }).catch(() => {});
+      }
     } finally {
       setSending(false);
     }
@@ -1517,6 +1529,26 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
               <X className="size-3.5" />
             </button>
           </div>
+          <div className="flex items-center gap-1 px-1 pb-2">
+            <button
+              type="button"
+              onClick={() => setGifPickerTab("usados")}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition ${
+                gifPickerTab === "usados" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              }`}
+            >
+              Mais usados
+            </button>
+            <button
+              type="button"
+              onClick={() => setGifPickerTab("recentes")}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition ${
+                gifPickerTab === "recentes" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              }`}
+            >
+              Recentes
+            </button>
+          </div>
           <div className="grid grid-cols-4 gap-1.5">
             <button
               type="button"
@@ -1548,11 +1580,18 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                 Nenhum GIF enviado ainda — seja o primeiro.
               </div>
             ) : (
-              gifs.map((g) => (
+              // "Mais usados" (padrão) ordena pelo contador real de envios —
+              // "Recentes" mantém a ordem natural da API (createdTime desc),
+              // garantindo que um upload novo (ainda com 0 usos) sempre
+              // apareça pra todo mundo em vez de afundar no fim da lista.
+              (gifPickerTab === "usados"
+                ? [...gifs].sort((a, b) => (b.usos || 0) - (a.usos || 0))
+                : gifs
+              ).map((g) => (
                 <button
                   key={g.id}
                   type="button"
-                  onClick={() => sendGif(g.url, g.isVideo)}
+                  onClick={() => sendGif(g.url, g.isVideo, g.id)}
                   className="aspect-square rounded-md overflow-hidden bg-muted hover:ring-2 hover:ring-primary transition"
                   title={g.name}
                 >
