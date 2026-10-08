@@ -134,7 +134,7 @@ import {
   investirPlaylistController,
   limparInvestimentoController,
 } from "../controllers/playlistsInvestimentoController";
-import { listTvChatGifsController } from "../controllers/tvChatGifsController";
+import { listTvChatGifsController, registrarUsoGifController } from "../controllers/tvChatGifsController";
 import {
   getPremiacoesAwardsController,
   getPremiacoesCategoriasController,
@@ -413,6 +413,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     "/api/social/banners",
     "/api/social/banners/deletar",
     "/api/empire-tv/gifs",
+    "/api/empire-tv/gifs/usar",
     "/api/turnes/locais",
     "/api/turnes/simular",
     "/api/turnes",
@@ -1145,6 +1146,14 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await limparInvestimentoController(request);
   } else if (url.pathname === "/api/empire-tv/gifs") {
     response = await listTvChatGifsController();
+  } else if (url.pathname === "/api/empire-tv/gifs/usar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Método não permitido." }), {
+        status: 405,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    response = await registrarUsoGifController(request);
   } else if (url.pathname === "/api/artistas/vincular") {
     if (request.method !== "POST") {
       return new Response(
