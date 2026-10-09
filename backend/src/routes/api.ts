@@ -271,6 +271,7 @@ import {
   diagnosticoAlbumLegadoController,
   dumpLinhasController,
   fixDutchessLesLumieresController,
+  corrigirAlbumRaynaAfterpartyController,
   mesclarTopicosMusicaController,
   apagarFaixaDuplicadaLegadoController,
   repararDatasLegadosController,
@@ -1121,6 +1122,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       response = await dumpLinhasController(request);
     } else if (url.pathname === "/api/playlists/albuns/admin/fix-dutchess-les-lumieres") {
       response = await fixDutchessLesLumieresController();
+    } else if (url.pathname === "/api/playlists/albuns/admin/corrigir-album-rayna-afterparty") {
+      response = await corrigirAlbumRaynaAfterpartyController();
     } else if (url.pathname === "/api/playlists/albuns/admin/reparar-datas-legados") {
       response = await repararDatasLegadosController(request);
     } else if (url.pathname === "/api/playlists/albuns/admin/debug-linha-edicao-charts") {

@@ -908,6 +908,64 @@ export async function fixDutchessLesLumieresController(): Promise<Response> {
   return jsonResponse({ success: true, acoes });
 }
 
+// Conserto pontual: "Rayna - AFTERPARTY" — mesmo bug do appendRow deslocando
+// colunas (já visto em fixDutchessLesLumieresController acima), mas dessa
+// vez SEM cópia correta em outro lugar pra simplesmente apagar — as 11
+// células da linha ("Albuns", A:K) saíram deslocadas a partir da coluna J
+// em vez de A, e a escrita concorrente de "EDIÇÃO CHARTS ÁLBUMS" (cópia do
+// Código único pra Albuns!L) venceu a corrida e sobrescreveu o valor que a
+// própria capa (que ficaria em C, deslocada pra L) tinha acabado de
+// ocupar ali — a capa real foi recuperada via busca no Drive pelo nome do
+// arquivo (CAPA_ALBUM_Rayna_AFTERPARTY_<timestamp>.jpg cujo timestamp bate
+// com o sufixo do ID do tópico). Reescreve a linha 100 nas colunas certas
+// e limpa o lixo deslocado (M:T) — só mexe se a linha ainda tiver
+// exatamente o padrão corrompido esperado (checagem de segurança).
+export async function corrigirAlbumRaynaAfterpartyController(): Promise<Response> {
+  const acoes: string[] = [];
+  const linha = 100;
+  const rows = await googleSheetsService.principal.readValues("Albuns", `A${linha}:T${linha}`);
+  const row = rows?.[0] || [];
+
+  const bateComCorrompido =
+    normalizeText(row[9]) === "46304" &&
+    normalizeText(row[11]) === "EMPALBM089" &&
+    normalizeText(row[15]) === "Rayna - AFTERPARTY";
+
+  if (!bateComCorrompido) {
+    return jsonResponse({
+      success: true,
+      acoes: [
+        `Albuns!linha ${linha} NÃO corrigida — não bateu com o padrão corrompido esperado (planilha já mudou, ou já foi corrigida antes).`,
+      ],
+      linhaAtual: row,
+    });
+  }
+
+  const encarteStr = normalizeText(row[18]); // S, deslocado — é o Encarte de verdade (J correto)
+  const tipoAlbum = normalizeText(row[19]) || "Álbum"; // T, deslocado — é o Tipo de verdade (K correto)
+
+  await googleSheetsService.principal.updateValues("Albuns", `A${linha}:T${linha}`, [
+    [
+      "09/10/2026", // A - Data de lançamento (46304 decodificado)
+      "album_1791560222575_dk34zz", // B - ID do tópico
+      "https://drive.google.com/file/d/1ewYWEg1J8dtlq_1Ms6nDmYarZr91hqx5/view?usp=drivesdk", // C - Capa (recuperada via Drive)
+      "album_1791560222575_dk34zz", // D - Comentários para
+      "7278505786", // E - ID do Criador
+      "Lucas B.", // F - Nome do criador
+      "Rayna - AFTERPARTY", // G - Novo Nome
+      "", // H
+      "", // I
+      encarteStr, // J - Encarte
+      tipoAlbum, // K - Tipo
+      "EMPALBM089", // L - Código único (já estava certo, mantido)
+      "", "", "", "", "", "", "", "", // M-T — limpa o lixo deslocado
+    ],
+  ]);
+  acoes.push(`Albuns!linha ${linha} reescrita nas colunas corretas (A-L), lixo deslocado (M:T) limpo.`);
+
+  return jsonResponse({ success: true, acoes });
+}
+
 // Dump bruto de um intervalo de linhas, sem NENHUM filtro por título —
 // último recurso quando o diagnóstico por título não bate com o que
 // aparece na planilha (ex: espaço/acento/caractere invisível diferente
