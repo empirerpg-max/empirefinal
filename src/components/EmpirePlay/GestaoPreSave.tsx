@@ -9,9 +9,10 @@ import {
   Ban,
   Upload as UploadIcon,
   Trash2,
+  UserCircle,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { api } from "@/lib/api";
+import { api, driveImg } from "@/lib/api";
 
 // Gestão Pre save — menu próprio do Catálogo (separado de "Gestão"), pra
 // criar/gerenciar campanhas de pre-save de álbum. Ver preSaveController.ts
@@ -95,6 +96,11 @@ interface Campanha {
   missoes: MissaoDia[];
 }
 
+interface PerfilMidia {
+  nome: string;
+  foto: string;
+}
+
 async function uploadImagem(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
@@ -114,6 +120,7 @@ export function GestaoPreSave() {
   const [artistas, setArtistas] = useState<string[]>([]);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [selecionada, setSelecionada] = useState<Campanha | null>(null);
+  const [perfisMidia, setPerfisMidia] = useState<PerfilMidia[]>([]);
 
   const carregar = () => {
     if (!telegramId) {
@@ -138,6 +145,35 @@ export function GestaoPreSave() {
     api
       .meusArtistas(telegramId)
       .then((lista) => setArtistas(lista.map((a) => a.nome).filter(Boolean)));
+  }, [telegramId]);
+
+  // Mesma lista/UI que social.tsx usa pra viewMode === "Midia"
+  // (perfisPublicos): perfis de SOCIAL_PERFIS com telegram_id = "Todos",
+  // mais os próprios artistas do jogador (que também podem ser escolhidos
+  // como "perfil" de bastidores) — dedupe por nome.
+  useEffect(() => {
+    (api as any)
+      .listarPerfisSocial()
+      .then((profs: any[]) => {
+        const vistos = new Set<string>();
+        const out: PerfilMidia[] = [];
+        for (const p of profs || []) {
+          const telegramIdPerfil = String(p.telegramId || "")
+            .trim()
+            .toLowerCase();
+          const ehCompartilhado = telegramIdPerfil === "todos";
+          const ehDoJogador = telegramId && telegramIdPerfil === telegramId.toLowerCase();
+          if (!ehCompartilhado && !ehDoJogador) continue;
+          const chave = String(p.artista || "")
+            .trim()
+            .toLowerCase();
+          if (!chave || vistos.has(chave)) continue;
+          vistos.add(chave);
+          out.push({ nome: p.artista, foto: p.avatar_url || p.avatar || p.foto || "" });
+        }
+        setPerfisMidia(out);
+      })
+      .catch(() => setPerfisMidia([]));
   }, [telegramId]);
 
   return (
@@ -183,6 +219,7 @@ export function GestaoPreSave() {
         <CalendarioCampanha
           campanha={selecionada}
           telegramId={telegramId}
+          perfisMidia={perfisMidia}
           onVoltar={() => setSelecionada(null)}
           onAtualizada={(c) => {
             setSelecionada(c);
@@ -555,11 +592,13 @@ function NovaCampanhaForm({
 function CalendarioCampanha({
   campanha,
   telegramId,
+  perfisMidia,
   onVoltar,
   onAtualizada,
 }: {
   campanha: Campanha;
   telegramId: string;
+  perfisMidia: PerfilMidia[];
   onVoltar: () => void;
   onAtualizada: (c: Campanha) => void;
 }) {
@@ -673,6 +712,7 @@ function CalendarioCampanha({
           telegramId={telegramId}
           missao={diaAberto}
           faixas={campanha.faixas}
+          perfisMidia={perfisMidia}
           onFechar={() => setDiaAberto(null)}
           onCompletada={() => {
             setDiaAberto(null);
@@ -691,6 +731,7 @@ function MissaoModal({
   telegramId,
   missao,
   faixas,
+  perfisMidia,
   onFechar,
   onCompletada,
 }: {
@@ -698,6 +739,7 @@ function MissaoModal({
   telegramId: string;
   missao: MissaoDia;
   faixas: Faixa[];
+  perfisMidia: PerfilMidia[];
   onFechar: () => void;
   onCompletada: () => void;
 }) {
@@ -707,7 +749,7 @@ function MissaoModal({
     tipo === "desafio_som" || tipo === "making_of_video" ? "tiktok" : REDES[0],
   );
   const [texto, setTexto] = useState("");
-  const [perfilTelegramId, setPerfilTelegramId] = useState("");
+  const [perfilArtista, setPerfilArtista] = useState("");
   const [faixaOrdemRevelada, setFaixaOrdemRevelada] = useState<number | "">("");
   const [entrevistaTitulo, setEntrevistaTitulo] = useState("");
   const [entrevistaPergunta, setEntrevistaPergunta] = useState("");
@@ -742,8 +784,8 @@ function MissaoModal({
       payload.rede =
         tipo === "desafio_som" ? "tiktok" : tipo === "making_of_video" ? "tiktok" : rede;
       if (tipo === "bastidores") {
-        if (!perfilTelegramId.trim()) return setErro('Informe o perfil de "Tá na Mídia" usado.');
-        payload.perfilTelegramId = perfilTelegramId.trim();
+        if (!perfilArtista) return setErro('Escolha um perfil de "Tá na Mídia" para publicar.');
+        payload.perfilArtista = perfilArtista;
       }
       if (tipo === "tracklist_reveal") {
         if (!faixaOrdemRevelada) return setErro("Escolha qual faixa oculta revelar.");
@@ -869,12 +911,57 @@ function MissaoModal({
               </div>
             )}
             {tipo === "bastidores" && (
-              <input
-                value={perfilTelegramId}
-                onChange={(e) => setPerfilTelegramId(e.target.value)}
-                placeholder='Perfil de "Tá na Mídia" usado (telegramId ou handle)'
-                className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
-              />
+              <div>
+                <label className="text-[11px] font-bold text-neutral-400">
+                  Publicar através de qual perfil de &quot;Tá na Mídia&quot;?
+                </label>
+                {perfisMidia.length === 0 ? (
+                  <p className="text-[11px] text-neutral-500 mt-1">
+                    Nenhum perfil de &quot;Tá na Mídia&quot; disponível no momento.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 mt-1.5 max-h-40 overflow-y-auto pr-1">
+                    {perfisMidia.map((perfil) => (
+                      <button
+                        key={perfil.nome}
+                        type="button"
+                        onClick={() => setPerfilArtista(perfil.nome)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-xl border min-w-0 ${
+                          perfilArtista === perfil.nome
+                            ? "bg-fuchsia-500/20 border-fuchsia-400/50"
+                            : "bg-white/5 border-white/10 hover:border-fuchsia-400/30"
+                        }`}
+                      >
+                        <div className="size-9 rounded-full overflow-hidden bg-neutral-700 flex items-center justify-center shrink-0">
+                          {perfil.foto ? (
+                            <img
+                              src={
+                                perfil.foto.includes("drive.google.com") ||
+                                perfil.foto.includes("googleusercontent.com")
+                                  ? driveImg(perfil.foto)
+                                  : perfil.foto
+                              }
+                              alt=""
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.onerror = null;
+                                target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(perfil.nome)}&background=111&color=fff&size=64&bold=true`;
+                              }}
+                            />
+                          ) : (
+                            <UserCircle className="size-5 text-neutral-500" />
+                          )}
+                        </div>
+                        <span className="text-[9px] font-bold text-neutral-300 truncate w-full text-center">
+                          {perfil.nome}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
             {tipo === "tracklist_reveal" && (
               <select

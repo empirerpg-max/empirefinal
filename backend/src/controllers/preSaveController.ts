@@ -686,7 +686,7 @@ export interface CompletarMissaoPayload {
   rede?: string; // rede do post social ("twitter" | "instagram" | "tiktok" | ...)
   texto?: string;
   mediaUrl?: string;
-  perfilTelegramId?: string; // bastidores: perfil de "Tá na Mídia" usado
+  perfilArtista?: string; // bastidores: nome do artista do perfil de "Tá na Mídia" escolhido (SOCIAL_PERFIS!A)
   faixaOrdemRevelada?: number; // tracklist_reveal: qual faixa revelar
   entrevista?: {
     titulo: string;
@@ -694,6 +694,39 @@ export interface CompletarMissaoPayload {
     musicas: string[];
   };
   videoRealId?: string; // making_of_video, caminho "vídeo real via Fórum > Vídeos" (id de vídeo já cadastrado lá)
+}
+
+// Valida de verdade o caminho "vídeo real" da missão making_of_video:
+// o videoId precisa existir em "Music Videos" (coluna F —
+// message_thread_id, mesmo id gerado em createVideoController,
+// gestaoController.ts) e pertencer ao artista da campanha. "Music Videos"
+// não tem uma coluna de "dono" própria preenchida de verdade — o título
+// (coluna B) é sempre gravado como "{artista} - {título}" (ver
+// createVideoController), então a posse é confirmada por esse prefixo,
+// igual o resto do app faz pra álbuns/faixas. Devolve a mensagem de erro,
+// ou "" quando está tudo certo.
+async function validarVideoRealPertenceAoArtista(
+  videoId: string,
+  artista: string,
+): Promise<string> {
+  const id = normalizeText(videoId);
+  if (!id) return "Informe o vídeo cadastrado em Fórum > Vídeos.";
+  const rows = await googleSheetsService.principal
+    .readValues("Music Videos", "A1:T20000")
+    .catch(() => []);
+  if (!rows || rows.length < 2)
+    return "Não foi possível conferir o cadastro de vídeos — tenta de novo.";
+  const prefixoArtista = normalizeComparison(`${artista} - `);
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (normalizeText(row[5]) !== id) continue; // F — message_thread_id
+    const titulo = normalizeComparison(row[1]); // B — título do tópico ("Artista - Título")
+    if (!titulo.startsWith(prefixoArtista)) {
+      return `Esse vídeo não pertence a "${artista}" — escolha um vídeo cadastrado por esse artista em Fórum > Vídeos.`;
+    }
+    return "";
+  }
+  return "Vídeo não encontrado em Fórum > Vídeos — cadastre-o lá antes de completar essa missão.";
 }
 
 async function validarEExecutarMissao(
@@ -752,8 +785,13 @@ async function validarEExecutarMissao(
     case "making_of_video": {
       // Dois caminhos possíveis: (a) post exclusivo de TikTok, ou (b) vídeo
       // real via Fórum > Vídeos (o jogador já cadastrou lá antes de
-      // completar essa missão aqui — só referenciamos o id).
+      // completar essa missão aqui) — nesse 2º caminho, valida de verdade
+      // contra "Music Videos" (gestaoController.ts/createVideoController):
+      // o vídeo precisa existir (coluna F = message_thread_id) e pertencer
+      // ao artista da campanha.
       if (payload.videoRealId) {
+        const erro = await validarVideoRealPertenceAoArtista(payload.videoRealId, c.artista);
+        if (erro) return { ok: false, error: erro };
         return { ok: true, dados: { caminho: "video_real", videoId: payload.videoRealId } };
       }
       return postarSocial("tiktok");
@@ -761,26 +799,39 @@ async function validarEExecutarMissao(
 
     case "bastidores": {
       // DEVE ser publicado através de um perfil de SOCIAL_PERFIS/"Tá na
-      // Mídia" disponível pro jogador (telegramId="Todos" cobre quase
-      // todos). Validação leve: perfil precisa existir e estar disponível.
-      const perfilId = normalizeText(payload.perfilTelegramId);
-      if (!perfilId)
+      // Mídia" disponível pro jogador — mesma lista que social.tsx mostra
+      // em viewMode === "Midia" (perfisPublicos: linhas com
+      // telegram_id="Todos", uma por artista) mais os próprios artistas do
+      // jogador (telegram_id === jogadorId). O front replica essa mesma
+      // lista visual (ver GestaoPreSave.tsx); aqui só confirma de verdade
+      // que o nome escolhido corresponde a um perfil de verdade disponível
+      // — nunca confia só num ID de texto solto digitado à mão.
+      const perfilArtista = normalizeComparison(payload.perfilArtista);
+      if (!perfilArtista) {
         return {
           ok: false,
           error: 'Escolha um perfil de "Tá na Mídia" para publicar os bastidores.',
         };
+      }
+      const jogadorIdAlvo = normalizeText(payload.jogadorId || c.jogadorId);
       const perfisRows = await googleSheetsService.usuarios
         .readValues("SOCIAL_PERFIS", "A1:H20000")
         .catch(() => []);
       const disponivel = (perfisRows || []).slice(1).some((row) => {
-        const telegramId = normalizeText(row[5]);
-        return normalizeComparison(telegramId) === "todos" || telegramId === perfilId;
+        const artista = normalizeComparison(row[0]);
+        if (artista !== perfilArtista) return false;
+        const telegramId = normalizeComparison(row[5]);
+        return telegramId === "todos" || telegramId === normalizeComparison(jogadorIdAlvo);
       });
-      if (!disponivel)
+      if (!disponivel) {
         return { ok: false, error: "Esse perfil não está disponível para publicar bastidores." };
+      }
       const resultado = await postarSocial();
       if (!resultado.ok) return resultado;
-      return { ok: true, dados: { ...(resultado.dados as object), perfilId } };
+      return {
+        ok: true,
+        dados: { ...(resultado.dados as object), perfilArtista: payload.perfilArtista },
+      };
     }
 
     case "tracklist_reveal": {
@@ -1050,4 +1101,33 @@ export async function processarLancamentosPreSaveScheduled(): Promise<{
     console.error("[processarLancamentosPreSaveScheduled] Erro geral:", err);
   }
   return { lancados, falhas };
+}
+
+// -------------------- LOCK DE COMENTÁRIOS (pré-lançamento) --------------------
+
+// Chamado por createCommentController (forumController.ts) antes de gravar
+// QUALQUER comentário num tópico de álbum. O tópico de uma campanha de
+// pre-save é criado (reservado) imediatamente ao iniciar a campanha, mas
+// comentários ficam travados até o dia do lançamento de verdade — regra
+// explícita do usuário. Não basta confiar em "o álbum ainda não existe em
+// Albuns": o tópico já existe (foi reservado), então sem essa checagem
+// explícita o comentário seria aceito mesmo assim (ou falharia de um jeito
+// confuso lá na frente). Devolve null quando não há lock (sem campanha
+// pre-save para esse topicId, ou campanha já "lancada"/"cancelada").
+export async function getPreSaveLockParaTopico(
+  albumTopicId: string,
+): Promise<{ albumTituloFull: string; dataLancamento: string } | null> {
+  const id = normalizeText(albumTopicId);
+  if (!id) return null;
+  try {
+    const campanhas = await readAllCampanhas();
+    const c = campanhas.find((x) => x.albumTopicId === id && x.status === "ativa");
+    if (!c) return null;
+    return { albumTituloFull: c.albumTituloFull, dataLancamento: c.dataLancamento };
+  } catch (err) {
+    console.warn("[getPreSaveLockParaTopico] Falha ao checar lock de pre-save:", err);
+    // Em caso de falha de leitura, nunca bloqueia por engano — só não
+    // trava um comentário que, na pior hipótese, já deveria estar liberado.
+    return null;
+  }
 }
