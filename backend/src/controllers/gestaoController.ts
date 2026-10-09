@@ -825,24 +825,34 @@ export async function createVideoController(request: Request): Promise<Response>
 }
 
 // Lista as músicas disponíveis nos charts pra busca por faixa no cadastro de
-// álbum — fonte é a aba "Pontos" (registrosCharts), coluna D, cujo cabeçalho
-// real fica na linha 3 (confirmado via dump ao vivo); os dados começam na
-// linha 4. Cada valor já vem no formato "Artista - Título".
+// álbum — fonte é "REGISTRO DE MÚSICA" (registrosCharts), a mesma aba onde
+// registrarFaixaNosCharts grava toda música lançada (B = Título "Artista -
+// Título", H = ACT PRINCIPAL). Antes lia a aba "Pontos" coluna D (comentário
+// dizia "confirmado via dump ao vivo", mas isso ficou desatualizado — hoje
+// "Pontos" é usada por marcarVideoclipeNaPontos, pros cadastros de
+// videoclipe, não tem nada de busca de faixa; e existe uma aba SEPARADA
+// "PONTOS" em maiúsculas, usada pelo módulo de distribuir pontos aos
+// jogadores, com nomes de jogador — foi essa planilha errada que a busca
+// de "Música Existente" acabava mostrando, nunca achando nenhuma música de
+// verdade). Usa ACT PRINCIPAL (H) como artist em vez de tentar separar o
+// título por " - ", porque títulos com múltiplos hífens no nome da música
+// quebravam esse split.
 export async function getMusicasEmChartController(): Promise<Response> {
   try {
-    const rows = await googleSheetsService.registrosCharts.readValues("Pontos", "D4:D5000");
+    const rows = await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
     const seen = new Set<string>();
     const musicas: { label: string; artist: string; title: string }[] = [];
-    for (const row of rows) {
-      const label = (row[0] || "").trim();
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const label = (row[1] || "").trim(); // B - Título
       if (!label || seen.has(label)) continue;
       seen.add(label);
-      const sepIdx = label.indexOf(" - ");
-      musicas.push({
-        label,
-        artist: sepIdx >= 0 ? label.slice(0, sepIdx).trim() : label,
-        title: sepIdx >= 0 ? label.slice(sepIdx + 3).trim() : "",
-      });
+      const artist = (row[7] || "").trim(); // H - ACT PRINCIPAL
+      const title =
+        artist && label.toLowerCase().startsWith(`${artist.toLowerCase()} - `)
+          ? label.slice(artist.length + 3).trim()
+          : label;
+      musicas.push({ label, artist: artist || label, title });
     }
     return new Response(JSON.stringify({ success: true, data: musicas }), {
       status: 200,
