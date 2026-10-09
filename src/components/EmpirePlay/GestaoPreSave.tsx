@@ -316,6 +316,73 @@ export function GestaoPreSave() {
           ))}
         </div>
       )}
+
+      {!mostrarForm && !selecionada && <LeaderboardPreSave />}
+    </div>
+  );
+}
+
+interface LeaderboardEntry {
+  posicao: number;
+  artista: string;
+  totalPreSaves: number;
+  campanhas: number;
+}
+
+// Leaderboard histórico "mais pre-saves da história" (top 10/20/30
+// artistas) — item explicitamente pedido no desenho da feature; faltava
+// ter ALGUM lugar pra exibir o que /api/presave/leaderboard já calculava.
+function LeaderboardPreSave() {
+  const [ranking, setRanking] = useState<LeaderboardEntry[]>([]);
+  const [limite, setLimite] = useState(10);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/presave/leaderboard?limit=${limite}`)
+      .then((r) => r.json())
+      .then((res) => setRanking(Array.isArray(res?.data) ? res.data : []))
+      .catch(() => setRanking([]))
+      .finally(() => setLoading(false));
+  }, [limite]);
+
+  return (
+    <div className="mt-8 rounded-2xl bg-neutral-800/40 border border-white/10 p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <h2 className="text-sm font-black uppercase tracking-wider text-fuchsia-300">
+          Top artistas em pre-save (histórico)
+        </h2>
+        <div className="flex gap-1.5">
+          {[10, 20, 30].map((n) => (
+            <button
+              key={n}
+              onClick={() => setLimite(n)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ${
+                limite === n ? "bg-fuchsia-500 text-black" : "bg-white/5 text-neutral-300"
+              }`}
+            >
+              Top {n}
+            </button>
+          ))}
+        </div>
+      </div>
+      {loading && <p className="text-xs text-neutral-500">Carregando...</p>}
+      {!loading && ranking.length === 0 && (
+        <p className="text-xs text-neutral-500">Nenhuma campanha de pre-save registrada ainda.</p>
+      )}
+      <div className="space-y-1.5">
+        {ranking.map((r) => (
+          <div key={r.artista} className="flex items-center gap-3 px-2 py-1.5 rounded-xl min-w-0">
+            <span className="text-xs font-black text-neutral-500 w-6 shrink-0">#{r.posicao}</span>
+            <span className="text-sm text-white font-bold truncate flex-1 min-w-0">
+              {r.artista}
+            </span>
+            <span className="text-xs font-bold text-fuchsia-300 shrink-0">
+              {r.totalPreSaves.toLocaleString("pt-BR")}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

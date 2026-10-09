@@ -1,4 +1,11 @@
-import { googleSheetsService, normalizeText, normalizeComparison, dedupeHeaders, normalizeHeader } from "../services/googleSheetsService";
+import {
+  googleSheetsService,
+  normalizeText,
+  normalizeComparison,
+  dedupeHeaders,
+  normalizeHeader,
+} from "../services/googleSheetsService";
+import { withWriteLock } from "../services/writeLockService";
 import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
 import {
   publicarAlbum,
@@ -11,7 +18,9 @@ import {
 
 function tituloCompletoDaFaixa(titulo: string, artista: string): string {
   const semPrefixoDuplicado = dedupeArtistPrefix(titulo, artista);
-  return semPrefixoDuplicado.includes(" - ") ? semPrefixoDuplicado : `${artista} - ${semPrefixoDuplicado}`;
+  return semPrefixoDuplicado.includes(" - ")
+    ? semPrefixoDuplicado
+    : `${artista} - ${semPrefixoDuplicado}`;
 }
 
 // Playlists vivem na planilha "usuarios" (a mesma de Usuários/Social), na
@@ -59,7 +68,10 @@ function genId(): string {
 // planilha é nunca usar :append — ler a coluna-âncora, achar a última linha
 // com conteúdo de verdade e escrever direto nessa linha via updateValues.
 async function proximaLinhaLivre(sheetName: string, colunaAncora: string): Promise<number> {
-  const rows = await googleSheetsService.usuarios.readValues(sheetName, `${colunaAncora}2:${colunaAncora}20000`);
+  const rows = await googleSheetsService.usuarios.readValues(
+    sheetName,
+    `${colunaAncora}2:${colunaAncora}20000`,
+  );
   let ultimaComConteudo = 1; // linha 1 = cabeçalho
   for (let i = 0; i < rows.length; i++) {
     if ((rows[i]?.[0] || "").toString().trim()) ultimaComConteudo = i + 2;
@@ -162,7 +174,9 @@ export async function savePlaylistController(request: Request): Promise<Response
   const tgId = body.tgId || "";
   const allRows = await googleSheetsService.usuarios.readValues(SHEET);
   const isEdit = Boolean(payload.id);
-  const rowIndex = isEdit ? allRows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === payload.id) : -1;
+  const rowIndex = isEdit
+    ? allRows.findIndex((row, i) => i > 0 && normalizeText(row[0]) === payload.id)
+    : -1;
 
   if (isEdit && rowIndex === -1) {
     return jsonResponse({ ok: false, error: "Playlist não encontrada." }, 404);
@@ -182,7 +196,15 @@ export async function savePlaylistController(request: Request): Promise<Response
 
   if (isEdit) {
     await googleSheetsService.usuarios.updateValues(SHEET, `B${rowIndex + 1}:H${rowIndex + 1}`, [
-      [payload.titulo, payload.descricao || "", payload.capa_url || "", payload.owner || "", tgId, tracksJson, data],
+      [
+        payload.titulo,
+        payload.descricao || "",
+        payload.capa_url || "",
+        payload.owner || "",
+        tgId,
+        tracksJson,
+        data,
+      ],
     ]);
   } else {
     await googleSheetsService.usuarios.appendRow(SHEET, [
@@ -203,12 +225,19 @@ export async function savePlaylistController(request: Request): Promise<Response
 // -------------------- CATÁLOGO (pra montar playlists) --------------------
 
 export async function getPlaylistsCatalogoController(): Promise<Response> {
-  const [albunsRows, faixasRows] = await Promise.all([readAlbunsAntigosRows(), readFaixasAntigasRows()]);
+  const [albunsRows, faixasRows] = await Promise.all([
+    readAlbunsAntigosRows(),
+    readFaixasAntigasRows(),
+  ]);
 
   const albunsById = new Map(
     albunsRows.map((row) => [
       normalizeText(row[0]),
-      { artista: normalizeText(row[1]), titulo: normalizeText(row[2]), capa_url: normalizeText(row[6]) },
+      {
+        artista: normalizeText(row[1]),
+        titulo: normalizeText(row[2]),
+        capa_url: normalizeText(row[6]),
+      },
     ]),
   );
 
@@ -256,7 +285,10 @@ function faixaAntigaFromRow(row: string[]) {
 // -------------------- ÁLBUNS ANTIGOS (galeria, listagem/detalhe) --------------------
 
 export async function getAlbunsAntigosController(): Promise<Response> {
-  const [albunsRows, faixasRows] = await Promise.all([readAlbunsAntigosRows(), readFaixasAntigasRows()]);
+  const [albunsRows, faixasRows] = await Promise.all([
+    readAlbunsAntigosRows(),
+    readFaixasAntigasRows(),
+  ]);
 
   const faixasCountByAlbum = new Map<string, number>();
   for (const row of faixasRows) {
@@ -286,7 +318,10 @@ export async function getAlbunsAntigosController(): Promise<Response> {
 }
 
 export async function getAlbumAntigoByIdController(id: string): Promise<Response> {
-  const [albunsRows, faixasRows] = await Promise.all([readAlbunsAntigosRows(), readFaixasAntigasRows()]);
+  const [albunsRows, faixasRows] = await Promise.all([
+    readAlbunsAntigosRows(),
+    readFaixasAntigasRows(),
+  ]);
   const row = albunsRows.find((r) => normalizeText(r[0]) === id);
   if (!row) return jsonResponse({ error: "Álbum não encontrado." }, 404);
 
@@ -360,7 +395,10 @@ export async function diagnosticoDuplicatasLegadosController(): Promise<Response
 
   // linha real na planilha = índice no array + 1 (linha 1 é cabeçalho, e
   // readValues devolve a partir da linha 1 também, então rows[i] = linha i+1)
-  const musicasPorTitulo = new Map<string, { linha: number; topicId: string; pendente: string; album: string }[]>();
+  const musicasPorTitulo = new Map<
+    string,
+    { linha: number; topicId: string; pendente: string; album: string }[]
+  >();
   for (let i = 1; i < musicasRows.length; i++) {
     const row = musicasRows[i];
     const titulo = normalizeText(row?.[7]);
@@ -376,14 +414,19 @@ export async function diagnosticoDuplicatasLegadosController(): Promise<Response
   }
 
   // "EDIÇÃO CHARTS" lido a partir de A2, então rows[i] = linha i+2.
-  const edicaoChartsPorTitulo = new Map<string, { linha: number; album: string; weeks: string }[]>();
+  const edicaoChartsPorTitulo = new Map<
+    string,
+    { linha: number; album: string; weeks: string }[]
+  >();
   for (let i = 0; i < (edicaoChartsRows || []).length; i++) {
     const row = edicaoChartsRows[i];
     const titulo = normalizeText(row?.[1]); // B
     if (!titulo) continue;
     const key = normalizeComparison(titulo);
     if (!edicaoChartsPorTitulo.has(key)) edicaoChartsPorTitulo.set(key, []);
-    edicaoChartsPorTitulo.get(key)!.push({ linha: i + 2, album: normalizeText(row[4]), weeks: normalizeText(row[5]) });
+    edicaoChartsPorTitulo
+      .get(key)!
+      .push({ linha: i + 2, album: normalizeText(row[4]), weeks: normalizeText(row[5]) });
   }
 
   const duplicatasMusicas: {
@@ -399,7 +442,9 @@ export async function diagnosticoDuplicatasLegadosController(): Promise<Response
     const artista = normalizeText(row[1]);
     const albumId = normalizeText(row[0]);
     if (!artista) continue;
-    const faixas = faixasLegadasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
+    const faixas = faixasLegadasRows
+      .filter((r) => normalizeText(r[0]) === albumId)
+      .map(faixaAntigaFromRow);
     for (const f of faixas) {
       const tituloCompleto = tituloCompletoDaFaixa(f.titulo, artista);
       const key = normalizeComparison(tituloCompleto);
@@ -452,12 +497,18 @@ export async function mesclarTopicosMusicaController(request: Request): Promise<
   const body =
     request.method === "GET"
       ? { manter: url.searchParams.get("manter"), remover: url.searchParams.get("remover") }
-      : ((await request.json().catch(() => ({}))) as { manter?: string | null; remover?: string | null });
+      : ((await request.json().catch(() => ({}))) as {
+          manter?: string | null;
+          remover?: string | null;
+        });
   const manter = normalizeText(body.manter || "");
   const remover = normalizeText(body.remover || "");
   if (!manter || !remover || manter === remover) {
     return jsonResponse(
-      { success: false, error: "Parâmetros 'manter' e 'remover' são obrigatórios e precisam ser diferentes." },
+      {
+        success: false,
+        error: "Parâmetros 'manter' e 'remover' são obrigatórios e precisam ser diferentes.",
+      },
       400,
     );
   }
@@ -468,8 +519,16 @@ export async function mesclarTopicosMusicaController(request: Request): Promise<
   const musicasRows = await googleSheetsService.principal.readValues("Musicas");
   const linhaManter = musicasRows.findIndex((r, i) => i > 0 && normalizeText(r[1]) === manter);
   const linhaRemover = musicasRows.findIndex((r, i) => i > 0 && normalizeText(r[1]) === remover);
-  if (linhaManter < 1) return jsonResponse({ success: false, error: `Tópico 'manter' (${manter}) não encontrado em Musicas.` }, 404);
-  if (linhaRemover < 1) return jsonResponse({ success: false, error: `Tópico 'remover' (${remover}) não encontrado em Musicas.` }, 404);
+  if (linhaManter < 1)
+    return jsonResponse(
+      { success: false, error: `Tópico 'manter' (${manter}) não encontrado em Musicas.` },
+      404,
+    );
+  if (linhaRemover < 1)
+    return jsonResponse(
+      { success: false, error: `Tópico 'remover' (${remover}) não encontrado em Musicas.` },
+      404,
+    );
 
   const tituloManter = normalizeText(musicasRows[linhaManter][7]);
   const tituloRemover = normalizeText(musicasRows[linhaRemover][7]);
@@ -479,14 +538,18 @@ export async function mesclarTopicosMusicaController(request: Request): Promise<
   let comentariosMovidos = 0;
   for (let i = 1; i < comentariosRows.length; i++) {
     if (normalizeText(comentariosRows[i][0]) !== remover) continue;
-    await googleSheetsService.principal.updateValues("Comentarios_Musicas", `A${i + 1}`, [[manter]]);
+    await googleSheetsService.principal.updateValues("Comentarios_Musicas", `A${i + 1}`, [
+      [manter],
+    ]);
     comentariosMovidos++;
   }
 
   // 3. Só agora apaga a linha duplicada em Musicas (a do tópico `remover`).
-  await googleSheetsService.principal.updateValues("Musicas", `A${linhaRemover + 1}:Y${linhaRemover + 1}`, [
-    Array(25).fill(""),
-  ]);
+  await googleSheetsService.principal.updateValues(
+    "Musicas",
+    `A${linhaRemover + 1}:Y${linhaRemover + 1}`,
+    [Array(25).fill("")],
+  );
 
   return jsonResponse({
     success: true,
@@ -520,12 +583,19 @@ export async function mesclarAlbunsDuplicadosController(request: Request): Promi
   const body =
     request.method === "GET"
       ? { manter: url.searchParams.get("manter"), remover: url.searchParams.get("remover") }
-      : ((await request.json().catch(() => ({}))) as { manter?: string | null; remover?: string | null });
+      : ((await request.json().catch(() => ({}))) as {
+          manter?: string | null;
+          remover?: string | null;
+        });
   const manter = normalizeText(body.manter || "");
   const remover = normalizeText(body.remover || "");
   if (!manter || !remover || normalizeComparison(manter) === normalizeComparison(remover)) {
     return jsonResponse(
-      { success: false, error: "Parâmetros 'manter' e 'remover' são obrigatórios e precisam ser diferentes (título completo 'Artista - Título')." },
+      {
+        success: false,
+        error:
+          "Parâmetros 'manter' e 'remover' são obrigatórios e precisam ser diferentes (título completo 'Artista - Título').",
+      },
       400,
     );
   }
@@ -534,10 +604,22 @@ export async function mesclarAlbunsDuplicadosController(request: Request): Promi
 
   // 1. Localiza os 2 álbuns em Albuns (coluna G = índice 6).
   const albunsRows = await googleSheetsService.principal.readValues("Albuns");
-  const linhaManter = albunsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === manterKey);
-  const linhaRemover = albunsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === removerKey);
-  if (linhaManter < 1) return jsonResponse({ success: false, error: `Álbum 'manter' ("${manter}") não encontrado em Albuns.` }, 404);
-  if (linhaRemover < 1) return jsonResponse({ success: false, error: `Álbum 'remover' ("${remover}") não encontrado em Albuns.` }, 404);
+  const linhaManter = albunsRows.findIndex(
+    (r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === manterKey,
+  );
+  const linhaRemover = albunsRows.findIndex(
+    (r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === removerKey,
+  );
+  if (linhaManter < 1)
+    return jsonResponse(
+      { success: false, error: `Álbum 'manter' ("${manter}") não encontrado em Albuns.` },
+      404,
+    );
+  if (linhaRemover < 1)
+    return jsonResponse(
+      { success: false, error: `Álbum 'remover' ("${remover}") não encontrado em Albuns.` },
+      404,
+    );
 
   const tituloManter = normalizeText(albunsRows[linhaManter][6]);
   const tituloRemover = normalizeText(albunsRows[linhaRemover][6]);
@@ -549,7 +631,9 @@ export async function mesclarAlbunsDuplicadosController(request: Request): Promi
   let comentariosMovidos = 0;
   for (let i = 1; i < comentariosRows.length; i++) {
     if (normalizeText(comentariosRows[i][0]) !== topicIdRemover) continue;
-    await googleSheetsService.principal.updateValues("Comentarios_Albuns", `A${i + 1}`, [[topicIdManter]]);
+    await googleSheetsService.principal.updateValues("Comentarios_Albuns", `A${i + 1}`, [
+      [topicIdManter],
+    ]);
     comentariosMovidos++;
   }
 
@@ -566,17 +650,22 @@ export async function mesclarAlbunsDuplicadosController(request: Request): Promi
   let faixasRepointadasEdicaoCharts = 0;
   for (let i = 1; i < edicaoChartsRows.length; i++) {
     if (normalizeComparison(normalizeText(edicaoChartsRows[i][4])) !== removerKey) continue;
-    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `E${i + 1}`, [[tituloManter]]);
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `E${i + 1}`, [
+      [tituloManter],
+    ]);
     faixasRepointadasEdicaoCharts++;
   }
 
   // 4. Apaga a linha do álbum duplicado em Albuns (A:L).
-  await googleSheetsService.principal.updateValues("Albuns", `A${linhaRemover + 1}:L${linhaRemover + 1}`, [
-    Array(12).fill(""),
-  ]);
+  await googleSheetsService.principal.updateValues(
+    "Albuns",
+    `A${linhaRemover + 1}:L${linhaRemover + 1}`,
+    [Array(12).fill("")],
+  );
 
   // 5. Apaga a linha correspondente em EDIÇÃO CHARTS ÁLBUMS (coluna D = índice 3).
-  const edicaoChartsAlbunsRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS");
+  const edicaoChartsAlbunsRows =
+    await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS");
   const linhaEdChartsAlbum = edicaoChartsAlbunsRows.findIndex(
     (r, i) => i > 0 && normalizeComparison(normalizeText(r[3])) === removerKey,
   );
@@ -612,11 +701,21 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
   const url = new URL(request.url);
   const tituloCompleto = normalizeText(url.searchParams.get("titulo") || "");
   if (!tituloCompleto) {
-    return jsonResponse({ success: false, error: "Parâmetro 'titulo' (completo, 'Artista - Título') é obrigatório." }, 400);
+    return jsonResponse(
+      { success: false, error: "Parâmetro 'titulo' (completo, 'Artista - Título') é obrigatório." },
+      400,
+    );
   }
   const key = normalizeComparison(tituloCompleto);
 
-  const [albunsLegadosRows, faixasLegadasRows, albunsRows, musicasRows, edicaoChartsAlbunsRows, edicaoChartsRows] = await Promise.all([
+  const [
+    albunsLegadosRows,
+    faixasLegadasRows,
+    albunsRows,
+    musicasRows,
+    edicaoChartsAlbunsRows,
+    edicaoChartsRows,
+  ] = await Promise.all([
     readAlbunsAntigosRows(),
     readFaixasAntigasRows(),
     googleSheetsService.principal.readValues("Albuns"),
@@ -641,7 +740,14 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
   // um merge anterior podia ter deixado 2+ linhas e um findIndex só
   // reportaria a primeira, escondendo a duplicata que o usuário via na
   // planilha).
-  const albunsOcorrencias: { linha: number; topicId: string; data: string; novoNome: string; tipo: string; codigoUnico: string }[] = [];
+  const albunsOcorrencias: {
+    linha: number;
+    topicId: string;
+    data: string;
+    novoNome: string;
+    tipo: string;
+    codigoUnico: string;
+  }[] = [];
   for (let i = 1; i < albunsRows.length; i++) {
     if (normalizeComparison(normalizeText(albunsRows[i][6])) !== key) continue;
     albunsOcorrencias.push({
@@ -658,12 +764,22 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
   const faixasEmMusicas: { linha: number; titulo: string; topicId: string }[] = [];
   for (let i = 1; i < musicasRows.length; i++) {
     if (normalizeComparison(normalizeText(musicasRows[i][10])) !== key) continue;
-    faixasEmMusicas.push({ linha: i + 1, titulo: normalizeText(musicasRows[i][7]), topicId: normalizeText(musicasRows[i][1]) });
+    faixasEmMusicas.push({
+      linha: i + 1,
+      titulo: normalizeText(musicasRows[i][7]),
+      topicId: normalizeText(musicasRows[i][1]),
+    });
   }
 
   // 4. TODAS as linhas em EDIÇÃO CHARTS ÁLBUMS com esse título (mesmo
   // motivo do item 2 acima).
-  const edicaoChartsAlbunsOcorrencias: { linha: number; data: string; semanas: string; numeroFaixas: string; codigoUnico: string }[] = [];
+  const edicaoChartsAlbunsOcorrencias: {
+    linha: number;
+    data: string;
+    semanas: string;
+    numeroFaixas: string;
+    codigoUnico: string;
+  }[] = [];
   for (let i = 1; i < edicaoChartsAlbunsRows.length; i++) {
     if (normalizeComparison(normalizeText(edicaoChartsAlbunsRows[i][3])) !== key) continue;
     edicaoChartsAlbunsOcorrencias.push({
@@ -682,10 +798,18 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
   // ausente de Musicas.
   const artistaLegado = legadoRow ? normalizeText(legadoRow[1]) : "";
   const edicaoChartsPorFaixa = faixasLegadas.map((f) => {
-    const tituloCompletoFaixa = f.titulo.includes(" - ") ? f.titulo : `${artistaLegado} - ${f.titulo}`;
+    const tituloCompletoFaixa = f.titulo.includes(" - ")
+      ? f.titulo
+      : `${artistaLegado} - ${f.titulo}`;
     const keyFaixa = normalizeComparison(tituloCompletoFaixa);
-    const linha = edicaoChartsRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[1])) === keyFaixa);
-    return { titulo: tituloCompletoFaixa, existeEmEdicaoCharts: linha >= 1, linhaEdicaoCharts: linha >= 1 ? linha + 1 : null };
+    const linha = edicaoChartsRows.findIndex(
+      (r, i) => i > 0 && normalizeComparison(normalizeText(r[1])) === keyFaixa,
+    );
+    return {
+      titulo: tituloCompletoFaixa,
+      existeEmEdicaoCharts: linha >= 1,
+      linhaEdicaoCharts: linha >= 1 ? linha + 1 : null,
+    };
   });
 
   return jsonResponse({
@@ -701,10 +825,16 @@ export async function diagnosticoAlbumLegadoController(request: Request): Promis
           // ajuda a diagnosticar onde a faixa se perdeu.
           faixas: faixasLegadas.map(({ letra, ...resto }) => resto),
         }
-      : { encontrado: false, obs: "Não existe em Playlists_Albuns com esse título — não tinha o que migrar." },
+      : {
+          encontrado: false,
+          obs: "Não existe em Playlists_Albuns com esse título — não tinha o que migrar.",
+        },
     albuns: { totalOcorrencias: albunsOcorrencias.length, ocorrencias: albunsOcorrencias },
     musicas: { totalFaixasApontandoPraEsseAlbum: faixasEmMusicas.length, faixas: faixasEmMusicas },
-    edicaoChartsAlbuns: { totalOcorrencias: edicaoChartsAlbunsOcorrencias.length, ocorrencias: edicaoChartsAlbunsOcorrencias },
+    edicaoChartsAlbuns: {
+      totalOcorrencias: edicaoChartsAlbunsOcorrencias.length,
+      ocorrencias: edicaoChartsAlbunsOcorrencias,
+    },
     // Se alguma faixa aqui estiver "existeEmEdicaoCharts: true" sem
     // aparecer em "musicas" acima, é a causa raiz: a migração acha que ela
     // já existe (bloqueando novas tentativas) mesmo sem ter Musicas.
@@ -737,25 +867,42 @@ export async function fixDutchessLesLumieresController(): Promise<Response> {
   const row100 = albunsRow100?.[0] || [];
   if (row100.some((c) => normalizeText(c) === "EMPALBM089")) {
     await googleSheetsService.principal.updateValues("Albuns", "A100:Z100", [Array(26).fill("")]);
-    acoes.push("Albuns!linha 100 apagada (resto deslocado de coluna da tentativa de criação duplicada)");
+    acoes.push(
+      "Albuns!linha 100 apagada (resto deslocado de coluna da tentativa de criação duplicada)",
+    );
   } else {
     acoes.push("Albuns!linha 100 NÃO apagada — não bateu com o esperado (planilha já mudou?)");
   }
 
   // 2. EDIÇÃO CHARTS ÁLBUMS!linha 89 e 90.
-  const edRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A89:R90");
+  const edRows = await googleSheetsService.edicaoCharts.readValues(
+    "EDIÇÃO CHARTS ÁLBUMS",
+    "A89:R90",
+  );
   const row89 = edRows?.[0] || [];
   const row90 = edRows?.[1] || [];
-  const row89Ok = normalizeText(row89[3]) === "The Dutchess - Les Lumières" && normalizeText(row89[1]) === "21/09/2019";
-  const row90Ok = normalizeText(row90[3]) === "The Dutchess - Les Lumières" && normalizeText(row90[17]) === "EMPALBM089";
+  const row89Ok =
+    normalizeText(row89[3]) === "The Dutchess - Les Lumières" &&
+    normalizeText(row89[1]) === "21/09/2019";
+  const row90Ok =
+    normalizeText(row90[3]) === "The Dutchess - Les Lumières" &&
+    normalizeText(row90[17]) === "EMPALBM089";
 
   if (row89Ok && row90Ok) {
     await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", "E89", [["10"]]);
-    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", "R89", [["EMPALBM088"]]);
-    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", "A90:R90", [Array(18).fill("")]);
-    acoes.push("EDIÇÃO CHARTS ÁLBUMS!89 corrigida (Número de Faixas=10, Código=EMPALBM088) e !90 apagada");
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", "R89", [
+      ["EMPALBM088"],
+    ]);
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", "A90:R90", [
+      Array(18).fill(""),
+    ]);
+    acoes.push(
+      "EDIÇÃO CHARTS ÁLBUMS!89 corrigida (Número de Faixas=10, Código=EMPALBM088) e !90 apagada",
+    );
   } else {
-    acoes.push(`EDIÇÃO CHARTS ÁLBUMS!89/90 NÃO mexidas — não bateram com o esperado (linha89 ok: ${row89Ok}, linha90 ok: ${row90Ok})`);
+    acoes.push(
+      `EDIÇÃO CHARTS ÁLBUMS!89/90 NÃO mexidas — não bateram com o esperado (linha89 ok: ${row89Ok}, linha90 ok: ${row90Ok})`,
+    );
   }
 
   return jsonResponse({ success: true, acoes });
@@ -771,9 +918,18 @@ export async function dumpLinhasController(request: Request): Promise<Response> 
   const sheet = normalizeText(url.searchParams.get("sheet") || "");
   const de = Number(url.searchParams.get("de")) || 1;
   const ate = Number(url.searchParams.get("ate")) || de + 20;
-  if (!sheet) return jsonResponse({ success: false, error: "Parâmetro 'sheet' obrigatório: Albuns | EDIÇÃO CHARTS ÁLBUMS | Musicas | EDIÇÃO CHARTS." }, 400);
+  if (!sheet)
+    return jsonResponse(
+      {
+        success: false,
+        error:
+          "Parâmetro 'sheet' obrigatório: Albuns | EDIÇÃO CHARTS ÁLBUMS | Musicas | EDIÇÃO CHARTS.",
+      },
+      400,
+    );
 
-  const isEdicaoCharts = sheet.toUpperCase().startsWith("EDIÇÃO") || sheet.toUpperCase().startsWith("EDICAO");
+  const isEdicaoCharts =
+    sheet.toUpperCase().startsWith("EDIÇÃO") || sheet.toUpperCase().startsWith("EDICAO");
   const rows = isEdicaoCharts
     ? await googleSheetsService.edicaoCharts.readValues(sheet, `A${de}:R${ate}`)
     : await googleSheetsService.principal.readValues(sheet, `A${de}:Z${ate}`);
@@ -807,21 +963,33 @@ export async function apagarFaixaDuplicadaLegadoController(request: Request): Pr
   const tituloEsperado = normalizeText(body.tituloEsperado || "");
   const sheet = normalizeText(body.sheet || "Musicas");
   if (!linha || linha < 2 || !tituloEsperado) {
-    return jsonResponse({ success: false, error: "Parâmetros 'linha' e 'tituloEsperado' são obrigatórios." }, 400);
+    return jsonResponse(
+      { success: false, error: "Parâmetros 'linha' e 'tituloEsperado' são obrigatórios." },
+      400,
+    );
   }
 
   if (normalizeComparison(sheet) === normalizeComparison("EdicaoCharts")) {
-    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", `A${linha}:F${linha}`);
+    const rows = await googleSheetsService.edicaoCharts.readValues(
+      "EDIÇÃO CHARTS",
+      `A${linha}:F${linha}`,
+    );
     const row = rows?.[0];
     if (!row) return jsonResponse({ success: false, error: "Linha não encontrada." }, 404);
     const titulo = normalizeText(row[1]); // B
     if (normalizeComparison(titulo) !== normalizeComparison(tituloEsperado)) {
       return jsonResponse(
-        { success: false, error: "Título da linha não bate com o esperado — abortado por segurança.", titulo },
+        {
+          success: false,
+          error: "Título da linha não bate com o esperado — abortado por segurança.",
+          titulo,
+        },
         409,
       );
     }
-    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linha}:Q${linha}`, [Array(17).fill("")]);
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linha}:Q${linha}`, [
+      Array(17).fill(""),
+    ]);
     return jsonResponse({ success: true, sheet: "EdicaoCharts", linha, tituloApagado: titulo });
   }
 
@@ -835,19 +1003,31 @@ export async function apagarFaixaDuplicadaLegadoController(request: Request): Pr
 
   if (normalizeComparison(titulo) !== normalizeComparison(tituloEsperado)) {
     return jsonResponse(
-      { success: false, error: "Título da linha não bate com o esperado — abortado por segurança.", titulo },
+      {
+        success: false,
+        error: "Título da linha não bate com o esperado — abortado por segurança.",
+        titulo,
+      },
       409,
     );
   }
   if (topicId) {
     return jsonResponse(
-      { success: false, error: "Essa linha TEM tópico próprio (B preenchido) — não parece ser a duplicata criada pela migração. Abortado por segurança." },
+      {
+        success: false,
+        error:
+          "Essa linha TEM tópico próprio (B preenchido) — não parece ser a duplicata criada pela migração. Abortado por segurança.",
+      },
       409,
     );
   }
   if (normalizeComparison(pendente) !== "sim") {
     return jsonResponse(
-      { success: false, error: "Essa linha não está marcada como Pendente — não parece ser a duplicata criada pela migração. Abortado por segurança." },
+      {
+        success: false,
+        error:
+          "Essa linha não está marcada como Pendente — não parece ser a duplicata criada pela migração. Abortado por segurança.",
+      },
       409,
     );
   }
@@ -855,7 +1035,9 @@ export async function apagarFaixaDuplicadaLegadoController(request: Request): Pr
   // Esvazia a linha inteira (não dá pra remover a linha de verdade via API
   // sem deslocar todas as de baixo) — H (título) em branco já basta pra
   // sumir de toda busca/listagem que filtra por título vazio.
-  await googleSheetsService.principal.updateValues("Musicas", `A${linha}:Y${linha}`, [Array(25).fill("")]);
+  await googleSheetsService.principal.updateValues("Musicas", `A${linha}:Y${linha}`, [
+    Array(25).fill(""),
+  ]);
 
   return jsonResponse({ success: true, sheet: "Musicas", linha, tituloApagado: titulo });
 }
@@ -868,9 +1050,13 @@ export async function apagarFaixaDuplicadaLegadoController(request: Request): Pr
 export async function debugLinhaEdicaoChartsController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const linha = Number(url.searchParams.get("linha"));
-  if (!linha || linha < 2) return jsonResponse({ success: false, error: "Parâmetro 'linha' obrigatório." }, 400);
+  if (!linha || linha < 2)
+    return jsonResponse({ success: false, error: "Parâmetro 'linha' obrigatório." }, 400);
 
-  const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", `A${linha}:Q${linha}`);
+  const rows = await googleSheetsService.edicaoCharts.readValues(
+    "EDIÇÃO CHARTS",
+    `A${linha}:Q${linha}`,
+  );
   const row = rows?.[0] || [];
   return jsonResponse({
     success: true,
@@ -898,7 +1084,13 @@ export async function repararDatasLegadosController(request: Request): Promise<R
   const url = new URL(request.url);
   const limite = Math.max(1, Math.min(15, Number(url.searchParams.get("limit")) || 5));
 
-  const [albunsLegadosRows, albunsAtuaisRows, edicaoChartsAlbunsRows, musicasRows, edicaoChartsRows] = await Promise.all([
+  const [
+    albunsLegadosRows,
+    albunsAtuaisRows,
+    edicaoChartsAlbunsRows,
+    musicasRows,
+    edicaoChartsRows,
+  ] = await Promise.all([
     readAlbunsAntigosRows(),
     googleSheetsService.principal.readValues("Albuns"),
     googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS"),
@@ -937,12 +1129,16 @@ export async function repararDatasLegadosController(request: Request): Promise<R
     const correcoes: string[] = [];
 
     // Albuns!A (Data de lançamento)
-    const albumRowIdx = albunsAtuaisRows.findIndex((r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === key);
+    const albumRowIdx = albunsAtuaisRows.findIndex(
+      (r, i) => i > 0 && normalizeComparison(normalizeText(r[6])) === key,
+    );
     if (albumRowIdx > 0) {
       const linha = albumRowIdx + 1;
       const dataAtual = normalizeText(albunsAtuaisRows[albumRowIdx][0]);
       if (dataAtual !== c.dataFormatadaCorreta) {
-        await googleSheetsService.principal.updateValues("Albuns", `A${linha}`, [[c.dataFormatadaCorreta]]);
+        await googleSheetsService.principal.updateValues("Albuns", `A${linha}`, [
+          [c.dataFormatadaCorreta],
+        ]);
         correcoes.push(`Albuns!A${linha}: "${dataAtual}" -> "${c.dataFormatadaCorreta}"`);
       }
     }
@@ -957,12 +1153,20 @@ export async function repararDatasLegadosController(request: Request): Promise<R
       const dataAtual = normalizeText(row[1]);
       const semanasAtuais = normalizeText(row[2]);
       if (dataAtual !== c.dataFormatadaCorreta) {
-        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `B${linha}`, [[c.dataFormatadaCorreta]]);
-        correcoes.push(`EDIÇÃO CHARTS ÁLBUMS!B${linha}: "${dataAtual}" -> "${c.dataFormatadaCorreta}"`);
+        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `B${linha}`, [
+          [c.dataFormatadaCorreta],
+        ]);
+        correcoes.push(
+          `EDIÇÃO CHARTS ÁLBUMS!B${linha}: "${dataAtual}" -> "${c.dataFormatadaCorreta}"`,
+        );
       }
       if (semanasAtuais !== c.semanasCorretas) {
-        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `C${linha}`, [[c.semanasCorretas]]);
-        correcoes.push(`EDIÇÃO CHARTS ÁLBUMS!C${linha}: "${semanasAtuais}" -> "${c.semanasCorretas}"`);
+        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `C${linha}`, [
+          [c.semanasCorretas],
+        ]);
+        correcoes.push(
+          `EDIÇÃO CHARTS ÁLBUMS!C${linha}: "${semanasAtuais}" -> "${c.semanasCorretas}"`,
+        );
       }
     }
 
@@ -974,11 +1178,15 @@ export async function repararDatasLegadosController(request: Request): Promise<R
       const dataAtual = normalizeText(row[0]);
       const weeksAtual = normalizeText(row[11]);
       if (dataAtual !== c.dataFormatadaCorreta) {
-        await googleSheetsService.principal.updateValues("Musicas", `A${linha}`, [[c.dataFormatadaCorreta]]);
+        await googleSheetsService.principal.updateValues("Musicas", `A${linha}`, [
+          [c.dataFormatadaCorreta],
+        ]);
         correcoes.push(`Musicas!A${linha}: "${dataAtual}" -> "${c.dataFormatadaCorreta}"`);
       }
       if (weeksAtual !== c.semanasCorretas) {
-        await googleSheetsService.principal.updateValues("Musicas", `L${linha}`, [[c.semanasCorretas]]);
+        await googleSheetsService.principal.updateValues("Musicas", `L${linha}`, [
+          [c.semanasCorretas],
+        ]);
         correcoes.push(`Musicas!L${linha}: "${weeksAtual}" -> "${c.semanasCorretas}"`);
       }
     }
@@ -991,11 +1199,15 @@ export async function repararDatasLegadosController(request: Request): Promise<R
       const dataAtual = normalizeText(row[0]);
       const weeksAtual = normalizeText(row[5]);
       if (dataAtual !== c.dataFormatadaCorreta) {
-        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linha}`, [[c.dataFormatadaCorreta]]);
+        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linha}`, [
+          [c.dataFormatadaCorreta],
+        ]);
         correcoes.push(`EDIÇÃO CHARTS!A${linha}: "${dataAtual}" -> "${c.dataFormatadaCorreta}"`);
       }
       if (weeksAtual !== c.semanasCorretas) {
-        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `F${linha}`, [[c.semanasCorretas]]);
+        await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `F${linha}`, [
+          [c.semanasCorretas],
+        ]);
         correcoes.push(`EDIÇÃO CHARTS!F${linha}: "${weeksAtual}" -> "${c.semanasCorretas}"`);
       }
     }
@@ -1053,15 +1265,23 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
   const url = new URL(request.url);
   const limite = Math.max(1, Math.min(10, Number(url.searchParams.get("limit")) || 3));
 
-  const [albunsRows, faixasRows, albunsExistentesRows, musicasExistentesRows, edicaoChartsRows, edicaoChartsAlbunsRows] =
-    await Promise.all([
-      readAlbunsAntigosRows(),
-      readFaixasAntigasRows(),
-      googleSheetsService.principal.readValues("Albuns").catch(() => []),
-      googleSheetsService.principal.readValues("Musicas").catch(() => []),
-      googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:B20000").catch(() => []),
-      googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D20000").catch(() => []),
-    ]);
+  const [
+    albunsRows,
+    faixasRows,
+    albunsExistentesRows,
+    musicasExistentesRows,
+    edicaoChartsRows,
+    edicaoChartsAlbunsRows,
+  ] = await Promise.all([
+    readAlbunsAntigosRows(),
+    readFaixasAntigasRows(),
+    googleSheetsService.principal.readValues("Albuns").catch(() => []),
+    googleSheetsService.principal.readValues("Musicas").catch(() => []),
+    googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:B20000").catch(() => []),
+    googleSheetsService.edicaoCharts
+      .readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D20000")
+      .catch(() => []),
+  ]);
 
   // G - Novo Nome -> {B - ID do tópico, linha}, pra conseguir completar um
   // álbum que já existe (em vez de tentar criar de novo e ser barrado pela
@@ -1112,7 +1332,9 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
     if (!artista || !titulo) continue;
     const fullTitle = `${artista} - ${titulo}`;
     const albumId = normalizeText(row[0]);
-    const todasFaixas = faixasRows.filter((r) => normalizeText(r[0]) === albumId).map(faixaAntigaFromRow);
+    const todasFaixas = faixasRows
+      .filter((r) => normalizeText(r[0]) === albumId)
+      .map(faixaAntigaFromRow);
     if (todasFaixas.length === 0) continue;
     const faixasNovas = todasFaixas.filter((f) => {
       const tituloCompleto = normalizeComparison(tituloCompletoDaFaixa(f.titulo, artista));
@@ -1135,7 +1357,11 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
     });
   }
 
-  const resultados: { titulo: string; status: "migrado" | "completado" | "erro"; detalhe?: string }[] = [];
+  const resultados: {
+    titulo: string;
+    status: "migrado" | "completado" | "erro";
+    detalhe?: string;
+  }[] = [];
   let faixasProcessadasNestaChamada = 0;
   let albunsProcessados = 0;
   // Bug real corrigido aqui: antes, "restantes" contava um álbum como
@@ -1151,7 +1377,11 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
   let albunsIncompletos = 0;
 
   for (const pendente of pendentes) {
-    if (albunsProcessados + albunsIncompletos >= limite || faixasProcessadasNestaChamada >= MAX_FAIXAS_POR_CHAMADA) break;
+    if (
+      albunsProcessados + albunsIncompletos >= limite ||
+      faixasProcessadasNestaChamada >= MAX_FAIXAS_POR_CHAMADA
+    )
+      break;
 
     const artista = normalizeText(pendente.row[1]);
     const titulo = normalizeText(pendente.row[2]);
@@ -1190,7 +1420,11 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
             numeroFaixas: pendente.todasFaixas.length,
             albumRowIndexEmAlbuns: pendente.albumExistente.linhaEmAlbuns,
           });
-          detalhes.push(codigo ? "entrada em EDIÇÃO CHARTS ÁLBUMS criada (estava faltando)" : "falhou ao criar entrada em EDIÇÃO CHARTS ÁLBUMS");
+          detalhes.push(
+            codigo
+              ? "entrada em EDIÇÃO CHARTS ÁLBUMS criada (estava faltando)"
+              : "falhou ao criar entrada em EDIÇÃO CHARTS ÁLBUMS",
+          );
         }
         if (faixasDaVez.length > 0) {
           await completarAlbumExistente({
@@ -1212,11 +1446,17 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
           });
           detalhes.push(
             `${faixasDaVez.length} faixa(s) que faltavam foram adicionadas${
-              faltouEspaco ? ` (ainda faltam ${pendente.faixasNovas.length - faixasDaVez.length}, próxima chamada)` : ""
+              faltouEspaco
+                ? ` (ainda faltam ${pendente.faixasNovas.length - faixasDaVez.length}, próxima chamada)`
+                : ""
             }`,
           );
         }
-        resultados.push({ titulo: pendente.fullTitle, status: "completado", detalhe: detalhes.join("; ") || undefined });
+        resultados.push({
+          titulo: pendente.fullTitle,
+          status: "completado",
+          detalhe: detalhes.join("; ") || undefined,
+        });
       } else {
         const payload: CreateAlbumPayload = {
           tituloAlbum: titulo,
@@ -1242,18 +1482,25 @@ export async function migrarAlbunsLegadosController(request: Request): Promise<R
         resultados.push({
           titulo: pendente.fullTitle,
           status: "migrado",
-          detalhe: [
-            faixasJaExistiam > 0 ? `${faixasJaExistiam} faixa(s) já existiam e foram puladas` : "",
-            faltouEspaco
-              ? `só ${faixasDaVez.length} de ${pendente.faixasNovas.length} faixas novas entraram — chame de novo pra completar`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("; ") || undefined,
+          detalhe:
+            [
+              faixasJaExistiam > 0
+                ? `${faixasJaExistiam} faixa(s) já existiam e foram puladas`
+                : "",
+              faltouEspaco
+                ? `só ${faixasDaVez.length} de ${pendente.faixasNovas.length} faixas novas entraram — chame de novo pra completar`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("; ") || undefined,
         });
       }
     } catch (err: any) {
-      resultados.push({ titulo: pendente.fullTitle, status: "erro", detalhe: err?.message || String(err) });
+      resultados.push({
+        titulo: pendente.fullTitle,
+        status: "erro",
+        detalhe: err?.message || String(err),
+      });
     }
 
     faixasProcessadasNestaChamada += faixasDaVez.length;
@@ -1312,7 +1559,10 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
   };
 
   if (!body.artista?.trim() || !body.titulo?.trim() || !body.faixas?.length) {
-    return jsonResponse({ ok: false, error: "Artista, título e ao menos uma faixa são obrigatórios." }, 400);
+    return jsonResponse(
+      { ok: false, error: "Artista, título e ao menos uma faixa são obrigatórios." },
+      400,
+    );
   }
   if (body.faixas.some((f) => !f.titulo?.trim() || !f.drive_url?.trim())) {
     return jsonResponse({ ok: false, error: "Toda faixa precisa de título e link/arquivo." }, 400);
@@ -1324,49 +1574,68 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
   // Sem try/catch aqui de propósito — se a linha do álbum não gravar, ele
   // não existe de verdade, então a falha deve propagar e responder
   // ok:false, nunca fingir sucesso.
-  const linhaAlbum = await proximaLinhaLivre(SHEET_ALBUNS, "A");
-  await googleSheetsService.usuarios.updateValues(SHEET_ALBUNS, `A${linhaAlbum}:K${linhaAlbum}`, [
-    [
-      albumId,
-      body.artista.trim(),
-      body.titulo.trim(),
-      body.genero?.trim() || "",
-      dataLancamento,
-      body.descricao?.trim() || "",
-      body.capa_url || "",
-      body.contracapa_url || "",
-      JSON.stringify(body.encarte?.filter(Boolean) || []),
-      body.telegram_id || "",
-      new Date().toISOString(),
-    ],
-  ]);
+  //
+  // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") — todo
+  // o bloco "calcular próxima linha livre + escrever" (álbum e TODAS as
+  // faixas) precisa ser uma seção crítica única — mantém a trava aberta
+  // do cálculo até a última escrita, nunca só em volta do cálculo: duas
+  // chamadas concorrentes a este endpoint calculavam a MESMA "próxima
+  // linha livre" antes de qualquer uma escrever, exatamente o padrão que
+  // corrompeu "Albuns" (linha da Rayna).
+  await withWriteLock(`playlists:${SHEET_ALBUNS}`, async () => {
+    const linhaAlbum = await proximaLinhaLivre(SHEET_ALBUNS, "A");
+    await googleSheetsService.usuarios.updateValues(SHEET_ALBUNS, `A${linhaAlbum}:K${linhaAlbum}`, [
+      [
+        albumId,
+        body.artista!.trim(),
+        body.titulo!.trim(),
+        body.genero?.trim() || "",
+        dataLancamento,
+        body.descricao?.trim() || "",
+        body.capa_url || "",
+        body.contracapa_url || "",
+        JSON.stringify(body.encarte?.filter(Boolean) || []),
+        body.telegram_id || "",
+        new Date().toISOString(),
+      ],
+    ]);
+  });
 
   // Isolamento por faixa: uma falha no meio da lista não pode travar as
   // faixas seguintes nem fazer o álbum voltar "ok:true" fingindo que todas
   // as faixas foram gravadas quando só uma parte foi de verdade. A linha
   // alvo é calculada uma vez e incrementada localmente — computar de novo
   // pra cada faixa reabriria a mesma corrida que causa o desvio de coluna.
-  let proximaLinhaFaixa = await proximaLinhaLivre(SHEET_FAIXAS, "A");
+  // O cálculo + TODAS as escritas de faixa ficam sob a mesma trava, do
+  // início ao fim — sem isso, outra chamada concorrente podia calcular a
+  // mesma linha inicial enquanto este loop ainda estava escrevendo.
   let faixasGravadas = 0;
-  for (const f of body.faixas) {
-    try {
-      await googleSheetsService.usuarios.updateValues(SHEET_FAIXAS, `A${proximaLinhaFaixa}:G${proximaLinhaFaixa}`, [
-        [
-          albumId,
-          String(f.numero || ""),
-          f.titulo.trim(),
-          f.artistas?.trim() || body.artista.trim(),
-          f.duracao || "",
-          f.drive_url.trim(),
-          f.letra || "",
-        ],
-      ]);
-      proximaLinhaFaixa++;
-      faixasGravadas++;
-    } catch (err) {
-      console.warn("[criarAlbumAntigoController] Erro ao gravar faixa:", f.titulo, err);
+  await withWriteLock(`playlists:${SHEET_FAIXAS}`, async () => {
+    let proximaLinhaFaixa = await proximaLinhaLivre(SHEET_FAIXAS, "A");
+    for (const f of body.faixas!) {
+      try {
+        await googleSheetsService.usuarios.updateValues(
+          SHEET_FAIXAS,
+          `A${proximaLinhaFaixa}:G${proximaLinhaFaixa}`,
+          [
+            [
+              albumId,
+              String(f.numero || ""),
+              f.titulo.trim(),
+              f.artistas?.trim() || body.artista!.trim(),
+              f.duracao || "",
+              f.drive_url.trim(),
+              f.letra || "",
+            ],
+          ],
+        );
+        proximaLinhaFaixa++;
+        faixasGravadas++;
+      } catch (err) {
+        console.warn("[criarAlbumAntigoController] Erro ao gravar faixa:", f.titulo, err);
+      }
     }
-  }
+  });
 
   const faltaram = body.faixas.length - faixasGravadas;
   return jsonResponse({
@@ -1384,7 +1653,11 @@ export async function criarAlbumAntigoController(request: Request): Promise<Resp
 // Só o dono (telegram_id da coluna J) ou admin (810141686) pode editar/
 // excluir — mesma regra usada em outros lugares do app (posts sociais,
 // artistas etc).
-async function podeEditarAlbumAntigo(row: string[], tgId: string, request: Request): Promise<boolean> {
+async function podeEditarAlbumAntigo(
+  row: string[],
+  tgId: string,
+  request: Request,
+): Promise<boolean> {
   if (tgId.trim() === ADMIN_TG_ID && (await requestProvesAdmin(request))) return true;
   const owner = normalizeText(row[9]);
   return !!owner && owner === tgId.trim();
@@ -1419,17 +1692,21 @@ export async function editarAlbumAntigoController(request: Request): Promise<Res
     return jsonResponse({ ok: false, error: "Você só pode editar seus próprios álbuns." }, 403);
   }
 
-  await googleSheetsService.usuarios.updateValues(SHEET_ALBUNS, `B${rowIndex + 1}:H${rowIndex + 1}`, [
+  await googleSheetsService.usuarios.updateValues(
+    SHEET_ALBUNS,
+    `B${rowIndex + 1}:H${rowIndex + 1}`,
     [
-      body.artista.trim(),
-      body.titulo.trim(),
-      body.genero?.trim() || "",
-      body.data || normalizeText(albunsRows[rowIndex][4]),
-      body.descricao?.trim() || "",
-      body.capa_url || normalizeText(albunsRows[rowIndex][6]),
-      body.contracapa_url || normalizeText(albunsRows[rowIndex][7]),
+      [
+        body.artista.trim(),
+        body.titulo.trim(),
+        body.genero?.trim() || "",
+        body.data || normalizeText(albunsRows[rowIndex][4]),
+        body.descricao?.trim() || "",
+        body.capa_url || normalizeText(albunsRows[rowIndex][6]),
+        body.contracapa_url || normalizeText(albunsRows[rowIndex][7]),
+      ],
     ],
-  ]);
+  );
 
   // Substitui as faixas: limpa (em branco) todas as linhas atuais desse
   // álbum e grava a lista nova do zero — mais simples e seguro do que
@@ -1454,17 +1731,21 @@ export async function editarAlbumAntigoController(request: Request): Promise<Res
   }
   let proximaLinhaFaixa = ultimaComConteudo + 1;
   for (const f of body.faixas) {
-    await googleSheetsService.usuarios.updateValues(SHEET_FAIXAS, `A${proximaLinhaFaixa}:G${proximaLinhaFaixa}`, [
+    await googleSheetsService.usuarios.updateValues(
+      SHEET_FAIXAS,
+      `A${proximaLinhaFaixa}:G${proximaLinhaFaixa}`,
       [
-        id,
-        String(f.numero || ""),
-        f.titulo.trim(),
-        f.artistas?.trim() || body.artista.trim(),
-        f.duracao || "",
-        f.drive_url.trim(),
-        f.letra || "",
+        [
+          id,
+          String(f.numero || ""),
+          f.titulo.trim(),
+          f.artistas?.trim() || body.artista.trim(),
+          f.duracao || "",
+          f.drive_url.trim(),
+          f.letra || "",
+        ],
       ],
-    ]);
+    );
     proximaLinhaFaixa++;
   }
 
@@ -1486,9 +1767,11 @@ export async function deletarAlbumAntigoController(request: Request): Promise<Re
     return jsonResponse({ ok: false, error: "Você só pode excluir seus próprios álbuns." }, 403);
   }
 
-  await googleSheetsService.usuarios.updateValues(SHEET_ALBUNS, `A${rowIndex + 1}:K${rowIndex + 1}`, [
-    ["", "", "", "", "", "", "", "", "", "", ""],
-  ]);
+  await googleSheetsService.usuarios.updateValues(
+    SHEET_ALBUNS,
+    `A${rowIndex + 1}:K${rowIndex + 1}`,
+    [["", "", "", "", "", "", "", "", "", "", ""]],
+  );
 
   const faixasRows = await googleSheetsService.usuarios.readValues(SHEET_FAIXAS);
   for (let i = 1; i < faixasRows.length; i++) {
@@ -1570,7 +1853,8 @@ export async function removeSalvoController(request: Request): Promise<Response>
   const rowIndex = allRows.findIndex(
     (row, i) => i > 0 && normalizeText(row[0]) === tgId && normalizeText(row[5]) === drive_url,
   );
-  if (rowIndex === -1) return jsonResponse({ ok: false, error: "Faixa não encontrada nos salvos." }, 404);
+  if (rowIndex === -1)
+    return jsonResponse({ ok: false, error: "Faixa não encontrada nos salvos." }, 404);
 
   await googleSheetsService.usuarios.updateValues(SHEET_SALVOS, `A${rowIndex + 1}`, [[""]]);
 

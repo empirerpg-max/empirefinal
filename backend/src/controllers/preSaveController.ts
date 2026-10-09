@@ -65,6 +65,7 @@ import {
   normalizeText,
 } from "../services/googleSheetsService";
 import { registrarLogSistema } from "../services/logSistemaService";
+import { withWriteLock } from "../services/writeLockService";
 import { publicarAlbum, type TrackItemPayload } from "./gestaoController";
 import { createAcervoEntrevistaController } from "./acervoController";
 import { createSocialPostController } from "./socialController";
@@ -329,20 +330,25 @@ async function writeCampanha(c: PreSaveCampanha): Promise<void> {
   );
 }
 
+// Trava de concorrência (ver writeLockService.ts, "bug da Rayna") — mesmo
+// padrão de risco de "achar última linha + escrever" sem proteção; duas
+// campanhas criadas quase ao mesmo tempo podiam calcular a mesma linha.
 async function appendCampanha(c: PreSaveCampanha): Promise<number> {
-  const rows = await googleSheetsService.principal
-    .readValues(PRESAVE_SHEET, "A2:A20000")
-    .catch(() => []);
-  let ultimaLinha = 1;
-  for (let i = 0; i < (rows || []).length; i++) {
-    if (normalizeText(rows[i]?.[0])) ultimaLinha = i + 2;
-  }
-  const linhaAlvo = ultimaLinha + 1;
-  c._rowIndex = linhaAlvo;
-  await googleSheetsService.principal.updateValues(PRESAVE_SHEET, `A${linhaAlvo}:U${linhaAlvo}`, [
-    campanhaToRow(c),
-  ]);
-  return linhaAlvo;
+  return withWriteLock("presave:PreSave_Album", async () => {
+    const rows = await googleSheetsService.principal
+      .readValues(PRESAVE_SHEET, "A2:A20000")
+      .catch(() => []);
+    let ultimaLinha = 1;
+    for (let i = 0; i < (rows || []).length; i++) {
+      if (normalizeText(rows[i]?.[0])) ultimaLinha = i + 2;
+    }
+    const linhaAlvo = ultimaLinha + 1;
+    c._rowIndex = linhaAlvo;
+    await googleSheetsService.principal.updateValues(PRESAVE_SHEET, `A${linhaAlvo}:U${linhaAlvo}`, [
+      campanhaToRow(c),
+    ]);
+    return linhaAlvo;
+  });
 }
 
 // ---- cálculo do teto (nunca exposto) ----
