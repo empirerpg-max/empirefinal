@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api, driveImg } from "@/lib/api";
+import { getStoredLogin } from "@/components/LoginScreen";
 import {
   FaixaEditor,
   TIPOS_ALBUM,
@@ -180,7 +181,13 @@ async function uploadToDrive(
 
 export function GestaoPreSave() {
   const { user } = useTelegramUser();
-  const telegramId = user?.id ? String(user.id) : "";
+  // Mesma lógica de Gestao.tsx: fora do Telegram (ex: testando no navegador
+  // comum), user?.id vem "guest" ou vazio — sem o fallback pro login
+  // armazenado, telegramId ficava "" e nenhuma música do artista carregava
+  // (useEffect de /api/user/me e /api/gestao/musicas-em-chart nunca disparava).
+  const storedLogin = getStoredLogin();
+  const telegramId =
+    storedLogin?.id || (user?.id && user.id !== "guest" ? String(user.id) : "");
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [loading, setLoading] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
