@@ -1,5 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { Flame, Music, Tv, Disc3, MessageSquare, Upload, ListMusic, Mic2 } from "lucide-react";
+import {
+  Flame,
+  Music,
+  Tv,
+  Disc3,
+  MessageSquare,
+  Upload,
+  ListMusic,
+  Mic2,
+  Rocket,
+} from "lucide-react";
 import { haptic } from "@/lib/telegram";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
@@ -13,6 +23,7 @@ const TABS = [
   { to: "/empire-play/playlists", label: "Playlists", icon: ListMusic },
   { to: "/empire-play/forum", label: "Fórum", icon: MessageSquare },
   { to: "/empire-play/gestao", label: "Gestão", icon: Upload },
+  { to: "/empire-play/gestao-presave", label: "Gestão Pre save", icon: Rocket },
 ] as const;
 
 export function EmpirePlayTabNav() {
@@ -23,8 +34,14 @@ export function EmpirePlayTabNav() {
         ref={tabsScroll.ref}
         className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide border-b border-white/10 touch-pan-x flex-nowrap flex-1 cursor-grab active:cursor-grabbing select-none"
       >
-        <StickyScrollArrowLeft show={tabsScroll.canScrollLeft} onClick={() => tabsScroll.scrollByAmount(-1)} />
-        <StickyScrollArrowRight show={tabsScroll.canScrollRight} onClick={() => tabsScroll.scrollByAmount(1)} />
+        <StickyScrollArrowLeft
+          show={tabsScroll.canScrollLeft}
+          onClick={() => tabsScroll.scrollByAmount(-1)}
+        />
+        <StickyScrollArrowRight
+          show={tabsScroll.canScrollRight}
+          onClick={() => tabsScroll.scrollByAmount(1)}
+        />
         {TABS.map((tab) => {
           const Icon = tab.icon;
           return (

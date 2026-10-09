@@ -204,6 +204,16 @@ import {
 } from "../controllers/marketController";
 import { getLeilaoAtualController, postLeilaoLanceController } from "../controllers/leilaoController";
 import {
+  criarCampanhaPreSaveController,
+  getMinhasCampanhasPreSaveController,
+  getCampanhaPreSaveController,
+  getContadorPublicoPreSaveController,
+  getCampanhasAtivasParaBannerController,
+  getLeaderboardPreSaveController,
+  completarMissaoPreSaveController,
+  cancelarCampanhaPreSaveController,
+} from "../controllers/preSaveController";
+import {
   getBannersAtivosController,
   getBannerOpcoesController,
   postComprarBannerController,
@@ -639,6 +649,40 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       );
     }
     response = await updateFaixaLetraSincronizadaController(request);
+  } else if (url.pathname === "/api/presave/criar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/presave/criar." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await criarCampanhaPreSaveController(request);
+  } else if (url.pathname === "/api/presave/completar-missao") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/presave/completar-missao." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await completarMissaoPreSaveController(request);
+  } else if (url.pathname === "/api/presave/cancelar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/presave/cancelar." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await cancelarCampanhaPreSaveController(request);
+  } else if (url.pathname === "/api/presave/minhas-campanhas") {
+    response = await getMinhasCampanhasPreSaveController(request);
+  } else if (url.pathname === "/api/presave/campanha") {
+    response = await getCampanhaPreSaveController(request);
+  } else if (url.pathname === "/api/presave/contador-publico") {
+    response = await getContadorPublicoPreSaveController(request);
+  } else if (url.pathname === "/api/presave/banners-ativos") {
+    response = await getCampanhasAtivasParaBannerController();
+  } else if (url.pathname === "/api/presave/leaderboard") {
+    response = await getLeaderboardPreSaveController(request);
   } else if (url.pathname === "/api/gestao/faixa/publicar") {
     if (request.method !== "POST") {
       return new Response(

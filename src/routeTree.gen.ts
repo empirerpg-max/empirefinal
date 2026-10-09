@@ -33,6 +33,7 @@ import { Route as EmpirePlayAlbunsRouteImport } from './routes/empire-play.albun
 import { Route as EmpirePlayAlbunsAntigosRouteImport } from './routes/empire-play.albuns-antigos'
 import { Route as EmpirePlayForumRouteImport } from './routes/empire-play.forum'
 import { Route as EmpirePlayGestaoRouteImport } from './routes/empire-play.gestao'
+import { Route as EmpirePlayGestaoPresaveRouteImport } from './routes/empire-play.gestao-presave'
 import { Route as EmpirePlayMusicasRouteImport } from './routes/empire-play.musicas'
 import { Route as EmpirePlayVideosRouteImport } from './routes/empire-play.videos'
 import { Route as MarketIndexRouteImport } from './routes/market.index'
@@ -179,6 +180,11 @@ const EmpirePlayForumRoute = EmpirePlayForumRouteImport.update({
 const EmpirePlayGestaoRoute = EmpirePlayGestaoRouteImport.update({
   id: '/gestao',
   path: '/gestao',
+  getParentRoute: () => EmpirePlayRoute,
+} as any)
+const EmpirePlayGestaoPresaveRoute = EmpirePlayGestaoPresaveRouteImport.update({
+  id: '/gestao-presave',
+  path: '/gestao-presave',
   getParentRoute: () => EmpirePlayRoute,
 } as any)
 const EmpirePlayMusicasRoute = EmpirePlayMusicasRouteImport.update({
@@ -344,6 +350,7 @@ export interface FileRoutesByFullPath {
   '/empire-play/albuns-antigos': typeof EmpirePlayAlbunsAntigosRouteWithChildren
   '/empire-play/forum': typeof EmpirePlayForumRoute
   '/empire-play/gestao': typeof EmpirePlayGestaoRouteWithChildren
+  '/empire-play/gestao-presave': typeof EmpirePlayGestaoPresaveRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
   '/market/leilao': typeof MarketLeilaoRoute
@@ -393,6 +400,7 @@ export interface FileRoutesByTo {
   '/awards/$nome': typeof AwardsNomeRoute
   '/empire-play/albuns': typeof EmpirePlayAlbunsRoute
   '/empire-play/forum': typeof EmpirePlayForumRoute
+  '/empire-play/gestao-presave': typeof EmpirePlayGestaoPresaveRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
   '/market/leilao': typeof MarketLeilaoRoute
@@ -445,6 +453,7 @@ export interface FileRoutesById {
   '/empire-play/albuns-antigos': typeof EmpirePlayAlbunsAntigosRouteWithChildren
   '/empire-play/forum': typeof EmpirePlayForumRoute
   '/empire-play/gestao': typeof EmpirePlayGestaoRouteWithChildren
+  '/empire-play/gestao-presave': typeof EmpirePlayGestaoPresaveRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
   '/market/leilao': typeof MarketLeilaoRoute
@@ -500,6 +509,7 @@ export interface FileRouteTypes {
     | '/empire-play/albuns-antigos'
     | '/empire-play/forum'
     | '/empire-play/gestao'
+    | '/empire-play/gestao-presave'
     | '/empire-play/musicas'
     | '/empire-play/videos'
     | '/market/leilao'
@@ -549,6 +559,7 @@ export interface FileRouteTypes {
     | '/awards/$nome'
     | '/empire-play/albuns'
     | '/empire-play/forum'
+    | '/empire-play/gestao-presave'
     | '/empire-play/musicas'
     | '/empire-play/videos'
     | '/market/leilao'
@@ -600,6 +611,7 @@ export interface FileRouteTypes {
     | '/empire-play/albuns-antigos'
     | '/empire-play/forum'
     | '/empire-play/gestao'
+    | '/empire-play/gestao-presave'
     | '/empire-play/musicas'
     | '/empire-play/videos'
     | '/market/leilao'
@@ -831,6 +843,13 @@ declare module '@tanstack/react-router' {
       path: '/gestao'
       fullPath: '/empire-play/gestao'
       preLoaderRoute: typeof EmpirePlayGestaoRouteImport
+      parentRoute: typeof EmpirePlayRoute
+    }
+    '/empire-play/gestao-presave': {
+      id: '/empire-play/gestao-presave'
+      path: '/gestao-presave'
+      fullPath: '/empire-play/gestao-presave'
+      preLoaderRoute: typeof EmpirePlayGestaoPresaveRouteImport
       parentRoute: typeof EmpirePlayRoute
     }
     '/empire-play/musicas': {
@@ -1072,6 +1091,7 @@ interface EmpirePlayRouteChildren {
   EmpirePlayAlbunsAntigosRoute: typeof EmpirePlayAlbunsAntigosRouteWithChildren
   EmpirePlayForumRoute: typeof EmpirePlayForumRoute
   EmpirePlayGestaoRoute: typeof EmpirePlayGestaoRouteWithChildren
+  EmpirePlayGestaoPresaveRoute: typeof EmpirePlayGestaoPresaveRoute
   EmpirePlayMusicasRoute: typeof EmpirePlayMusicasRoute
   EmpirePlayVideosRoute: typeof EmpirePlayVideosRoute
   EmpirePlayIndexRoute: typeof EmpirePlayIndexRoute
@@ -1085,6 +1105,7 @@ const EmpirePlayRouteChildren: EmpirePlayRouteChildren = {
   EmpirePlayAlbunsAntigosRoute: EmpirePlayAlbunsAntigosRouteWithChildren,
   EmpirePlayForumRoute: EmpirePlayForumRoute,
   EmpirePlayGestaoRoute: EmpirePlayGestaoRouteWithChildren,
+  EmpirePlayGestaoPresaveRoute: EmpirePlayGestaoPresaveRoute,
   EmpirePlayMusicasRoute: EmpirePlayMusicasRoute,
   EmpirePlayVideosRoute: EmpirePlayVideosRoute,
   EmpirePlayIndexRoute: EmpirePlayIndexRoute,
