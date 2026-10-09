@@ -25,6 +25,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Scratch dir dos agentes em background do Claude Code (worktrees isolados)
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

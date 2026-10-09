@@ -824,7 +824,18 @@ export const EditModal: React.FC<EditModalProps> = ({
                     <div className="grid grid-cols-4 gap-2">
                       {editEncarte.map((url, i) => (
                         <div key={`${url}-${i}`} className="relative aspect-square rounded-lg overflow-hidden border border-white/10 bg-neutral-900">
-                          <img src={driveImg(url)} alt={`Encarte ${i + 1}`} className="w-full h-full object-cover" />
+                          <SmartImg
+                            src={url}
+                            size={300}
+                            wide
+                            alt={`Encarte ${i + 1}`}
+                            className="w-full h-full object-cover"
+                            fallback={
+                              <div className="w-full h-full grid place-items-center text-[10px] text-neutral-500 text-center px-1">
+                                Não foi possível carregar
+                              </div>
+                            }
+                          />
                           <button
                             type="button"
                             onClick={() => setEditEncarte((prev) => prev.filter((_, idx) => idx !== i))}

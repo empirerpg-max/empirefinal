@@ -453,6 +453,23 @@ export default {
         )
         .catch((err) => console.error("[scheduled] Erro ao atualizar snapshot Metacritic:", err)),
     );
+    // Pre-save de álbum (Catálogo > Gestão Pre save): checa a cada ciclo do
+    // cron (10 min) se alguma campanha ativa já chegou na data de
+    // lançamento e, se sim, lança o álbum de verdade (reaproveita
+    // publicarAlbum) e grava o bônus final na coluna PRE-SAVE quando o
+    // modo foi "com missão" — ver preSaveController.ts.
+    ctx.waitUntil(
+      (async () => {
+        const { processarLancamentosPreSaveScheduled } = await import("../backend/src/controllers/preSaveController");
+        return processarLancamentosPreSaveScheduled();
+      })()
+        .then((r) => {
+          if (r.lancados > 0 || r.falhas > 0) {
+            console.log(`[scheduled] Pre-save: ${r.lancados} álbum(ns) lançado(s), ${r.falhas} falha(s).`);
+          }
+        })
+        .catch((err) => console.error("[scheduled] Erro ao processar lançamentos de pre-save:", err)),
+    );
   },
 
   async fetch(request: Request, env: unknown, ctx: unknown) {

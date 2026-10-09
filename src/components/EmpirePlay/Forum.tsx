@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { driveImg, driveRawImg, api, normalizeNome } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
+import { PreSaveCounterBadge } from "@/components/PreSaveCounterBadge";
 import { AwardBadge, type AwardBadgeInfo } from "@/components/AwardBadge";
 import { EncarteViewer } from "./EncarteViewer";
 import { useTelegramUser, haptic } from "@/lib/telegram";
@@ -1180,6 +1181,11 @@ export const Forum: React.FC<ForumProps> = ({
                 {!visualAberto && premioDoTopico(selectedTopic) && (
                   <div className="mt-2.5">
                     <AwardBadge {...premioDoTopico(selectedTopic)!} />
+                  </div>
+                )}
+                {!visualAberto && activeSubmenu === "albuns" && (
+                  <div className="mt-2.5">
+                    <PreSaveCounterBadge albumTopicId={selectedTopic.id} />
                   </div>
                 )}
                 {(activeSubmenu === "musicas" || activeSubmenu === "albuns") && (

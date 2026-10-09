@@ -10,6 +10,7 @@ import { somarPrestigio } from "../services/prestigioService";
 import { getOwnerIdForArtist } from "./artistasController";
 import { registrarNotificacaoComentario } from "./notificacoesController";
 import { processarComentarioParaBanner } from "./bannerController";
+import { getPreSaveLockParaTopico } from "./preSaveController";
 import { insertComentarioD1 } from "../services/catalogoDbService";
 
 const USUARIOS_SHEET = "Usuários";
@@ -139,7 +140,14 @@ export interface CreateCommentBody {
  */
 function buildCommentRow(
   tipoMedia: CreateCommentBody["tipoMedia"],
-  params: { topicId: string; jogadorId: string; playerClean: string; comentario: string; nowStr: string; replyTo: string },
+  params: {
+    topicId: string;
+    jogadorId: string;
+    playerClean: string;
+    comentario: string;
+    nowStr: string;
+    replyTo: string;
+  },
 ): string[] {
   const { topicId, jogadorId, playerClean, comentario, nowStr, replyTo } = params;
 
@@ -199,7 +207,9 @@ async function gravarComentario(sheet: string, valores: string[]): Promise<numbe
       `[ForumController] Colisão ao gravar comentário em ${sheet} na linha ${linha} (tentativa ${tentativa}/${MAX_TENTATIVAS}) — tentando de novo.`,
     );
   }
-  console.warn(`[ForumController] Não foi possível gravar comentário em ${sheet} após retries — colisão persistente.`);
+  console.warn(
+    `[ForumController] Não foi possível gravar comentário em ${sheet} após retries — colisão persistente.`,
+  );
   return null;
 }
 
@@ -236,7 +246,16 @@ export async function createCommentController(request: Request): Promise<Respons
   try {
     const body = (await request.json()) as CreateCommentBody;
 
-    const { tipoMedia, tituloMedia, topicId, jogadorId, nomeJogador, comentario, intervalo, replyTo } = body;
+    const {
+      tipoMedia,
+      tituloMedia,
+      topicId,
+      jogadorId,
+      nomeJogador,
+      comentario,
+      intervalo,
+      replyTo,
+    } = body;
 
     if (!tipoMedia || !tituloMedia || !nomeJogador || !comentario) {
       return new Response(
@@ -284,6 +303,22 @@ export async function createCommentController(request: Request): Promise<Respons
       colRatingsIndex = 7; // Coluna H
       colAvgIndex = 8; // Coluna I
       colCodigoIndex = 11; // Coluna L — "Código único"
+      // Pre-save (Gestão Pre save): o tópico do álbum é reservado/criado
+      // JÁ na criação da campanha, bem antes do álbum existir de verdade
+      // em "Albuns" — comentários ficam travados até o dia do lançamento
+      // (regra explícita do usuário). Checa isso ANTES de gravar qualquer
+      // coisa, pra nunca deixar passar um comentário num álbum que ainda
+      // nem foi lançado de verdade.
+      const lockPreSave = await getPreSaveLockParaTopico(topicIdClean);
+      if (lockPreSave) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `Comentários travados: "${lockPreSave.albumTituloFull}" ainda está em campanha de pre-save (lançamento em ${lockPreSave.dataLancamento}).`,
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } },
+        );
+      }
     } else if (tipoMedia === "video" || tipoMedia === "music-video") {
       // "Videos"/"Comentarios_Videos" não existem mais — Vídeos e Music
       // Videos foram consolidados em "Music Videos"/"Comentarios_MV". A
@@ -320,150 +355,158 @@ export async function createCommentController(request: Request): Promise<Respons
     // try/catch pra uma falha aqui (ex: título sem match nenhum) nunca
     // impedir os passos 2 e 3 (salvar o comentário e o audit log). Pulado
     // inteiro pra respostas (isReply) — não rolam nota nem mexem na média.
-    if (!isReply) try {
-      // O maior índice de coluna usado por qualquer tipo de mídia é 25 (Z,
-      // "Código único" de música) — o range default (A:ZZ, 702 colunas) lia
-      // MUITO mais do que qualquer código aqui usa. Medido ao vivo: o
-      // comentário em vídeo (aba "Music Videos", 764+ linhas) levava ~5.7s,
-      // e essa única leitura era o maior custo isolado da requisição.
-      // Restringir pra A:AA corta o volume de dados da resposta em ~26x.
-      const rows = await googleSheetsService.principal.readValues(targetSheet, "A:AA");
+    if (!isReply)
+      try {
+        // O maior índice de coluna usado por qualquer tipo de mídia é 25 (Z,
+        // "Código único" de música) — o range default (A:ZZ, 702 colunas) lia
+        // MUITO mais do que qualquer código aqui usa. Medido ao vivo: o
+        // comentário em vídeo (aba "Music Videos", 764+ linhas) levava ~5.7s,
+        // e essa única leitura era o maior custo isolado da requisição.
+        // Restringir pra A:AA corta o volume de dados da resposta em ~26x.
+        const rows = await googleSheetsService.principal.readValues(targetSheet, "A:AA");
 
-      if (rows && rows.length > 0) {
-        // Busca pela coluna de ID do tópico certa pra essa aba (ver acima —
-        // Music Videos usa uma posição diferente de Musicas/Albuns). Só cai
-        // pra busca por título (substring, menos confiável) se o topicId não
-        // vier.
-        let foundRowIndex = -1;
+        if (rows && rows.length > 0) {
+          // Busca pela coluna de ID do tópico certa pra essa aba (ver acima —
+          // Music Videos usa uma posição diferente de Musicas/Albuns). Só cai
+          // pra busca por título (substring, menos confiável) se o topicId não
+          // vier.
+          let foundRowIndex = -1;
 
-        if (topicIdClean) {
-          const topicNorm = normalizeComparison(topicIdClean);
-          for (let i = 1; i < rows.length; i++) {
-            if (normalizeComparison(rows[i][colTopicIdIndex] || "") === topicNorm) {
-              foundRowIndex = i + 1; // A1 row number (1-based)
-              break;
+          if (topicIdClean) {
+            const topicNorm = normalizeComparison(topicIdClean);
+            for (let i = 1; i < rows.length; i++) {
+              if (normalizeComparison(rows[i][colTopicIdIndex] || "") === topicNorm) {
+                foundRowIndex = i + 1; // A1 row number (1-based)
+                break;
+              }
+            }
+          }
+
+          if (foundRowIndex === -1) {
+            const titleNorm = normalizeComparison(titleClean);
+            for (let i = 1; i < rows.length; i++) {
+              const row = rows[i];
+              const rowText = row.join(" ");
+              if (normalizeComparison(rowText).includes(titleNorm)) {
+                foundRowIndex = i + 1; // A1 row number (1-based)
+                break;
+              }
+            }
+          }
+
+          if (foundRowIndex > 0) {
+            const rowData = rows[foundRowIndex - 1] || [];
+            const tituloDaLinha = normalizeText(rowData[colTituloIndex]);
+            if (tituloDaLinha) tituloOficial = tituloDaLinha;
+            codigoUnico = normalizeText(rowData[colCodigoIndex]);
+
+            // BUG ESTRUTURAL confirmado em 2026-09-11 (ex: "CURSED BLESSED"):
+            // quando a linha não tem "ID do tópico" preenchido, o cliente
+            // manda um id sintético baseado na POSIÇÃO da linha na planilha
+            // (ex: "musicas_idx416") — instável: se uma linha for inserida
+            // acima depois, a posição muda e os comentários já salvos com o
+            // id antigo ficam órfãos (o app não acha mais nenhum comentário
+            // pra essa música, mesmo tendo vários). Corrige na raiz: assim
+            // que alguém comenta uma mídia sem "ID do tópico" ainda, gera um
+            // id estável de verdade AQUI e grava na planilha antes de salvar
+            // o comentário — a partir daí a mídia nunca mais depende da
+            // posição da linha.
+            const topicIdJaTinha = normalizeText(rowData[colTopicIdIndex]);
+            if (!topicIdJaTinha) {
+              const prefixo =
+                tipoMedia === "album"
+                  ? "album"
+                  : tipoMedia === "video" || tipoMedia === "music-video"
+                    ? "video"
+                    : "musica";
+              const novoTopicId = `${prefixo}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+              const colTopicLetter = colIndexToA1Letter(colTopicIdIndex);
+              await googleSheetsService.principal
+                .updateValues(targetSheet, `${colTopicLetter}${foundRowIndex}`, [[novoTopicId]])
+                .catch((err) =>
+                  console.warn("[ForumController] Falha ao gravar novo ID do tópico:", err),
+                );
+              topicIdClean = novoTopicId;
+            } else if (normalizeComparison(topicIdJaTinha) !== normalizeComparison(topicIdClean)) {
+              // A linha foi achada (por ID batendo OU por fallback de título) e
+              // JÁ tem um ID de tópico próprio — mas diferente do que o
+              // cliente mandou. Sem isso, um cliente com cache velho (ex: um
+              // id_do_topico sintético antigo, tipo "videos_idx215", gerado
+              // antes da linha ganhar o ID real) salvava o comentário E
+              // disparava a notificação com o ID ERRADO — órfão pra sempre,
+              // já que a partir daqui ninguém mais casa esse id com nada.
+              // A linha da planilha é a fonte da verdade: sempre usa o ID
+              // real dela daqui pra frente (comentário e notificação).
+              topicIdClean = topicIdJaTinha;
+            }
+
+            // Se essa linha carrega o Código único de OUTRA música (ex: um
+            // vídeo vinculado, ou uma faixa criada com "conta pra uma música
+            // já lançada"), o título de verdade pro REGISTRO é o da música
+            // dona desse código, não o título da própria linha (topic/vídeo).
+            if (tipoMedia !== "album" && codigoUnico) {
+              const tituloReal = await resolverTituloPorCodigoUnico(codigoUnico);
+              if (tituloReal) tituloOficial = tituloReal;
+            }
+
+            const currentRatings = rowData[colRatingsIndex] || "";
+
+            const updatedRatings = currentRatings.trim()
+              ? `${currentRatings.trim()}, ${playerClean}: ${score}`
+              : `${playerClean}: ${score}`;
+
+            const newAvg = calculateAverageFromRatings(updatedRatings);
+
+            const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
+            const avgColLetter = colIndexToA1Letter(colAvgIndex);
+
+            // Rating por jogador e média sempre ficam em colunas adjacentes
+            // (N/O, H/I, V/W conforme a aba) — uma updateValues só cobrindo o
+            // intervalo, em vez de duas chamadas sequenciais.
+            await googleSheetsService.principal.updateValues(
+              targetSheet,
+              `${ratingColLetter}${foundRowIndex}:${avgColLetter}${foundRowIndex}`,
+              [[updatedRatings, String(newAvg)]],
+            );
+
+            // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
+            // Monroe de Rose Thompson" pra quem é dono de Rose Thompson) — nunca
+            // a si mesmo. Pra "musica" o nome do artista vem da coluna N (ACT
+            // PRINCIPAL); álbum/vídeo usam o título "Artista - Título" (mesmo
+            // formato confirmado em Music Videos/Albuns). Só DISPARA aqui —
+            // quem chama espera o resultado lá embaixo, em paralelo com o
+            // passo 2.
+            const artistaNome =
+              tipoMedia === "musica"
+                ? normalizeText(rowData[13])
+                : (() => {
+                    const sep = tituloOficial.indexOf(" - ");
+                    return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
+                  })();
+            if (artistaNome) {
+              notifyPromise = getOwnerIdForArtist(artistaNome)
+                .then((ownerId) =>
+                  ownerId
+                    ? registrarNotificacaoComentario({
+                        ownerId,
+                        autorId: jogadorIdClean,
+                        autorNome: playerClean,
+                        tipoMedia,
+                        tituloMedia: tituloOficial,
+                        topicId: topicIdClean,
+                        comentario: comentario.trim(),
+                      })
+                    : undefined,
+                )
+                .catch((err) => {
+                  console.warn("[ForumController] Erro ao notificar dono do artista:", err);
+                });
             }
           }
         }
-
-        if (foundRowIndex === -1) {
-          const titleNorm = normalizeComparison(titleClean);
-          for (let i = 1; i < rows.length; i++) {
-            const row = rows[i];
-            const rowText = row.join(" ");
-            if (normalizeComparison(rowText).includes(titleNorm)) {
-              foundRowIndex = i + 1; // A1 row number (1-based)
-              break;
-            }
-          }
-        }
-
-        if (foundRowIndex > 0) {
-          const rowData = rows[foundRowIndex - 1] || [];
-          const tituloDaLinha = normalizeText(rowData[colTituloIndex]);
-          if (tituloDaLinha) tituloOficial = tituloDaLinha;
-          codigoUnico = normalizeText(rowData[colCodigoIndex]);
-
-          // BUG ESTRUTURAL confirmado em 2026-09-11 (ex: "CURSED BLESSED"):
-          // quando a linha não tem "ID do tópico" preenchido, o cliente
-          // manda um id sintético baseado na POSIÇÃO da linha na planilha
-          // (ex: "musicas_idx416") — instável: se uma linha for inserida
-          // acima depois, a posição muda e os comentários já salvos com o
-          // id antigo ficam órfãos (o app não acha mais nenhum comentário
-          // pra essa música, mesmo tendo vários). Corrige na raiz: assim
-          // que alguém comenta uma mídia sem "ID do tópico" ainda, gera um
-          // id estável de verdade AQUI e grava na planilha antes de salvar
-          // o comentário — a partir daí a mídia nunca mais depende da
-          // posição da linha.
-          const topicIdJaTinha = normalizeText(rowData[colTopicIdIndex]);
-          if (!topicIdJaTinha) {
-            const prefixo = tipoMedia === "album" ? "album" : tipoMedia === "video" || tipoMedia === "music-video" ? "video" : "musica";
-            const novoTopicId = `${prefixo}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-            const colTopicLetter = colIndexToA1Letter(colTopicIdIndex);
-            await googleSheetsService.principal
-              .updateValues(targetSheet, `${colTopicLetter}${foundRowIndex}`, [[novoTopicId]])
-              .catch((err) => console.warn("[ForumController] Falha ao gravar novo ID do tópico:", err));
-            topicIdClean = novoTopicId;
-          } else if (normalizeComparison(topicIdJaTinha) !== normalizeComparison(topicIdClean)) {
-            // A linha foi achada (por ID batendo OU por fallback de título) e
-            // JÁ tem um ID de tópico próprio — mas diferente do que o
-            // cliente mandou. Sem isso, um cliente com cache velho (ex: um
-            // id_do_topico sintético antigo, tipo "videos_idx215", gerado
-            // antes da linha ganhar o ID real) salvava o comentário E
-            // disparava a notificação com o ID ERRADO — órfão pra sempre,
-            // já que a partir daqui ninguém mais casa esse id com nada.
-            // A linha da planilha é a fonte da verdade: sempre usa o ID
-            // real dela daqui pra frente (comentário e notificação).
-            topicIdClean = topicIdJaTinha;
-          }
-
-          // Se essa linha carrega o Código único de OUTRA música (ex: um
-          // vídeo vinculado, ou uma faixa criada com "conta pra uma música
-          // já lançada"), o título de verdade pro REGISTRO é o da música
-          // dona desse código, não o título da própria linha (topic/vídeo).
-          if (tipoMedia !== "album" && codigoUnico) {
-            const tituloReal = await resolverTituloPorCodigoUnico(codigoUnico);
-            if (tituloReal) tituloOficial = tituloReal;
-          }
-
-          const currentRatings = rowData[colRatingsIndex] || "";
-
-          const updatedRatings = currentRatings.trim()
-            ? `${currentRatings.trim()}, ${playerClean}: ${score}`
-            : `${playerClean}: ${score}`;
-
-          const newAvg = calculateAverageFromRatings(updatedRatings);
-
-          const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
-          const avgColLetter = colIndexToA1Letter(colAvgIndex);
-
-          // Rating por jogador e média sempre ficam em colunas adjacentes
-          // (N/O, H/I, V/W conforme a aba) — uma updateValues só cobrindo o
-          // intervalo, em vez de duas chamadas sequenciais.
-          await googleSheetsService.principal.updateValues(
-            targetSheet,
-            `${ratingColLetter}${foundRowIndex}:${avgColLetter}${foundRowIndex}`,
-            [[updatedRatings, String(newAvg)]],
-          );
-
-          // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
-          // Monroe de Rose Thompson" pra quem é dono de Rose Thompson) — nunca
-          // a si mesmo. Pra "musica" o nome do artista vem da coluna N (ACT
-          // PRINCIPAL); álbum/vídeo usam o título "Artista - Título" (mesmo
-          // formato confirmado em Music Videos/Albuns). Só DISPARA aqui —
-          // quem chama espera o resultado lá embaixo, em paralelo com o
-          // passo 2.
-          const artistaNome =
-            tipoMedia === "musica"
-              ? normalizeText(rowData[13])
-              : (() => {
-                  const sep = tituloOficial.indexOf(" - ");
-                  return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
-                })();
-          if (artistaNome) {
-            notifyPromise = getOwnerIdForArtist(artistaNome)
-              .then((ownerId) =>
-                ownerId
-                  ? registrarNotificacaoComentario({
-                      ownerId,
-                      autorId: jogadorIdClean,
-                      autorNome: playerClean,
-                      tipoMedia,
-                      tituloMedia: tituloOficial,
-                      topicId: topicIdClean,
-                      comentario: comentario.trim(),
-                    })
-                  : undefined,
-              )
-              .catch((err) => {
-                console.warn("[ForumController] Erro ao notificar dono do artista:", err);
-              });
-          }
-        }
+      } catch (err) {
+        console.warn("[ForumController] Erro ao atualizar nota/média:", err);
       }
-    } catch (err) {
-      console.warn("[ForumController] Erro ao atualizar nota/média:", err);
-    }
 
     // 2. Salvar comentário na aba de comentários correspondente — em
     // paralelo com a notificação disparada no passo 1 (não depende dela).
@@ -530,7 +573,9 @@ export async function createCommentController(request: Request): Promise<Respons
           isAlbum: tipoMedia === "album",
           codigoUnico,
         }),
-        somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(() => {}),
+        somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(
+          () => {},
+        ),
       ]);
     }
 
@@ -620,7 +665,10 @@ async function carregarTodosComentariosProcessados(): Promise<ComentarioProcessa
     ...formatMusicaOrAlbumStyle(albumComments, "album", 4), // E
   ];
 
-  comentariosProcessadosCache = { data: allComments, expiresAt: Date.now() + COMENTARIOS_CACHE_TTL_MS };
+  comentariosProcessadosCache = {
+    data: allComments,
+    expiresAt: Date.now() + COMENTARIOS_CACHE_TTL_MS,
+  };
   return allComments;
 }
 
@@ -698,7 +746,10 @@ export async function getMeusComentariosController(request: Request): Promise<Re
   } catch (error: any) {
     console.error("[getMeusComentariosController] Erro:", error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message || "Erro ao buscar seus comentários." }),
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao buscar seus comentários.",
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -732,7 +783,10 @@ export async function editCommentController(request: Request): Promise<Response>
     const col = COMMENT_TEXT_COLUMN[sheetComments];
     if (!col || !rowIndex || rowIndex < 2 || !jogadorId || !novoTexto?.trim()) {
       return new Response(
-        JSON.stringify({ success: false, error: "Parâmetros inválidos pra editar este comentário." }),
+        JSON.stringify({
+          success: false,
+          error: "Parâmetros inválidos pra editar este comentário.",
+        }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
@@ -800,7 +854,10 @@ export async function toggleCommentReactionController(request: Request): Promise
     const col = REACTION_COLUMN[sheetComments];
     if (!col || !rowIndex || rowIndex < 2 || !emoji || !jogadorId) {
       return new Response(
-        JSON.stringify({ success: false, error: "Parâmetros inválidos pra reagir a este comentário." }),
+        JSON.stringify({
+          success: false,
+          error: "Parâmetros inválidos pra reagir a este comentário.",
+        }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
@@ -874,14 +931,15 @@ export async function toggleCommentReactionController(request: Request): Promise
  */
 export async function getAtividadeRecenteController(): Promise<Response> {
   try {
-    const [musicaComments, mvComments, albumComments, musicasRows, mvRows, albunsRows] = await Promise.all([
-      googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
-      googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
-      googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
-      googleSheetsService.principal.readValues("Musicas").catch(() => []),
-      googleSheetsService.principal.readValues("Music Videos").catch(() => []),
-      googleSheetsService.principal.readValues("Albuns").catch(() => []),
-    ]);
+    const [musicaComments, mvComments, albumComments, musicasRows, mvRows, albunsRows] =
+      await Promise.all([
+        googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
+        googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
+        googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
+        googleSheetsService.principal.readValues("Musicas").catch(() => []),
+        googleSheetsService.principal.readValues("Music Videos").catch(() => []),
+        googleSheetsService.principal.readValues("Albuns").catch(() => []),
+      ]);
 
     // topicId → título, uma vez por catálogo (evita varrer a aba de novo
     // pra cada comentário).
@@ -898,7 +956,12 @@ export async function getAtividadeRecenteController(): Promise<Response> {
     const titulosVideos = mapaTitulos(mvRows, 5, 1); // F message_thread_id, B Título
     const titulosAlbuns = mapaTitulos(albunsRows, 1, 6); // B ID do tópico, G Novo Nome
 
-    const ultimos = (rows: string[][], tipo: "musica" | "video" | "album", mapa: Map<string, string>, n: number) => {
+    const ultimos = (
+      rows: string[][],
+      tipo: "musica" | "video" | "album",
+      mapa: Map<string, string>,
+      n: number,
+    ) => {
       if (!rows || rows.length <= 1) return [];
       return rows
         .slice(1)
@@ -925,7 +988,10 @@ export async function getAtividadeRecenteController(): Promise<Response> {
   } catch (error: any) {
     console.error("[getAtividadeRecenteController] Erro:", error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message || "Erro ao buscar atividade recente." }),
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao buscar atividade recente.",
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
