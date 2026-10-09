@@ -4,7 +4,10 @@ import {
   getTopPlaylistsController,
 } from "../controllers/catalogController";
 import { getUserMeController } from "../controllers/userController";
-import { chartsApiController, debugRealtimeCoversController } from "../controllers/chartsController";
+import {
+  chartsApiController,
+  debugRealtimeCoversController,
+} from "../controllers/chartsController";
 import {
   getAcervoRevistasController,
   createAcervoRevistaController,
@@ -134,7 +137,10 @@ import {
   investirPlaylistController,
   limparInvestimentoController,
 } from "../controllers/playlistsInvestimentoController";
-import { listTvChatGifsController, registrarUsoGifController } from "../controllers/tvChatGifsController";
+import {
+  listTvChatGifsController,
+  registrarUsoGifController,
+} from "../controllers/tvChatGifsController";
 import {
   getPremiacoesAwardsController,
   getPremiacoesCategoriasController,
@@ -202,7 +208,10 @@ import {
   diagnosticoUsuariosController,
   fixAniversarioFormatoController,
 } from "../controllers/marketController";
-import { getLeilaoAtualController, postLeilaoLanceController } from "../controllers/leilaoController";
+import {
+  getLeilaoAtualController,
+  postLeilaoLanceController,
+} from "../controllers/leilaoController";
 import {
   criarCampanhaPreSaveController,
   getMinhasCampanhasPreSaveController,
@@ -308,12 +317,23 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   // Match qualquer /api/empire-play/*
   const isEmpirePlayPath = url.pathname.startsWith("/api/empire-play/");
   // Match /api/playlists ou /api/playlists/:id
-  const isPlaylistsPath = url.pathname === "/api/playlists" || url.pathname.startsWith("/api/playlists/");
+  const isPlaylistsPath =
+    url.pathname === "/api/playlists" || url.pathname.startsWith("/api/playlists/");
   // Match /api/salvos ou /api/salvos/:acao
   const isSalvosPath = url.pathname === "/api/salvos" || url.pathname.startsWith("/api/salvos/");
   // Match /api/albuns-antigos ou /api/albuns-antigos/:id
   const isAlbunsAntigosPath =
     url.pathname === "/api/albuns-antigos" || url.pathname.startsWith("/api/albuns-antigos/");
+  // Match qualquer /api/presave/* (Gestão Pre save) — BUG REAL encontrado:
+  // nenhuma dessas rotas estava em `supportedPaths` nem em nenhum dos
+  // prefixos abaixo, então TODO request pra /api/presave/* caía no
+  // `return null` logo abaixo antes de chegar no if/else-if que trata cada
+  // rota (criar campanha, completar missão, contador público, banner da
+  // Home, leaderboard) — a feature inteira ficava inacessível por fetch,
+  // silenciosamente (cada chamada do front engolia o erro com .catch(() =>
+  // [])), nunca dando erro visível. Foi isso que fazia o banner da Home
+  // nunca aparecer, mesmo com o componente certo montado.
+  const isPresavePath = url.pathname.startsWith("/api/presave/");
 
   const supportedPaths = new Set([
     "/api/charts",
@@ -506,7 +526,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     !isEmpirePlayPath &&
     !isPlaylistsPath &&
     !isSalvosPath &&
-    !isAlbunsAntigosPath
+    !isAlbunsAntigosPath &&
+    !isPresavePath
   ) {
     return null;
   }
@@ -628,7 +649,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   } else if (url.pathname === "/api/gestao/album-faixas/reordenar") {
     if (request.method !== "POST") {
       return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/gestao/album-faixas/reordenar." }),
+        JSON.stringify({
+          success: false,
+          error: "Use POST para /api/gestao/album-faixas/reordenar.",
+        }),
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
@@ -644,33 +668,45 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   } else if (url.pathname === "/api/gestao/faixa-letra-sincronizada") {
     if (request.method !== "POST") {
       return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/gestao/faixa-letra-sincronizada." }),
+        JSON.stringify({
+          success: false,
+          error: "Use POST para /api/gestao/faixa-letra-sincronizada.",
+        }),
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
     response = await updateFaixaLetraSincronizadaController(request);
   } else if (url.pathname === "/api/presave/criar") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/presave/criar." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/presave/criar." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await criarCampanhaPreSaveController(request);
   } else if (url.pathname === "/api/presave/completar-missao") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/presave/completar-missao." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/presave/completar-missao." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await completarMissaoPreSaveController(request);
   } else if (url.pathname === "/api/presave/cancelar") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/presave/cancelar." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/presave/cancelar." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await cancelarCampanhaPreSaveController(request);
   } else if (url.pathname === "/api/presave/minhas-campanhas") {
@@ -708,7 +744,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
           : request.method === "PUT"
             ? await updateAcervoRevistaController(request)
             : new Response(
-                JSON.stringify({ success: false, error: "Use GET, POST ou PUT para /api/acervo/revistas." }),
+                JSON.stringify({
+                  success: false,
+                  error: "Use GET, POST ou PUT para /api/acervo/revistas.",
+                }),
                 { status: 405, headers: { "Content-Type": "application/json" } },
               );
   } else if (url.pathname === "/api/acervo/entrevistas") {
@@ -718,7 +757,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         : request.method === "POST"
           ? await createAcervoEntrevistaController(request)
           : new Response(
-              JSON.stringify({ success: false, error: "Use GET ou POST para /api/acervo/entrevistas." }),
+              JSON.stringify({
+                success: false,
+                error: "Use GET ou POST para /api/acervo/entrevistas.",
+              }),
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
   } else if (url.pathname === "/api/acervo/metacritic/atualizar") {
@@ -809,7 +851,11 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     } else {
-      const resultado = await corrigirPrestigioAssistirTvPorJanela(desdeJanela, ateJanela, confirmarJanela);
+      const resultado = await corrigirPrestigioAssistirTvPorJanela(
+        desdeJanela,
+        ateJanela,
+        confirmarJanela,
+      );
       response = new Response(JSON.stringify({ success: true, data: resultado }), {
         status: 200,
         headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -833,7 +879,11 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     } else {
-      const resultado = await corrigirRegistroReprocessamentoTV(desdeJanelaR, ateJanelaR, confirmarRegistro);
+      const resultado = await corrigirRegistroReprocessamentoTV(
+        desdeJanelaR,
+        ateJanelaR,
+        confirmarRegistro,
+      );
       response = new Response(JSON.stringify({ success: true, data: resultado }), {
         status: 200,
         headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -846,7 +896,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     // sempre — createSocialPostController agora trava o range). Simulação
     // por padrão, ?confirmar=1 pra aplicar.
     const confirmarDesalinhamento = url.searchParams.get("confirmar") === "1";
-    const resultadoDesalinhamento = await corrigirDesalinhamentoSocialPosts(confirmarDesalinhamento);
+    const resultadoDesalinhamento =
+      await corrigirDesalinhamentoSocialPosts(confirmarDesalinhamento);
     response = new Response(JSON.stringify({ success: true, data: resultadoDesalinhamento }), {
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -881,7 +932,12 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     } else {
-      const resultadoRechave = await rechavearComentarios(tipoRechave, deTopic, paraTopic, confirmarRechave);
+      const resultadoRechave = await rechavearComentarios(
+        tipoRechave,
+        deTopic,
+        paraTopic,
+        confirmarRechave,
+      );
       response = new Response(JSON.stringify({ success: true, data: resultadoRechave }), {
         status: 200,
         headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -1124,10 +1180,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     }
   } else if (url.pathname === "/api/ponto") {
     if (request.method !== "GET") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use GET para /api/ponto." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/ponto." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
     }
     response = await getPontosController(request);
   } else if (url.pathname === "/api/ponto/salvar") {
@@ -1172,18 +1228,24 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await investirPlaylistController(request);
   } else if (url.pathname === "/api/ponto/limpar") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/ponto/limpar." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/ponto/limpar." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await limparPontoCelulaController(request);
   } else if (url.pathname === "/api/ponto/valores") {
     if (request.method !== "GET") {
-      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/ponto/valores." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/ponto/valores." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await listarValoresPontoController(request);
   } else if (url.pathname === "/api/ponto/playlists/limpar") {
@@ -1282,7 +1344,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
       });
     } catch (error: any) {
       response = new Response(
-        JSON.stringify({ success: false, error: error.message || "Erro ao processar participação." }),
+        JSON.stringify({
+          success: false,
+          error: error.message || "Erro ao processar participação.",
+        }),
         { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
       );
     }
@@ -1319,7 +1384,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         : request.method === "POST"
           ? await saveSocialBannerController(request)
           : new Response(
-              JSON.stringify({ success: false, error: "Use GET ou POST para /api/social/banners." }),
+              JSON.stringify({
+                success: false,
+                error: "Use GET ou POST para /api/social/banners.",
+              }),
               { status: 405, headers: { "Content-Type": "application/json" } },
             );
   } else if (url.pathname === "/api/social/banners/deletar") {
@@ -1456,10 +1524,13 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await getTurnesController(request);
   } else if (url.pathname === "/api/projetos") {
     if (request.method !== "GET") {
-      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/projetos." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/projetos." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await getProjetosController(request);
   } else if (url.pathname === "/api/turnes/detalhe") {
@@ -1544,10 +1615,13 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await getProximasGlobaisController();
   } else if (url.pathname === "/api/turnes/feed") {
     if (request.method !== "GET") {
-      return new Response(JSON.stringify({ success: false, error: "Use GET para /api/turnes/feed." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/turnes/feed." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await getFeedGlobalController(request);
   } else if (url.pathname === "/api/premiacoes/awards") {
@@ -1572,18 +1646,24 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await listarMinhasIndicacoesController(request);
   } else if (url.pathname === "/api/premiacoes/indicar/criar") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/indicar/criar." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/indicar/criar." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await criarIndicacaoController(request);
   } else if (url.pathname === "/api/premiacoes/indicar/remover") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/indicar/remover." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/indicar/remover." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await removerIndicacaoController(request);
   } else if (url.pathname === "/api/premiacoes/indicar/popup-status") {
@@ -1591,7 +1671,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   } else if (url.pathname === "/api/premiacoes/indicar/popup-dismiss") {
     if (request.method !== "POST") {
       return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/indicar/popup-dismiss." }),
+        JSON.stringify({
+          success: false,
+          error: "Use POST para /api/premiacoes/indicar/popup-dismiss.",
+        }),
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
@@ -1610,38 +1693,56 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await listarIndicadosVotacaoController(request);
   } else if (url.pathname === "/api/premiacoes/votacao/nota") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/nota." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/nota." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await registrarNotaVotacaoController(request);
   } else if (url.pathname === "/api/premiacoes/votacao/voto") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/voto." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/voto." }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await registrarVotoVotacaoController(request);
   } else if (url.pathname === "/api/premiacoes/votacao/termo-status") {
     response = await statusTermoVotoController(request);
   } else if (url.pathname === "/api/premiacoes/votacao/termo-aceitar") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/termo-aceitar." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Use POST para /api/premiacoes/votacao/termo-aceitar.",
+        }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await aceitarTermoVotoController(request);
   } else if (url.pathname === "/api/premiacoes/votacao/popup-status") {
     response = await popupVotacaoStatusController(request);
   } else if (url.pathname === "/api/premiacoes/votacao/popup-dismiss") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/votacao/popup-dismiss." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Use POST para /api/premiacoes/votacao/popup-dismiss.",
+        }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await popupVotacaoDismissController(request);
   } else if (url.pathname === "/api/premiacoes/votacao/admin/popup-reset") {
@@ -1650,20 +1751,32 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await statusPerformanceController(request);
   } else if (url.pathname === "/api/premiacoes/performance/responder") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/performance/responder." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Use POST para /api/premiacoes/performance/responder.",
+        }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await responderPerformanceController(request);
   } else if (url.pathname === "/api/premiacoes/performance/pendentes") {
     response = await pendentesPerformanceController(request);
   } else if (url.pathname === "/api/premiacoes/performance/enviar") {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ success: false, error: "Use POST para /api/premiacoes/performance/enviar." }), {
-        status: 405,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Use POST para /api/premiacoes/performance/enviar.",
+        }),
+        {
+          status: 405,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
     response = await enviarPerformanceController(request);
   } else if (url.pathname === "/api/awards") {

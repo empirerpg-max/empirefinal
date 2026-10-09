@@ -1,4 +1,9 @@
-import { googleSheetsService, normalizeComparison, normalizeText } from "../services/googleSheetsService";
+import {
+  googleSheetsService,
+  normalizeComparison,
+  normalizeText,
+} from "../services/googleSheetsService";
+import { withWriteLock } from "../services/writeLockService";
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
 import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
@@ -38,7 +43,9 @@ async function gerarProximoCodigoUnico(
   prefixo: string,
   digitos: number,
 ): Promise<string> {
-  const rows = await googleSheetsService.edicaoCharts.readValues(sheetName, "A1:BZ5000").catch(() => []);
+  const rows = await googleSheetsService.edicaoCharts
+    .readValues(sheetName, "A1:BZ5000")
+    .catch(() => []);
   if (!rows || rows.length < 1) return `${prefixo}${"1".padStart(digitos, "0")}`;
   const headers = rows[0].map((h) => normalizeComparison(h));
   const col = headers.findIndex((h) => h.startsWith("codigo unico"));
@@ -78,6 +85,26 @@ export async function registrarNaEdicaoCharts(params: {
 }): Promise<number | null> {
   const participantesLimpos = (params.participantes || []).filter(Boolean).slice(0, 5);
   const albunsExtrasLimpos = (params.albunsExtras || []).filter(Boolean).slice(0, 4);
+  // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") — sem
+  // isso, duas faixas registradas quase ao mesmo tempo (ex: lançamento
+  // normal + migração de álbuns legados rodando junto) podiam calcular a
+  // MESMA "próxima linha livre" e colidir.
+  return withWriteLock("gestao:edicao-charts", () => registrarNaEdicaoChartsSemTrava(params));
+}
+
+async function registrarNaEdicaoChartsSemTrava(params: {
+  dataFormatada: string;
+  fullTitle: string;
+  tipoSingle: string;
+  tipoMusica: string;
+  album?: string;
+  artistaPrincipal: string;
+  participantes?: string[];
+  albunsExtras?: string[];
+  weeksOverride?: string;
+}): Promise<number | null> {
+  const participantesLimpos = (params.participantes || []).filter(Boolean).slice(0, 5);
+  const albunsExtrasLimpos = (params.albunsExtras || []).filter(Boolean).slice(0, 4);
   try {
     // NÃO usa appendRow/:append aqui — mesmo com faixa explícita (A:Q),
     // confirmado ao vivo que o Sheets continua achando a "próxima linha
@@ -98,27 +125,31 @@ export async function registrarNaEdicaoCharts(params: {
     }
     const linhaAlvo = ultimaLinhaComTitulo + 1;
 
-    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linhaAlvo}:Q${linhaAlvo}`, [
+    await googleSheetsService.edicaoCharts.updateValues(
+      "EDIÇÃO CHARTS",
+      `A${linhaAlvo}:Q${linhaAlvo}`,
       [
-        params.dataFormatada, // A - Data de lançamento
-        params.fullTitle, // B - Nome (Artista - Título)
-        params.tipoSingle || "", // C - TIPO DE SINGLE
-        params.tipoMusica || "", // D - TIPO DE MÚSICA
-        params.album || "", // E - ALBUM
-        params.weeksOverride || "1", // F - WEEKS
-        "", // G - não mexer
-        params.artistaPrincipal, // H - ACT PRINCIPAL
-        participantesLimpos[0] || "", // I - ARTISTA 2
-        participantesLimpos[1] || "", // J - ARTISTA 3
-        participantesLimpos[2] || "", // K - ARTISTA 4
-        participantesLimpos[3] || "", // L - ARTISTA 5
-        participantesLimpos[4] || "", // M - ARTISTA 6
-        albunsExtrasLimpos[0] || "", // N - ALBUM 2
-        albunsExtrasLimpos[1] || "", // O - ALBUM 3
-        albunsExtrasLimpos[2] || "", // P - ALBUM 4
-        albunsExtrasLimpos[3] || "", // Q - ALBUM 5
+        [
+          params.dataFormatada, // A - Data de lançamento
+          params.fullTitle, // B - Nome (Artista - Título)
+          params.tipoSingle || "", // C - TIPO DE SINGLE
+          params.tipoMusica || "", // D - TIPO DE MÚSICA
+          params.album || "", // E - ALBUM
+          params.weeksOverride || "1", // F - WEEKS
+          "", // G - não mexer
+          params.artistaPrincipal, // H - ACT PRINCIPAL
+          participantesLimpos[0] || "", // I - ARTISTA 2
+          participantesLimpos[1] || "", // J - ARTISTA 3
+          participantesLimpos[2] || "", // K - ARTISTA 4
+          participantesLimpos[3] || "", // L - ARTISTA 5
+          participantesLimpos[4] || "", // M - ARTISTA 6
+          albunsExtrasLimpos[0] || "", // N - ALBUM 2
+          albunsExtrasLimpos[1] || "", // O - ALBUM 3
+          albunsExtrasLimpos[2] || "", // P - ALBUM 4
+          albunsExtrasLimpos[3] || "", // Q - ALBUM 5
+        ],
       ],
-    ]);
+    );
     return linhaAlvo;
   } catch (err) {
     console.warn("[registrarNaEdicaoCharts] Erro ao gravar em EDIÇÃO CHARTS:", err);
@@ -426,7 +457,10 @@ export async function createSongController(request: Request): Promise<Response> 
         const linhaReferencia = rows.slice(1).find((r) => normalizeComparison(r[1]) === alvo);
         codigoUnicoGerado = linhaReferencia ? (linhaReferencia[55] || "").trim() : "";
       } catch (err) {
-        console.warn("[createSongController] Erro ao buscar Código único da música referenciada:", err);
+        console.warn(
+          "[createSongController] Erro ao buscar Código único da música referenciada:",
+          err,
+        );
       }
     } else {
       // 1.5 Registrar em "EDIÇÃO CHARTS" (edicaoCharts) — aba real de cálculo
@@ -458,7 +492,9 @@ export async function createSongController(request: Request): Promise<Response> 
     if (musicaRowIndexNova && codigoUnicoGerado) {
       await googleSheetsService.principal
         .updateValues("Musicas", `Z${musicaRowIndexNova}`, [[codigoUnicoGerado]])
-        .catch((err) => console.warn("[createSongController] Erro ao copiar Código único pra Musicas!Z:", err));
+        .catch((err) =>
+          console.warn("[createSongController] Erro ao copiar Código único pra Musicas!Z:", err),
+        );
     }
 
     // 2. Gravar em REGISTRO DE MÚSICA na planilha de Registros — só as
@@ -518,7 +554,10 @@ export async function createSongController(request: Request): Promise<Response> 
     // forumController.ts) — lançar a própria música não é um comentário, e
     // registrar isso aqui como se fosse um inflava indevidamente a aba.
 
-    await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
+    await somarPrestigio(
+      { telegramId: jogadorId, usuario: nomeJogador },
+      "publicar_lancamento",
+    ).catch(() => {});
 
     registrarLogSistema({
       categoria: "Ação concluída",
@@ -585,18 +624,25 @@ async function resolverLinhaEdicaoCharts(
   }
   try {
     const musicasRows = await googleSheetsService.principal.readValues("Musicas");
-    const porTituloMusicas = musicasRows.slice(1).find((r) => normalizeComparison(r[7] || "") === nomeNosCharts);
+    const porTituloMusicas = musicasRows
+      .slice(1)
+      .find((r) => normalizeComparison(r[7] || "") === nomeNosCharts);
     const codigoUnicoMusicas = porTituloMusicas ? (porTituloMusicas[25] || "").trim() : "";
     if (!codigoUnicoMusicas) return null;
     const porCodigo = rows.slice(1).find((r) => (r[55] || "").trim() === codigoUnicoMusicas);
-    return porCodigo ? { titulo: (porCodigo[1] || "").trim(), codigoUnico: codigoUnicoMusicas } : null;
+    return porCodigo
+      ? { titulo: (porCodigo[1] || "").trim(), codigoUnico: codigoUnicoMusicas }
+      : null;
   } catch (err) {
     console.warn("[resolverLinhaEdicaoCharts] Erro no fallback por Código único:", err);
     return null;
   }
 }
 
-async function marcarVideoclipeNaPontos(musicaVinculada: string, dataFormatada: string): Promise<boolean> {
+async function marcarVideoclipeNaPontos(
+  musicaVinculada: string,
+  dataFormatada: string,
+): Promise<boolean> {
   if (!musicaVinculada.trim()) return false;
   try {
     const matches = await googleSheetsService.registrosCharts.findRows(
@@ -604,13 +650,17 @@ async function marcarVideoclipeNaPontos(musicaVinculada: string, dataFormatada: 
       (row) => (row[3] || "").trim().toLowerCase() === musicaVinculada.trim().toLowerCase(),
     );
     if (matches.length === 0) {
-      console.warn(`[marcarVideoclipeNaPontos] Música não encontrada na aba Pontos: ${musicaVinculada}`);
+      console.warn(
+        `[marcarVideoclipeNaPontos] Música não encontrada na aba Pontos: ${musicaVinculada}`,
+      );
       return false;
     }
     for (const { rowIndex } of matches) {
-      await googleSheetsService.registrosCharts.updateValues("Pontos", `N${rowIndex}:O${rowIndex}`, [
-        ["TRUE", dataFormatada],
-      ]);
+      await googleSheetsService.registrosCharts.updateValues(
+        "Pontos",
+        `N${rowIndex}:O${rowIndex}`,
+        [["TRUE", dataFormatada]],
+      );
     }
     return true;
   } catch (err) {
@@ -664,7 +714,10 @@ export async function createVideoController(request: Request): Promise<Response>
 
     if (musicasVinculadas.length === 0) {
       return new Response(
-        JSON.stringify({ success: false, error: "Selecione pelo menos uma música vinculada ao vídeo." }),
+        JSON.stringify({
+          success: false,
+          error: "Selecione pelo menos uma música vinculada ao vídeo.",
+        }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
@@ -728,9 +781,11 @@ export async function createVideoController(request: Request): Promise<Response>
       const colunaB = await googleSheetsService.principal.readValues("Music Videos", "B2:B5000");
       const idxVazio = colunaB.findIndex((r) => !(r[0] || "").trim());
       const linhaLivre = idxVazio >= 0 ? idxVazio + 2 : colunaB.length + 2;
-      await googleSheetsService.principal.updateValues("Music Videos", `A${linhaLivre}:T${linhaLivre}`, [
-        rowValues,
-      ]);
+      await googleSheetsService.principal.updateValues(
+        "Music Videos",
+        `A${linhaLivre}:T${linhaLivre}`,
+        [rowValues],
+      );
       videoRowIndexNovo = linhaLivre;
       upsertMidiaD1({
         id: topicId,
@@ -764,15 +819,25 @@ export async function createVideoController(request: Request): Promise<Response>
         linhaEdicaoCharts = await resolverLinhaEdicaoCharts(musicasVinculadas[0]);
         if (linhaEdicaoCharts?.codigoUnico) {
           await googleSheetsService.principal
-            .updateValues("Music Videos", `U${videoRowIndexNovo}`, [[linhaEdicaoCharts.codigoUnico]])
-            .catch((err) => console.warn("[createVideoController] Erro ao copiar Código único pra Music Videos!U:", err));
+            .updateValues("Music Videos", `U${videoRowIndexNovo}`, [
+              [linhaEdicaoCharts.codigoUnico],
+            ])
+            .catch((err) =>
+              console.warn(
+                "[createVideoController] Erro ao copiar Código único pra Music Videos!U:",
+                err,
+              ),
+            );
         } else {
           warnings.push(
             `Vídeo cadastrado, mas não achei "${musicasVinculadas[0]}" em EDIÇÃO CHARTS — o Código único não foi copiado pra Music Videos, confira o vínculo com a música.`,
           );
         }
       } catch (err) {
-        console.warn("[createVideoController] Erro ao buscar Código único da música vinculada:", err);
+        console.warn(
+          "[createVideoController] Erro ao buscar Código único da música vinculada:",
+          err,
+        );
       }
     }
 
@@ -789,7 +854,9 @@ export async function createVideoController(request: Request): Promise<Response>
       const tituloParaPontos = linhaEdicaoCharts?.titulo || musicasVinculadas[0];
       const marcou = await marcarVideoclipeNaPontos(tituloParaPontos, dataFormatada);
       if (!marcou) {
-        warnings.push(`Vídeo cadastrado, mas não achei "${musicasVinculadas[0]}" na aba Pontos — a caixinha de lançamento não foi marcada, confira o vínculo.`);
+        warnings.push(
+          `Vídeo cadastrado, mas não achei "${musicasVinculadas[0]}" na aba Pontos — a caixinha de lançamento não foi marcada, confira o vínculo.`,
+        );
       }
     }
     const warning = warnings.length > 0 ? warnings.join(" ") : undefined;
@@ -825,34 +892,54 @@ export async function createVideoController(request: Request): Promise<Response>
 }
 
 // Lista as músicas disponíveis nos charts pra busca por faixa no cadastro de
-// álbum — fonte é "REGISTRO DE MÚSICA" (registrosCharts), a mesma aba onde
-// registrarFaixaNosCharts grava toda música lançada (B = Título "Artista -
-// Título", H = ACT PRINCIPAL). Antes lia a aba "Pontos" coluna D (comentário
-// dizia "confirmado via dump ao vivo", mas isso ficou desatualizado — hoje
-// "Pontos" é usada por marcarVideoclipeNaPontos, pros cadastros de
-// videoclipe, não tem nada de busca de faixa; e existe uma aba SEPARADA
-// "PONTOS" em maiúsculas, usada pelo módulo de distribuir pontos aos
-// jogadores, com nomes de jogador — foi essa planilha errada que a busca
-// de "Música Existente" acabava mostrando, nunca achando nenhuma música de
-// verdade). Usa ACT PRINCIPAL (H) como artist em vez de tentar separar o
-// título por " - ", porque títulos com múltiplos hífens no nome da música
-// quebravam esse split.
+// álbum — fonte principal é "REGISTRO DE MÚSICA" (registrosCharts), a mesma
+// aba onde registrarFaixaNosCharts grava toda música lançada (B = Título
+// "Artista - Título", H = ACT PRINCIPAL). Antes lia a aba "Pontos" coluna D
+// (comentário dizia "confirmado via dump ao vivo", mas isso ficou
+// desatualizado — hoje "Pontos" é usada só por marcarVideoclipeNaPontos,
+// pros cadastros de videoclipe, não tem nada de busca de faixa; e existe
+// uma aba SEPARADA "PONTOS" em maiúsculas, usada pelo módulo de distribuir
+// pontos aos jogadores, com nomes de JOGADOR — foi essa planilha errada
+// que a busca de "Música Existente" acabava mostrando, nunca achando
+// nenhuma música de verdade).
+//
+// SEGUNDA FONTE (chartsBase/"SPOTIFY") adicionada depois de um bug real
+// reportado pelo usuário: o jogador Wesley (artista Max Gorghan) buscou
+// "Follia" e não achou nada, mesmo ela estando ativa no chart SPOTIFY
+// (07/10/2026: art="Max Gorghan", capa e style vazios/"Não encontrado" —
+// sinal de registro incompleto em REGISTRO DE MÚSICA). Uma faixa recém-
+// lançada/migrada pode legitimamente ainda não ter uma linha lá — mescla
+// também toda faixa do chart SPOTIFY ativo agora, usando a coluna "art"
+// (já vem separada do título, sem precisar depender de split por " - ",
+// que quebra em títulos com hífen no meio do nome).
 export async function getMusicasEmChartController(): Promise<Response> {
   try {
-    const rows = await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
+    const [registroRows, spotifyRows] = await Promise.all([
+      googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA").catch(() => []),
+      googleSheetsService.chartsBase.readValues("SPOTIFY", "A1:ZZ5000").catch(() => []),
+    ]);
     const seen = new Set<string>();
     const musicas: { label: string; artist: string; title: string }[] = [];
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      const label = (row[1] || "").trim(); // B - Título
-      if (!label || seen.has(label)) continue;
-      seen.add(label);
-      const artist = (row[7] || "").trim(); // H - ACT PRINCIPAL
+    const push = (label: string, artist: string) => {
+      label = label.trim();
+      artist = artist.trim();
+      const key = normalizeComparison(label);
+      if (!label || seen.has(key)) return;
+      seen.add(key);
       const title =
         artist && label.toLowerCase().startsWith(`${artist.toLowerCase()} - `)
           ? label.slice(artist.length + 3).trim()
           : label;
       musicas.push({ label, artist: artist || label, title });
+    };
+    for (let i = 1; i < registroRows.length; i++) {
+      push((registroRows[i][1] || "").trim(), (registroRows[i][7] || "").trim()); // B - Título, H - ACT PRINCIPAL
+    }
+    // SPOTIFY (chartsBase): tit = coluna D (índice 3), art = coluna H
+    // (índice 7) — layout confirmado em chartsController.ts (fetchC). Pula
+    // o cabeçalho (linha 1).
+    for (let i = 1; i < spotifyRows.length; i++) {
+      push((spotifyRows[i]?.[3] || "").trim(), (spotifyRows[i]?.[7] || "").trim());
     }
     return new Response(JSON.stringify({ success: true, data: musicas }), {
       status: 200,
@@ -861,7 +948,10 @@ export async function getMusicasEmChartController(): Promise<Response> {
   } catch (error: any) {
     console.error("[getMusicasEmChartController] Erro:", error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message || "Erro ao buscar músicas em chart." }),
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao buscar músicas em chart.",
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -874,7 +964,10 @@ export async function getMusicasEmChartController(): Promise<Response> {
 // não precisa nenhuma resolução extra por Código único aqui).
 export async function getAlbunsEmChartController(): Promise<Response> {
   try {
-    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D5000");
+    const rows = await googleSheetsService.edicaoCharts.readValues(
+      "EDIÇÃO CHARTS ÁLBUMS",
+      "A2:D5000",
+    );
     const seen = new Set<string>();
     const albuns: { label: string; artist: string; title: string }[] = [];
     for (const row of rows) {
@@ -912,10 +1005,13 @@ export async function getFaixasSemAlbumController(request: Request): Promise<Res
     const url = new URL(request.url);
     const artista = (url.searchParams.get("artista") || "").trim();
     if (!artista) {
-      return new Response(JSON.stringify({ success: false, error: "Parâmetro 'artista' é obrigatório." }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Parâmetro 'artista' é obrigatório." }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     const rows = await googleSheetsService.principal.readValues("Musicas");
@@ -942,7 +1038,10 @@ export async function getFaixasSemAlbumController(request: Request): Promise<Res
   } catch (error: any) {
     console.error("[getFaixasSemAlbumController] Erro:", error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message || "Erro ao buscar faixas sem álbum." }),
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao buscar faixas sem álbum.",
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -976,15 +1075,32 @@ async function vincularFaixaExistenteAoAlbum(
       "Musicas",
       (row) => normalizeComparison(row[7] || "") === alvoNorm,
     );
-    for (const { rowIndex } of musicasMatches) {
+    // Regra de negócio confirmada: uma faixa já lançada pode pertencer a
+    // MÚLTIPLOS álbuns (ex: single que depois entra numa coletânea/deluxe)
+    // — selecioná-la como "Música Existente" NUNCA deve ser tratada como
+    // erro/duplicata/pulada. Bug real corrigido aqui: antes, toda linha
+    // encontrada em Musicas (coluna K = álbum da faixa) tinha o K
+    // SOBRESCRITO pelo álbum novo, mesmo quando já pertencia a outro álbum
+    // — "roubando" a faixa do álbum original em vez de linká-la aos dois.
+    // Agora só atualiza em cima de uma linha livre (K vazio) ou já do MESMO
+    // álbum (re-run idempotente); se toda linha encontrada já pertence a um
+    // álbum DIFERENTE, cai no mesmo ramo de "não encontrada" abaixo, que
+    // cria uma linha PRÓPRIA pra essa faixa dentro do álbum novo — sem
+    // nunca tocar na linha/álbum original.
+    let atualizouLinhaLivre = false;
+    for (const { rowIndex, row } of musicasMatches) {
+      const albumAtual = normalizeComparison(row[10] || ""); // K
+      const albumNovoNorm = normalizeComparison(albumFullTitle);
+      if (albumAtual && albumAtual !== albumNovoNorm) continue; // pertence a outro álbum — não sobrescreve
       await googleSheetsService.principal.updateValues("Musicas", `K${rowIndex}`, [
         [albumFullTitle],
       ]);
       await googleSheetsService.principal.updateValues("Musicas", `U${rowIndex}`, [
         [String(ordem)],
       ]);
+      atualizouLinhaLivre = true;
     }
-    musicasOk = musicasMatches.length > 0;
+    musicasOk = atualizouLinhaLivre;
     // Migração antiga: algumas faixas de álbum contabilizavam vendas/streams
     // pro total do álbum nos charts, mas nunca tiveram linha própria em
     // "Musicas" (só existiam como tópico do álbum, sem tópico individual).
@@ -1011,7 +1127,11 @@ async function vincularFaixaExistenteAoAlbum(
           "", // L - WEEKS
           "", // M - WEEKS VIDEO
           artistaAlbum, // N - ACT PRINCIPAL
-          "", "", "", "", "", // O-S - ARTISTA 2-6
+          "",
+          "",
+          "",
+          "",
+          "", // O-S - ARTISTA 2-6
           "", // T - GÊNERO
           String(ordem), // U - Ordem
           "", // V - Metacritic por jogador
@@ -1022,7 +1142,10 @@ async function vincularFaixaExistenteAoAlbum(
         musicasOk = true;
         criada = true;
       } catch (err) {
-        console.warn(`[vincularFaixaExistenteAoAlbum] Erro ao criar linha pendente pra "${musicaSelecionada}":`, err);
+        console.warn(
+          `[vincularFaixaExistenteAoAlbum] Erro ao criar linha pendente pra "${musicaSelecionada}":`,
+          err,
+        );
       }
     }
   } catch (err) {
@@ -1061,7 +1184,9 @@ async function vincularFaixaExistenteAoAlbum(
       edicaoChartsOk = novaLinha !== null;
     }
     if (!edicaoChartsOk) {
-      console.warn(`[vincularFaixaExistenteAoAlbum] Música não encontrada em EDIÇÃO CHARTS: ${musicaSelecionada}`);
+      console.warn(
+        `[vincularFaixaExistenteAoAlbum] Música não encontrada em EDIÇÃO CHARTS: ${musicaSelecionada}`,
+      );
     }
   } catch (err) {
     console.warn("[vincularFaixaExistenteAoAlbum] Erro ao atualizar EDIÇÃO CHARTS:", err);
@@ -1091,7 +1216,18 @@ async function registrarFaixaNosCharts(params: {
   pendente?: boolean;
   weeksOverride?: string;
 }): Promise<number | null> {
-  const { dataFormatada, songTitle, tipoSingle, tipoMusica, album, artistaPrincipal, participantes, capaUrl, pendente, weeksOverride } = params;
+  const {
+    dataFormatada,
+    songTitle,
+    tipoSingle,
+    tipoMusica,
+    album,
+    artistaPrincipal,
+    participantes,
+    capaUrl,
+    pendente,
+    weeksOverride,
+  } = params;
 
   const edicaoChartsRowIndex = await registrarNaEdicaoCharts({
     dataFormatada,
@@ -1109,38 +1245,49 @@ async function registrarFaixaNosCharts(params: {
   }
 
   try {
-    const registroRows = await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
-    let targetRow = (registroRows?.length || 0) + 1;
-    if (registroRows && registroRows.length > 1) {
-      for (let i = 1; i < registroRows.length; i++) {
-        if (!(registroRows[i][1] || "").trim()) {
-          targetRow = i + 1;
-          break;
+    // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") —
+    // mesmo padrão arriscado de "ler última linha livre + escrever" sem
+    // proteção nenhuma contra outra escrita concorrente calculando a
+    // MESMA targetRow.
+    await withWriteLock("gestao:registro-de-musica", async () => {
+      const registroRows =
+        await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
+      let targetRow = (registroRows?.length || 0) + 1;
+      if (registroRows && registroRows.length > 1) {
+        for (let i = 1; i < registroRows.length; i++) {
+          if (!(registroRows[i][1] || "").trim()) {
+            targetRow = i + 1;
+            break;
+          }
         }
+      } else if (!registroRows || registroRows.length === 0) {
+        targetRow = 2;
       }
-    } else if (!registroRows || registroRows.length === 0) {
-      targetRow = 2;
-    }
 
-    await googleSheetsService.registrosCharts.updateValues("REGISTRO DE MÚSICA", `B${targetRow}:P${targetRow}`, [
-      [
-        songTitle, // B - Título
-        tipoSingle, // C - Tipo de Single
-        tipoMusica, // D - Tipo de Música
-        album, // E - ÁLBUM
-        "", // F
-        "", // G
-        artistaPrincipal, // H - ACT PRINCIPAL
-        participantes[0] || "", // I - Artista 2
-        participantes[1] || "", // J - Artista 3
-        participantes[2] || "", // K - Artista 4
-        participantes[3] || "", // L - Artista 5
-        participantes[4] || "", // M - Artista 6
-        "Não", // N - SUBSTITUIR NOS CHARTS?
-        "", // O - Por qual música?
-        "OK", // P - ENVIAR
-      ],
-    ]);
+      await googleSheetsService.registrosCharts.updateValues(
+        "REGISTRO DE MÚSICA",
+        `B${targetRow}:P${targetRow}`,
+        [
+          [
+            songTitle, // B - Título
+            tipoSingle, // C - Tipo de Single
+            tipoMusica, // D - Tipo de Música
+            album, // E - ÁLBUM
+            "", // F
+            "", // G
+            artistaPrincipal, // H - ACT PRINCIPAL
+            participantes[0] || "", // I - Artista 2
+            participantes[1] || "", // J - Artista 3
+            participantes[2] || "", // K - Artista 4
+            participantes[3] || "", // L - Artista 5
+            participantes[4] || "", // M - Artista 6
+            "Não", // N - SUBSTITUIR NOS CHARTS?
+            "", // O - Por qual música?
+            "OK", // P - ENVIAR
+          ],
+        ],
+      );
+    });
   } catch (err) {
     console.warn("[registrarFaixaNosCharts] Erro ao gravar em REGISTRO DE MÚSICA:", err);
   }
@@ -1171,13 +1318,20 @@ async function atualizarFaixaNosChartsAoPublicar(params: {
       }
     }
     if (!linhaAlvo) {
-      console.warn("[atualizarFaixaNosChartsAoPublicar] Linha não encontrada em EDIÇÃO CHARTS pra:", fullTitle);
+      console.warn(
+        "[atualizarFaixaNosChartsAoPublicar] Linha não encontrada em EDIÇÃO CHARTS pra:",
+        fullTitle,
+      );
       return null;
     }
-    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linhaAlvo}`, [[dataFormatada]]);
-    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `C${linhaAlvo}:D${linhaAlvo}`, [
-      [tipoSingle, tipoMusica],
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `A${linhaAlvo}`, [
+      [dataFormatada],
     ]);
+    await googleSheetsService.edicaoCharts.updateValues(
+      "EDIÇÃO CHARTS",
+      `C${linhaAlvo}:D${linhaAlvo}`,
+      [[tipoSingle, tipoMusica]],
+    );
     return linhaAlvo;
   } catch (err) {
     console.warn("[atualizarFaixaNosChartsAoPublicar] Erro ao atualizar EDIÇÃO CHARTS:", err);
@@ -1292,7 +1446,10 @@ async function processarFaixasDoAlbum(
         }).catch(() => {});
       }
     } catch (faixaErr) {
-      console.warn("[processarFaixasDoAlbum] Erro ao registrar faixa inédita em Musicas:", faixaErr);
+      console.warn(
+        "[processarFaixasDoAlbum] Erro ao registrar faixa inédita em Musicas:",
+        faixaErr,
+      );
       continue;
     }
 
@@ -1322,7 +1479,9 @@ async function processarFaixasDoAlbum(
       if (codigoGerado) {
         await googleSheetsService.principal
           .updateValues("Musicas", `Z${faixaRowIndex}`, [[codigoGerado]])
-          .catch((err) => console.warn("[processarFaixasDoAlbum] Erro ao copiar Código único:", err));
+          .catch((err) =>
+            console.warn("[processarFaixasDoAlbum] Erro ao copiar Código único:", err),
+          );
       }
     }
   }
@@ -1388,10 +1547,13 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
     const url = new URL(request.url);
     const topicId = (url.searchParams.get("topicId") || "").trim();
     if (!topicId) {
-      return new Response(JSON.stringify({ success: false, error: "Parâmetro 'topicId' é obrigatório." }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Parâmetro 'topicId' é obrigatório." }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     const albumRows = await googleSheetsService.principal.readValues("Albuns");
@@ -1422,10 +1584,10 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
       }))
       .sort((a, b) => a.ordem - b.ordem);
 
-    return new Response(
-      JSON.stringify({ success: true, data: { albumFullTitle, faixas } }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ success: true, data: { albumFullTitle, faixas } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (error: any) {
     console.error("[getAlbumFaixasController] Erro:", error);
     return new Response(
@@ -1532,7 +1694,10 @@ export async function updateFaixaLetraSincronizadaController(request: Request): 
   } catch (error: any) {
     console.error("[updateFaixaLetraSincronizadaController] Erro:", error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message || "Erro ao gravar letra sincronizada." }),
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao gravar letra sincronizada.",
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -1557,10 +1722,13 @@ export async function getFaixasPendentesController(request: Request): Promise<Re
     const url = new URL(request.url);
     const artista = (url.searchParams.get("artista") || "").trim();
     if (!artista) {
-      return new Response(JSON.stringify({ success: false, error: "Parâmetro 'artista' é obrigatório." }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Parâmetro 'artista' é obrigatório." }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     const rows = await googleSheetsService.principal.readValues("Musicas");
@@ -1613,7 +1781,10 @@ export async function getFaixasPendentesController(request: Request): Promise<Re
   } catch (error: any) {
     console.error("[getFaixasPendentesController] Erro:", error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message || "Erro ao buscar faixas pendentes." }),
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao buscar faixas pendentes.",
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -1646,7 +1817,10 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     const capaUrlEscolhida = (body.capaUrl || "").trim();
     const letraEscolhida = typeof body.letra === "string" ? body.letra : undefined;
     const participantesEscolhidos = Array.isArray(body.participantes)
-      ? body.participantes.map((p) => (p || "").trim()).filter(Boolean).slice(0, 5)
+      ? body.participantes
+          .map((p) => (p || "").trim())
+          .filter(Boolean)
+          .slice(0, 5)
       : undefined;
 
     if (!musicaRowIndex || musicaRowIndex < 2 || !nomeJogador) {
@@ -1656,7 +1830,10 @@ export async function publicarFaixaPendenteController(request: Request): Promise
       );
     }
 
-    const rows = await googleSheetsService.principal.readValues("Musicas", `A${musicaRowIndex}:Y${musicaRowIndex}`);
+    const rows = await googleSheetsService.principal.readValues(
+      "Musicas",
+      `A${musicaRowIndex}:Y${musicaRowIndex}`,
+    );
     const row = rows?.[0];
     if (!row) {
       return new Response(JSON.stringify({ success: false, error: "Faixa não encontrada." }), {
@@ -1677,14 +1854,18 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     // de "dois códigos pra mesma faixa" que já aconteceu.
     const pendenteAtual = (row[23] || "").trim();
     if (normalizeComparison(pendenteAtual) !== "sim") {
-      return new Response(JSON.stringify({ success: false, error: "Essa faixa já tem tópico publicado." }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Essa faixa já tem tópico publicado." }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     const fullTitle = row[7] || "";
-    const topicId = (row[1] || "").trim() || `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const topicId =
+      (row[1] || "").trim() || `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     await googleSheetsService.principal.updateValues("Musicas", `B${musicaRowIndex}`, [[topicId]]);
     await googleSheetsService.principal.updateValues("Musicas", `F${musicaRowIndex}`, [[topicId]]);
@@ -1704,35 +1885,47 @@ export async function publicarFaixaPendenteController(request: Request): Promise
     if (tipoSingleEscolhido && tipoSingleEscolhido !== row[8]) {
       await googleSheetsService.principal
         .updateValues("Musicas", `I${musicaRowIndex}`, [[tipoSingle]])
-        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar tipo em Musicas:", err));
+        .catch((err) =>
+          console.warn("[publicarFaixaPendenteController] Erro ao atualizar tipo em Musicas:", err),
+        );
     }
     if (tipoMusicaEscolhido && tipoMusicaEscolhido !== row[9]) {
       await googleSheetsService.principal
         .updateValues("Musicas", `J${musicaRowIndex}`, [[tipoMusica]])
-        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar tipo de música:", err));
+        .catch((err) =>
+          console.warn("[publicarFaixaPendenteController] Erro ao atualizar tipo de música:", err),
+        );
     }
     const audioFinal = audioUrlEscolhido || row[2] || "";
     if (audioUrlEscolhido && audioUrlEscolhido !== row[2]) {
       await googleSheetsService.principal
         .updateValues("Musicas", `C${musicaRowIndex}`, [[audioFinal]])
-        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar áudio:", err));
+        .catch((err) =>
+          console.warn("[publicarFaixaPendenteController] Erro ao atualizar áudio:", err),
+        );
     }
     const capaFinal = capaUrlEscolhida || row[3] || "";
     if (capaUrlEscolhida && capaUrlEscolhida !== row[3]) {
       await googleSheetsService.principal
         .updateValues("Musicas", `D${musicaRowIndex}`, [[capaFinal]])
-        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar capa:", err));
+        .catch((err) =>
+          console.warn("[publicarFaixaPendenteController] Erro ao atualizar capa:", err),
+        );
     }
     if (letraEscolhida !== undefined && letraEscolhida !== row[4]) {
       await googleSheetsService.principal
         .updateValues("Musicas", `E${musicaRowIndex}`, [[letraEscolhida]])
-        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar letra:", err));
+        .catch((err) =>
+          console.warn("[publicarFaixaPendenteController] Erro ao atualizar letra:", err),
+        );
     }
     if (participantesEscolhidos !== undefined) {
       const padded = [0, 1, 2, 3, 4].map((i) => participantesEscolhidos[i] || "");
       await googleSheetsService.principal
         .updateValues("Musicas", `O${musicaRowIndex}:S${musicaRowIndex}`, [padded])
-        .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao atualizar participantes:", err));
+        .catch((err) =>
+          console.warn("[publicarFaixaPendenteController] Erro ao atualizar participantes:", err),
+        );
     }
     const edicaoChartsRowIndex = await atualizarFaixaNosChartsAoPublicar({
       fullTitle,
@@ -1751,28 +1944,40 @@ export async function publicarFaixaPendenteController(request: Request): Promise
         codigoUnicoFinal = codigoGerado;
         await googleSheetsService.principal
           .updateValues("Musicas", `Z${musicaRowIndex}`, [[codigoGerado]])
-          .catch((err) => console.warn("[publicarFaixaPendenteController] Erro ao copiar Código único:", err));
+          .catch((err) =>
+            console.warn("[publicarFaixaPendenteController] Erro ao copiar Código único:", err),
+          );
       }
     }
 
     // REGISTRO é só pra comentários de OUTROS jogadores (ver
     // forumController.ts) — publicar a própria faixa não é comentário.
 
-    await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
+    await somarPrestigio(
+      { telegramId: jogadorId, usuario: nomeJogador },
+      "publicar_lancamento",
+    ).catch(() => {});
 
     // codigoUnico devolvido pro front conseguir salvar Shop/Info/Visual
     // (material extra) na hora de publicar, igual já faz "Nova Música" —
     // sem isso o front não tinha como saber qual código usar aqui.
     return new Response(
-      JSON.stringify({ success: true, data: { topicId, titulo: fullTitle, codigoUnico: codigoUnicoFinal } }),
+      JSON.stringify({
+        success: true,
+        data: { topicId, titulo: fullTitle, codigoUnico: codigoUnicoFinal },
+      }),
       {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   } catch (error: any) {
     console.error("[publicarFaixaPendenteController] Erro:", error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message || "Erro ao publicar faixa pendente." }),
+      JSON.stringify({
+        success: false,
+        error: error.message || "Erro ao publicar faixa pendente.",
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -1840,117 +2045,117 @@ export interface SubstituirAlbumPayload {
 // estourado o tempo de execução de uma migração com álbum grande demais).
 export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
   const {
-      albumTopicId,
-      novaCapaUrl = "",
-      novosEncartesUrls,
-      novasFaixas = [],
-      nomeJogador,
-      jogadorId = "",
-      dataLancamento = "",
+    albumTopicId,
+    novaCapaUrl = "",
+    novosEncartesUrls,
+    novasFaixas = [],
+    nomeJogador,
+    jogadorId = "",
+    dataLancamento = "",
+    weeksOverride,
+  } = body;
+
+  if (!albumTopicId || !nomeJogador) {
+    throw new Error("Campos obrigatórios ausentes: albumTopicId, nomeJogador.");
+  }
+
+  const rows = await googleSheetsService.principal.readValues("Albuns");
+  let rowIndex = -1;
+  let albumFullTitle = "";
+  for (let i = 1; i < rows.length; i++) {
+    if ((rows[i][1] || "").trim() === albumTopicId.trim()) {
+      rowIndex = i + 1;
+      albumFullTitle = (rows[i][6] || "").trim();
+      break;
+    }
+  }
+
+  if (rowIndex === -1 || !albumFullTitle) {
+    throw new Error("Álbum não encontrado.");
+  }
+
+  const artistaAlbum = albumFullTitle.includes(" - ")
+    ? albumFullTitle.slice(0, albumFullTitle.indexOf(" - ")).trim()
+    : albumFullTitle;
+  const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const dataFormatada = /^\d{4}-\d{2}-\d{2}$/.test(dataLancamento)
+    ? (() => {
+        const [ano, mes, dia] = dataLancamento.split("-");
+        return `${dia}/${mes}/${ano}`;
+      })()
+    : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+  if (novaCapaUrl) {
+    try {
+      await googleSheetsService.principal.updateValues("Albuns", `C${rowIndex}`, [[novaCapaUrl]]);
+    } catch (err) {
+      console.warn("[substituirAlbumController] Erro ao atualizar capa:", err);
+    }
+  }
+
+  // undefined = campo nem foi enviado (não mexe no encarte); [] enviado
+  // de propósito = jogador removeu todo o encarte que tinha, precisa
+  // conseguir limpar a coluna. Antes só gravava com length > 0, então
+  // não tinha como esvaziar o encarte pela tela.
+  if (novosEncartesUrls !== undefined) {
+    try {
+      await googleSheetsService.principal.updateValues("Albuns", `J${rowIndex}`, [
+        [novosEncartesUrls.join(", ")],
+      ]);
+    } catch (err) {
+      console.warn("[substituirAlbumController] Erro ao atualizar encarte:", err);
+    }
+  }
+
+  let resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
+  if (novasFaixas.length > 0) {
+    ({ resultadosFaixasExistentes } = await processarFaixasDoAlbum(
+      novasFaixas,
+      albumFullTitle,
+      artistaAlbum,
+      novaCapaUrl,
+      jogadorId,
+      dataFormatada,
       weeksOverride,
-    } = body;
+      albumTopicId,
+    ));
 
-    if (!albumTopicId || !nomeJogador) {
-      throw new Error("Campos obrigatórios ausentes: albumTopicId, nomeJogador.");
-    }
-
-    const rows = await googleSheetsService.principal.readValues("Albuns");
-    let rowIndex = -1;
-    let albumFullTitle = "";
-    for (let i = 1; i < rows.length; i++) {
-      if ((rows[i][1] || "").trim() === albumTopicId.trim()) {
-        rowIndex = i + 1;
-        albumFullTitle = (rows[i][6] || "").trim();
-        break;
-      }
-    }
-
-    if (rowIndex === -1 || !albumFullTitle) {
-      throw new Error("Álbum não encontrado.");
-    }
-
-    const artistaAlbum = albumFullTitle.includes(" - ")
-      ? albumFullTitle.slice(0, albumFullTitle.indexOf(" - ")).trim()
-      : albumFullTitle;
-    const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const dataFormatada = /^\d{4}-\d{2}-\d{2}$/.test(dataLancamento)
-      ? (() => {
-          const [ano, mes, dia] = dataLancamento.split("-");
-          return `${dia}/${mes}/${ano}`;
-        })()
-      : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-
-    if (novaCapaUrl) {
-      try {
-        await googleSheetsService.principal.updateValues("Albuns", `C${rowIndex}`, [[novaCapaUrl]]);
-      } catch (err) {
-        console.warn("[substituirAlbumController] Erro ao atualizar capa:", err);
-      }
-    }
-
-    // undefined = campo nem foi enviado (não mexe no encarte); [] enviado
-    // de propósito = jogador removeu todo o encarte que tinha, precisa
-    // conseguir limpar a coluna. Antes só gravava com length > 0, então
-    // não tinha como esvaziar o encarte pela tela.
-    if (novosEncartesUrls !== undefined) {
-      try {
-        await googleSheetsService.principal.updateValues("Albuns", `J${rowIndex}`, [
-          [novosEncartesUrls.join(", ")],
-        ]);
-      } catch (err) {
-        console.warn("[substituirAlbumController] Erro ao atualizar encarte:", err);
-      }
-    }
-
-    let resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
-    if (novasFaixas.length > 0) {
-      ({ resultadosFaixasExistentes } = await processarFaixasDoAlbum(
-        novasFaixas,
-        albumFullTitle,
-        artistaAlbum,
-        novaCapaUrl,
-        jogadorId,
-        dataFormatada,
-        weeksOverride,
-        albumTopicId,
-      ));
-
-      // Soma a quantidade de faixas novas ao total já registrado em
-      // "EDIÇÃO CHARTS ÁLBUMS" (coluna E), em vez de sobrescrever.
-      try {
-        const edicaoMatches = await googleSheetsService.edicaoCharts.findRows(
+    // Soma a quantidade de faixas novas ao total já registrado em
+    // "EDIÇÃO CHARTS ÁLBUMS" (coluna E), em vez de sobrescrever.
+    try {
+      const edicaoMatches = await googleSheetsService.edicaoCharts.findRows(
+        "EDIÇÃO CHARTS ÁLBUMS",
+        (row) => (row[3] || "").trim().toLowerCase() === albumFullTitle.toLowerCase(),
+      );
+      for (const { rowIndex: edicaoRowIndex, row } of edicaoMatches) {
+        const totalAtual = parseInt((row[4] || "0").replace(/\D/g, ""), 10) || 0;
+        await googleSheetsService.edicaoCharts.updateValues(
           "EDIÇÃO CHARTS ÁLBUMS",
-          (row) => (row[3] || "").trim().toLowerCase() === albumFullTitle.toLowerCase(),
+          `E${edicaoRowIndex}`,
+          [[String(totalAtual + novasFaixas.length)]],
         );
-        for (const { rowIndex: edicaoRowIndex, row } of edicaoMatches) {
-          const totalAtual = parseInt((row[4] || "0").replace(/\D/g, ""), 10) || 0;
-          await googleSheetsService.edicaoCharts.updateValues(
-            "EDIÇÃO CHARTS ÁLBUMS",
-            `E${edicaoRowIndex}`,
-            [[String(totalAtual + novasFaixas.length)]],
-          );
-        }
-      } catch (err) {
-        console.warn("[substituirAlbumController] Erro ao atualizar EDIÇÃO CHARTS ÁLBUMS:", err);
       }
+    } catch (err) {
+      console.warn("[substituirAlbumController] Erro ao atualizar EDIÇÃO CHARTS ÁLBUMS:", err);
     }
+  }
 
-    // REGISTRO é só pra comentários de OUTROS jogadores (ver
-    // forumController.ts) — adicionar faixa/lançar conteúdo não é
-    // comentário, então não gera mais registro aqui (correção de um
-    // desenho anterior que tratava lançamento como se fosse comentário).
+  // REGISTRO é só pra comentários de OUTROS jogadores (ver
+  // forumController.ts) — adicionar faixa/lançar conteúdo não é
+  // comentário, então não gera mais registro aqui (correção de um
+  // desenho anterior que tratava lançamento como se fosse comentário).
 
-    const faixasCriadas = resultadosFaixasExistentes.filter((f) => f.criada).map((f) => f.titulo);
-    const faixasFalhas = resultadosFaixasExistentes.filter((f) => !f.ok).map((f) => f.titulo);
-    let mensagem = "Álbum atualizado com sucesso!";
-    if (faixasCriadas.length > 0) {
-      mensagem += ` Atenção: "${faixasCriadas.join('", "')}" não tinha registro individual (migração antiga) — foi criada como faixa pendente, sem tópico ainda; publique quando quiser abrir o tópico dela.`;
-    }
-    if (faixasFalhas.length > 0) {
-      mensagem += ` Falha ao vincular: "${faixasFalhas.join('", "')}".`;
-    }
+  const faixasCriadas = resultadosFaixasExistentes.filter((f) => f.criada).map((f) => f.titulo);
+  const faixasFalhas = resultadosFaixasExistentes.filter((f) => !f.ok).map((f) => f.titulo);
+  let mensagem = "Álbum atualizado com sucesso!";
+  if (faixasCriadas.length > 0) {
+    mensagem += ` Atenção: "${faixasCriadas.join('", "')}" não tinha registro individual (migração antiga) — foi criada como faixa pendente, sem tópico ainda; publique quando quiser abrir o tópico dela.`;
+  }
+  if (faixasFalhas.length > 0) {
+    mensagem += ` Falha ao vincular: "${faixasFalhas.join('", "')}".`;
+  }
 
-    return { titulo: albumFullTitle, mensagem, faixasCriadas, faixasFalhas };
+  return { titulo: albumFullTitle, mensagem, faixasCriadas, faixasFalhas };
 }
 
 // Controller para Substituir álbum já lançado — fina camada HTTP em cima
@@ -1991,46 +2196,88 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
   numeroFaixas: number;
   albumRowIndexEmAlbuns?: number | null;
 }): Promise<string> {
-  const { artistaAlbum, albumFullTitle, tipoAlbum, dataFormatada, numeroSemanas, numeroFaixas, albumRowIndexEmAlbuns } = params;
-  try {
-    const tipoNum = tipoAlbum.trim().toUpperCase() === "EP" ? "1" : "2";
-    const codigoUnico = await gerarProximoCodigoUnico("EDIÇÃO CHARTS ÁLBUMS", "EMPALBM", 3);
-    // NÃO usa appendRow/:append (confirmado ao vivo: faixa de coluna
-    // explícita não impede o Sheets de pular pra longe por causa das
-    // colunas de cálculo à direita). Acha a última linha com NOME DO ALBUM
-    // de verdade (coluna D) e escreve direto na seguinte via updateValues.
-    const albunsRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D20000");
-    let ultimaLinhaComAlbum = 1;
-    for (let i = 0; i < albunsRows.length; i++) {
-      if ((albunsRows[i]?.[3] || "").trim()) ultimaLinhaComAlbum = i + 2;
+  const {
+    artistaAlbum,
+    albumFullTitle,
+    tipoAlbum,
+    dataFormatada,
+    numeroSemanas,
+    numeroFaixas,
+    albumRowIndexEmAlbuns,
+  } = params;
+  // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") — esta
+  // função inteira (gerar Código único + achar linha livre + escrever +
+  // copiar pra Albuns!L) precisa ser uma seção crítica única: foi
+  // exatamente aqui (lançamento normal de álbum vs. migração de álbuns
+  // legados rodando em paralelo, ambas via publicarAlbum) que a corrupção
+  // real da linha 100 de "Albuns" aconteceu — o Código único de uma
+  // chamada foi parar na coluna errada de uma linha que pertencia à
+  // escrita concorrente.
+  return withWriteLock("gestao:edicao-charts-albuns", async () => {
+    try {
+      const tipoNum = tipoAlbum.trim().toUpperCase() === "EP" ? "1" : "2";
+      const codigoUnico = await gerarProximoCodigoUnico("EDIÇÃO CHARTS ÁLBUMS", "EMPALBM", 3);
+      // NÃO usa appendRow/:append (confirmado ao vivo: faixa de coluna
+      // explícita não impede o Sheets de pular pra longe por causa das
+      // colunas de cálculo à direita). Acha a última linha com NOME DO ALBUM
+      // de verdade (coluna D) e escreve direto na seguinte via updateValues.
+      const albunsRows = await googleSheetsService.edicaoCharts.readValues(
+        "EDIÇÃO CHARTS ÁLBUMS",
+        "A2:D20000",
+      );
+      let ultimaLinhaComAlbum = 1;
+      for (let i = 0; i < albunsRows.length; i++) {
+        if ((albunsRows[i]?.[3] || "").trim()) ultimaLinhaComAlbum = i + 2;
+      }
+      const linhaAlvoAlbum = ultimaLinhaComAlbum + 1;
+      await googleSheetsService.edicaoCharts.updateValues(
+        "EDIÇÃO CHARTS ÁLBUMS",
+        `A${linhaAlvoAlbum}:R${linhaAlvoAlbum}`,
+        [
+          [
+            artistaAlbum, // A - ARTISTA
+            dataFormatada, // B - DATA DE LANÇAMENTO
+            String(numeroSemanas), // C - NÚMERO DE SEMANAS
+            albumFullTitle, // D - NOME DO ALBUM
+            String(numeroFaixas), // E - NÚMERO DE FAIXAS
+            tipoNum, // F - TIPO DE ÁLBUM (2 = Álbum/Deluxe, 1 = EP)
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "", // G-P (streams/vendas/certificação/multiplicador — calculados à parte)
+            "", // Q - CÁLCULO 1
+            codigoUnico, // R - Código único
+          ],
+        ],
+      );
+      // Como esse código é gerado pelo próprio app (não por fórmula), já
+      // temos o valor em mãos — leva a mesma cópia pro catálogo (Albuns!L),
+      // sem precisar reler nada.
+      if (albumRowIndexEmAlbuns) {
+        await googleSheetsService.principal
+          .updateValues("Albuns", `L${albumRowIndexEmAlbuns}`, [[codigoUnico]])
+          .catch((err) =>
+            console.warn(
+              "[registrarAlbumNaEdicaoChartsAlbuns] Erro ao copiar Código único pra Albuns!L:",
+              err,
+            ),
+          );
+      }
+      return codigoUnico;
+    } catch (err) {
+      console.warn(
+        "[registrarAlbumNaEdicaoChartsAlbuns] Erro ao gravar em EDIÇÃO CHARTS ÁLBUMS:",
+        err,
+      );
+      return "";
     }
-    const linhaAlvoAlbum = ultimaLinhaComAlbum + 1;
-    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `A${linhaAlvoAlbum}:R${linhaAlvoAlbum}`, [
-      [
-        artistaAlbum, // A - ARTISTA
-        dataFormatada, // B - DATA DE LANÇAMENTO
-        String(numeroSemanas), // C - NÚMERO DE SEMANAS
-        albumFullTitle, // D - NOME DO ALBUM
-        String(numeroFaixas), // E - NÚMERO DE FAIXAS
-        tipoNum, // F - TIPO DE ÁLBUM (2 = Álbum/Deluxe, 1 = EP)
-        "", "", "", "", "", "", "", "", "", "", // G-P (streams/vendas/certificação/multiplicador — calculados à parte)
-        "", // Q - CÁLCULO 1
-        codigoUnico, // R - Código único
-      ],
-    ]);
-    // Como esse código é gerado pelo próprio app (não por fórmula), já
-    // temos o valor em mãos — leva a mesma cópia pro catálogo (Albuns!L),
-    // sem precisar reler nada.
-    if (albumRowIndexEmAlbuns) {
-      await googleSheetsService.principal
-        .updateValues("Albuns", `L${albumRowIndexEmAlbuns}`, [[codigoUnico]])
-        .catch((err) => console.warn("[registrarAlbumNaEdicaoChartsAlbuns] Erro ao copiar Código único pra Albuns!L:", err));
-    }
-    return codigoUnico;
-  } catch (err) {
-    console.warn("[registrarAlbumNaEdicaoChartsAlbuns] Erro ao gravar em EDIÇÃO CHARTS ÁLBUMS:", err);
-    return "";
-  }
+  });
 }
 
 // Núcleo do lançamento de álbum (normal ou retroativo) — extraído de
@@ -2040,59 +2287,72 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
 // erro em caso de validação/falha; quem chama decide como responder.
 export async function publicarAlbum(body: CreateAlbumPayload) {
   const {
-      tituloAlbum,
-      artistaAlbum,
-      tipoAlbum = "Álbum",
-      capaUrl,
-      encartesUrls = [],
-      nomeJogador,
-      jogadorId = "",
-      faixas = [],
-      dataLancamento = "",
-    } = body;
+    tituloAlbum,
+    artistaAlbum,
+    tipoAlbum = "Álbum",
+    capaUrl,
+    encartesUrls = [],
+    nomeJogador,
+    jogadorId = "",
+    faixas = [],
+    dataLancamento = "",
+  } = body;
 
-    if (!tituloAlbum || !artistaAlbum || !nomeJogador) {
-      throw new Error("Campos obrigatórios ausentes: tituloAlbum, artistaAlbum, nomeJogador.");
-    }
+  if (!tituloAlbum || !artistaAlbum || !nomeJogador) {
+    throw new Error("Campos obrigatórios ausentes: tituloAlbum, artistaAlbum, nomeJogador.");
+  }
 
-    const retroativo = /^\d{4}-\d{2}-\d{2}$/.test(dataLancamento);
-    const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const dataFormatada = retroativo
-      ? (() => {
-          const [ano, mes, dia] = dataLancamento.split("-");
-          return `${dia}/${mes}/${ano}`;
-        })()
-      : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const numeroSemanas = retroativo ? calcularSemanasRetroativas(dataLancamento) : 1;
-    // Álbum retroativo: toda faixa entra pendente, mesmo que o front tenha
-    // mandado abrirTopico=true — decisão do usuário: relançar (abrir tópico
-    // próprio) é uma ação separada, feita depois via publicarFaixaPendente.
-    const faixasFinal = retroativo ? faixas.map((f) => ({ ...f, abrirTopico: false })) : faixas;
-    // Mesma rede de segurança contra "Artista - Artista - Título" das
-    // demais categorias.
-    const albumArtistPrefix = `${artistaAlbum} - `;
-    const tituloAlbumLimpo = tituloAlbum.toLowerCase().startsWith(albumArtistPrefix.toLowerCase())
-      ? tituloAlbum.slice(albumArtistPrefix.length).trim()
-      : tituloAlbum;
-    const albumFullTitle = `${artistaAlbum} - ${tituloAlbumLimpo}`;
-    const encartesStr = encartesUrls.join(", ");
-    const albumTopicId = `album_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const retroativo = /^\d{4}-\d{2}-\d{2}$/.test(dataLancamento);
+  const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const dataFormatada = retroativo
+    ? (() => {
+        const [ano, mes, dia] = dataLancamento.split("-");
+        return `${dia}/${mes}/${ano}`;
+      })()
+    : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const numeroSemanas = retroativo ? calcularSemanasRetroativas(dataLancamento) : 1;
+  // Álbum retroativo: toda faixa entra pendente, mesmo que o front tenha
+  // mandado abrirTopico=true — decisão do usuário: relançar (abrir tópico
+  // próprio) é uma ação separada, feita depois via publicarFaixaPendente.
+  const faixasFinal = retroativo ? faixas.map((f) => ({ ...f, abrirTopico: false })) : faixas;
+  // Mesma rede de segurança contra "Artista - Artista - Título" das
+  // demais categorias.
+  const albumArtistPrefix = `${artistaAlbum} - `;
+  const tituloAlbumLimpo = tituloAlbum.toLowerCase().startsWith(albumArtistPrefix.toLowerCase())
+    ? tituloAlbum.slice(albumArtistPrefix.length).trim()
+    : tituloAlbum;
+  const albumFullTitle = `${artistaAlbum} - ${tituloAlbumLimpo}`;
+  const encartesStr = encartesUrls.join(", ");
+  const albumTopicId = `album_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // 1. Gravar Álbum na planilha principal PRIMEIRO — antes de processar
-    // qualquer faixa. Ordem invertida de propósito: antes o álbum era
-    // gravado só DEPOIS das faixas, então uma falha aqui (SEM engolir
-    // erro — se isso falhar, o álbum não existe de verdade no app) deixava
-    // pra trás faixas "órfãs" em Musicas/EDIÇÃO CHARTS, associadas a um
-    // álbum que nunca chegou a existir de fato (foi exatamente o que
-    // aconteceu com o álbum "SANTISSIMA" da Emma — as faixas gravaram,
-    // essa gravação falhou, e o álbum nunca apareceu no catálogo). Com o
-    // álbum gravado primeiro, se ISSO falhar não sobra faixa nenhuma pra
-    // trás; se o que falhar for uma faixa individual depois, o álbum já
-    // existe e só fica com menos faixas (degradação já tratada abaixo via
-    // faixasIneditasFalharam), never o inverso.
-    // Range explícito (A:K) — mesma classe de bug de "próxima linha livre"
-    // corrigida em registrarNaEdicaoCharts logo abaixo.
-    const albumRowIndexNovo = await googleSheetsService.principal.appendRow(
+  // 1. Gravar Álbum na planilha principal PRIMEIRO — antes de processar
+  // qualquer faixa. Ordem invertida de propósito: antes o álbum era
+  // gravado só DEPOIS das faixas, então uma falha aqui (SEM engolir
+  // erro — se isso falhar, o álbum não existe de verdade no app) deixava
+  // pra trás faixas "órfãs" em Musicas/EDIÇÃO CHARTS, associadas a um
+  // álbum que nunca chegou a existir de fato (foi exatamente o que
+  // aconteceu com o álbum "SANTISSIMA" da Emma — as faixas gravaram,
+  // essa gravação falhou, e o álbum nunca apareceu no catálogo). Com o
+  // álbum gravado primeiro, se ISSO falhar não sobra faixa nenhuma pra
+  // trás; se o que falhar for uma faixa individual depois, o álbum já
+  // existe e só fica com menos faixas (degradação já tratada abaixo via
+  // faixasIneditasFalharam), never o inverso.
+  // Range explícito (A:K) — mesma classe de bug de "próxima linha livre"
+  // corrigida em registrarNaEdicaoCharts logo abaixo.
+  //
+  // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") —
+  // esse appendRow nativo (:append) NÃO é garantidamente serializado
+  // entre duas chamadas quase simultâneas (lançamento normal de álbum
+  // concorrendo com migrarAlbunsLegadosController, que também chama
+  // publicarAlbum). Foi exatamente essa falta de trava que corrompeu a
+  // linha 100 de "Albuns" (tópico/título da Rayna misturados com
+  // criador de outro jogador de uma migração rodando em paralelo). Usa a
+  // MESMA chave de registrarAlbumNaEdicaoChartsAlbuns porque os dois
+  // escrevem na mesma linha em sequência (append aqui, depois Albuns!L
+  // lá) — tem que ser uma seção crítica única, não duas travas
+  // separadas que ainda deixariam a janela entre elas desprotegida.
+  const albumRowIndexNovo = await withWriteLock("gestao:edicao-charts-albuns", () =>
+    googleSheetsService.principal.appendRow(
       "Albuns",
       [
         dataFormatada, // A - Data de lançamento
@@ -2108,77 +2368,81 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
         tipoAlbum, // K - Tipo (EP/Álbum/Deluxe)
       ],
       "A:K",
-    );
-    upsertMidiaD1({
-      id: albumTopicId,
-      tipo: "album",
-      titulo: albumFullTitle,
-      artista: artistaAlbum,
-      capaUrl: capaUrl || null,
-      dataLancamento: dataFormatada,
-      idCriador: jogadorId || null,
-      comentariosPara: albumTopicId,
-      encarteUrl: encartesStr || null,
-      tipoAlbum,
-    }).catch(() => {});
+    ),
+  );
+  upsertMidiaD1({
+    id: albumTopicId,
+    tipo: "album",
+    titulo: albumFullTitle,
+    artista: artistaAlbum,
+    capaUrl: capaUrl || null,
+    dataLancamento: dataFormatada,
+    idCriador: jogadorId || null,
+    comentariosPara: albumTopicId,
+    encarteUrl: encartesStr || null,
+    tipoAlbum,
+  }).catch(() => {});
 
-    // 2. Gravar em "EDIÇÃO CHARTS ÁLBUMS" (edicaoCharts) — aba separada da
-    // "EDIÇÃO CHARTS" usada pelas faixas, confirmada via dump ao vivo. Já
-    // inclui o "Código único" (coluna R, padrão EMPALBM001, EMPALBM002...)
-    // — antes essa coluna ficava sempre em branco pra álbum lançado pelo
-    // app, só os legados/manuais tinham código.
-    const codigoUnicoAlbum = await registrarAlbumNaEdicaoChartsAlbuns({
-      artistaAlbum,
-      albumFullTitle,
-      tipoAlbum,
-      dataFormatada,
-      numeroSemanas,
-      numeroFaixas: faixasFinal.length,
-      albumRowIndexEmAlbuns: albumRowIndexNovo,
-    });
+  // 2. Gravar em "EDIÇÃO CHARTS ÁLBUMS" (edicaoCharts) — aba separada da
+  // "EDIÇÃO CHARTS" usada pelas faixas, confirmada via dump ao vivo. Já
+  // inclui o "Código único" (coluna R, padrão EMPALBM001, EMPALBM002...)
+  // — antes essa coluna ficava sempre em branco pra álbum lançado pelo
+  // app, só os legados/manuais tinham código.
+  const codigoUnicoAlbum = await registrarAlbumNaEdicaoChartsAlbuns({
+    artistaAlbum,
+    albumFullTitle,
+    tipoAlbum,
+    dataFormatada,
+    numeroSemanas,
+    numeroFaixas: faixasFinal.length,
+    albumRowIndexEmAlbuns: albumRowIndexNovo,
+  });
 
-    // 3. Processar cada faixa (existente ou inédita) — só depois do álbum
-    // já existir de verdade em "Albuns".
-    const { faixasIneditasEsperadas, faixasIneditasGravadas } = await processarFaixasDoAlbum(
-      faixasFinal,
-      albumFullTitle,
-      artistaAlbum,
-      capaUrl,
-      jogadorId,
-      dataFormatada,
-      retroativo ? String(numeroSemanas) : undefined,
-      albumTopicId,
-    );
+  // 3. Processar cada faixa (existente ou inédita) — só depois do álbum
+  // já existir de verdade em "Albuns".
+  const { faixasIneditasEsperadas, faixasIneditasGravadas } = await processarFaixasDoAlbum(
+    faixasFinal,
+    albumFullTitle,
+    artistaAlbum,
+    capaUrl,
+    jogadorId,
+    dataFormatada,
+    retroativo ? String(numeroSemanas) : undefined,
+    albumTopicId,
+  );
 
-    // REGISTRO é só pra comentários de OUTROS jogadores (ver
-    // forumController.ts) — lançar o próprio álbum não é comentário.
+  // REGISTRO é só pra comentários de OUTROS jogadores (ver
+  // forumController.ts) — lançar o próprio álbum não é comentário.
 
-    await somarPrestigio({ telegramId: jogadorId, usuario: nomeJogador }, "publicar_lancamento").catch(() => {});
+  await somarPrestigio(
+    { telegramId: jogadorId, usuario: nomeJogador },
+    "publicar_lancamento",
+  ).catch(() => {});
 
-    // Se alguma faixa inédita falhou ao gravar, o álbum FOI registrado (ele
-    // existe), mas com menos faixas do que o pedido — avisa isso na
-    // resposta em vez de dizer "sucesso" sem ressalva, pra não esconder
-    // faixa que sumiu silenciosamente.
-    const faixasIneditasFalharam = faixasIneditasEsperadas - faixasIneditasGravadas;
+  // Se alguma faixa inédita falhou ao gravar, o álbum FOI registrado (ele
+  // existe), mas com menos faixas do que o pedido — avisa isso na
+  // resposta em vez de dizer "sucesso" sem ressalva, pra não esconder
+  // faixa que sumiu silenciosamente.
+  const faixasIneditasFalharam = faixasIneditasEsperadas - faixasIneditasGravadas;
 
-    registrarLogSistema({
-      categoria: "Ação concluída",
-      oQueAconteceu: `Álbum "${albumFullTitle}" lançado por ${artistaAlbum} (${faixasFinal.length} faixa(s)${retroativo ? ", retroativo" : ""}).`,
-      onde: "createAlbumController",
-    }).catch(() => {});
+  registrarLogSistema({
+    categoria: "Ação concluída",
+    oQueAconteceu: `Álbum "${albumFullTitle}" lançado por ${artistaAlbum} (${faixasFinal.length} faixa(s)${retroativo ? ", retroativo" : ""}).`,
+    onde: "createAlbumController",
+  }).catch(() => {});
 
-    return {
-      titulo: albumFullTitle,
-      artista: artistaAlbum,
-      totalFaixas: faixasFinal.length,
-      faixasIneditasGravadas,
-      faixasIneditasEsperadas,
-      codigoUnico: codigoUnicoAlbum,
-      mensagem:
-        faixasIneditasFalharam > 0
-          ? `Álbum registrado, mas ${faixasIneditasFalharam} faixa(s) inédita(s) falharam ao gravar — confira e adicione de novo se precisar.`
-          : "Álbum e faixas registrados com sucesso!",
-    };
+  return {
+    titulo: albumFullTitle,
+    artista: artistaAlbum,
+    totalFaixas: faixasFinal.length,
+    faixasIneditasGravadas,
+    faixasIneditasEsperadas,
+    codigoUnico: codigoUnicoAlbum,
+    mensagem:
+      faixasIneditasFalharam > 0
+        ? `Álbum registrado, mas ${faixasIneditasFalharam} faixa(s) inédita(s) falharam ao gravar — confira e adicione de novo se precisar.`
+        : "Álbum e faixas registrados com sucesso!",
+  };
 }
 
 // Controller para Criar / Registrar Álbum
@@ -2292,25 +2556,25 @@ export async function uploadDriveController(request: Request): Promise<Response>
                         : folderType === "artistPhotos"
                           ? DRIVE_FOLDERS.artistPhotos
                           : folderType === "playlistTracks"
-                          ? DRIVE_FOLDERS.playlistTracks
-                          : folderType === "tvChatGifs"
-                            ? DRIVE_FOLDERS.tvChatGifs
-                            : folderType === "turnes" || folderType === "redCarpet"
-                              // Sem pasta própria ainda — reaproveita a de
-                              // posts sociais (mesmo padrão do artistPhotos
-                              // acima) até existir uma pasta dedicada.
-                              ? DRIVE_FOLDERS.socialPosts
-                              : folderType === "acervo"
-                                ? DRIVE_FOLDERS.acervo
-                                : folderType === "materiaisMusica"
-                                  ? DRIVE_FOLDERS.materiaisMusica
-                                  : folderType === "materiaisAlbum"
-                                    ? DRIVE_FOLDERS.materiaisAlbum
-                                    : folderType === "performanceAward"
-                                      // Sem pasta própria ainda — reaproveita a de
-                                      // Music Videos (mesmo padrão do "videos" acima).
-                                      ? DRIVE_FOLDERS.musicVideos
-                                      : DRIVE_FOLDERS.musicas;
+                            ? DRIVE_FOLDERS.playlistTracks
+                            : folderType === "tvChatGifs"
+                              ? DRIVE_FOLDERS.tvChatGifs
+                              : folderType === "turnes" || folderType === "redCarpet"
+                                ? // Sem pasta própria ainda — reaproveita a de
+                                  // posts sociais (mesmo padrão do artistPhotos
+                                  // acima) até existir uma pasta dedicada.
+                                  DRIVE_FOLDERS.socialPosts
+                                : folderType === "acervo"
+                                  ? DRIVE_FOLDERS.acervo
+                                  : folderType === "materiaisMusica"
+                                    ? DRIVE_FOLDERS.materiaisMusica
+                                    : folderType === "materiaisAlbum"
+                                      ? DRIVE_FOLDERS.materiaisAlbum
+                                      : folderType === "performanceAward"
+                                        ? // Sem pasta própria ainda — reaproveita a de
+                                          // Music Videos (mesmo padrão do "videos" acima).
+                                          DRIVE_FOLDERS.musicVideos
+                                        : DRIVE_FOLDERS.musicas;
 
     const fileUrl = base64Data
       ? await uploadFileToDrive(fileName, folderId, mimeType, base64Data)
@@ -2392,10 +2656,10 @@ export async function diagnosticoMusicaController(request: Request): Promise<Res
       codigoUnico: row[55] || "",
     }));
 
-  return new Response(
-    JSON.stringify({ success: true, data: { emMusicas, emEdicaoCharts } }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
-  );
+  return new Response(JSON.stringify({ success: true, data: { emMusicas, emEdicaoCharts } }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 // GET /api/gestao/admin/backfill-vinculo-video?musicaVinculada=...&data=DD/MM/AAAA
@@ -2425,13 +2689,21 @@ export async function backfillVinculoVideoController(request: Request): Promise<
 
   if (candidatos.length === 0) {
     return new Response(
-      JSON.stringify({ success: false, error: `Nenhuma linha em Music Videos com "${musicaVinculada}" na coluna de música vinculada.` }),
+      JSON.stringify({
+        success: false,
+        error: `Nenhuma linha em Music Videos com "${musicaVinculada}" na coluna de música vinculada.`,
+      }),
       { status: 404, headers: { "Content-Type": "application/json" } },
     );
   }
   const { linha } = candidatos[candidatos.length - 1];
 
-  const resultado: { linhaMusicVideos: number; codigoUnicoCopiado: boolean; pontosMarcado: boolean; aviso?: string } = {
+  const resultado: {
+    linhaMusicVideos: number;
+    codigoUnicoCopiado: boolean;
+    pontosMarcado: boolean;
+    aviso?: string;
+  } = {
     linhaMusicVideos: linha,
     codigoUnicoCopiado: false,
     pontosMarcado: false,
@@ -2449,18 +2721,26 @@ export async function backfillVinculoVideoController(request: Request): Promise<
 
     const uAtual = (musicVideosRows[linha - 1]?.[20] || "").trim();
     if (!uAtual) {
-      await googleSheetsService.principal.updateValues("Music Videos", `U${linha}`, [[linhaEdicaoCharts.codigoUnico]]);
+      await googleSheetsService.principal.updateValues("Music Videos", `U${linha}`, [
+        [linhaEdicaoCharts.codigoUnico],
+      ]);
       resultado.codigoUnicoCopiado = true;
     } else {
       resultado.aviso = `Music Videos!U${linha} já tinha valor ("${uAtual}") — não sobrescrevi.`;
     }
 
-    resultado.pontosMarcado = await marcarVideoclipeNaPontos(linhaEdicaoCharts.titulo, dataFormatada);
+    resultado.pontosMarcado = await marcarVideoclipeNaPontos(
+      linhaEdicaoCharts.titulo,
+      dataFormatada,
+    );
   } catch (err: any) {
-    return new Response(JSON.stringify({ success: false, error: err.message || "Falha no backfill." }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ success: false, error: err.message || "Falha no backfill." }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   return new Response(JSON.stringify({ success: true, data: resultado }), {
@@ -2480,13 +2760,17 @@ export async function backfillVinculoVideoController(request: Request): Promise<
 export async function adminFixVernissageEdicaoChartsController(): Promise<Response> {
   const musicasRows = await googleSheetsService.principal.readValues("Musicas");
   const rowIndex = musicasRows.findIndex(
-    (r, i) => i > 0 && normalizeComparison(r[7] || "") === normalizeComparison("Rayna - Vernissage"),
+    (r, i) =>
+      i > 0 && normalizeComparison(r[7] || "") === normalizeComparison("Rayna - Vernissage"),
   );
   if (rowIndex === -1) {
-    return new Response(JSON.stringify({ success: false, error: '"Rayna - Vernissage" não encontrada em Musicas.' }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ success: false, error: '"Rayna - Vernissage" não encontrada em Musicas.' }),
+      {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
   const row = musicasRows[rowIndex];
   const dataFormatada = (row[0] || "").trim();
@@ -2517,15 +2801,20 @@ export async function adminFixVernissageEdicaoChartsController(): Promise<Respon
     artistaPrincipal,
   });
   if (!edicaoChartsRowIndex) {
-    return new Response(JSON.stringify({ success: false, error: "Falha ao gravar em EDIÇÃO CHARTS." }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ success: false, error: "Falha ao gravar em EDIÇÃO CHARTS." }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   const codigoUnico = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
   if (codigoUnico) {
-    await googleSheetsService.principal.updateValues("Musicas", `Z${rowIndex + 1}`, [[codigoUnico]]);
+    await googleSheetsService.principal.updateValues("Musicas", `Z${rowIndex + 1}`, [
+      [codigoUnico],
+    ]);
   }
 
   return new Response(
