@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Rocket,
   Plus,
+  Minus,
   Calendar,
   X,
   Check,
@@ -10,9 +11,24 @@ import {
   Upload as UploadIcon,
   Trash2,
   UserCircle,
+  Image as ImageIcon,
+  Sparkles,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api, driveImg } from "@/lib/api";
+import {
+  FaixaEditor,
+  TIPOS_ALBUM,
+  stripArtistPrefix,
+  type TrackConfig,
+  type MusicaEmChart,
+  type UserProfile,
+} from "./Gestao";
+import {
+  ExtraMaterialEditor,
+  emptyExtraMaterialEditorValue,
+  type ExtraMaterialEditorValue,
+} from "./ExtraMaterial";
 
 // Gestão Pre save — menu próprio do Catálogo (separado de "Gestão"), pra
 // criar/gerenciar campanhas de pre-save de álbum. Ver preSaveController.ts
@@ -66,11 +82,14 @@ const MISSOES: { tipo: MissaoTipo; label: string; descricao: string }[] = [
 
 const REDES = ["twitter", "instagram", "tiktok", "stories"];
 
+// Mesmo formato de TrackConfig (Gestao.tsx) persistido pela campanha, já
+// resolvido pelo backend (ver preSaveController.ts) — 2 campos extras de
+// pre-save (mostrarNomeReal/revelada) por cima do cadastro normal de faixa.
 interface Faixa {
-  ordem: number;
-  tituloReal: string;
+  num: number;
+  inedita: boolean;
+  titulo: string;
   mostrarNomeReal: boolean;
-  jaLancada: boolean;
   revelada: boolean;
 }
 
@@ -101,15 +120,62 @@ interface PerfilMidia {
   foto: string;
 }
 
-async function uploadImagem(file: File): Promise<string> {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("fileName", file.name);
-  formData.append("folderType", "album");
-  const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
-  const data = await res.json().catch(() => null);
-  if (res.ok && data?.success && data?.data?.fileUrl) return data.data.fileUrl;
-  throw new Error("Falha ao enviar a capa.");
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
+}
+
+// Mesmo upload de Gestao.tsx (handleUploadToDrive): FormData primeiro,
+// fallback em Base64 JSON, e um link de pasta pública como último recurso
+// — nunca deixa o upload travar o formulário sem solução nenhuma.
+async function uploadToDrive(
+  file: File,
+  folderType: "musica" | "musicaAudio" | "album",
+  customName?: string,
+): Promise<string> {
+  const TIMEOUT_MS = 45_000;
+  const fetchComTimeout = (input: string, init: RequestInit) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  };
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("fileName", customName || file.name);
+    formData.append("folderType", folderType);
+    const res = await fetchComTimeout("/api/gestao/upload", { method: "POST", body: formData });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success && data?.data?.fileUrl) return data.data.fileUrl;
+  } catch (err) {
+    console.warn("[GestaoPreSave] Upload por FormData falhou, tentando Base64:", err);
+  }
+
+  try {
+    const base64 = await fileToBase64(file);
+    const fileName = customName || file.name;
+    const res = await fetchComTimeout("/api/gestao/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName,
+        mimeType: file.type || "image/jpeg",
+        base64Data: base64,
+        folderType,
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (data?.data?.fileUrl) return data.data.fileUrl;
+  } catch (err) {
+    console.warn("[GestaoPreSave] Upload por Base64 falhou:", err);
+  }
+
+  throw new Error("Falha ao enviar o arquivo — tenta de novo.");
 }
 
 export function GestaoPreSave() {
@@ -117,7 +183,6 @@ export function GestaoPreSave() {
   const telegramId = user?.id ? String(user.id) : "";
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [loading, setLoading] = useState(true);
-  const [artistas, setArtistas] = useState<string[]>([]);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [selecionada, setSelecionada] = useState<Campanha | null>(null);
   const [perfisMidia, setPerfisMidia] = useState<PerfilMidia[]>([]);
@@ -138,13 +203,6 @@ export function GestaoPreSave() {
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [telegramId]);
-
-  useEffect(() => {
-    if (!telegramId) return;
-    api
-      .meusArtistas(telegramId)
-      .then((lista) => setArtistas(lista.map((a) => a.nome).filter(Boolean)));
   }, [telegramId]);
 
   // Mesma lista/UI que social.tsx usa pra viewMode === "Midia"
@@ -206,7 +264,6 @@ export function GestaoPreSave() {
         <NovaCampanhaForm
           telegramId={telegramId}
           jogadorNome={user?.name || "Jogador"}
-          artistas={artistas}
           onCancelar={() => setMostrarForm(false)}
           onCriada={() => {
             setMostrarForm(false);
@@ -284,57 +341,166 @@ function StatusPill({ status }: { status: Campanha["status"] }) {
 
 // -------------------- FORMULÁRIO DE NOVA CAMPANHA --------------------
 
+// Rico de propósito: é EXATAMENTE o mesmo cadastro de álbum de verdade de
+// Catálogo > Gestão (Gestao.tsx, seção albumObjetivo === "a") — reaproveita
+// FaixaEditor/TrackConfig/TIPOS_ALBUM/ExtraMaterialEditor de lá em vez de
+// reinventar um editor de faixa simplificado — só com os campos extras de
+// pre-save (modo de campanha, data de lançamento, calendário de missões)
+// por cima. A diferença pro cadastro normal é só NO ENVIO: aqui nada é
+// publicado na hora — tudo (inclusive capa/encartes/áudio já enviados pro
+// Drive) fica salvo no estado da campanha (aba PreSave_Album) até o dia D,
+// quando processarLancamentosPreSaveScheduled (preSaveController.ts)
+// finalmente chama publicarAlbum de verdade.
 function NovaCampanhaForm({
   telegramId,
   jogadorNome,
-  artistas,
   onCancelar,
   onCriada,
 }: {
   telegramId: string;
   jogadorNome: string;
-  artistas: string[];
   onCancelar: () => void;
   onCriada: () => void;
 }) {
-  const [artista, setArtista] = useState(artistas[0] || "");
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [musicasEmChart, setMusicasEmChart] = useState<MusicaEmChart[]>([]);
+
+  const [artista, setArtista] = useState("");
   const [tituloAlbum, setTituloAlbum] = useState("");
   const [tipoAlbum, setTipoAlbum] = useState("Álbum");
-  const [capaUrl, setCapaUrl] = useState("");
-  const [enviandoCapa, setEnviandoCapa] = useState(false);
+  const [capaFile, setCapaFile] = useState<File | null>(null);
+  const [capaPreview, setCapaPreview] = useState<string | null>(null);
+  const [encartesFiles, setEncartesFiles] = useState<File[]>([]);
+  const [totalFaixasCount, setTotalFaixasCount] = useState(3);
+  const [faixasConfig, setFaixasConfig] = useState<TrackConfig[]>([
+    { num: 1, titulo: "", inedita: true },
+    { num: 2, titulo: "", inedita: true },
+    { num: 3, titulo: "", inedita: true },
+  ]);
+  const [extraAlbum, setExtraAlbum] = useState<ExtraMaterialEditorValue>(
+    emptyExtraMaterialEditorValue(),
+  );
+
   const [modo, setModo] = useState<Modo>("contagem");
   const [dataLancamento, setDataLancamento] = useState("");
-  const [faixas, setFaixas] = useState<
-    { titulo: string; mostrarNomeReal: boolean; jaLancada: boolean }[]
-  >([{ titulo: "", mostrarNomeReal: false, jaLancada: false }]);
   const [missoesPorDia, setMissoesPorDia] = useState<Record<number, MissaoTipo | "">>({});
   const [duracaoDias] = useState(14);
+
   const [salvando, setSalvando] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [erro, setErro] = useState("");
 
   const dias = useMemo(() => Array.from({ length: duracaoDias }, (_, i) => i + 1), [duracaoDias]);
 
-  const handleCapa = async (file: File) => {
-    setEnviandoCapa(true);
-    try {
-      setCapaUrl(await uploadImagem(file));
-    } catch (err: any) {
-      setErro(err.message || "Falha ao enviar a capa.");
-    } finally {
-      setEnviandoCapa(false);
+  useEffect(() => {
+    if (!telegramId) return;
+    fetch(`/api/user/me?telegram_id=${telegramId}`, { headers: { "x-telegram-id": telegramId } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && data.data) {
+          const prof: UserProfile = data.data;
+          setProfile(prof);
+          setArtista(prof.artistName || prof.associatedArtists[0] || "");
+        }
+      })
+      .catch((err) => console.error("[GestaoPreSave] Erro ao carregar perfil:", err));
+
+    fetch("/api/gestao/musicas-em-chart")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && Array.isArray(data.data)) setMusicasEmChart(data.data);
+      })
+      .catch((err) => console.error("[GestaoPreSave] Erro ao carregar músicas em chart:", err));
+  }, [telegramId]);
+
+  // Músicas em chart só dos artistas do jogador — mesma lógica de
+  // myChartSongs em Gestao.tsx, usada pelo FaixaEditor na busca de faixa
+  // "Música Existente".
+  const myChartSongs = useMemo(() => {
+    const meus = new Set((profile?.associatedArtists || []).map((a) => a.toLowerCase()));
+    if (meus.size === 0) return [];
+    return musicasEmChart.filter((m) => m.artist && meus.has(m.artist.toLowerCase()));
+  }, [musicasEmChart, profile]);
+
+  // Ajustar lista de faixas ao mudar "Quantidade de Faixas" — mesma lógica
+  // de Gestao.tsx: só adiciona/remove do fim, nunca descarta o que já foi
+  // preenchido.
+  useEffect(() => {
+    const updated: TrackConfig[] = [];
+    for (let i = 1; i <= totalFaixasCount; i++) {
+      const existing = faixasConfig[i - 1];
+      updated.push(existing ? { ...existing, num: i } : { num: i, titulo: "", inedita: true });
     }
+    setFaixasConfig(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalFaixasCount]);
+
+  const handleCapaSelect = (file: File) => {
+    setCapaFile(file);
+    setCapaPreview(URL.createObjectURL(file));
   };
 
   const salvar = async () => {
     setErro("");
-    if (!artista || !tituloAlbum.trim()) return setErro("Escolha o artista e o título do álbum.");
-    if (!capaUrl) return setErro("A capa é obrigatória pra iniciar a campanha.");
+    if (!artista.trim()) return setErro("Selecione ou informe o Artista do Álbum.");
+    if (!tituloAlbum.trim()) return setErro("Informe o Título do Álbum.");
+    if (!capaFile) return setErro("A capa é obrigatória pra iniciar a campanha.");
     if (!dataLancamento) return setErro("Escolha a data de lançamento.");
-    const faixasValidas = faixas.filter((f) => f.titulo.trim());
-    if (faixasValidas.length === 0) return setErro("Informe ao menos 1 faixa.");
+    if (new Date(`${dataLancamento}T00:00:00`).getTime() <= Date.now()) {
+      return setErro("A data de lançamento precisa ser no futuro.");
+    }
+    for (const faixa of faixasConfig) {
+      if (!faixa.titulo.trim()) {
+        return setErro(
+          faixa.inedita
+            ? `Informe o título da Faixa #${faixa.num}.`
+            : `Selecione a música existente da Faixa #${faixa.num}.`,
+        );
+      }
+      if (faixa.inedita && !faixa.mediaUrl?.trim() && !faixa.mediaFile) {
+        return setErro(
+          `Informe o link do áudio (Drive ou YouTube) ou envie um arquivo pra Faixa #${faixa.num}.`,
+        );
+      }
+    }
 
     setSalvando(true);
+    setUploadProgress("Fazendo upload da capa...");
     try {
+      const capaUrl = await uploadToDrive(
+        capaFile,
+        "musica",
+        `CAPA_PRESAVE_${artista}_${tituloAlbum}_${Date.now()}.jpg`,
+      );
+
+      const encartesUrls: string[] = [];
+      for (let i = 0; i < encartesFiles.length; i++) {
+        setUploadProgress(`Fazendo upload do encarte ${i + 1} de ${encartesFiles.length}...`);
+        encartesUrls.push(
+          await uploadToDrive(
+            encartesFiles[i],
+            "album",
+            `ENCARTE_${i + 1}_${artista}_${tituloAlbum}_${Date.now()}.jpg`,
+          ),
+        );
+      }
+
+      const faixasComAudio: TrackConfig[] = [];
+      for (const f of faixasConfig) {
+        if (f.inedita && f.mediaFile) {
+          setUploadProgress(`Fazendo upload do áudio da Faixa #${f.num}...`);
+          const url = await uploadToDrive(
+            f.mediaFile,
+            "musicaAudio",
+            `AUDIO_${artista}_${f.titulo}_${Date.now()}`,
+          );
+          faixasComAudio.push({ ...f, mediaUrl: url });
+        } else {
+          faixasComAudio.push(f);
+        }
+      }
+
+      setUploadProgress("Criando campanha de pre-save...");
       const res = await fetch("/api/presave/criar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -342,15 +508,31 @@ function NovaCampanhaForm({
           jogadorId: telegramId,
           jogadorNome,
           artista,
-          tituloAlbum: tituloAlbum.trim(),
+          tituloAlbum: stripArtistPrefix(tituloAlbum.trim(), artista),
           tipoAlbum,
           capaUrl,
+          encartesUrls,
           modo,
           dataLancamento,
-          faixas: faixasValidas,
+          faixas: faixasComAudio.map((f) => ({
+            num: f.num,
+            inedita: f.inedita,
+            titulo: f.titulo,
+            tipoSingle: f.tipoSingle,
+            tipoMusica: f.tipoMusica,
+            participantes: (f.participantes || []).filter((p) => p.trim()),
+            mediaUrl: f.mediaUrl,
+            letra: f.letra,
+            abrirTopico: f.abrirTopico,
+            mostrarNomeReal: !f.inedita, // faixa inédita nasce oculta ("Track N") por padrão
+          })),
           missoesPorDia:
             modo === "missao"
               ? Object.fromEntries(Object.entries(missoesPorDia).filter(([, v]) => v))
+              : undefined,
+          extraMaterial:
+            extraAlbum.shopAtivo || extraAlbum.infoAtivo || extraAlbum.visualAtivo
+              ? extraAlbum
               : undefined,
         }),
       });
@@ -362,6 +544,7 @@ function NovaCampanhaForm({
       setErro(err.message || "Falha ao criar campanha.");
     } finally {
       setSalvando(false);
+      setUploadProgress(null);
     }
   };
 
@@ -374,66 +557,172 @@ function NovaCampanhaForm({
         </button>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div>
-          <label className="text-xs font-bold text-neutral-400">Artista</label>
+      <div>
+        <label className="text-xs font-bold text-neutral-400">Artista do Álbum</label>
+        {profile?.associatedArtists && profile.associatedArtists.length > 0 ? (
           <select
             value={artista}
             onChange={(e) => setArtista(e.target.value)}
             className="w-full mt-1 bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
           >
-            <option value="">Selecione...</option>
-            {artistas.map((a) => (
-              <option key={a} value={a}>
-                {a}
+            {profile.associatedArtists.map((art) => (
+              <option key={art} value={art}>
+                {art}
               </option>
             ))}
           </select>
-        </div>
-        <div>
-          <label className="text-xs font-bold text-neutral-400">Tipo</label>
-          <select
-            value={tipoAlbum}
-            onChange={(e) => setTipoAlbum(e.target.value)}
+        ) : (
+          <input
+            value={artista}
+            onChange={(e) => setArtista(e.target.value)}
+            placeholder="Ex: Taylor Swift"
             className="w-full mt-1 bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
-          >
-            <option value="Álbum">Álbum</option>
-            <option value="EP">EP</option>
-            <option value="Deluxe">Deluxe</option>
-          </select>
-        </div>
+          />
+        )}
       </div>
 
       <div>
-        <label className="text-xs font-bold text-neutral-400">Título do álbum</label>
+        <label className="text-xs font-bold text-neutral-400">Título do Álbum</label>
         <input
           value={tituloAlbum}
           onChange={(e) => setTituloAlbum(e.target.value)}
-          placeholder="Nome do álbum"
+          placeholder="Ex: Midnights"
           className="w-full mt-1 bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
         />
       </div>
 
       <div>
-        <label className="text-xs font-bold text-neutral-400">Capa (obrigatória)</label>
-        <div className="flex items-center gap-3 mt-1">
-          {capaUrl && (
-            <img src={capaUrl} alt="" className="size-14 rounded-xl object-cover shrink-0" />
-          )}
-          <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold cursor-pointer shrink-0">
-            <UploadIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{enviandoCapa ? "Enviando..." : "Enviar capa"}</span>
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && handleCapa(e.target.files[0])}
-            />
-          </label>
+        <label className="text-xs font-bold text-neutral-400">Tipo</label>
+        <select
+          value={tipoAlbum}
+          onChange={(e) => setTipoAlbum(e.target.value)}
+          className="w-full mt-1 bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
+        >
+          {TIPOS_ALBUM.map((tipo) => (
+            <option key={tipo} value={tipo}>
+              {tipo}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs font-bold text-neutral-400">
+          Quantidade de Faixas ({totalFaixasCount})
+        </label>
+        <div className="flex items-center gap-2 mt-1">
+          <button
+            type="button"
+            onClick={() => setTotalFaixasCount((n) => Math.max(1, n - 1))}
+            disabled={totalFaixasCount <= 1}
+            className="size-10 shrink-0 rounded-xl bg-neutral-900 border border-white/10 text-white flex items-center justify-center disabled:opacity-30"
+          >
+            <Minus className="size-4" />
+          </button>
+          <input
+            type="number"
+            min={1}
+            max={30}
+            value={totalFaixasCount}
+            onChange={(e) => setTotalFaixasCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            className="w-16 text-center bg-neutral-900 border border-white/10 rounded-xl px-2 py-2 text-sm text-white"
+          />
+          <button
+            type="button"
+            onClick={() => setTotalFaixasCount((n) => Math.min(30, n + 1))}
+            disabled={totalFaixasCount >= 30}
+            className="size-10 shrink-0 rounded-xl bg-neutral-900 border border-white/10 text-white flex items-center justify-center disabled:opacity-30"
+          >
+            <Plus className="size-4" />
+          </button>
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="space-y-3 bg-neutral-950/60 p-4 rounded-2xl border border-white/5 max-h-[28rem] overflow-y-auto">
+        <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+          Lista de Faixas do Álbum
+        </label>
+        {faixasConfig.map((faixa, idx) => (
+          <FaixaEditor
+            key={idx}
+            faixa={faixa}
+            myChartSongs={myChartSongs}
+            onChange={(patch) => {
+              const updated = [...faixasConfig];
+              updated[idx] = { ...updated[idx], ...patch };
+              setFaixasConfig(updated);
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
+        <div className="space-y-2">
+          <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+            Capa do Álbum (obrigatória)
+          </label>
+          <div className="flex items-center gap-3 bg-neutral-950 p-3 rounded-2xl border border-white/10">
+            {capaPreview ? (
+              <img src={capaPreview} alt="" className="size-14 rounded-xl object-cover shrink-0" />
+            ) : (
+              <div className="size-14 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500 shrink-0">
+                <ImageIcon className="size-5" />
+              </div>
+            )}
+            <label className="cursor-pointer px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[11px] uppercase tracking-wider border border-white/10 inline-flex items-center gap-1.5 min-w-0">
+              <UploadIcon className="size-3.5 text-fuchsia-400 shrink-0" />
+              <span className="truncate">Selecione a Capa</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleCapaSelect(e.target.files[0])}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+            Encartes / Imagens Adicionais
+          </label>
+          <div className="flex items-center gap-3 bg-neutral-950 p-3 rounded-2xl border border-white/10">
+            <div className="size-14 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500 shrink-0">
+              <ImageIcon className="size-5" />
+            </div>
+            <label className="cursor-pointer px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[11px] uppercase tracking-wider border border-white/10 inline-flex items-center gap-1.5 min-w-0">
+              <UploadIcon className="size-3.5 text-fuchsia-400 shrink-0" />
+              <span className="truncate">Selecione os Encartes</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => e.target.files && setEncartesFiles(Array.from(e.target.files))}
+              />
+            </label>
+          </div>
+          {encartesFiles.length > 0 && (
+            <p className="text-[11px] text-fuchsia-300">
+              {encartesFiles.length} encarte(s) selecionado(s)
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs font-black uppercase tracking-wider text-fuchsia-400 mb-3 flex items-center gap-2">
+          <Sparkles className="size-4 text-fuchsia-400" />
+          Botões do Tópico (Opcional)
+        </label>
+        <ExtraMaterialEditor
+          value={extraAlbum}
+          onChange={setExtraAlbum}
+          folderType="materiaisAlbum"
+        />
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
         <div>
           <label className="text-xs font-bold text-neutral-400">Data de lançamento</label>
           <input
@@ -463,70 +752,6 @@ function NovaCampanhaForm({
               Contagem + missões
             </button>
           </div>
-        </div>
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-neutral-400">Faixas</label>
-          <button
-            onClick={() =>
-              setFaixas((f) => [...f, { titulo: "", mostrarNomeReal: false, jaLancada: false }])
-            }
-            className="text-[11px] font-bold text-fuchsia-300 hover:text-fuchsia-200"
-          >
-            + adicionar faixa
-          </button>
-        </div>
-        <div className="space-y-2 mt-1.5">
-          {faixas.map((f, i) => (
-            <div key={i} className="flex items-center gap-2 min-w-0">
-              <input
-                value={f.titulo}
-                onChange={(e) =>
-                  setFaixas((prev) =>
-                    prev.map((x, idx) => (idx === i ? { ...x, titulo: e.target.value } : x)),
-                  )
-                }
-                placeholder={`Faixa ${i + 1} (ou deixe "Track ${i + 1}" se quiser ocultar)`}
-                className="flex-1 min-w-0 bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
-              />
-              <label className="flex items-center gap-1 text-[10px] text-neutral-400 shrink-0 whitespace-nowrap">
-                <input
-                  type="checkbox"
-                  checked={f.mostrarNomeReal}
-                  onChange={(e) =>
-                    setFaixas((prev) =>
-                      prev.map((x, idx) =>
-                        idx === i ? { ...x, mostrarNomeReal: e.target.checked } : x,
-                      ),
-                    )
-                  }
-                />
-                nome real
-              </label>
-              <label className="flex items-center gap-1 text-[10px] text-neutral-400 shrink-0 whitespace-nowrap">
-                <input
-                  type="checkbox"
-                  checked={f.jaLancada}
-                  onChange={(e) =>
-                    setFaixas((prev) =>
-                      prev.map((x, idx) => (idx === i ? { ...x, jaLancada: e.target.checked } : x)),
-                    )
-                  }
-                />
-                já lançada
-              </label>
-              {faixas.length > 1 && (
-                <button
-                  onClick={() => setFaixas((prev) => prev.filter((_, idx) => idx !== i))}
-                  className="shrink-0 p-1.5 rounded-lg hover:bg-white/10"
-                >
-                  <Trash2 className="size-3.5 text-neutral-500" />
-                </button>
-              )}
-            </div>
-          ))}
         </div>
       </div>
 
@@ -566,6 +791,7 @@ function NovaCampanhaForm({
         </div>
       )}
 
+      {uploadProgress && <p className="text-xs text-fuchsia-300">{uploadProgress}</p>}
       {erro && <p className="text-xs text-red-400">{erro}</p>}
 
       <div className="flex justify-end gap-2">
@@ -759,7 +985,7 @@ function MissaoModal({
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
 
-  const faixasOcultas = faixas.filter((f) => !f.revelada && !f.jaLancada);
+  const faixasOcultas = faixas.filter((f) => !f.revelada);
 
   const completar = async () => {
     setErro("");
@@ -971,8 +1197,8 @@ function MissaoModal({
               >
                 <option value="">Escolha a faixa a revelar...</option>
                 {faixasOcultas.map((f) => (
-                  <option key={f.ordem} value={f.ordem}>
-                    {f.tituloReal}
+                  <option key={f.num} value={f.num}>
+                    {f.titulo}
                   </option>
                 ))}
               </select>

@@ -91,7 +91,7 @@ export interface MeuAlbum {
   encarte?: string[];
 }
 
-const TIPOS_ALBUM = ["EP", "Álbum", "Deluxe"];
+export const TIPOS_ALBUM = ["EP", "Álbum", "Deluxe"];
 
 // Reformulado a pedido do usuário: jogadores estavam clicando em "Registrar
 // em Chart" (a) pra música que JÁ EXISTIA — deveria ser "Substituir" (b).
@@ -168,7 +168,7 @@ const CATEGORIAS_VIDEO = [
 // Editor de uma faixa de álbum — música existente (buscada nos charts) ou
 // inédita (formulário completo). Reutilizado tanto na criação de álbum
 // quanto na adição de novas faixas a um álbum já lançado (Substituir).
-const FaixaEditor: React.FC<{
+export const FaixaEditor: React.FC<{
   faixa: TrackConfig;
   onChange: (patch: Partial<TrackConfig>) => void;
   myChartSongs: MusicaEmChart[];
@@ -274,7 +274,9 @@ const FaixaEditor: React.FC<{
                 <button
                   type="button"
                   onClick={() =>
-                    onChange({ participantes: (faixa.participantes || []).filter((_, i) => i !== idx) })
+                    onChange({
+                      participantes: (faixa.participantes || []).filter((_, i) => i !== idx),
+                    })
                   }
                   className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg border border-red-500/20 transition shrink-0"
                 >
@@ -359,7 +361,7 @@ const FaixaEditor: React.FC<{
   );
 };
 
-function stripArtistPrefix(nome: string, artista: string): string {
+export function stripArtistPrefix(nome: string, artista: string): string {
   const trimmedNome = nome.trim();
   const trimmedArtista = artista.trim();
   if (!trimmedArtista) return trimmedNome;
@@ -382,7 +384,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   // tipo_de_perfil = "Admin" na aba Usuários (ver getStoredLogin().tipoPerfil,
   // preenchido a partir dessa coluna no login).
   const storedLogin = getStoredLogin();
-  const loginTgId = storedLogin?.id || (telegramUser?.id && telegramUser.id !== "guest" ? String(telegramUser.id) : "");
+  const loginTgId =
+    storedLogin?.id ||
+    (telegramUser?.id && telegramUser.id !== "guest" ? String(telegramUser.id) : "");
   const isAdminUser = loginTgId === "810141686" || storedLogin?.tipoPerfil === "Admin";
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState<boolean>(true);
@@ -399,7 +403,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 
   useEffect(() => {
     if (!loginTgId) return;
-    api.listarPendenciasPerformance(loginTgId).then((data) => setTemPerformancePendente(data.length > 0));
+    api
+      .listarPendenciasPerformance(loginTgId)
+      .then((data) => setTemPerformancePendente(data.length > 0));
   }, [loginTgId]);
 
   // Músicas do catálogo para seleção
@@ -468,8 +474,12 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 
   // Material extra (botões Shop/Info/Visual do tópico) — um estado por tipo
   // porque música e álbum são formulários/submits separados nesta mesma tela.
-  const [extraMusica, setExtraMusica] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
-  const [extraAlbum, setExtraAlbum] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
+  const [extraMusica, setExtraMusica] = useState<ExtraMaterialEditorValue>(
+    emptyExtraMaterialEditorValue(),
+  );
+  const [extraAlbum, setExtraAlbum] = useState<ExtraMaterialEditorValue>(
+    emptyExtraMaterialEditorValue(),
+  );
 
   // Duplo aviso antes de publicar (música e vídeo) — mostra um resumo do
   // que foi preenchido + um aviso opcional (ex: categoria de vídeo que não
@@ -735,7 +745,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     const fetchComTimeout = (input: string, init: RequestInit) => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-      return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+      return fetch(input, { ...init, signal: controller.signal }).finally(() =>
+        clearTimeout(timer),
+      );
     };
 
     // 1. Tentar via FormData primeiro (evita estouro de memória Base64 no cliente)
@@ -840,12 +852,20 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       titulo: "Confirmar Lançamento de Música",
       itens: [
         { label: "Artista Responsável", valor: artistaResponsavel },
-        { label: "Título", valor: `${artistaResponsavel} - ${stripArtistPrefix(nomeMusica, artistaResponsavel)}` },
+        {
+          label: "Título",
+          valor: `${artistaResponsavel} - ${stripArtistPrefix(nomeMusica, artistaResponsavel)}`,
+        },
         { label: "Tipo de Single", valor: tipoSingle },
         { label: "Tipo de Música", valor: tipoMusica },
         { label: "Objetivo no Chart", valor: opcaoEscolhida?.title || opcaoChart },
         ...(musicaReferencia
-          ? [{ label: "Música Referenciada", valor: `${musicaReferencia.artist} - ${musicaReferencia.title}` }]
+          ? [
+              {
+                label: "Música Referenciada",
+                valor: `${musicaReferencia.artist} - ${musicaReferencia.title}`,
+              },
+            ]
           : []),
         ...(participantes.filter((p) => p.trim()).length > 0
           ? [{ label: "Participantes", valor: participantes.filter((p) => p.trim()).join(", ") }]
@@ -920,7 +940,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       // alguma das 3 seções — e só é possível AGORA, depois de criada,
       // porque só aqui a gente sabe o Código único de verdade.
       const codigoUnicoNovo = data.data?.codigoUnico || "";
-      if (codigoUnicoNovo && (extraMusica.shopAtivo || extraMusica.infoAtivo || extraMusica.visualAtivo)) {
+      if (
+        codigoUnicoNovo &&
+        (extraMusica.shopAtivo || extraMusica.infoAtivo || extraMusica.visualAtivo)
+      ) {
         await saveExtraMaterial(codigoUnicoNovo, "musica", {
           shop: extraMusica.shopAtivo ? extraMusica.shop : [],
           info: extraMusica.infoAtivo ? extraMusica.info : "",
@@ -980,7 +1003,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         { label: "Artista Responsável", valor: artistaResponsavel },
         { label: "Título", valor: tituloVideo },
         { label: "Categoria", valor: categoriaVideo },
-        { label: "Músicas Vinculadas", valor: musicasVinculadas.map((s) => `${s.artist} - ${s.title}`).join(", ") },
+        {
+          label: "Músicas Vinculadas",
+          valor: musicasVinculadas.map((s) => `${s.artist} - ${s.title}`).join(", "),
+        },
         ...(participantes.filter((p) => p.trim()).length > 0
           ? [{ label: "Participantes", valor: participantes.filter((p) => p.trim()).join(", ") }]
           : []),
@@ -1072,7 +1098,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 
     if (albumObjetivo === "b") {
       setErrorMsg(
-        "Substituir álbum nos charts ainda não está disponível — use \"Registrar\" por enquanto.",
+        'Substituir álbum nos charts ainda não está disponível — use "Registrar" por enquanto.',
       );
       return;
     }
@@ -1098,7 +1124,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         return;
       }
       if (faixa.inedita && !faixa.mediaUrl?.trim() && !faixa.mediaFile) {
-        setErrorMsg(`Informe o link do áudio (Drive ou YouTube) ou envie um arquivo pra Faixa #${faixa.num}.`);
+        setErrorMsg(
+          `Informe o link do áudio (Drive ou YouTube) ou envie um arquivo pra Faixa #${faixa.num}.`,
+        );
         return;
       }
     }
@@ -1186,7 +1214,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       }
 
       const codigoUnicoNovo = data.data?.codigoUnico || "";
-      if (codigoUnicoNovo && (extraAlbum.shopAtivo || extraAlbum.infoAtivo || extraAlbum.visualAtivo)) {
+      if (
+        codigoUnicoNovo &&
+        (extraAlbum.shopAtivo || extraAlbum.infoAtivo || extraAlbum.visualAtivo)
+      ) {
         await saveExtraMaterial(codigoUnicoNovo, "album", {
           shop: extraAlbum.shopAtivo ? extraAlbum.shop : [],
           info: extraAlbum.infoAtivo ? extraAlbum.info : "",
@@ -1236,7 +1267,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         return;
       }
       if (faixa.inedita && !faixa.mediaUrl?.trim() && !faixa.mediaFile) {
-        setErrorMsg(`Informe o link do áudio (Drive ou YouTube) ou envie um arquivo pra nova faixa #${faixa.num}.`);
+        setErrorMsg(
+          `Informe o link do áudio (Drive ou YouTube) ou envie um arquivo pra nova faixa #${faixa.num}.`,
+        );
         return;
       }
     }
@@ -1356,7 +1389,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400 mb-1">
                 Central do gravador
               </p>
-              <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tight text-white">Gestão</h2>
+              <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tight text-white">
+                Gestão
+              </h2>
             </div>
             <button
               onClick={() => setIsEditModalOpen(true)}
@@ -1464,1198 +1499,1029 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           </div>
 
           <p className="text-[11px] text-neutral-500 leading-relaxed">
-            Cadastre músicas, vídeos, music videos e álbuns para pontuação nos Charts e catálogo do Empire Play — escolha uma ação acima pra começar.
+            Cadastre músicas, vídeos, music videos e álbuns para pontuação nos Charts e catálogo do
+            Empire Play — escolha uma ação acima pra começar.
           </p>
 
           <MeusSpotlightBanners telegramId={loginTgId} />
         </div>
       ) : (
         <>
-      {/* HEADER DA GESTÃO (modo formulário) */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => setShowLanding(true)}
-          className="size-9 shrink-0 rounded-full bg-neutral-900 border border-white/10 text-neutral-300 hover:text-white hover:border-white/20 transition grid place-items-center"
-          title="Voltar ao início da Gestão"
-        >
-          <span className="sr-only">Voltar</span>
-          ←
-        </button>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-lg sm:text-xl font-black italic uppercase tracking-tight text-white truncate">
-            {activeTab === "musica"
-              ? "Nova Música"
-              : activeTab === "video"
-                ? "Novo Vídeo"
-                : activeTab === "banners"
-                  ? "Banners do Catálogo"
-                  : "Novo Álbum"}
-          </h2>
-        </div>
-        <button
-          onClick={() => setIsEditModalOpen(true)}
-          className="px-3.5 py-2 rounded-full bg-neutral-900 border border-white/10 text-[11px] font-bold text-neutral-300 hover:text-white hover:border-white/20 transition flex items-center gap-1.5 shrink-0"
-        >
-          <Pencil className="size-3.5 text-emerald-400" />
-          <span className="hidden sm:inline">Editar meus materiais</span>
-        </button>
-      </div>
+          {/* HEADER DA GESTÃO (modo formulário) */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowLanding(true)}
+              className="size-9 shrink-0 rounded-full bg-neutral-900 border border-white/10 text-neutral-300 hover:text-white hover:border-white/20 transition grid place-items-center"
+              title="Voltar ao início da Gestão"
+            >
+              <span className="sr-only">Voltar</span>←
+            </button>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg sm:text-xl font-black italic uppercase tracking-tight text-white truncate">
+                {activeTab === "musica"
+                  ? "Nova Música"
+                  : activeTab === "video"
+                    ? "Novo Vídeo"
+                    : activeTab === "banners"
+                      ? "Banners do Catálogo"
+                      : "Novo Álbum"}
+              </h2>
+            </div>
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="px-3.5 py-2 rounded-full bg-neutral-900 border border-white/10 text-[11px] font-bold text-neutral-300 hover:text-white hover:border-white/20 transition flex items-center gap-1.5 shrink-0"
+            >
+              <Pencil className="size-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Editar meus materiais</span>
+            </button>
+          </div>
 
-      {/* TABS DE SELEÇÃO (banners tem tela própria, sem essas 3 abas) */}
-      {activeTab !== "banners" && (
-      <div className="grid grid-cols-3 gap-1.5 bg-neutral-950/60 p-1.5 rounded-2xl border border-white/5">
-        <button
-          onClick={() => {
-            setActiveTab("musica");
-            resetFormState();
-          }}
-          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
-            activeTab === "musica"
-              ? "bg-emerald-500 text-black"
-              : "text-neutral-400 hover:text-white hover:bg-white/5"
-          }`}
-        >
-          <Music className="size-4" />
-          <span>Músicas</span>
-        </button>
+          {/* TABS DE SELEÇÃO (banners tem tela própria, sem essas 3 abas) */}
+          {activeTab !== "banners" && (
+            <div className="grid grid-cols-3 gap-1.5 bg-neutral-950/60 p-1.5 rounded-2xl border border-white/5">
+              <button
+                onClick={() => {
+                  setActiveTab("musica");
+                  resetFormState();
+                }}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                  activeTab === "musica"
+                    ? "bg-emerald-500 text-black"
+                    : "text-neutral-400 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <Music className="size-4" />
+                <span>Músicas</span>
+              </button>
 
-        <button
-          onClick={() => {
-            setActiveTab("video");
-            resetFormState();
-          }}
-          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
-            activeTab === "video"
-              ? "bg-emerald-500 text-black"
-              : "text-neutral-400 hover:text-white hover:bg-white/5"
-          }`}
-        >
-          <Tv className="size-4" />
-          <span>Vídeos</span>
-        </button>
+              <button
+                onClick={() => {
+                  setActiveTab("video");
+                  resetFormState();
+                }}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                  activeTab === "video"
+                    ? "bg-emerald-500 text-black"
+                    : "text-neutral-400 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <Tv className="size-4" />
+                <span>Vídeos</span>
+              </button>
 
-        <button
-          onClick={() => {
-            setActiveTab("album");
-            resetFormState();
-          }}
-          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
-            activeTab === "album"
-              ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
-              : "text-neutral-400 hover:text-white hover:bg-white/5"
-          }`}
-        >
-          <Disc className="size-4" />
-          <span>Álbuns</span>
-        </button>
-      </div>
-      )}
+              <button
+                onClick={() => {
+                  setActiveTab("album");
+                  resetFormState();
+                }}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                  activeTab === "album"
+                    ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                    : "text-neutral-400 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <Disc className="size-4" />
+                <span>Álbuns</span>
+              </button>
+            </div>
+          )}
 
-      {/* BANNERS DO CATÁLOGO — tela própria, fora do fluxo de músicas/vídeos/álbuns.
+          {/* BANNERS DO CATÁLOGO — tela própria, fora do fluxo de músicas/vídeos/álbuns.
           Só admin (mesmo dono do "810141686" hardcoded em outros pontos do
           app) — o backend também recusa sem o token de sessão de admin. */}
-      {activeTab === "banners" && isAdminUser && <BannersManager tgId={loginTgId} />}
+          {activeTab === "banners" && isAdminUser && <BannersManager tgId={loginTgId} />}
 
-      {/* MENSAGENS DE SUCESSO E ERRO (músicas/vídeos/álbuns) */}
-      {activeTab !== "banners" && successMsg && (
-        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-3">
-          <CheckCircle2 className="size-5 shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      {activeTab !== "banners" && errorMsg && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-3">
-          <AlertCircle className="size-5 shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
-      )}
-
-      {/* FORMULÁRIO DE MÚSICA */}
-      {activeTab === "musica" && (
-        <form
-          onSubmit={handleSubmitMusica}
-          className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
-        >
-          {/* SELEÇÃO DO ARTISTA RESPONSÁVEL */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <User className="size-4 text-emerald-400" />
-              Artista Responsável
-            </label>
-            {profile?.associatedArtists && profile.associatedArtists.length > 0 ? (
-              <select
-                value={artistaResponsavel}
-                onChange={(e) => setArtistaResponsavel(e.target.value)}
-                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
-              >
-                {profile.associatedArtists.map((art) => (
-                  <option key={art} value={art}>
-                    {art}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={artistaResponsavel}
-                onChange={(e) => setArtistaResponsavel(e.target.value)}
-                placeholder="Ex: Taylor Swift"
-                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-              />
-            )}
-          </div>
-
-          {/* TÍTULO DA MÚSICA */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <Music className="size-4 text-emerald-400" />
-              Título da Música
-            </label>
-            <input
-              type="text"
-              value={nomeMusica}
-              onChange={(e) => setNomeMusica(e.target.value)}
-              placeholder="Ex: Anti-Hero"
-              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-            />
-            <p className="text-[11px] text-neutral-400 leading-relaxed">
-              Só o nome da música — o artista já vem do campo acima e é
-              adicionado automaticamente.
-              <br />
-              <span className="text-emerald-400 font-bold">Certo:</span> "Anti-Hero"
-              <span className="text-neutral-600"> → vira "Taylor Swift - Anti-Hero"</span>
-              <br />
-              <span className="text-red-400 font-bold">Errado:</span> "Taylor Swift - Anti-Hero"
-              <span className="text-neutral-600"> → duplica o nome do artista</span>
-            </p>
-          </div>
-
-          {/* TIPO DE SINGLE E TIPO DE MÚSICA */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                Tipo de Single
-              </label>
-              <select
-                value={tipoSingle}
-                onChange={(e) => setTipoSingle(e.target.value)}
-                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
-              >
-                {TIPOS_SINGLE.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+          {/* MENSAGENS DE SUCESSO E ERRO (músicas/vídeos/álbuns) */}
+          {activeTab !== "banners" && successMsg && (
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-3">
+              <CheckCircle2 className="size-5 shrink-0" />
+              <span>{successMsg}</span>
             </div>
+          )}
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                Tipo de Música
-              </label>
-              <select
-                value={tipoMusica}
-                onChange={(e) => setTipoMusica(e.target.value)}
-                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
-              >
-                {TIPOS_MUSICA.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+          {activeTab !== "banners" && errorMsg && (
+            <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-3">
+              <AlertCircle className="size-5 shrink-0" />
+              <span>{errorMsg}</span>
             </div>
-          </div>
+          )}
 
-          {/* OPÇÕES DE CHART — ícone/cor própria por opção (antes eram 3
-              cards visualmente idênticos, causa de gente clicar errado). */}
-          <div className="space-y-3">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-              Objetivo no Chart
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {OPCOES_CHART.map((op) => {
-                const Icon = op.icon;
-                const ativo = opcaoChart === op.value;
-                return (
-                  <button
-                    type="button"
-                    key={op.key}
-                    onClick={() => setOpcaoChart(op.value)}
-                    className={`text-left p-4 rounded-2xl border cursor-pointer transition flex flex-col gap-2 ${
-                      ativo
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-white"
-                        : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
-                    }`}
+          {/* FORMULÁRIO DE MÚSICA */}
+          {activeTab === "musica" && (
+            <form
+              onSubmit={handleSubmitMusica}
+              className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
+            >
+              {/* SELEÇÃO DO ARTISTA RESPONSÁVEL */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                  <User className="size-4 text-emerald-400" />
+                  Artista Responsável
+                </label>
+                {profile?.associatedArtists && profile.associatedArtists.length > 0 ? (
+                  <select
+                    value={artistaResponsavel}
+                    onChange={(e) => setArtistaResponsavel(e.target.value)}
+                    className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
                   >
-                    <Icon className={`size-5 ${ativo ? "text-emerald-400" : "text-neutral-500"}`} />
-                    <span className="font-black text-xs uppercase tracking-wide text-white">{op.title}</span>
-                    <span className="text-[11px] text-neutral-400 leading-relaxed">{op.desc}</span>
-                  </button>
-                );
-              })}
-            </div>
+                    {profile.associatedArtists.map((art) => (
+                      <option key={art} value={art}>
+                        {art}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={artistaResponsavel}
+                    onChange={(e) => setArtistaResponsavel(e.target.value)}
+                    placeholder="Ex: Taylor Swift"
+                    className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                  />
+                )}
+              </div>
 
-            {/* AVISO DE POSSÍVEL DUPLICATA — o pedido original: detectar que
+              {/* TÍTULO DA MÚSICA */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                  <Music className="size-4 text-emerald-400" />
+                  Título da Música
+                </label>
+                <input
+                  type="text"
+                  value={nomeMusica}
+                  onChange={(e) => setNomeMusica(e.target.value)}
+                  placeholder="Ex: Anti-Hero"
+                  className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                />
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  Só o nome da música — o artista já vem do campo acima e é adicionado
+                  automaticamente.
+                  <br />
+                  <span className="text-emerald-400 font-bold">Certo:</span> "Anti-Hero"
+                  <span className="text-neutral-600"> → vira "Taylor Swift - Anti-Hero"</span>
+                  <br />
+                  <span className="text-red-400 font-bold">Errado:</span> "Taylor Swift - Anti-Hero"
+                  <span className="text-neutral-600"> → duplica o nome do artista</span>
+                </p>
+              </div>
+
+              {/* TIPO DE SINGLE E TIPO DE MÚSICA */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    Tipo de Single
+                  </label>
+                  <select
+                    value={tipoSingle}
+                    onChange={(e) => setTipoSingle(e.target.value)}
+                    className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  >
+                    {TIPOS_SINGLE.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    Tipo de Música
+                  </label>
+                  <select
+                    value={tipoMusica}
+                    onChange={(e) => setTipoMusica(e.target.value)}
+                    className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  >
+                    {TIPOS_MUSICA.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* OPÇÕES DE CHART — ícone/cor própria por opção (antes eram 3
+              cards visualmente idênticos, causa de gente clicar errado). */}
+              <div className="space-y-3">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                  Objetivo no Chart
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {OPCOES_CHART.map((op) => {
+                    const Icon = op.icon;
+                    const ativo = opcaoChart === op.value;
+                    return (
+                      <button
+                        type="button"
+                        key={op.key}
+                        onClick={() => setOpcaoChart(op.value)}
+                        className={`text-left p-4 rounded-2xl border cursor-pointer transition flex flex-col gap-2 ${
+                          ativo
+                            ? "bg-emerald-500/10 border-emerald-500/30 text-white"
+                            : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
+                        }`}
+                      >
+                        <Icon
+                          className={`size-5 ${ativo ? "text-emerald-400" : "text-neutral-500"}`}
+                        />
+                        <span className="font-black text-xs uppercase tracking-wide text-white">
+                          {op.title}
+                        </span>
+                        <span className="text-[11px] text-neutral-400 leading-relaxed">
+                          {op.desc}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* AVISO DE POSSÍVEL DUPLICATA — o pedido original: detectar que
                 o jogador escolheu "Lançamento Novo" pra uma música que já
                 existe no catálogo do artista dele, e oferecer trocar pra
                 "Substituir" com a música já pré-selecionada. */}
-            {possivelDuplicataChart && (
-              <div className="flex items-start gap-3 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10">
-                <AlertTriangle className="size-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0 space-y-2">
-                  <p className="text-xs text-amber-200 leading-relaxed">
-                    Encontramos uma música parecida no seu catálogo:{" "}
-                    <span className="font-black text-white">
-                      {possivelDuplicataChart.artist} - {possivelDuplicataChart.title}
-                    </span>
-                    . Tem certeza que esse é um lançamento <span className="font-black">novo</span>? Se não for,
-                    use "Substituir Existente" pra não duplicar a música no chart.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpcaoChart(OPCOES_CHART[1].value);
-                      setMusicaReferencia(possivelDuplicataChart);
-                    }}
-                    className="inline-flex items-center gap-1.5 text-xs font-black text-amber-300 hover:text-amber-200 uppercase tracking-wide"
-                  >
-                    <Repeat2 className="size-3.5" />
-                    Na verdade, é pra substituir essa música
-                  </button>
-                </div>
+                {possivelDuplicataChart && (
+                  <div className="flex items-start gap-3 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10">
+                    <AlertTriangle className="size-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <p className="text-xs text-amber-200 leading-relaxed">
+                        Encontramos uma música parecida no seu catálogo:{" "}
+                        <span className="font-black text-white">
+                          {possivelDuplicataChart.artist} - {possivelDuplicataChart.title}
+                        </span>
+                        . Tem certeza que esse é um lançamento{" "}
+                        <span className="font-black">novo</span>? Se não for, use "Substituir
+                        Existente" pra não duplicar a música no chart.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpcaoChart(OPCOES_CHART[1].value);
+                          setMusicaReferencia(possivelDuplicataChart);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-black text-amber-300 hover:text-amber-200 uppercase tracking-wide"
+                      >
+                        <Repeat2 className="size-3.5" />
+                        Na verdade, é pra substituir essa música
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* SELEÇÃO DE MÚSICA EXISTENTE — obrigatório para (b) e (c) */}
-          {opcaoChart !== OPCOES_CHART[0].value && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                {opcaoChart === OPCOES_CHART[1].value
-                  ? "Qual música você quer substituir?"
-                  : "A qual música lançada os comentários devem valer?"}
-              </label>
-              {musicaReferencia ? (
-                <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
-                  <span className="text-sm text-white font-bold truncate">
-                    {musicaReferencia.artist} - {musicaReferencia.title}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMusicaReferencia(null);
-                      setMusicaReferenciaQuery("");
-                    }}
-                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
-                  >
-                    Trocar
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={musicaReferenciaQuery}
-                    onChange={(e) => setMusicaReferenciaQuery(e.target.value)}
-                    placeholder="Busque pelo título ou artista..."
-                    className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                  />
-                  {musicaReferenciaQuery.trim().length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
-                      {myCatalogSongs
-                        .filter((s) => {
-                          const q = musicaReferenciaQuery.trim().toLowerCase();
-                          return (
-                            s.title?.toLowerCase().includes(q) ||
-                            s.artist?.toLowerCase().includes(q)
-                          );
-                        })
-                        .slice(0, 20)
-                        .map((s) => (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => {
-                              setMusicaReferencia(s);
-                              setMusicaReferenciaQuery("");
-                            }}
-                            className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
-                          >
-                            <span className="font-bold">{s.artist}</span> - {s.title}
-                          </button>
-                        ))}
-                      {myCatalogSongs.filter((s) => {
-                        const q = musicaReferenciaQuery.trim().toLowerCase();
-                        return (
-                          s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q)
-                        );
-                      }).length === 0 && (
-                        <p className="px-4 py-3 text-xs text-neutral-500 italic">
-                          Nenhuma música encontrada.
-                        </p>
+              {/* SELEÇÃO DE MÚSICA EXISTENTE — obrigatório para (b) e (c) */}
+              {opcaoChart !== OPCOES_CHART[0].value && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    {opcaoChart === OPCOES_CHART[1].value
+                      ? "Qual música você quer substituir?"
+                      : "A qual música lançada os comentários devem valer?"}
+                  </label>
+                  {musicaReferencia ? (
+                    <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+                      <span className="text-sm text-white font-bold truncate">
+                        {musicaReferencia.artist} - {musicaReferencia.title}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMusicaReferencia(null);
+                          setMusicaReferenciaQuery("");
+                        }}
+                        className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
+                      >
+                        Trocar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={musicaReferenciaQuery}
+                        onChange={(e) => setMusicaReferenciaQuery(e.target.value)}
+                        placeholder="Busque pelo título ou artista..."
+                        className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                      />
+                      {musicaReferenciaQuery.trim().length > 0 && (
+                        <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
+                          {myCatalogSongs
+                            .filter((s) => {
+                              const q = musicaReferenciaQuery.trim().toLowerCase();
+                              return (
+                                s.title?.toLowerCase().includes(q) ||
+                                s.artist?.toLowerCase().includes(q)
+                              );
+                            })
+                            .slice(0, 20)
+                            .map((s) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  setMusicaReferencia(s);
+                                  setMusicaReferenciaQuery("");
+                                }}
+                                className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
+                              >
+                                <span className="font-bold">{s.artist}</span> - {s.title}
+                              </button>
+                            ))}
+                          {myCatalogSongs.filter((s) => {
+                            const q = musicaReferenciaQuery.trim().toLowerCase();
+                            return (
+                              s.title?.toLowerCase().includes(q) ||
+                              s.artist?.toLowerCase().includes(q)
+                            );
+                          }).length === 0 && (
+                            <p className="px-4 py-3 text-xs text-neutral-500 italic">
+                              Nenhuma música encontrada.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* PARTICIPANTES (FEAT) */}
-          <div className="space-y-3">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-              Participantes (Feat / Artistas 2 a 6)
-            </label>
-            {participantes.map((part, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={part}
-                  onChange={(e) => handleParticipanteChange(idx, e.target.value)}
-                  placeholder={`Artista participante #${idx + 2}`}
-                  list="participantes-conhecidos"
-                  className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                />
-                {participantes.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveParticipante(idx)}
-                    className="p-2.5 text-red-400 hover:bg-red-500/10 rounded-xl border border-red-500/20 transition"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                )}
-              </div>
-            ))}
-            {participantes.length < 5 && (
-              <button
-                type="button"
-                onClick={handleAddParticipante}
-                className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition"
-              >
-                <Plus className="size-4" />
-                <span>Adicionar Participante</span>
-              </button>
-            )}
-          </div>
-
-          {/* UPLOAD DE ARQUIVOS COM BOTÕES EXATOS DA ESPECIFICAÇÃO */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
-            {/* CAPA */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                Capa do Lançamento
-              </label>
-              <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
-                {capaPreview ? (
-                  <img
-                    src={capaPreview}
-                    alt="Capa Preview"
-                    className="size-16 object-cover rounded-xl border border-white/10"
-                  />
-                ) : (
-                  <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
-                    <ImageIcon className="size-6" />
-                  </div>
-                )}
-                <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
-                  <Upload className="size-4 text-emerald-400" />
-                  <span>Selecione a Capa</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && handleCapaSelect(e.target.files[0])}
-                    className="hidden"
-                  />
+              {/* PARTICIPANTES (FEAT) */}
+              <div className="space-y-3">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                  Participantes (Feat / Artistas 2 a 6)
                 </label>
-              </div>
-            </div>
-
-            {/* ÁUDIO (LINK OU ARQUIVO) */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                Arquivo de Áudio ou Link (YouTube / Drive)
-              </label>
-              <input
-                type="text"
-                value={mediaUrlInput}
-                onChange={(e) => setMediaUrlInput(e.target.value)}
-                placeholder="Cole o Link (YouTube, Google Drive, MP3 URL) ou selecione abaixo"
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none mb-2"
-              />
-              <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
-                <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
-                  <FileVideo className="size-6" />
-                </div>
-                <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
-                  <Upload className="size-4 text-emerald-400" />
-                  <span>Upload de Arquivo local</span>
-                  <input
-                    type="file"
-                    accept="audio/*,video/*"
-                    onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              {mediaFile && (
-                <p className="text-[11px] text-emerald-400 truncate">
-                  Selecionado: {mediaFile.name}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* LETRA DA MÚSICA */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <FileText className="size-4 text-emerald-400" />
-              Letra da Música (Opcional)
-            </label>
-            <textarea
-              rows={4}
-              value={letraInput}
-              onChange={(e) => setLetraInput(e.target.value)}
-              placeholder="Cole aqui a letra completa da música..."
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl p-4 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-
-          {/* SHOP / INFO / VISUAL — opcional, ativado aqui já na criação */}
-          <div>
-            <label className="text-xs font-black uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
-              <Sparkles className="size-4 text-emerald-400" />
-              Botões do Tópico (Opcional)
-            </label>
-            <ExtraMaterialEditor value={extraMusica} onChange={setExtraMusica} folderType="materiaisMusica" />
-          </div>
-
-          {/* BOTÃO PRINCIPAL DE ENVIO */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <Sparkles className="size-5" />
-            <span>
-              {isSubmitting ? uploadProgress || "Enviando..." : "Publicar Lançamento de Música"}
-            </span>
-          </button>
-        </form>
-      )}
-
-      {/* FORMULÁRIO DE VÍDEO */}
-      {activeTab === "video" && (
-        <form
-          onSubmit={handleSubmitVideo}
-          className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
-        >
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <User className="size-4 text-emerald-400" />
-              Artista Responsável
-            </label>
-            {profile?.associatedArtists && profile.associatedArtists.length > 0 ? (
-              <select
-                value={artistaResponsavel}
-                onChange={(e) => setArtistaResponsavel(e.target.value)}
-                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
-              >
-                {profile.associatedArtists.map((art) => (
-                  <option key={art} value={art}>
-                    {art}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={artistaResponsavel}
-                onChange={(e) => setArtistaResponsavel(e.target.value)}
-                placeholder="Ex: Taylor Swift"
-                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-              />
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <Tv className="size-4 text-emerald-400" />
-              Título do Vídeo
-            </label>
-            <input
-              type="text"
-              value={tituloVideo}
-              onChange={(e) => setTituloVideo(e.target.value)}
-              placeholder="Ex: Entrevista Exclusiva no Empire Hub"
-              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-            />
-            <p className="text-[11px] text-neutral-400 leading-relaxed">
-              Só o título — o artista já vem do campo acima e é adicionado automaticamente.
-              <br />
-              <span className="text-emerald-400 font-bold">Certo:</span> "Entrevista Exclusiva"
-              <span className="text-neutral-600"> → vira "Taylor Swift - Entrevista Exclusiva"</span>
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-              Categoria / Tipo de Vídeo
-            </label>
-            <select
-              value={categoriaVideo}
-              onChange={(e) => {
-                const novaCategoria = e.target.value;
-                setCategoriaVideo(novaCategoria);
-                // Music Video só aceita 1 música — se já tinha mais de uma
-                // selecionada num outro tipo, mantém só a primeira.
-                if (novaCategoria === "Music Video") {
-                  setMusicasVinculadas((prev) => prev.slice(0, 1));
-                }
-              }}
-              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
-            >
-              {CATEGORIAS_VIDEO.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <Music className="size-4 text-emerald-400" />
-              Música(s) Vinculada(s){" "}
-              {categoriaVideo === "Music Video" ? "(1 obrigatória)" : `(1 a ${maxMusicasVinculadas} obrigatórias)`}
-            </label>
-            {musicasVinculadas.length > 0 && (
-              <div className="space-y-1.5">
-                {musicasVinculadas.map((s) => (
-                  <div
-                    key={s.id}
-                    className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3"
-                  >
-                    <span className="text-sm text-white font-bold truncate">
-                      {s.artist} - {s.title}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMusicasVinculadas((prev) => prev.filter((m) => m.id !== s.id))
-                      }
-                      className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
-                    >
-                      Remover
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {musicasVinculadas.length < maxMusicasVinculadas && (
-              <div className="relative">
-                <input
-                  type="text"
-                  value={musicaVinculadaQuery}
-                  onChange={(e) => setMusicaVinculadaQuery(e.target.value)}
-                  placeholder="Busque pelo título ou artista da música lançada..."
-                  className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                />
-                {musicaVinculadaQuery.trim().length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
-                    {myCatalogSongs
-                      .filter((s) => {
-                        const q = musicaVinculadaQuery.trim().toLowerCase();
-                        const jaSelecionada = musicasVinculadas.some((m) => m.id === s.id);
-                        return (
-                          !jaSelecionada &&
-                          (s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q))
-                        );
-                      })
-                      .slice(0, 20)
-                      .map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => {
-                            setMusicasVinculadas((prev) => [...prev, s]);
-                            setMusicaVinculadaQuery("");
-                          }}
-                          className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
-                        >
-                          <span className="font-bold">{s.artist}</span> - {s.title}
-                        </button>
-                      ))}
-                    {myCatalogSongs.filter((s) => {
-                      const q = musicaVinculadaQuery.trim().toLowerCase();
-                      const jaSelecionada = musicasVinculadas.some((m) => m.id === s.id);
-                      return (
-                        !jaSelecionada &&
-                        (s.title?.toLowerCase().includes(q) || s.artist?.toLowerCase().includes(q))
-                      );
-                    }).length === 0 && (
-                      <p className="px-4 py-3 text-xs text-neutral-500 italic">
-                        Nenhuma música encontrada.
-                      </p>
+                {participantes.map((part, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={part}
+                      onChange={(e) => handleParticipanteChange(idx, e.target.value)}
+                      placeholder={`Artista participante #${idx + 2}`}
+                      list="participantes-conhecidos"
+                      className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                    />
+                    {participantes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveParticipante(idx)}
+                        className="p-2.5 text-red-400 hover:bg-red-500/10 rounded-xl border border-red-500/20 transition"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
                     )}
                   </div>
-                )}
-              </div>
-            )}
-            {categoriaVideo === "Music Video" && (
-              <p className="text-[11px] text-neutral-400">
-                Ao publicar, a linha dessa música na aba de Pontos será marcada como videoclipe
-                lançado.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <FileText className="size-4 text-emerald-400" />
-              Descrição do Vídeo (Opcional)
-            </label>
-            <textarea
-              rows={3}
-              value={descricaoInput}
-              onChange={(e) => setDescricaoInput(e.target.value)}
-              placeholder="Descreva detalhes, sinopse ou contexto do vídeo..."
-              className="w-full bg-neutral-950 border border-white/10 rounded-xl p-4 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-
-          {/* PARTICIPANTES */}
-          <div className="space-y-3">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-              Participantes (Artistas 2 a 6)
-            </label>
-            {participantes.map((part, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={part}
-                  onChange={(e) => handleParticipanteChange(idx, e.target.value)}
-                  placeholder={`Participante #${idx + 2}`}
-                  list="participantes-conhecidos"
-                  className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-                />
-                {participantes.length > 1 && (
+                ))}
+                {participantes.length < 5 && (
                   <button
                     type="button"
-                    onClick={() => handleRemoveParticipante(idx)}
-                    className="p-2.5 text-red-400 hover:bg-red-500/10 rounded-xl border border-red-500/20 transition"
+                    onClick={handleAddParticipante}
+                    className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition"
                   >
-                    <Trash2 className="size-4" />
+                    <Plus className="size-4" />
+                    <span>Adicionar Participante</span>
                   </button>
                 )}
               </div>
-            ))}
-            {participantes.length < 5 && (
-              <button
-                type="button"
-                onClick={handleAddParticipante}
-                className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition"
-              >
-                <Plus className="size-4" />
-                <span>Adicionar Participante</span>
-              </button>
-            )}
-          </div>
 
-          {/* UPLOAD DE ARQUIVOS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                Capa do Vídeo / Thumbnail
-              </label>
-              <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
-                {capaPreview ? (
-                  <img
-                    src={capaPreview}
-                    alt="Capa Preview"
-                    className="size-16 object-cover rounded-xl border border-white/10"
-                  />
-                ) : (
-                  <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
-                    <ImageIcon className="size-6" />
+              {/* UPLOAD DE ARQUIVOS COM BOTÕES EXATOS DA ESPECIFICAÇÃO */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                {/* CAPA */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                    Capa do Lançamento
+                  </label>
+                  <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
+                    {capaPreview ? (
+                      <img
+                        src={capaPreview}
+                        alt="Capa Preview"
+                        className="size-16 object-cover rounded-xl border border-white/10"
+                      />
+                    ) : (
+                      <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
+                        <ImageIcon className="size-6" />
+                      </div>
+                    )}
+                    <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
+                      <Upload className="size-4 text-emerald-400" />
+                      <span>Selecione a Capa</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => e.target.files?.[0] && handleCapaSelect(e.target.files[0])}
+                        className="hidden"
+                      />
+                    </label>
                   </div>
-                )}
-                <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
-                  <Upload className="size-4 text-emerald-400" />
-                  <span>Selecione a Capa</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={async (e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = "";
-                      if (!f) return;
-                      const cropped = await cropCapaVideo(f);
-                      if (cropped) handleCapaSelect(cropped);
-                    }}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                Arquivo ou Link do Vídeo (YouTube / Drive)
-              </label>
-              <input
-                type="text"
-                value={mediaUrlInput}
-                onChange={(e) => setMediaUrlInput(e.target.value)}
-                placeholder="Cole o Link (YouTube, Drive, MP4 URL) ou selecione abaixo"
-                className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none mb-2"
-              />
-              <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
-                <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
-                  <FileVideo className="size-6" />
                 </div>
-                <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
-                  <Upload className="size-4 text-emerald-400" />
-                  <span>Upload de Arquivo</span>
+
+                {/* ÁUDIO (LINK OU ARQUIVO) */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                    Arquivo de Áudio ou Link (YouTube / Drive)
+                  </label>
                   <input
-                    type="file"
-                    accept="video/*"
-                    onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
-                    className="hidden"
+                    type="text"
+                    value={mediaUrlInput}
+                    onChange={(e) => setMediaUrlInput(e.target.value)}
+                    placeholder="Cole o Link (YouTube, Google Drive, MP3 URL) ou selecione abaixo"
+                    className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none mb-2"
                   />
-                </label>
+                  <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
+                    <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
+                      <FileVideo className="size-6" />
+                    </div>
+                    <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
+                      <Upload className="size-4 text-emerald-400" />
+                      <span>Upload de Arquivo local</span>
+                      <input
+                        type="file"
+                        accept="audio/*,video/*"
+                        onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {mediaFile && (
+                    <p className="text-[11px] text-emerald-400 truncate">
+                      Selecionado: {mediaFile.name}
+                    </p>
+                  )}
+                </div>
               </div>
-              {mediaFile && (
-                <p className="text-[11px] text-emerald-400 truncate">
-                  Selecionado: {mediaFile.name}
-                </p>
-              )}
-            </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <Sparkles className="size-5" />
-            <span>
-              {isSubmitting
-                ? uploadProgress || "Enviando..."
-                : categoriaVideo === "Music Video"
-                  ? "Publicar Music Video"
-                  : "Publicar Vídeo"}
-            </span>
-          </button>
-        </form>
-      )}
+              {/* LETRA DA MÚSICA */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                  <FileText className="size-4 text-emerald-400" />
+                  Letra da Música (Opcional)
+                </label>
+                <textarea
+                  rows={4}
+                  value={letraInput}
+                  onChange={(e) => setLetraInput(e.target.value)}
+                  placeholder="Cole aqui a letra completa da música..."
+                  className="w-full bg-neutral-950 border border-white/10 rounded-xl p-4 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
 
-      {/* FORMULÁRIO DE ÁLBUM */}
-      {activeTab === "album" && (
-        <div className="space-y-6">
-          <button
-            type="button"
-            onClick={() => {
-              setAlbumObjetivo("a");
-              setAlbumRetroativo((v) => !v);
-            }}
-            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-colors ${
-              albumRetroativo
-                ? "bg-emerald-500/20 border-emerald-500 text-white"
-                : "bg-emerald-500/10 border-emerald-500/30 text-white hover:bg-emerald-500/20"
-            }`}
-          >
-            <span className="text-xs font-bold text-left">
-              Tem um álbum <span className="text-emerald-400">retroativo</span> pra cadastrar? Ele vira tópico no
-              fórum e entra nos charts na semana certa.
-            </span>
-            <span className="text-[11px] font-black uppercase text-emerald-400 shrink-0 ml-3">
-              {albumRetroativo ? "Ativado ✓" : "Ativar →"}
-            </span>
-          </button>
+              {/* SHOP / INFO / VISUAL — opcional, ativado aqui já na criação */}
+              <div>
+                <label className="text-xs font-black uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
+                  <Sparkles className="size-4 text-emerald-400" />
+                  Botões do Tópico (Opcional)
+                </label>
+                <ExtraMaterialEditor
+                  value={extraMusica}
+                  onChange={setExtraMusica}
+                  folderType="materiaisMusica"
+                />
+              </div>
 
-          {albumRetroativo && (
-            <div className="p-4 rounded-2xl bg-neutral-900/90 border border-emerald-500/30 space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                Data real de lançamento
-              </label>
-              <input
-                type="date"
-                value={dataLancamentoRetroativo}
-                onChange={(e) => setDataLancamentoRetroativo(e.target.value)}
-                max={new Date().toISOString().slice(0, 10)}
-                className="w-full p-3 rounded-xl bg-neutral-950/60 border border-white/10 text-white text-sm"
-              />
-              <p className="text-[11px] text-neutral-400">
-                O álbum entra nos charts já na semana correspondente a essa data (em vez de estrear na semana 1), e
-                todas as faixas entram como pendentes — você relança cada uma quando quiser.
-              </p>
-            </div>
+              {/* BOTÃO PRINCIPAL DE ENVIO */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Sparkles className="size-5" />
+                <span>
+                  {isSubmitting ? uploadProgress || "Enviando..." : "Publicar Lançamento de Música"}
+                </span>
+              </button>
+            </form>
           )}
 
-          {/* OBJETIVO */}
-          <div className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-2 backdrop-blur-md">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-              O que você quer fazer?
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div
-                onClick={() => setAlbumObjetivo("a")}
-                className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
-                  albumObjetivo === "a"
-                    ? "bg-emerald-500/10 border-emerald-500 text-white"
-                    : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
-                }`}
-              >
-                <span className="font-bold text-xs text-white mb-1">Registrar</span>
-                <span className="text-[11px] text-neutral-400">
-                  Cadastra um álbum novo com suas faixas.
-                </span>
-              </div>
-              <div
-                onClick={() => setAlbumObjetivo("b")}
-                className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
-                  albumObjetivo === "b"
-                    ? "bg-emerald-500/10 border-emerald-500 text-white"
-                    : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
-                }`}
-              >
-                <span className="font-bold text-xs text-white mb-1">Substituir nos Charts</span>
-                <span className="text-[11px] text-neutral-400">
-                  Troca capa, encarte e/ou adiciona faixas a um álbum já lançado.
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {albumObjetivo === "a" && (
-        <form
-          onSubmit={handleSubmitAlbum}
-          className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
-        >
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <User className="size-4 text-emerald-400" />
-              Artista do Álbum
-            </label>
-            {profile?.associatedArtists && profile.associatedArtists.length > 0 ? (
-              <select
-                value={artistaResponsavel}
-                onChange={(e) => setArtistaResponsavel(e.target.value)}
-                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
-              >
-                {profile.associatedArtists.map((art) => (
-                  <option key={art} value={art}>
-                    {art}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={artistaResponsavel}
-                onChange={(e) => setArtistaResponsavel(e.target.value)}
-                placeholder="Ex: Taylor Swift"
-                className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-              />
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <Disc className="size-4 text-emerald-400" />
-              Título do Álbum
-            </label>
-            <input
-              type="text"
-              value={tituloAlbum}
-              onChange={(e) => setTituloAlbum(e.target.value)}
-              placeholder="Ex: Midnights"
-              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
-            />
-            <p className="text-[11px] text-neutral-400 leading-relaxed">
-              Só o título — o artista já vem do campo acima e é adicionado automaticamente.
-              <br />
-              <span className="text-emerald-400 font-bold">Certo:</span> "Midnights"
-              <span className="text-neutral-600"> → vira "Taylor Swift - Midnights"</span>
-            </p>
-          </div>
-
-          {/* TIPO DO ÁLBUM */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-              Tipo
-            </label>
-            <select
-              value={tipoAlbum}
-              onChange={(e) => setTipoAlbum(e.target.value)}
-              className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
-            >
-              {TIPOS_ALBUM.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {tipo}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* QUANTIDADE DE FAIXAS — os spinners nativos do input number são
-              minúsculos e difíceis de tocar no celular; um stepper com
-              botões grandes de +/- resolve isso, mantendo o campo digitável
-              pra quem preferir digitar direto. */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-              <ListMusic className="size-4 text-emerald-400" />
-              Quantidade de Faixas ({totalFaixasCount})
-            </label>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setTotalFaixasCount((n) => Math.max(1, n - 1))}
-                disabled={totalFaixasCount <= 1}
-                className="size-11 shrink-0 rounded-xl bg-neutral-950 border border-white/10 text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
-                aria-label="Diminuir quantidade de faixas"
-              >
-                <Minus className="size-4" />
-              </button>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={30}
-                value={totalFaixasCount}
-                onChange={(e) => setTotalFaixasCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                className="w-16 text-center bg-neutral-950 border border-white/10 rounded-xl px-2 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setTotalFaixasCount((n) => Math.min(30, n + 1))}
-                disabled={totalFaixasCount >= 30}
-                className="size-11 shrink-0 rounded-xl bg-neutral-950 border border-white/10 text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
-                aria-label="Aumentar quantidade de faixas"
-              >
-                <Plus className="size-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* TRACKLIST CONFIG */}
-          <div className="space-y-3 bg-neutral-950/60 p-4 rounded-2xl border border-white/5 max-h-[32rem] overflow-y-auto">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-              Lista de Faixas do Álbum
-            </label>
-            {faixasConfig.map((faixa, idx) => (
-              <FaixaEditor
-                key={idx}
-                faixa={faixa}
-                myChartSongs={myChartSongs}
-                onChange={(patch) => {
-                  const updated = [...faixasConfig];
-                  updated[idx] = { ...updated[idx], ...patch };
-                  setFaixasConfig(updated);
-                }}
-              />
-            ))}
-          </div>
-
-          {/* UPLOAD DA CAPA E ENCARTES */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                Capa do Álbum
-              </label>
-              <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
-                {capaPreview ? (
-                  <img
-                    src={capaPreview}
-                    alt="Capa Preview"
-                    className="size-16 object-cover rounded-xl border border-white/10"
-                  />
-                ) : (
-                  <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
-                    <ImageIcon className="size-6" />
-                  </div>
-                )}
-                <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
-                  <Upload className="size-4 text-emerald-400" />
-                  <span>Selecione a Capa</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && handleCapaSelect(e.target.files[0])}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                Encartes / Imagens Adicionais
-              </label>
-              <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
-                <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
-                  <ImageIcon className="size-6" />
-                </div>
-                <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
-                  <Upload className="size-4 text-emerald-400" />
-                  <span>Selecione os Encartes (Fotos)</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => e.target.files && setEncartesFiles(Array.from(e.target.files))}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              {encartesFiles.length > 0 && (
-                <p className="text-[11px] text-emerald-400">
-                  {encartesFiles.length} encarte(s) selecionado(s)
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-black uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
-              <Sparkles className="size-4 text-emerald-400" />
-              Botões do Tópico (Opcional)
-            </label>
-            <ExtraMaterialEditor value={extraAlbum} onChange={setExtraAlbum} folderType="materiaisAlbum" />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <Sparkles className="size-5" />
-            <span>
-              {isSubmitting
-                ? uploadProgress || "Enviando..."
-                : albumRetroativo
-                  ? "Publicar Álbum Retroativo"
-                  : "Publicar Lançamento"}
-            </span>
-          </button>
-        </form>
-          )}
-
-          {albumObjetivo === "b" && (
+          {/* FORMULÁRIO DE VÍDEO */}
+          {activeTab === "video" && (
             <form
-              onSubmit={handleSubstituirAlbum}
+              onSubmit={handleSubmitVideo}
               className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
             >
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-                  <Disc className="size-4 text-emerald-400" />
-                  Qual álbum você quer substituir?
+                  <User className="size-4 text-emerald-400" />
+                  Artista Responsável
                 </label>
-                {albumSubstSelecionado ? (
-                  <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
-                    <span className="text-sm text-white font-bold truncate">
-                      {albumSubstSelecionado.label}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAlbumSubstSelecionado(null);
-                        setAlbumSubstQuery("");
-                        setEncarteAtual([]);
-                      }}
-                      className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
-                    >
-                      Trocar
-                    </button>
-                  </div>
+                {profile?.associatedArtists && profile.associatedArtists.length > 0 ? (
+                  <select
+                    value={artistaResponsavel}
+                    onChange={(e) => setArtistaResponsavel(e.target.value)}
+                    className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  >
+                    {profile.associatedArtists.map((art) => (
+                      <option key={art} value={art}>
+                        {art}
+                      </option>
+                    ))}
+                  </select>
                 ) : (
+                  <input
+                    type="text"
+                    value={artistaResponsavel}
+                    onChange={(e) => setArtistaResponsavel(e.target.value)}
+                    placeholder="Ex: Taylor Swift"
+                    className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                  />
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                  <Tv className="size-4 text-emerald-400" />
+                  Título do Vídeo
+                </label>
+                <input
+                  type="text"
+                  value={tituloVideo}
+                  onChange={(e) => setTituloVideo(e.target.value)}
+                  placeholder="Ex: Entrevista Exclusiva no Empire Hub"
+                  className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                />
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  Só o título — o artista já vem do campo acima e é adicionado automaticamente.
+                  <br />
+                  <span className="text-emerald-400 font-bold">Certo:</span> "Entrevista Exclusiva"
+                  <span className="text-neutral-600">
+                    {" "}
+                    → vira "Taylor Swift - Entrevista Exclusiva"
+                  </span>
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                  Categoria / Tipo de Vídeo
+                </label>
+                <select
+                  value={categoriaVideo}
+                  onChange={(e) => {
+                    const novaCategoria = e.target.value;
+                    setCategoriaVideo(novaCategoria);
+                    // Music Video só aceita 1 música — se já tinha mais de uma
+                    // selecionada num outro tipo, mantém só a primeira.
+                    if (novaCategoria === "Music Video") {
+                      setMusicasVinculadas((prev) => prev.slice(0, 1));
+                    }
+                  }}
+                  className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
+                >
+                  {CATEGORIAS_VIDEO.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                  <Music className="size-4 text-emerald-400" />
+                  Música(s) Vinculada(s){" "}
+                  {categoriaVideo === "Music Video"
+                    ? "(1 obrigatória)"
+                    : `(1 a ${maxMusicasVinculadas} obrigatórias)`}
+                </label>
+                {musicasVinculadas.length > 0 && (
+                  <div className="space-y-1.5">
+                    {musicasVinculadas.map((s) => (
+                      <div
+                        key={s.id}
+                        className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3"
+                      >
+                        <span className="text-sm text-white font-bold truncate">
+                          {s.artist} - {s.title}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMusicasVinculadas((prev) => prev.filter((m) => m.id !== s.id))
+                          }
+                          className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {musicasVinculadas.length < maxMusicasVinculadas && (
                   <div className="relative">
                     <input
                       type="text"
-                      value={albumSubstQuery}
-                      onChange={(e) => setAlbumSubstQuery(e.target.value)}
-                      placeholder="Busque pelo título do álbum já lançado..."
+                      value={musicaVinculadaQuery}
+                      onChange={(e) => setMusicaVinculadaQuery(e.target.value)}
+                      placeholder="Busque pelo título ou artista da música lançada..."
                       className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
                     />
-                    {albumSubstQuery.trim().length > 0 && (
+                    {musicaVinculadaQuery.trim().length > 0 && (
                       <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
-                        {myAlbuns
-                          .filter((a) =>
-                            a.label.toLowerCase().includes(albumSubstQuery.trim().toLowerCase()),
-                          )
+                        {myCatalogSongs
+                          .filter((s) => {
+                            const q = musicaVinculadaQuery.trim().toLowerCase();
+                            const jaSelecionada = musicasVinculadas.some((m) => m.id === s.id);
+                            return (
+                              !jaSelecionada &&
+                              (s.title?.toLowerCase().includes(q) ||
+                                s.artist?.toLowerCase().includes(q))
+                            );
+                          })
                           .slice(0, 20)
-                          .map((a) => (
+                          .map((s) => (
                             <button
-                              key={a.topicId}
+                              key={s.id}
                               type="button"
                               onClick={() => {
-                                setAlbumSubstSelecionado(a);
-                                setAlbumSubstQuery("");
-                                setEncarteAtual(a.encarte || []);
+                                setMusicasVinculadas((prev) => [...prev, s]);
+                                setMusicaVinculadaQuery("");
                               }}
                               className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
                             >
-                              {a.label}
+                              <span className="font-bold">{s.artist}</span> - {s.title}
                             </button>
                           ))}
-                        {myAlbuns.filter((a) =>
-                          a.label.toLowerCase().includes(albumSubstQuery.trim().toLowerCase()),
-                        ).length === 0 && (
+                        {myCatalogSongs.filter((s) => {
+                          const q = musicaVinculadaQuery.trim().toLowerCase();
+                          const jaSelecionada = musicasVinculadas.some((m) => m.id === s.id);
+                          return (
+                            !jaSelecionada &&
+                            (s.title?.toLowerCase().includes(q) ||
+                              s.artist?.toLowerCase().includes(q))
+                          );
+                        }).length === 0 && (
                           <p className="px-4 py-3 text-xs text-neutral-500 italic">
-                            Nenhum álbum encontrado.
+                            Nenhuma música encontrada.
                           </p>
                         )}
                       </div>
                     )}
                   </div>
                 )}
+                {categoriaVideo === "Music Video" && (
+                  <p className="text-[11px] text-neutral-400">
+                    Ao publicar, a linha dessa música na aba de Pontos será marcada como videoclipe
+                    lançado.
+                  </p>
+                )}
               </div>
 
-              {albumSubstSelecionado && (
-                <>
-                  {/* NOVAS FAIXAS */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                  <FileText className="size-4 text-emerald-400" />
+                  Descrição do Vídeo (Opcional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={descricaoInput}
+                  onChange={(e) => setDescricaoInput(e.target.value)}
+                  placeholder="Descreva detalhes, sinopse ou contexto do vídeo..."
+                  className="w-full bg-neutral-950 border border-white/10 rounded-xl p-4 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              {/* PARTICIPANTES */}
+              <div className="space-y-3">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                  Participantes (Artistas 2 a 6)
+                </label>
+                {participantes.map((part, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={part}
+                      onChange={(e) => handleParticipanteChange(idx, e.target.value)}
+                      placeholder={`Participante #${idx + 2}`}
+                      list="participantes-conhecidos"
+                      className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                    />
+                    {participantes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveParticipante(idx)}
+                        className="p-2.5 text-red-400 hover:bg-red-500/10 rounded-xl border border-red-500/20 transition"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {participantes.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={handleAddParticipante}
+                    className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition"
+                  >
+                    <Plus className="size-4" />
+                    <span>Adicionar Participante</span>
+                  </button>
+                )}
+              </div>
+
+              {/* UPLOAD DE ARQUIVOS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                    Capa do Vídeo / Thumbnail
+                  </label>
+                  <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
+                    {capaPreview ? (
+                      <img
+                        src={capaPreview}
+                        alt="Capa Preview"
+                        className="size-16 object-cover rounded-xl border border-white/10"
+                      />
+                    ) : (
+                      <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
+                        <ImageIcon className="size-6" />
+                      </div>
+                    )}
+                    <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
+                      <Upload className="size-4 text-emerald-400" />
+                      <span>Selecione a Capa</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!f) return;
+                          const cropped = await cropCapaVideo(f);
+                          if (cropped) handleCapaSelect(cropped);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                    Arquivo ou Link do Vídeo (YouTube / Drive)
+                  </label>
+                  <input
+                    type="text"
+                    value={mediaUrlInput}
+                    onChange={(e) => setMediaUrlInput(e.target.value)}
+                    placeholder="Cole o Link (YouTube, Drive, MP4 URL) ou selecione abaixo"
+                    className="w-full bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none mb-2"
+                  />
+                  <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
+                    <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
+                      <FileVideo className="size-6" />
+                    </div>
+                    <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
+                      <Upload className="size-4 text-emerald-400" />
+                      <span>Upload de Arquivo</span>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {mediaFile && (
+                    <p className="text-[11px] text-emerald-400 truncate">
+                      Selecionado: {mediaFile.name}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Sparkles className="size-5" />
+                <span>
+                  {isSubmitting
+                    ? uploadProgress || "Enviando..."
+                    : categoriaVideo === "Music Video"
+                      ? "Publicar Music Video"
+                      : "Publicar Vídeo"}
+                </span>
+              </button>
+            </form>
+          )}
+
+          {/* FORMULÁRIO DE ÁLBUM */}
+          {activeTab === "album" && (
+            <div className="space-y-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setAlbumObjetivo("a");
+                  setAlbumRetroativo((v) => !v);
+                }}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-colors ${
+                  albumRetroativo
+                    ? "bg-emerald-500/20 border-emerald-500 text-white"
+                    : "bg-emerald-500/10 border-emerald-500/30 text-white hover:bg-emerald-500/20"
+                }`}
+              >
+                <span className="text-xs font-bold text-left">
+                  Tem um álbum <span className="text-emerald-400">retroativo</span> pra cadastrar?
+                  Ele vira tópico no fórum e entra nos charts na semana certa.
+                </span>
+                <span className="text-[11px] font-black uppercase text-emerald-400 shrink-0 ml-3">
+                  {albumRetroativo ? "Ativado ✓" : "Ativar →"}
+                </span>
+              </button>
+
+              {albumRetroativo && (
+                <div className="p-4 rounded-2xl bg-neutral-900/90 border border-emerald-500/30 space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    Data real de lançamento
+                  </label>
+                  <input
+                    type="date"
+                    value={dataLancamentoRetroativo}
+                    onChange={(e) => setDataLancamentoRetroativo(e.target.value)}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="w-full p-3 rounded-xl bg-neutral-950/60 border border-white/10 text-white text-sm"
+                  />
+                  <p className="text-[11px] text-neutral-400">
+                    O álbum entra nos charts já na semana correspondente a essa data (em vez de
+                    estrear na semana 1), e todas as faixas entram como pendentes — você relança
+                    cada uma quando quiser.
+                  </p>
+                </div>
+              )}
+
+              {/* OBJETIVO */}
+              <div className="bg-neutral-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-2 backdrop-blur-md">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                  O que você quer fazer?
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div
+                    onClick={() => setAlbumObjetivo("a")}
+                    className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                      albumObjetivo === "a"
+                        ? "bg-emerald-500/10 border-emerald-500 text-white"
+                        : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
+                    }`}
+                  >
+                    <span className="font-bold text-xs text-white mb-1">Registrar</span>
+                    <span className="text-[11px] text-neutral-400">
+                      Cadastra um álbum novo com suas faixas.
+                    </span>
+                  </div>
+                  <div
+                    onClick={() => setAlbumObjetivo("b")}
+                    className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                      albumObjetivo === "b"
+                        ? "bg-emerald-500/10 border-emerald-500 text-white"
+                        : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:border-white/20"
+                    }`}
+                  >
+                    <span className="font-bold text-xs text-white mb-1">Substituir nos Charts</span>
+                    <span className="text-[11px] text-neutral-400">
+                      Troca capa, encarte e/ou adiciona faixas a um álbum já lançado.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {albumObjetivo === "a" && (
+                <form
+                  onSubmit={handleSubmitAlbum}
+                  className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
+                >
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                      <User className="size-4 text-emerald-400" />
+                      Artista do Álbum
+                    </label>
+                    {profile?.associatedArtists && profile.associatedArtists.length > 0 ? (
+                      <select
+                        value={artistaResponsavel}
+                        onChange={(e) => setArtistaResponsavel(e.target.value)}
+                        className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
+                      >
+                        {profile.associatedArtists.map((art) => (
+                          <option key={art} value={art}>
+                            {art}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={artistaResponsavel}
+                        onChange={(e) => setArtistaResponsavel(e.target.value)}
+                        placeholder="Ex: Taylor Swift"
+                        className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                      <Disc className="size-4 text-emerald-400" />
+                      Título do Álbum
+                    </label>
+                    <input
+                      type="text"
+                      value={tituloAlbum}
+                      onChange={(e) => setTituloAlbum(e.target.value)}
+                      placeholder="Ex: Midnights"
+                      className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                    />
+                    <p className="text-[11px] text-neutral-400 leading-relaxed">
+                      Só o título — o artista já vem do campo acima e é adicionado automaticamente.
+                      <br />
+                      <span className="text-emerald-400 font-bold">Certo:</span> "Midnights"
+                      <span className="text-neutral-600"> → vira "Taylor Swift - Midnights"</span>
+                    </p>
+                  </div>
+
+                  {/* TIPO DO ÁLBUM */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                      Tipo
+                    </label>
+                    <select
+                      value={tipoAlbum}
+                      onChange={(e) => setTipoAlbum(e.target.value)}
+                      className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
+                    >
+                      {TIPOS_ALBUM.map((tipo) => (
+                        <option key={tipo} value={tipo}>
+                          {tipo}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* QUANTIDADE DE FAIXAS — os spinners nativos do input number são
+              minúsculos e difíceis de tocar no celular; um stepper com
+              botões grandes de +/- resolve isso, mantendo o campo digitável
+              pra quem preferir digitar direto. */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
                       <ListMusic className="size-4 text-emerald-400" />
-                      Adicionar Faixas Novas (Opcional) ({substNovasFaixasCount})
+                      Quantidade de Faixas ({totalFaixasCount})
                     </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={30}
-                      value={substNovasFaixasCount}
-                      onChange={(e) =>
-                        setSubstNovasFaixasCount(Math.max(0, parseInt(e.target.value, 10) || 0))
-                      }
-                      className="w-32 bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
-                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTotalFaixasCount((n) => Math.max(1, n - 1))}
+                        disabled={totalFaixasCount <= 1}
+                        className="size-11 shrink-0 rounded-xl bg-neutral-950 border border-white/10 text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                        aria-label="Diminuir quantidade de faixas"
+                      >
+                        <Minus className="size-4" />
+                      </button>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={30}
+                        value={totalFaixasCount}
+                        onChange={(e) =>
+                          setTotalFaixasCount(Math.max(1, parseInt(e.target.value, 10) || 1))
+                        }
+                        className="w-16 text-center bg-neutral-950 border border-white/10 rounded-xl px-2 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setTotalFaixasCount((n) => Math.min(30, n + 1))}
+                        disabled={totalFaixasCount >= 30}
+                        className="size-11 shrink-0 rounded-xl bg-neutral-950 border border-white/10 text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                        aria-label="Aumentar quantidade de faixas"
+                      >
+                        <Plus className="size-4" />
+                      </button>
+                    </div>
                   </div>
 
-                  {substNovasFaixasCount > 0 && (
-                    <div className="space-y-3 bg-neutral-950/60 p-4 rounded-2xl border border-white/5 max-h-[32rem] overflow-y-auto">
-                      {substNovasFaixas.map((faixa, idx) => (
-                        <FaixaEditor
-                          key={idx}
-                          faixa={faixa}
-                          myChartSongs={myChartSongs}
-                          onChange={(patch) => {
-                            const updated = [...substNovasFaixas];
-                            updated[idx] = { ...updated[idx], ...patch };
-                            setSubstNovasFaixas(updated);
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  {/* TRACKLIST CONFIG */}
+                  <div className="space-y-3 bg-neutral-950/60 p-4 rounded-2xl border border-white/5 max-h-[32rem] overflow-y-auto">
+                    <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                      Lista de Faixas do Álbum
+                    </label>
+                    {faixasConfig.map((faixa, idx) => (
+                      <FaixaEditor
+                        key={idx}
+                        faixa={faixa}
+                        myChartSongs={myChartSongs}
+                        onChange={(patch) => {
+                          const updated = [...faixasConfig];
+                          updated[idx] = { ...updated[idx], ...patch };
+                          setFaixasConfig(updated);
+                        }}
+                      />
+                    ))}
+                  </div>
 
-                  {/* NOVA CAPA E ENCARTES */}
+                  {/* UPLOAD DA CAPA E ENCARTES */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                        Nova Capa (Opcional)
+                        Capa do Álbum
                       </label>
                       <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
                         {capaPreview ? (
@@ -2675,7 +2541,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                           <input
                             type="file"
                             accept="image/*"
-                            onChange={(e) => e.target.files?.[0] && handleCapaSelect(e.target.files[0])}
+                            onChange={(e) =>
+                              e.target.files?.[0] && handleCapaSelect(e.target.files[0])
+                            }
                             className="hidden"
                           />
                         </label>
@@ -2684,31 +2552,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
-                        Encarte
-                      </label>
-                      {encarteAtual.length > 0 && (
-                        <div className="grid grid-cols-4 gap-2 mb-2">
-                          {encarteAtual.map((url, i) => (
-                            <div key={`${url}-${i}`} className="relative aspect-square rounded-lg overflow-hidden border border-white/10 bg-neutral-900">
-                              <img
-                                src={driveImg(url, 200)}
-                                alt={`Encarte ${i + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setEncarteAtual((prev) => prev.filter((_, idx) => idx !== i))}
-                                className="absolute top-1 right-1 size-6 rounded-full bg-black/70 text-red-400 grid place-items-center hover:bg-black/90"
-                                title="Remover essa imagem do encarte"
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <label className="text-[11px] text-neutral-500 block">
-                        Adicionar imagens novas:
+                        Encartes / Imagens Adicionais
                       </label>
                       <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
                         <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
@@ -2721,7 +2565,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                             type="file"
                             accept="image/*"
                             multiple
-                            onChange={(e) => e.target.files && setEncartesFiles(Array.from(e.target.files))}
+                            onChange={(e) =>
+                              e.target.files && setEncartesFiles(Array.from(e.target.files))
+                            }
                             className="hidden"
                           />
                         </label>
@@ -2734,20 +2580,252 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                     </div>
                   </div>
 
+                  <div>
+                    <label className="text-xs font-black uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
+                      <Sparkles className="size-4 text-emerald-400" />
+                      Botões do Tópico (Opcional)
+                    </label>
+                    <ExtraMaterialEditor
+                      value={extraAlbum}
+                      onChange={setExtraAlbum}
+                      folderType="materiaisAlbum"
+                    />
+                  </div>
+
                   <button
                     type="submit"
                     disabled={isSubmitting}
                     className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Sparkles className="size-5" />
-                    <span>{isSubmitting ? uploadProgress || "Enviando..." : "Salvar Alterações"}</span>
+                    <span>
+                      {isSubmitting
+                        ? uploadProgress || "Enviando..."
+                        : albumRetroativo
+                          ? "Publicar Álbum Retroativo"
+                          : "Publicar Lançamento"}
+                    </span>
                   </button>
-                </>
+                </form>
               )}
-            </form>
+
+              {albumObjetivo === "b" && (
+                <form
+                  onSubmit={handleSubstituirAlbum}
+                  className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
+                >
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                      <Disc className="size-4 text-emerald-400" />
+                      Qual álbum você quer substituir?
+                    </label>
+                    {albumSubstSelecionado ? (
+                      <div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+                        <span className="text-sm text-white font-bold truncate">
+                          {albumSubstSelecionado.label}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAlbumSubstSelecionado(null);
+                            setAlbumSubstQuery("");
+                            setEncarteAtual([]);
+                          }}
+                          className="text-xs font-bold text-emerald-400 hover:text-emerald-300 shrink-0"
+                        >
+                          Trocar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={albumSubstQuery}
+                          onChange={(e) => setAlbumSubstQuery(e.target.value)}
+                          placeholder="Busque pelo título do álbum já lançado..."
+                          className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white placeholder-neutral-500 focus:border-emerald-500 focus:outline-none"
+                        />
+                        {albumSubstQuery.trim().length > 0 && (
+                          <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
+                            {myAlbuns
+                              .filter((a) =>
+                                a.label
+                                  .toLowerCase()
+                                  .includes(albumSubstQuery.trim().toLowerCase()),
+                              )
+                              .slice(0, 20)
+                              .map((a) => (
+                                <button
+                                  key={a.topicId}
+                                  type="button"
+                                  onClick={() => {
+                                    setAlbumSubstSelecionado(a);
+                                    setAlbumSubstQuery("");
+                                    setEncarteAtual(a.encarte || []);
+                                  }}
+                                  className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
+                                >
+                                  {a.label}
+                                </button>
+                              ))}
+                            {myAlbuns.filter((a) =>
+                              a.label.toLowerCase().includes(albumSubstQuery.trim().toLowerCase()),
+                            ).length === 0 && (
+                              <p className="px-4 py-3 text-xs text-neutral-500 italic">
+                                Nenhum álbum encontrado.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {albumSubstSelecionado && (
+                    <>
+                      {/* NOVAS FAIXAS */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                          <ListMusic className="size-4 text-emerald-400" />
+                          Adicionar Faixas Novas (Opcional) ({substNovasFaixasCount})
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={30}
+                          value={substNovasFaixasCount}
+                          onChange={(e) =>
+                            setSubstNovasFaixasCount(Math.max(0, parseInt(e.target.value, 10) || 0))
+                          }
+                          className="w-32 bg-neutral-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+
+                      {substNovasFaixasCount > 0 && (
+                        <div className="space-y-3 bg-neutral-950/60 p-4 rounded-2xl border border-white/5 max-h-[32rem] overflow-y-auto">
+                          {substNovasFaixas.map((faixa, idx) => (
+                            <FaixaEditor
+                              key={idx}
+                              faixa={faixa}
+                              myChartSongs={myChartSongs}
+                              onChange={(patch) => {
+                                const updated = [...substNovasFaixas];
+                                updated[idx] = { ...updated[idx], ...patch };
+                                setSubstNovasFaixas(updated);
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* NOVA CAPA E ENCARTES */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                            Nova Capa (Opcional)
+                          </label>
+                          <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
+                            {capaPreview ? (
+                              <img
+                                src={capaPreview}
+                                alt="Capa Preview"
+                                className="size-16 object-cover rounded-xl border border-white/10"
+                              />
+                            ) : (
+                              <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
+                                <ImageIcon className="size-6" />
+                              </div>
+                            )}
+                            <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
+                              <Upload className="size-4 text-emerald-400" />
+                              <span>Selecione a Capa</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) =>
+                                  e.target.files?.[0] && handleCapaSelect(e.target.files[0])
+                                }
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                            Encarte
+                          </label>
+                          {encarteAtual.length > 0 && (
+                            <div className="grid grid-cols-4 gap-2 mb-2">
+                              {encarteAtual.map((url, i) => (
+                                <div
+                                  key={`${url}-${i}`}
+                                  className="relative aspect-square rounded-lg overflow-hidden border border-white/10 bg-neutral-900"
+                                >
+                                  <img
+                                    src={driveImg(url, 200)}
+                                    alt={`Encarte ${i + 1}`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEncarteAtual((prev) => prev.filter((_, idx) => idx !== i))
+                                    }
+                                    className="absolute top-1 right-1 size-6 rounded-full bg-black/70 text-red-400 grid place-items-center hover:bg-black/90"
+                                    title="Remover essa imagem do encarte"
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <label className="text-[11px] text-neutral-500 block">
+                            Adicionar imagens novas:
+                          </label>
+                          <div className="flex items-center gap-4 bg-neutral-950 p-4 rounded-2xl border border-white/10">
+                            <div className="size-16 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center text-neutral-500">
+                              <ImageIcon className="size-6" />
+                            </div>
+                            <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition inline-flex items-center gap-2">
+                              <Upload className="size-4 text-emerald-400" />
+                              <span>Selecione os Encartes (Fotos)</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) =>
+                                  e.target.files && setEncartesFiles(Array.from(e.target.files))
+                                }
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                          {encartesFiles.length > 0 && (
+                            <p className="text-[11px] text-emerald-400">
+                              {encartesFiles.length} encarte(s) selecionado(s)
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <Sparkles className="size-5" />
+                        <span>
+                          {isSubmitting ? uploadProgress || "Enviando..." : "Salvar Alterações"}
+                        </span>
+                      </button>
+                    </>
+                  )}
+                </form>
+              )}
+            </div>
           )}
-        </div>
-      )}
         </>
       )}
 
@@ -2774,7 +2852,11 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         <PerformanceAwardModal
           telegramId={loginTgId}
           onClose={() => setPerformanceAwardOpen(false)}
-          onSubmitted={() => api.listarPendenciasPerformance(loginTgId).then((data) => setTemPerformancePendente(data.length > 0))}
+          onSubmitted={() =>
+            api
+              .listarPendenciasPerformance(loginTgId)
+              .then((data) => setTemPerformancePendente(data.length > 0))
+          }
         />
       )}
 
@@ -2793,11 +2875,16 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 
             <div className="space-y-2.5">
               {confirmacao.itens.map((item, i) => (
-                <div key={i} className="flex flex-col gap-0.5 pb-2 border-b border-white/5 last:border-b-0">
+                <div
+                  key={i}
+                  className="flex flex-col gap-0.5 pb-2 border-b border-white/5 last:border-b-0"
+                >
                   <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
                     {item.label}
                   </span>
-                  <span className="text-sm text-white font-bold break-words">{item.valor || "—"}</span>
+                  <span className="text-sm text-white font-bold break-words">
+                    {item.valor || "—"}
+                  </span>
                 </div>
               ))}
             </div>
