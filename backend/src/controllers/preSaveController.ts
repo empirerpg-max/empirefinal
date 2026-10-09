@@ -27,7 +27,7 @@
 // tiver cabeçalho ainda, writeHeaderIfNeeded() escreve um na primeira
 // escrita.
 //
-// Colunas de "PreSave_Album" (A..T):
+// Colunas de "PreSave_Album" (A..U):
 //  A ID               — "PRESAVE-xxxxxxxx"
 //  B JogadorId        — telegram id de quem criou a campanha
 //  C JogadorNome
@@ -41,22 +41,34 @@
 //  K DuracaoDias      — default 14 (PRESAVE_DURACAO_DIAS_DEFAULT)
 //  L TetoFinal        — número, NUNCA exposto nas respostas públicas
 //  M Status           — "ativa" | "lancada" | "cancelada"
-//  N FaixasJson       — [{ordem, tituloReal, mostrarNomeReal, jaLancada, revelada}]
+//  N FaixasJson       — [{num, inedita, titulo, tipoSingle, tipoMusica,
+//                         participantes, mediaUrl, letra, abrirTopico,
+//                         mostrarNomeReal, revelada}] — MESMO formato de
+//                        TrackConfig/TrackItemPayload (Gestao.tsx/
+//                        gestaoController.ts): é o mesmo cadastro de álbum
+//                        de verdade, só com 2 campos extras de pre-save
+//                        (mostrarNomeReal/revelada) por cima.
 //  O MissoesJson      — [{dia(1..duracao), tipo, peso, status: "pendente"|"completa"|"perdida", completadoEm, dados}]
 //  P AlbumTopicId     — id do tópico criado imediatamente (comentários travados até o lançamento)
 //  Q CodigoUnicoAlbum — preenchido só no dia do lançamento
 //  R EncartesUrls     — join(", ")
 //  S NomeJogadorExibicao (redundante com C, mantido por clareza em leituras manuais)
 //  T CriadoEmISO
+//  U ExtraMaterialJson — { shopAtivo, shop, infoAtivo, info, visualAtivo, arte }
+//                        (mesmo formato de ExtraMaterialEditorValue,
+//                        ExtraMaterial.tsx) — coletado na criação da
+//                        campanha, só é de fato salvo em Extra_Albuns no
+//                        dia do lançamento (quando o Código único existe).
 import {
   googleSheetsService,
   normalizeComparison,
   normalizeText,
 } from "../services/googleSheetsService";
 import { registrarLogSistema } from "../services/logSistemaService";
-import { publicarAlbum } from "./gestaoController";
+import { publicarAlbum, type TrackItemPayload } from "./gestaoController";
 import { createAcervoEntrevistaController } from "./acervoController";
 import { createSocialPostController } from "./socialController";
+import { saveExtraMaterialController } from "./extraMaterialController";
 
 const PRESAVE_SHEET = "PreSave_Album";
 export const PRESAVE_DURACAO_DIAS_DEFAULT = 14;
@@ -141,11 +153,25 @@ export const MISSOES_CATALOGO: Record<
   },
 };
 
+// Mesmo formato de TrackConfig/TrackItemPayload (Gestao.tsx/
+// gestaoController.ts) — é o mesmo cadastro de álbum de verdade (faixa
+// existente buscada nos charts OU inédita, com tipoSingle/tipoMusica/
+// participantes/mediaUrl/letra/abrirTopico), só com 2 campos extras de
+// pre-save por cima: mostrarNomeReal (só relevante quando inedita=true —
+// se false, o nome fica oculto como "Track N" até a missão
+// tracklist_reveal ou o lançamento) e revelada (calculado: toda faixa já
+// existente, ou inédita marcada pra mostrar nome real, já nasce revelada).
 export interface PreSaveFaixa {
-  ordem: number;
-  tituloReal: string;
+  num: number;
+  inedita: boolean;
+  titulo: string;
+  tipoSingle?: string;
+  tipoMusica?: string;
+  participantes?: string[];
+  mediaUrl?: string;
+  letra?: string;
+  abrirTopico?: boolean;
   mostrarNomeReal: boolean;
-  jaLancada: boolean;
   revelada: boolean;
 }
 
@@ -177,6 +203,9 @@ export interface PreSaveCampanha {
   codigoUnicoAlbum: string;
   encartesUrls: string[];
   criadoEmISO: string;
+  // JSON bruto de ExtraMaterialEditorValue (ExtraMaterial.tsx) — "" quando
+  // o jogador não ativou shop/info/visual na criação da campanha.
+  extraMaterialJson: string;
   _rowIndex: number; // 1-based linha real na planilha (uso interno)
 }
 
@@ -216,6 +245,7 @@ function rowToCampanha(row: string[], rowIndex: number): PreSaveCampanha | null 
       .map((s) => s.trim())
       .filter(Boolean),
     criadoEmISO: normalizeText(row[19]),
+    extraMaterialJson: normalizeText(row[20]),
     _rowIndex: rowIndex,
   };
 }
@@ -242,6 +272,7 @@ function campanhaToRow(c: PreSaveCampanha): string[] {
     c.encartesUrls.join(", "),
     c.jogadorNome,
     c.criadoEmISO,
+    c.extraMaterialJson || "",
   ];
 }
 
@@ -266,20 +297,21 @@ const HEADER = [
   "EncartesUrls",
   "JogadorNomeExibicao",
   "CriadoEmISO",
+  "ExtraMaterialJson",
 ];
 
 async function ensureHeader(): Promise<void> {
   const existing = await googleSheetsService.principal
-    .readValues(PRESAVE_SHEET, "A1:T1")
+    .readValues(PRESAVE_SHEET, "A1:U1")
     .catch(() => []);
   if (!existing || existing.length === 0 || !normalizeText(existing[0]?.[0])) {
-    await googleSheetsService.principal.updateValues(PRESAVE_SHEET, "A1:T1", [HEADER]);
+    await googleSheetsService.principal.updateValues(PRESAVE_SHEET, "A1:U1", [HEADER]);
   }
 }
 
 async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
   const rows = await googleSheetsService.principal
-    .readValues(PRESAVE_SHEET, "A2:T20000")
+    .readValues(PRESAVE_SHEET, "A2:U20000")
     .catch(() => []);
   const out: PreSaveCampanha[] = [];
   for (let i = 0; i < (rows || []).length; i++) {
@@ -292,7 +324,7 @@ async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
 async function writeCampanha(c: PreSaveCampanha): Promise<void> {
   await googleSheetsService.principal.updateValues(
     PRESAVE_SHEET,
-    `A${c._rowIndex}:T${c._rowIndex}`,
+    `A${c._rowIndex}:U${c._rowIndex}`,
     [campanhaToRow(c)],
   );
 }
@@ -307,7 +339,7 @@ async function appendCampanha(c: PreSaveCampanha): Promise<number> {
   }
   const linhaAlvo = ultimaLinha + 1;
   c._rowIndex = linhaAlvo;
-  await googleSheetsService.principal.updateValues(PRESAVE_SHEET, `A${linhaAlvo}:T${linhaAlvo}`, [
+  await googleSheetsService.principal.updateValues(PRESAVE_SHEET, `A${linhaAlvo}:U${linhaAlvo}`, [
     campanhaToRow(c),
   ]);
   return linhaAlvo;
@@ -418,10 +450,36 @@ function campanhaDoDono(c: PreSaveCampanha) {
     missoes: c.missoes,
     encartesUrls: c.encartesUrls,
     criadoEmISO: c.criadoEmISO,
+    extraMaterial: c.extraMaterialJson ? parseJsonSafe(c.extraMaterialJson) : null,
   };
 }
 
+function parseJsonSafe<T>(raw: string): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 // -------------------- CRIAR CAMPANHA --------------------
+
+// Faixa recebida na criação — EXATAMENTE o mesmo formato de TrackConfig
+// (Gestao.tsx)/TrackItemPayload (gestaoController.ts), já que é o mesmo
+// cadastro de álbum de verdade; só ganha 1 campo extra de pre-save
+// (mostrarNomeReal, só relevante se inedita=true).
+export interface CriarPreSaveFaixaPayload {
+  num: number;
+  inedita: boolean;
+  titulo: string;
+  tipoSingle?: string;
+  tipoMusica?: string;
+  participantes?: string[];
+  mediaUrl?: string;
+  letra?: string;
+  abrirTopico?: boolean;
+  mostrarNomeReal?: boolean;
+}
 
 export interface CriarPreSavePayload {
   jogadorId: string;
@@ -434,9 +492,11 @@ export interface CriarPreSavePayload {
   dataLancamento: string; // YYYY-MM-DD, obrigatoriamente futura
   duracaoDias?: number;
   encartesUrls?: string[];
-  faixas: { titulo: string; mostrarNomeReal: boolean; jaLancada: boolean }[];
+  faixas: CriarPreSaveFaixaPayload[];
   // modo "missao": mapa dia(1..duracao) -> tipo de missão (ou omitido/null = sem missão nesse dia)
   missoesPorDia?: Record<number, MissaoTipo | null>;
+  // Mesmo formato de ExtraMaterialEditorValue (ExtraMaterial.tsx) — opcional.
+  extraMaterial?: unknown;
 }
 
 export async function criarCampanhaPreSaveController(request: Request): Promise<Response> {
@@ -480,6 +540,30 @@ export async function criarCampanhaPreSaveController(request: Request): Promise<
     if (!Array.isArray(body.faixas) || body.faixas.length === 0) {
       return jsonResponse({ success: false, error: "Informe ao menos 1 faixa." }, 400);
     }
+    // Mesma validação de handleSubmitAlbum (Gestao.tsx): faixa inédita
+    // precisa de título e de um link/arquivo de áudio (upload já deve ter
+    // acontecido no front antes de chegar aqui); faixa existente precisa
+    // só do título (selecionado na busca dos charts).
+    for (const f of body.faixas) {
+      if (!normalizeText(f.titulo)) {
+        return jsonResponse(
+          {
+            success: false,
+            error: `Informe o título/selecione a música de cada faixa (faixa #${f.num || "?"}).`,
+          },
+          400,
+        );
+      }
+      if (f.inedita !== false && !normalizeText(f.mediaUrl)) {
+        return jsonResponse(
+          {
+            success: false,
+            error: `Informe o link do áudio (ou envie um arquivo) da faixa "${f.titulo}".`,
+          },
+          400,
+        );
+      }
+    }
 
     await ensureHeader();
 
@@ -492,13 +576,27 @@ export async function criarCampanhaPreSaveController(request: Request): Promise<
       : tituloAlbum;
     const albumTituloFull = `${artista} - ${tituloLimpo}`;
 
-    const faixas: PreSaveFaixa[] = body.faixas.map((f, i) => ({
-      ordem: i + 1,
-      tituloReal: normalizeText(f.titulo) || `Track ${i + 1}`,
-      mostrarNomeReal: !!f.mostrarNomeReal,
-      jaLancada: !!f.jaLancada,
-      revelada: !!f.mostrarNomeReal || !!f.jaLancada,
-    }));
+    const faixas: PreSaveFaixa[] = body.faixas.map((f, i) => {
+      const inedita = f.inedita !== false; // default true (faixa inédita), igual Gestao.tsx
+      const mostrarNomeReal = !inedita || !!f.mostrarNomeReal;
+      return {
+        num: f.num || i + 1,
+        inedita,
+        titulo: normalizeText(f.titulo) || `Track ${i + 1}`,
+        tipoSingle: f.tipoSingle,
+        tipoMusica: f.tipoMusica,
+        participantes: (f.participantes || []).filter((p) => p && p.trim()),
+        mediaUrl: f.mediaUrl,
+        letra: f.letra,
+        abrirTopico: !!f.abrirTopico,
+        mostrarNomeReal,
+        // Faixa já existente (não-inédita) não tem nome a esconder — nasce
+        // revelada. Inédita só nasce revelada se o jogador explicitamente
+        // marcou "mostrar nome real"; senão fica como "Track N" até a
+        // missão tracklist_reveal ou o lançamento no dia D.
+        revelada: mostrarNomeReal,
+      };
+    });
 
     const missoes: PreSaveMissaoDia[] = [];
     for (let dia = 1; dia <= duracaoDias; dia++) {
@@ -535,6 +633,7 @@ export async function criarCampanhaPreSaveController(request: Request): Promise<
       codigoUnicoAlbum: "",
       encartesUrls: (body.encartesUrls || []).filter(Boolean),
       criadoEmISO: new Date().toISOString(),
+      extraMaterialJson: body.extraMaterial ? JSON.stringify(body.extraMaterial) : "",
       _rowIndex: -1,
     };
 
@@ -835,15 +934,15 @@ async function validarEExecutarMissao(
     }
 
     case "tracklist_reveal": {
-      const ordem = payload.faixaOrdemRevelada;
-      const faixa = c.faixas.find((f) => f.ordem === ordem);
+      const num = payload.faixaOrdemRevelada;
+      const faixa = c.faixas.find((f) => f.num === num);
       if (!faixa) return { ok: false, error: "Escolha uma faixa oculta válida para revelar." };
       if (faixa.revelada) return { ok: false, error: "Essa faixa já foi revelada." };
       const resultado = await postarSocial();
       if (!resultado.ok) return resultado;
       faixa.revelada = true;
       faixa.mostrarNomeReal = true;
-      return { ok: true, dados: { faixaOrdem: faixa.ordem, tituloReal: faixa.tituloReal } };
+      return { ok: true, dados: { faixaNum: faixa.num, titulo: faixa.titulo } };
     }
 
     case "entrevista": {
@@ -1010,11 +1109,25 @@ export async function processarLancamentosPreSaveScheduled(): Promise<{
         aplicarDiasPerdidos(c);
         const acumuladoFinal = calcularAcumulado(c);
 
-        const faixasPayload = c.faixas
-          .filter((f) => !f.jaLancada)
+        // Só faixas INÉDITAS entram no payload de lançamento — faixa já
+        // existente (inedita=false) já está nos charts/catálogo de antes e
+        // continua como está (mesma regra do lançamento normal de álbum,
+        // ver publicarAlbum/processarFaixasDoAlbum). O título real já é o
+        // que foi coletado na criação da campanha (nunca "Track N" — esse
+        // nome oculto é só de exibição pré-lançamento, ver campanhaDoDono/
+        // front; o backend sempre guarda o título real).
+        const faixasPayload: TrackItemPayload[] = c.faixas
+          .filter((f) => f.inedita)
           .map((f) => ({
-            titulo: f.tituloReal,
-            abrirTopico: true,
+            num: f.num,
+            inedita: true,
+            titulo: f.titulo,
+            tipoSingle: f.tipoSingle,
+            tipoMusica: f.tipoMusica,
+            participantes: f.participantes,
+            mediaUrl: f.mediaUrl,
+            letra: f.letra,
+            abrirTopico: f.abrirTopico,
           }));
 
         const resultado = await publicarAlbum({
@@ -1027,8 +1140,42 @@ export async function processarLancamentosPreSaveScheduled(): Promise<{
           encartesUrls: c.encartesUrls,
           nomeJogador: c.jogadorNome,
           jogadorId: c.jogadorId,
-          faixas: faixasPayload as any,
+          faixas: faixasPayload,
         });
+
+        // Material extra (Shop/Info/Visual) coletado na criação da
+        // campanha só pode ser salvo agora, com o Código único real em
+        // mãos (mesmo fluxo de handleSubmitAlbum em Gestao.tsx).
+        if (c.extraMaterialJson && resultado.codigoUnico) {
+          try {
+            const extra = parseJsonSafe<{
+              shopAtivo?: boolean;
+              shop?: unknown[];
+              infoAtivo?: boolean;
+              info?: string;
+              visualAtivo?: boolean;
+              arte?: unknown[];
+            }>(c.extraMaterialJson);
+            if (extra && (extra.shopAtivo || extra.infoAtivo || extra.visualAtivo)) {
+              const fakeRequest = new Request("https://internal.empire/api/gestao/extra", {
+                method: "POST",
+                body: JSON.stringify({
+                  codigoUnico: resultado.codigoUnico,
+                  tipo: "album",
+                  shop: extra.shopAtivo ? extra.shop || [] : [],
+                  info: extra.infoAtivo ? extra.info || "" : "",
+                  arte: extra.visualAtivo ? extra.arte || [] : [],
+                }),
+              });
+              await saveExtraMaterialController(fakeRequest);
+            }
+          } catch (err) {
+            console.warn(
+              "[processarLancamentosPreSaveScheduled] Falha ao salvar material extra:",
+              err,
+            );
+          }
+        }
 
         // Modo "missao": grava o valor final acumulado na coluna S
         // ("PRE-SAVE") da linha recém-criada em "EDIÇÃO CHARTS ÁLBUMS" —
