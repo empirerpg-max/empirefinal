@@ -28,7 +28,7 @@ jobs:
         run: |
           curl -sS --max-time 280 \
             "https://tanstack-start-app.empirerpg-forum.workers.dev${{ github.event.inputs.path }}" \
-            | tee resposta.json | jq . || cat resposta.json
+            | tee resposta.json | jq -c . || cat resposta.json
 
       - name: Guardar resposta
         uses: actions/upload-artifact@v4
