@@ -24,7 +24,7 @@ import {
   Mic2,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { driveImg, api } from "@/lib/api";
+import { driveImg, api, normalizeNome } from "@/lib/api";
 import { MeusSpotlightBanners } from "./MeusSpotlightBanners";
 import { EditModal } from "./EditModal";
 import { LancarFaixaAlbumModal } from "./LancarFaixaAlbumModal";
@@ -440,9 +440,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   // Músicas em chart (aba Pontos) só dos artistas que o jogador controla —
   // usado na busca de faixa existente pra compor um álbum.
   const myChartSongs = useMemo(() => {
-    const meus = new Set((profile?.associatedArtists || []).map((a) => a.toLowerCase()));
+    const meus = new Set((profile?.associatedArtists || []).map((a) => normalizeNome(a)));
     if (meus.size === 0) return [];
-    return musicasEmChart.filter((m) => m.artist && meus.has(m.artist.toLowerCase()));
+    return musicasEmChart.filter((m) => m.artist && meus.has(normalizeNome(m.artist)));
   }, [musicasEmChart, profile]);
 
   // Álbuns já lançados só dos artistas que o jogador controla — usado na

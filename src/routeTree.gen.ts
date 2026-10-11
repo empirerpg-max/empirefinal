@@ -56,6 +56,7 @@ import { Route as EmpirePlayGestaoAlbumAntigoRouteImport } from './routes/empire
 import { Route as EmpirePlayPlaylistsIndexRouteImport } from './routes/empire-play.playlists.index'
 import { Route as EmpirePlayPlaylistsIdRouteImport } from './routes/empire-play.playlists.$id'
 import { Route as EmpirePlayPlaylistsNovaRouteImport } from './routes/empire-play.playlists.nova'
+import { Route as EmpirePlayPresaveIdRouteImport } from './routes/empire-play.presave.$id'
 import { Route as PontoDistribuirIndexRouteImport } from './routes/ponto.distribuir.index'
 import { Route as PontoDistribuirPlanilhaRouteImport } from './routes/ponto.distribuir.planilha'
 import { Route as PontoPlaylistsIndexRouteImport } from './routes/ponto.playlists.index'
@@ -301,6 +302,11 @@ const EmpirePlayPlaylistsNovaRoute = EmpirePlayPlaylistsNovaRouteImport.update({
   path: '/playlists/nova',
   getParentRoute: () => EmpirePlayRoute,
 } as any)
+const EmpirePlayPresaveIdRoute = EmpirePlayPresaveIdRouteImport.update({
+  id: '/presave/$id',
+  path: '/presave/$id',
+  getParentRoute: () => EmpirePlayRoute,
+} as any)
 const PontoDistribuirIndexRoute = PontoDistribuirIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -372,6 +378,7 @@ export interface FileRoutesByFullPath {
   '/empire-play/gestao/album-antigo': typeof EmpirePlayGestaoAlbumAntigoRoute
   '/empire-play/playlists/$id': typeof EmpirePlayPlaylistsIdRouteWithChildren
   '/empire-play/playlists/nova': typeof EmpirePlayPlaylistsNovaRoute
+  '/empire-play/presave/$id': typeof EmpirePlayPresaveIdRoute
   '/ponto/distribuir/planilha': typeof PontoDistribuirPlanilhaRoute
   '/ponto/playlists/planilha': typeof PontoPlaylistsPlanilhaRoute
   '/artistas/$nome/': typeof ArtistasNomeIndexRoute
@@ -420,6 +427,7 @@ export interface FileRoutesByTo {
   '/empire-play/gestao/album-antigo': typeof EmpirePlayGestaoAlbumAntigoRoute
   '/empire-play/playlists/$id': typeof EmpirePlayPlaylistsIdRouteWithChildren
   '/empire-play/playlists/nova': typeof EmpirePlayPlaylistsNovaRoute
+  '/empire-play/presave/$id': typeof EmpirePlayPresaveIdRoute
   '/ponto/distribuir/planilha': typeof PontoDistribuirPlanilhaRoute
   '/ponto/playlists/planilha': typeof PontoPlaylistsPlanilhaRoute
   '/artistas/$nome': typeof ArtistasNomeIndexRoute
@@ -475,6 +483,7 @@ export interface FileRoutesById {
   '/empire-play/gestao/album-antigo': typeof EmpirePlayGestaoAlbumAntigoRoute
   '/empire-play/playlists/$id': typeof EmpirePlayPlaylistsIdRouteWithChildren
   '/empire-play/playlists/nova': typeof EmpirePlayPlaylistsNovaRoute
+  '/empire-play/presave/$id': typeof EmpirePlayPresaveIdRoute
   '/ponto/distribuir/planilha': typeof PontoDistribuirPlanilhaRoute
   '/ponto/playlists/planilha': typeof PontoPlaylistsPlanilhaRoute
   '/artistas/$nome/': typeof ArtistasNomeIndexRoute
@@ -531,6 +540,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao/album-antigo'
     | '/empire-play/playlists/$id'
     | '/empire-play/playlists/nova'
+    | '/empire-play/presave/$id'
     | '/ponto/distribuir/planilha'
     | '/ponto/playlists/planilha'
     | '/artistas/$nome/'
@@ -579,6 +589,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao/album-antigo'
     | '/empire-play/playlists/$id'
     | '/empire-play/playlists/nova'
+    | '/empire-play/presave/$id'
     | '/ponto/distribuir/planilha'
     | '/ponto/playlists/planilha'
     | '/artistas/$nome'
@@ -633,6 +644,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao/album-antigo'
     | '/empire-play/playlists/$id'
     | '/empire-play/playlists/nova'
+    | '/empire-play/presave/$id'
     | '/ponto/distribuir/planilha'
     | '/ponto/playlists/planilha'
     | '/artistas/$nome/'
@@ -1006,6 +1018,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EmpirePlayPlaylistsNovaRouteImport
       parentRoute: typeof EmpirePlayRoute
     }
+    '/empire-play/presave/$id': {
+      id: '/empire-play/presave/$id'
+      path: '/presave/$id'
+      fullPath: '/empire-play/presave/$id'
+      preLoaderRoute: typeof EmpirePlayPresaveIdRouteImport
+      parentRoute: typeof EmpirePlayRoute
+    }
     '/ponto/distribuir/': {
       id: '/ponto/distribuir/'
       path: '/'
@@ -1097,6 +1116,7 @@ interface EmpirePlayRouteChildren {
   EmpirePlayIndexRoute: typeof EmpirePlayIndexRoute
   EmpirePlayPlaylistsIdRoute: typeof EmpirePlayPlaylistsIdRouteWithChildren
   EmpirePlayPlaylistsNovaRoute: typeof EmpirePlayPlaylistsNovaRoute
+  EmpirePlayPresaveIdRoute: typeof EmpirePlayPresaveIdRoute
   EmpirePlayPlaylistsIndexRoute: typeof EmpirePlayPlaylistsIndexRoute
 }
 
@@ -1111,6 +1131,7 @@ const EmpirePlayRouteChildren: EmpirePlayRouteChildren = {
   EmpirePlayIndexRoute: EmpirePlayIndexRoute,
   EmpirePlayPlaylistsIdRoute: EmpirePlayPlaylistsIdRouteWithChildren,
   EmpirePlayPlaylistsNovaRoute: EmpirePlayPlaylistsNovaRoute,
+  EmpirePlayPresaveIdRoute: EmpirePlayPresaveIdRoute,
   EmpirePlayPlaylistsIndexRoute: EmpirePlayPlaylistsIndexRoute,
 }
 

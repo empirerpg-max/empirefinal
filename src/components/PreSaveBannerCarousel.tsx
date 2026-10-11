@@ -50,9 +50,7 @@ export function PreSaveBannerCarousel() {
   return (
     <div className="mb-8">
       <button
-        onClick={() =>
-          navigate({ to: "/empire-play/forum", search: { tab: "albuns", id: atual.albumTopicId } })
-        }
+        onClick={() => navigate({ to: "/empire-play/presave/$id", params: { id: atual.id } })}
         className="relative w-full rounded-2xl overflow-hidden text-left"
         style={{ height: 112, boxShadow: "0 8px 22px rgba(0,0,0,0.35)" }}
       >

@@ -15,7 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { api, driveImg } from "@/lib/api";
+import { api, driveImg, normalizeNome } from "@/lib/api";
 import { getStoredLogin } from "@/components/LoginScreen";
 import {
   FaixaEditor,
@@ -491,9 +491,9 @@ function NovaCampanhaForm({
   // myChartSongs em Gestao.tsx, usada pelo FaixaEditor na busca de faixa
   // "Música Existente".
   const myChartSongs = useMemo(() => {
-    const meus = new Set((profile?.associatedArtists || []).map((a) => a.toLowerCase()));
+    const meus = new Set((profile?.associatedArtists || []).map((a) => normalizeNome(a)));
     if (meus.size === 0) return [];
-    return musicasEmChart.filter((m) => m.artist && meus.has(m.artist.toLowerCase()));
+    return musicasEmChart.filter((m) => m.artist && meus.has(normalizeNome(m.artist)));
   }, [musicasEmChart, profile]);
 
   // Ajustar lista de faixas ao mudar "Quantidade de Faixas" — mesma lógica
@@ -531,11 +531,13 @@ function NovaCampanhaForm({
             : `Selecione a música existente da Faixa #${faixa.num}.`,
         );
       }
-      if (faixa.inedita && !faixa.mediaUrl?.trim() && !faixa.mediaFile) {
-        return setErro(
-          `Informe o link do áudio (Drive ou YouTube) ou envie um arquivo pra Faixa #${faixa.num}.`,
-        );
-      }
+      // Diferente do álbum normal (Gestao.tsx), aqui o áudio NÃO é
+      // obrigatório na criação da campanha — o álbum só é publicado de
+      // verdade no dia D, então o jogador pode cadastrar a faixa (nome
+      // oculto "Track N") sem ainda ter o áudio final pronto. A ausência
+      // de áudio numa faixa inédita é validada/bloqueada no lançamento
+      // (ver processarLancamentosPreSaveScheduled, preSaveController.ts),
+      // não aqui.
     }
 
     setSalvando(true);
@@ -624,6 +626,15 @@ function NovaCampanhaForm({
 
   return (
     <div className="rounded-2xl bg-neutral-800/40 border border-white/10 p-4 sm:p-5 space-y-5 min-w-0">
+      {/* Mesma lista de sugestões de "Feat" que Gestao.tsx usa — o
+          FaixaEditor reaproveitado aqui referencia esse mesmo id de
+          datalist; sem ele, o campo de participante continua funcionando
+          normalmente, só sem autocomplete. */}
+      <datalist id="participantes-conhecidos">
+        {(profile?.associatedArtists || []).map((nome) => (
+          <option key={nome} value={nome} />
+        ))}
+      </datalist>
       <div className="flex items-center justify-between">
         <h2 className="font-black text-white">Nova campanha de pre-save</h2>
         <button onClick={onCancelar} className="p-1.5 rounded-lg hover:bg-white/10 shrink-0">
@@ -1010,6 +1021,7 @@ function CalendarioCampanha({
         <MissaoModal
           campanhaId={campanha.id}
           telegramId={telegramId}
+          artista={campanha.artista}
           missao={diaAberto}
           faixas={campanha.faixas}
           perfisMidia={perfisMidia}
@@ -1026,9 +1038,15 @@ function CalendarioCampanha({
 
 // -------------------- MODAL DE COMPLETAR MISSÃO --------------------
 
+interface PerguntaResposta {
+  pergunta: string;
+  resposta: string;
+}
+
 function MissaoModal({
   campanhaId,
   telegramId,
+  artista,
   missao,
   faixas,
   perfisMidia,
@@ -1037,6 +1055,7 @@ function MissaoModal({
 }: {
   campanhaId: string;
   telegramId: string;
+  artista: string;
   missao: MissaoDia;
   faixas: Faixa[];
   perfisMidia: PerfilMidia[];
@@ -1049,11 +1068,39 @@ function MissaoModal({
     tipo === "desafio_som" || tipo === "making_of_video" ? "tiktok" : REDES[0],
   );
   const [texto, setTexto] = useState("");
+  // Mesma forma de postar que já existe em Social (src/routes/social.tsx):
+  // texto + upload de imagem opcional — missões de rede social não podem
+  // ficar só-texto.
+  const [midiaFile, setMidiaFile] = useState<File | null>(null);
+  const [midiaPreview, setMidiaPreview] = useState<string | null>(null);
+  const [enviandoMidia, setEnviandoMidia] = useState(false);
   const [perfilArtista, setPerfilArtista] = useState("");
   const [faixaOrdemRevelada, setFaixaOrdemRevelada] = useState<number | "">("");
+
+  // Entrevista — EXATAMENTE a mesma forma do cadastro de Entrevistas do
+  // Acervo (acervo.tsx, CreateModal): múltiplas perguntas/respostas, capa
+  // opcional, músicas vinculadas do chart do artista.
   const [entrevistaTitulo, setEntrevistaTitulo] = useState("");
-  const [entrevistaPergunta, setEntrevistaPergunta] = useState("");
-  const [entrevistaResposta, setEntrevistaResposta] = useState("");
+  const [entrevistaCapaFile, setEntrevistaCapaFile] = useState<File | null>(null);
+  const [entrevistaCapaPreview, setEntrevistaCapaPreview] = useState<string | null>(null);
+  const [enviandoCapaEntrevista, setEnviandoCapaEntrevista] = useState(false);
+  const [perguntas, setPerguntas] = useState<PerguntaResposta[]>([{ pergunta: "", resposta: "" }]);
+  const [musicasChart, setMusicasChart] = useState<{ label: string; artist: string }[]>([]);
+  const [musicasSelecionadas, setMusicasSelecionadas] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (tipo !== "entrevista") return;
+    fetch("/api/gestao/musicas-em-chart")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && Array.isArray(data.data)) setMusicasChart(data.data);
+      })
+      .catch(() => {});
+  }, [tipo]);
+  const musicasDoArtista = musicasChart.filter(
+    (m) => normalizeNome(m.artist) === normalizeNome(artista),
+  );
+
   const [videoRealId, setVideoRealId] = useState("");
   const [caminhoMakingOf, setCaminhoMakingOf] = useState<"tiktok" | "video_real">("tiktok");
   const [enviando, setEnviando] = useState(false);
@@ -1066,23 +1113,58 @@ function MissaoModal({
     const payload: Record<string, unknown> = { campanhaId, dia: missao.dia, jogadorId: telegramId };
 
     if (tipo === "entrevista") {
-      if (!entrevistaTitulo.trim() || !entrevistaPergunta.trim() || !entrevistaResposta.trim()) {
-        return setErro("Preencha título, pergunta e resposta da entrevista.");
+      const perguntasValidas = perguntas.filter((p) => p.pergunta.trim() && p.resposta.trim());
+      if (!entrevistaTitulo.trim() || perguntasValidas.length === 0) {
+        return setErro("Preencha o título e ao menos 1 pergunta/resposta da entrevista.");
+      }
+      if (musicasSelecionadas.size === 0) {
+        return setErro("Selecione ao menos 1 música do chart pra essa entrevista.");
+      }
+      let capaEntrevistaUrl = "";
+      if (entrevistaCapaFile) {
+        setEnviandoCapaEntrevista(true);
+        try {
+          capaEntrevistaUrl = await uploadToDrive(
+            entrevistaCapaFile,
+            "musica",
+            `CAPA_ENTREVISTA_${Date.now()}.jpg`,
+          );
+        } catch (err: any) {
+          setEnviandoCapaEntrevista(false);
+          return setErro(err.message || "Falha ao enviar a capa da entrevista.");
+        }
+        setEnviandoCapaEntrevista(false);
       }
       payload.entrevista = {
         titulo: entrevistaTitulo,
-        perguntas: [{ pergunta: entrevistaPergunta, resposta: entrevistaResposta }],
-        musicas: [],
+        capa: capaEntrevistaUrl,
+        perguntas: perguntasValidas,
+        musicas: Array.from(musicasSelecionadas),
       };
     } else if (tipo === "making_of_video" && caminhoMakingOf === "video_real") {
       if (!videoRealId.trim())
         return setErro("Informe o ID do vídeo já cadastrado em Fórum > Vídeos.");
       payload.videoRealId = videoRealId.trim();
     } else {
-      if (!texto.trim()) return setErro("Escreva o texto do post.");
+      if (!texto.trim() && !midiaFile)
+        return setErro("Escreva um texto ou anexe uma imagem pro post.");
       payload.texto = texto;
       payload.rede =
         tipo === "desafio_som" ? "tiktok" : tipo === "making_of_video" ? "tiktok" : rede;
+      if (midiaFile) {
+        setEnviandoMidia(true);
+        try {
+          payload.mediaUrl = await uploadToDrive(
+            midiaFile,
+            "musica",
+            `PRESAVE_${tipo}_${Date.now()}.jpg`,
+          );
+        } catch (err: any) {
+          setEnviandoMidia(false);
+          return setErro(err.message || "Falha ao enviar a imagem.");
+        }
+        setEnviandoMidia(false);
+      }
       if (tipo === "bastidores") {
         if (!perfilArtista) return setErro('Escolha um perfil de "Tá na Mídia" para publicar.');
         payload.perfilArtista = perfilArtista;
@@ -1130,25 +1212,134 @@ function MissaoModal({
         <p className="text-xs text-neutral-400">{info.descricao}</p>
 
         {tipo === "entrevista" ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <input
               value={entrevistaTitulo}
               onChange={(e) => setEntrevistaTitulo(e.target.value)}
               placeholder="Título da entrevista"
               className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
             />
-            <input
-              value={entrevistaPergunta}
-              onChange={(e) => setEntrevistaPergunta(e.target.value)}
-              placeholder="Pergunta"
-              className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
-            />
-            <textarea
-              value={entrevistaResposta}
-              onChange={(e) => setEntrevistaResposta(e.target.value)}
-              placeholder="Resposta"
-              className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
-            />
+
+            <div>
+              <label className="text-[11px] font-bold text-neutral-400">Capa (opcional)</label>
+              <div className="flex items-center gap-3 mt-1">
+                {entrevistaCapaPreview && (
+                  <img
+                    src={entrevistaCapaPreview}
+                    alt=""
+                    className="size-12 rounded-xl object-cover shrink-0"
+                  />
+                )}
+                <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold cursor-pointer shrink-0">
+                  <UploadIcon className="size-3.5 shrink-0" />
+                  <span className="truncate">
+                    {enviandoCapaEntrevista
+                      ? "Enviando..."
+                      : entrevistaCapaPreview
+                        ? "Trocar capa"
+                        : "Selecionar capa"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setEntrevistaCapaFile(file);
+                      setEntrevistaCapaPreview(URL.createObjectURL(file));
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-neutral-400">Músicas vinculadas</label>
+              {musicasDoArtista.length === 0 ? (
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  Nenhuma música do artista encontrada no chart.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 mt-1.5 max-h-28 overflow-y-auto">
+                  {musicasDoArtista.map((m) => (
+                    <button
+                      key={m.label}
+                      type="button"
+                      onClick={() =>
+                        setMusicasSelecionadas((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(m.label)) next.delete(m.label);
+                          else next.add(m.label);
+                          return next;
+                        })
+                      }
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold truncate max-w-full ${
+                        musicasSelecionadas.has(m.label)
+                          ? "bg-fuchsia-500 text-black"
+                          : "bg-white/5 text-neutral-300"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-neutral-400">
+                  Perguntas e respostas
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setPerguntas((prev) => [...prev, { pergunta: "", resposta: "" }])}
+                  className="text-[11px] font-bold text-fuchsia-300 hover:text-fuchsia-200"
+                >
+                  + adicionar pergunta
+                </button>
+              </div>
+              {perguntas.map((p, i) => (
+                <div
+                  key={i}
+                  className="space-y-1.5 p-2.5 rounded-xl bg-neutral-800 border border-white/10"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-neutral-500">#{i + 1}</span>
+                    {perguntas.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setPerguntas((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="p-1 rounded-lg hover:bg-white/10"
+                      >
+                        <Trash2 className="size-3.5 text-neutral-500" />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    value={p.pergunta}
+                    onChange={(e) =>
+                      setPerguntas((prev) =>
+                        prev.map((x, idx) => (idx === i ? { ...x, pergunta: e.target.value } : x)),
+                      )
+                    }
+                    placeholder="Pergunta"
+                    className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                  />
+                  <textarea
+                    value={p.resposta}
+                    onChange={(e) =>
+                      setPerguntas((prev) =>
+                        prev.map((x, idx) => (idx === i ? { ...x, resposta: e.target.value } : x)),
+                      )
+                    }
+                    placeholder="Resposta"
+                    className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         ) : tipo === "making_of_video" ? (
           <div className="space-y-3">
@@ -1283,6 +1474,45 @@ function MissaoModal({
               placeholder="Texto do post"
               className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
             />
+            {/* Mesma forma de postar do Social: texto + imagem opcional */}
+            <div className="flex items-center gap-3">
+              {midiaPreview && (
+                <img
+                  src={midiaPreview}
+                  alt=""
+                  className="size-12 rounded-xl object-cover shrink-0"
+                />
+              )}
+              <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold cursor-pointer shrink-0">
+                <UploadIcon className="size-3.5 shrink-0" />
+                <span className="truncate">
+                  {enviandoMidia ? "Enviando..." : midiaPreview ? "Trocar imagem" : "Anexar imagem"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setMidiaFile(file);
+                    setMidiaPreview(URL.createObjectURL(file));
+                  }}
+                />
+              </label>
+              {midiaPreview && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMidiaFile(null);
+                    setMidiaPreview(null);
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-white/10 shrink-0"
+                >
+                  <Trash2 className="size-3.5 text-neutral-500" />
+                </button>
+              )}
+            </div>
           </div>
         )}
 
