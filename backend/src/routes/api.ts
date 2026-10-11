@@ -725,9 +725,12 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   } else if (url.pathname === "/api/presave/diagnostico") {
     response = await getDiagnosticoTetoPreSaveController(request);
   } else if (url.pathname === "/api/presave/recalcular-teto") {
-    if (request.method !== "POST") {
+    // GET com ?campanhaId= também aceito (só pra permitir rodar o reparo
+    // via workflow admin-call.yml, que só faz GET) — a proteção real
+    // (só mexe se tetoFinal já armazenado for 0) está dentro do controller.
+    if (request.method !== "POST" && request.method !== "GET") {
       return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/presave/recalcular-teto." }),
+        JSON.stringify({ success: false, error: "Use POST (ou GET com ?campanhaId=) para /api/presave/recalcular-teto." }),
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }

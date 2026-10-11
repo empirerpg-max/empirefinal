@@ -830,8 +830,14 @@ export async function getDiagnosticoTetoPreSaveController(request: Request): Pro
 // por um teto zerado.
 export async function recalcularTetoPreSaveController(request: Request): Promise<Response> {
   try {
-    const body = (await request.json().catch(() => ({}))) as { campanhaId?: string };
-    const campanhaId = normalizeText(body.campanhaId);
+    const url = new URL(request.url);
+    const body =
+      request.method === "POST" ? ((await request.json().catch(() => ({}))) as { campanhaId?: string }) : {};
+    // Aceita também ?campanhaId= via GET — só pra permitir rodar o reparo
+    // via workflow de diagnóstico admin-call.yml (que só faz GET), sem
+    // precisar expor um formulário. A proteção real (só mexe se tetoFinal
+    // já armazenado for exatamente 0) continua intacta de qualquer jeito.
+    const campanhaId = normalizeText(body.campanhaId || url.searchParams.get("campanhaId") || "");
     const campanhas = await readAllCampanhas();
     const c = campanhas.find((x) => x.id === campanhaId);
     if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
