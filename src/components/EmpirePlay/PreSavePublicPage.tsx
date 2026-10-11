@@ -24,6 +24,7 @@ interface CampanhaPublica {
   albumTopicId: string;
   faixas: FaixaPublica[];
   acumuladoAtual: number;
+  valoresPorDia: { dia: number; valor: number }[];
 }
 
 // Página pública de acompanhamento de pre-save — acessível a qualquer
@@ -132,6 +133,20 @@ export function PreSavePublicPage({ campanhaId }: { campanhaId: string }) {
         <div className="text-2xl font-black text-white mt-0.5">
           {campanha.acumuladoAtual.toLocaleString("pt-BR")}
         </div>
+        {campanha.valoresPorDia.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-white/10 space-y-1">
+            {campanha.valoresPorDia.map((d) => (
+              <div key={d.dia} className="flex items-center justify-between text-xs">
+                <span className="text-neutral-400 font-bold">Dia {d.dia}</span>
+                <span
+                  className={`font-black ${d.valor > 0 ? "text-fuchsia-300" : "text-neutral-500"}`}
+                >
+                  {d.valor > 0 ? `+${Math.round(d.valor).toLocaleString("pt-BR")}` : "0"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div>

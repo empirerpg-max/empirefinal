@@ -264,7 +264,18 @@ function campanhaToRow(c: PreSaveCampanha): string[] {
     c.dataInicioISO,
     c.dataLancamento,
     String(c.duracaoDias),
-    String(c.tetoFinal),
+    // SEMPRE inteiro, nunca decimal — bug real confirmado em produção:
+    // updateValues usa valueInputOption=USER_ENTERED, e a planilha está em
+    // locale PT-BR (vírgula=decimal, ponto=milhar); gravar uma string com
+    // PONTO decimal (formato JS, ex: "1804278.114") faz o Sheets
+    // reinterpretar esse ponto como separador de milhar do locale dele,
+    // corrompendo o valor pra "1.804.278.114" — depois, ler essa célula de
+    // volta e tentar Number()/parseFloat() nela dá um valor errado (não
+    // necessariamente 0, pode ser um número pequeno tipo 1.804, já que
+    // parseFloat para no segundo ponto). Arredondar pra inteiro ANTES de
+    // gravar elimina o ponto decimal de uma vez — pre-save nunca precisa
+    // de casas decimais aqui.
+    String(Math.round(c.tetoFinal)),
     c.status,
     JSON.stringify(c.faixas),
     JSON.stringify(c.missoes),
@@ -461,6 +472,41 @@ export function calcularAcumulado(c: PreSaveCampanha): number {
     );
 }
 
+// Quanto cada dia JÁ PASSADO contribuiu — mesma lógica de calcularAcumulado,
+// só que dia a dia em vez de só o total (pedido explícito: "todo dia tem
+// que ter número e ir somando", não só um total solto sem contexto).
+// - modo "contagem": cada dia-calendário completo libera exatamente
+//   1/duracaoDias do teto, automático — todo dia já passado tem o MESMO
+//   valor (porDia).
+// - modo "missao": só os dias com missão "completa" têm valor (porDia *
+//   peso/100); "perdida" ou "pendente" (ainda não chegou a vez) valem 0.
+// Só devolve dias de 1 até min(duracaoDias, diaCampanhaAtual - 1) — o dia
+// corrente ainda está em andamento, não "já passado", então não entra
+// aqui (ele pode ainda ganhar sua fatia completando a missão).
+// Valores aqui NÃO são arredondados individualmente — só o total
+// (acumuladoAtual) e a soma destes dias são arredondados no mesmo lugar
+// (campanhaPublica), garantindo que a soma exibida bate exatamente com o
+// total exibido (arredondar cada dia separado e depois somar os
+// arredondados podia divergir do total por alguns pontos).
+export function valoresPorDia(c: PreSaveCampanha): { dia: number; valor: number }[] {
+  const porDia = c.tetoFinal / c.duracaoDias;
+  const diasPassados = Math.min(c.duracaoDias, Math.max(0, diaCampanhaAtual(c) - 1));
+  const out: { dia: number; valor: number }[] = [];
+  for (let dia = 1; dia <= diasPassados; dia++) {
+    if (c.modo === "contagem") {
+      out.push({ dia, valor: porDia });
+      continue;
+    }
+    const missao = c.missoes.find((m) => m.dia === dia);
+    const valor =
+      missao?.status === "completa"
+        ? porDia * ((MISSOES_CATALOGO[missao.tipo as MissaoTipo]?.peso ?? 0) / 100)
+        : 0;
+    out.push({ dia, valor });
+  }
+  return out;
+}
+
 // Marca como "perdida" (sem reposição) qualquer dia de missão cuja data já
 // passou e que ainda estava "pendente" — chamado sempre que o estado é
 // lido, pra manter o calendário honesto sem depender de um cron próprio.
@@ -502,6 +548,9 @@ function campanhaPublica(c: PreSaveCampanha) {
         jaLancada: !f.inedita,
       })),
     acumuladoAtual: Math.round(calcularAcumulado(c)),
+    // Quanto cada dia já passado contribuiu — pra UI mostrar dia a dia
+    // (e a soma bater com acumuladoAtual), não só o total solto.
+    valoresPorDia: valoresPorDia(c),
   };
 }
 
@@ -629,7 +678,10 @@ export async function criarCampanhaPreSaveController(request: Request): Promise<
     await ensureHeader();
 
     const { tetoMissao, tetoContagem, valTotal } = await calcularTetos(artista);
-    const tetoFinal = modo === "missao" ? tetoMissao : tetoContagem;
+    // Math.round: nunca grava decimal em TetoFinal — ver comentário em
+    // campanhaToRow sobre a corrupção de locale (ponto decimal
+    // reinterpretado como separador de milhar pelo Sheets em PT-BR).
+    const tetoFinal = Math.round(modo === "missao" ? tetoMissao : tetoContagem);
     // Diagnóstico: se o artista não tem nenhuma música no chart SPOTIFY
     // (ou o valTotal não pôde ser lido), o teto sai 0 e o contador de
     // pre-save fica preso em 0 PRA SEMPRE, mesmo com dias passando/missões
@@ -823,11 +875,22 @@ export async function getDiagnosticoTetoPreSaveController(request: Request): Pro
 }
 
 // POST /api/presave/recalcular-teto { campanhaId } — só reescreve
-// tetoFinal quando o valor ARMAZENADO é 0 (nunca sobrescreve um teto já
-// calculado de verdade) e o recálculo (com o bug do cap já corrigido) dá
-// um valor maior que 0. Nunca muda o acumulado já registrado em missões
-// completadas — só desbloqueia o cálculo de acumulado parar de multiplicar
-// por um teto zerado.
+// tetoFinal quando o valor ARMAZENADO parece quebrado (nunca sobrescreve
+// um teto já calculado de verdade) e o recálculo (com o bug do cap já
+// corrigido) dá um valor plausível. Nunca muda o acumulado já registrado
+// em missões completadas — só desbloqueia o cálculo de acumulado parar de
+// multiplicar por um teto zerado/corrompido.
+//
+// "Parece quebrado" NÃO é só "=== 0" — bug real confirmado em produção: o
+// valor gravado podia ser uma STRING corrompida por reinterpretação de
+// locale (ex: célula virou texto "1.804.278.114" em vez do número
+// 1804278; ver comentário em campanhaToRow) — ao reler essa célula,
+// parseFloat("1.804.278.114") para no segundo ponto e devolve 1.804, não
+// NaN e não 0, mas um número minúsculo e claramente errado (nenhum teto
+// real fica abaixo de milhares, já que é 0,3% de um valTotal de milhões).
+// Por isso o limiar de reparo é "< 1000", não "=== 0".
+const TETO_MINIMO_PLAUSIVEL = 1000;
+
 export async function recalcularTetoPreSaveController(request: Request): Promise<Response> {
   try {
     const body = (await request.json().catch(() => ({}))) as { campanhaId?: string };
@@ -835,31 +898,34 @@ export async function recalcularTetoPreSaveController(request: Request): Promise
     const campanhas = await readAllCampanhas();
     const c = campanhas.find((x) => x.id === campanhaId);
     if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
-    if (c.tetoFinal > 0) {
+    if (Number.isFinite(c.tetoFinal) && c.tetoFinal >= TETO_MINIMO_PLAUSIVEL) {
       return jsonResponse({
         success: false,
-        error: `Essa campanha já tem um teto armazenado (${c.tetoFinal}) — não é 0, então não é esse bug. Não sobrescrevi nada.`,
+        error: `Essa campanha já tem um teto armazenado plausível (${c.tetoFinal}) — não parece esse bug. Não sobrescrevi nada.`,
       });
     }
     const recalculo = await calcularTetos(c.artista);
-    const novoTeto = c.modo === "missao" ? recalculo.tetoMissao : recalculo.tetoContagem;
-    if (novoTeto <= 0) {
+    const novoTeto = Math.round(
+      c.modo === "missao" ? recalculo.tetoMissao : recalculo.tetoContagem,
+    );
+    if (novoTeto < TETO_MINIMO_PLAUSIVEL) {
       return jsonResponse({
         success: false,
-        error: `Recalculei e o teto ainda saiu 0 (valTotal=${recalculo.valTotal}) — o artista "${c.artista}" realmente não tem música encontrada no chart SPOTIFY agora. Não é o bug do cap; precisa investigar o cruzamento de nome do artista.`,
+        error: `Recalculei e o teto ainda saiu baixo/0 (${novoTeto}, valTotal=${recalculo.valTotal}) — o artista "${c.artista}" realmente não tem música encontrada no chart SPOTIFY agora. Não é o bug do cap/locale; precisa investigar o cruzamento de nome do artista.`,
       });
     }
+    const tetoAnterior = c.tetoFinal;
     c.tetoFinal = novoTeto;
     await writeCampanha(c);
     registrarLogSistema({
       categoria: "Ação concluída",
-      oQueAconteceu: `Teto da campanha de pre-save "${c.albumTituloFull}" recalculado de 0 pra ${novoTeto} (valTotal=${recalculo.valTotal}) — reparo do bug do cap fixo em SPOTIFY.`,
+      oQueAconteceu: `Teto da campanha de pre-save "${c.albumTituloFull}" recalculado de ${tetoAnterior} pra ${novoTeto} (valTotal=${recalculo.valTotal}) — reparo do bug do cap fixo em SPOTIFY/corrupção de locale.`,
       onde: "recalcularTetoPreSaveController",
     }).catch(() => {});
     return jsonResponse({
       success: true,
       data: {
-        tetoAnterior: 0,
+        tetoAnterior,
         tetoNovo: novoTeto,
         valTotal: recalculo.valTotal,
         acumuladoAgora: Math.round(calcularAcumulado(c)),
