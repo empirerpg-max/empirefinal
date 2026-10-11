@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, Rocket, Lock, ListMusic, Disc3 } from "lucide-react";
-import { driveImgWide } from "@/lib/api";
+import { ChevronLeft, Rocket, Lock, ListMusic, Disc3, Maximize2 } from "lucide-react";
+import { driveImgWide, formatarDataBR } from "@/lib/api";
+import { EncarteViewer } from "./EncarteViewer";
 
 interface FaixaPublica {
   num: number;
@@ -34,6 +35,7 @@ interface CampanhaPublica {
 export function PreSavePublicPage({ campanhaId }: { campanhaId: string }) {
   const navigate = useNavigate();
   const [campanha, setCampanha] = useState<CampanhaPublica | null | undefined>(undefined);
+  const [capaExpandida, setCapaExpandida] = useState(false);
 
   useEffect(() => {
     fetch(`/api/presave/contador-publico?id=${encodeURIComponent(campanhaId)}`)
@@ -83,11 +85,21 @@ export function PreSavePublicPage({ campanhaId }: { campanhaId: string }) {
 
       <div className="flex items-center gap-4">
         {campanha.capaUrl ? (
-          <img
-            src={driveImgWide(campanha.capaUrl, 400)}
-            alt=""
-            className="size-20 sm:size-24 rounded-2xl object-cover shrink-0"
-          />
+          <button
+            type="button"
+            onClick={() => setCapaExpandida(true)}
+            title="Ver capa em tela cheia"
+            className="relative size-20 sm:size-24 rounded-2xl overflow-hidden shrink-0 group"
+          >
+            <img
+              src={driveImgWide(campanha.capaUrl, 400)}
+              alt=""
+              className="w-full h-full object-cover group-hover:scale-105 transition"
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
+              <Maximize2 className="size-4 text-white opacity-0 group-hover:opacity-100 transition" />
+            </div>
+          </button>
         ) : (
           <div className="size-20 sm:size-24 rounded-2xl bg-neutral-800 shrink-0 flex items-center justify-center">
             <Disc3 className="size-8 text-neutral-600" />
@@ -108,7 +120,8 @@ export function PreSavePublicPage({ campanhaId }: { campanhaId: string }) {
       <div className="rounded-2xl bg-fuchsia-500/10 border border-fuchsia-400/30 p-4 text-center">
         <div className="text-3xl font-black text-white">{diasFaltando}</div>
         <div className="text-[11px] font-bold text-fuchsia-300 uppercase tracking-wider mt-0.5">
-          dia{diasFaltando === 1 ? "" : "s"} pro lançamento ({campanha.dataLancamento})
+          dia{diasFaltando === 1 ? "" : "s"} pro lançamento (
+          {formatarDataBR(campanha.dataLancamento)})
         </div>
       </div>
 
@@ -151,10 +164,19 @@ export function PreSavePublicPage({ campanhaId }: { campanhaId: string }) {
       <div className="rounded-2xl bg-neutral-800/40 border border-white/10 p-4 flex items-center gap-3">
         <Lock className="size-4 text-neutral-500 shrink-0" />
         <p className="text-xs text-neutral-400">
-          Comentários desse álbum ficam travados até o lançamento ({campanha.dataLancamento}) —
-          depois disso, o tópico abre pra comentar normalmente no Fórum.
+          Comentários desse álbum ficam travados até o lançamento (
+          {formatarDataBR(campanha.dataLancamento)}) — depois disso, o tópico abre pra comentar
+          normalmente no Fórum.
         </p>
       </div>
+
+      {capaExpandida && (
+        <EncarteViewer
+          paginas={[campanha.capaUrl]}
+          indiceInicial={0}
+          onClose={() => setCapaExpandida(false)}
+        />
+      )}
     </div>
   );
 }

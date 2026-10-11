@@ -13,9 +13,10 @@ import {
   UserCircle,
   Image as ImageIcon,
   Sparkles,
+  Maximize2,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { api, driveImg, normalizeNome } from "@/lib/api";
+import { api, driveImg, normalizeNome, formatarDataBR } from "@/lib/api";
 import {
   FaixaEditor,
   TIPOS_ALBUM,
@@ -29,6 +30,7 @@ import {
   emptyExtraMaterialEditorValue,
   type ExtraMaterialEditorValue,
 } from "./ExtraMaterial";
+import { EncarteViewer } from "./EncarteViewer";
 
 // Gestão Pre save — menu próprio do Catálogo (separado de "Gestão"), pra
 // criar/gerenciar campanhas de pre-save de álbum. Ver preSaveController.ts
@@ -307,7 +309,7 @@ export function GestaoPreSave() {
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-white truncate">{c.albumTituloFull}</div>
                 <div className="text-xs text-neutral-400 truncate">
-                  Lançamento em {c.dataLancamento} ·{" "}
+                  Lançamento em {formatarDataBR(c.dataLancamento)} ·{" "}
                   {c.modo === "missao" ? "Com missões" : "Só contagem"}
                 </div>
               </div>
@@ -383,6 +385,77 @@ function LeaderboardPreSave() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Botão de diagnóstico/reparo — só aparece quando o contador está em 0.
+// Investiga um bug real reportado em produção: o teto é calculado uma vez
+// na criação da campanha e NUNCA recalculado depois; se nessa hora o
+// cálculo do valTotal do artista deu 0 (bug real do cap fixo em
+// "SPOTIFY", já corrigido em getMelhorValTotalArtista), o teto ficou
+// gravado em 0 PRA SEMPRE, e qualquer missão completada depois nunca
+// soma nada (0 × peso = 0). Esse botão chama o diagnóstico e, se for
+// exatamente esse o caso, corrige recalculando com o bug já corrigido —
+// sem nunca sobrescrever um teto que já era > 0 de verdade.
+function RecalcularTetoButton({
+  campanhaId,
+  onCorrigido,
+}: {
+  campanhaId: string;
+  onCorrigido: () => void;
+}) {
+  const [estado, setEstado] = useState<"idle" | "verificando" | "ok" | "corrigido" | "erro">(
+    "idle",
+  );
+  const [mensagem, setMensagem] = useState("");
+
+  const verificarECorrigir = async () => {
+    setEstado("verificando");
+    setMensagem("");
+    try {
+      const diag = await fetch(
+        `/api/presave/diagnostico?id=${encodeURIComponent(campanhaId)}`,
+      ).then((r) => r.json());
+      if (!diag?.success) throw new Error(diag?.error || "Falha ao diagnosticar.");
+      if (diag.data.tetoFinalArmazenado > 0) {
+        setEstado("ok");
+        setMensagem(
+          "O teto dessa campanha não está zerado — o contador em 0 é porque nenhuma missão foi completada ainda (ou foi perdida), não é esse bug.",
+        );
+        return;
+      }
+      const res = await fetch("/api/presave/recalcular-teto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campanhaId }),
+      }).then((r) => r.json());
+      if (!res.success) {
+        setEstado("erro");
+        setMensagem(res.error || "Não consegui corrigir.");
+        return;
+      }
+      setEstado("corrigido");
+      setMensagem(
+        `Teto estava zerado por um bug já corrigido — recalculado pra ${res.data.tetoNovo} agora. Contador atualizado.`,
+      );
+      onCorrigido();
+    } catch (err: any) {
+      setEstado("erro");
+      setMensagem(err.message || "Falha ao verificar/corrigir.");
+    }
+  };
+
+  return (
+    <div className="mt-2.5 pt-2.5 border-t border-fuchsia-400/20">
+      <button
+        onClick={verificarECorrigir}
+        disabled={estado === "verificando"}
+        className="text-[11px] font-bold text-fuchsia-300 hover:text-fuchsia-200 disabled:opacity-50"
+      >
+        {estado === "verificando" ? "Verificando..." : "Contador em 0? Verificar/corrigir"}
+      </button>
+      {mensagem && <p className="text-[11px] text-neutral-400 mt-1">{mensagem}</p>}
     </div>
   );
 }
@@ -907,6 +980,7 @@ function CalendarioCampanha({
   onAtualizada: (c: Campanha) => void;
 }) {
   const [diaAberto, setDiaAberto] = useState<MissaoDia | null>(null);
+  const [capaExpandida, setCapaExpandida] = useState(false);
   const diasFaltando = Math.max(
     0,
     Math.ceil((new Date(`${campanha.dataLancamento}T00:00:00`).getTime() - Date.now()) / 86400000),
@@ -937,12 +1011,26 @@ function CalendarioCampanha({
 
       <div className="flex items-center gap-3">
         {campanha.capaUrl && (
-          <img src={campanha.capaUrl} alt="" className="size-16 rounded-xl object-cover shrink-0" />
+          <button
+            type="button"
+            onClick={() => setCapaExpandida(true)}
+            title="Ver capa em tela cheia"
+            className="relative size-16 rounded-xl overflow-hidden shrink-0 group"
+          >
+            <img
+              src={campanha.capaUrl}
+              alt=""
+              className="w-full h-full object-cover group-hover:scale-105 transition"
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
+              <Maximize2 className="size-3.5 text-white opacity-0 group-hover:opacity-100 transition" />
+            </div>
+          </button>
         )}
         <div className="flex-1 min-w-0">
           <h2 className="font-black text-white text-lg truncate">{campanha.albumTituloFull}</h2>
           <p className="text-xs text-neutral-400 truncate">
-            Lançamento em {campanha.dataLancamento} · faltam {diasFaltando} dia
+            Lançamento em {formatarDataBR(campanha.dataLancamento)} · faltam {diasFaltando} dia
             {diasFaltando === 1 ? "" : "s"}
           </p>
         </div>
@@ -959,6 +1047,9 @@ function CalendarioCampanha({
         <p className="text-[11px] text-neutral-400 mt-1">
           Valor acumulado até agora — visível a todos no banner e na página do álbum.
         </p>
+        {campanha.acumuladoAtual === 0 && campanha.status === "ativa" && (
+          <RecalcularTetoButton campanhaId={campanha.id} onCorrigido={recarregar} />
+        )}
       </div>
 
       {campanha.modo === "missao" ? (
@@ -1023,6 +1114,14 @@ function CalendarioCampanha({
             setDiaAberto(null);
             recarregar();
           }}
+        />
+      )}
+
+      {capaExpandida && campanha.capaUrl && (
+        <EncarteViewer
+          paginas={[campanha.capaUrl]}
+          indiceInicial={0}
+          onClose={() => setCapaExpandida(false)}
         />
       )}
     </div>

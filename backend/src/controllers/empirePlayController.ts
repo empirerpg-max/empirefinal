@@ -12,7 +12,9 @@ import {
 import { getUserProfile } from "./userController";
 
 function levenshtein(a: string, b: string): number {
-  const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
+    new Array(b.length + 1).fill(0),
+  );
   for (let i = 0; i <= a.length; i++) dp[i][0] = i;
   for (let j = 0; j <= b.length; j++) dp[0][j] = j;
   for (let i = 1; i <= a.length; i++) {
@@ -34,7 +36,7 @@ function levenshtein(a: string, b: string): number {
 function correctArtistName(rawName: string, knownNames: string[]): string {
   const normalized = normalizeComparison(rawName);
   if (!normalized) return rawName;
-  let best: { name: string; dist: number }[] = [];
+  const best: { name: string; dist: number }[] = [];
   for (const known of knownNames) {
     const dist = levenshtein(normalized, normalizeComparison(known));
     if (dist === 0) return known;
@@ -700,15 +702,15 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
       // as que apareciam batendo no limite de requisições/minuto da API do
       // Sheets no log real (logsSistema!LOGS), e cachedRead também serve o
       // último dado bom em vez de vazio quando a leitura falha mesmo assim.
-      cachedRead("home:Top_50_Spotify", 120_000, () => sheetsService.readSheetObjects("Top_50_Spotify")).catch(
-        () => [],
-      ),
+      cachedRead("home:Top_50_Spotify", 120_000, () =>
+        sheetsService.readSheetObjects("Top_50_Spotify"),
+      ).catch(() => []),
       cachedRead("home:Top_Songs_Apple_Music", 120_000, () =>
         sheetsService.readSheetObjects("Top_Songs_Apple_Music"),
       ).catch(() => []),
-      cachedRead("home:Top_Videos_YT", 120_000, () => sheetsService.readSheetObjects("Top_Videos_YT")).catch(
-        () => [],
-      ),
+      cachedRead("home:Top_Videos_YT", 120_000, () =>
+        sheetsService.readSheetObjects("Top_Videos_YT"),
+      ).catch(() => []),
       sheetsService.readSheetObjects("Musicas").catch(() => []),
       sheetsService.readSheetObjects("Music Videos").catch(() => []),
       // ARTISTAS vive na planilha "usuarios" (diferente da "principal" usada
@@ -716,9 +718,9 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
       // pra distinguir da capa da música/vídeo. Era a leitura que mais
       // aparecia falhando por limite de API nos logs — o cache aqui é o que
       // resolve o "abro a tela e a foto do artista virou a padrão".
-      cachedRead("home:ARTISTAS", 120_000, () => googleSheetsService.usuarios.readSheetObjects("ARTISTAS")).catch(
-        () => [],
-      ),
+      cachedRead("home:ARTISTAS", 120_000, () =>
+        googleSheetsService.usuarios.readSheetObjects("ARTISTAS"),
+      ).catch(() => []),
       findFileByName(CAPA_PLAYLIST_FOLDER_ID, "substituta").catch(() => null),
     ]);
     const fallbackPhotoUrl = fallbackPhotoFile
@@ -834,7 +836,9 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
     const topSpotify = enrichWithArtistPhoto(
       enrichWithCover(
         enrichWithScore(
-          correctArtistNames(spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx))),
+          correctArtistNames(
+            spotifyRecords.map((rec, idx) => buildCleanItem("Top_50_Spotify", rec, idx)),
+          ),
           musicaScoreIndex,
         ),
         musicaCoverIndex,
@@ -854,7 +858,9 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
     const topYoutube = enrichWithArtistPhoto(
       enrichWithCover(
         enrichWithScore(
-          correctArtistNames(youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx))),
+          correctArtistNames(
+            youtubeRecords.map((rec, idx) => buildCleanItem("Top_Videos_YT", rec, idx)),
+          ),
           videoScoreIndex,
         ),
         videoCoverIndex,
@@ -936,7 +942,8 @@ export async function getEmpirePlayMusicasController(request: Request): Promise<
     // pra qualquer par onde um dos dois não tinha data deixava o array
     // praticamente na ordem crua da planilha).
     items.sort((a, b) => {
-      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
+      if (a.releaseDateIso && b.releaseDateIso)
+        return b.releaseDateIso.localeCompare(a.releaseDateIso);
       if (a.releaseDateIso) return -1;
       if (b.releaseDateIso) return 1;
       return 0;
@@ -1004,7 +1011,8 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
     // Mais recente primeiro (Data do envio) — itens sem data ficam por
     // último, na ordem em que já vieram da planilha.
     items.sort((a, b) => {
-      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
+      if (a.releaseDateIso && b.releaseDateIso)
+        return b.releaseDateIso.localeCompare(a.releaseDateIso);
       if (a.releaseDateIso) return -1;
       if (b.releaseDateIso) return 1;
       return 0;
@@ -1038,17 +1046,23 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
  */
 export async function getEmpirePlayLancamentosRecentesController(): Promise<Response> {
   try {
-    const [edicaoMusicasRows, edicaoAlbunsRows, musicaRecords, albumRecords, musicasRawRows, albunsRawRows] =
-      await Promise.all([
-        // BD = coluna 56 (índice 55) — "Código único" gerado por fórmula.
-        googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD5000"),
-        // R = coluna 18 (índice 17) — "Código único".
-        googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000"),
-        sheetsService.readSheetObjects("Musicas"),
-        sheetsService.readSheetObjects("Albuns"),
-        googleSheetsService.principal.readValues("Musicas"),
-        googleSheetsService.principal.readValues("Albuns"),
-      ]);
+    const [
+      edicaoMusicasRows,
+      edicaoAlbunsRows,
+      musicaRecords,
+      albumRecords,
+      musicasRawRows,
+      albunsRawRows,
+    ] = await Promise.all([
+      // BD = coluna 56 (índice 55) — "Código único" gerado por fórmula.
+      googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD5000"),
+      // R = coluna 18 (índice 17) — "Código único".
+      googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000"),
+      sheetsService.readSheetObjects("Musicas"),
+      sheetsService.readSheetObjects("Albuns"),
+      googleSheetsService.principal.readValues("Musicas"),
+      googleSheetsService.principal.readValues("Albuns"),
+    ]);
 
     const musicaItems = musicaRecords
       .filter((rec) => (getValue(rec, ["pendente"]) || "").trim().toLowerCase() !== "sim")
@@ -1090,7 +1104,10 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
       .map((row) => {
         const artista = (row[0] || "").trim();
         const nomeAlbum = (row[3] || "").trim();
-        const titulo = artista && nomeAlbum && !nomeAlbum.includes(" - ") ? `${artista} - ${nomeAlbum}` : nomeAlbum;
+        const titulo =
+          artista && nomeAlbum && !nomeAlbum.includes(" - ")
+            ? `${artista} - ${nomeAlbum}`
+            : nomeAlbum;
         return {
           dataIso: parseDateToIso(row[1] || null),
           titulo,
@@ -1100,21 +1117,39 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
       })
       .filter((c): c is Candidato => !!c.dataIso && !!c.titulo);
 
-    const candidatos = [...candidatosMusicas, ...candidatosAlbuns].sort((a, b) => b.dataIso.localeCompare(a.dataIso));
+    const candidatos = [...candidatosMusicas, ...candidatosAlbuns].sort((a, b) =>
+      b.dataIso.localeCompare(a.dataIso),
+    );
 
     const matchByTituloCompleto = (m: EmpirePlayCleanItem, tituloCompleto: string) =>
       normalizeComparison(`${m.artist} - ${m.title}`) === normalizeComparison(tituloCompleto) ||
       normalizeComparison(tituloCompleto).endsWith(normalizeComparison(m.title));
 
     const titulosVistos = new Set<string>();
-    const lancamentos: { id: string; titulo: string; artista: string; coverUrl: string | null; dataIso: string }[] = [];
+    // BUG REAL encontrado (reportado: "AFTERPARTY" e outros álbuns no Home
+    // não levavam pro tópico certo): a flag `isAlbum`/`c.isAlbum` que
+    // distingue música de álbum era calculada aqui mas NUNCA chegava na
+    // resposta — o front sempre assumia tab="musicas" pra todo item, então
+    // clicar num álbum procurava o id errado na aba errada do Fórum (não
+    // achava nada, parecia "não aconteceu nada"). Agora devolve `tipo`
+    // ("album" | "musica") pro front escolher a aba certa.
+    const lancamentos: {
+      id: string;
+      titulo: string;
+      artista: string;
+      coverUrl: string | null;
+      dataIso: string;
+      tipo: "album" | "musica";
+    }[] = [];
     for (const c of candidatos) {
       if (lancamentos.length >= 3) break;
       const norm = normalizeComparison(c.titulo);
       if (titulosVistos.has(norm)) continue;
       const catalogo = c.isAlbum ? albumItems : musicaItems;
       const mapaCodigo = c.isAlbum ? codigoParaAlbum : codigoParaMusica;
-      const match = (c.codigoUnico && mapaCodigo.get(c.codigoUnico)) || catalogo.find((m) => matchByTituloCompleto(m, c.titulo));
+      const match =
+        (c.codigoUnico && mapaCodigo.get(c.codigoUnico)) ||
+        catalogo.find((m) => matchByTituloCompleto(m, c.titulo));
       if (!match) continue;
       titulosVistos.add(norm);
       lancamentos.push({
@@ -1126,6 +1161,7 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
         artista: match.displayArtists || match.artist,
         coverUrl: match.coverUrl || null,
         dataIso: c.dataIso,
+        tipo: c.isAlbum ? "album" : "musica",
       });
     }
 
@@ -1222,7 +1258,9 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         // SANTISSIMA") batia mais. Compara também os dois lados SEM o
         // prefixo do artista, pra nunca mais depender dessa convenção
         // manual de digitação.
-        return stripArtistPrefixNormalized(normSongAlbum) === stripArtistPrefixNormalized(normAlbumTitle);
+        return (
+          stripArtistPrefixNormalized(normSongAlbum) === stripArtistPrefixNormalized(normAlbumTitle)
+        );
       });
 
       // Ordenar faixas pela coluna Ordem
@@ -1280,7 +1318,8 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
     // Álbuns não tinham NENHUMA ordenação — voltavam na ordem crua da
     // planilha. Mais recente primeiro, igual Músicas/Vídeos.
     albuns.sort((a, b) => {
-      if (a.releaseDateIso && b.releaseDateIso) return b.releaseDateIso.localeCompare(a.releaseDateIso);
+      if (a.releaseDateIso && b.releaseDateIso)
+        return b.releaseDateIso.localeCompare(a.releaseDateIso);
       if (a.releaseDateIso) return -1;
       if (b.releaseDateIso) return 1;
       return 0;
@@ -1372,24 +1411,30 @@ export async function getEmpirePlayForumTopicController(
   const replyToColumnKey = "coluna_7";
 
   try {
-    const [mediaRecords, commentRecordsWithRow, genericComments, empireComments, topicCommentsSheet, usuariosRecords] =
-      await Promise.all([
-        sheetsService.readSheetObjects(sheetMedia).catch(() => []),
-        readSheetObjectsWithRowIndex(sheetComments),
-        sheetsService.readSheetObjects("Comentarios").catch(() => []),
-        sheetsService.readSheetObjects("Comentarios_EmpirePlay").catch(() => []),
-        sheetsService.readSheetObjects("Topicos_EmpirePlay").catch(() => []),
-        // Foto de perfil de quem comentou (config padrão de imagem da conta,
-        // não a foto do artista) — cacheada porque é a aba inteira de
-        // usuários, lida de novo a cada tópico de fórum aberto senão. TTL
-        // curto (20s, não os 120s do resto deste arquivo) — essa é
-        // especificamente a leitura que decide a foto mostrada nos
-        // comentários; um TTL longo aqui fazia o upload de foto parecer
-        // "não refletir" por até 2 minutos depois de salvo.
-        cachedRead("forum:usuarios_fotos", 20_000, () => googleSheetsService.usuarios.readSheetObjects("Usuários")).catch(
-          () => [],
-        ),
-      ]);
+    const [
+      mediaRecords,
+      commentRecordsWithRow,
+      genericComments,
+      empireComments,
+      topicCommentsSheet,
+      usuariosRecords,
+    ] = await Promise.all([
+      sheetsService.readSheetObjects(sheetMedia).catch(() => []),
+      readSheetObjectsWithRowIndex(sheetComments),
+      sheetsService.readSheetObjects("Comentarios").catch(() => []),
+      sheetsService.readSheetObjects("Comentarios_EmpirePlay").catch(() => []),
+      sheetsService.readSheetObjects("Topicos_EmpirePlay").catch(() => []),
+      // Foto de perfil de quem comentou (config padrão de imagem da conta,
+      // não a foto do artista) — cacheada porque é a aba inteira de
+      // usuários, lida de novo a cada tópico de fórum aberto senão. TTL
+      // curto (20s, não os 120s do resto deste arquivo) — essa é
+      // especificamente a leitura que decide a foto mostrada nos
+      // comentários; um TTL longo aqui fazia o upload de foto parecer
+      // "não refletir" por até 2 minutos depois de salvo.
+      cachedRead("forum:usuarios_fotos", 20_000, () =>
+        googleSheetsService.usuarios.readSheetObjects("Usuários"),
+      ).catch(() => []),
+    ]);
     const fotoPorJogadorId = new Map<string, string>();
     for (const u of usuariosRecords as SheetRecord[]) {
       const id = getValue(u, ["id"]);
@@ -1416,7 +1461,7 @@ export async function getEmpirePlayForumTopicController(
 
     const normTopicSearch = normalizeComparison(topicIdParam);
 
-    let targetMediaIndex = mediaRecords.findIndex((rec, idx) => {
+    const targetMediaIndex = mediaRecords.findIndex((rec, idx) => {
       const item = buildCleanItem(sheetIdLabel, rec, idx);
       const recTopicId =
         getValue(rec, [
@@ -1440,10 +1485,10 @@ export async function getEmpirePlayForumTopicController(
     // comentários de OUTRO item. Sem match real, retorna 404 em vez de
     // mostrar dado errado silenciosamente.
     if (targetMediaIndex === -1) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Tópico não encontrado." }),
-        { status: 404, headers: { "Content-Type": "application/json; charset=utf-8" } },
-      );
+      return new Response(JSON.stringify({ success: false, error: "Tópico não encontrado." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
     }
 
     const rawMedia = mediaRecords[targetMediaIndex];
@@ -1643,7 +1688,13 @@ export async function getEmpirePlayForumTopicController(
         // ID do jogador que comentou (coluna B nas abas Comentarios_*) — usado
         // pra saber se o usuário logado pode editar esse comentário.
         const jogadorIdVal =
-          getValue(rec, ["id_do_jogador", "id_jogador", "jogador_id", "jogadorid", "telegram_id"]) || "";
+          getValue(rec, [
+            "id_do_jogador",
+            "id_jogador",
+            "jogador_id",
+            "jogadorid",
+            "telegram_id",
+          ]) || "";
 
         // "comentarios_para" NUNCA deve virar texto do comentário — é a
         // coluna de referência ao ID do tópico (usada só pra achar o
@@ -1674,7 +1725,8 @@ export async function getEmpirePlayForumTopicController(
         }
         const reactions: Record<string, number> = {};
         Object.entries(reactionsMap).forEach(([emoji, jogadorIds]) => {
-          if (Array.isArray(jogadorIds) && jogadorIds.length > 0) reactions[emoji] = jogadorIds.length;
+          if (Array.isArray(jogadorIds) && jogadorIds.length > 0)
+            reactions[emoji] = jogadorIds.length;
         });
 
         // Só os registros da aba principal (com __rowIndex) têm essa coluna

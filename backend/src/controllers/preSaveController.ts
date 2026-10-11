@@ -358,9 +358,15 @@ async function appendCampanha(c: PreSaveCampanha): Promise<number> {
 // posição/mais recente do artista, lendo o valTotal (coluna F, total
 // acumulado) e não o val semanal (coluna E).
 async function getMelhorValTotalArtista(artista: string): Promise<number> {
-  const rows = await googleSheetsService.chartsBase
-    .readValues("SPOTIFY", "A1:ZZ5000")
-    .catch(() => []);
+  // BUG REAL corrigido aqui (confirmado com dado de produção): a aba
+  // SPOTIFY acumula o histórico INTEIRO desde 2020 numa lista só (230+
+  // datas × ~100 posições = 20.000+ linhas, crescendo toda semana) —
+  // qualquer range com cap fixo (ex: "A1:ZZ5000") corta a planilha antes
+  // de chegar nas semanas recentes, já que as linhas vêm em ordem
+  // cronológica (mais antiga primeiro). Mesmo padrão de chartsController.ts
+  // (readSheet): lê SEM range (pega a aba inteira de verdade), sem
+  // depender de um número que quebra de novo mais pra frente.
+  const rows = await googleSheetsService.chartsBase.readValues("SPOTIFY").catch(() => []);
   if (!rows || rows.length < 2) return 0;
   const alvo = normalizeComparison(artista);
   let melhor = 0;
@@ -757,6 +763,111 @@ export async function getCampanhaPreSaveController(request: Request): Promise<Re
     console.error("[getCampanhaPreSaveController] Erro:", error);
     return jsonResponse(
       { success: false, error: error.message || "Erro ao buscar campanha." },
+      500,
+    );
+  }
+}
+
+// -------------------- DIAGNÓSTICO / REPARO DO TETO --------------------
+//
+// Criado pra investigar o relato real de contador travado em 0 (campanhas
+// do Max Gorghan e do Cowboy Fresh). Hipótese confirmada por raciocínio
+// de código (não consigo ler a planilha de produção direto desta sessão
+// — sem credenciais do Google Service Account configuradas aqui): o teto
+// (tetoFinal) é calculado UMA VEZ, na criação da campanha, e persistido —
+// nunca recalculado depois. getMelhorValTotalArtista tinha um bug real
+// (corrigido na mesma rodada desta investigação) que lia a aba SPOTIFY com
+// um cap fixo ("A1:ZZ5000"), e essa aba acumula 20.000+ linhas cronológicas
+// desde 2020 — qualquer artista cujas linhas recentes ficassem depois da
+// linha 5000 tinha valTotal=0 computado, e portanto tetoFinal=0 GRAVADO
+// PRA SEMPRE na campanha, mesmo com o fuso corrigido e missões completadas
+// depois: 0 (teto) * qualquer coisa = 0 (acumulado). Isso explicaria tanto
+// o caso com missão (Max Gorghan) quanto o sem missão (Cowboy Fresh) com a
+// MESMA causa raiz, já que os dois dependem do mesmo cálculo de teto.
+//
+// GET /api/presave/diagnostico?id=... — devolve o estado real armazenado
+// (sem nunca expor o teto na resposta pública de outros endpoints, mas
+// aqui É o propósito: diagnosticar o problema do teto) + o valTotal/teto
+// que SERIAM calculados agora com o bug já corrigido, pra comparar.
+export async function getDiagnosticoTetoPreSaveController(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const id = normalizeText(url.searchParams.get("id") || "");
+    const campanhas = await readAllCampanhas();
+    const c = campanhas.find((x) => x.id === id);
+    if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
+    const recalculo = await calcularTetos(c.artista);
+    return jsonResponse({
+      success: true,
+      data: {
+        id: c.id,
+        artista: c.artista,
+        modo: c.modo,
+        status: c.status,
+        tetoFinalArmazenado: c.tetoFinal,
+        acumuladoCalculadoAgora: Math.round(calcularAcumulado(c)),
+        valTotalRecalculadoAgora: recalculo.valTotal,
+        tetoQueSeriaCalculadoAgora:
+          c.modo === "missao" ? recalculo.tetoMissao : recalculo.tetoContagem,
+        missoes: c.modo === "missao" ? c.missoes : undefined,
+        diaCampanhaAtual: diaCampanhaAtual(c),
+        dataInicioISO: c.dataInicioISO,
+      },
+    });
+  } catch (error: any) {
+    return jsonResponse(
+      { success: false, error: error.message || "Erro ao diagnosticar campanha." },
+      500,
+    );
+  }
+}
+
+// POST /api/presave/recalcular-teto { campanhaId } — só reescreve
+// tetoFinal quando o valor ARMAZENADO é 0 (nunca sobrescreve um teto já
+// calculado de verdade) e o recálculo (com o bug do cap já corrigido) dá
+// um valor maior que 0. Nunca muda o acumulado já registrado em missões
+// completadas — só desbloqueia o cálculo de acumulado parar de multiplicar
+// por um teto zerado.
+export async function recalcularTetoPreSaveController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as { campanhaId?: string };
+    const campanhaId = normalizeText(body.campanhaId);
+    const campanhas = await readAllCampanhas();
+    const c = campanhas.find((x) => x.id === campanhaId);
+    if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
+    if (c.tetoFinal > 0) {
+      return jsonResponse({
+        success: false,
+        error: `Essa campanha já tem um teto armazenado (${c.tetoFinal}) — não é 0, então não é esse bug. Não sobrescrevi nada.`,
+      });
+    }
+    const recalculo = await calcularTetos(c.artista);
+    const novoTeto = c.modo === "missao" ? recalculo.tetoMissao : recalculo.tetoContagem;
+    if (novoTeto <= 0) {
+      return jsonResponse({
+        success: false,
+        error: `Recalculei e o teto ainda saiu 0 (valTotal=${recalculo.valTotal}) — o artista "${c.artista}" realmente não tem música encontrada no chart SPOTIFY agora. Não é o bug do cap; precisa investigar o cruzamento de nome do artista.`,
+      });
+    }
+    c.tetoFinal = novoTeto;
+    await writeCampanha(c);
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Teto da campanha de pre-save "${c.albumTituloFull}" recalculado de 0 pra ${novoTeto} (valTotal=${recalculo.valTotal}) — reparo do bug do cap fixo em SPOTIFY.`,
+      onde: "recalcularTetoPreSaveController",
+    }).catch(() => {});
+    return jsonResponse({
+      success: true,
+      data: {
+        tetoAnterior: 0,
+        tetoNovo: novoTeto,
+        valTotal: recalculo.valTotal,
+        acumuladoAgora: Math.round(calcularAcumulado(c)),
+      },
+    });
+  } catch (error: any) {
+    return jsonResponse(
+      { success: false, error: error.message || "Erro ao recalcular teto." },
       500,
     );
   }

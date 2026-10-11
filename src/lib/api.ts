@@ -1,7 +1,13 @@
 // Empire Hub — Apps Script API client
 // Mantém Apps Script + Google Sheets como backend.
 
-import { getStoredSessionToken, setStoredSessionToken, getStoredLogin, setStoredLogin, type LoginResult } from "@/components/LoginScreen";
+import {
+  getStoredSessionToken,
+  setStoredSessionToken,
+  getStoredLogin,
+  setStoredLogin,
+  type LoginResult,
+} from "@/components/LoginScreen";
 
 // Anexa o token de sessão (quando existe) como Authorization: Bearer — só
 // as ações admin-gated no backend (bypass do ID hardcoded) exigem que ele
@@ -157,8 +163,8 @@ export interface ProgramaTV {
   espectadores: number;
   cover: string;
   stream_url: string;
-  data?: string;       // DD/MM/YYYY
-  horario?: string;    // HH:mm
+  data?: string; // DD/MM/YYYY
+  horario?: string; // HH:mm
   data_inicio?: string;
   duracao_min?: number;
   buff?: string;
@@ -213,11 +219,16 @@ function persistCache() {
   }, 500);
 }
 
-async function rawCall<T = unknown>(params: Record<string, unknown>, base: string = SCRIPT_URL): Promise<T> {
+async function rawCall<T = unknown>(
+  params: Record<string, unknown>,
+  base: string = SCRIPT_URL,
+): Promise<T> {
   const isPost = params.payload || JSON.stringify(params).length > 1000;
   const options: RequestInit = { method: isPost ? "POST" : "GET" };
   if (isPost) options.body = JSON.stringify(params);
-  const url = isPost ? base : `${base}?${qs(params as Record<string, string | number | undefined>)}`;
+  const url = isPost
+    ? base
+    : `${base}?${qs(params as Record<string, string | number | undefined>)}`;
   const res = await fetch(url, options);
   const text = await res.text();
   try {
@@ -250,7 +261,10 @@ function fetchAndStore<T>(key: string, params: Record<string, unknown>, base: st
   return p;
 }
 
-async function call<T = unknown>(params: Record<string, unknown>, opts: { cache?: boolean; tv?: boolean } = {}): Promise<T> {
+async function call<T = unknown>(
+  params: Record<string, unknown>,
+  opts: { cache?: boolean; tv?: boolean } = {},
+): Promise<T> {
   const base = opts.tv ? TV_SCRIPT_URL : SCRIPT_URL;
   if (!opts.cache) return rawCall<T>(params, base);
   const key = (opts.tv ? "TV::" : "HUB::") + JSON.stringify(params);
@@ -308,10 +322,11 @@ function isEmptyish(data: unknown): boolean {
 export function invalidateCache() {
   cache.clear();
   if (typeof sessionStorage !== "undefined") {
-    try { sessionStorage.removeItem(SS_KEY); } catch {}
+    try {
+      sessionStorage.removeItem(SS_KEY);
+    } catch {}
   }
 }
-
 
 // Compara nomes ignorando acento/maiúscula — mesma lógica do
 // normalizeComparison do backend. Sem isso, "Anníbal Páris" vindo da aba
@@ -396,7 +411,10 @@ export const api = {
         },
     );
   },
-  async meuNivel(identificador: { telegramId?: string; usuario?: string }): Promise<NivelJogador | null> {
+  async meuNivel(identificador: {
+    telegramId?: string;
+    usuario?: string;
+  }): Promise<NivelJogador | null> {
     const { telegramId, usuario } = identificador;
     if (!telegramId && !usuario) return null;
     const params = new URLSearchParams();
@@ -440,7 +458,10 @@ export const api = {
   },
   // Grava o texto novo na coluna E ("biografia") da aba INFOS ACTS — antes
   // só dava pra editar direto na planilha.
-  async setArtistBiografia(nome: string, biografia: string): Promise<{ success: boolean; error?: string }> {
+  async setArtistBiografia(
+    nome: string,
+    biografia: string,
+  ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/artistas/biografia", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -581,7 +602,12 @@ export const api = {
     }
   },
   async postarRedCarpet(payload: {
-    programaId: string; artista: string; artistaFoto?: string; fotos: string[]; legenda?: string; telegramId: string;
+    programaId: string;
+    artista: string;
+    artistaFoto?: string;
+    fotos: string[];
+    legenda?: string;
+    telegramId: string;
   }): Promise<{ success: boolean; data?: RedCarpetPost; error?: string }> {
     const res = await fetch("/api/tv/red-carpet", {
       method: "POST",
@@ -590,7 +616,10 @@ export const api = {
     });
     return res.json();
   },
-  async curtirRedCarpet(postId: string, tgId: string): Promise<{ success: boolean; likes?: number; error?: string }> {
+  async curtirRedCarpet(
+    postId: string,
+    tgId: string,
+  ): Promise<{ success: boolean; likes?: number; error?: string }> {
     const res = await fetch("/api/tv/red-carpet/curtir", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -598,7 +627,10 @@ export const api = {
     });
     return res.json();
   },
-  async deletarRedCarpet(postId: string, tgId: string): Promise<{ success: boolean; error?: string }> {
+  async deletarRedCarpet(
+    postId: string,
+    tgId: string,
+  ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/tv/red-carpet/deletar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -629,7 +661,11 @@ export const api = {
     }
   },
   async responderEnquete(payload: {
-    enqueteId: string; programaId: string; tgId: string; nome: string; nota: number;
+    enqueteId: string;
+    programaId: string;
+    tgId: string;
+    nome: string;
+    nota: number;
   }): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/tv/enquete/responder", {
       method: "POST",
@@ -640,7 +676,10 @@ export const api = {
   },
 
   async registrarPresencaTV(p: {
-    programa_id: string; telegram_id: string; nome: string; watched_seconds: number;
+    programa_id: string;
+    telegram_id: string;
+    nome: string;
+    watched_seconds: number;
   }): Promise<CommonResponse> {
     const res = await fetch("/api/tv/presenca", {
       method: "POST",
@@ -649,7 +688,11 @@ export const api = {
     });
     return res.json();
   },
-  async listarPresencaTV(programa_id: string): Promise<Array<{ telegram_id: string; nome: string; watched_seconds: number; percentual: number }>> {
+  async listarPresencaTV(
+    programa_id: string,
+  ): Promise<
+    Array<{ telegram_id: string; nome: string; watched_seconds: number; percentual: number }>
+  > {
     try {
       const res = await fetch(`/api/tv/presenca?programa_id=${encodeURIComponent(programa_id)}`);
       if (!res.ok) return [];
@@ -665,14 +708,18 @@ export const api = {
       return [];
     }
   },
-  async listarArquivoTV(): Promise<Array<{ data: string; hora: string; sala: string; total_msgs: number }>> {
+  async listarArquivoTV(): Promise<
+    Array<{ data: string; hora: string; sala: string; total_msgs: number }>
+  > {
     const r = await call<any[]>({ acao: "listar_arquivo_tv" }, { cache: true, tv: true });
-    return Array.isArray(r) ? r.map((x) => ({
-      data: String(x.data || ""),
-      hora: String(x.hora || ""),
-      sala: String(x.sala || ""),
-      total_msgs: Number(x.total_msgs || 0),
-    })) : [];
+    return Array.isArray(r)
+      ? r.map((x) => ({
+          data: String(x.data || ""),
+          hora: String(x.hora || ""),
+          sala: String(x.sala || ""),
+          total_msgs: Number(x.total_msgs || 0),
+        }))
+      : [];
   },
 
   // ---- Álbuns (migrado do Apps Script pro Worker — reaproveita o mesmo
@@ -750,7 +797,10 @@ export const api = {
     const res = await fetch("/api/playlists", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ payload: JSON.stringify(payload), tgId: telegramId || payload.telegram_id || "" }),
+      body: JSON.stringify({
+        payload: JSON.stringify(payload),
+        tgId: telegramId || payload.telegram_id || "",
+      }),
     });
     return res.json();
   },
@@ -775,7 +825,10 @@ export const api = {
     const data = await res.json().catch(() => null);
     return Array.isArray(data) ? data : [];
   },
-  async salvarFaixa(tgId: string, track: PlaylistTrack): Promise<CommonResponse & { already?: boolean }> {
+  async salvarFaixa(
+    tgId: string,
+    track: PlaylistTrack,
+  ): Promise<CommonResponse & { already?: boolean }> {
     const res = await fetch("/api/salvos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -870,7 +923,14 @@ export const api = {
     descricao?: string;
     capa_url?: string;
     contracapa_url?: string;
-    faixas: { numero: number; titulo: string; artistas: string; duracao?: string; drive_url: string; letra?: string }[];
+    faixas: {
+      numero: number;
+      titulo: string;
+      artistas: string;
+      duracao?: string;
+      drive_url: string;
+      letra?: string;
+    }[];
   }): Promise<CommonResponse> {
     const res = await fetch("/api/playlists/albuns/editar", {
       method: "POST",
@@ -896,8 +956,8 @@ export const api = {
   async listarPremiacoesCategorias(
     award: string,
   ): Promise<{ ano: string; segmento: string; categoria: string; preenchido: boolean }[]> {
-    const res = await fetch(`/api/premiacoes/categorias?award=${encodeURIComponent(award)}`).then((r) =>
-      r.json(),
+    const res = await fetch(`/api/premiacoes/categorias?award=${encodeURIComponent(award)}`).then(
+      (r) => r.json(),
     );
     return res?.data || [];
   },
@@ -943,9 +1003,9 @@ export const api = {
     };
     categorias: { categoria: string; descritivo: string; premia: string }[];
   } | null> {
-    const res = await fetch(`/api/premiacoes/indicar/categorias?awardId=${encodeURIComponent(awardId)}`).then((r) =>
-      r.json(),
-    );
+    const res = await fetch(
+      `/api/premiacoes/indicar/categorias?awardId=${encodeURIComponent(awardId)}`,
+    ).then((r) => r.json());
     return res?.success ? res.data : null;
   },
   async listarCandidatosIndicar(
@@ -985,9 +1045,9 @@ export const api = {
     shouldShow: boolean;
     award?: { id: string; premiacao: string; capaUrl: string; encerramento: string };
   }> {
-    const res = await fetch(`/api/premiacoes/indicar/popup-status?telegramId=${encodeURIComponent(telegramId)}`).then(
-      (r) => r.json(),
-    );
+    const res = await fetch(
+      `/api/premiacoes/indicar/popup-status?telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
     return res?.success ? res.data : { shouldShow: false };
   },
   async dispensarPopupVma(telegramId: string): Promise<{ success: boolean }> {
@@ -998,7 +1058,11 @@ export const api = {
     });
     return res.json();
   },
-  async removerIndicacao(awardId: string, linha: number, telegramId: string): Promise<{ success: boolean; error?: string }> {
+  async removerIndicacao(
+    awardId: string,
+    linha: number,
+    telegramId: string,
+  ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/premiacoes/indicar/remover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1012,9 +1076,9 @@ export const api = {
     shouldShow: boolean;
     award?: { id: string; premiacao: string; capaUrl: string; encerramento: string };
   }> {
-    const res = await fetch(`/api/premiacoes/votacao/popup-status?telegramId=${encodeURIComponent(telegramId)}`).then(
-      (r) => r.json(),
-    );
+    const res = await fetch(
+      `/api/premiacoes/votacao/popup-status?telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
     return res?.success ? res.data : { shouldShow: false };
   },
   async dispensarPopupVotacao(telegramId: string): Promise<{ success: boolean }> {
@@ -1047,9 +1111,9 @@ export const api = {
     };
     categorias: { categoria: string; descritivo: string; tipo: "nota" | "voto" }[];
   } | null> {
-    const res = await fetch(`/api/premiacoes/votacao/categorias?awardId=${encodeURIComponent(awardId)}`).then((r) =>
-      r.json(),
-    );
+    const res = await fetch(
+      `/api/premiacoes/votacao/categorias?awardId=${encodeURIComponent(awardId)}`,
+    ).then((r) => r.json());
     return res?.success ? res.data : null;
   },
   async listarIndicadosVotacao(
@@ -1058,7 +1122,16 @@ export const api = {
     telegramId: string,
   ): Promise<{
     tipo: "nota" | "voto";
-    indicados: { titulo: string; artista: string; codigoUnico: string; meuValor: string; imagem: string; imagemFallback?: string; topicId: string; tab: string }[];
+    indicados: {
+      titulo: string;
+      artista: string;
+      codigoUnico: string;
+      meuValor: string;
+      imagem: string;
+      imagemFallback?: string;
+      topicId: string;
+      tab: string;
+    }[];
   }> {
     const qs = `awardId=${encodeURIComponent(awardId)}&categoria=${encodeURIComponent(categoria)}&telegramId=${encodeURIComponent(telegramId)}`;
     const res = await fetch(`/api/premiacoes/votacao/indicados?${qs}`).then((r) => r.json());
@@ -1125,9 +1198,9 @@ export const api = {
   async listarPendenciasPerformance(
     telegramId: string,
   ): Promise<{ awardId: string; premiacao: string; linha: number; artista: string }[]> {
-    const res = await fetch(`/api/premiacoes/performance/pendentes?telegramId=${encodeURIComponent(telegramId)}`).then(
-      (r) => r.json(),
-    );
+    const res = await fetch(
+      `/api/premiacoes/performance/pendentes?telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
     return res?.data || [];
   },
   async enviarPerformance(payload: {
@@ -1145,13 +1218,19 @@ export const api = {
   },
 
   // ---- Premiações > Votação > termo de integridade do voto (obrigatório) ----
-  async statusTermoVoto(awardId: string, telegramId: string): Promise<{ aceito: boolean; texto: string } | null> {
+  async statusTermoVoto(
+    awardId: string,
+    telegramId: string,
+  ): Promise<{ aceito: boolean; texto: string } | null> {
     const res = await fetch(
       `/api/premiacoes/votacao/termo-status?awardId=${encodeURIComponent(awardId)}&telegramId=${encodeURIComponent(telegramId)}`,
     ).then((r) => r.json());
     return res?.success ? res.data : null;
   },
-  async aceitarTermoVoto(awardId: string, telegramId: string): Promise<{ success: boolean; error?: string }> {
+  async aceitarTermoVoto(
+    awardId: string,
+    telegramId: string,
+  ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/premiacoes/votacao/termo-aceitar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1202,23 +1281,37 @@ export const api = {
       totalIndicacoes: number;
       totalVencedor: number;
       porAward: { award: string; indicacoes: number; vencedor: number }[];
-      detalhes: { award: string; ano: string; categoria: string; status: "vencedor" | "indicado"; titulo?: string; artista: string }[];
+      detalhes: {
+        award: string;
+        ano: string;
+        categoria: string;
+        status: "vencedor" | "indicado";
+        titulo?: string;
+        artista: string;
+      }[];
     };
   }> {
-    const res = await fetch(`/api/awards/artista?nome=${encodeURIComponent(nome)}`).then((r) => r.json());
+    const res = await fetch(`/api/awards/artista?nome=${encodeURIComponent(nome)}`).then((r) =>
+      r.json(),
+    );
     return res;
   },
   async listarAwardsTodos(): Promise<
-    { award: string; ano: string; categoria: string; status: "vencedor" | "indicado"; titulo?: string; artista: string }[]
+    {
+      award: string;
+      ano: string;
+      categoria: string;
+      status: "vencedor" | "indicado";
+      titulo?: string;
+      artista: string;
+    }[]
   > {
     const res = await fetch("/api/awards/todos").then((r) => r.json());
     return res?.data || [];
   },
 
   // ---- Empire Market (prestígio + ECoin) ----
-  async listarMarketProdutos(
-    telegramId: string,
-  ): Promise<{
+  async listarMarketProdutos(telegramId: string): Promise<{
     itens: {
       id: string;
       nome: string;
@@ -1238,9 +1331,9 @@ export const api = {
     saldoPrestigio: number;
     artistas: { nome: string; saldoEcoin: number }[];
   }> {
-    const res = await fetch(`/api/market/produtos?telegramId=${encodeURIComponent(telegramId)}`).then(
-      (r) => r.json(),
-    );
+    const res = await fetch(
+      `/api/market/produtos?telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
     return res?.data || { itens: [], saldoPrestigio: 0, artistas: [] };
   },
   async listarMarketRegras(): Promise<{
@@ -1268,7 +1361,14 @@ export const api = {
 
   // ---- Spotlight Banner (Market) ----
   async listarBannersAtivos(): Promise<
-    { id: string; artista: string; titulo: string; imagemUrl: string; topicoId: string; tab: string }[]
+    {
+      id: string;
+      artista: string;
+      titulo: string;
+      imagemUrl: string;
+      topicoId: string;
+      tab: string;
+    }[]
   > {
     const res = await fetch("/api/market/banners/ativos").then((r) => r.json());
     return res?.data || [];
@@ -1316,7 +1416,9 @@ export const api = {
     lances: { artista: string; valor: number; ts: string }[];
     artistas: { nome: string; saldoEcoin: number }[];
   } | null> {
-    const res = await fetch(`/api/market/leilao?telegramId=${encodeURIComponent(telegramId)}`).then((r) => r.json());
+    const res = await fetch(`/api/market/leilao?telegramId=${encodeURIComponent(telegramId)}`).then(
+      (r) => r.json(),
+    );
     return res?.data ?? null;
   },
   async enviarLanceLeilao(payload: {
@@ -1331,7 +1433,10 @@ export const api = {
     });
     return res.json();
   },
-  async registrarCliqueBanner(payload: { telegramId: string; bannerId: string }): Promise<{ success: boolean }> {
+  async registrarCliqueBanner(payload: {
+    telegramId: string;
+    bannerId: string;
+  }): Promise<{ success: boolean }> {
     const res = await fetch("/api/market/banners/clique", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1350,12 +1455,15 @@ export const api = {
       ativo: boolean;
     }[]
   > {
-    const res = await fetch(`/api/market/banners/meus?telegramId=${encodeURIComponent(telegramId)}`).then((r) =>
-      r.json(),
-    );
+    const res = await fetch(
+      `/api/market/banners/meus?telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
     return res?.data || [];
   },
-  async deletarBanner(payload: { telegramId: string; bannerId: string }): Promise<{ success: boolean; error?: string }> {
+  async deletarBanner(payload: {
+    telegramId: string;
+    bannerId: string;
+  }): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/market/banners/deletar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1398,7 +1506,9 @@ export const api = {
     });
     return res.json();
   },
-  async distribuirPontosAleatorioNovo(telegramId: string): Promise<CommonResponse & { distribuidas?: number }> {
+  async distribuirPontosAleatorioNovo(
+    telegramId: string,
+  ): Promise<CommonResponse & { distribuidas?: number }> {
     const res = await fetch("/api/ponto/distribuir-aleatorio", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1577,7 +1687,13 @@ export const api = {
       for (const [key, mapped] of Object.entries(KEY_MAP)) {
         const item = json[key] as { tit?: string; art?: string; capa?: string } | undefined;
         if (!item) continue;
-        out[mapped] = { musica: item.tit || "", artista: item.art || "", foto: item.capa || "", data: "", url: "" };
+        out[mapped] = {
+          musica: item.tit || "",
+          artista: item.art || "",
+          foto: item.capa || "",
+          data: "",
+          url: "",
+        };
       }
       return out;
     } catch {
@@ -1641,7 +1757,14 @@ export const api = {
     const res = await fetch("/api/social/posts/editar", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ postId, texto, media_url: mediaUrl, tgId, autor, media_tipo: mediaTipo }),
+      body: JSON.stringify({
+        postId,
+        texto,
+        media_url: mediaUrl,
+        tgId,
+        autor,
+        media_tipo: mediaTipo,
+      }),
     });
     return res.json();
   },
@@ -1744,7 +1867,14 @@ export const api = {
     tipo: "BEST_NEW_TRACK" | "TOP_ARTIST",
     periodoId: string,
   ): Promise<{
-    comentarios: { id: string; jogadorId: string; nome: string; fotoPerfil: string | null; comentario: string; data: string }[];
+    comentarios: {
+      id: string;
+      jogadorId: string;
+      nome: string;
+      fotoPerfil: string | null;
+      comentario: string;
+      data: string;
+    }[];
   }> {
     const res = await fetch(
       `/api/acervo/pitchfork/comentarios?tipo=${encodeURIComponent(tipo)}&periodoId=${encodeURIComponent(periodoId)}`,
@@ -1779,7 +1909,12 @@ export const api = {
       body: JSON.stringify({ tipo, periodoId, jogadorId }),
     });
     const data = await res.json().catch(() => null);
-    if (data?.success) return { success: true, curtidas: data.data.curtidas, curtidoPorMim: data.data.curtidoPorMim };
+    if (data?.success)
+      return {
+        success: true,
+        curtidas: data.data.curtidas,
+        curtidoPorMim: data.data.curtidoPorMim,
+      };
     return { success: false };
   },
   // Letra sincronizada (formato LRC) — só o dono do artista da faixa
@@ -1797,7 +1932,10 @@ export const api = {
     });
     return res.json();
   },
-  async criarRevistaAcervo(payload: any, tgId: string): Promise<{ ok: boolean; id?: string; error?: string }> {
+  async criarRevistaAcervo(
+    payload: any,
+    tgId: string,
+  ): Promise<{ ok: boolean; id?: string; error?: string }> {
     const res = await fetch("/api/acervo/revistas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1821,7 +1959,10 @@ export const api = {
     const data = await res.json().catch(() => null);
     return Array.isArray(data) ? data : [];
   },
-  async criarEntrevistaAcervo(payload: any, tgId: string): Promise<{ ok: boolean; id?: string; error?: string }> {
+  async criarEntrevistaAcervo(
+    payload: any,
+    tgId: string,
+  ): Promise<{ ok: boolean; id?: string; error?: string }> {
     const res = await fetch("/api/acervo/entrevistas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1863,7 +2004,11 @@ export const api = {
     const data = await res.json().catch(() => null);
     return Array.isArray(data) ? data : [];
   },
-  async editarComentarioSocial(rowIndex: number, texto: string, tgId: string): Promise<CommonResponse> {
+  async editarComentarioSocial(
+    rowIndex: number,
+    texto: string,
+    tgId: string,
+  ): Promise<CommonResponse> {
     const res = await fetch("/api/social/comentario/editar", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -1906,7 +2051,6 @@ export const api = {
     });
     return res.json();
   },
-
 };
 
 export interface ChartData {
@@ -1948,13 +2092,30 @@ export function fmtMoney(n: number) {
   return `$${(n || 0).toLocaleString("pt-BR")}`;
 }
 
+// Padrão de data exibida pro jogador em TODO o app: DD/MM/AAAA (fuso
+// Brasília). Converte um "YYYY-MM-DD" (formato que o backend guarda/manda
+// pra datas simples, ex: dataLancamento do pre-save) pro formato certo —
+// por split de string, nunca via Date+timeZone (evita qualquer artefato de
+// fuso na conversão: "YYYY-MM-DD" já é um dia-calendário puro, sem hora).
+// Reaproveita o mesmo padrão já usado em vários lugares do backend
+// (`const [ano, mes, dia] = data.split("-")`), só centralizado aqui pro
+// front nunca mais mostrar "2026-10-22" cru pro jogador.
+export function formatarDataBR(yyyyMmDd: string | undefined | null): string {
+  if (!yyyyMmDd) return "";
+  const m = yyyyMmDd.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return yyyyMmDd;
+  const [, ano, mes, dia] = m;
+  return `${dia}/${mes}/${ano}`;
+}
+
 // `size` é sempre em pixels CSS — mas a tela pode ter densidade 2x/3x
 // (praticamente todo celular moderno), então pedir exatamente o tamanho da
 // caixa fazia a imagem sair borrada nesses aparelhos. Multiplica pela
 // densidade real da tela (com teto de 3x — acima disso o ganho visual não
 // compensa o peso extra) antes de montar a URL do thumbnail.
 function tamanhoEfetivo(size: number): number {
-  const dpr = typeof window !== "undefined" && window.devicePixelRatio ? window.devicePixelRatio : 1;
+  const dpr =
+    typeof window !== "undefined" && window.devicePixelRatio ? window.devicePixelRatio : 1;
   return Math.round(size * Math.min(dpr, 3));
 }
 
@@ -1980,7 +2141,10 @@ export function driveImg(url: string | undefined | null, size: number = 800): st
 // capa/thumbnail quadrada por natureza (ex.: blocos de imagem do "Visual"
 // nos tópicos — banners, pôsteres, prints —, que ficavam cortados/
 // distorcidos com o recorte quadrado do driveImg).
-export function driveImgWide(url: string | undefined | null, width: number = 1600): string | undefined {
+export function driveImgWide(
+  url: string | undefined | null,
+  width: number = 1600,
+): string | undefined {
   if (!url) return undefined;
   const alvo = tamanhoEfetivo(width);
   if (url.includes("lh3.googleusercontent.com")) {
