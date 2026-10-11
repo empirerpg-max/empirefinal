@@ -737,11 +737,11 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     }
     response = await recalcularTetoPreSaveController(request);
   } else if (url.pathname === "/api/presave/vincular-faixa-existente") {
-    if (request.method !== "POST") {
+    if (request.method !== "POST" && request.method !== "GET") {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Use POST para /api/presave/vincular-faixa-existente.",
+          error: "Use POST (ou GET com querystring) para /api/presave/vincular-faixa-existente.",
         }),
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );

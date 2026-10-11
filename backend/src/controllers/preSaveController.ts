@@ -976,14 +976,23 @@ export async function recalcularTetoPreSaveController(request: Request): Promise
 // áudio nenhum, porque faixa existente nunca precisa de mediaUrl próprio.
 export async function vincularFaixaExistentePreSaveController(request: Request): Promise<Response> {
   try {
-    const body = (await request.json().catch(() => ({}))) as {
-      campanhaId?: string;
-      faixaNum?: number;
-      tituloMusicaExistente?: string;
-    };
-    const campanhaId = normalizeText(body.campanhaId);
-    const faixaNum = Number(body.faixaNum);
-    const tituloMusicaExistente = normalizeText(body.tituloMusicaExistente);
+    const url = new URL(request.url);
+    const body =
+      request.method === "POST"
+        ? ((await request.json().catch(() => ({}))) as {
+            campanhaId?: string;
+            faixaNum?: number;
+            tituloMusicaExistente?: string;
+          })
+        : {};
+    // Aceita também querystring via GET — só pra permitir rodar o reparo via
+    // workflow admin-call.yml (que só faz GET), mesmo padrão já usado em
+    // recalcular-teto.
+    const campanhaId = normalizeText(body.campanhaId || url.searchParams.get("campanhaId") || "");
+    const faixaNum = Number(body.faixaNum || url.searchParams.get("faixaNum") || "");
+    const tituloMusicaExistente = normalizeText(
+      body.tituloMusicaExistente || url.searchParams.get("tituloMusicaExistente") || "",
+    );
     if (!campanhaId || !faixaNum || !tituloMusicaExistente) {
       return jsonResponse(
         { success: false, error: "campanhaId, faixaNum e tituloMusicaExistente são obrigatórios." },
