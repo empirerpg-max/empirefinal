@@ -796,18 +796,65 @@ function NovaCampanhaForm({
         <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
           Lista de Faixas do Álbum
         </label>
-        {faixasConfig.map((faixa, idx) => (
-          <FaixaEditor
-            key={idx}
-            faixa={faixa}
-            myChartSongs={myChartSongs}
-            onChange={(patch) => {
-              const updated = [...faixasConfig];
-              updated[idx] = { ...updated[idx], ...patch };
-              setFaixasConfig(updated);
-            }}
-          />
-        ))}
+        {faixasConfig.map((faixa, idx) => {
+          // Aviso real (pedido do usuário, achado o motivo com o bug da
+          // "Follia" na campanha do Max Gorghan): faixa marcada como
+          // inédita, com um link placeholder ("-" ou vazio), cujo título
+          // já bate com uma música REAL já registrada nos charts — sinal
+          // de que o jogador só preencheu "inédita" pra conseguir avançar
+          // no formulário (provavelmente porque a busca de "Música
+          // Existente" não achava essa música na hora, bug do cap fixo do
+          // SPOTIFY, já corrigido). Em vez de deixar passar calado,
+          // sugere trocar pra "Música Existente" de verdade.
+          const linkPlaceholder = !faixa.mediaUrl?.trim() || faixa.mediaUrl.trim() === "-";
+          const sugestaoExistente =
+            faixa.inedita && linkPlaceholder && faixa.titulo.trim()
+              ? musicasEmChart.find(
+                  (m) =>
+                    normalizeNome(m.artist) === normalizeNome(artista) &&
+                    (normalizeNome(m.title) === normalizeNome(faixa.titulo) ||
+                      normalizeNome(m.label) === normalizeNome(`${artista} - ${faixa.titulo}`)),
+                )
+              : undefined;
+          return (
+            <div key={idx} className="space-y-1.5">
+              {sugestaoExistente && (
+                <div className="flex items-center justify-between gap-2 bg-amber-500/10 border border-amber-400/30 rounded-xl px-3 py-2">
+                  <span className="text-[11px] text-amber-200 min-w-0">
+                    "{sugestaoExistente.label}" já existe nos charts — vincular como Música
+                    Existente em vez de criar uma faixa inédita vazia?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = [...faixasConfig];
+                      updated[idx] = {
+                        ...updated[idx],
+                        inedita: false,
+                        titulo: sugestaoExistente.label,
+                        mediaUrl: undefined,
+                        buscaQuery: "",
+                      };
+                      setFaixasConfig(updated);
+                    }}
+                    className="text-[11px] font-black text-amber-300 hover:text-amber-200 shrink-0 whitespace-nowrap"
+                  >
+                    Vincular
+                  </button>
+                </div>
+              )}
+              <FaixaEditor
+                faixa={faixa}
+                myChartSongs={myChartSongs}
+                onChange={(patch) => {
+                  const updated = [...faixasConfig];
+                  updated[idx] = { ...updated[idx], ...patch };
+                  setFaixasConfig(updated);
+                }}
+              />
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
