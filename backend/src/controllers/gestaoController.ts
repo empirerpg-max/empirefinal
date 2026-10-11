@@ -916,11 +916,35 @@ export async function getMusicasEmChartController(): Promise<Response> {
     ]);
     const seen = new Set<string>();
     const musicas: { label: string; artist: string; title: string }[] = [];
-    const push = (label: string) => {
+    // `artistHint`: quando a fonte TEM uma coluna própria de artista
+    // (SPOTIFY/chartsBase tem — ver abaixo), usa ela como fonte de
+    // verdade do artista em vez de derivar cortando a string no " - ".
+    // Bug real encontrado (Max Gorghan - "Follia" não aparecia na busca,
+    // mesmo "Fuori Rotta" do mesmo artista aparecendo): derivar o artista
+    // só cortando o título no primeiro " - " quebra silenciosamente se o
+    // separador real vier diferente (en dash, espaço duplo, sem espaço
+    // antes/depois etc.) OU se o próprio título da música tiver um " - "
+    // no meio (ex: "Artista - Nome - Extra") — o corte pega só até o
+    // primeiro, e o restante bagunça artist/title. Com a coluna de
+    // artista dedicada (SPOTIFY!H), isso deixa de depender de qualquer
+    // formatação do título.
+    const push = (label: string, artistHint?: string) => {
       label = label.trim();
       const key = normalizeComparison(label);
       if (!label || seen.has(key)) return;
       seen.add(key);
+      const artistoLimpo = (artistHint || "").trim();
+      if (artistoLimpo) {
+        // Título vem sempre como "Artista - Título" (confirmado nas
+        // fontes usadas) — corta só o prefixo exato do artista real
+        // (coluna própria), nunca o primeiro " - " que aparecer.
+        const prefixo = `${artistoLimpo} - `;
+        const title = label.toLowerCase().startsWith(prefixo.toLowerCase())
+          ? label.slice(prefixo.length).trim()
+          : label;
+        musicas.push({ label, artist: artistoLimpo, title });
+        return;
+      }
       const sepIdx = label.indexOf(" - ");
       musicas.push({
         label,
@@ -929,9 +953,12 @@ export async function getMusicasEmChartController(): Promise<Response> {
       });
     };
     for (const row of pontosRows) push(row[0] || "");
-    // SPOTIFY (chartsBase): tit = coluna D (índice 3) — layout confirmado
-    // em chartsController.ts (fetchC). Pula o cabeçalho (linha 1).
-    for (let i = 1; i < spotifyRows.length; i++) push(spotifyRows[i]?.[3] || "");
+    // SPOTIFY (chartsBase): tit = coluna D (índice 3), art = coluna H
+    // (índice 7) — layout confirmado em chartsController.ts (fetchC).
+    // Pula o cabeçalho (linha 1).
+    for (let i = 1; i < spotifyRows.length; i++) {
+      push(spotifyRows[i]?.[3] || "", spotifyRows[i]?.[7] || "");
+    }
     return new Response(JSON.stringify({ success: true, data: musicas }), {
       status: 200,
       headers: { "Content-Type": "application/json" },

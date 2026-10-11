@@ -389,19 +389,61 @@ async function calcularTetos(
   return { tetoMissao: tetoBase, tetoContagem: tetoBase * TETO_PCT_MODO_CONTAGEM, valTotal };
 }
 
+// Fuso horário do calendário de 14 dias: SEMPRE Brasília (UTC-3), ciclo de
+// 24h corridas nesse fuso — combinado desde o início, mas até agora
+// calculado errado (ver diaCampanhaAtual abaixo). Mesmo padrão de fuso já
+// usado em processarLancamentosPreSaveScheduled (hojeStr).
+const FUSO_CAMPANHA = "America/Sao_Paulo";
+
+// "YYYY-MM-DD" do dia-calendário (em Brasília) de uma data qualquer.
+function diaCalendarioBrasilia(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: FUSO_CAMPANHA });
+}
+
+// Diferença em DIAS-CALENDÁRIO (não em horas corridas) entre duas datas
+// "YYYY-MM-DD" — parseadas como meia-noite UTC só pra fazer a subtração
+// de dias de forma exata, sem nenhum artefato de fuso/horário de verão.
+function diasEntreCalendario(aStr: string, bStr: string): number {
+  const a = new Date(`${aStr}T00:00:00Z`).getTime();
+  const b = new Date(`${bStr}T00:00:00Z`).getTime();
+  return Math.round((b - a) / 86400000);
+}
+
+// BUG REAL corrigido aqui (reportado em produção, 2026-10): "que dia da
+// campanha é hoje" estava calculado como horas corridas desde o instante
+// exato da criação da campanha (dataInicioISO) dividido por 24h — isso
+// NUNCA bate com o conceito combinado de "dia-calendário em Brasília".
+// Exemplo real do bug: campanha criada 23:50 de um dia — 20 minutos
+// depois já é outro dia-calendário em Brasília (óbvio pro jogador que
+// virou "Dia 2"), mas o cálculo antigo ainda achava que só tinham passado
+// alguns minutos de 24h, continuando a travar a missão do Dia 2 como "fora
+// da janela". Isso também explicava o contador ficar preso em 0 pra
+// sempre no modo com missão: se o dia "de hoje" calculado nunca bate com o
+// dia agendado da missão, completarMissaoPreSaveController SEMPRE rejeita
+// a tentativa (ver dia !== hojeIndex), então nenhuma missão jamais
+// completa de verdade. Agora usa diferença de dia-calendário em Brasília
+// — dia 1 é o dia-calendário da criação, dia 2 é o dia-calendário
+// seguinte, etc., sem depender da hora exata em que a campanha nasceu.
+function diaCampanhaAtual(c: PreSaveCampanha): number {
+  const inicioStr = diaCalendarioBrasilia(new Date(c.dataInicioISO));
+  const hojeStr = diaCalendarioBrasilia(new Date());
+  return diasEntreCalendario(inicioStr, hojeStr) + 1;
+}
+
 // Progresso acumulado ATÉ AGORA (nunca o teto) — calculado a partir do
 // estado persistido, sem precisar de cron por minuto:
 // - modo "missao": soma (peso/100) * (teto/duracao) de cada dia já
 //   completo. Dias "perdidos" (data já passou e não foi completado) não
 //   contam nunca mais — sem fallback, de propósito.
-// - modo "contagem": sobe linear e automático com o tempo decorrido,
-//   sempre travado no teto reduzido (35%) no dia do lançamento.
+// - modo "contagem": sobe 1/duracaoDias por DIA-CALENDÁRIO (Brasília)
+//   completo desde a criação, sempre travado no teto reduzido (35%) no
+//   dia do lançamento. Antes crescia fracionado por hora corrida — trocado
+//   pra dia-calendário inteiro, consistente com o resto do cálculo de
+//   "dia da campanha" (mesmo bug de fuso do item acima).
 export function calcularAcumulado(c: PreSaveCampanha): number {
   if (c.modo === "contagem") {
-    const inicio = new Date(c.dataInicioISO).getTime();
-    const agora = Date.now();
-    const diasPassados = Math.max(0, (agora - inicio) / 86400000);
-    const fracao = Math.min(1, diasPassados / c.duracaoDias);
+    const diasCompletos = Math.max(0, diaCampanhaAtual(c) - 1); // dia 1 = 0 dias completos ainda
+    const fracao = Math.min(1, diasCompletos / c.duracaoDias);
     return c.tetoFinal * fracao;
   }
   const porDia = c.tetoFinal / c.duracaoDias;
@@ -418,8 +460,7 @@ export function calcularAcumulado(c: PreSaveCampanha): number {
 // lido, pra manter o calendário honesto sem depender de um cron próprio.
 function aplicarDiasPerdidos(c: PreSaveCampanha): boolean {
   if (c.modo !== "missao" || c.status !== "ativa") return false;
-  const inicio = new Date(c.dataInicioISO).getTime();
-  const hojeIndex = Math.floor((Date.now() - inicio) / 86400000) + 1; // dia 1 = dia da criação
+  const hojeIndex = diaCampanhaAtual(c);
   let mudou = false;
   for (const m of c.missoes) {
     if (m.status === "pendente" && m.tipo && m.dia < hojeIndex) {
@@ -431,16 +472,29 @@ function aplicarDiasPerdidos(c: PreSaveCampanha): boolean {
 }
 
 function campanhaPublica(c: PreSaveCampanha) {
-  // Visão "contador público" — NUNCA inclui tetoFinal.
+  // Visão "contador público" — NUNCA inclui tetoFinal. Inclui a tracklist
+  // já sanitizada (nome real só se `revelada`, senão "Track N") pra dar
+  // suporte à página pública de acompanhamento (qualquer jogador, não só
+  // o criador) — ver PreSavePublicPage.tsx.
   return {
     id: c.id,
     artista: c.artista,
     albumTituloFull: c.albumTituloFull,
     capaUrl: c.capaUrl,
+    tipoAlbum: c.tipoAlbum,
+    duracaoDias: c.duracaoDias,
     modo: c.modo,
     dataLancamento: c.dataLancamento,
     status: c.status,
     albumTopicId: c.albumTopicId,
+    faixas: c.faixas
+      .sort((a, b) => a.num - b.num)
+      .map((f) => ({
+        num: f.num,
+        titulo: f.revelada ? f.titulo : `Track ${f.num}`,
+        revelada: f.revelada,
+        jaLancada: !f.inedita,
+      })),
     acumuladoAtual: Math.round(calcularAcumulado(c)),
   };
 }
@@ -547,9 +601,13 @@ export async function criarCampanhaPreSaveController(request: Request): Promise<
       return jsonResponse({ success: false, error: "Informe ao menos 1 faixa." }, 400);
     }
     // Mesma validação de handleSubmitAlbum (Gestao.tsx): faixa inédita
-    // precisa de título e de um link/arquivo de áudio (upload já deve ter
-    // acontecido no front antes de chegar aqui); faixa existente precisa
-    // só do título (selecionado na busca dos charts).
+    // precisa de título (faixa existente precisa só dele, selecionado na
+    // busca dos charts). O ÁUDIO da faixa inédita NÃO é exigido aqui —
+    // diferente do álbum normal (que publica na hora), o pre-save só
+    // publica de verdade no dia D, então o jogador pode cadastrar a faixa
+    // sem o áudio final ainda pronto. A ausência de áudio é bloqueada no
+    // lançamento (ver processarLancamentosPreSaveScheduled abaixo), não
+    // na criação da campanha.
     for (const f of body.faixas) {
       if (!normalizeText(f.titulo)) {
         return jsonResponse(
@@ -560,21 +618,24 @@ export async function criarCampanhaPreSaveController(request: Request): Promise<
           400,
         );
       }
-      if (f.inedita !== false && !normalizeText(f.mediaUrl)) {
-        return jsonResponse(
-          {
-            success: false,
-            error: `Informe o link do áudio (ou envie um arquivo) da faixa "${f.titulo}".`,
-          },
-          400,
-        );
-      }
     }
 
     await ensureHeader();
 
-    const { tetoMissao, tetoContagem } = await calcularTetos(artista);
+    const { tetoMissao, tetoContagem, valTotal } = await calcularTetos(artista);
     const tetoFinal = modo === "missao" ? tetoMissao : tetoContagem;
+    // Diagnóstico: se o artista não tem nenhuma música no chart SPOTIFY
+    // (ou o valTotal não pôde ser lido), o teto sai 0 e o contador de
+    // pre-save fica preso em 0 PRA SEMPRE, mesmo com dias passando/missões
+    // completadas — sem log nenhum, isso é indistinguível de um bug de
+    // cálculo de dia. Avisa alto no LOGS pra não confundir os dois.
+    if (valTotal <= 0) {
+      registrarLogSistema({
+        categoria: "Falha de escrita",
+        oQueAconteceu: `Campanha de pre-save criada para "${artista}" com teto ZERO — não achei nenhuma música desse artista no chart SPOTIFY (ou valTotal veio 0). O contador de pre-save dessa campanha vai ficar sempre em 0.`,
+        onde: "criarCampanhaPreSaveController",
+      }).catch(() => {});
+    }
 
     const albumArtistPrefix = `${artista} - `;
     const tituloLimpo = tituloAlbum.toLowerCase().startsWith(albumArtistPrefix.toLowerCase())
@@ -795,6 +856,7 @@ export interface CompletarMissaoPayload {
   faixaOrdemRevelada?: number; // tracklist_reveal: qual faixa revelar
   entrevista?: {
     titulo: string;
+    capa?: string; // opcional — mesmo formato do cadastro de Entrevistas do Acervo
     perguntas: { pergunta: string; resposta: string }[];
     musicas: string[];
   };
@@ -968,7 +1030,7 @@ async function validarEExecutarMissao(
         body: JSON.stringify({
           artista: c.artista,
           titulo: entrevista.titulo,
-          capa: c.capaUrl,
+          capa: entrevista.capa || c.capaUrl,
           perguntas: entrevista.perguntas,
           musicas: entrevista.musicas,
           tgId: payload.jogadorId || c.jogadorId,
@@ -1014,9 +1076,9 @@ export async function completarMissaoPreSaveController(request: Request): Promis
     if (!missao || !missao.tipo)
       return jsonResponse({ success: false, error: "Esse dia não tem missão agendada." }, 400);
     // Travado no dia exato — igual Tour, sem flexibilidade de antecipar ou
-    // remarcar. Só pode completar a missão do dia atual do calendário.
-    const inicio = new Date(c.dataInicioISO).getTime();
-    const hojeIndex = Math.floor((Date.now() - inicio) / 86400000) + 1;
+    // remarcar. Só pode completar a missão do dia atual do calendário
+    // (dia-calendário em Brasília — ver diaCampanhaAtual).
+    const hojeIndex = diaCampanhaAtual(c);
     if (dia !== hojeIndex) {
       return jsonResponse(
         {
@@ -1122,8 +1184,17 @@ export async function processarLancamentosPreSaveScheduled(): Promise<{
         // que foi coletado na criação da campanha (nunca "Track N" — esse
         // nome oculto é só de exibição pré-lançamento, ver campanhaDoDono/
         // front; o backend sempre guarda o título real).
+        // Faixa inédita SEM áudio até o dia D (permitido na criação da
+        // campanha — ver criarCampanhaPreSaveController — já que o jogador
+        // pode cadastrar sem o áudio final ainda pronto) não pode virar um
+        // lançamento "mudo" silencioso: fica de fora do payload de
+        // lançamento (não publica faixa sem áudio nenhum) e é registrada
+        // no LOGS didático pra alguém notar e completar depois (mesma
+        // degradação que publicarAlbum já usa pra faixa que falha ao
+        // gravar — nunca trava o álbum inteiro por causa de 1 faixa).
+        const faixasSemAudio = c.faixas.filter((f) => f.inedita && !normalizeText(f.mediaUrl));
         const faixasPayload: TrackItemPayload[] = c.faixas
-          .filter((f) => f.inedita)
+          .filter((f) => f.inedita && normalizeText(f.mediaUrl))
           .map((f) => ({
             num: f.num,
             inedita: true,
@@ -1135,6 +1206,14 @@ export async function processarLancamentosPreSaveScheduled(): Promise<{
             letra: f.letra,
             abrirTopico: f.abrirTopico,
           }));
+
+        if (faixasSemAudio.length > 0) {
+          registrarLogSistema({
+            categoria: "Falha de escrita",
+            oQueAconteceu: `Pre-save de "${c.albumTituloFull}" lançado no dia D, mas ${faixasSemAudio.length} faixa(s) sem áudio ficaram de fora: ${faixasSemAudio.map((f) => f.titulo).join(", ")}. Suba o áudio e publique essas faixas manualmente (faixa pendente) depois.`,
+            onde: "processarLancamentosPreSaveScheduled",
+          }).catch(() => {});
+        }
 
         const resultado = await publicarAlbum({
           tituloAlbum: c.albumTituloFull.startsWith(`${c.artista} - `)
