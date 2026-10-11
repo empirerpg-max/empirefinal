@@ -116,6 +116,7 @@ interface Campanha {
   acumuladoAtual: number;
   faixas: Faixa[];
   missoes: MissaoDia[];
+  valoresPorDia: { dia: number; valor: number }[];
 }
 
 interface PerfilMidia {
@@ -417,34 +418,29 @@ function RecalcularTetoButton({
   );
   const [mensagem, setMensagem] = useState("");
 
+  // O backend (recalcularTetoPreSaveController) já decide se o teto
+  // armazenado "parece quebrado" (zero OU um número implausivelmente
+  // pequeno — bug real de corrupção de locale, ver preSaveController.ts)
+  // e só reescreve nesse caso — não precisa de um diagnóstico separado
+  // antes, a própria chamada já responde com o motivo quando não é o
+  // caso.
   const verificarECorrigir = async () => {
     setEstado("verificando");
     setMensagem("");
     try {
-      const diag = await fetch(
-        `/api/presave/diagnostico?id=${encodeURIComponent(campanhaId)}`,
-      ).then((r) => r.json());
-      if (!diag?.success) throw new Error(diag?.error || "Falha ao diagnosticar.");
-      if (diag.data.tetoFinalArmazenado > 0) {
-        setEstado("ok");
-        setMensagem(
-          "O teto dessa campanha não está zerado — o contador em 0 é porque nenhuma missão foi completada ainda (ou foi perdida), não é esse bug.",
-        );
-        return;
-      }
       const res = await fetch("/api/presave/recalcular-teto", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ campanhaId }),
       }).then((r) => r.json());
       if (!res.success) {
-        setEstado("erro");
-        setMensagem(res.error || "Não consegui corrigir.");
+        setEstado("ok");
+        setMensagem(res.error || "Não encontrei esse bug nessa campanha.");
         return;
       }
       setEstado("corrigido");
       setMensagem(
-        `Teto estava zerado por um bug já corrigido — recalculado pra ${res.data.tetoNovo} agora. Contador atualizado.`,
+        `Teto estava quebrado (${res.data.tetoAnterior}) — recalculado pra ${res.data.tetoNovo} agora. Contador atualizado.`,
       );
       onCorrigido();
     } catch (err: any) {
@@ -1065,40 +1061,71 @@ function CalendarioCampanha({
             Calendário de missões ({campanha.duracaoDias} dias)
           </h3>
           <div className="grid grid-cols-3 sm:grid-cols-7 gap-2">
-            {campanha.missoes.map((m) => (
-              <button
-                key={m.dia}
-                onClick={() => m.tipo && m.status === "pendente" && setDiaAberto(m)}
-                disabled={!m.tipo || m.status !== "pendente"}
-                className={`flex flex-col items-center gap-1 px-1.5 py-2.5 rounded-xl border text-center min-w-0 ${
-                  m.status === "completa"
-                    ? "bg-emerald-500/15 border-emerald-400/30"
-                    : m.status === "perdida"
-                      ? "bg-red-500/10 border-red-400/20"
-                      : m.tipo
-                        ? "bg-white/5 border-white/10 hover:border-fuchsia-400/40"
-                        : "bg-neutral-900/40 border-white/5"
-                }`}
-              >
-                <span className="text-[10px] font-black text-neutral-400">Dia {m.dia}</span>
-                {m.status === "completa" && (
-                  <Check className="size-3.5 text-emerald-400 shrink-0" />
-                )}
-                {m.status === "perdida" && <Ban className="size-3.5 text-red-400 shrink-0" />}
-                {m.status === "pendente" && m.tipo && (
-                  <Clock className="size-3.5 text-neutral-400 shrink-0" />
-                )}
-                <span className="text-[9px] text-neutral-400 truncate w-full">
-                  {m.tipo ? MISSOES.find((x) => x.tipo === m.tipo)?.label : "Sem missão"}
-                </span>
-              </button>
-            ))}
+            {campanha.missoes.map((m) => {
+              const valorDoDia = campanha.valoresPorDia.find((v) => v.dia === m.dia)?.valor;
+              return (
+                <button
+                  key={m.dia}
+                  onClick={() => m.tipo && m.status === "pendente" && setDiaAberto(m)}
+                  disabled={!m.tipo || m.status !== "pendente"}
+                  className={`flex flex-col items-center gap-1 px-1.5 py-2.5 rounded-xl border text-center min-w-0 ${
+                    m.status === "completa"
+                      ? "bg-emerald-500/15 border-emerald-400/30"
+                      : m.status === "perdida"
+                        ? "bg-red-500/10 border-red-400/20"
+                        : m.tipo
+                          ? "bg-white/5 border-white/10 hover:border-fuchsia-400/40"
+                          : "bg-neutral-900/40 border-white/5"
+                  }`}
+                >
+                  <span className="text-[10px] font-black text-neutral-400">Dia {m.dia}</span>
+                  {m.status === "completa" && (
+                    <Check className="size-3.5 text-emerald-400 shrink-0" />
+                  )}
+                  {m.status === "perdida" && <Ban className="size-3.5 text-red-400 shrink-0" />}
+                  {m.status === "pendente" && m.tipo && (
+                    <Clock className="size-3.5 text-neutral-400 shrink-0" />
+                  )}
+                  <span className="text-[9px] text-neutral-400 truncate w-full">
+                    {m.tipo ? MISSOES.find((x) => x.tipo === m.tipo)?.label : "Sem missão"}
+                  </span>
+                  {/* Quanto esse dia já contribuiu pro contador — pedido
+                      explícito: cada dia tem que mostrar seu número, não só
+                      um total solto no final. Só dias já passados têm valor
+                      aqui (valoresPorDia nunca inclui o dia corrente). */}
+                  {valorDoDia !== undefined && (
+                    <span
+                      className={`text-[10px] font-black ${valorDoDia > 0 ? "text-fuchsia-300" : "text-neutral-600"}`}
+                    >
+                      {valorDoDia > 0 ? `+${Math.round(valorDoDia).toLocaleString("pt-BR")}` : "0"}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2 text-sm text-neutral-400">
-          <Calendar className="size-4 shrink-0" />
-          Modo só contagem — o contador sobe automaticamente até o dia do lançamento, sem missões.
+        <div>
+          <div className="flex items-center gap-2 text-sm text-neutral-400 mb-2">
+            <Calendar className="size-4 shrink-0" />
+            Modo só contagem — o contador sobe automaticamente todo dia, sem depender de missão.
+          </div>
+          {campanha.valoresPorDia.length > 0 && (
+            <div className="grid grid-cols-3 sm:grid-cols-7 gap-2">
+              {campanha.valoresPorDia.map((d) => (
+                <div
+                  key={d.dia}
+                  className="flex flex-col items-center gap-1 px-1.5 py-2.5 rounded-xl border border-white/10 bg-white/5 text-center min-w-0"
+                >
+                  <span className="text-[10px] font-black text-neutral-400">Dia {d.dia}</span>
+                  <span className="text-[11px] font-black text-fuchsia-300">
+                    +{Math.round(d.valor).toLocaleString("pt-BR")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
