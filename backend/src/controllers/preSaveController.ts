@@ -63,6 +63,7 @@ import {
   googleSheetsService,
   normalizeComparison,
   normalizeText,
+  type GoogleSheetRow,
 } from "../services/googleSheetsService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { withWriteLock } from "../services/writeLockService";
@@ -251,7 +252,23 @@ function rowToCampanha(row: string[], rowIndex: number): PreSaveCampanha | null 
   };
 }
 
-function campanhaToRow(c: PreSaveCampanha): string[] {
+// IMPORTANTE — números NUNCA viram string nesta linha: GoogleSheetRow
+// (ver googleSheetsService.ts) aceita `number` de verdade no array de
+// valores, e a API do Sheets grava um JSON number assim recebido como
+// CÉLULA NUMÉRICA de verdade, sem passar pelo parser de texto do
+// valueInputOption=USER_ENTERED — é esse parser de texto (pensado pra
+// interpretar o que um humano digitaria) que reinterpreta um PONTO como
+// separador de milhar no locale PT-BR da planilha. Bug real confirmado em
+// produção, duas vezes: primeiro gravando a string "1804278.114" (virou
+// texto "1.804.278.114" na célula); depois, mesmo já arredondando com
+// Math.round ANTES de converter pra string, o valor ainda saiu
+// corrompido — prova de que NENHUMA conversão pra string é seguro aqui,
+// só escrever o number nativo elimina o problema de vez (e cobre os
+// outros possíveis no-1-ou-de-formato que uma string decimal sempre
+// corre, independente de arredondar antes ou não). Math.round() segue
+// aplicado por segurança (pre-save nunca precisa de casa decimal), mas a
+// garantia real é o tipo `number`, não o arredondamento em si.
+function campanhaToRow(c: PreSaveCampanha): GoogleSheetRow {
   return [
     c.id,
     c.jogadorId,
@@ -263,19 +280,8 @@ function campanhaToRow(c: PreSaveCampanha): string[] {
     c.modo,
     c.dataInicioISO,
     c.dataLancamento,
-    String(c.duracaoDias),
-    // SEMPRE inteiro, nunca decimal — bug real confirmado em produção:
-    // updateValues usa valueInputOption=USER_ENTERED, e a planilha está em
-    // locale PT-BR (vírgula=decimal, ponto=milhar); gravar uma string com
-    // PONTO decimal (formato JS, ex: "1804278.114") faz o Sheets
-    // reinterpretar esse ponto como separador de milhar do locale dele,
-    // corrompendo o valor pra "1.804.278.114" — depois, ler essa célula de
-    // volta e tentar Number()/parseFloat() nela dá um valor errado (não
-    // necessariamente 0, pode ser um número pequeno tipo 1.804, já que
-    // parseFloat para no segundo ponto). Arredondar pra inteiro ANTES de
-    // gravar elimina o ponto decimal de uma vez — pre-save nunca precisa
-    // de casas decimais aqui.
-    String(Math.round(c.tetoFinal)),
+    Math.round(c.duracaoDias),
+    Math.round(c.tetoFinal),
     c.status,
     JSON.stringify(c.faixas),
     JSON.stringify(c.missoes),
@@ -333,12 +339,23 @@ async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
   return out;
 }
 
+// Trava por campanha (chave = id da campanha, não a aba inteira) — cobre o
+// caso de duas escritas concorrentes na MESMA campanha (ex: duplo-clique
+// completando a mesma missão duas vezes, ou completar-missão e
+// recalcular-teto rodando quase juntos): sem isso, é um "lost update"
+// clássico — a segunda escrita sobrescreve a primeira sem nenhum aviso.
+// Não usa a trava genérica da aba (presave:PreSave_Album, usada só pra
+// achar a próxima linha livre na criação) porque aqui o rowIndex já é
+// conhecido — travar por campanha específica permite completar missões
+// de campanhas DIFERENTES em paralelo, sem fila desnecessária.
 async function writeCampanha(c: PreSaveCampanha): Promise<void> {
-  await googleSheetsService.principal.updateValues(
-    PRESAVE_SHEET,
-    `A${c._rowIndex}:U${c._rowIndex}`,
-    [campanhaToRow(c)],
-  );
+  await withWriteLock(`presave:campanha:${c.id}`, async () => {
+    await googleSheetsService.principal.updateValues(
+      PRESAVE_SHEET,
+      `A${c._rowIndex}:U${c._rowIndex}`,
+      [campanhaToRow(c)],
+    );
+  });
 }
 
 // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") — mesmo
@@ -934,6 +951,74 @@ export async function recalcularTetoPreSaveController(request: Request): Promise
   } catch (error: any) {
     return jsonResponse(
       { success: false, error: error.message || "Erro ao recalcular teto." },
+      500,
+    );
+  }
+}
+
+// POST /api/presave/vincular-faixa-existente { campanhaId, faixaNum, tituloMusicaExistente }
+// Reparo pontual + genérico pra um bug real de produção: o jogador do Max
+// Gorghan cadastrou "Follia" (faixa #2 da campanha PRESAVE-7da5f189) como
+// inédita com mediaUrl="-" (placeholder), porque na hora de criar a
+// campanha a busca de "Música Existente" tinha o bug do cap fixo do
+// SPOTIFY (já corrigido) e não achava "Max Gorghan - Follia", mesmo ela
+// já sendo uma música real e ativa no chart. Esse endpoint corrige QUALQUER
+// faixa nessa mesma situação (não hardcoded só pra Follia): troca
+// inedita=true/mediaUrl placeholder pra inedita=false, titulo = o título
+// real da música existente (mesmo formato que outras faixas vinculadas já
+// usam, ex: faixa #8 "Fuori Rotta" na mesma campanha) — sem precisar subir
+// áudio nenhum, porque faixa existente nunca precisa de mediaUrl próprio.
+export async function vincularFaixaExistentePreSaveController(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as {
+      campanhaId?: string;
+      faixaNum?: number;
+      tituloMusicaExistente?: string;
+    };
+    const campanhaId = normalizeText(body.campanhaId);
+    const faixaNum = Number(body.faixaNum);
+    const tituloMusicaExistente = normalizeText(body.tituloMusicaExistente);
+    if (!campanhaId || !faixaNum || !tituloMusicaExistente) {
+      return jsonResponse(
+        { success: false, error: "campanhaId, faixaNum e tituloMusicaExistente são obrigatórios." },
+        400,
+      );
+    }
+    const campanhas = await readAllCampanhas();
+    const c = campanhas.find((x) => x.id === campanhaId);
+    if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
+    const faixa = c.faixas.find((f) => f.num === faixaNum);
+    if (!faixa)
+      return jsonResponse(
+        { success: false, error: `Faixa #${faixaNum} não encontrada nessa campanha.` },
+        404,
+      );
+
+    const faixaAntes = { ...faixa };
+    faixa.inedita = false;
+    faixa.titulo = tituloMusicaExistente;
+    faixa.mediaUrl = undefined;
+    faixa.tipoSingle = undefined;
+    faixa.tipoMusica = undefined;
+    faixa.letra = undefined;
+    faixa.abrirTopico = undefined;
+    // Faixa existente nunca fica "oculta" (Track N) — já é conhecida,
+    // sempre nasce revelada, igual as outras faixas existentes da mesma
+    // campanha (ex: "Fuori Rotta").
+    faixa.mostrarNomeReal = true;
+    faixa.revelada = true;
+
+    await writeCampanha(c);
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Faixa #${faixaNum} da campanha de pre-save "${c.albumTituloFull}" corrigida: era inédita (título "${faixaAntes.titulo}", mediaUrl "${faixaAntes.mediaUrl || ""}") e virou vinculada à música existente "${tituloMusicaExistente}" — bug do cap fixo do SPOTIFY impedia achar essa música na busca no momento da criação da campanha.`,
+      onde: "vincularFaixaExistentePreSaveController",
+    }).catch(() => {});
+
+    return jsonResponse({ success: true, data: { faixaAntes, faixaDepois: faixa } });
+  } catch (error: any) {
+    return jsonResponse(
+      { success: false, error: error.message || "Erro ao vincular faixa existente." },
       500,
     );
   }
