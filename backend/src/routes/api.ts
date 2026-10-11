@@ -221,6 +221,8 @@ import {
   getLeaderboardPreSaveController,
   completarMissaoPreSaveController,
   cancelarCampanhaPreSaveController,
+  getDiagnosticoTetoPreSaveController,
+  recalcularTetoPreSaveController,
 } from "../controllers/preSaveController";
 import {
   getBannersAtivosController,
@@ -720,6 +722,16 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await getCampanhasAtivasParaBannerController();
   } else if (url.pathname === "/api/presave/leaderboard") {
     response = await getLeaderboardPreSaveController(request);
+  } else if (url.pathname === "/api/presave/diagnostico") {
+    response = await getDiagnosticoTetoPreSaveController(request);
+  } else if (url.pathname === "/api/presave/recalcular-teto") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/presave/recalcular-teto." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await recalcularTetoPreSaveController(request);
   } else if (url.pathname === "/api/gestao/faixa/publicar") {
     if (request.method !== "POST") {
       return new Response(

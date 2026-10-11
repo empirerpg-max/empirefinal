@@ -38,7 +38,8 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type LoadState<T> = { status: "loading" } | { status: "error"; error: string } | { status: "ok"; data: T };
+type LoadState<T> =
+  { status: "loading" } | { status: "error"; error: string } | { status: "ok"; data: T };
 
 interface LancamentoRecente {
   id: string;
@@ -46,6 +47,7 @@ interface LancamentoRecente {
   artista: string;
   coverUrl: string | null;
   dataIso: string;
+  tipo?: "album" | "musica";
 }
 
 interface ProximoEvento {
@@ -86,13 +88,23 @@ interface AcervoItem {
 // abrem a parada específica dentro do app, em vez de sair pro site externo.
 const PLATFORM_META: Record<
   string,
-  { label: string; icon: typeof Music2; color: string; chartsTab: "spotify" | "apple" | "youtube" | "albums" | "sales" }
+  {
+    label: string;
+    icon: typeof Music2;
+    color: string;
+    chartsTab: "spotify" | "apple" | "youtube" | "albums" | "sales";
+  }
 > = {
   spotify: { label: "Spotify", icon: Music2, color: "text-[#1DB954]", chartsTab: "spotify" },
   apple_music: { label: "Apple Music", icon: Music, color: "text-[#FC3C44]", chartsTab: "apple" },
   youtube: { label: "YouTube", icon: PlayCircle, color: "text-[#FF0000]", chartsTab: "youtube" },
   billboard_200: { label: "Billboard 200", icon: Disc, color: "text-primary", chartsTab: "albums" },
-  digital_sales: { label: "Digital Sales", icon: BarChart3, color: "text-blue-500", chartsTab: "sales" },
+  digital_sales: {
+    label: "Digital Sales",
+    icon: BarChart3,
+    color: "text-blue-500",
+    chartsTab: "sales",
+  },
 };
 
 function Index() {
@@ -138,7 +150,10 @@ function Index() {
     const usuario = login?.usuario;
     const telegramId = user?.id && user.id !== "guest" ? user.id : undefined;
     if (!usuario && !telegramId) return;
-    api.meuNivel({ usuario, telegramId }).then(setMeuNivel).catch(() => setMeuNivel(null));
+    api
+      .meuNivel({ usuario, telegramId })
+      .then(setMeuNivel)
+      .catch(() => setMeuNivel(null));
   }, [login?.usuario, user?.id]);
 
   // dd/mm/yyyy [+ HH:MM opcional] → timestamp, pra ordenar shows (só data) e
@@ -158,7 +173,12 @@ function Index() {
 
     const tasks: Promise<unknown>[] = [];
 
-    tasks.push(api.topCharts().then(setTopCharts).catch(() => {}));
+    tasks.push(
+      api
+        .topCharts()
+        .then(setTopCharts)
+        .catch(() => {}),
+    );
 
     tasks.push(
       fetch("/api/empire-play/lancamentos-recentes")
@@ -211,7 +231,9 @@ function Index() {
           );
           setUltimasPostagens({ status: "ok", data: semRepeticaoSucessiva.slice(0, 8) });
         })
-        .catch((e: any) => setUltimasPostagens({ status: "error", error: String(e?.message || e) })),
+        .catch((e: any) =>
+          setUltimasPostagens({ status: "error", error: String(e?.message || e) }),
+        ),
     );
 
     tasks.push(
@@ -258,7 +280,8 @@ function Index() {
           .catch(() => null),
       ])
         .then(([missoesRes, tvRes]) => {
-          const missoes = missoesRes?.success && Array.isArray(missoesRes.data) ? missoesRes.data : [];
+          const missoes =
+            missoesRes?.success && Array.isArray(missoesRes.data) ? missoesRes.data : [];
           const showEventos: (ProximoEvento & { _artista: string })[] = missoes
             .map((m: any) => ({
               id: `show-${m.idUnico}-${m.showNumero}`,
@@ -372,14 +395,19 @@ function Index() {
         {ultimasPostagens.status === "loading" ? (
           <div className="flex gap-3 overflow-x-hidden">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="min-w-[150px] h-[10rem] rounded-[1.5rem] bg-white/5 animate-pulse" />
+              <div
+                key={i}
+                className="min-w-[150px] h-[10rem] rounded-[1.5rem] bg-white/5 animate-pulse"
+              />
             ))}
           </div>
         ) : ultimasPostagens.status === "error" ? (
           <LoadErrorState onRetry={() => fetchData(false)} />
         ) : ultimasPostagens.data.length === 0 ? (
           <div className="w-full p-6 rounded-[1.75rem] bg-card/50 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center text-center min-h-32">
-            <p className="text-sm font-black uppercase tracking-tight mb-1">Nenhuma publicação ainda</p>
+            <p className="text-sm font-black uppercase tracking-tight mb-1">
+              Nenhuma publicação ainda
+            </p>
             <p className="text-[11px] font-medium text-muted-foreground leading-snug max-w-[18rem]">
               Poste como um dos seus artistas no Social pra aparecer aqui.
             </p>
@@ -389,8 +417,14 @@ function Index() {
             ref={postagensScroll.ref}
             className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x cursor-grab active:cursor-grabbing select-none"
           >
-            <StickyScrollArrowLeft show={postagensScroll.canScrollLeft} onClick={() => postagensScroll.scrollByAmount(-1)} />
-            <StickyScrollArrowRight show={postagensScroll.canScrollRight} onClick={() => postagensScroll.scrollByAmount(1)} />
+            <StickyScrollArrowLeft
+              show={postagensScroll.canScrollLeft}
+              onClick={() => postagensScroll.scrollByAmount(-1)}
+            />
+            <StickyScrollArrowRight
+              show={postagensScroll.canScrollRight}
+              onClick={() => postagensScroll.scrollByAmount(1)}
+            />
             {ultimasPostagens.data.map((p) => {
               const isNews = p.tipo === "News";
               const PlatformIcon = isNews
@@ -439,8 +473,13 @@ function Index() {
                   className="min-w-[220px] max-w-[220px] snap-center rounded-[1.5rem] bg-white/5 border border-white/10 active:scale-95 transition-all flex flex-col p-3.5"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">{p.autor}</h3>
-                    <PlatformIcon className="size-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+                    <h3 className="text-[11px] font-black uppercase leading-tight line-clamp-1">
+                      {p.autor}
+                    </h3>
+                    <PlatformIcon
+                      className="size-3.5 text-muted-foreground shrink-0"
+                      aria-hidden="true"
+                    />
                   </div>
                   <div className="flex-1 flex items-start gap-1.5">
                     <Quote className="size-3 text-primary/50 shrink-0 mt-0.5" aria-hidden="true" />
@@ -489,8 +528,14 @@ function Index() {
             ref={acervoScroll.ref}
             className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 snap-x cursor-grab active:cursor-grabbing select-none"
           >
-            <StickyScrollArrowLeft show={acervoScroll.canScrollLeft} onClick={() => acervoScroll.scrollByAmount(-1)} />
-            <StickyScrollArrowRight show={acervoScroll.canScrollRight} onClick={() => acervoScroll.scrollByAmount(1)} />
+            <StickyScrollArrowLeft
+              show={acervoScroll.canScrollLeft}
+              onClick={() => acervoScroll.scrollByAmount(-1)}
+            />
+            <StickyScrollArrowRight
+              show={acervoScroll.canScrollRight}
+              onClick={() => acervoScroll.scrollByAmount(1)}
+            />
             {acervoRecente.data.map((item) => {
               const TipoIcon = item.tipo === "revista" ? BookOpen : MessageSquareText;
               return (
@@ -514,8 +559,12 @@ function Index() {
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-[10px] font-black uppercase leading-tight line-clamp-1">{item.titulo}</h3>
-                    <p className="text-[9px] text-muted-foreground font-bold truncate">{item.artista}</p>
+                    <h3 className="text-[10px] font-black uppercase leading-tight line-clamp-1">
+                      {item.titulo}
+                    </h3>
+                    <p className="text-[9px] text-muted-foreground font-bold truncate">
+                      {item.artista}
+                    </p>
                   </div>
                 </Link>
               );
@@ -549,7 +598,9 @@ function Index() {
               fallback={
                 <div className="w-full h-full flex flex-col items-center justify-center gap-4 opacity-20">
                   <TrendingUp className="size-20" aria-hidden="true" />
-                  <span className="text-xs font-black uppercase tracking-[0.3em]">Global Chart</span>
+                  <span className="text-xs font-black uppercase tracking-[0.3em]">
+                    Global Chart
+                  </span>
                 </div>
               }
             />
@@ -583,15 +634,24 @@ function Index() {
 
     topPlataformas: () => (
       <section className="mb-12" aria-labelledby="platforms-h">
-        <h2 id="platforms-h" className="text-xs font-black uppercase tracking-[0.2em] mb-4 text-muted-foreground">
+        <h2
+          id="platforms-h"
+          className="text-xs font-black uppercase tracking-[0.2em] mb-4 text-muted-foreground"
+        >
           Top por plataforma
         </h2>
         <div
           ref={plataformasScroll.ref}
           className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 snap-x cursor-grab active:cursor-grabbing select-none"
         >
-          <StickyScrollArrowLeft show={plataformasScroll.canScrollLeft} onClick={() => plataformasScroll.scrollByAmount(-1)} />
-          <StickyScrollArrowRight show={plataformasScroll.canScrollRight} onClick={() => plataformasScroll.scrollByAmount(1)} />
+          <StickyScrollArrowLeft
+            show={plataformasScroll.canScrollLeft}
+            onClick={() => plataformasScroll.scrollByAmount(-1)}
+          />
+          <StickyScrollArrowRight
+            show={plataformasScroll.canScrollRight}
+            onClick={() => plataformasScroll.scrollByAmount(1)}
+          />
           {Object.entries(config.sections.topPlataformas.links).map(([id]) => {
             const meta = PLATFORM_META[id];
             if (!meta) return null;
@@ -614,8 +674,13 @@ function Index() {
                     alt={`${meta.label} #1`}
                     fallback={
                       <div className="w-full h-full bg-secondary flex flex-col items-center justify-center p-2">
-                        <Icon className={`size-7 ${meta.color} opacity-30 mb-1`} aria-hidden="true" />
-                        <span className="text-[9px] font-bold uppercase opacity-50 text-center">Abrir</span>
+                        <Icon
+                          className={`size-7 ${meta.color} opacity-30 mb-1`}
+                          aria-hidden="true"
+                        />
+                        <span className="text-[9px] font-bold uppercase opacity-50 text-center">
+                          Abrir
+                        </span>
                       </div>
                     }
                   />
@@ -625,7 +690,9 @@ function Index() {
                   </div>
                 </div>
                 <div className="p-2">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-primary mb-0.5 block truncate">{meta.label}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-primary mb-0.5 block truncate">
+                    {meta.label}
+                  </span>
                   <h4 className="text-[11px] font-black uppercase leading-tight line-clamp-1">
                     {data?.musica || "Ver parada"}
                   </h4>
@@ -642,7 +709,8 @@ function Index() {
   };
 
   const isEnabled = (key: string) =>
-    key in config.sections && (config.sections as Record<string, { enabled: boolean }>)[key].enabled;
+    key in config.sections &&
+    (config.sections as Record<string, { enabled: boolean }>)[key].enabled;
 
   return (
     <div className="pb-24 px-4 pt-6 max-w-md mx-auto min-h-screen">
@@ -652,7 +720,9 @@ function Index() {
           <div className="size-12 shrink-0 rounded-full bg-primary/20 border border-primary/30 grid place-items-center overflow-hidden">
             {fotoUsuario && fotoUsuarioStage !== "falhou" ? (
               <img
-                src={fotoUsuarioStage === "raw" ? driveRawImg(fotoUsuario) : driveImg(fotoUsuario, 100)}
+                src={
+                  fotoUsuarioStage === "raw" ? driveRawImg(fotoUsuario) : driveImg(fotoUsuario, 100)
+                }
                 className="size-12 rounded-full object-cover"
                 alt={`Foto de ${nomeUsuario}`}
                 referrerPolicy="no-referrer"
@@ -667,9 +737,7 @@ function Index() {
           <div className="min-w-0 flex-1">
             {/* Sem truncate — quebra a linha em vez de cortar com "...",
                 mas continua no mesmo tamanho/espaçamento de sempre. */}
-            <p className="text-base font-black leading-tight break-words">
-              Olá, {nomeUsuario}
-            </p>
+            <p className="text-base font-black leading-tight break-words">Olá, {nomeUsuario}</p>
             <p className="text-[11px] uppercase font-bold text-muted-foreground tracking-[0.15em] mt-1">
               Empire <span className="text-primary">Hub</span>
             </p>
@@ -706,7 +774,10 @@ function Index() {
         {lancamentosRecentes.status === "loading" ? (
           <div className="flex gap-3 overflow-x-hidden">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="min-w-[140px] h-[10.5rem] rounded-[1.5rem] bg-white/5 animate-pulse" />
+              <div
+                key={i}
+                className="min-w-[140px] h-[10.5rem] rounded-[1.5rem] bg-white/5 animate-pulse"
+              />
             ))}
           </div>
         ) : lancamentosRecentes.status === "ok" && lancamentosRecentes.data.length > 0 ? (
@@ -714,13 +785,19 @@ function Index() {
             ref={lancamentosScroll.ref}
             className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 snap-x cursor-grab active:cursor-grabbing select-none"
           >
-            <StickyScrollArrowLeft show={lancamentosScroll.canScrollLeft} onClick={() => lancamentosScroll.scrollByAmount(-1)} />
-            <StickyScrollArrowRight show={lancamentosScroll.canScrollRight} onClick={() => lancamentosScroll.scrollByAmount(1)} />
+            <StickyScrollArrowLeft
+              show={lancamentosScroll.canScrollLeft}
+              onClick={() => lancamentosScroll.scrollByAmount(-1)}
+            />
+            <StickyScrollArrowRight
+              show={lancamentosScroll.canScrollRight}
+              onClick={() => lancamentosScroll.scrollByAmount(1)}
+            />
             {lancamentosRecentes.data.map((l) => (
               <Link
                 key={l.id}
                 to="/empire-play/forum"
-                search={{ tab: "musicas", id: l.id }}
+                search={{ tab: l.tipo === "album" ? "albuns" : "musicas", id: l.id }}
                 onClick={() => haptic.selection()}
                 className="min-w-[140px] snap-center rounded-[1.5rem] overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all"
               >
@@ -741,12 +818,8 @@ function Index() {
                   {/* Sem line-clamp/truncate — título completo sempre visível,
                       quebrando em mais linhas quando precisar, em vez de
                       cortar com reticências. */}
-                  <h3 className="text-[11px] font-black uppercase leading-tight">
-                    {l.titulo}
-                  </h3>
-                  <p className="text-[10px] text-muted-foreground font-bold mt-0.5">
-                    {l.artista}
-                  </p>
+                  <h3 className="text-[11px] font-black uppercase leading-tight">{l.titulo}</h3>
+                  <p className="text-[10px] text-muted-foreground font-bold mt-0.5">{l.artista}</p>
                 </div>
               </Link>
             ))}
@@ -759,10 +832,7 @@ function Index() {
       </section>
 
       <section className="mb-10" aria-labelledby="proximos-eventos-h">
-        <h2
-          id="proximos-eventos-h"
-          className="text-xs font-black uppercase tracking-[0.2em] mb-4"
-        >
+        <h2 id="proximos-eventos-h" className="text-xs font-black uppercase tracking-[0.2em] mb-4">
           Próximos Eventos
         </h2>
 
@@ -792,7 +862,9 @@ function Index() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-[11px] font-black uppercase leading-tight">{ev.titulo}</h3>
-                  <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">{ev.subtitulo}</p>
+                  <p className="text-[10px] text-muted-foreground font-bold truncate mt-0.5">
+                    {ev.subtitulo}
+                  </p>
                 </div>
                 <div className="shrink-0 flex flex-col items-end gap-0.5 text-right">
                   <span className="flex items-center gap-1 text-[10px] font-black text-foreground/80">
@@ -817,7 +889,7 @@ function Index() {
       </section>
 
       {config.order.map((key) =>
-        isEnabled(key) && sections[key] ? <div key={key}>{sections[key]()}</div> : null
+        isEnabled(key) && sections[key] ? <div key={key}>{sections[key]()}</div> : null,
       )}
 
       <footer className="mt-12 text-center pb-6 border-t border-white/5 pt-6">

@@ -914,9 +914,19 @@ export async function createVideoController(request: Request): Promise<Response>
 // que quebra em títulos com hífen no meio do nome).
 export async function getMusicasEmChartController(): Promise<Response> {
   try {
-    const [registroRows, spotifyRows] = await Promise.all([
+    // Nenhuma dessas abas é lida com range de cap fixo (ex: "A1:ZZ5000") —
+    // bug real confirmado em produção: SPOTIFY (chartsBase) acumula o
+    // histórico INTEIRO desde 2020 numa lista só (230+ datas × ~100
+    // posições = 20.000+ linhas cronológicas, mais antiga primeiro — um
+    // cap fixo corta antes de chegar nas semanas recentes, e só cresce
+    // mais a cada semana). EDIÇÃO CHARTS tem o mesmo risco (942+ linhas
+    // confirmadas, também crescendo toda semana). Lê sem range (mesmo
+    // padrão de chartsController.ts/readSheet) — pega a aba inteira de
+    // verdade, sem depender de nenhum número que quebra de novo depois.
+    const [edicaoChartsRows, registroRows, spotifyRows] = await Promise.all([
+      googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS").catch(() => []),
       googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA").catch(() => []),
-      googleSheetsService.chartsBase.readValues("SPOTIFY", "A1:ZZ5000").catch(() => []),
+      googleSheetsService.chartsBase.readValues("SPOTIFY").catch(() => []),
     ]);
     const seen = new Set<string>();
     const musicas: { label: string; artist: string; title: string }[] = [];
@@ -955,6 +965,19 @@ export async function getMusicasEmChartController(): Promise<Response> {
         title: sepIdx >= 0 ? label.slice(sepIdx + 3).trim() : "",
       });
     };
+    // FONTE PRIMÁRIA: "EDIÇÃO CHARTS" (edicaoCharts) — registro PERSISTENTE
+    // de toda música que já entrou em chart alguma vez (qualquer semana,
+    // não só a atual), escrita por registrarNaEdicaoCharts sempre que
+    // qualquer faixa é registrada. Bug real confirmado com dado de
+    // produção: a busca não lia essa aba, e uma leitura com cap fixo na
+    // SPOTIFY também truncava antes de achar faixas recentes (linha 931
+    // de EDIÇÃO CHARTS: B="Max Gorghan - Follia", H="Max Gorghan"). B =
+    // Nome (índice 1), H = ACT PRINCIPAL (índice 7) — mesmo layout de
+    // registrarNaEdicaoCharts.
+    for (const row of edicaoChartsRows) push(row[1] || "", row[7] || "");
+    // Complementar: "REGISTRO DE MÚSICA" (registrosCharts) — mesma aba
+    // onde registrarFaixaNosCharts grava toda música lançada, cobre
+    // qualquer lacuna que "EDIÇÃO CHARTS" não tenha.
     for (let i = 1; i < registroRows.length; i++) {
       push(registroRows[i][1] || "", registroRows[i][7] || ""); // B - Título, H - ACT PRINCIPAL
     }
