@@ -84,6 +84,21 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+// POST lê do corpo JSON, como sempre; GET lê de url.searchParams — esse
+// fallback é usado de propósito pelo workflow admin-call.yml (o sandbox
+// não tem acesso de rede direto ao domínio do Worker, então rodar um
+// endpoint admin em produção só é possível via GET sem corpo). Removido
+// por engano numa rodada anterior (regressão real, já reportada e
+// corrigida aqui) — nunca tirar esse suporte de novo.
+async function readParamsBodyOrQuery(request: Request): Promise<Record<string, string>> {
+  if (request.method === "GET") {
+    const url = new URL(request.url);
+    return Object.fromEntries(url.searchParams.entries());
+  }
+  const body = await request.json().catch(() => ({}));
+  return (body && typeof body === "object" ? body : {}) as Record<string, string>;
+}
+
 function genId(prefix: string): string {
   const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
   return `${prefix}-${rand}`;
@@ -941,8 +956,8 @@ const TETO_MINIMO_PLAUSIVEL = 1000;
 
 export async function recalcularTetoPreSaveController(request: Request): Promise<Response> {
   try {
-    const body = (await request.json().catch(() => ({}))) as { campanhaId?: string };
-    const campanhaId = normalizeText(body.campanhaId);
+    const params = await readParamsBodyOrQuery(request);
+    const campanhaId = normalizeText(params.campanhaId);
     const campanhas = await readAllCampanhas();
     const c = campanhas.find((x) => x.id === campanhaId);
     if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
@@ -1001,14 +1016,10 @@ export async function recalcularTetoPreSaveController(request: Request): Promise
 // áudio nenhum, porque faixa existente nunca precisa de mediaUrl próprio.
 export async function vincularFaixaExistentePreSaveController(request: Request): Promise<Response> {
   try {
-    const body = (await request.json().catch(() => ({}))) as {
-      campanhaId?: string;
-      faixaNum?: number;
-      tituloMusicaExistente?: string;
-    };
-    const campanhaId = normalizeText(body.campanhaId);
-    const faixaNum = Number(body.faixaNum);
-    const tituloMusicaExistente = normalizeText(body.tituloMusicaExistente);
+    const params = await readParamsBodyOrQuery(request);
+    const campanhaId = normalizeText(params.campanhaId);
+    const faixaNum = Number(params.faixaNum);
+    const tituloMusicaExistente = normalizeText(params.tituloMusicaExistente);
     if (!campanhaId || !faixaNum || !tituloMusicaExistente) {
       return jsonResponse(
         { success: false, error: "campanhaId, faixaNum e tituloMusicaExistente são obrigatórios." },
