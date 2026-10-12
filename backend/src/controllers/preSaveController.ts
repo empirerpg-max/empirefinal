@@ -327,20 +327,41 @@ async function ensureHeader(): Promise<void> {
   }
 }
 
+// Colunas desta aba que são NÚMERO de verdade (índice 0-based) — só essas
+// precisam do valor bruto (UNFORMATTED_VALUE). Índice 10 = K (DuracaoDias),
+// 11 = L (TetoFinal).
+const PRESAVE_COLUNAS_NUMERICAS = [10, 11];
+
 async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
-  // readValuesRaw (UNFORMATTED_VALUE) — NUNCA readValues aqui. Causa raiz
-  // real confirmada em produção: a coluna TetoFinal tinha um formato de
-  // célula numérico que exibia 1804278 como "2" (ver comentário em
-  // ValueRenderOption, googleSheetsService.ts) — qualquer leitura com
-  // FORMATTED_VALUE (o default) trazia esse "2" em vez do valor real,
-  // mesmo a célula tendo o número certo guardado. Isso corrompia
-  // qualquer escrita que lesse-modificasse-escrevesse a linha inteira
-  // (ex: vincularFaixaExistentePreSaveController), regravando o valor
-  // errado por cima do correto. Ler sempre o valor bruto elimina essa
-  // classe de bug de vez, pra todo campo numérico desta aba.
-  const rows = await googleSheetsService.principal
-    .readValuesRaw(PRESAVE_SHEET, "A2:U20000")
-    .catch(() => []);
+  // Regressão real encontrada e corrigida: ler a aba INTEIRA com
+  // UNFORMATTED_VALUE resolveu o teto (ver bug "tetoFinal virava 2" —
+  // comentário mais abaixo), mas quebrou toda coluna de DATA (ex.
+  // DataLancamento): o texto "2026-10-22" escrito via USER_ENTERED é
+  // autodetectado pelo Sheets como data de verdade — o valor BRUTO
+  // guardado por baixo é o número de série (dias desde 1899-12-30), não o
+  // texto; só o valor FORMATADO (default, FORMATTED_VALUE) devolve
+  // "2026-10-22" de volta. Ler tudo raw trocou um bug por outro
+  // ("46317" em vez da data, NaN na tela).
+  //
+  // Fix: duas leituras da MESMA aba em paralelo — uma formatada (default,
+  // certa pra texto/data) e uma bruta (certa pra número) — e MESCLA linha
+  // a linha, usando o valor bruto só nas colunas que são número de
+  // verdade (PRESAVE_COLUNAS_NUMERICAS), formatado em todas as outras.
+  // Nunca lê a aba inteira só de um jeito só — cada coluna usa a leitura
+  // certa pro tipo de dado que ela guarda.
+  const [rowsFormatadas, rowsBrutas] = await Promise.all([
+    googleSheetsService.principal.readValues(PRESAVE_SHEET, "A2:U20000").catch(() => []),
+    googleSheetsService.principal.readValuesRaw(PRESAVE_SHEET, "A2:U20000").catch(() => []),
+  ]);
+  const rows = rowsFormatadas.map((rowFormatada, i) => {
+    const rowBruta = rowsBrutas[i];
+    if (!rowBruta) return rowFormatada;
+    const combinada = [...rowFormatada];
+    for (const col of PRESAVE_COLUNAS_NUMERICAS) {
+      if (rowBruta[col] !== undefined) combinada[col] = rowBruta[col];
+    }
+    return combinada;
+  });
   const out: PreSaveCampanha[] = [];
   for (let i = 0; i < (rows || []).length; i++) {
     const c = rowToCampanha(rows[i], i + 2);
