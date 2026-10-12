@@ -225,6 +225,7 @@ import {
   recalcularTetoPreSaveController,
   vincularFaixaExistentePreSaveController,
   compensarMaximoRetroativoPreSaveController,
+  auditoriaLancamentosPreSavecontroller,
 } from "../controllers/preSaveController";
 import {
   getBannersAtivosController,
@@ -738,6 +739,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   } else if (url.pathname === "/api/presave/compensar-maximo-retroativo") {
     // Mesmo motivo dos dois endpoints acima — aceita GET (querystring) ou POST.
     response = await compensarMaximoRetroativoPreSaveController(request);
+  } else if (url.pathname === "/api/presave/auditoria-lancamentos") {
+    // GET, só leitura — lista todas as campanhas com status/data, marcando
+    // suspeita de lançamento antes da hora ou data em formato inválido.
+    response = await auditoriaLancamentosPreSavecontroller();
   } else if (url.pathname === "/api/gestao/faixa/publicar") {
     if (request.method !== "POST") {
       return new Response(

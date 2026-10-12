@@ -900,6 +900,54 @@ export async function getCampanhaPreSaveController(request: Request): Promise<Re
 // o caso com missão (Max Gorghan) quanto o sem missão (Cowboy Fresh) com a
 // MESMA causa raiz, já que os dois dependem do mesmo cálculo de teto.
 //
+// GET /api/presave/auditoria-lancamentos — só leitura, nunca escreve nada.
+// Pedido explícito depois do bug real do Max Gorghan/FOLLIA (álbum
+// publicado ~10 dias antes da dataLancamento combinada): lista TODA
+// campanha (ativa OU já lançada) junto com dataLancamento, status e
+// "hoje" (Brasília), marcando `suspeita` quando o status não combina com
+// a data — "lancada" com dataLancamento ainda no futuro (lançou antes da
+// hora) ou "ativa" com dataLancamento já formatada errado (não bate
+// com YYYY-MM-DD, o mesmo jeito que causou o bug). Não decide nem corrige
+// nada sozinho — só reúne a evidência real pra decisão humana.
+export async function auditoriaLancamentosPreSavecontroller(): Promise<Response> {
+  try {
+    const campanhas = await readAllCampanhas();
+    const hojeStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+    const DATA_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+    const linhas = campanhas.map((c) => {
+      const dataValida = DATA_ISO_REGEX.test(c.dataLancamento);
+      const lancadaAntesDaHora =
+        c.status === "lancada" && dataValida && c.dataLancamento > hojeStr;
+      const dataInvalida = !dataValida && !!c.dataLancamento;
+      return {
+        id: c.id,
+        artista: c.artista,
+        albumTituloFull: c.albumTituloFull,
+        status: c.status,
+        dataLancamento: c.dataLancamento,
+        rowIndex: c._rowIndex,
+        suspeita: lancadaAntesDaHora
+          ? "lancada_antes_da_hora"
+          : dataInvalida
+            ? "data_formato_invalido"
+            : null,
+      };
+    });
+    return jsonResponse({
+      success: true,
+      hoje: hojeStr,
+      total: linhas.length,
+      suspeitas: linhas.filter((l) => l.suspeita),
+      todas: linhas,
+    });
+  } catch (error: any) {
+    return jsonResponse(
+      { success: false, error: error.message || "Erro na auditoria de lançamentos." },
+      500,
+    );
+  }
+}
+
 // GET /api/presave/diagnostico?id=... — devolve o estado real armazenado
 // (sem nunca expor o teto na resposta pública de outros endpoints, mas
 // aqui É o propósito: diagnosticar o problema do teto) + o valTotal/teto
