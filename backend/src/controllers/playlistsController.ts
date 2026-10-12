@@ -7,6 +7,7 @@ import {
 } from "../services/googleSheetsService";
 import { withWriteLock } from "../services/writeLockService";
 import { ADMIN_TG_ID, requestProvesAdmin } from "../services/sessionService";
+import { registrarLogSistema } from "../services/logSistemaService";
 import {
   publicarAlbum,
   completarAlbumExistente,
@@ -964,6 +965,54 @@ export async function corrigirAlbumRaynaAfterpartyController(): Promise<Response
   acoes.push(`Albuns!linha ${linha} reescrita nas colunas corretas (A-L), lixo deslocado (M:T) limpo.`);
 
   return jsonResponse({ success: true, acoes });
+}
+
+// Conserto pontual: "Max Gorghan - FOLLIA" (pre-save), mesma classe de bug
+// de appendRow deslocando colunas (já visto em corrigirAlbumRaynaAfterpartyController
+// no histórico do git) — mas aqui, diferente da Rayna, o lançamento real
+// ainda NÃO deve ter acontecido (dataLancamento da campanha de pre-save
+// ainda está no futuro; a linha nasceu de uma publicação feita antes da
+// hora, já corrigida na raiz em publicarAlbum/processarLancamentosPreSaveScheduled
+// — ver commits 4378fed/916bcff). Por isso não "reescreve nas colunas
+// certas" como foi feito pra Rayna: aqui a decisão certa é APAGAR a linha
+// inteira, porque o álbum simplesmente não devia estar público ainda —
+// a campanha de pre-save volta a lançar pelo fluxo normal no dia D real.
+// Checagem de segurança antes de agir (só confirma o padrão exato já
+// visto no dump, nunca confia em "linha 101" sozinho): linha[9]==="46307"
+// E linha[15]==="Max Gorghan - FOLLIA" — se a planilha já mudou (alguém
+// corrigiu/apagou antes), não faz nada.
+export async function corrigirAlbumFolliaPreSaveController(): Promise<Response> {
+  const linha = 101;
+  const rows = await googleSheetsService.principal.readValues("Albuns", `A${linha}:T${linha}`);
+  const row = rows?.[0] || [];
+
+  const bateComCorrompido =
+    normalizeText(row[9]) === "46307" && normalizeText(row[15]) === "Max Gorghan - FOLLIA";
+
+  if (!bateComCorrompido) {
+    return jsonResponse({
+      success: true,
+      acoes: [
+        `Albuns!linha ${linha} NÃO apagada — não bateu com o padrão corrompido esperado (planilha já mudou, ou já foi corrigida antes).`,
+      ],
+      linhaAtual: row,
+    });
+  }
+
+  await googleSheetsService.principal.updateValues("Albuns", `A${linha}:T${linha}`, [
+    Array(20).fill(""),
+  ]);
+
+  registrarLogSistema({
+    categoria: "Ação concluída",
+    oQueAconteceu: `Linha ${linha} de "Albuns" apagada (A:T) — era o álbum "Max Gorghan - FOLLIA" publicado antes da hora pelo bug do pre-save (lançamento automático rodou ~10 dias antes de dataLancamento), já corrigido na raiz. A campanha de pre-save volta a lançar pelo fluxo normal no dia real.`,
+    onde: "corrigirAlbumFolliaPreSaveController",
+  }).catch(() => {});
+
+  return jsonResponse({
+    success: true,
+    acoes: [`Albuns!linha ${linha} apagada (A:T) — álbum publicado antes da hora, removido.`],
+  });
 }
 
 // Dump bruto de um intervalo de linhas, sem NENHUM filtro por título —
