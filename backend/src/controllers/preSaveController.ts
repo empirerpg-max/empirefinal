@@ -328,8 +328,18 @@ async function ensureHeader(): Promise<void> {
 }
 
 async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
+  // readValuesRaw (UNFORMATTED_VALUE) — NUNCA readValues aqui. Causa raiz
+  // real confirmada em produção: a coluna TetoFinal tinha um formato de
+  // célula numérico que exibia 1804278 como "2" (ver comentário em
+  // ValueRenderOption, googleSheetsService.ts) — qualquer leitura com
+  // FORMATTED_VALUE (o default) trazia esse "2" em vez do valor real,
+  // mesmo a célula tendo o número certo guardado. Isso corrompia
+  // qualquer escrita que lesse-modificasse-escrevesse a linha inteira
+  // (ex: vincularFaixaExistentePreSaveController), regravando o valor
+  // errado por cima do correto. Ler sempre o valor bruto elimina essa
+  // classe de bug de vez, pra todo campo numérico desta aba.
   const rows = await googleSheetsService.principal
-    .readValues(PRESAVE_SHEET, "A2:U20000")
+    .readValuesRaw(PRESAVE_SHEET, "A2:U20000")
     .catch(() => []);
   const out: PreSaveCampanha[] = [];
   for (let i = 0; i < (rows || []).length; i++) {
