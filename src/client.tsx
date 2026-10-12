@@ -2,6 +2,11 @@ import { StrictMode, startTransition } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { StartClient } from "@tanstack/react-start/client";
 import { toast } from "sonner";
+import {
+  isStaleChunkErrorMessage,
+  pareceFalhaDeChunkJs,
+  reloadOnStaleChunk as reloadOnStaleChunkShared,
+} from "@/lib/staleChunk";
 
 // Depois de um deploy novo, um chunk lazy (rota carregada sob demanda, ex:
 // Catálogo, Ponto) pode ter o nome do arquivo trocado — se a aba já estava
@@ -17,77 +22,19 @@ import { toast } from "sonner";
 // grande (caso do Gilson no álbum SANTISSIMA, que perdeu o texto todo no
 // meio de um deploy) — nunca recarrega com um campo de texto ativo e com
 // conteúdo; espera a pessoa sair do campo pra aplicar.
-function estaDigitando(): HTMLElement | null {
-  const el = document.activeElement as HTMLElement | null;
-  if (!el) return null;
-  if (el.tagName === "TEXTAREA") {
-    return (el as HTMLTextAreaElement).value.trim() ? el : null;
-  }
-  if (el.tagName === "INPUT") {
-    const tipo = (el as HTMLInputElement).type;
-    if (["text", "search", "email", "tel", "url", ""].includes(tipo)) {
-      return (el as HTMLInputElement).value.trim() ? el : null;
-    }
-    return null;
-  }
-  if (el.isContentEditable) {
-    return el.textContent?.trim() ? el : null;
-  }
-  return null;
-}
-
-let avisoPendenteMostrado = false;
-
+//
+// estaDigitando/avisoPendenteMostrado/a lógica de reload em si viraram
+// src/lib/staleChunk.ts — compartilhadas com router.tsx (defaultOnCatch),
+// que precisa do MESMO reparo pra um caminho de falha que esses listeners
+// globais aqui não cobrem (ver comentário em staleChunk.ts).
 function reloadOnStaleChunk() {
-  const FLAG = "empire_stale_chunk_reload";
-  const alreadyTried = sessionStorage.getItem(FLAG);
-  if (alreadyTried && Date.now() - Number(alreadyTried) < 10_000) return;
-
-  const campoAtivo = estaDigitando();
-  if (campoAtivo) {
-    if (!avisoPendenteMostrado) {
-      avisoPendenteMostrado = true;
-      toast("Nova versão pronta", {
-        description: "Vamos atualizar assim que você terminar de escrever, pra não perder o que já digitou.",
-        duration: 8000,
-      });
-    }
-    campoAtivo.addEventListener(
-      "blur",
-      () => {
-        avisoPendenteMostrado = false;
-        reloadOnStaleChunk();
-      },
-      { once: true },
-    );
-    return;
-  }
-
-  sessionStorage.setItem(FLAG, String(Date.now()));
-  window.location.reload();
-}
-
-// "Load failed" é a mensagem GENÉRICA do WebKit (Safari/iOS — inclusive a
-// WebView do Telegram Mini App em iPhone) pra QUALQUER fetch() que falhe,
-// não só import de chunk JS — uma chamada de API comum engasgando na rede
-// 4G do celular lança o mesmo texto que um chunk desatualizado. Sem
-// distinguir os dois, o app recarregava do nada em qualquer soluço de rede
-// no mobile (confirmado em reclamações reais de usuário: "o app atualiza
-// do nada às vezes"). Only os erros de "Importing a module script
-// failed"/"dynamically imported module" já são específicos o bastante
-// (só acontecem em import() de verdade); pro "Load failed" genérico, exige
-// que o stack trace realmente referencie um chunk JS do nosso build
-// (sempre servido de "/assets/...js") antes de recarregar — uma falha de
-// fetch comum da API (ex: /api/...) nunca aparece no stack apontando pra
-// um asset.
-function pareceFalhaDeChunkJs(stack: string | undefined): boolean {
-  return /\/assets\/[^"'\s)]+\.js/i.test(stack || "");
+  reloadOnStaleChunkShared(toast);
 }
 
 window.addEventListener("vite:preloadError", reloadOnStaleChunk);
 window.addEventListener("error", (event) => {
   const msg = event.message || "";
-  if (/importing a module script failed|dynamically imported module/i.test(msg)) {
+  if (isStaleChunkErrorMessage(msg)) {
     reloadOnStaleChunk();
     return;
   }
@@ -97,7 +44,7 @@ window.addEventListener("error", (event) => {
 });
 window.addEventListener("unhandledrejection", (event) => {
   const msg = event.reason?.message || String(event.reason || "");
-  if (/importing a module script failed|dynamically imported module|failed to fetch dynamically/i.test(msg)) {
+  if (isStaleChunkErrorMessage(msg)) {
     reloadOnStaleChunk();
     return;
   }

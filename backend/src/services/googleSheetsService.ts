@@ -65,18 +65,20 @@ export function normalizeText(value: unknown): string {
 }
 
 export function normalizeComparison(value: unknown): string {
-  return normalizeText(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    // Edi\u00e7\u00e3o manual na planilha (copiar/colar de outro app, autocorretor do
-    // celular etc.) \u00e0s vezes deixa caracteres invis\u00edveis (zero-width,
-    // espa\u00e7o n\u00e3o-quebr\u00e1vel) ou espa\u00e7o duplo no meio do valor \u2014 sem isso, um
-    // "usuario"/"id" que parece id\u00eantico visualmente falhava em bater no
-    // match por igualdade estrita, fazendo telas como o heartbeat de perfil
-    // n\u00e3o encontrarem a linha certa (ou nenhuma) pro usu\u00e1rio.
-    .replace(/[\u200b-\u200d\ufeff]/g, "")
-    .replace(/\s+/g, " ");
+  return (
+    normalizeText(value)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      // Edi\u00e7\u00e3o manual na planilha (copiar/colar de outro app, autocorretor do
+      // celular etc.) \u00e0s vezes deixa caracteres invis\u00edveis (zero-width,
+      // espa\u00e7o n\u00e3o-quebr\u00e1vel) ou espa\u00e7o duplo no meio do valor \u2014 sem isso, um
+      // "usuario"/"id" que parece id\u00eantico visualmente falhava em bater no
+      // match por igualdade estrita, fazendo telas como o heartbeat de perfil
+      // n\u00e3o encontrarem a linha certa (ou nenhuma) pro usu\u00e1rio.
+      .replace(/[\u200b-\u200d\ufeff]/g, "")
+      .replace(/\s+/g, " ")
+  );
 }
 
 export function normalizeHeader(value: unknown): string {
@@ -181,9 +183,13 @@ export interface SheetTabInfo {
 
 // Lista as abas (nome + gid) de uma planilha — usado pra resolver um gid de
 // URL (ex: .../edit?gid=1234#gid=1234) pro nome real da aba, sem chutar.
-export async function listSheetTabs(spreadsheetKeyOrId: SpreadsheetKey | string): Promise<SheetTabInfo[]> {
+export async function listSheetTabs(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+): Promise<SheetTabInfo[]> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
-  const response = await sheetsRequest<{ sheets?: Array<{ properties?: { title?: string; sheetId?: number } }> }>(
+  const response = await sheetsRequest<{
+    sheets?: Array<{ properties?: { title?: string; sheetId?: number } }>;
+  }>(
     `/${spreadsheetId}?fields=sheets.properties.title,sheets.properties.sheetId`,
     { method: "GET" },
     [SHEETS_READONLY_SCOPE],
@@ -243,13 +249,39 @@ function invalidateReadCache(spreadsheetId: string, sheetName: string): void {
   }
 }
 
+// valueRenderOption: a API do Sheets, quando não especificado, usa
+// FORMATTED_VALUE por padrão — devolve o valor JÁ FORMATADO (aplicando o
+// FORMATO DA CÉLULA e o locale da planilha), não o número/valor real
+// guardado nela. Esse comportamento é o que o resto do app sempre quis
+// (datas vêm como "DD/MM/AAAA" já formatadas, por exemplo) — por isso o
+// default aqui continua FORMATTED_VALUE, pra não mudar nada em nenhum
+// outro lugar que já depende disso. MAS causou um bug real confirmado em
+// produção: a coluna TetoFinal de "PreSave_Album" tinha (provavelmente
+// por herança de formatação de uma célula vizinha, ou algum formato
+// numérico customizado aplicado em algum momento) um FORMATO DE CÉLULA
+// que exibia 1804278 como "2" (formato tipo "0,," do Sheets, que divide
+// o valor por 1.000.000 e arredonda pra exibição em "milhões") — mesmo
+// com o valor real gravado corretamente (de verdade, como número), toda
+// LEITURA devolvia o "2" formatado, não o 1804278 real. Isso faz qualquer
+// controller que lê-modifica-escreve a linha inteira (ex:
+// vincularFaixaExistentePreSaveController, que só queria alterar uma
+// faixa) acabar REGRAVANDO esse "2" errado por cima do valor real — o bug
+// não é do código de escrita, é da leitura trazendo um valor formatado em
+// vez do valor de verdade. UNFORMATTED_VALUE pede o valor real da célula,
+// sem nenhuma formatação/locale aplicada — usado onde um número precisa
+// ser lido com garantia de ser o valor de verdade (ver
+// googleSheetsService.principal.readValuesRaw, usado por
+// preSaveController.ts/readAllCampanhas).
+type ValueRenderOption = "FORMATTED_VALUE" | "UNFORMATTED_VALUE";
+
 export async function readValues(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   range = "A:ZZ",
+  valueRenderOption: ValueRenderOption = "FORMATTED_VALUE",
 ): Promise<string[][]> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
-  const cacheKey = `${readCacheKeyPrefix(spreadsheetId, sheetName)}${range}`;
+  const cacheKey = `${readCacheKeyPrefix(spreadsheetId, sheetName)}${range}::${valueRenderOption}`;
 
   const cached = readCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
@@ -257,7 +289,7 @@ export async function readValues(
   const emAndamento = readInFlight.get(cacheKey);
   if (emAndamento) return emAndamento;
 
-  const promise = readValuesUncached(spreadsheetKeyOrId, sheetName, range)
+  const promise = readValuesUncached(spreadsheetKeyOrId, sheetName, range, valueRenderOption)
     .then((data) => {
       readCache.set(cacheKey, { data, expiresAt: Date.now() + READ_CACHE_TTL_MS });
       return data;
@@ -273,6 +305,7 @@ async function readValuesUncached(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   range = "A:ZZ",
+  valueRenderOption: ValueRenderOption = "FORMATTED_VALUE",
 ): Promise<string[][]> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
 
@@ -297,7 +330,7 @@ async function readValuesUncached(
     try {
       const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
       const response = await sheetsRequest<GoogleSheetsValuesResponse>(
-        `/${spreadsheetId}/values/${a1Range}?majorDimension=ROWS`,
+        `/${spreadsheetId}/values/${a1Range}?majorDimension=ROWS&valueRenderOption=${valueRenderOption}`,
         { method: "GET" },
         [SHEETS_READONLY_SCOPE],
       );
@@ -305,7 +338,8 @@ async function readValuesUncached(
     } catch (err) {
       ultimoErroV4 = err instanceof Error ? err : new Error(String(err));
       const ehCotaPorMinuto = /quota exceeded|requests per minute/i.test(ultimoErroV4.message);
-      const ehLimiteDeRequisicao = ehCotaPorMinuto || /rate limit|429|resource_exhausted/i.test(ultimoErroV4.message);
+      const ehLimiteDeRequisicao =
+        ehCotaPorMinuto || /rate limit|429|resource_exhausted/i.test(ultimoErroV4.message);
       const isLastAttempt = attempt === attempts;
       // Só vale a pena tentar de novo em erro de limite passageiro — um 404
       // (aba não existe) ou 403 (sem permissão) nunca vai se resolver
@@ -635,6 +669,13 @@ export const googleSheetsService = {
   appendRow,
   principal: {
     readValues: (sheetName: string, range?: string) => readValues("principal", sheetName, range),
+    // Lê o valor REAL da célula, sem aplicar formatação/locale (ver
+    // comentário em cima de ValueRenderOption) — usar sempre que o número
+    // lido vai ser usado em cálculo (nunca só exibido), pra nunca
+    // confundir o formato de exibição de uma célula com o valor de
+    // verdade guardado nela.
+    readValuesRaw: (sheetName: string, range?: string) =>
+      readValues("principal", sheetName, range, "UNFORMATTED_VALUE"),
     readSheetObjects: (sheetName: string, range?: string) =>
       readSheetObjects("principal", sheetName, range),
     findRows: (
@@ -644,8 +685,9 @@ export const googleSheetsService = {
     ) => findRows("principal", sheetName, predicate, range),
     updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
       updateValues("principal", sheetName, range, values),
-    updateValuesBatch: (entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[]) =>
-      updateValuesBatch("principal", entries),
+    updateValuesBatch: (
+      entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[],
+    ) => updateValuesBatch("principal", entries),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("principal", sheetName, values, range),
   },
@@ -729,18 +771,23 @@ export const googleSheetsService = {
       appendRow("agendaTV", sheetName, values, range),
   },
   // Charts — só leitura, planilhas editoriais mantidas fora do app.
-  chartsBase: { readValues: (sheetName: string, range?: string) => readValues("chartsBase", sheetName, range) },
+  chartsBase: {
+    readValues: (sheetName: string, range?: string) => readValues("chartsBase", sheetName, range),
+  },
   chartsCountries: {
-    readValues: (sheetName: string, range?: string) => readValues("chartsCountries", sheetName, range),
+    readValues: (sheetName: string, range?: string) =>
+      readValues("chartsCountries", sheetName, range),
   },
   chartsAlbums: {
     readValues: (sheetName: string, range?: string) => readValues("chartsAlbums", sheetName, range),
   },
   chartsMonthly: {
-    readValues: (sheetName: string, range?: string) => readValues("chartsMonthly", sheetName, range),
+    readValues: (sheetName: string, range?: string) =>
+      readValues("chartsMonthly", sheetName, range),
   },
   chartsRealtime: {
-    readValues: (sheetName: string, range?: string) => readValues("chartsRealtime", sheetName, range),
+    readValues: (sheetName: string, range?: string) =>
+      readValues("chartsRealtime", sheetName, range),
   },
   chartsTop50: {
     readValues: (sheetName: string, range?: string) => readValues("chartsTop50", sheetName, range),
@@ -755,7 +802,8 @@ export const googleSheetsService = {
       appendRow("chartsTop50", sheetName, values, range),
   },
   chartsReleases: {
-    readValues: (sheetName: string, range?: string) => readValues("chartsReleases", sheetName, range),
+    readValues: (sheetName: string, range?: string) =>
+      readValues("chartsReleases", sheetName, range),
   },
   logsSistema: {
     readValues: (sheetName: string, range?: string) => readValues("logsSistema", sheetName, range),
