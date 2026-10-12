@@ -84,6 +84,21 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+// POST lê do corpo JSON, como sempre; GET lê de url.searchParams — esse
+// fallback é usado de propósito pelo workflow admin-call.yml (o sandbox
+// não tem acesso de rede direto ao domínio do Worker, então rodar um
+// endpoint admin em produção só é possível via GET sem corpo). Removido
+// por engano numa rodada anterior (regressão real, já reportada e
+// corrigida aqui) — nunca tirar esse suporte de novo.
+async function readParamsBodyOrQuery(request: Request): Promise<Record<string, string>> {
+  if (request.method === "GET") {
+    const url = new URL(request.url);
+    return Object.fromEntries(url.searchParams.entries());
+  }
+  const body = await request.json().catch(() => ({}));
+  return (body && typeof body === "object" ? body : {}) as Record<string, string>;
+}
+
 function genId(prefix: string): string {
   const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
   return `${prefix}-${rand}`;
@@ -327,20 +342,41 @@ async function ensureHeader(): Promise<void> {
   }
 }
 
+// Colunas desta aba que são NÚMERO de verdade (índice 0-based) — só essas
+// precisam do valor bruto (UNFORMATTED_VALUE). Índice 10 = K (DuracaoDias),
+// 11 = L (TetoFinal).
+const PRESAVE_COLUNAS_NUMERICAS = [10, 11];
+
 async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
-  // readValuesRaw (UNFORMATTED_VALUE) — NUNCA readValues aqui. Causa raiz
-  // real confirmada em produção: a coluna TetoFinal tinha um formato de
-  // célula numérico que exibia 1804278 como "2" (ver comentário em
-  // ValueRenderOption, googleSheetsService.ts) — qualquer leitura com
-  // FORMATTED_VALUE (o default) trazia esse "2" em vez do valor real,
-  // mesmo a célula tendo o número certo guardado. Isso corrompia
-  // qualquer escrita que lesse-modificasse-escrevesse a linha inteira
-  // (ex: vincularFaixaExistentePreSaveController), regravando o valor
-  // errado por cima do correto. Ler sempre o valor bruto elimina essa
-  // classe de bug de vez, pra todo campo numérico desta aba.
-  const rows = await googleSheetsService.principal
-    .readValuesRaw(PRESAVE_SHEET, "A2:U20000")
-    .catch(() => []);
+  // Regressão real encontrada e corrigida: ler a aba INTEIRA com
+  // UNFORMATTED_VALUE resolveu o teto (ver bug "tetoFinal virava 2" —
+  // comentário mais abaixo), mas quebrou toda coluna de DATA (ex.
+  // DataLancamento): o texto "2026-10-22" escrito via USER_ENTERED é
+  // autodetectado pelo Sheets como data de verdade — o valor BRUTO
+  // guardado por baixo é o número de série (dias desde 1899-12-30), não o
+  // texto; só o valor FORMATADO (default, FORMATTED_VALUE) devolve
+  // "2026-10-22" de volta. Ler tudo raw trocou um bug por outro
+  // ("46317" em vez da data, NaN na tela).
+  //
+  // Fix: duas leituras da MESMA aba em paralelo — uma formatada (default,
+  // certa pra texto/data) e uma bruta (certa pra número) — e MESCLA linha
+  // a linha, usando o valor bruto só nas colunas que são número de
+  // verdade (PRESAVE_COLUNAS_NUMERICAS), formatado em todas as outras.
+  // Nunca lê a aba inteira só de um jeito só — cada coluna usa a leitura
+  // certa pro tipo de dado que ela guarda.
+  const [rowsFormatadas, rowsBrutas] = await Promise.all([
+    googleSheetsService.principal.readValues(PRESAVE_SHEET, "A2:U20000").catch(() => []),
+    googleSheetsService.principal.readValuesRaw(PRESAVE_SHEET, "A2:U20000").catch(() => []),
+  ]);
+  const rows = rowsFormatadas.map((rowFormatada, i) => {
+    const rowBruta = rowsBrutas[i];
+    if (!rowBruta) return rowFormatada;
+    const combinada = [...rowFormatada];
+    for (const col of PRESAVE_COLUNAS_NUMERICAS) {
+      if (rowBruta[col] !== undefined) combinada[col] = rowBruta[col];
+    }
+    return combinada;
+  });
   const out: PreSaveCampanha[] = [];
   for (let i = 0; i < (rows || []).length; i++) {
     const c = rowToCampanha(rows[i], i + 2);
@@ -920,14 +956,8 @@ const TETO_MINIMO_PLAUSIVEL = 1000;
 
 export async function recalcularTetoPreSaveController(request: Request): Promise<Response> {
   try {
-    const url = new URL(request.url);
-    const body =
-      request.method === "POST" ? ((await request.json().catch(() => ({}))) as { campanhaId?: string }) : {};
-    // Aceita também ?campanhaId= via GET — só pra permitir rodar o reparo
-    // via workflow de diagnóstico admin-call.yml (que só faz GET), sem
-    // precisar expor um formulário. A proteção real (só mexe se tetoFinal
-    // já armazenado for exatamente 0) continua intacta de qualquer jeito.
-    const campanhaId = normalizeText(body.campanhaId || url.searchParams.get("campanhaId") || "");
+    const params = await readParamsBodyOrQuery(request);
+    const campanhaId = normalizeText(params.campanhaId);
     const campanhas = await readAllCampanhas();
     const c = campanhas.find((x) => x.id === campanhaId);
     if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
@@ -986,23 +1016,10 @@ export async function recalcularTetoPreSaveController(request: Request): Promise
 // áudio nenhum, porque faixa existente nunca precisa de mediaUrl próprio.
 export async function vincularFaixaExistentePreSaveController(request: Request): Promise<Response> {
   try {
-    const url = new URL(request.url);
-    const body =
-      request.method === "POST"
-        ? ((await request.json().catch(() => ({}))) as {
-            campanhaId?: string;
-            faixaNum?: number;
-            tituloMusicaExistente?: string;
-          })
-        : {};
-    // Aceita também querystring via GET — só pra permitir rodar o reparo via
-    // workflow admin-call.yml (que só faz GET), mesmo padrão já usado em
-    // recalcular-teto.
-    const campanhaId = normalizeText(body.campanhaId || url.searchParams.get("campanhaId") || "");
-    const faixaNum = Number(body.faixaNum || url.searchParams.get("faixaNum") || "");
-    const tituloMusicaExistente = normalizeText(
-      body.tituloMusicaExistente || url.searchParams.get("tituloMusicaExistente") || "",
-    );
+    const params = await readParamsBodyOrQuery(request);
+    const campanhaId = normalizeText(params.campanhaId);
+    const faixaNum = Number(params.faixaNum);
+    const tituloMusicaExistente = normalizeText(params.tituloMusicaExistente);
     if (!campanhaId || !faixaNum || !tituloMusicaExistente) {
       return jsonResponse(
         { success: false, error: "campanhaId, faixaNum e tituloMusicaExistente são obrigatórios." },

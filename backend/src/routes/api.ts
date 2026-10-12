@@ -726,26 +726,13 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   } else if (url.pathname === "/api/presave/diagnostico") {
     response = await getDiagnosticoTetoPreSaveController(request);
   } else if (url.pathname === "/api/presave/recalcular-teto") {
-    // GET com ?campanhaId= também aceito (só pra permitir rodar o reparo
-    // via workflow admin-call.yml, que só faz GET) — a proteção real
-    // (só mexe se tetoFinal já armazenado for 0) está dentro do controller.
-    if (request.method !== "POST" && request.method !== "GET") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Use POST (ou GET com ?campanhaId=) para /api/presave/recalcular-teto." }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
+    // Aceita GET (lê de querystring) OU POST (lê do corpo) de propósito —
+    // o workflow admin-call.yml, único jeito de rodar isso em produção
+    // sem acesso de rede direto ao domínio do Worker, só faz GET sem
+    // corpo. Ver readParamsBodyOrQuery em preSaveController.ts.
     response = await recalcularTetoPreSaveController(request);
   } else if (url.pathname === "/api/presave/vincular-faixa-existente") {
-    if (request.method !== "POST" && request.method !== "GET") {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Use POST (ou GET com querystring) para /api/presave/vincular-faixa-existente.",
-        }),
-        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
-    }
+    // Mesmo motivo do endpoint acima — aceita GET (querystring) ou POST.
     response = await vincularFaixaExistentePreSaveController(request);
   } else if (url.pathname === "/api/gestao/faixa/publicar") {
     if (request.method !== "POST") {
