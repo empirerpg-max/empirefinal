@@ -1002,6 +1002,76 @@ export async function recalcularTetoPreSaveController(request: Request): Promise
   }
 }
 
+// POST (ou GET, mesmo motivo dos endpoints acima) /api/presave/compensar-maximo-retroativo
+// { campanhaId } — reparo retroativo APROVADO EXPLICITAMENTE pelo
+// coordenador/usuário, só pra campanhas modo "missao": marca como
+// "completa" (com dados.compensacao=true) todo dia de missão que estava
+// "perdida" (ou "pendente" com data já passada, mesmo efeito) — ou seja,
+// todo dia perdido por causa dos bugs de fuso/cap/teto já corrigidos (não
+// por o jogador simplesmente não ter postado nada) recebe o crédito
+// máximo retroativo. Só altera o status/dados da missão (nunca o peso,
+// nunca o teto, nunca o dia em si) — a fórmula de cálculo
+// (calcularAcumulado/valoresPorDia) já sabe somar "completa" normalmente,
+// então não precisa de nenhum campo novo. Idempotente: já marcada
+// "completa" fica como está; dia ainda "pendente" com data futura (ainda
+// não chegou a vez) não é tocado.
+export async function compensarMaximoRetroativoPreSaveController(
+  request: Request,
+): Promise<Response> {
+  try {
+    const params = await readParamsBodyOrQuery(request);
+    const campanhaId = normalizeText(params.campanhaId);
+    const campanhas = await readAllCampanhas();
+    const c = campanhas.find((x) => x.id === campanhaId);
+    if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
+    if (c.modo !== "missao") {
+      return jsonResponse({
+        success: false,
+        error: `Campanha "${c.id}" é modo "${c.modo}", não "missao" — compensação retroativa só existe pra modo missão (modo contagem já acumula automaticamente todo dia, sem depender de missão nenhuma).`,
+      });
+    }
+    aplicarDiasPerdidos(c); // garante que todo dia vencido sem ação já virou "perdida" antes de compensar
+    const acumuladoAntes = Math.round(calcularAcumulado(c));
+    const agora = new Date().toISOString();
+    let diasCompensados = 0;
+    for (const m of c.missoes) {
+      if (m.status === "perdida") {
+        m.status = "completa";
+        m.completadoEm = agora;
+        m.dados = {
+          compensacao: true,
+          motivo:
+            "Compensação retroativa máxima — dia perdido por bug já corrigido (fuso/cap do chart/corrupção de teto), aprovado explicitamente pelo coordenador/usuário.",
+        };
+        diasCompensados++;
+      }
+    }
+    if (diasCompensados === 0) {
+      return jsonResponse({
+        success: true,
+        data: { diasCompensados: 0, acumuladoAntes, acumuladoDepois: acumuladoAntes },
+        aviso: "Nenhum dia 'perdida' encontrado pra compensar — nada foi alterado.",
+      });
+    }
+    await writeCampanha(c);
+    const acumuladoDepois = Math.round(calcularAcumulado(c));
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Compensação retroativa máxima aplicada na campanha de pre-save "${c.albumTituloFull}" (${c.id}): ${diasCompensados} dia(s) perdido(s) marcado(s) como completo(s). Acumulado foi de ${acumuladoAntes} pra ${acumuladoDepois}.`,
+      onde: "compensarMaximoRetroativoPreSaveController",
+    }).catch(() => {});
+    return jsonResponse({
+      success: true,
+      data: { diasCompensados, acumuladoAntes, acumuladoDepois },
+    });
+  } catch (error: any) {
+    return jsonResponse(
+      { success: false, error: error.message || "Erro ao compensar retroativamente." },
+      500,
+    );
+  }
+}
+
 // POST /api/presave/vincular-faixa-existente { campanhaId, faixaNum, tituloMusicaExistente }
 // Reparo pontual + genérico pra um bug real de produção: o jogador do Max
 // Gorghan cadastrou "Follia" (faixa #2 da campanha PRESAVE-7da5f189) como

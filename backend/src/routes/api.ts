@@ -224,6 +224,7 @@ import {
   getDiagnosticoTetoPreSaveController,
   recalcularTetoPreSaveController,
   vincularFaixaExistentePreSaveController,
+  compensarMaximoRetroativoPreSaveController,
 } from "../controllers/preSaveController";
 import {
   getBannersAtivosController,
@@ -734,6 +735,9 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
   } else if (url.pathname === "/api/presave/vincular-faixa-existente") {
     // Mesmo motivo do endpoint acima — aceita GET (querystring) ou POST.
     response = await vincularFaixaExistentePreSaveController(request);
+  } else if (url.pathname === "/api/presave/compensar-maximo-retroativo") {
+    // Mesmo motivo dos dois endpoints acima — aceita GET (querystring) ou POST.
+    response = await compensarMaximoRetroativoPreSaveController(request);
   } else if (url.pathname === "/api/gestao/faixa/publicar") {
     if (request.method !== "POST") {
       return new Response(
