@@ -1544,7 +1544,37 @@ export async function processarLancamentosPreSaveScheduled(): Promise<{
   try {
     const campanhas = await readAllCampanhas();
     const hojeStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD
-    const paraLancar = campanhas.filter((c) => c.status === "ativa" && c.dataLancamento <= hojeStr);
+    // Bug real confirmado em produção: álbum publicado ~10 dias antes da
+    // data combinada (Max Gorghan/FOLLIA, PRESAVE-7da5f189) — a comparação
+    // de string `c.dataLancamento <= hojeStr` confia ciegamente que
+    // dataLancamento sempre vem no formato certo "YYYY-MM-DD". Se por
+    // QUALQUER motivo (leitura caindo pro fallback GViz, célula
+    // temporariamente corrompida, linha desalinhada etc. — mesma classe
+    // de bug já vista na corrupção dessa mesma coluna) o valor lido vier
+    // vazio ("") ou num formato que não seja data, a comparação lexical
+    // podia dar falso positivo (string vazia é "menor" que qualquer data,
+    // por exemplo) e lançar o álbum achando que o dia já passou. Fix:
+    // NUNCA lança uma campanha cuja dataLancamento não bata exatamente
+    // com o formato esperado — trata "formato inválido" como "ainda não
+    // é dia de lançar" (falha segura, nunca o oposto) e registra no LOGS
+    // didático pra alguém notar, em vez de arriscar lançar antes da hora.
+    const DATA_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+    for (const c of campanhas) {
+      if (c.status === "ativa" && c.dataLancamento && !DATA_ISO_REGEX.test(c.dataLancamento)) {
+        falhas++;
+        registrarLogSistema({
+          categoria: "Erro do app",
+          oQueAconteceu: `Campanha de pre-save "${c.albumTituloFull}" (${c.id}) tem dataLancamento num formato inesperado ("${c.dataLancamento}", esperado YYYY-MM-DD) — NÃO lancei por segurança (evita repetir o bug do álbum lançado antes da hora). Confira a célula J da linha ${c._rowIndex} de "PreSave_Album".`,
+          onde: "processarLancamentosPreSaveScheduled",
+        }).catch(() => {});
+      }
+    }
+    const paraLancar = campanhas.filter(
+      (c) =>
+        c.status === "ativa" &&
+        DATA_ISO_REGEX.test(c.dataLancamento) &&
+        c.dataLancamento <= hojeStr,
+    );
 
     for (const c of paraLancar) {
       try {

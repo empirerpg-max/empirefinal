@@ -2383,23 +2383,46 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
   // trás; se o que falhar for uma faixa individual depois, o álbum já
   // existe e só fica com menos faixas (degradação já tratada abaixo via
   // faixasIneditasFalharam), never o inverso.
-  // Range explícito (A:K) — mesma classe de bug de "próxima linha livre"
-  // corrigida em registrarNaEdicaoCharts logo abaixo.
+  // NÃO usa appendRow/:append aqui — mesmo problema real já visto e
+  // corrigido pra "EDIÇÃO CHARTS ÁLBUMS" (ver comentário em
+  // registrarAlbumNaEdicaoChartsAlbuns abaixo: "confirmado ao vivo: faixa
+  // de coluna explícita não impede o Sheets de pular pra longe por causa
+  // das colunas de cálculo à direita") e a causa raiz CONFIRMADA das
+  // corrupções reais de "Albuns" linha 100 (Rayna) e linha 101 (Max
+  // Gorghan/FOLLIA, via pre-save): o algoritmo de detecção de "tabela" do
+  // :append da API do Sheets escaneia a linha INTEIRA (não só A:K) pra
+  // achar a próxima linha livre — colunas à direita de K (ex: L em
+  // diante, preenchidas por cópia do Código único ou por alguma fórmula
+  // auto-calculada) fazem o Sheets achar que a linha candidata "já tem
+  // dado" e começar a escrever os 11 valores a partir da PRIMEIRA coluna
+  // livre que ele encontra (ex: J), deslocando a linha inteira 9 posições
+  // pra direita — não é uma corrida entre duas chamadas, é o próprio
+  // :append tomando a decisão errada de onde começar a escrever, mesmo
+  // com um range explícito "A:K". Fix: acha a última linha com "Novo
+  // Nome" de verdade (coluna G, índice 6) e escreve direto nessa linha+1
+  // via updateValues (range fixo A:K, nunca deslocável) — mesmo padrão já
+  // usado em registrarAlbumNaEdicaoChartsAlbuns.
   //
   // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") —
-  // esse appendRow nativo (:append) NÃO é garantidamente serializado
-  // entre duas chamadas quase simultâneas (lançamento normal de álbum
-  // concorrendo com migrarAlbunsLegadosController, que também chama
-  // publicarAlbum). Foi exatamente essa falta de trava que corrompeu a
-  // linha 100 de "Albuns" (tópico/título da Rayna misturados com
-  // criador de outro jogador de uma migração rodando em paralelo). Usa a
+  // continua necessária: duas chamadas quase simultâneas (lançamento
+  // normal de álbum concorrendo com migrarAlbunsLegadosController/pre-save
+  // automático, que também chamam publicarAlbum) ainda podiam calcular a
+  // MESMA "última linha livre" e escrever uma por cima da outra. Usa a
   // MESMA chave de registrarAlbumNaEdicaoChartsAlbuns porque os dois
-  // escrevem na mesma linha em sequência (append aqui, depois Albuns!L
-  // lá) — tem que ser uma seção crítica única, não duas travas
-  // separadas que ainda deixariam a janela entre elas desprotegida.
-  const albumRowIndexNovo = await withWriteLock("gestao:edicao-charts-albuns", () =>
-    googleSheetsService.principal.appendRow(
+  // escrevem na mesma linha em sequência (aqui, depois Albuns!L lá) —
+  // tem que ser uma seção crítica única, não duas travas separadas que
+  // ainda deixariam a janela entre elas desprotegida.
+  const albumRowIndexNovo = await withWriteLock("gestao:edicao-charts-albuns", async () => {
+    const albunsRowsAtuais = await googleSheetsService.principal.readValues(
       "Albuns",
+      "A2:G20000",
+    );
+    let ultimaLinhaComAlbum = 1; // linha 1 = cabeçalho
+    for (let i = 0; i < albunsRowsAtuais.length; i++) {
+      if ((albunsRowsAtuais[i]?.[6] || "").trim()) ultimaLinhaComAlbum = i + 2;
+    }
+    const linhaAlvo = ultimaLinhaComAlbum + 1;
+    await googleSheetsService.principal.updateValues("Albuns", `A${linhaAlvo}:K${linhaAlvo}`, [
       [
         dataFormatada, // A - Data de lançamento
         albumTopicId, // B - ID do tópico
@@ -2413,9 +2436,9 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
         encartesStr, // J - Encarte
         tipoAlbum, // K - Tipo (EP/Álbum/Deluxe)
       ],
-      "A:K",
-    ),
-  );
+    ]);
+    return linhaAlvo;
+  });
   upsertMidiaD1({
     id: albumTopicId,
     tipo: "album",
