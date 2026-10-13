@@ -590,9 +590,20 @@ export function buildCleanItem(
     // só usa o índice de leitura como ÚLTIMO recurso, pra linhas que nunca
     // tiveram nem tópico nem código (ex: algumas entradas de chart puramente
     // numéricas) — sabendo que esse último caso ainda pode ficar instável.
-    id: `${sheetName.toLowerCase().replace(/\s+/g, "_")}_${
-      telegramTopicId || codigoUnicoParaId || `idx${index + 1}`
-    }`,
+    // Álbuns usam um esquema de ID diferente das outras abas: o backfill de
+    // topicId em forumController.ts já grava o ID de álbum COM o prefixo
+    // "album_" (ex: "album_1789526186644_d1fj53"), e é esse mesmo formato
+    // (sem prefixo "albuns_" duplicado) que getEmpirePlayAlbunsController usa
+    // e que o deep-link de "Lançamentos Recentes" precisa bater exatamente
+    // pra abrir o tópico certo (ver Forum.tsx, matcher de pendingDeepLinkId).
+    id:
+      sheetName === "Albuns"
+        ? telegramTopicId?.startsWith("album_")
+          ? telegramTopicId
+          : `album_${telegramTopicId || codigoUnicoParaId || `idx${index + 1}`}`
+        : `${sheetName.toLowerCase().replace(/\s+/g, "_")}_${
+            telegramTopicId || codigoUnicoParaId || `idx${index + 1}`
+          }`,
     type: sheetName.toLowerCase().replace(/\s+/g, "-"),
     title,
     artist,
