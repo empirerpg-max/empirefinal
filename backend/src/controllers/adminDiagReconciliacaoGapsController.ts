@@ -602,3 +602,205 @@ export async function adminDiagAuditoriaColunasMusicasController(): Promise<Resp
     { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
   );
 }
+
+// ===========================================================================
+// Auditoria COLUNA POR COLUNA — tipo='video' (Music Videos). Mesmo padrão
+// exato de adminDiagAuditoriaColunasMusicasController, segunda rodada de
+// reconciliação (2026-10-13): SOMENTE LEITURA, lê o D1 de verdade
+// (SELECT * FROM midia WHERE tipo='video') e compara, campo por campo, com
+// o valor atual lido direto do Sheets "Music Videos" (A:U) — a mesma
+// leitura e as mesmas transformações que
+// adminMigrarCatalogoD1Controller.ts usa hoje (já com o fix de `artista` e
+// o novo campo `reportado_em`, ambos aprovados pelo usuário).
+//
+// GET /api/empire-play/admin/diagnostico-auditoria-colunas-videos
+// ===========================================================================
+
+interface LinhaVideoD1 {
+  id: string;
+  titulo: string | null;
+  artista: string | null;
+  video_url: string | null;
+  video_source: string | null;
+  categoria: string | null;
+  descricao: string | null;
+  data_lancamento: string | null;
+  data_lancamento_iso: string | null;
+  codigo_unico: string | null;
+  likes_por_jogador: string | null;
+  media_likes: number | null;
+  nome_original_charts: string | null;
+  thumb_url: string | null;
+  reportado_em: string | null;
+}
+
+export async function adminDiagAuditoriaColunasVideosController(): Promise<Response> {
+  const db = getCatalogoDb();
+  if (!db) {
+    return new Response(JSON.stringify({ success: false, error: "Binding CATALOGO_DB não disponível." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  }
+
+  const videosRows = await googleSheetsService.principal.readValues("Music Videos", "A:U").catch(() => []);
+
+  function parseDateToIso(dataBR: string | null): string | null {
+    if (!dataBR) return null;
+    const m = dataBR.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (!m) return null;
+    return `${m[3]}-${m[2]}-${m[1]}`;
+  }
+
+  type VideoEsperado = {
+    id: string;
+    linha: number;
+    titulo: string;
+    artista: string;
+    videoUrl: string | null;
+    categoria: string | null;
+    descricao: string | null;
+    dataLancamento: string | null;
+    dataLancamentoIso: string | null;
+    codigoUnico: string | null;
+    likesPorJogador: string | null;
+    mediaLikes: number | null;
+    nomeOriginalCharts: string | null;
+    thumbUrl: string | null;
+    reportadoEm: string | null;
+  };
+
+  const videosEsperados: VideoEsperado[] = [];
+  for (let i = 1; i < videosRows.length; i++) {
+    const row = videosRows[i];
+    if (!row || !row.some((c) => normalizeText(c))) continue;
+    const topicId = normalizeText(row[5]); // F — message_thread_id
+    if (!topicId) continue; // mesma linha pulada pela migração — sem ID estável ainda
+    const dataEnvio = normalizeText(row[9]) || null; // J
+    videosEsperados.push({
+      id: idMidiaParaD1("video", topicId),
+      linha: i + 1,
+      titulo: normalizeText(row[1]) || "Sem título", // B
+      artista: normalizeText(row[15]) || "", // P — Nome original nos charts (fix aprovado)
+      videoUrl: normalizeText(row[12]) || null, // M
+      categoria: normalizeText(row[7]) || null, // H
+      descricao: normalizeText(row[8]) || null, // I
+      dataLancamento: dataEnvio,
+      dataLancamentoIso: parseDateToIso(dataEnvio),
+      codigoUnico: normalizeText(row[20]) || null, // U
+      likesPorJogador: normalizeText(row[13]) || null, // N
+      mediaLikes: Number(normalizeText(row[14])) || null, // O
+      nomeOriginalCharts: normalizeText(row[15]) || null, // P
+      thumbUrl: normalizeText(row[19]) || null, // T
+      reportadoEm: normalizeText(row[18]) || null, // S (novo campo, Gap 2)
+    });
+  }
+
+  const { results: linhasD1 } = await db
+    .prepare("SELECT * FROM midia WHERE tipo = 'video'")
+    .all<LinhaVideoD1>();
+  const d1PorId = new Map<string, LinhaVideoD1>();
+  for (const row of linhasD1) d1PorId.set(row.id, row);
+
+  const COLUNAS: { campo: string; get: (v: VideoEsperado) => unknown; getD1: (r: LinhaVideoD1) => unknown }[] = [
+    { campo: "titulo", get: (v) => v.titulo, getD1: (r) => r.titulo },
+    { campo: "artista", get: (v) => v.artista, getD1: (r) => r.artista },
+    { campo: "video_url", get: (v) => v.videoUrl, getD1: (r) => r.video_url },
+    // video_source não vem de uma coluna direta do Sheets — é resolvido por
+    // heurística a partir da própria URL (ver resolveVideoUrlAndSource em
+    // empirePlayController.ts), fora do escopo desta rodada aprovada pelo
+    // usuário (só Gap 1 artista + Gap 2 reportado_em). Reportado aqui só
+    // pra constar na cobertura pedida, sem comparar contra um "esperado"
+    // inventado — D1 sempre vazio hoje é o comportamento atual conhecido,
+    // não um bug desta reconciliação.
+    { campo: "video_source", get: () => null, getD1: (r) => r.video_source },
+    { campo: "categoria", get: (v) => v.categoria, getD1: (r) => r.categoria },
+    { campo: "descricao", get: (v) => v.descricao, getD1: (r) => r.descricao },
+    { campo: "data_lancamento", get: (v) => v.dataLancamento, getD1: (r) => r.data_lancamento },
+    { campo: "data_lancamento_iso", get: (v) => v.dataLancamentoIso, getD1: (r) => r.data_lancamento_iso },
+    { campo: "codigo_unico", get: (v) => v.codigoUnico, getD1: (r) => r.codigo_unico },
+    { campo: "likes_por_jogador", get: (v) => v.likesPorJogador, getD1: (r) => r.likes_por_jogador },
+    { campo: "media_likes", get: (v) => v.mediaLikes, getD1: (r) => r.media_likes },
+    { campo: "nome_original_charts", get: (v) => v.nomeOriginalCharts, getD1: (r) => r.nome_original_charts },
+    { campo: "thumb_url", get: (v) => v.thumbUrl, getD1: (r) => r.thumb_url },
+    { campo: "reportado_em", get: (v) => v.reportadoEm, getD1: (r) => r.reportado_em },
+  ];
+
+  type DivergenciaLinha = { videoId: string; linha: number; titulo: string; esperado: unknown; noD1: unknown };
+  const resumoPorColuna: {
+    campo: string;
+    sheetsPreenchido: number;
+    d1Preenchido: number;
+    videoNaoEncontradoNoD1: number;
+    casosPerdidos: number;
+    casosDivergentes: number;
+    linhasPerdidas: DivergenciaLinha[];
+    linhasDivergentes: DivergenciaLinha[];
+  }[] = [];
+
+  for (const coluna of COLUNAS) {
+    let sheetsPreenchido = 0;
+    let d1Preenchido = 0;
+    let videoNaoEncontradoNoD1 = 0;
+    const linhasPerdidas: DivergenciaLinha[] = [];
+    const linhasDivergentes: DivergenciaLinha[] = [];
+
+    for (const v of videosEsperados) {
+      const esperado = coluna.get(v);
+      const temEsperado = esperado !== null && esperado !== undefined && esperado !== "";
+      if (temEsperado) sheetsPreenchido++;
+
+      const linhaD1 = d1PorId.get(v.id);
+      if (!linhaD1) {
+        videoNaoEncontradoNoD1++;
+        continue;
+      }
+      const valorD1 = coluna.getD1(linhaD1);
+      const temD1 = valorD1 !== null && valorD1 !== undefined && valorD1 !== "";
+      if (temD1) d1Preenchido++;
+
+      if (temEsperado && !temD1) {
+        linhasPerdidas.push({ videoId: v.id, linha: v.linha, titulo: v.titulo, esperado, noD1: valorD1 });
+      } else if (temEsperado && temD1 && !valoresIguais(esperado, valorD1)) {
+        linhasDivergentes.push({ videoId: v.id, linha: v.linha, titulo: v.titulo, esperado, noD1: valorD1 });
+      }
+    }
+
+    resumoPorColuna.push({
+      campo: coluna.campo,
+      sheetsPreenchido,
+      d1Preenchido,
+      videoNaoEncontradoNoD1,
+      casosPerdidos: linhasPerdidas.length,
+      casosDivergentes: linhasDivergentes.length,
+      linhasPerdidas,
+      linhasDivergentes: linhasDivergentes.slice(0, 30),
+    });
+  }
+
+  const videosSemLinhaNoD1 = videosEsperados.filter((v) => !d1PorId.has(v.id)).length;
+
+  return new Response(
+    JSON.stringify(
+      {
+        success: true,
+        data: {
+          totalVideosEsperados: videosEsperados.length,
+          totalLinhasNoD1: linhasD1.length,
+          videosEsperadosSemLinhaNoD1: videosSemLinhaNoD1,
+          videosSemLinhaNoD1_detalhe: videosEsperados
+            .filter((v) => !d1PorId.has(v.id))
+            .map((v) => ({ videoId: v.id, linha: v.linha, titulo: v.titulo })),
+          resumoPorColuna,
+          observacao:
+            "casosPerdidos = Sheets TEM valor e D1 está vazio (bug real de migração, prioridade máxima). " +
+            "casosDivergentes = os dois têm valor mas são diferentes (pode ser Sheets atualizado depois da última migração, não necessariamente bug). " +
+            "video_source não vem de coluna direta do Sheets (resolvido por heurística de URL em empirePlayController.ts) — fora do escopo desta rodada, reportado só por cobertura, sem comparação de 'esperado'.",
+        },
+      },
+      null,
+      2,
+    ),
+    { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
+  );
+}

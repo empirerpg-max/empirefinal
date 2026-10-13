@@ -199,6 +199,7 @@ import { adminAlterCatalogoD1AddTiposController } from "../controllers/adminAlte
 import {
   adminDiagReconciliacaoGapsController,
   adminDiagAuditoriaColunasMusicasController,
+  adminDiagAuditoriaColunasVideosController,
 } from "../controllers/adminDiagReconciliacaoGapsController";
 import { adminDiagIdsDuplicadosD1Controller } from "../controllers/adminDiagIdsDuplicadosD1Controller";
 import { adminFixSocialPostsShift3Controller } from "../controllers/adminFixSocialPostsShift3Controller";
@@ -1851,6 +1852,10 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminDiagComentarioPerdidoController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-tamanho-dados") {
     response = await adminDiagTamanhoDadosController();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-auditoria-colunas-videos") {
+    // Auditoria coluna-por-coluna de TODA a tabela midia (tipo='video')
+    // contra o Sheets "Music Videos" de verdade — SOMENTE LEITURA.
+    response = await adminDiagAuditoriaColunasVideosController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-auditoria-colunas-musicas") {
     // Auditoria coluna-por-coluna de TODA a tabela midia (tipo='musica')
     // contra o Sheets "Musicas" de verdade — SOMENTE LEITURA (lê D1 e

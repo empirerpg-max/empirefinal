@@ -152,7 +152,14 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       id: idMidiaParaD1("video", topicId),
       tipo: "video",
       titulo: normalizeText(row[1]) || "Sem título", // B
-      artista: "", // Music Videos não tem coluna própria de artista — resolvido via "Nome original nos charts" (P) quando necessário
+      // Music Videos não tem coluna própria de "artista" — o comentário
+      // antigo aqui dizia "resolvido via Nome original nos charts (P)
+      // quando necessário", mas isso nunca acontecia de verdade (o valor
+      // só ia pro campo separado nomeOriginalCharts, nunca pra artista).
+      // BUG CONFIRMADO (reconciliação de 2026-10-13, rodada vídeo): os 300
+      // vídeos ficavam sempre com artista="" no D1. Corrigido reaproveitando
+      // a mesma coluna P (índice 15) pros dois campos.
+      artista: normalizeText(row[15]) || "", // P — Nome original nos charts
       videoUrl: normalizeText(row[12]) || null, // M
       categoria: normalizeText(row[7]) || null, // H — Tipo de vídeo
       descricao: normalizeText(row[8]) || null, // I
@@ -163,6 +170,13 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       mediaLikes: Number(normalizeText(row[14])) || null,
       nomeOriginalCharts: normalizeText(row[15]) || null,
       thumbUrl: normalizeText(row[19]) || null,
+      // Reconciliação de 2026-10-13 (rodada vídeo, Gap 2) — coluna S
+      // ("Reportado em", índice 18) estava dentro do range A:U já lido mas
+      // nunca extraída/gravada em lugar nenhum; não existia campo
+      // correspondente no schema do D1. Timestamp/data de quando foi
+      // reportado — diferente semanticamente de reportado_incorreto
+      // (booleano Sim/Não, já existente pra música).
+      reportadoEm: normalizeText(row[18]) || null, // S — Reportado em
     });
     resultado.videos.migradas++;
   }

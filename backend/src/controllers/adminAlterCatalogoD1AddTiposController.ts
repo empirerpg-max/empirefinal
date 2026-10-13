@@ -1,8 +1,10 @@
 import { getCatalogoDb } from "../services/catalogoDbService";
 
-// Reconciliação de 2026-10-13 (Tarefa 3) — adiciona as 2 colunas novas
-// (tipo_single, tipo_musica) na tabela "midia" do D1 de PRODUÇÃO, mesmo
-// padrão já usado na leva de 2026-10-06 (ver comentário em d1/schema.sql):
+// Reconciliação de 2026-10-13 (Tarefa 3) — adiciona colunas novas na tabela
+// "midia" do D1 de PRODUÇÃO: tipo_single/tipo_musica (rodada música, já
+// aplicadas em produção — ficam aqui pra o endpoint continuar idempotente
+// se rodado de novo) e reportado_em (rodada vídeo, Gap 2). Mesmo padrão já
+// usado na leva de 2026-10-06 (ver comentário em d1/schema.sql):
 // ALTER TABLE direto no banco vivo, sem recriar a tabela (D1/SQLite não tem
 // DDL transacional nem "IF NOT EXISTS" pra ADD COLUMN antes do SQLite
 // 3.37ish — por isso cada ALTER é tentado individualmente e um erro de
@@ -24,6 +26,7 @@ export async function adminAlterCatalogoD1AddTiposController(): Promise<Response
   const colunas = [
     { nome: "tipo_single", ddl: "ALTER TABLE midia ADD COLUMN tipo_single TEXT" },
     { nome: "tipo_musica", ddl: "ALTER TABLE midia ADD COLUMN tipo_musica TEXT" },
+    { nome: "reportado_em", ddl: "ALTER TABLE midia ADD COLUMN reportado_em TEXT" },
   ];
 
   const resultado: { coluna: string; status: "criada" | "ja_existia" | "erro"; detalhe?: string }[] = [];

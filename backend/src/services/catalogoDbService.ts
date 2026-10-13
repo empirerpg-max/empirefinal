@@ -38,9 +38,9 @@ const MIDIA_UPSERT_SQL = `INSERT INTO midia (
     reportado_incorreto, album_id_2, album_id_3, album_id_4, album_id_5,
     likes_por_jogador, media_likes, nome_original_charts, thumb_url,
     encarte_url, tipo_album, shop_url, loja_info, arte_extra_url,
-    tipo_single, tipo_musica,
+    tipo_single, tipo_musica, reportado_em,
     atualizado_em
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   ON CONFLICT(id) DO UPDATE SET
     tipo = excluded.tipo, titulo = excluded.titulo, artista = excluded.artista,
     feat_artistas = excluded.feat_artistas, album_id = excluded.album_id,
@@ -63,6 +63,7 @@ const MIDIA_UPSERT_SQL = `INSERT INTO midia (
     shop_url = excluded.shop_url, loja_info = excluded.loja_info,
     arte_extra_url = excluded.arte_extra_url,
     tipo_single = excluded.tipo_single, tipo_musica = excluded.tipo_musica,
+    reportado_em = excluded.reportado_em,
     atualizado_em = datetime('now')`;
 
 /**
@@ -116,6 +117,7 @@ export function buildMidiaUpsertStatement(db: D1DatabaseLike, item: MidiaUpsert)
     item.arteExtraUrl ?? null,
     item.tipoSingle ?? null,
     item.tipoMusica ?? null,
+    item.reportadoEm ?? null,
   );
 }
 
@@ -236,6 +238,9 @@ export interface MidiaUpsert {
   // (Musicas!I/J; as outras abas não têm essas colunas).
   tipoSingle?: string | null;
   tipoMusica?: string | null;
+  // Reconciliação de 2026-10-13 (rodada vídeo, Gap 2) — só preenchido pra
+  // tipo='video' ("Music Videos"!S "Reportado em").
+  reportadoEm?: string | null;
 }
 
 /**

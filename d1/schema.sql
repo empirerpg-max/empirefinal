@@ -64,6 +64,11 @@ CREATE TABLE midia (
   -- admin em adminAlterCatalogoD1AddTiposController.ts.
   tipo_single TEXT,                    -- Musicas!I "TIPO DE SINGLE" (SOLO/DUETO/CONJUNTO/PARCERIA/LEAD SINGLE/...)
   tipo_musica TEXT,                    -- Musicas!J "TIPO DE MÚSICA" (SOLO/DUETO/CONJUNTO/PARCERIA)
+  -- Coluna adicionada na reconciliação de 2026-10-13 (rodada vídeo, Gap 2):
+  -- "Music Videos"!S "Reportado em" (índice 18) — timestamp/data de quando
+  -- o vídeo foi reportado, nunca migrada antes. Semanticamente diferente de
+  -- reportado_incorreto (booleano Sim/Não, já existente pra música).
+  reportado_em TEXT,                   -- "Music Videos"!S "Reportado em"
   criado_em TEXT NOT NULL DEFAULT (datetime('now')),
   atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
