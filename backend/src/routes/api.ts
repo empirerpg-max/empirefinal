@@ -196,6 +196,7 @@ import { adminDiagComentarioPerdidoController } from "../controllers/adminDiagCo
 import { adminDiagTamanhoDadosController } from "../controllers/adminDiagTamanhoDadosController";
 import { adminMigrarCatalogoD1Controller } from "../controllers/adminMigrarCatalogoD1Controller";
 import { adminAlterCatalogoD1AddTiposController } from "../controllers/adminAlterCatalogoD1AddTiposController";
+import { adminDiagReconciliacaoGapsController } from "../controllers/adminDiagReconciliacaoGapsController";
 import { adminDiagIdsDuplicadosD1Controller } from "../controllers/adminDiagIdsDuplicadosD1Controller";
 import { adminFixSocialPostsShift3Controller } from "../controllers/adminFixSocialPostsShift3Controller";
 import { adminFixFuoriRottaTopicoController } from "../controllers/adminFixFuoriRottaTopicoController";
@@ -1847,6 +1848,11 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminDiagComentarioPerdidoController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-tamanho-dados") {
     response = await adminDiagTamanhoDadosController();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-reconciliacao-gaps") {
+    // Investigação dos 3 gaps revelados pela migração de 2026-10-13
+    // (Gap A: vínculo música-álbum; Gap B: 6 músicas da Rayna sem tópico;
+    // Gap C: 11 comentários órfãos por FK) — 100% leitura, nunca grava.
+    response = await adminDiagReconciliacaoGapsController();
   } else if (url.pathname === "/api/empire-play/admin/alter-catalogo-d1-add-tipos") {
     // Tarefa 3 (reconciliação D1 música) — ALTER TABLE em produção. NUNCA
     // rodar sem aprovação explícita do usuário (ver comentário no
