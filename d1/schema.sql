@@ -54,6 +54,16 @@ CREATE TABLE midia (
   shop_url TEXT,                       -- Extra_Musicas/Extra_Albuns: Shop
   loja_info TEXT,                      -- Extra_Musicas/Extra_Albuns: Info
   arte_extra_url TEXT,                 -- Extra_Musicas/Extra_Albuns: Arte
+  -- Colunas adicionadas na reconciliação de 2026-10-13 (Tarefa 3, gap real
+  -- confirmado comparando o CSV exportado da aba "Musicas" com esse schema:
+  -- 2 colunas inteiras — "TIPO DE SINGLE" e "TIPO DE MÚSICA", 720/773 linhas
+  -- preenchidas cada — nunca tinham sido migradas pro D1 nem lidas/gravadas
+  -- em adminMigrarCatalogoD1Controller.ts/catalogoDbService.ts). Mesmo
+  -- padrão da leva de 2026-10-06: ALTER TABLE direto no D1 de produção
+  -- (sem recriar a tabela), só depois de aprovação explícita — ver endpoint
+  -- admin em adminAlterCatalogoD1AddTiposController.ts.
+  tipo_single TEXT,                    -- Musicas!I "TIPO DE SINGLE" (SOLO/DUETO/CONJUNTO/PARCERIA/LEAD SINGLE/...)
+  tipo_musica TEXT,                    -- Musicas!J "TIPO DE MÚSICA" (SOLO/DUETO/CONJUNTO/PARCERIA)
   criado_em TEXT NOT NULL DEFAULT (datetime('now')),
   atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );

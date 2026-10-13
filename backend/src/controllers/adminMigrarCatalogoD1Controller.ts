@@ -63,6 +63,12 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     comentariosMusicas: { lidas: 0, migradas: 0 },
     comentariosVideos: { lidas: 0, migradas: 0 },
     comentariosAlbuns: { lidas: 0, migradas: 0 },
+    // Reconciliação de 2026-10-13 (Tarefa 3) — linhas de Musicas puladas
+    // silenciosamente (sem ID do tópico, coluna B, ou sem título, coluna H)
+    // NUNCA entraram no D1. Reportadas aqui (número da linha na planilha,
+    // título quando existir, artista) em vez de só incrementar um contador
+    // mudo — zero exclusão decidida sem a pessoa ver a evidência primeiro.
+    musicasPuladas: [] as { linha: number; motivo: string; titulo: string; artista: string }[],
   };
 
   const midiaItems: MidiaUpsert[] = [];
@@ -80,7 +86,16 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
     if (!row || !row.some((c) => normalizeText(c))) continue;
     resultado.musicas.lidas++;
     const topicId = normalizeText(row[1]); // B
-    if (!topicId) continue; // sem ID estável ainda — fica pra próxima rodada depois de comentado/backfillado
+    const tituloBruto = normalizeText(row[7]); // H
+    if (!topicId || !tituloBruto) {
+      resultado.musicasPuladas.push({
+        linha: i + 1, // mesma numeração 1-based que aparece na UI do Sheets
+        motivo: !topicId ? "sem ID do tópico (coluna B)" : "sem título (coluna H)",
+        titulo: tituloBruto || "(vazio)",
+        artista: normalizeText(row[13]) || "(vazio)", // N — ACT PRINCIPAL
+      });
+      continue; // sem ID estável ainda — fica pra próxima rodada depois de comentado/backfillado
+    }
     const dataLancamento = normalizeText(row[0]) || null; // A
     const nomesAlbum = [row[10], row[26], row[27], row[28], row[29]] // K, AA, AB, AC, AD
       .map((v) => normalizeText(v))
@@ -114,6 +129,10 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
       comentariosPara: normalizeText(row[5]) || null,
       metacriticPorJogador: normalizeText(row[21]) || null,
       reportadoIncorreto: normalizeText(row[24]).toLowerCase() === "sim",
+      // Reconciliação de 2026-10-13 (Tarefa 3) — colunas I/J, nunca
+      // migradas antes (ver comentário em d1/schema.sql).
+      tipoSingle: normalizeText(row[8]) || null, // I — TIPO DE SINGLE
+      tipoMusica: normalizeText(row[9]) || null, // J — TIPO DE MÚSICA
     };
     midiaItems.push(musicaItem);
     if (nomesAlbum.length) vinculosAlbumPendentes.push({ item: musicaItem, nomes: nomesAlbum });
