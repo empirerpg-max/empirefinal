@@ -196,7 +196,10 @@ import { adminDiagComentarioPerdidoController } from "../controllers/adminDiagCo
 import { adminDiagTamanhoDadosController } from "../controllers/adminDiagTamanhoDadosController";
 import { adminMigrarCatalogoD1Controller } from "../controllers/adminMigrarCatalogoD1Controller";
 import { adminAlterCatalogoD1AddTiposController } from "../controllers/adminAlterCatalogoD1AddTiposController";
-import { adminDiagReconciliacaoGapsController } from "../controllers/adminDiagReconciliacaoGapsController";
+import {
+  adminDiagReconciliacaoGapsController,
+  adminDiagAuditoriaColunasMusicasController,
+} from "../controllers/adminDiagReconciliacaoGapsController";
 import { adminDiagIdsDuplicadosD1Controller } from "../controllers/adminDiagIdsDuplicadosD1Controller";
 import { adminFixSocialPostsShift3Controller } from "../controllers/adminFixSocialPostsShift3Controller";
 import { adminFixFuoriRottaTopicoController } from "../controllers/adminFixFuoriRottaTopicoController";
@@ -1848,6 +1851,11 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminDiagComentarioPerdidoController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-tamanho-dados") {
     response = await adminDiagTamanhoDadosController();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-auditoria-colunas-musicas") {
+    // Auditoria coluna-por-coluna de TODA a tabela midia (tipo='musica')
+    // contra o Sheets "Musicas" de verdade — SOMENTE LEITURA (lê D1 e
+    // Sheets, nunca grava). Ver adminDiagReconciliacaoGapsController.ts.
+    response = await adminDiagAuditoriaColunasMusicasController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-reconciliacao-gaps") {
     // Investigação dos 3 gaps revelados pela migração de 2026-10-13
     // (Gap A: vínculo música-álbum; Gap B: 6 músicas da Rayna sem tópico;
