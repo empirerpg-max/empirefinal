@@ -52,6 +52,7 @@ import { RichTextToolbar } from "@/components/EmpirePlay/RichTextToolbar";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
+import { SocialPostComposer } from "@/components/Social/SocialPostComposer";
 
 // Alternativa ao upload: colar direto o link de uma imagem já hospedada em
 // outro lugar (.png/.jpg/.jpeg/.webp). Só aplica se o link for válido —
@@ -858,43 +859,15 @@ function SocialPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedType, setSelectedType] = useState<"Instagram" | "Twitter" | "TikTok" | null>(null);
-  const [igMode, setIgMode] = useState<"Feed" | "Story">("Feed");
-  const [postText, setPostText] = useState("");
-  const postTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [imageUrl, setImageUrl] = useState("");
-  const [mediaTipo, setMediaTipo] = useState<"imagem" | "video">("imagem");
+  // Formulário real de post — extraído pra <SocialPostComposer> (ver
+  // src/components/Social/SocialPostComposer.tsx), reutilizado também pelo
+  // pre-save (missões de post social) pra não duplicar o form. Só o post em
+  // edição (campos mínimos) e o tipo/subtipo inicial continuam aqui, pra
+  // alimentar os defaults do composer ao reabrir pra editar.
   const [editingPost, setEditingPost] = useState<any | null>(null);
-  // Compartilhar música/álbum do próprio catálogo num post de Twitter —
-  // igual compartilhar um link do Spotify: o card do material substitui
-  // (ou acompanha) o texto.
-  const [attachedMaterial, setAttachedMaterial] = useState<PostMaterial | null>(null);
-  const [isMaterialPickerOpen, setIsMaterialPickerOpen] = useState(false);
-  const [materialPickerTipo, setMaterialPickerTipo] = useState<"musica" | "album">("musica");
-  const [materialOptions, setMaterialOptions] = useState<any[]>([]);
-  const [loadingMaterialOptions, setLoadingMaterialOptions] = useState(false);
-  const [materialSearchQuery, setMaterialSearchQuery] = useState("");
-  // Quando a pessoa escolhe um álbum no Story de música: guarda o álbum
-  // escolhido enquanto ela decide qual faixa vai tocar.
-  const [albumTrackPicker, setAlbumTrackPicker] = useState<any | null>(null);
-  // Feed do Instagram: até 10 fotos (a 1ª vai em imageUrl, as demais aqui) e
-  // um trecho de até 10s de uma música do catálogo tocando por cima.
-  const [extraImageUrls, setExtraImageUrls] = useState<string[]>([]);
-  const [uploadingExtraImage, setUploadingExtraImage] = useState(false);
-  const [attachedAudio, setAttachedAudio] = useState<PostAudio | null>(null);
-  const [isAudioPickerOpen, setIsAudioPickerOpen] = useState(false);
-  const MAX_IG_PHOTOS = 10;
-  const MAX_AUDIO_SEC = selectedType === "TikTok" ? 15 : 10;
-  // Story compartilhando música (capa + trecho de áudio) em vez de
-  // foto/vídeo escolhido manualmente.
-  const [storyMusicMode, setStoryMusicMode] = useState(false);
-  const [storyComSom, setStoryComSom] = useState(true);
-  // Blackout Mode — posta com um nome fictício em vez do nome real do
-  // artista, pra criar suspense antes de um anúncio (ex: lançamento de era).
-  // O post continua vinculado ao telegram_id de verdade (dono não muda),
-  // só o nome exibido; por isso o dono sempre pode editar/reverter depois.
-  const [blackoutMode, setBlackoutMode] = useState(false);
-  const [blackoutUsername, setBlackoutUsername] = useState("");
+  const [composerInitialType, setComposerInitialType] = useState<"Instagram" | "Twitter" | "TikTok" | null>(null);
+  const [composerInitialIgMode, setComposerInitialIgMode] = useState<"Feed" | "Story">("Feed");
+  const [composerInitialBlackoutAutor, setComposerInitialBlackoutAutor] = useState<string | undefined>(undefined);
   const [myArtists, setMyArtists] = useState<any[]>([]);
   const [selectedArtist, setSelectedArtist] = useState("");
   const [viewMode, setViewMode] = useState<"Feed" | "Settings" | "News" | "Industry" | "Midia">("Feed");
@@ -1270,18 +1243,14 @@ function SocialPage() {
   function openEditPost(post: any) {
     haptic.selection();
     setEditingPost(post);
-    setSelectedType(post.tipo);
-    setIgMode(post.subtipo === "Story" ? "Story" : "Feed");
-    setPostText(post.texto);
-    setImageUrl(post.media_url || "");
-    setMediaTipo(post.media_tipo === "video" ? "video" : "imagem");
+    setComposerInitialType(post.tipo);
+    setComposerInitialIgMode(post.subtipo === "Story" ? "Story" : "Feed");
     // Se o nome no post não bate com nenhum dos seus artistas nem com um
     // perfil público, ele foi publicado em Blackout Mode — reabre já no
     // modo certo, com o nome fictício pronto pra editar (ou voltar ao
     // normal).
     const eraBlackout = !!post.autor && !interagirComoOpcoes.some((a) => a.nome === post.autor);
-    setBlackoutMode(eraBlackout);
-    setBlackoutUsername(eraBlackout ? post.autor : "");
+    setComposerInitialBlackoutAutor(eraBlackout ? post.autor : undefined);
     setIsModalOpen(true);
   }
 
@@ -1320,291 +1289,50 @@ function SocialPage() {
 
   function closePostModal() {
     setIsModalOpen(false);
-    setSelectedType(null);
-    setPostText("");
-    setImageUrl("");
-    setMediaTipo("imagem");
     setEditingPost(null);
-    setBlackoutMode(false);
-    setBlackoutUsername("");
-    setAttachedMaterial(null);
-    setIsMaterialPickerOpen(false);
-    setExtraImageUrls([]);
-    setAttachedAudio(null);
-    setIsAudioPickerOpen(false);
-    setStoryMusicMode(false);
-    setStoryComSom(true);
-    setMaterialSearchQuery("");
-    setAlbumTrackPicker(null);
+    setComposerInitialType(null);
+    setComposerInitialIgMode("Feed");
+    setComposerInitialBlackoutAutor(undefined);
   }
 
-  // Catálogo inteiro (qualquer artista, não só o ativo) — mesmos endpoints
-  // que alimentam o Fórum/Catálogo do Empire Play, então cobre exatamente o
-  // que já está lançado e navegável por lá.
-  async function loadMaterialOptions(tipo: "musica" | "album", query: string = "") {
-    setLoadingMaterialOptions(true);
-    try {
-      if (tipo === "musica") {
-        const res = await fetch(`/api/empire-play/musicas${query ? `?q=${encodeURIComponent(query)}` : ""}`);
-        const json = await res.json().catch(() => null);
-        const items = (json?.success ? json.data || [] : []).map((it: any) => ({
-          id: it.id,
-          titulo: it.title,
-          artista: it.artist,
-          capaUrl: it.coverUrl,
-          audioUrl: it.audioUrl,
-          topicId: it.telegramTopicId,
-        }));
-        setMaterialOptions(items);
-      } else {
-        const res = await fetch("/api/empire-play/albuns");
-        const json = await res.json().catch(() => null);
-        let items = (json?.success ? json.data || [] : []) as any[];
-        const q = normalizeComparisonLocal(query);
-        if (q) {
-          items = items.filter((a) => normalizeComparisonLocal(`${a.title} ${a.artist}`).includes(q));
-        }
-        setMaterialOptions(
-          items.map((it) => ({
-            id: it.id,
-            titulo: it.title,
-            artista: it.artist,
-            capaUrl: it.coverUrl,
-            topicId: it.id?.replace(/^album_/, ""),
-            tracks: (it.tracks || []).map((t: any) => ({
-              id: t.id,
-              titulo: t.title,
-              artista: t.artist,
-              capaUrl: t.coverUrl || it.coverUrl,
-              audioUrl: t.audioUrl,
-              topicId: t.telegramTopicId,
-            })),
-          })),
-        );
-      }
-    } catch {
-      setMaterialOptions([]);
-    } finally {
-      setLoadingMaterialOptions(false);
-    }
-  }
-
-  function normalizeComparisonLocal(s: string) {
-    return s
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .toLowerCase()
-      .trim();
-  }
-
-  function openMaterialPicker() {
-    haptic.selection();
-    setIsMaterialPickerOpen(true);
-    setMaterialPickerTipo("musica");
-    setMaterialSearchQuery("");
-    setAlbumTrackPicker(null);
-    loadMaterialOptions("musica", "");
-  }
-
-  function pickMaterial(item: any, tipo: "musica" | "album") {
-    // Álbum no Story de música: a pessoa ainda precisa escolher QUAL faixa
-    // vai tocar — abre a lista de faixas em vez de fechar o seletor.
-    if (tipo === "album" && storyMusicMode) {
-      if (!item.tracks?.length) {
-        alert("Esse álbum não tem faixas com áudio cadastrado.");
-        return;
-      }
-      haptic.selection();
-      setAlbumTrackPicker(item);
+  // Disparado pelo <SocialPostComposer> (ver src/components/Social/
+  // SocialPostComposer.tsx) depois que o post é criado/editado com sucesso
+  // pelo caminho real (salvarPostSocial/editarPostSocial).
+  function handlePosted(result: { id: string; payload: Record<string, unknown> }) {
+    if (editingPost) {
+      closePostModal();
+      loadPosts();
       return;
     }
-
-    if (!item.topicId) {
-      alert("Essa faixa não tem um tópico vinculado no catálogo — não dá pra compartilhar.");
-      return;
-    }
-    haptic.selection();
-    setAttachedMaterial({
-      tipo,
-      titulo: item.titulo,
-      artista: item.artista || "",
-      capaUrl: item.capaUrl || undefined,
-      topicId: String(item.topicId),
-    });
-    if (storyMusicMode && tipo === "musica" && item.audioUrl) {
-      setAttachedAudio({
-        titulo: item.titulo,
-        artista: item.artista || "",
-        url: item.audioUrl,
-        topicId: String(item.topicId),
-        startSec: 0,
-        durationSec: MAX_AUDIO_SEC,
-      });
-    }
-    setIsMaterialPickerOpen(false);
-    setAlbumTrackPicker(null);
-  }
-
-  // Faixa escolhida dentro de um álbum (Story de música/álbum): o card
-  // mostra o ÁLBUM (capa/título/topicId do álbum), o áudio é o da faixa.
-  function pickAlbumTrack(track: any) {
-    if (!albumTrackPicker || !track.audioUrl) return;
-    haptic.selection();
-    setAttachedMaterial({
-      tipo: "album",
-      titulo: albumTrackPicker.titulo,
-      artista: albumTrackPicker.artista || "",
-      capaUrl: albumTrackPicker.capaUrl || undefined,
-      topicId: String(albumTrackPicker.topicId),
-    });
-    setAttachedAudio({
-      titulo: `${albumTrackPicker.titulo} — ${track.titulo}`,
-      artista: track.artista || "",
-      url: track.audioUrl,
-      topicId: String(track.topicId || albumTrackPicker.topicId),
-      startSec: 0,
-      durationSec: MAX_AUDIO_SEC,
-    });
-    setIsMaterialPickerOpen(false);
-    setAlbumTrackPicker(null);
-  }
-
-  function openAudioPicker() {
-    haptic.selection();
-    setIsAudioPickerOpen(true);
-    setMaterialSearchQuery("");
-    loadMaterialOptions("musica", "");
-  }
-
-  function pickAudio(item: any) {
-    if (!item.audioUrl) {
-      alert("Essa música não tem áudio cadastrado.");
-      return;
-    }
-    haptic.selection();
-    setAttachedAudio({
-      titulo: item.titulo,
-      artista: item.artista || "",
-      url: item.audioUrl,
-      topicId: String(item.topicId || ""),
-      startSec: 0,
-      durationSec: MAX_AUDIO_SEC,
-    });
-    setIsAudioPickerOpen(false);
-  }
-
-  function gerarNomeBlackout() {
-    const adjetivos = ["fã", "insider", "leak", "anônimo", "ghost", "fonte"];
-    const adjetivo = adjetivos[Math.floor(Math.random() * adjetivos.length)];
-    const numero = Math.floor(1000 + Math.random() * 9000);
-    setBlackoutUsername(`${adjetivo}_${numero}`);
-  }
-
-  async function handlePost() {
-    // Story não exige legenda — a imagem/vídeo já é o post, igual
-    // Instagram de verdade (texto vira só um overlay opcional). Os outros
-    // tipos continuam exigindo texto como sempre.
-    const isStoryDraft = selectedType === "Instagram" && igMode === "Story";
-    const isStoryMusicDraft = isStoryDraft && storyMusicMode;
-    const isTwitterMaterial = selectedType === "Twitter" && !!attachedMaterial;
-    const hasContent = isStoryMusicDraft
-      ? !!attachedMaterial
-      : isStoryDraft
-        ? !!(postText.trim() || imageUrl)
-        : isTwitterMaterial
-          ? true
-          : !!postText.trim();
-    if (!selectedType || !hasContent || !activeArtist || submitting) return;
-    if (blackoutMode && !blackoutUsername.trim()) return;
-
-    setSubmitting(true);
-    const tgId = user?.id || "";
-    const autorFinal = blackoutMode ? blackoutUsername.trim() : activeArtist.nome;
-
-    try {
-      if (editingPost) {
-        const res = await (api as any).editarPostSocial(
-          editingPost.id,
-          postText,
-          imageUrl,
-          tgId,
-          autorFinal,
-          mediaTipo,
-        );
-        if (res.ok) {
-          haptic.success();
-          closePostModal();
-          loadPosts();
-        }
-        return;
-      }
-
-      const payload = {
-        tipo: selectedType,
-        subtipo: selectedType === "Instagram" ? igMode : undefined,
+    // Insere o post localmente na hora, sem esperar o recarregamento — a
+    // escrita no Sheets confirma antes de ficar visível numa leitura logo em
+    // seguida, então só chamar loadPosts() podia deixar quem acabou de
+    // postar sem ver o próprio post por alguns segundos ("parecia que não
+    // aconteceu nada").
+    const autorFinal = String(result.payload.autor || "");
+    const perfil = profiles.find((pr) => pr.artista === autorFinal && pr.rede === result.payload.tipo);
+    setPosts((prev) => [
+      {
+        id: result.id,
+        tipo: result.payload.tipo as Post["tipo"],
+        subtipo: result.payload.subtipo as string | undefined,
         autor: autorFinal,
-        texto: postText,
-        media_url: isStoryMusicDraft ? attachedMaterial?.capaUrl || "" : imageUrl,
-        media_tipo: mediaTipo,
+        handle: perfil?.handle || "",
+        avatar: perfil?.avatar_url || perfil?.avatar || perfil?.foto || activeArtist?.foto,
+        texto: String(result.payload.texto || ""),
+        media_url: (result.payload.media_url as string) || undefined,
+        media_tipo: result.payload.media_tipo as string | undefined,
         analytics: { likes: 0, comments: 0, shares: 0 },
-        ...(selectedType === "Twitter" && attachedMaterial ? { material: attachedMaterial } : {}),
-        ...(isStoryMusicDraft && attachedMaterial ? { material: attachedMaterial } : {}),
-        ...(selectedType === "Instagram" && igMode === "Feed" && extraImageUrls.length
-          ? { extra_media: extraImageUrls }
-          : {}),
-        ...((selectedType === "Instagram" && igMode === "Feed") || selectedType === "TikTok"
-          ? attachedAudio
-            ? { audio: attachedAudio }
-            : {}
-          : {}),
-        ...(isStoryMusicDraft && storyComSom && attachedAudio ? { audio: attachedAudio } : {}),
-      };
-
-      const res = await (api as any).salvarPostSocial(payload, tgId);
-      if (res.ok) {
-        haptic.success();
-        // Insere o post localmente na hora, sem esperar o recarregamento —
-        // a escrita no Sheets confirma antes de ficar visível numa leitura
-        // logo em seguida, então só chamar loadPosts() podia deixar quem
-        // acabou de postar sem ver o próprio post por alguns segundos
-        // (parecia que "não aconteceu nada").
-        const perfil = profiles.find(
-          (pr) => pr.artista === autorFinal && pr.rede === selectedType,
-        );
-        setPosts((prev) => [
-          {
-            id: res.id || `temp_${Date.now()}`,
-            tipo: payload.tipo as Post["tipo"],
-            subtipo: payload.subtipo,
-            autor: autorFinal,
-            handle: perfil?.handle || "",
-            avatar: perfil?.avatar_url || perfil?.avatar || perfil?.foto || activeArtist?.foto,
-            texto: payload.texto,
-            media_url: payload.media_url || undefined,
-            media_tipo: payload.media_tipo,
-            analytics: { likes: 0, comments: 0, shares: 0 },
-            data: new Date().toISOString(),
-            telegram_id: tgId,
-            material: (payload as any).material,
-            extra_media: (payload as any).extra_media,
-            audio: (payload as any).audio,
-          },
-          ...prev,
-        ]);
-        closePostModal();
-        loadPosts();
-      } else {
-        // Sem isso, uma falha do backend (ex: dados incompletos) passava
-        // batido pra quem postou — parecia que "nada aconteceu" ao clicar,
-        // sem erro nenhum visível.
-        alert(res.error || "Não deu pra publicar. Tenta de novo.");
-      }
-    } catch (err) {
-      console.error("Erro ao postar:", err);
-      alert("Não deu pra publicar. Tenta de novo.");
-    } finally {
-      setSubmitting(false);
-    }
+        data: new Date().toISOString(),
+        telegram_id: user?.id || "",
+        material: result.payload.material as PostMaterial | undefined,
+        extra_media: result.payload.extra_media as string[] | undefined,
+        audio: result.payload.audio as PostAudio | undefined,
+      },
+      ...prev,
+    ]);
+    closePostModal();
+    loadPosts();
   }
 
   function closeNewsModal() {
@@ -1923,8 +1651,8 @@ function SocialPage() {
                     <button
                       onClick={() => {
                         haptic.selection();
-                        setSelectedType("Instagram");
-                        setIgMode("Story");
+                        setComposerInitialType("Instagram");
+                        setComposerInitialIgMode("Story");
                         setIsModalOpen(true);
                       }}
                       className="flex-none w-14 flex flex-col items-center gap-1.5"
@@ -3068,745 +2796,32 @@ function SocialPage() {
         <Plus className="size-7 stroke-[2.5]" />
       </button>
 
-      {/* Post Creation Modal */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm">
-            <motion.div
-              initial={{ y: 200 }}
-              animate={{ y: 0 }}
-              exit={{ y: 200 }}
-              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[90dvh] overflow-y-auto"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black uppercase">{editingPost ? "Editar post" : "Lançar Hype"}</h2>
-                <button
-                  onClick={closePostModal}
-                  className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-
-              {!selectedType ? (
-                <div className="grid gap-3">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground">
-                    Selecione onde o hype vai rolar:
-                  </p>
-                  <button
-                    onClick={() => {
-                      haptic.selection();
-                      setSelectedType("Instagram");
-                    }}
-                    className="flex items-center gap-4 p-4 min-h-14 rounded-2xl bg-white/5 border border-white/10 font-black uppercase text-sm active:scale-95 transition-transform"
-                  >
-                    <Instagram className="text-[#f472b6]" /> Instagram
-                  </button>
-                  <button
-                    onClick={() => {
-                      haptic.selection();
-                      setSelectedType("Twitter");
-                    }}
-                    className="flex items-center gap-4 p-4 min-h-14 rounded-2xl bg-white/5 border border-white/10 font-black uppercase text-sm active:scale-95 transition-transform"
-                  >
-                    <Twitter className="text-[#1d9bf0]" /> Twitter (X)
-                  </button>
-                  <button
-                    onClick={() => {
-                      haptic.selection();
-                      setSelectedType("TikTok");
-                    }}
-                    className="flex items-center gap-4 p-4 min-h-14 rounded-2xl bg-white/5 border border-white/10 font-black uppercase text-sm active:scale-95 transition-transform"
-                  >
-                    <Video className="text-[#25F4EE]" /> TikTok
-                  </button>
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground">Modo de publicação:</p>
-                    <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1">
-                      <button
-                        onClick={() => {
-                          haptic.selection();
-                          setBlackoutMode(false);
-                        }}
-                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase flex items-center justify-center gap-1.5 transition-all ${!blackoutMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                      >
-                        <Eye className="size-3.5" /> Normal
-                      </button>
-                      <button
-                        onClick={() => {
-                          haptic.selection();
-                          setBlackoutMode(true);
-                        }}
-                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase flex items-center justify-center gap-1.5 transition-all ${blackoutMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                      >
-                        <EyeOff className="size-3.5" /> Blackout
-                      </button>
-                    </div>
-                  </div>
-
-                  {blackoutMode ? (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-black uppercase text-muted-foreground">
-                        Nome fictício que vai aparecer no post:
-                      </p>
-                      <div className="flex gap-2">
-                        <input
-                          value={blackoutUsername}
-                          onChange={(e) => setBlackoutUsername(e.target.value)}
-                          placeholder="ex: fã_secreto482"
-                          className={inputCls + " flex-1"}
-                        />
-                        <button
-                          onClick={() => {
-                            haptic.selection();
-                            gerarNomeBlackout();
-                          }}
-                          className="size-11 shrink-0 rounded-xl bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
-                          title="Gerar nome aleatório"
-                        >
-                          <Shuffle className="size-4" />
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground font-medium leading-snug">
-                        Ninguém vai ver que é {activeArtist?.nome || "seu artista"} — bom pra criar suspense antes de
-                        um anúncio. Só você (o responsável) consegue editar ou voltar ao Normal depois.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-black uppercase text-muted-foreground">Postar como:</p>
-                      <div className={inputCls + " flex items-center gap-2 text-muted-foreground"}>
-                        <div className="size-5 rounded-full bg-white/10 flex items-center justify-center font-black text-[11px] overflow-hidden shrink-0">
-                          <SmartImg
-                            src={activeArtist?.foto}
-                            alt=""
-                            className="w-full h-full object-cover"
-                            fallback={<>{activeArtist?.nome[0]}</>}
-                          />
-                        </div>
-                        <span className="truncate">{activeArtist?.nome || "Magnata"}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedType === "Instagram" && (
-                    <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1">
-                      <button
-                        onClick={() => setIgMode("Feed")}
-                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${igMode === "Feed" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                      >
-                        Feed
-                      </button>
-                      <button
-                        onClick={() => setIgMode("Story")}
-                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${igMode === "Story" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                      >
-                        Story
-                      </button>
-                    </div>
-                  )}
-
-                  {selectedType === "Instagram" && igMode === "Story" && (
-                    <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1">
-                      <button
-                        onClick={() => {
-                          setStoryMusicMode(false);
-                          setAttachedMaterial(null);
-                          setAttachedAudio(null);
-                        }}
-                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${!storyMusicMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                      >
-                        Foto/Vídeo
-                      </button>
-                      <button
-                        onClick={() => {
-                          setStoryMusicMode(true);
-                          setImageUrl("");
-                        }}
-                        className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${storyMusicMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                      >
-                        <Music2 className="size-3.5 inline mr-1" /> Música
-                      </button>
-                    </div>
-                  )}
-
-                  {selectedType === "Instagram" && igMode === "Story" && storyMusicMode && (
-                    <div className="space-y-2">
-                      {attachedMaterial ? (
-                        <div className="rounded-2xl border border-white/15 bg-white/[0.03] p-3 space-y-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary">
-                              {attachedMaterial.capaUrl && (
-                                <SmartImg src={attachedMaterial.capaUrl} alt="" className="w-full h-full object-cover" />
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-black text-xs truncate">{attachedMaterial.titulo}</p>
-                              {attachedMaterial.tipo === "album" && attachedAudio && (
-                                <p className="text-[10px] text-muted-foreground font-bold truncate">
-                                  Faixa: {attachedAudio.titulo.split(" — ").slice(1).join(" — ")}
-                                </p>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setAttachedMaterial(null);
-                                setAttachedAudio(null);
-                              }}
-                              className="text-muted-foreground hover:text-white"
-                            >
-                              <X className="size-4" />
-                            </button>
-                          </div>
-
-                          <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1">
-                            <button
-                              onClick={() => setStoryComSom(true)}
-                              className={`flex-1 py-1.5 min-h-8 rounded-lg font-black text-[10px] uppercase transition-all ${storyComSom ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                            >
-                              Com som
-                            </button>
-                            <button
-                              onClick={() => setStoryComSom(false)}
-                              className={`flex-1 py-1.5 min-h-8 rounded-lg font-black text-[10px] uppercase transition-all ${!storyComSom ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                            >
-                              Sem som
-                            </button>
-                          </div>
-
-                          {storyComSom && attachedAudio && (
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between text-[10px] text-muted-foreground font-bold uppercase">
-                                <span>Início: {attachedAudio.startSec}s</span>
-                                <span>Duração: {attachedAudio.durationSec}s</span>
-                              </div>
-                              <input
-                                type="range"
-                                min={0}
-                                max={300}
-                                step={1}
-                                value={attachedAudio.startSec}
-                                onChange={(e) =>
-                                  setAttachedAudio((prev) => (prev ? { ...prev, startSec: Number(e.target.value) } : prev))
-                                }
-                                className="w-full"
-                              />
-                              <input
-                                type="range"
-                                min={1}
-                                max={MAX_AUDIO_SEC}
-                                step={1}
-                                value={attachedAudio.durationSec}
-                                onChange={(e) =>
-                                  setAttachedAudio((prev) => (prev ? { ...prev, durationSec: Number(e.target.value) } : prev))
-                                }
-                                className="w-full"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={openMaterialPicker}
-                          className={inputCls + " flex items-center justify-center gap-2 text-center"}
-                        >
-                          <Music2 className="size-4" /> Escolher música ou álbum
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  <RichTextToolbar textareaRef={postTextareaRef} value={postText} onChange={setPostText} />
-                  <textarea
-                    ref={postTextareaRef}
-                    value={postText}
-                    onChange={(e) => setPostText(e.target.value)}
-                    placeholder={
-                      selectedType === "Instagram" && igMode === "Story"
-                        ? "Legenda (opcional)..."
-                        : selectedType === "Twitter" && attachedMaterial
-                          ? "Comentário (opcional)..."
-                          : "Escreva algo f*** aqui... (use #hashtag, **negrito**, *itálico*)"
-                    }
-                    className={inputCls + " h-24 resize-none"}
-                  />
-
-                  {selectedType === "Twitter" && (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-black uppercase text-muted-foreground">
-                        Compartilhar música/álbum:
-                      </p>
-                      {attachedMaterial ? (
-                        <div className="flex items-stretch rounded-2xl border border-white/15 bg-white/[0.03] overflow-hidden">
-                          <div className="size-14 shrink-0 bg-secondary flex items-center justify-center overflow-hidden">
-                            {attachedMaterial.capaUrl ? (
-                              <SmartImg
-                                src={attachedMaterial.capaUrl}
-                                alt=""
-                                className="w-full h-full object-cover"
-                                fallback={
-                                  attachedMaterial.tipo === "album" ? (
-                                    <Disc className="size-5 text-muted-foreground" />
-                                  ) : (
-                                    <Music className="size-5 text-muted-foreground" />
-                                  )
-                                }
-                              />
-                            ) : attachedMaterial.tipo === "album" ? (
-                              <Disc className="size-5 text-muted-foreground" />
-                            ) : (
-                              <Music className="size-5 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0 flex flex-col justify-center px-3 py-1.5">
-                            <span className="font-black text-xs truncate">{attachedMaterial.titulo}</span>
-                            <span className="text-[10px] text-muted-foreground font-bold truncate">
-                              {attachedMaterial.tipo === "album" ? "Álbum" : "Música"} de{" "}
-                              {attachedMaterial.artista || activeArtist?.nome}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setAttachedMaterial(null)}
-                            className="w-11 shrink-0 grid place-items-center text-muted-foreground hover:text-white"
-                          >
-                            <X className="size-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={openMaterialPicker}
-                          className={inputCls + " flex items-center justify-center gap-2 text-center"}
-                        >
-                          <Music2 className="size-4" /> Anexar música ou álbum
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {!(selectedType === "Instagram" && igMode === "Story" && storyMusicMode) && (
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground">Mídia (imagem ou vídeo):</p>
-                    {imageUrl && (
-                      <div className="w-full aspect-video rounded-xl overflow-hidden bg-secondary border border-white/10">
-                        {mediaTipo === "video" ? (
-                          <video src={driveVideo(imageUrl)} controls playsInline className="w-full h-full object-cover" />
-                        ) : (
-                          <img src={driveImg(imageUrl)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        )}
-                      </div>
-                    )}
-                    <label
-                      className={
-                        inputCls +
-                        " flex items-center justify-center gap-2 cursor-pointer text-center " +
-                        (uploadingImage ? "opacity-60 pointer-events-none" : "")
-                      }
-                    >
-                      {mediaTipo === "video" ? <Video className="size-4" /> : <ImageIcon className="size-4" />}
-                      {uploadingImage ? "Enviando..." : imageUrl ? "Trocar mídia" : "Selecionar do dispositivo"}
-                      <input
-                        type="file"
-                        accept={selectedType === "TikTok" ? "video/*" : "image/*,video/*"}
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          e.target.value = "";
-                          if (!file) return;
-                          const isVideo = file.type.startsWith("video/");
-                          if (isVideo) {
-                            const erro = await validarVideoAntesDeEnviar(file);
-                            if (erro) {
-                              toast.error(erro);
-                              return;
-                            }
-                          }
-                          const isStory = selectedType === "Instagram" && igMode === "Story";
-                          const folderType: SocialFolderType = isStory ? "socialStories" : "socialPosts";
-                          // Story sempre sobe recortado no padrão vertical
-                          // automaticamente; fora disso (Feed/TikTok/Post),
-                          // a pessoa mesma escolhe o enquadramento no editor
-                          // de recorte antes de enviar.
-                          let fileToUpload: File = file;
-                          if (!isVideo) {
-                            if (isStory) {
-                              fileToUpload = await cropImageToStoryRatio(file).catch(() => file);
-                            } else {
-                              const cropped = await cropPostMedia(file);
-                              if (!cropped) return; // cancelou o recorte
-                              fileToUpload = cropped;
-                            }
-                          }
-                          setUploadingImage(true);
-                          const url = await uploadToDrive(fileToUpload, folderType);
-                          if (url) {
-                            setImageUrl(url);
-                            setMediaTipo(isVideo ? "video" : "imagem");
-                          }
-                          setUploadingImage(false);
-                        }}
-                      />
-                    </label>
-                    {mediaTipo === "imagem" && selectedType !== "TikTok" && (
-                      <PasteImageLinkInput onApply={setImageUrl} className={inputCls} />
-                    )}
-                  </div>
-                  )}
-
-                  {selectedType === "Instagram" && igMode === "Feed" && mediaTipo === "imagem" && imageUrl && (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-black uppercase text-muted-foreground">
-                        Mais fotos ({extraImageUrls.length + 1}/{MAX_IG_PHOTOS}):
-                      </p>
-                      <div className="grid grid-cols-4 gap-2">
-                        {extraImageUrls.map((url, idx) => (
-                          <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-secondary border border-white/10">
-                            <img src={driveImg(url)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            <button
-                              type="button"
-                              onClick={() => setExtraImageUrls((prev) => prev.filter((_, i) => i !== idx))}
-                              className="absolute top-1 right-1 size-5 rounded-full bg-black/70 grid place-items-center"
-                            >
-                              <X className="size-3" />
-                            </button>
-                          </div>
-                        ))}
-                        {extraImageUrls.length + 1 < MAX_IG_PHOTOS && (
-                          <label
-                            className={
-                              "aspect-square rounded-xl border border-dashed border-white/20 flex items-center justify-center cursor-pointer text-muted-foreground " +
-                              (uploadingExtraImage ? "opacity-60 pointer-events-none" : "")
-                            }
-                          >
-                            {uploadingExtraImage ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-5" />}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                e.target.value = "";
-                                if (!file) return;
-                                const cropped = await cropExtraPhoto(file);
-                                if (!cropped) return;
-                                setUploadingExtraImage(true);
-                                const url = await uploadToDrive(cropped, "socialPosts");
-                                if (url) setExtraImageUrls((prev) => [...prev, url]);
-                                setUploadingExtraImage(false);
-                              }}
-                            />
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {((selectedType === "Instagram" && igMode === "Feed") || selectedType === "TikTok") && (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-black uppercase text-muted-foreground">
-                        {selectedType === "TikTok"
-                          ? `Música por cima do vídeo (opcional, até ${MAX_AUDIO_SEC}s):`
-                          : `Música na publicação (opcional, até ${MAX_AUDIO_SEC}s):`}
-                      </p>
-                      {attachedAudio ? (
-                        <div className="rounded-2xl border border-white/15 bg-white/[0.03] p-3 space-y-2.5">
-                          <div className="flex items-center gap-2.5">
-                            <Music2 className="size-4 text-primary shrink-0" />
-                            <span className="font-black text-xs truncate flex-1">{attachedAudio.titulo}</span>
-                            <button type="button" onClick={() => setAttachedAudio(null)} className="text-muted-foreground hover:text-white">
-                              <X className="size-4" />
-                            </button>
-                          </div>
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between text-[10px] text-muted-foreground font-bold uppercase">
-                              <span>Início: {attachedAudio.startSec}s</span>
-                              <span>Duração: {attachedAudio.durationSec}s</span>
-                            </div>
-                            <input
-                              type="range"
-                              min={0}
-                              max={300}
-                              step={1}
-                              value={attachedAudio.startSec}
-                              onChange={(e) =>
-                                setAttachedAudio((prev) => (prev ? { ...prev, startSec: Number(e.target.value) } : prev))
-                              }
-                              className="w-full"
-                            />
-                            <input
-                              type="range"
-                              min={1}
-                              max={MAX_AUDIO_SEC}
-                              step={1}
-                              value={attachedAudio.durationSec}
-                              onChange={(e) =>
-                                setAttachedAudio((prev) => (prev ? { ...prev, durationSec: Number(e.target.value) } : prev))
-                              }
-                              className="w-full"
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={openAudioPicker}
-                          className={inputCls + " flex items-center justify-center gap-2 text-center"}
-                        >
-                          <Music2 className="size-4" /> Escolher música
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={handlePost}
-                    disabled={
-                      submitting ||
-                      !(selectedType === "Instagram" && igMode === "Story" && storyMusicMode
-                        ? attachedMaterial
-                        : selectedType === "Instagram" && igMode === "Story"
-                          ? postText.trim() || imageUrl
-                          : selectedType === "Twitter" && attachedMaterial
-                            ? true
-                            : postText.trim()) ||
-                      !activeArtist ||
-                      (blackoutMode && !blackoutUsername.trim())
-                    }
-                    className="mt-2 p-4 min-h-14 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-wide flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
-                  >
-                    {submitting
-                      ? editingPost
-                        ? "Salvando..."
-                        : "Lançando..."
-                      : editingPost
-                        ? "Salvar alterações"
-                        : "Lançar Agora"}{" "}
-                    <Send className="size-4" />
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Seletor de música/álbum do catálogo (compartilhar no Twitter) */}
-      <AnimatePresence>
-        {isMaterialPickerOpen && (
-          <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm">
-            <motion.div
-              initial={{ y: 200 }}
-              animate={{ y: 0 }}
-              exit={{ y: 200 }}
-              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[85dvh] overflow-y-auto"
-            >
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-black uppercase">
-                  {albumTrackPicker ? "Escolher faixa" : "Anexar material"}
-                </h2>
-                <button
-                  onClick={() => setIsMaterialPickerOpen(false)}
-                  className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-
-              {albumTrackPicker ? (
-                <div className="grid gap-2">
-                  <button
-                    onClick={() => setAlbumTrackPicker(null)}
-                    className="flex items-center gap-1.5 text-[11px] font-black uppercase text-muted-foreground mb-1"
-                  >
-                    <ChevronLeft className="size-3.5" /> {albumTrackPicker.titulo}
-                  </button>
-                  {albumTrackPicker.tracks
-                    .filter((t: any) => t.audioUrl)
-                    .map((t: any) => (
-                      <button
-                        key={t.id}
-                        onClick={() => pickAlbumTrack(t)}
-                        className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 text-left active:scale-[0.98] transition-transform"
-                      >
-                        <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
-                          {t.capaUrl ? (
-                            <SmartImg src={t.capaUrl} alt="" className="w-full h-full object-cover" fallback={<Music className="size-4 text-muted-foreground" />} />
-                          ) : (
-                            <Music className="size-4 text-muted-foreground" />
-                          )}
-                        </div>
-                        <span className="font-bold text-sm truncate">{t.titulo}</span>
-                      </button>
-                    ))}
-                </div>
-              ) : (
-                <>
-                  <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-1 gap-1 mb-3">
-                    <button
-                      onClick={() => {
-                        setMaterialPickerTipo("musica");
-                        loadMaterialOptions("musica", materialSearchQuery);
-                      }}
-                      className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "musica" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                    >
-                      Músicas
-                    </button>
-                    <button
-                      onClick={() => {
-                        setMaterialPickerTipo("album");
-                        loadMaterialOptions("album", materialSearchQuery);
-                      }}
-                      className={`flex-1 py-2 min-h-9 rounded-lg font-black text-[11px] uppercase transition-all ${materialPickerTipo === "album" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                    >
-                      Álbuns
-                    </button>
-                  </div>
-
-                  <div className="relative mb-4">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                    <input
-                      type="text"
-                      value={materialSearchQuery}
-                      onChange={(e) => {
-                        const q = e.target.value;
-                        setMaterialSearchQuery(q);
-                        loadMaterialOptions(materialPickerTipo, q);
-                      }}
-                      placeholder="Buscar por artista ou título..."
-                      className={inputCls + " pl-10"}
-                    />
-                  </div>
-
-                  {loadingMaterialOptions ? (
-                    <div className="py-10 flex items-center justify-center">
-                      <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : materialOptions.length === 0 ? (
-                    <p className="text-xs text-muted-foreground font-medium text-center py-10">
-                      Nenhum {materialPickerTipo === "album" ? "álbum" : "música"} encontrado.
-                    </p>
-                  ) : (
-                    <div className="grid gap-2">
-                      {materialOptions.map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => pickMaterial(item, materialPickerTipo)}
-                          className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 text-left active:scale-[0.98] transition-transform"
-                        >
-                          <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
-                            {item.capaUrl ? (
-                              <SmartImg
-                                src={item.capaUrl}
-                                alt=""
-                                className="w-full h-full object-cover"
-                                fallback={
-                                  materialPickerTipo === "album" ? (
-                                    <Disc className="size-4 text-muted-foreground" />
-                                  ) : (
-                                    <Music className="size-4 text-muted-foreground" />
-                                  )
-                                }
-                              />
-                            ) : materialPickerTipo === "album" ? (
-                              <Disc className="size-4 text-muted-foreground" />
-                            ) : (
-                              <Music className="size-4 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-bold text-sm truncate">{item.titulo}</p>
-                            <p className="text-[10px] text-muted-foreground font-bold truncate">{item.artista}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Seletor de música pra tocar por cima da publicação do Instagram */}
-      <AnimatePresence>
-        {isAudioPickerOpen && (
-          <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm">
-            <motion.div
-              initial={{ y: 200 }}
-              animate={{ y: 0 }}
-              exit={{ y: 200 }}
-              className="bg-card border-t sm:border border-white/10 rounded-t-[1.75rem] sm:rounded-[1.75rem] p-5 sm:p-6 max-w-sm w-full shadow-2xl max-h-[85dvh] overflow-y-auto"
-            >
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-black uppercase">Escolher música</h2>
-                <button
-                  onClick={() => setIsAudioPickerOpen(false)}
-                  className="size-9 shrink-0 rounded-full bg-white/5 border border-white/10 grid place-items-center active:scale-90 transition-transform"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-
-              <div className="relative mb-4">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={materialSearchQuery}
-                  onChange={(e) => {
-                    const q = e.target.value;
-                    setMaterialSearchQuery(q);
-                    loadMaterialOptions("musica", q);
-                  }}
-                  placeholder="Buscar por artista ou título..."
-                  className={inputCls + " pl-10"}
-                />
-              </div>
-
-              {loadingMaterialOptions ? (
-                <div className="py-10 flex items-center justify-center">
-                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : materialOptions.length === 0 ? (
-                <p className="text-xs text-muted-foreground font-medium text-center py-10">
-                  Nenhuma música encontrada.
-                </p>
-              ) : (
-                <div className="grid gap-2">
-                  {materialOptions.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => pickAudio(item)}
-                      className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10 text-left active:scale-[0.98] transition-transform"
-                    >
-                      <div className="size-11 shrink-0 rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
-                        {item.capaUrl ? (
-                          <SmartImg src={item.capaUrl} alt="" className="w-full h-full object-cover" fallback={<Music className="size-4 text-muted-foreground" />} />
-                        ) : (
-                          <Music className="size-4 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm truncate">{item.titulo}</p>
-                        <p className="text-[10px] text-muted-foreground font-bold truncate">{item.artista}</p>
-                      </div>
-                      {!item.audioUrl && (
-                        <span className="text-[9px] font-black uppercase text-muted-foreground shrink-0">Sem áudio</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* Post Creation Modal — formulário real extraído pra
+          <SocialPostComposer> (ver src/components/Social/SocialPostComposer.tsx),
+          reutilizado também pelo pre-save pra cumprir missões de post social
+          sem duplicar o form. */}
+      {isModalOpen && (
+        <SocialPostComposer
+          telegramId={user?.id || ""}
+          activeArtist={activeArtist ? { nome: activeArtist.nome, foto: activeArtist.foto } : undefined}
+          profiles={profiles}
+          initialType={composerInitialType}
+          initialIgMode={composerInitialIgMode}
+          initialBlackoutAutor={composerInitialBlackoutAutor}
+          editingPost={
+            editingPost
+              ? {
+                  id: editingPost.id,
+                  texto: editingPost.texto,
+                  media_url: editingPost.media_url,
+                  media_tipo: editingPost.media_tipo,
+                }
+              : null
+          }
+          onClose={closePostModal}
+          onPosted={handlePosted}
+        />
+      )}
 
       {/* News Creation Modal */}
       <AnimatePresence>

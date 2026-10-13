@@ -32,6 +32,7 @@ import {
   type ExtraMaterialEditorValue,
 } from "./ExtraMaterial";
 import { EncarteViewer } from "./EncarteViewer";
+import { SocialPostComposer } from "@/components/Social/SocialPostComposer";
 
 // Gestão Pre save — menu próprio do Catálogo (separado de "Gestão"), pra
 // criar/gerenciar campanhas de pre-save de álbum. Ver preSaveController.ts
@@ -82,8 +83,6 @@ const MISSOES: { tipo: MissaoTipo; label: string; descricao: string }[] = [
   { tipo: "countdown_marco", label: "Marco da contagem", descricao: "Post social, qualquer rede." },
   { tipo: "desafio_som", label: "Desafio de som", descricao: "Post social EXCLUSIVO de TikTok." },
 ];
-
-const REDES = ["twitter", "instagram", "tiktok", "stories"];
 
 // Mesmo formato de TrackConfig (Gestao.tsx) persistido pela campanha, já
 // resolvido pelo backend (ver preSaveController.ts) — 2 campos extras de
@@ -1237,16 +1236,14 @@ function MissaoModal({
 }) {
   const tipo = missao.tipo as MissaoTipo;
   const info = MISSOES.find((m) => m.tipo === tipo)!;
-  const [rede, setRede] = useState(
-    tipo === "desafio_som" || tipo === "making_of_video" ? "tiktok" : REDES[0],
-  );
-  const [texto, setTexto] = useState("");
-  // Mesma forma de postar que já existe em Social (src/routes/social.tsx):
-  // texto + upload de imagem opcional — missões de rede social não podem
-  // ficar só-texto.
-  const [midiaFile, setMidiaFile] = useState<File | null>(null);
-  const [midiaPreview, setMidiaPreview] = useState<string | null>(null);
-  const [enviandoMidia, setEnviandoMidia] = useState(false);
+  // Missões que terminam em post social agora usam o MESMO composer real do
+  // Social (<SocialPostComposer>, src/components/Social/SocialPostComposer.tsx)
+  // em vez de um mini-form próprio — o post sai pelo caminho de verdade
+  // (salvarPostSocial), e só depois de criado é que a missão é confirmada
+  // (ver confirmarMissaoComPost abaixo). No final das contas o post cai no
+  // mesmo Social de sempre.
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const [perfilArtista, setPerfilArtista] = useState("");
   const [faixaOrdemRevelada, setFaixaOrdemRevelada] = useState<number | "">("");
 
@@ -1319,33 +1316,12 @@ function MissaoModal({
         return setErro("Informe o ID do vídeo já cadastrado em Fórum > Vídeos.");
       payload.videoRealId = videoRealId.trim();
     } else {
-      if (!texto.trim() && !midiaFile)
-        return setErro("Escreva um texto ou anexe uma imagem pro post.");
-      payload.texto = texto;
-      payload.rede =
-        tipo === "desafio_som" ? "tiktok" : tipo === "making_of_video" ? "tiktok" : rede;
-      if (midiaFile) {
-        setEnviandoMidia(true);
-        try {
-          payload.mediaUrl = await uploadToDrive(
-            midiaFile,
-            "musica",
-            `PRESAVE_${tipo}_${Date.now()}.jpg`,
-          );
-        } catch (err: any) {
-          setEnviandoMidia(false);
-          return setErro(err.message || "Falha ao enviar a imagem.");
-        }
-        setEnviandoMidia(false);
-      }
-      if (tipo === "bastidores") {
-        if (!perfilArtista) return setErro('Escolha um perfil de "Tá na Mídia" para publicar.');
-        payload.perfilArtista = perfilArtista;
-      }
-      if (tipo === "tracklist_reveal") {
-        if (!faixaOrdemRevelada) return setErro("Escolha qual faixa oculta revelar.");
-        payload.faixaOrdemRevelada = faixaOrdemRevelada;
-      }
+      // Os demais tipos (post_anuncio, bastidores, capa_alternativa,
+      // trecho_letra, making_of_video "TikTok", enquete_fas,
+      // countdown_marco, desafio_som, tracklist_reveal) publicam pelo
+      // <SocialPostComposer> — ver confirmarMissaoComPost, chamado pelo
+      // onPosted do composer depois que o post já existe de verdade.
+      return;
     }
 
     setEnviando(true);
@@ -1364,6 +1340,72 @@ function MissaoModal({
       setEnviando(false);
     }
   };
+
+  // Chamado pelo <SocialPostComposer> (onPosted) depois que o post já foi
+  // criado de verdade no Social (mesmo backend, createSocialPostController/
+  // salvarPostSocial) — aqui só confirma a missão do dia, sem recriar o
+  // post (completar-missao recebe postJaPublicado:true e não publica de
+  // novo, ver preSaveController.ts).
+  const confirmarMissaoComPost = async (result: { id: string; payload: Record<string, unknown> }) => {
+    setErro("");
+    if (tipo === "bastidores" && !perfilArtista) {
+      return setErro('Escolha um perfil de "Tá na Mídia" para publicar.');
+    }
+    if (tipo === "tracklist_reveal" && !faixaOrdemRevelada) {
+      return setErro("Escolha qual faixa oculta revelar.");
+    }
+    const tipoRede = String(result.payload.tipo || "").toLowerCase();
+    const subtipo = String(result.payload.subtipo || "");
+    const rede = subtipo === "Story" ? "stories" : tipoRede;
+    const payload: Record<string, unknown> = {
+      campanhaId,
+      dia: missao.dia,
+      jogadorId: telegramId,
+      postJaPublicado: true,
+      rede,
+    };
+    if (tipo === "bastidores") payload.perfilArtista = perfilArtista;
+    if (tipo === "tracklist_reveal") payload.faixaOrdemRevelada = faixaOrdemRevelada;
+
+    setConfirmando(true);
+    try {
+      const res = await fetch("/api/presave/completar-missao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).then((r) => r.json());
+      if (!res.success)
+        throw new Error(
+          res.error ||
+            "O post já foi publicado no Social, mas não deu pra confirmar a missão — tenta de novo.",
+        );
+      haptic.success?.();
+      setComposerOpen(false);
+      onCompletada();
+    } catch (err: any) {
+      setErro(err.message || "Falha ao confirmar a missão.");
+    } finally {
+      setConfirmando(false);
+    }
+  };
+
+  // Rede(s) permitida(s) no 1º passo do composer: desafio_som e o caminho
+  // TikTok de making_of_video são exclusivos de TikTok; os demais tipos de
+  // post aceitam qualquer rede (igual o mini-form antigo, que oferecia
+  // twitter/instagram/tiktok/stories — "stories" vira o próprio modo Story
+  // dentro do Instagram no composer).
+  const composerAllowedTypes: ("Instagram" | "Twitter" | "TikTok")[] | undefined =
+    tipo === "desafio_som" || tipo === "making_of_video" ? ["TikTok"] : undefined;
+
+  // Bastidores publica através de um perfil de "Tá na Mídia" escolhido
+  // (não do artista da campanha) — os demais tipos publicam como o próprio
+  // artista da campanha.
+  const composerFixedArtist =
+    tipo === "bastidores"
+      ? perfilArtista
+        ? { nome: perfilArtista, foto: perfisMidia.find((p) => p.nome === perfilArtista)?.foto }
+        : null
+      : { nome: artista };
 
   return (
     <div
@@ -1539,12 +1581,16 @@ function MissaoModal({
               </button>
             </div>
             {caminhoMakingOf === "tiktok" ? (
-              <textarea
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                placeholder="Legenda do post de TikTok"
-                className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
-              />
+              <button
+                type="button"
+                onClick={() => {
+                  haptic.selection?.();
+                  setComposerOpen(true);
+                }}
+                className="w-full px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-fuchsia-500 hover:bg-fuchsia-400 text-black"
+              >
+                Abrir compositor do Social (TikTok)
+              </button>
             ) : (
               <input
                 value={videoRealId}
@@ -1555,20 +1601,7 @@ function MissaoModal({
             )}
           </div>
         ) : (
-          <div className="space-y-2">
-            {tipo !== "desafio_som" && (
-              <select
-                value={rede}
-                onChange={(e) => setRede(e.target.value)}
-                className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
-              >
-                {REDES.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            )}
+          <div className="space-y-3">
             {tipo === "desafio_som" && (
               <div className="text-[11px] text-fuchsia-300 font-bold">
                 Rede travada em TikTok (exclusivo).
@@ -1641,64 +1674,52 @@ function MissaoModal({
                 ))}
               </select>
             )}
-            <textarea
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="Texto do post"
-              className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
-            />
-            {/* Mesma forma de postar do Social: texto + imagem opcional */}
-            <div className="flex items-center gap-3">
-              {midiaPreview && (
-                <img
-                  src={midiaPreview}
-                  alt=""
-                  className="size-12 rounded-xl object-cover shrink-0"
-                />
-              )}
-              <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold cursor-pointer shrink-0">
-                <UploadIcon className="size-3.5 shrink-0" />
-                <span className="truncate">
-                  {enviandoMidia ? "Enviando..." : midiaPreview ? "Trocar imagem" : "Anexar imagem"}
-                </span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    setMidiaFile(file);
-                    setMidiaPreview(URL.createObjectURL(file));
-                  }}
-                />
-              </label>
-              {midiaPreview && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMidiaFile(null);
-                    setMidiaPreview(null);
-                  }}
-                  className="p-1.5 rounded-lg hover:bg-white/10 shrink-0"
-                >
-                  <Trash2 className="size-3.5 text-neutral-500" />
-                </button>
-              )}
-            </div>
+            <button
+              type="button"
+              disabled={
+                (tipo === "bastidores" && !perfilArtista) ||
+                (tipo === "tracklist_reveal" && !faixaOrdemRevelada)
+              }
+              onClick={() => {
+                haptic.selection?.();
+                setComposerOpen(true);
+              }}
+              className="w-full px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-fuchsia-500 hover:bg-fuchsia-400 text-black disabled:opacity-50"
+            >
+              Abrir compositor do Social
+            </button>
           </div>
         )}
 
         {erro && <p className="text-xs text-red-400">{erro}</p>}
 
-        <button
-          onClick={completar}
-          disabled={enviando}
-          className="w-full px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-fuchsia-500 hover:bg-fuchsia-400 text-black disabled:opacity-50"
-        >
-          {enviando ? "Enviando..." : "Completar missão"}
-        </button>
+        {(tipo === "entrevista" || (tipo === "making_of_video" && caminhoMakingOf === "video_real")) && (
+          <button
+            onClick={completar}
+            disabled={enviando}
+            className="w-full px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-fuchsia-500 hover:bg-fuchsia-400 text-black disabled:opacity-50"
+          >
+            {enviando ? "Enviando..." : "Completar missão"}
+          </button>
+        )}
       </div>
+
+      {composerOpen && composerFixedArtist && (
+        <SocialPostComposer
+          telegramId={telegramId}
+          fixedArtist={composerFixedArtist}
+          allowedTypes={composerAllowedTypes}
+          initialType={composerAllowedTypes?.length === 1 ? composerAllowedTypes[0] : null}
+          profiles={[]}
+          onClose={() => setComposerOpen(false)}
+          onPosted={confirmarMissaoComPost}
+        />
+      )}
+      {confirmando && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70">
+          <p className="text-xs font-bold text-white">Confirmando a missão...</p>
+        </div>
+      )}
     </div>
   );
 }

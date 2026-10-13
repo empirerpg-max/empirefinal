@@ -1274,6 +1274,14 @@ export interface CompletarMissaoPayload {
   rede?: string; // rede do post social ("twitter" | "instagram" | "tiktok" | ...)
   texto?: string;
   mediaUrl?: string;
+  // O front (GestaoPreSave.tsx) agora publica o post de verdade ANTES de
+  // chamar esse endpoint — pelo mesmo composer/caminho real do Social
+  // (<SocialPostComposer>, salvarPostSocial), com suporte a tudo que o
+  // Social tem (Stories, múltiplas fotos, áudio, material anexado etc.),
+  // em vez do mini-form simplificado antigo que só mandava texto+mediaUrl
+  // pra esse endpoint recriar o post aqui. Quando essa flag vem true, NÃO
+  // cria um segundo post (evita duplicar) — só confirma a missão.
+  postJaPublicado?: boolean;
   perfilArtista?: string; // bastidores: nome do artista do perfil de "Tá na Mídia" escolhido (SOCIAL_PERFIS!A)
   faixaOrdemRevelada?: number; // tracklist_reveal: qual faixa revelar
   entrevista?: {
@@ -1332,6 +1340,10 @@ async function validarEExecutarMissao(
   const postarSocial = async (redeForcada?: string) => {
     const rede = redeForcada || payload.rede;
     if (!rede) return { ok: false as const, error: "Escolha uma rede social para esse post." };
+    // Post já publicado de verdade pelo front via <SocialPostComposer>
+    // (mesmo caminho real do Social) — só confirma a missão, sem recriar o
+    // post aqui (evitaria duplicar).
+    if (payload.postJaPublicado) return { ok: true as const, dados: { rede } };
     if (!payload.texto?.trim() && !payload.mediaUrl) {
       return { ok: false as const, error: "Escreva um texto ou envie uma mídia para o post." };
     }
