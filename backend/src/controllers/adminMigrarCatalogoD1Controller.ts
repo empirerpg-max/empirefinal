@@ -217,11 +217,39 @@ export async function adminMigrarCatalogoD1Controller(): Promise<Response> {
   // sem álbum de verdade (confirmado: não existe nenhuma linha com esse
   // título em Albuns) — não é um vínculo quebrado, é o esperado.
   const NOMES_SEM_ALBUM_REAL = new Set([normalizeComparison("Playlists Avulsas")]);
+
+  // Apelidos conhecidos e APROVADOS (reconciliação de 2026-10-13, Gap A) —
+  // a célula ALBUM/ALBUM 2-5 de Musicas guarda um nome que não bate com o
+  // "Novo Nome" real cadastrado em Albuns (nomenclatura inconsistente entre
+  // a música e o álbum, ex: falta/sobra "(Deluxe Edition)"), mas os dois
+  // são comprovadamente o MESMO álbum — confirmado caso a caso pelo
+  // usuário, não um fuzzy-match genérico aplicado a tudo. Só esses 6 pares
+  // específicos; qualquer outro nome não encontrado continua sem vínculo
+  // (ver os 14 casos pendentes documentados no diagnóstico de
+  // adminDiagReconciliacaoGapsController.ts — decisão explícita de deixar
+  // sem ação por ora).
+  const APELIDOS_ALBUM_APROVADOS = new Map<string, string>([
+    [normalizeComparison("Kyeh - KDLA"), normalizeComparison("KYEH - KDLA (Full Album)")],
+    [normalizeComparison("Kyeh - KDLA (Deluxe Edition)"), normalizeComparison("KYEH - KDLA (Full Album)")],
+    [normalizeComparison("Alexxa Hills - villain (deluxe edition)"), normalizeComparison("Alexxa Hills - villain")],
+    [normalizeComparison("Rayna - Lasso"), normalizeComparison("Rayna - Lasso (2026)")],
+    [normalizeComparison("Paul Carter - end of an era."), normalizeComparison("Paul Carter - end of an era. (EP)")],
+    [
+      normalizeComparison("Paul Carter - Evergreen (deluxe edition)"),
+      normalizeComparison("Paul Carter - Evergreen (Deluxe)"),
+    ],
+  ]);
+
   const albunsNaoEncontrados: { musicaId: string; nomeAlbum: string }[] = [];
   for (const { item, nomes } of vinculosAlbumPendentes) {
     const idsResolvidos = nomes.map((nome) => {
       if (NOMES_SEM_ALBUM_REAL.has(normalizeComparison(nome))) return null;
-      const id = albumIdPorNome.get(normalizeComparison(nome));
+      const chave = normalizeComparison(nome);
+      const id =
+        albumIdPorNome.get(chave) ??
+        (APELIDOS_ALBUM_APROVADOS.has(chave)
+          ? albumIdPorNome.get(APELIDOS_ALBUM_APROVADOS.get(chave)!)
+          : undefined);
       if (!id) albunsNaoEncontrados.push({ musicaId: item.id, nomeAlbum: nome });
       return id ?? null;
     });
