@@ -204,6 +204,7 @@ import { adminMigrarMusicasD1Controller } from "../controllers/adminMigrarMusica
 import { adminCriarTabelaComentariosMusicasController } from "../controllers/adminCriarTabelaComentariosMusicasController";
 import { adminMigrarComentariosMusicasD1Controller } from "../controllers/adminMigrarComentariosMusicasD1Controller";
 import { adminDiagOrfaosComentariosController } from "../controllers/adminDiagOrfaosComentariosController";
+import { adminBackfillCodigoUnicoMusicasController } from "../controllers/adminBackfillCodigoUnicoMusicasController";
 import {
   adminDiagReconciliacaoGapsController,
   adminDiagAuditoriaColunasMusicasController,
@@ -1902,6 +1903,8 @@ export async function handleEmpireApiRoutes(
     response = await adminMigrarComentariosMusicasD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-orfaos-comentarios") {
     response = await adminDiagOrfaosComentariosController();
+  } else if (url.pathname === "/api/empire-play/admin/backfill-codigo-unico-musicas") {
+    response = await adminBackfillCodigoUnicoMusicasController();
   } else if (url.pathname === "/api/empire-play/admin/migrar-catalogo-d1") {
     response = await adminMigrarCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {
