@@ -21,14 +21,11 @@ export async function adminMigrarComentariosMusicasD1Controller(): Promise<Respo
     });
   }
 
-  // IDs de música já migrados — usado só pra REPORTAR órfãos (comentário
-  // cujo "ID do tópico" não bate com nenhuma música hoje), nunca pra
-  // excluir: o comentário é migrado de qualquer forma, com evidência
-  // visível de que o vínculo está quebrado, igual ao padrão já usado em
-  // adminDiagComentarioPerdidoController.ts.
-  const musicaIdsResult = await db.prepare("SELECT id FROM musicas").all<{ id: string }>();
-  const musicaIdsExistentes = new Set((musicaIdsResult.results || []).map((r) => r.id));
-
+  // Comentarios_Musicas guarda "ID do tópico" (coluna A), mas a PK de
+  // `musicas` agora é "Código único" (ver pivot 2026-10-14) — resolve
+  // topicId -> codigoUnico via Musicas (coluna B id_topico -> coluna Z
+  // codigo_unico), sempre preenchido após o backfill.
+  const codigoUnicoPorTopicId = new Map<string, string>();
   // Resolve ID antigo -> ID real atual: algumas linhas de Musicas têm um
   // "Comentários para" (coluna F) preenchido com um ID DE TÓPICO ANTIGO que
   // a própria linha já teve (antes de ser recriada com um id novo) — não um
@@ -41,17 +38,24 @@ export async function adminMigrarComentariosMusicasD1Controller(): Promise<Respo
   // pertencem a essa música, não são órfãos de verdade.
   const idAntigoParaIdReal = new Map<string, string>();
   const musicasParaResolverRedirecionamento = await googleSheetsService.principal
-    .readValues("Musicas", "A:F")
+    .readValues("Musicas", "A:AE")
     .catch(() => []);
   for (let i = 1; i < musicasParaResolverRedirecionamento.length; i++) {
     const row = musicasParaResolverRedirecionamento[i];
     if (!row) continue;
     const idReal = normalizeText(row[1]); // B
     const idAntigo = normalizeText(row[5]); // F — "Comentários para"
+    const codigoUnico = normalizeText(row[25]); // Z
     if (idReal && idAntigo && idAntigo !== idReal) {
       idAntigoParaIdReal.set(idAntigo, idReal);
     }
+    if (idReal && codigoUnico) {
+      codigoUnicoPorTopicId.set(idReal, codigoUnico);
+    }
   }
+
+  const codigosUnicosExistentesResult = await db.prepare("SELECT codigo_unico FROM musicas").all<{ codigo_unico: string }>();
+  const codigosUnicosExistentes = new Set((codigosUnicosExistentesResult.results || []).map((r) => r.codigo_unico));
 
   const rows = await googleSheetsService.principal.readValues("Comentarios_Musicas", "A:G").catch(() => []);
 
@@ -72,23 +76,25 @@ export async function adminMigrarComentariosMusicasD1Controller(): Promise<Respo
     const comentario = normalizeText(row[3]); // D
     if (!topicIdBruto || !comentario) continue; // linha quebrada, sem como migrar
 
-    // Resolve id antigo -> id real ANTES de checar órfão (ver mapa acima) —
-    // o comentário pertence à música de verdade, só foi salvo com um id que
-    // ela já não usa mais.
+    // Resolve id antigo -> id real ANTES de resolver pra código único (ver
+    // mapa acima) — o comentário pertence à música de verdade, só foi
+    // salvo com um id que ela já não usa mais.
     const topicId = idAntigoParaIdReal.get(topicIdBruto) || topicIdBruto;
+    const codigoUnico = codigoUnicoPorTopicId.get(topicId);
 
-    if (!musicaIdsExistentes.has(topicId)) {
+    if (!codigoUnico || !codigosUnicosExistentes.has(codigoUnico)) {
       // Órfão de verdade (mesma categoria já confirmada antes nesta sessão:
       // comentário referenciando mídia substituída/excluída) — D1 tem FK
-      // real (musica_id REFERENCES musicas(id)), então INSERT falharia de
-      // qualquer forma. Reportado com evidência completa, mas não inserido
-      // (nunca teria como, sem inventar uma música que não existe).
+      // real (musica_id REFERENCES musicas(codigo_unico)), então INSERT
+      // falharia de qualquer forma. Reportado com evidência completa, mas
+      // não inserido (nunca teria como, sem inventar uma música que não
+      // existe).
       resultado.orfaos.push({ linha: i + 1, topicId: topicIdBruto });
       continue;
     }
 
     const item: ComentarioMusicaInsert = {
-      musicaId: topicId,
+      musicaId: codigoUnico,
       jogadorId: normalizeText(row[1]) || null, // B
       jogadorNome: normalizeText(row[2]) || null, // C
       comentario,

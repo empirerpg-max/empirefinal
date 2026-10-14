@@ -11,8 +11,11 @@ import { executarEmLotes, type ItemComRotulo } from "../services/catalogoDbServi
 // reestruturação "uma tabela por tipo" pedida pelo usuário em 2026-10-14.
 // Lê as colunas A:AE de "Musicas" (30 colunas confirmadas contra o TSV
 // exportado da aba) e casa com Extra_Musicas por "Código único" (coluna A
-// de Extra_Musicas = coluna Z de Musicas). Idempotente (ON CONFLICT(id) DO
-// UPDATE); roda de novo sem duplicar.
+// de Extra_Musicas = coluna Z de Musicas). PK é "Código único" (agora
+// sempre preenchido, ver backfill-codigo-unico-musicas); "ID do tópico"
+// fica como id_topico, nullable (faixa pendente de álbum não tem tópico
+// ainda, mas já tem código único e já entra em D1 mesmo assim). Idempotente
+// (ON CONFLICT(codigo_unico) DO UPDATE); roda de novo sem duplicar.
 //
 // GET /api/empire-play/admin/migrar-musicas-d1
 function parseDateToIso(dataBR: string | null): string | null {
@@ -76,24 +79,24 @@ export async function adminMigrarMusicasD1Controller(): Promise<Response> {
     if (!row || !row.some((c) => normalizeText(c))) continue;
     resultado.lidas++;
 
-    const topicId = normalizeText(row[1]); // B — ID do tópico
+    const topicId = normalizeText(row[1]) || null; // B — ID do tópico (pode ser vazio em faixa pendente de álbum)
     const titulo = normalizeText(row[7]); // H — Nome da música
-    if (!topicId || !titulo) {
+    const codigoUnico = normalizeText(row[25]); // Z — agora sempre preenchido (backfill GEN#### p/ lacunas históricas)
+    if (!codigoUnico || !titulo) {
       resultado.puladas.push({
         linha: i + 1,
-        motivo: !topicId ? "Sem ID do tópico (coluna B)" : "Sem título (coluna H)",
+        motivo: !codigoUnico ? "Sem Código único (coluna Z)" : "Sem título (coluna H)",
         titulo: titulo || "(sem título)",
       });
       continue;
     }
 
-    const codigoUnico = normalizeText(row[25]) || null; // Z
-    const extra = codigoUnico ? extraPorCodigo.get(normalizeComparison(codigoUnico)) : undefined;
+    const extra = extraPorCodigo.get(normalizeComparison(codigoUnico));
     const dataLancamento = normalizeText(row[0]) || null; // A
 
     const item: MusicaUpsert = {
-      id: topicId,
       codigoUnico,
+      idTopico: topicId,
       titulo,
       artista: normalizeText(row[13]) || "", // N — ACT PRINCIPAL
       artista2: normalizeText(row[14]) || null, // O
@@ -131,7 +134,7 @@ export async function adminMigrarMusicasD1Controller(): Promise<Response> {
 
     itens.push({
       statement: buildMusicaUpsertStatement(db, item),
-      rotulo: `${topicId} — ${titulo}`,
+      rotulo: `${codigoUnico} — ${titulo}`,
     });
   }
 

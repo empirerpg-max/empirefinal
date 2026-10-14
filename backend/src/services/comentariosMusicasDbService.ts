@@ -18,7 +18,7 @@ export { getCatalogoDb };
 export const COMENTARIOS_MUSICAS_CREATE_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS comentarios_musicas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    musica_id TEXT NOT NULL REFERENCES musicas(id) ON DELETE CASCADE,
+    musica_id TEXT NOT NULL REFERENCES musicas(codigo_unico) ON DELETE CASCADE,
     jogador_id TEXT,
     jogador_nome TEXT,
     comentario TEXT NOT NULL,

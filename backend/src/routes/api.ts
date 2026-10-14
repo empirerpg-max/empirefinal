@@ -205,6 +205,7 @@ import { adminCriarTabelaComentariosMusicasController } from "../controllers/adm
 import { adminMigrarComentariosMusicasD1Controller } from "../controllers/adminMigrarComentariosMusicasD1Controller";
 import { adminDiagOrfaosComentariosController } from "../controllers/adminDiagOrfaosComentariosController";
 import { adminBackfillCodigoUnicoMusicasController } from "../controllers/adminBackfillCodigoUnicoMusicasController";
+import { adminRecriarTabelasMusicasD1Controller } from "../controllers/adminRecriarTabelasMusicasD1Controller";
 import {
   adminDiagReconciliacaoGapsController,
   adminDiagAuditoriaColunasMusicasController,
@@ -1905,6 +1906,11 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagOrfaosComentariosController();
   } else if (url.pathname === "/api/empire-play/admin/backfill-codigo-unico-musicas") {
     response = await adminBackfillCodigoUnicoMusicasController();
+  } else if (url.pathname === "/api/empire-play/admin/recriar-tabelas-musicas-d1") {
+    // DROP + recriação de musicas/comentarios_musicas com codigo_unico como
+    // PK (pivot 2026-10-14) — destrutivo só nessas 2 tabelas, chamado
+    // manualmente via admin-call.yml antes de remigrar.
+    response = await adminRecriarTabelasMusicasD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/migrar-catalogo-d1") {
     response = await adminMigrarCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {

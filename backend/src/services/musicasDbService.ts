@@ -15,8 +15,8 @@ export { getCatalogoDb };
 
 export const MUSICAS_CREATE_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS musicas (
-    id TEXT PRIMARY KEY,
-    codigo_unico TEXT,
+    codigo_unico TEXT PRIMARY KEY,
+    id_topico TEXT,
     titulo TEXT NOT NULL,
     artista TEXT NOT NULL,
     artista_2 TEXT,
@@ -53,20 +53,20 @@ export const MUSICAS_CREATE_STATEMENTS: string[] = [
     criado_em TEXT NOT NULL DEFAULT (datetime('now')),
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
-  "CREATE INDEX IF NOT EXISTS idx_musicas_codigo_unico ON musicas(codigo_unico)",
+  "CREATE INDEX IF NOT EXISTS idx_musicas_id_topico ON musicas(id_topico)",
   "CREATE INDEX IF NOT EXISTS idx_musicas_artista ON musicas(artista)",
   "CREATE INDEX IF NOT EXISTS idx_musicas_data ON musicas(data_lancamento_iso)",
 ];
 
 const MUSICAS_UPSERT_SQL = `INSERT INTO musicas (
-    id, codigo_unico, titulo, artista, artista_2, artista_3, artista_4, artista_5, artista_6,
+    codigo_unico, id_topico, titulo, artista, artista_2, artista_3, artista_4, artista_5, artista_6,
     album, album_2, album_3, album_4, album_5, capa_url, audio_url, letra, letra_sincronizada,
     genero, tipo_single, tipo_musica, data_lancamento, data_lancamento_iso, weeks, weeks_video,
     ordem, id_criador, comentarios_para, metacritic_por_jogador, metacritic_media, pendente,
     reportado_incorreto, shop_json, loja_info, arte_extra_json, atualizado_em
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  ON CONFLICT(id) DO UPDATE SET
-    codigo_unico = excluded.codigo_unico, titulo = excluded.titulo, artista = excluded.artista,
+  ON CONFLICT(codigo_unico) DO UPDATE SET
+    id_topico = excluded.id_topico, titulo = excluded.titulo, artista = excluded.artista,
     artista_2 = excluded.artista_2, artista_3 = excluded.artista_3, artista_4 = excluded.artista_4,
     artista_5 = excluded.artista_5, artista_6 = excluded.artista_6,
     album = excluded.album, album_2 = excluded.album_2, album_3 = excluded.album_3,
@@ -83,8 +83,8 @@ const MUSICAS_UPSERT_SQL = `INSERT INTO musicas (
     atualizado_em = datetime('now')`;
 
 export interface MusicaUpsert {
-  id: string;
-  codigoUnico: string | null;
+  codigoUnico: string;
+  idTopico?: string | null;
   titulo: string;
   artista: string;
   artista2?: string | null;
@@ -122,8 +122,8 @@ export interface MusicaUpsert {
 
 export function buildMusicaUpsertStatement(db: D1DatabaseLike, m: MusicaUpsert): D1PreparedStatement {
   return db.prepare(MUSICAS_UPSERT_SQL).bind(
-    m.id,
-    m.codigoUnico ?? null,
+    m.codigoUnico,
+    m.idTopico ?? null,
     m.titulo,
     m.artista,
     m.artista2 ?? null,
