@@ -22,9 +22,10 @@ import {
   ImageIcon,
   ChevronDown,
   Disc,
+  Search,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { api } from "@/lib/api";
+import { api, normalizeNome } from "@/lib/api";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import { toast } from "sonner";
 
@@ -246,6 +247,7 @@ function MarketPage() {
   >([]);
   const [bannerOpcaoTopicoId, setBannerOpcaoTopicoId] = useState("");
   const [bannerOpcaoAberto, setBannerOpcaoAberto] = useState(false);
+  const [bannerOpcaoBusca, setBannerOpcaoBusca] = useState("");
   const [bannerImageFile, setBannerImageFile] = useState<File | null>(null);
   const [bannerImagePreview, setBannerImagePreview] = useState<string | null>(null);
   const [bannerSubmitting, setBannerSubmitting] = useState(false);
@@ -342,9 +344,15 @@ function MarketPage() {
     if (!bannerModalOpen || !bannerArtista || !tgId) return;
     api.listarBannerOpcoes(tgId, bannerArtista).then(setBannerOpcoes);
     setBannerOpcaoTopicoId("");
+    setBannerOpcaoBusca("");
   }, [bannerModalOpen, bannerArtista, tgId]);
 
   const bannerOpcaoSelecionada = bannerOpcoes.find((o) => o.topicoId === bannerOpcaoTopicoId);
+  const bannerOpcoesFiltradas = useMemo(() => {
+    const termo = normalizeNome(bannerOpcaoBusca);
+    if (!termo) return bannerOpcoes;
+    return bannerOpcoes.filter((o) => normalizeNome(o.titulo).includes(termo));
+  }, [bannerOpcoes, bannerOpcaoBusca]);
   const bannerPreco = PLATAFORMAS_BANNER.find((p) => p.valor === bannerPlataforma)?.preco ?? 0;
   const bannerSaldoArtista = artistas.find((a) => a.nome === bannerArtista)?.saldoEcoin ?? 0;
 
@@ -761,7 +769,7 @@ function MarketPage() {
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
               Música ou álbum
             </p>
-            <div className="relative mb-3">
+            <div className="mb-3">
               <button
                 type="button"
                 onClick={() => bannerOpcoes.length > 0 && setBannerOpcaoAberto((v) => !v)}
@@ -782,28 +790,50 @@ function MarketPage() {
               </button>
 
               {bannerOpcaoAberto && bannerOpcoes.length > 0 && (
-                <div className="absolute z-10 top-full left-0 right-0 mt-1.5 max-h-56 overflow-y-auto rounded-2xl border border-white/10 bg-[#11141c] shadow-xl shadow-black/40 py-1.5">
-                  {bannerOpcoes.map((o) => (
-                    <button
-                      key={o.topicoId}
-                      type="button"
-                      onClick={() => {
-                        setBannerOpcaoTopicoId(o.topicoId);
-                        setBannerOpcaoAberto(false);
-                      }}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-white/5 transition ${
-                        o.topicoId === bannerOpcaoTopicoId ? "bg-primary/10" : ""
-                      }`}
-                    >
-                      <Disc className="size-4 text-muted-foreground shrink-0" />
-                      <span className="flex-1 min-w-0 truncate text-sm">{o.titulo}</span>
-                      {o.tipo === "albuns" && (
-                        <span className="shrink-0 text-[9px] font-black uppercase tracking-wide text-muted-foreground bg-white/10 px-2 py-0.5 rounded-full">
-                          Álbum
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                <div className="mt-1.5 rounded-2xl border border-white/10 bg-[#11141c] shadow-xl shadow-black/40 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10">
+                    <Search className="size-4 text-muted-foreground shrink-0" />
+                    <input
+                      type="text"
+                      value={bannerOpcaoBusca}
+                      onChange={(e) => setBannerOpcaoBusca(e.target.value)}
+                      placeholder="Pesquisar por nome..."
+                      autoFocus
+                      className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    />
+                  </div>
+                  <div
+                    className="max-h-56 overflow-y-auto overscroll-contain py-1.5"
+                    style={{ touchAction: "pan-y" }}
+                  >
+                    {bannerOpcoesFiltradas.length === 0 ? (
+                      <p className="px-3 py-3 text-sm text-muted-foreground text-center">
+                        Nenhum resultado pra "{bannerOpcaoBusca}"
+                      </p>
+                    ) : (
+                      bannerOpcoesFiltradas.map((o) => (
+                        <button
+                          key={o.topicoId}
+                          type="button"
+                          onClick={() => {
+                            setBannerOpcaoTopicoId(o.topicoId);
+                            setBannerOpcaoAberto(false);
+                          }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-white/5 transition ${
+                            o.topicoId === bannerOpcaoTopicoId ? "bg-primary/10" : ""
+                          }`}
+                        >
+                          <Disc className="size-4 text-muted-foreground shrink-0" />
+                          <span className="flex-1 min-w-0 truncate text-sm">{o.titulo}</span>
+                          {o.tipo === "albuns" && (
+                            <span className="shrink-0 text-[9px] font-black uppercase tracking-wide text-muted-foreground bg-white/10 px-2 py-0.5 rounded-full">
+                              Álbum
+                            </span>
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
