@@ -198,6 +198,7 @@ import { adminDiagBannerOpcoesController } from "../controllers/adminDiagBannerO
 import { adminDiagTamanhoDadosController } from "../controllers/adminDiagTamanhoDadosController";
 import { adminMigrarCatalogoD1Controller } from "../controllers/adminMigrarCatalogoD1Controller";
 import { adminAlterCatalogoD1AddTiposController } from "../controllers/adminAlterCatalogoD1AddTiposController";
+import { adminResetCatalogoD1Controller } from "../controllers/adminResetCatalogoD1Controller";
 import {
   adminDiagReconciliacaoGapsController,
   adminDiagAuditoriaColunasMusicasController,
@@ -1880,6 +1881,12 @@ export async function handleEmpireApiRoutes(
     // rodar sem aprovação explícita do usuário (ver comentário no
     // controller); só chamado manualmente via admin-call.yml.
     response = await adminAlterCatalogoD1AddTiposController();
+  } else if (url.pathname === "/api/empire-play/admin/reset-catalogo-d1") {
+    // DROP + recriação total das tabelas (midia/comentario/reacao) —
+    // destrutivo, só chamado manualmente via admin-call.yml, só depois de
+    // aprovação explícita do usuário (pedido em 2026-10-14 pra recomeçar a
+    // migração do zero).
+    response = await adminResetCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/migrar-catalogo-d1") {
     response = await adminMigrarCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {
