@@ -561,8 +561,19 @@ export async function createCommentController(request: Request): Promise<Respons
     // Rodar em paralelo em vez de sequencial foi o que finalmente tirou o
     // comentário em vídeo da casa dos 5-7s medidos ao vivo. Pulado pra
     // respostas — não é registro de ponto, só interação normal.
+    // Não bloqueia a resposta: cada chamada aqui já é best-effort por
+    // conta própria (registrarAuditLog e somarPrestigio nunca lançam), mas
+    // antes ficavam dentro de um `await Promise.all` que travava a
+    // resposta até as duas terminarem — e as duas fazem vários round-trips
+    // sequenciais ao Sheets (EDIÇÃO CHARTS inteira + REGISTRO inteira, com
+    // reler-pra-confirmar e até 3 tentativas em caso de colisão de linha).
+    // Com a instabilidade já observada na API do Sheets, isso estourava o
+    // tempo de resposta e o Cloudflare devolvia a própria página de erro
+    // (HTML) no lugar do JSON — mesmo sintoma do "Unexpected token '<'" ao
+    // comentar. Igual ao D1/banner acima: dispara e segue, sem travar quem
+    // comentou.
     if (!isReply) {
-      await Promise.all([
+      Promise.all([
         registrarAuditLog({
           nomeJogador: playerClean,
           titulo: tituloOficial,
@@ -576,7 +587,9 @@ export async function createCommentController(request: Request): Promise<Respons
         somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(
           () => {},
         ),
-      ]);
+      ]).catch((err) => {
+        console.warn("[ForumController] Erro no audit log/prestígio do comentário:", err);
+      });
     }
 
     return new Response(
