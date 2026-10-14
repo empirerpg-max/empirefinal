@@ -49,7 +49,13 @@ export async function adminMigrarComentariosMusicasD1Controller(): Promise<Respo
     if (!topicId || !comentario) continue; // linha quebrada, sem como migrar
 
     if (!musicaIdsExistentes.has(topicId)) {
+      // Órfão de verdade (mesma categoria já confirmada antes nesta sessão:
+      // comentário referenciando mídia substituída/excluída) — D1 tem FK
+      // real (musica_id REFERENCES musicas(id)), então INSERT falharia de
+      // qualquer forma. Reportado com evidência completa, mas não inserido
+      // (nunca teria como, sem inventar uma música que não existe).
       resultado.orfaos.push({ linha: i + 1, topicId });
+      continue;
     }
 
     const item: ComentarioMusicaInsert = {
