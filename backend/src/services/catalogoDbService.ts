@@ -14,7 +14,7 @@ interface D1Result<T = unknown> {
   success: boolean;
 }
 
-interface D1PreparedStatement {
+export interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement;
   run(): Promise<D1Result>;
   all<T = unknown>(): Promise<D1Result<T>>;
