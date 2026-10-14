@@ -24,10 +24,15 @@ export async function adminDiagComentarioPerdidoController(request: Request): Pr
     );
   }
 
-  const [musicasHeader, musicasRows, comentariosRows] = await Promise.all([
+  const [musicasHeader, musicasRows, comentariosRows, registroRows] = await Promise.all([
     googleSheetsService.principal.readValues("Musicas", "A1:AA1").catch(() => []),
     googleSheetsService.principal.readValues("Musicas", "A2:AA5000").catch(() => []),
     googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
+    // Confere se o comentário achado abaixo (Comentarios_Musicas) tem o
+    // par correspondente em REGISTRO (aba B=jogador, C=conteúdo, D=tipo) —
+    // pra distinguir "comentário salvo mas Audit Log perdido" (bug do
+    // 2026-10-14, ver forumController.ts) de "comentário nunca existiu".
+    googleSheetsService.registrosCharts.readValues("REGISTRO").catch(() => []),
   ]);
 
   const header = musicasHeader[0] || [];
@@ -73,8 +78,29 @@ export async function adminDiagComentarioPerdidoController(request: Request): Pr
     }
   }
 
+  // Varre REGISTRO procurando qualquer linha cujo CONTEÚDO (coluna C)
+  // mencione o termo buscado — pra ver se o Audit Log do comentário acima
+  // (COMENTÁRIOS, SINGLES/VÍDEOS/MÚSICAS) realmente foi gravado.
+  const registroEncontrado: { linha: number; jogador: string; conteudo: string; tipo: string }[] = [];
+  for (let i = 1; i < registroRows.length; i++) {
+    const row = registroRows[i] || [];
+    const conteudo = normalizeComparison(row[2] || "");
+    if (termo && conteudo.includes(termo)) {
+      registroEncontrado.push({
+        linha: i + 1,
+        jogador: normalizeText(row[1]),
+        conteudo: normalizeText(row[2]),
+        tipo: normalizeText(row[3]),
+      });
+    }
+  }
+
   return new Response(
-    JSON.stringify({ success: true, termo, topicIdBusca, linhasMusica, comentariosEncontrados }, null, 2),
+    JSON.stringify(
+      { success: true, termo, topicIdBusca, linhasMusica, comentariosEncontrados, registroEncontrado },
+      null,
+      2,
+    ),
     { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
   );
 }
