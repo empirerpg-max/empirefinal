@@ -242,7 +242,42 @@ export function calculateAverageFromRatings(ratingsStr: string): number {
   return Math.round(sum / numbers.length);
 }
 
-export async function createCommentController(request: Request): Promise<Response> {
+// Execution context do Worker (fetch(request, env, ctx)) — só o método que
+// interessa aqui. Passado desde src/server.ts através de
+// handleEmpireApiRoutes pra permitir adiar trabalho não-crítico (nota/
+// média, notificação, Audit Log, prestígio) SEM travar a resposta do
+// comentário nem arriscar perdê-lo: ctx.waitUntil mantém a isolate viva até
+// a promise terminar, mesmo depois da Response já ter saído. Ver histórico
+// no passo 3 abaixo — sem isso, um `await` removido ingenuamente derrubava
+// o trabalho de fundo antes de terminar (commit 67080f5, revertido em
+// ed698b8) assim que a resposta saía.
+export interface WorkerExecutionContext {
+  waitUntil: (promise: Promise<unknown>) => void;
+}
+
+// Roda `work` em segundo plano sem travar a resposta — via ctx.waitUntil
+// quando disponível. Sem ctx (chamada sem o parâmetro, ex: algum caller
+// antigo), cai pra `await` mesmo: mais lento nesse caso, mas nunca arrisca
+// perder a escrita silenciosamente, que é o requisito inegociável aqui
+// (zero perda de dado).
+async function runInBackground(
+  ctx: WorkerExecutionContext | undefined,
+  work: () => Promise<void>,
+): Promise<void> {
+  const promise = work().catch((err) => {
+    console.warn("[ForumController] Erro em tarefa de fundo do comentário:", err);
+  });
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(promise);
+  } else {
+    await promise;
+  }
+}
+
+export async function createCommentController(
+  request: Request,
+  ctx?: WorkerExecutionContext,
+): Promise<Response> {
   try {
     const body = (await request.json()) as CreateCommentBody;
 
@@ -346,14 +381,19 @@ export async function createCommentController(request: Request): Promise<Respons
     // linha ainda não tem código preenchido (registrarAuditLog cai pro
     // fallback por título nesse caso).
     let codigoUnico = "";
-    // Notificação do dono do artista — disparada (não esperada) ainda
-    // dentro do passo 1, pra rodar em paralelo com o passo 2 (salvar o
-    // comentário) em vez de mais uma chamada sequencial à API do Sheets.
-    let notifyPromise: Promise<void> = Promise.resolve();
+    // Dados da linha achada em `targetSheet` (se achou) — só o necessário
+    // pra resolver o topicId estável ANTES de salvar o comentário (passo
+    // 2). Tudo que depende disso mas NÃO precisa bloquear a resposta (nota/
+    // média, notificação, título "real" por código único) foi empurrado pro
+    // passo 3, em background.
+    let rowDataEncontrada: string[] | null = null;
+    let foundRowIndex = -1;
+    let topicIdJaTinha = "";
 
-    // 1. Atualizar nota/likes e média na planilha principal — isolado num
-    // try/catch pra uma falha aqui (ex: título sem match nenhum) nunca
-    // impedir os passos 2 e 3 (salvar o comentário e o audit log). Pulado
+    // 1. Achar a linha e resolver o topicId estável — único trecho que
+    // PRECISA terminar antes de salvar o comentário (passo 2), porque o
+    // comentário é gravado com esse id. Isolado num try/catch pra uma falha
+    // aqui (ex: título sem match nenhum) nunca impedir o passo 2. Pulado
     // inteiro pra respostas (isReply) — não rolam nota nem mexem na média.
     if (!isReply)
       try {
@@ -370,8 +410,6 @@ export async function createCommentController(request: Request): Promise<Respons
           // Music Videos usa uma posição diferente de Musicas/Albuns). Só cai
           // pra busca por título (substring, menos confiável) se o topicId não
           // vier.
-          let foundRowIndex = -1;
-
           if (topicIdClean) {
             const topicNorm = normalizeComparison(topicIdClean);
             for (let i = 1; i < rows.length; i++) {
@@ -396,6 +434,7 @@ export async function createCommentController(request: Request): Promise<Respons
 
           if (foundRowIndex > 0) {
             const rowData = rows[foundRowIndex - 1] || [];
+            rowDataEncontrada = rowData;
             const tituloDaLinha = normalizeText(rowData[colTituloIndex]);
             if (tituloDaLinha) tituloOficial = tituloDaLinha;
             codigoUnico = normalizeText(rowData[colCodigoIndex]);
@@ -408,10 +447,10 @@ export async function createCommentController(request: Request): Promise<Respons
             // id antigo ficam órfãos (o app não acha mais nenhum comentário
             // pra essa música, mesmo tendo vários). Corrige na raiz: assim
             // que alguém comenta uma mídia sem "ID do tópico" ainda, gera um
-            // id estável de verdade AQUI e grava na planilha antes de salvar
-            // o comentário — a partir daí a mídia nunca mais depende da
-            // posição da linha.
-            const topicIdJaTinha = normalizeText(rowData[colTopicIdIndex]);
+            // id estável de verdade AQUI (a GRAVAÇÃO na planilha acontece em
+            // background no passo 3 — só precisa existir em memória a tempo
+            // de salvar o comentário com ele).
+            topicIdJaTinha = normalizeText(rowData[colTopicIdIndex]);
             if (!topicIdJaTinha) {
               const prefixo =
                 tipoMedia === "album"
@@ -419,14 +458,7 @@ export async function createCommentController(request: Request): Promise<Respons
                   : tipoMedia === "video" || tipoMedia === "music-video"
                     ? "video"
                     : "musica";
-              const novoTopicId = `${prefixo}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-              const colTopicLetter = colIndexToA1Letter(colTopicIdIndex);
-              await googleSheetsService.principal
-                .updateValues(targetSheet, `${colTopicLetter}${foundRowIndex}`, [[novoTopicId]])
-                .catch((err) =>
-                  console.warn("[ForumController] Falha ao gravar novo ID do tópico:", err),
-                );
-              topicIdClean = novoTopicId;
+              topicIdClean = `${prefixo}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
             } else if (normalizeComparison(topicIdJaTinha) !== normalizeComparison(topicIdClean)) {
               // A linha foi achada (por ID batendo OU por fallback de título) e
               // JÁ tem um ID de tópico próprio — mas diferente do que o
@@ -439,153 +471,159 @@ export async function createCommentController(request: Request): Promise<Respons
               // real dela daqui pra frente (comentário e notificação).
               topicIdClean = topicIdJaTinha;
             }
-
-            // Se essa linha carrega o Código único de OUTRA música (ex: um
-            // vídeo vinculado, ou uma faixa criada com "conta pra uma música
-            // já lançada"), o título de verdade pro REGISTRO é o da música
-            // dona desse código, não o título da própria linha (topic/vídeo).
-            if (tipoMedia !== "album" && codigoUnico) {
-              const tituloReal = await resolverTituloPorCodigoUnico(codigoUnico);
-              if (tituloReal) tituloOficial = tituloReal;
-            }
-
-            const currentRatings = rowData[colRatingsIndex] || "";
-
-            const updatedRatings = currentRatings.trim()
-              ? `${currentRatings.trim()}, ${playerClean}: ${score}`
-              : `${playerClean}: ${score}`;
-
-            const newAvg = calculateAverageFromRatings(updatedRatings);
-
-            const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
-            const avgColLetter = colIndexToA1Letter(colAvgIndex);
-
-            // Rating por jogador e média sempre ficam em colunas adjacentes
-            // (N/O, H/I, V/W conforme a aba) — uma updateValues só cobrindo o
-            // intervalo, em vez de duas chamadas sequenciais.
-            await googleSheetsService.principal.updateValues(
-              targetSheet,
-              `${ratingColLetter}${foundRowIndex}:${avgColLetter}${foundRowIndex}`,
-              [[updatedRatings, String(newAvg)]],
-            );
-
-            // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
-            // Monroe de Rose Thompson" pra quem é dono de Rose Thompson) — nunca
-            // a si mesmo. Pra "musica" o nome do artista vem da coluna N (ACT
-            // PRINCIPAL); álbum/vídeo usam o título "Artista - Título" (mesmo
-            // formato confirmado em Music Videos/Albuns). Só DISPARA aqui —
-            // quem chama espera o resultado lá embaixo, em paralelo com o
-            // passo 2.
-            const artistaNome =
-              tipoMedia === "musica"
-                ? normalizeText(rowData[13])
-                : (() => {
-                    const sep = tituloOficial.indexOf(" - ");
-                    return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
-                  })();
-            if (artistaNome) {
-              notifyPromise = getOwnerIdForArtist(artistaNome)
-                .then((ownerId) =>
-                  ownerId
-                    ? registrarNotificacaoComentario({
-                        ownerId,
-                        autorId: jogadorIdClean,
-                        autorNome: playerClean,
-                        tipoMedia,
-                        tituloMedia: tituloOficial,
-                        topicId: topicIdClean,
-                        comentario: comentario.trim(),
-                      })
-                    : undefined,
-                )
-                .catch((err) => {
-                  console.warn("[ForumController] Erro ao notificar dono do artista:", err);
-                });
-            }
           }
         }
       } catch (err) {
-        console.warn("[ForumController] Erro ao atualizar nota/média:", err);
+        console.warn("[ForumController] Erro ao achar linha/resolver topicId:", err);
       }
 
-    // 2. Salvar comentário na aba de comentários correspondente — em
-    // paralelo com a notificação disparada no passo 1 (não depende dela).
+    // 2. Salvar comentário na aba de comentários correspondente — É O
+    // CAMINHO CRÍTICO da resposta: só depende da leitura+resolução do
+    // topicId acima, nunca da nota/média, notificação ou Audit Log (passo
+    // 3, abaixo, roda em background). Isso existe porque a cadeia completa
+    // de chamadas sequenciais ao Sheets (nota/média + Audit Log lendo
+    // EDIÇÃO CHARTS/REGISTRO inteiros) já causou o Worker estourar o tempo
+    // de resposta e o Cloudflare devolver sua própria página de erro (HTML)
+    // no lugar do JSON — sintoma "Unexpected token '<'" confirmado ao vivo
+    // mais de uma vez, com o comentário às vezes nem chegando a ser salvo.
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
     // Linha real onde o comentário caiu — permite reagir com emoji
     // imediatamente após publicar, direto no fluxo do comentário, sem
     // precisar reler a aba pra descobrir a linha depois.
-    let newRowIndex: number | null = null;
-    const [, appendResult] = await Promise.all([
-      notifyPromise,
-      gravarComentario(
-        commentSheet,
-        buildCommentRow(tipoMedia, {
-          topicId: topicIdClean,
-          jogadorId: jogadorIdClean,
-          playerClean,
-          comentario: comentario.trim(),
-          nowStr,
-          replyTo: (replyTo || "").trim(),
-        }),
-      ).catch((err) => {
-        console.warn(`[ForumController] Não foi possível salvar em ${commentSheet}:`, err);
-        return null;
+    const newRowIndex = await gravarComentario(
+      commentSheet,
+      buildCommentRow(tipoMedia, {
+        topicId: topicIdClean,
+        jogadorId: jogadorIdClean,
+        playerClean,
+        comentario: comentario.trim(),
+        nowStr,
+        replyTo: (replyTo || "").trim(),
       }),
-    ]);
-    newRowIndex = appendResult;
+    ).catch((err) => {
+      console.warn(`[ForumController] Não foi possível salvar em ${commentSheet}:`, err);
+      return null;
+    });
     invalidarCacheComentariosForum();
 
     // Espelha no D1 (Fase 1 da migração, ver catalogoDbService.ts) — nunca
     // bloqueia nem falha o comentário (Sheets já é a resposta real acima);
     // só funciona se a mídia já tiver sido migrada pro D1 (FK), senão
     // ignora silenciosamente.
-    insertComentarioD1({
-      midiaId: topicIdClean,
-      jogadorId: jogadorIdClean,
-      jogadorNome: playerClean,
-      texto: comentario.trim(),
-    }).catch(() => {});
+    runInBackground(ctx, () =>
+      insertComentarioD1({
+        midiaId: topicIdClean,
+        jogadorId: jogadorIdClean,
+        jogadorNome: playerClean,
+        texto: comentario.trim(),
+      }),
+    );
 
     // Spotlight Banner (Market): se esse comentário veio de alguém que
     // clicou num banner ligado a esse tópico, libera o bônus de playlist
-    // mínima. Nunca bloqueia nem falha o comentário — roda em paralelo,
-    // sem await, com catch próprio.
-    processarComentarioParaBanner(jogadorIdClean, topicIdClean).catch((err) => {
-      console.warn("[ForumController] Falha ao processar banner do comentário:", err);
-    });
+    // mínima. Nunca bloqueia nem falha o comentário.
+    runInBackground(ctx, () => processarComentarioParaBanner(jogadorIdClean, topicIdClean));
 
-    // 3. Registrar Audit Log na Planilha REGISTRO (1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg)
-    // e somar prestígio — independentes entre si (cada um faz suas próprias
-    // idas ao Sheets: registrarAuditLog lê EDIÇÃO CHARTS + REGISTRO inteiros
-    // pra achar a próxima linha livre; somarPrestigio lê regras + usuário).
-    // Rodar em paralelo em vez de sequencial foi o que finalmente tirou o
-    // comentário em vídeo da casa dos 5-7s medidos ao vivo. Pulado pra
-    // respostas — não é registro de ponto, só interação normal.
-    // REVERTIDO (2026-10-14): tentei deixar isso fire-and-forget sem
-    // `await` pra tirar o Audit Log do caminho crítico da resposta (ver
-    // hipótese de timeout acima), mas sem `ctx.waitUntil` do Worker — que
-    // não chega até aqui, `handleEmpireApiRoutes` só recebe `request` —
-    // o Cloudflare mata a isolate assim que a resposta sai, derrubando a
-    // promise em background antes dela terminar. Confirmado ao vivo:
-    // comentário foi pro fórum mas NUNCA chegou em REGISTRO. Voltou a
-    // aguardar — mais lento, mas sem perder dado (requisito explícito:
-    // zero perda de dado na migração/registro).
-    if (!isReply) {
-      await Promise.all([
-        registrarAuditLog({
-          nomeJogador: playerClean,
-          titulo: tituloOficial,
-          tipo:
-            tipoMedia === "album"
-              ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
-              : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-          isAlbum: tipoMedia === "album",
-          codigoUnico,
-        }),
-        somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(
-          () => {},
-        ),
-      ]);
+    // 3. Tudo que NÃO precisa terminar antes de responder: persistir o
+    // topicId novo (se gerado no passo 1), nota/média + notificação do
+    // dono do artista, título "real" por código único, Audit Log em
+    // REGISTRO e prestígio — nessa ordem, sequencial dentro da MESMA tarefa
+    // de fundo (cada uma depende da anterior). Via ctx.waitUntil: a isolate
+    // do Worker continua viva até terminar, mesmo com a Response já
+    // enviada — ao contrário de um `await` simplesmente removido (commit
+    // 67080f5, revertido em ed698b8), que derrubava o trabalho assim que a
+    // resposta saía porque o runtime não tinha garantia nenhuma de
+    // continuar executando. Pulado pra respostas (isReply).
+    if (!isReply && foundRowIndex > 0 && rowDataEncontrada) {
+      const rowData = rowDataEncontrada;
+      runInBackground(ctx, async () => {
+        if (!topicIdJaTinha) {
+          const colTopicLetter = colIndexToA1Letter(colTopicIdIndex);
+          await googleSheetsService.principal
+            .updateValues(targetSheet, `${colTopicLetter}${foundRowIndex}`, [[topicIdClean]])
+            .catch((err) =>
+              console.warn("[ForumController] Falha ao gravar novo ID do tópico:", err),
+            );
+        }
+
+        // Se essa linha carrega o Código único de OUTRA música (ex: um
+        // vídeo vinculado, ou uma faixa criada com "conta pra uma música já
+        // lançada"), o título de verdade pro REGISTRO é o da música dona
+        // desse código, não o título da própria linha (topic/vídeo).
+        if (tipoMedia !== "album" && codigoUnico) {
+          const tituloReal = await resolverTituloPorCodigoUnico(codigoUnico);
+          if (tituloReal) tituloOficial = tituloReal;
+        }
+
+        const currentRatings = rowData[colRatingsIndex] || "";
+        const updatedRatings = currentRatings.trim()
+          ? `${currentRatings.trim()}, ${playerClean}: ${score}`
+          : `${playerClean}: ${score}`;
+        const newAvg = calculateAverageFromRatings(updatedRatings);
+        const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
+        const avgColLetter = colIndexToA1Letter(colAvgIndex);
+
+        // Rating por jogador e média sempre ficam em colunas adjacentes
+        // (N/O, H/I, V/W conforme a aba) — uma updateValues só cobrindo o
+        // intervalo, em vez de duas chamadas sequenciais.
+        await googleSheetsService.principal.updateValues(
+          targetSheet,
+          `${ratingColLetter}${foundRowIndex}:${avgColLetter}${foundRowIndex}`,
+          [[updatedRatings, String(newAvg)]],
+        );
+
+        // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
+        // Monroe de Rose Thompson" pra quem é dono de Rose Thompson) — nunca
+        // a si mesmo. Pra "musica" o nome do artista vem da coluna N (ACT
+        // PRINCIPAL); álbum/vídeo usam o título "Artista - Título" (mesmo
+        // formato confirmado em Music Videos/Albuns).
+        const artistaNome =
+          tipoMedia === "musica"
+            ? normalizeText(rowData[13])
+            : (() => {
+                const sep = tituloOficial.indexOf(" - ");
+                return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
+              })();
+        if (artistaNome) {
+          const ownerId = await getOwnerIdForArtist(artistaNome).catch(() => undefined);
+          if (ownerId) {
+            await registrarNotificacaoComentario({
+              ownerId,
+              autorId: jogadorIdClean,
+              autorNome: playerClean,
+              tipoMedia,
+              tituloMedia: tituloOficial,
+              topicId: topicIdClean,
+              comentario: comentario.trim(),
+            }).catch((err) => {
+              console.warn("[ForumController] Erro ao notificar dono do artista:", err);
+            });
+          }
+        }
+
+        // Registrar Audit Log na Planilha REGISTRO
+        // (1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg) e somar prestígio —
+        // cada um faz suas próprias idas ao Sheets (registrarAuditLog lê
+        // EDIÇÃO CHARTS + REGISTRO inteiros pra achar a próxima linha
+        // livre; somarPrestigio lê regras + usuário) — exatamente o tipo de
+        // trabalho pesado e sequencial que não pode mais travar a resposta
+        // do comentário.
+        await Promise.all([
+          registrarAuditLog({
+            nomeJogador: playerClean,
+            titulo: tituloOficial,
+            tipo:
+              tipoMedia === "album"
+                ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
+                : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+            isAlbum: tipoMedia === "album",
+            codigoUnico,
+          }),
+          somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(
+            () => {},
+          ),
+        ]);
+      });
     }
 
     return new Response(

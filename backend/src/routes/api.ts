@@ -317,7 +317,10 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Headers": "Content-Type, Range, x-telegram-id",
 };
 
-export async function handleEmpireApiRoutes(request: Request): Promise<Response | null> {
+export async function handleEmpireApiRoutes(
+  request: Request,
+  ctx?: { waitUntil: (promise: Promise<unknown>) => void },
+): Promise<Response | null> {
   const mediaResponse = await handleMediaRoutes(request);
   if (mediaResponse) {
     return mediaResponse;
@@ -1478,7 +1481,7 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await createCommentController(request);
+    response = await createCommentController(request, ctx);
   } else if (url.pathname === "/api/forum/comments") {
     if (request.method !== "GET") {
       return new Response(

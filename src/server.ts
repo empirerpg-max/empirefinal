@@ -472,7 +472,7 @@ export default {
     );
   },
 
-  async fetch(request: Request, env: unknown, ctx: unknown) {
+  async fetch(request: Request, env: unknown, ctx: { waitUntil: (promise: Promise<unknown>) => void }) {
     const url = new URL(request.url);
 
     injectRuntimeEnv(env);
@@ -484,7 +484,11 @@ export default {
     // mostrava vazio em vez de um erro real pra tentar de novo.
     let empirePlayResponse: Response | null;
     try {
-      empirePlayResponse = await handleEmpireApiRoutes(request);
+      // `ctx` repassado até createCommentController (forumController.ts)
+      // pra permitir ctx.waitUntil em trabalho de fundo do comentário (nota/
+      // média, Audit Log, prestígio) sem travar a resposta nem arriscar
+      // perder a escrita quando a isolate é encerrada logo depois dela sair.
+      empirePlayResponse = await handleEmpireApiRoutes(request, ctx);
     } catch (error) {
       console.error("[handleEmpireApiRoutes] Erro não tratado:", error);
       empirePlayResponse = url.pathname.startsWith("/api/")
