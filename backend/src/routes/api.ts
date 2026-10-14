@@ -193,6 +193,7 @@ import { adminDiagSemanasChartController } from "../controllers/adminDiagSemanas
 import { adminDiagComentariosController } from "../controllers/adminDiagComentariosController";
 import { adminBackfillTopicIdsController } from "../controllers/adminBackfillTopicIdsController";
 import { adminDiagComentarioPerdidoController } from "../controllers/adminDiagComentarioPerdidoController";
+import { adminFixComentarioAuditLogJulyHugoController } from "../controllers/adminFixComentarioAuditLogController";
 import { adminDiagTamanhoDadosController } from "../controllers/adminDiagTamanhoDadosController";
 import { adminMigrarCatalogoD1Controller } from "../controllers/adminMigrarCatalogoD1Controller";
 import { adminAlterCatalogoD1AddTiposController } from "../controllers/adminAlterCatalogoD1AddTiposController";
@@ -1850,6 +1851,8 @@ export async function handleEmpireApiRoutes(request: Request): Promise<Response 
     response = await adminBackfillTopicIdsController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-comentario-perdido") {
     response = await adminDiagComentarioPerdidoController(request);
+  } else if (url.pathname === "/api/empire-play/admin/fix-comentario-audit-log-july-hugo") {
+    response = await adminFixComentarioAuditLogJulyHugoController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-tamanho-dados") {
     response = await adminDiagTamanhoDadosController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-auditoria-colunas-videos") {
