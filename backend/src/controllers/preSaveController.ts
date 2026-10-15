@@ -190,6 +190,7 @@ export interface PreSaveFaixa {
   abrirTopico?: boolean;
   mostrarNomeReal: boolean;
   revelada: boolean;
+  instrumental?: boolean;
 }
 
 export interface PreSaveMissaoDia {
@@ -1181,6 +1182,85 @@ export async function vincularFaixaExistentePreSaveController(request: Request):
       { success: false, error: error.message || "Erro ao vincular faixa existente." },
       500,
     );
+  }
+}
+
+// Edita nome/letra/instrumental de uma faixa já cadastrada na campanha —
+// pedido explícito do usuário pra corrigir dados da tracklist sem precisar
+// recriar a campanha inteira. Só o dono da campanha pode editar. Só faz
+// sentido pra faixa INÉDITA (a letra/título de faixa já existente vem do
+// cadastro real em Musicas, editado por lá — ver vincularFaixaExistentePreSaveController
+// acima, que já zera esses campos ao vincular). Editar o título de uma
+// faixa JÁ REVELADA é permitido (corrigir erro de digitação, por ex.), mas
+// nunca MUDA o status de revelada — o nome só vira público pela missão
+// tracklist_reveal normal se ainda estiver oculta.
+export async function editarFaixaPreSavecontroller(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as {
+      campanhaId?: string;
+      jogadorId?: string;
+      faixaNum?: number;
+      titulo?: string;
+      letra?: string;
+      instrumental?: boolean;
+    };
+    const campanhaId = normalizeText(body.campanhaId);
+    const faixaNum = Number(body.faixaNum);
+    if (!campanhaId || !faixaNum) {
+      return jsonResponse({ success: false, error: "campanhaId e faixaNum são obrigatórios." }, 400);
+    }
+    const campanhas = await readAllCampanhas();
+    const c = campanhas.find((x) => x.id === campanhaId);
+    if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
+    if (normalizeText(body.jogadorId) !== c.jogadorId) {
+      return jsonResponse(
+        { success: false, error: "Só quem criou a campanha pode editar a tracklist." },
+        403,
+      );
+    }
+    const faixa = c.faixas.find((f) => f.num === faixaNum);
+    if (!faixa)
+      return jsonResponse(
+        { success: false, error: `Faixa #${faixaNum} não encontrada nessa campanha.` },
+        404,
+      );
+    if (!faixa.inedita) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Essa faixa já existe no catálogo — edite o título/letra dela em Fórum > Músicas.",
+        },
+        400,
+      );
+    }
+
+    if (body.titulo !== undefined) {
+      const tituloLimpo = normalizeText(body.titulo);
+      if (!tituloLimpo) return jsonResponse({ success: false, error: "Título não pode ficar vazio." }, 400);
+      faixa.titulo = tituloLimpo;
+    }
+    if (body.instrumental !== undefined) {
+      faixa.instrumental = !!body.instrumental;
+      // Instrumental e letra são mutuamente exclusivos — marcar uma música
+      // como instrumental some com qualquer letra salva antes.
+      if (faixa.instrumental) faixa.letra = undefined;
+    }
+    if (body.letra !== undefined && !faixa.instrumental) {
+      const letraLimpa = normalizeText(body.letra);
+      faixa.letra = letraLimpa || undefined;
+    }
+
+    await writeCampanha(c);
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Faixa #${faixaNum} ("${faixa.titulo}") da campanha de pre-save "${c.albumTituloFull}" editada (título/letra/instrumental).`,
+      onde: "editarFaixaPreSavecontroller",
+    }).catch(() => {});
+
+    return jsonResponse({ success: true, data: campanhaDoDono(c) });
+  } catch (error: any) {
+    console.error("[editarFaixaPreSavecontroller] Erro:", error);
+    return jsonResponse({ success: false, error: error.message || "Erro ao editar faixa." }, 500);
   }
 }
 

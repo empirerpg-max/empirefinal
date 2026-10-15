@@ -242,6 +242,7 @@ import {
   vincularFaixaExistentePreSaveController,
   compensarMaximoRetroativoPreSaveController,
   auditoriaLancamentosPreSavecontroller,
+  editarFaixaPreSavecontroller,
 } from "../controllers/preSaveController";
 import {
   getBannersAtivosController,
@@ -753,6 +754,8 @@ export async function handleEmpireApiRoutes(
     // sem acesso de rede direto ao domínio do Worker, só faz GET sem
     // corpo. Ver readParamsBodyOrQuery em preSaveController.ts.
     response = await recalcularTetoPreSaveController(request);
+  } else if (url.pathname === "/api/presave/editar-faixa") {
+    response = await editarFaixaPreSavecontroller(request);
   } else if (url.pathname === "/api/presave/vincular-faixa-existente") {
     // Mesmo motivo do endpoint acima — aceita GET (querystring) ou POST.
     response = await vincularFaixaExistentePreSaveController(request);

@@ -14,6 +14,7 @@ import {
   Image as ImageIcon,
   Sparkles,
   Maximize2,
+  Pencil,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { api, driveImg, normalizeNome, formatarDataBR } from "@/lib/api";
@@ -93,6 +94,8 @@ interface Faixa {
   titulo: string;
   mostrarNomeReal: boolean;
   revelada: boolean;
+  instrumental?: boolean;
+  letra?: string;
 }
 
 interface MissaoDia {
@@ -1175,6 +1178,13 @@ function CalendarioCampanha({
         </div>
       )}
 
+      <TracklistEditor
+        campanhaId={campanha.id}
+        telegramId={telegramId}
+        faixas={campanha.faixas}
+        onAtualizada={(c) => onAtualizada(c)}
+      />
+
       {campanha.status === "ativa" && (
         <button onClick={cancelar} className="text-xs font-bold text-red-400 hover:text-red-300">
           Cancelar campanha
@@ -1204,6 +1214,187 @@ function CalendarioCampanha({
           onClose={() => setCapaExpandida(false)}
         />
       )}
+    </div>
+  );
+}
+
+// -------------------- EDITAR TRACKLIST --------------------
+
+// Só edita faixa INÉDITA (f.inedita) — faixa já existente no catálogo tem
+// seu título/letra editados por lá (Fórum > Músicas), não aqui (ver
+// editarFaixaPreSavecontroller, backend). Editar aqui nunca muda o status
+// de "revelada" — só corrige nome/letra/instrumental.
+function TracklistEditor({
+  campanhaId,
+  telegramId,
+  faixas,
+  onAtualizada,
+}: {
+  campanhaId: string;
+  telegramId: string;
+  faixas: Faixa[];
+  onAtualizada: (c: Campanha) => void;
+}) {
+  const [editando, setEditando] = useState<Faixa | null>(null);
+  const editaveis = faixas.filter((f) => f.inedita);
+  if (editaveis.length === 0) return null;
+
+  return (
+    <div>
+      <h3 className="text-xs font-black uppercase tracking-wider text-neutral-400 mb-2">
+        Tracklist
+      </h3>
+      <div className="space-y-1.5">
+        {editaveis.map((f) => (
+          <button
+            key={f.num}
+            onClick={() => {
+              haptic.selection?.();
+              setEditando(f);
+            }}
+            className="w-full flex items-center gap-2.5 p-2.5 rounded-xl bg-neutral-800/40 border border-white/10 hover:border-fuchsia-400/40 transition-colors text-left min-w-0"
+          >
+            <span className="size-6 rounded-lg bg-white/5 flex items-center justify-center text-[10px] font-black text-neutral-400 shrink-0">
+              {f.num}
+            </span>
+            <span className="flex-1 min-w-0 truncate text-sm font-bold text-white">
+              {f.revelada ? f.titulo : `Track ${f.num}`}
+            </span>
+            {f.instrumental && (
+              <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-neutral-400 bg-white/5 px-1.5 py-0.5 rounded-full">
+                Instrumental
+              </span>
+            )}
+            <Pencil className="size-3.5 text-neutral-500 shrink-0" />
+          </button>
+        ))}
+      </div>
+
+      {editando && (
+        <EditarFaixaModal
+          campanhaId={campanhaId}
+          telegramId={telegramId}
+          faixa={editando}
+          onFechar={() => setEditando(null)}
+          onSalva={(c) => {
+            setEditando(null);
+            onAtualizada(c);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditarFaixaModal({
+  campanhaId,
+  telegramId,
+  faixa,
+  onFechar,
+  onSalva,
+}: {
+  campanhaId: string;
+  telegramId: string;
+  faixa: Faixa;
+  onFechar: () => void;
+  onSalva: (c: Campanha) => void;
+}) {
+  const [titulo, setTitulo] = useState(faixa.titulo);
+  const [letra, setLetra] = useState(faixa.letra || "");
+  const [instrumental, setInstrumental] = useState(!!faixa.instrumental);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const salvar = async () => {
+    if (!titulo.trim()) return setErro("O título não pode ficar vazio.");
+    setErro("");
+    setSalvando(true);
+    try {
+      const res = await fetch("/api/presave/editar-faixa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campanhaId,
+          jogadorId: telegramId,
+          faixaNum: faixa.num,
+          titulo: titulo.trim(),
+          letra,
+          instrumental,
+        }),
+      }).then((r) => r.json());
+      if (!res.success) throw new Error(res.error || "Falha ao salvar a faixa.");
+      haptic.success?.();
+      onSalva(res.data);
+    } catch (err: any) {
+      setErro(err.message || "Falha ao salvar a faixa.");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4">
+      <div className="w-full sm:max-w-md bg-neutral-900 border border-white/10 rounded-t-2xl sm:rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h3 className="font-black text-white text-sm">Editar faixa {faixa.num}</h3>
+          <button onClick={onFechar} className="text-neutral-400 hover:text-white">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400 block mb-1.5">
+            Nome da faixa
+          </label>
+          <input
+            value={titulo}
+            onChange={(e) => setTitulo(e.target.value)}
+            className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
+            placeholder="Nome da faixa"
+          />
+          {!faixa.revelada && (
+            <p className="text-[11px] text-neutral-500 mt-1">
+              Essa faixa ainda está oculta pro público — vai continuar aparecendo como "Track{" "}
+              {faixa.num}" até a missão de revelação.
+            </p>
+          )}
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={instrumental}
+            onChange={(e) => setInstrumental(e.target.checked)}
+            className="size-4 accent-fuchsia-500"
+          />
+          <span className="text-sm text-white font-bold">Faixa instrumental (sem letra)</span>
+        </label>
+
+        {!instrumental && (
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400 block mb-1.5">
+              Letra
+            </label>
+            <textarea
+              value={letra}
+              onChange={(e) => setLetra(e.target.value)}
+              rows={8}
+              className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white resize-none"
+              placeholder="Cole a letra da faixa aqui..."
+            />
+          </div>
+        )}
+
+        {erro && <p className="text-xs text-red-400">{erro}</p>}
+
+        <button
+          onClick={salvar}
+          disabled={salvando}
+          className="w-full px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-fuchsia-500 hover:bg-fuchsia-400 text-black disabled:opacity-50"
+        >
+          {salvando ? "Salvando..." : "Salvar faixa"}
+        </button>
+      </div>
     </div>
   );
 }
