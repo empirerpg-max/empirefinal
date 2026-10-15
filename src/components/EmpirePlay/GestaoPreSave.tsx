@@ -1275,6 +1275,10 @@ function MissaoModal({
   const [caminhoMakingOf, setCaminhoMakingOf] = useState<"tiktok" | "video_real">("tiktok");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  // Confirmação explícita pro jogador depois de revelar — sem isso, a
+  // faixa só "some" da lista de ocultas sem nenhum feedback de qual nome
+  // virou público.
+  const [faixaRevelConfirmada, setFaixaRevelConfirmada] = useState<string | null>(null);
 
   const faixasOcultas = faixas.filter((f) => !f.revelada);
 
@@ -1381,6 +1385,15 @@ function MissaoModal({
         );
       haptic.success?.();
       setComposerOpen(false);
+      if (tipo === "tracklist_reveal") {
+        // Nome real só existe no retorno DEPOIS de confirmado — o dropdown
+        // mostrava só "Track N" (ver option abaixo), então esse é o
+        // primeiro momento em que o jogador vê de fato o que foi revelado.
+        const faixaRevelada = (res.data?.faixas as { num: number; titulo: string }[] | undefined)?.find(
+          (f) => f.num === faixaOrdemRevelada,
+        );
+        setFaixaRevelConfirmada(faixaRevelada?.titulo || null);
+      }
       onCompletada();
     } catch (err: any) {
       setErro(err.message || "Falha ao confirmar a missão.");
@@ -1661,18 +1674,28 @@ function MissaoModal({
               </div>
             )}
             {tipo === "tracklist_reveal" && (
-              <select
-                value={faixaOrdemRevelada}
-                onChange={(e) => setFaixaOrdemRevelada(Number(e.target.value))}
-                className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
-              >
-                <option value="">Escolha a faixa a revelar...</option>
-                {faixasOcultas.map((f) => (
-                  <option key={f.num} value={f.num}>
-                    {f.titulo}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={faixaOrdemRevelada}
+                  onChange={(e) => setFaixaOrdemRevelada(Number(e.target.value))}
+                  className="w-full bg-neutral-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
+                >
+                  {/* Nome real só aparece DEPOIS da missão confirmada (ver
+                      faixaRevelConfirmada) — mostrar f.titulo aqui vazaria o
+                      nome antes da "revelação" de verdade acontecer. */}
+                  <option value="">Escolha a faixa a revelar...</option>
+                  {faixasOcultas.map((f) => (
+                    <option key={f.num} value={f.num}>
+                      Track {f.num}
+                    </option>
+                  ))}
+                </select>
+                {faixaRevelConfirmada && (
+                  <p className="text-xs font-bold text-fuchsia-300">
+                    🎉 Faixa revelada: {faixaRevelConfirmada}
+                  </p>
+                )}
+              </>
             )}
             <button
               type="button"
