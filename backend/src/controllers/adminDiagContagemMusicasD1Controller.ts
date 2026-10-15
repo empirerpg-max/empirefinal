@@ -33,6 +33,11 @@ export async function adminDiagContagemMusicasD1Controller(): Promise<Response> 
   const sheetRows = await googleSheetsService.principal.readValues("Musicas", "A:X").catch(() => []);
   let sheetsTotal = 0;
   let sheetsPendentes = 0;
+  // Datas das linhas pendentes — pra saber se é backlog histórico (datas
+  // espalhadas no passado) ou algo recém-criado numa rajada (datas de
+  // hoje concentradas), o que apontaria causas bem diferentes.
+  const datasPendentes: string[] = [];
+  const albunsPendentes = new Map<string, number>();
   const amostraDivergente: { linha: number; titulo: string; pendenteSheets: string; emD1: boolean; pendenteD1: number | null }[] = [];
   const codigosD1 = await db.prepare("SELECT codigo_unico, pendente FROM musicas").all<{ codigo_unico: string; pendente: number }>();
   const mapaD1 = new Map((codigosD1.results || []).map((r) => [r.codigo_unico, r.pendente]));
@@ -42,7 +47,12 @@ export async function adminDiagContagemMusicasD1Controller(): Promise<Response> 
     if (!row || !row.some((c) => normalizeText(c))) continue;
     sheetsTotal++;
     const pendenteSheets = normalizeComparison(normalizeText(row[23])) === "sim";
-    if (pendenteSheets) sheetsPendentes++;
+    if (pendenteSheets) {
+      sheetsPendentes++;
+      datasPendentes.push(normalizeText(row[0]) || "(sem data)");
+      const album = normalizeText(row[10]) || "(sem álbum)";
+      albunsPendentes.set(album, (albunsPendentes.get(album) || 0) + 1);
+    }
     const codigo = normalizeText(codigoPorLinha[i]?.[0]);
     const pendenteD1 = codigo && mapaD1.has(codigo) ? mapaD1.get(codigo)! : null;
     const divergente = codigo && mapaD1.has(codigo) && (pendenteD1 === 1) !== pendenteSheets;
@@ -69,6 +79,16 @@ export async function adminDiagContagemMusicasD1Controller(): Promise<Response> 
         sheets: {
           total: sheetsTotal,
           comPendenteSim: sheetsPendentes,
+          distribuicaoDatasPendentes: datasPendentes.reduce(
+            (acc, d) => {
+              acc[d] = (acc[d] || 0) + 1;
+              return acc;
+            },
+            {} as Record<string, number>,
+          ),
+          top10AlbunsComMaisPendentes: [...albunsPendentes.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10),
         },
         amostraDivergente,
         amostra: amostra.results,
