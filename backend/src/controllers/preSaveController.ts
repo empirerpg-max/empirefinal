@@ -1567,7 +1567,25 @@ async function validarEExecutarMissao(
 
 export async function completarMissaoPreSaveController(request: Request): Promise<Response> {
   try {
-    const body = (await request.json().catch(() => ({}))) as CompletarMissaoPayload;
+    // dryRun (só GET, só pra investigar via admin-call.yml) — roda a MESMA
+    // validação de ponta a ponta sem persistir nada, pra descobrir qual
+    // checagem está barrando um jogador sem arriscar completar a missão
+    // dele sem querer (admin-call.yml não manda corpo POST, só querystring).
+    const url = new URL(request.url);
+    const dryRun = url.searchParams.get("dryRun") === "1";
+    const body: CompletarMissaoPayload = dryRun
+      ? {
+          campanhaId: url.searchParams.get("campanhaId") || "",
+          dia: Number(url.searchParams.get("dia") || 0),
+          jogadorId: url.searchParams.get("jogadorId") || "",
+          rede: url.searchParams.get("rede") || "instagram",
+          postJaPublicado: true,
+          faixaOrdemRevelada: url.searchParams.get("faixaOrdemRevelada")
+            ? Number(url.searchParams.get("faixaOrdemRevelada"))
+            : undefined,
+          perfilArtista: url.searchParams.get("perfilArtista") || undefined,
+        }
+      : ((await request.json().catch(() => ({}))) as CompletarMissaoPayload);
     const campanhaId = normalizeText(body.campanhaId);
     const dia = Number(body.dia);
     if (!campanhaId || !dia)
@@ -1611,7 +1629,11 @@ export async function completarMissaoPreSaveController(request: Request): Promis
       );
 
     const resultado = await validarEExecutarMissao(c, missao, body);
-    if (!resultado.ok) return jsonResponse({ success: false, error: resultado.error }, 400);
+    if (!resultado.ok) return jsonResponse({ success: false, error: resultado.error, dryRun }, 400);
+
+    if (dryRun) {
+      return jsonResponse({ success: true, dryRun: true, passaria: true, dados: resultado.dados });
+    }
 
     missao.status = "completa";
     missao.completadoEm = new Date().toISOString();
