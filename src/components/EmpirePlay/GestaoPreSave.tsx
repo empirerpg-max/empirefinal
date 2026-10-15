@@ -1554,10 +1554,19 @@ function MissaoModal({
   // novo, ver preSaveController.ts).
   const confirmarMissaoComPost = async (result: { id: string; payload: Record<string, unknown> }) => {
     setErro("");
+    // BUG REAL corrigido aqui (reportado em produção, 2026-10): esses 2
+    // retornos antecipados não fechavam o composer — ele cobre a tela
+    // inteira (z-[110]), então o jogador via o post sair de verdade no
+    // Social e, em seguida, nada visível acontecia (a mensagem de erro
+    // ficava escondida atrás do composer ainda aberto). Mesma causa raiz
+    // do fix anterior (sucesso fechando o modal sem feedback), só que
+    // nesse caminho de erro específico.
     if (tipo === "bastidores" && !perfilArtista) {
+      setComposerOpen(false);
       return setErro('Escolha um perfil de "Tá na Mídia" para publicar.');
     }
     if (tipo === "tracklist_reveal" && !faixaOrdemRevelada) {
+      setComposerOpen(false);
       return setErro("Escolha qual faixa oculta revelar.");
     }
     const tipoRede = String(result.payload.tipo || "").toLowerCase();
