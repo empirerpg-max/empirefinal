@@ -1470,6 +1470,17 @@ function MissaoModal({
   // faixa só "some" da lista de ocultas sem nenhum feedback de qual nome
   // virou público.
   const [faixaRevelConfirmada, setFaixaRevelConfirmada] = useState<string | null>(null);
+  // BUG REAL corrigido aqui (reportado em produção, 2026-10): antes,
+  // sucesso chamava onCompletada() na mesma passada de render que setava
+  // faixaRevelConfirmada — onCompletada fecha esse modal inteiro
+  // (setDiaAberto(null) no componente pai), desmontando MissaoModal ANTES
+  // de qualquer confirmação aparecer na tela. Pro jogador, a experiência
+  // era: publica no Instagram, a tela simplesmente volta pra Gestão sem
+  // nenhum feedback — parecia que "não deixava publicar", mesmo quando a
+  // missão tinha sido confirmada de verdade no backend. Agora o sucesso
+  // mostra uma tela de confirmação própria, e só fecha quando o jogador
+  // confirma ter visto (onCompletada só dispara aí).
+  const [missaoConcluida, setMissaoConcluida] = useState(false);
 
   const faixasOcultas = faixas.filter((f) => !f.revelada);
 
@@ -1528,7 +1539,7 @@ function MissaoModal({
       }).then((r) => r.json());
       if (!res.success) throw new Error(res.error || "Falha ao completar missão.");
       haptic.success?.();
-      onCompletada();
+      setMissaoConcluida(true);
     } catch (err: any) {
       setErro(err.message || "Falha ao completar missão.");
     } finally {
@@ -1585,8 +1596,12 @@ function MissaoModal({
         );
         setFaixaRevelConfirmada(faixaRevelada?.titulo || null);
       }
-      onCompletada();
+      setMissaoConcluida(true);
     } catch (err: any) {
+      // Fecha o composer no erro também — ele cobre a tela inteira
+      // (z-[110]), então enquanto ficasse aberto o jogador nunca via essa
+      // mensagem de erro (ela some atrás do composer).
+      setComposerOpen(false);
       setErro(err.message || "Falha ao confirmar a missão.");
     } finally {
       setConfirmando(false);
@@ -1628,9 +1643,36 @@ function MissaoModal({
             <X className="size-4" />
           </button>
         </div>
-        <p className="text-xs text-neutral-400">{info.descricao}</p>
 
-        {tipo === "entrevista" ? (
+        {missaoConcluida ? (
+          <div className="py-6 flex flex-col items-center text-center gap-3">
+            <div className="size-14 rounded-full bg-emerald-500/15 flex items-center justify-center">
+              <Check className="size-7 text-emerald-400" />
+            </div>
+            <div>
+              <p className="font-black text-white">Missão concluída!</p>
+              {faixaRevelConfirmada ? (
+                <p className="text-sm text-fuchsia-300 font-bold mt-1">
+                  🎉 Faixa revelada: {faixaRevelConfirmada}
+                </p>
+              ) : (
+                <p className="text-xs text-neutral-400 mt-1">
+                  O post já está no Social e o contador de pre-save foi atualizado.
+                </p>
+              )}
+            </div>
+            <button
+              onClick={onCompletada}
+              className="w-full px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-fuchsia-500 hover:bg-fuchsia-400 text-black"
+            >
+              Fechar
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-neutral-400">{info.descricao}</p>
+
+            {tipo === "entrevista" ? (
           <div className="space-y-3">
             <input
               value={entrevistaTitulo}
@@ -1915,6 +1957,8 @@ function MissaoModal({
           >
             {enviando ? "Enviando..." : "Completar missão"}
           </button>
+        )}
+          </>
         )}
       </div>
 
