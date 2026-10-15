@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { X, Image as ImageIcon, ZoomIn } from "lucide-react";
+import { toast } from "sonner";
 
 function clamp01(v: number) {
   return Math.min(1, Math.max(0, v));
@@ -56,7 +57,23 @@ export function ImageCropModal({
         setNatural({ w: img.naturalWidth, h: img.naturalHeight });
         setRawSrc(src);
       };
+      // BUG REAL corrigido aqui (reportado em produção, 2026-10): sem esse
+      // handler, uma foto que o navegador não consegue decodificar (muito
+      // comum em fotos tiradas direto no iPhone, formato HEIC — bastante
+      // WebView/navegador mobile não renderiza isso em <img>) travava aqui
+      // pra sempre, sem erro nenhum — o modal ficava preso no spinner,
+      // "Salvar" nunca habilitava, e o jogador não tinha como saber o que
+      // fazer. Agora cai pro arquivo original sem recorte (o app já lida
+      // com proporção arbitrária em qualquer lugar que mostra a imagem).
+      img.onerror = () => {
+        toast.error("Não deu pra abrir essa foto pra recortar — vou usar ela como está.");
+        onUseOriginal();
+      };
       img.src = src;
+    };
+    reader.onerror = () => {
+      toast.error("Não deu pra ler essa foto — tenta escolher outra.");
+      onCancel();
     };
     reader.readAsDataURL(file);
   }, [file]);
@@ -116,7 +133,7 @@ export function ImageCropModal({
       canvas.width = targetW;
       canvas.height = targetH;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      if (!ctx) throw new Error("Canvas indisponível nesse navegador.");
       const img = new Image();
       await new Promise<void>((resolve, reject) => {
         img.onload = () => resolve();
@@ -125,7 +142,15 @@ export function ImageCropModal({
       });
       ctx.drawImage(img, geo.dx, geo.dy, geo.drawW, geo.drawH);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", 0.92));
-      if (blob) onCropped(blob);
+      if (!blob) throw new Error("Falha ao gerar o arquivo recortado.");
+      onCropped(blob);
+    } catch (err) {
+      // BUG REAL corrigido aqui (mesma classe do fix no useEffect acima):
+      // qualquer falha aqui (canvas.toBlob indisponível, imagem corrompida)
+      // deixava "Salvar alterações" voltar ao normal sem avisar nada — o
+      // jogador clicava de novo, nada mudava, achava que o app travou.
+      console.error("[ImageCropModal] Falha ao recortar:", err);
+      toast.error("Não deu pra recortar essa foto — tenta usar ela sem recorte.");
     } finally {
       setSaving(false);
     }
