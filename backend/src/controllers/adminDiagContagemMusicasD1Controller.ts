@@ -1,4 +1,5 @@
 import { getCatalogoDb } from "../services/catalogoDbService";
+import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 
 // Diagnóstico read-only: getEmpirePlayMusicasController (Catálogo/Fórum)
 // devolveu só 196 itens em produção depois do pivot pra D1, quando o
@@ -25,13 +26,51 @@ export async function adminDiagContagemMusicasD1Controller(): Promise<Response> 
     .all<{ n: number }>();
   const amostra = await db.prepare("SELECT codigo_unico, id_topico, titulo, pendente FROM musicas LIMIT 10").all();
 
+  // Comparação com a FONTE DE VERDADE (Sheets) — pra saber se o D1 só está
+  // refletindo um crescimento real de faixas pendentes (jogo rodou,
+  // álbuns novos criados com faixas sem tópico aberto) ou se é um bug de
+  // sincronização nos hooks de escrita (ver gestaoController.ts).
+  const sheetRows = await googleSheetsService.principal.readValues("Musicas", "A:X").catch(() => []);
+  let sheetsTotal = 0;
+  let sheetsPendentes = 0;
+  const amostraDivergente: { linha: number; titulo: string; pendenteSheets: string; emD1: boolean; pendenteD1: number | null }[] = [];
+  const codigosD1 = await db.prepare("SELECT codigo_unico, pendente FROM musicas").all<{ codigo_unico: string; pendente: number }>();
+  const mapaD1 = new Map((codigosD1.results || []).map((r) => [r.codigo_unico, r.pendente]));
+  const codigoPorLinha = await googleSheetsService.principal.readValues("Musicas", "Z:Z").catch(() => []);
+  for (let i = 1; i < sheetRows.length; i++) {
+    const row = sheetRows[i];
+    if (!row || !row.some((c) => normalizeText(c))) continue;
+    sheetsTotal++;
+    const pendenteSheets = normalizeComparison(normalizeText(row[23])) === "sim";
+    if (pendenteSheets) sheetsPendentes++;
+    const codigo = normalizeText(codigoPorLinha[i]?.[0]);
+    const pendenteD1 = codigo && mapaD1.has(codigo) ? mapaD1.get(codigo)! : null;
+    const divergente = codigo && mapaD1.has(codigo) && (pendenteD1 === 1) !== pendenteSheets;
+    if (divergente && amostraDivergente.length < 15) {
+      amostraDivergente.push({
+        linha: i + 1,
+        titulo: normalizeText(row[7]),
+        pendenteSheets: row[23] || "",
+        emD1: mapaD1.has(codigo),
+        pendenteD1,
+      });
+    }
+  }
+
   return new Response(
     JSON.stringify(
       {
         success: true,
-        totalNaTabela: total.results?.[0]?.n ?? null,
-        comPendenteIgual1: pendentes.results?.[0]?.n ?? null,
-        semTitulo: semTitulo.results?.[0]?.n ?? null,
+        d1: {
+          totalNaTabela: total.results?.[0]?.n ?? null,
+          comPendenteIgual1: pendentes.results?.[0]?.n ?? null,
+          semTitulo: semTitulo.results?.[0]?.n ?? null,
+        },
+        sheets: {
+          total: sheetsTotal,
+          comPendenteSim: sheetsPendentes,
+        },
+        amostraDivergente,
         amostra: amostra.results,
       },
       null,
