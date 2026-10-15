@@ -716,7 +716,11 @@ export async function handleEmpireApiRoutes(
     }
     response = await criarCampanhaPreSaveController(request);
   } else if (url.pathname === "/api/presave/completar-missao") {
-    if (request.method !== "POST") {
+    // dryRun=1 é a única exceção que aceita GET (sem corpo) — admin-call.yml
+    // só faz GET, usado só pra investigar qual checagem barraria um jogador
+    // real sem arriscar completar a missão dele sem querer (ver
+    // completarMissaoPreSaveController, nunca persiste nada em dryRun).
+    if (request.method !== "POST" && url.searchParams.get("dryRun") !== "1") {
       return new Response(
         JSON.stringify({ success: false, error: "Use POST para /api/presave/completar-missao." }),
         {
