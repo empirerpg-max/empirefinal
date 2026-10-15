@@ -14,11 +14,18 @@ export async function adminDiagBannerOpcoesController(request: Request): Promise
   const url = new URL(request.url);
   const telegramId = normalizeText(url.searchParams.get("telegramId"));
   const artista = normalizeText(url.searchParams.get("artista"));
-  if (!artista) {
-    return new Response(JSON.stringify({ success: false, error: "Use ?artista=<nome>" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
+  // search=1 pula o filtro de artista (que é exatamente o que pode estar
+  // com bug) — dump cru do catálogo inteiro, filtrado só por texto no
+  // título, pra achar álbuns cujo "artista" gravado não bate com o nome do
+  // artista de verdade (ex: Albuns não tem coluna própria de artista — ver
+  // buildCatalogItem, usa nome_do_criador/artista como fallback, que pra
+  // essa aba é quem publicou, não a banda).
+  const search = normalizeText(url.searchParams.get("search"));
+  if (!artista && !search) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Use ?artista=<nome> ou ?search=<texto>" }),
+      { status: 400, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
   }
 
   const meusArtistas = telegramId ? await getArtistNamesForOwner(telegramId) : [];
@@ -27,8 +34,8 @@ export async function adminDiagBannerOpcoesController(request: Request): Promise
     : null;
 
   const [musicas, albuns] = await Promise.all([
-    getCatalog("musicas", { artist: artista }),
-    getCatalog("albuns", { artist: artista }),
+    getCatalog("musicas", artista ? { artist: artista } : { search }),
+    getCatalog("albuns", artista ? { artist: artista } : { search }),
   ]);
 
   const dump = (items: typeof musicas) =>

@@ -126,8 +126,26 @@ function buildCatalogItem(
       "titulo_do_album",
     ]) || "";
 
-  const artist =
+  let artist =
     getValue(record, ["act_principal", "artista", "nome_do_criador", "nome_do_artista"]) || "";
+
+  // A aba "Albuns" não tem coluna própria de artista — "nome_do_criador"
+  // guarda o JOGADOR que publicou (pode ser diferente do artista, ex:
+  // admin publicando por outra pessoa, ou colaboração), não o nome do
+  // artista de verdade. O título do álbum SEMPRE vem como "Artista -
+  // Título" (mesma convenção de createAlbumController/empirePlayController.ts
+  // buildCleanItem), então o split do título é sempre mais confiável.
+  // BUG REAL corrigido aqui (reportado em produção, 2026-10): sem esse
+  // split, getBannerOpcoesController filtrava álbuns comparando o nome do
+  // artista contra "nome_do_criador" — álbuns cujo criador não era
+  // literalmente o nome do artista (ex: "AFTERPARTY", "In Honor Of...")
+  // sumiam da lista do Spotlight Banner mesmo pertencendo ao artista certo.
+  if (sheetName === "Albuns" && title) {
+    const albumDashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
+    if (albumDashMatch) {
+      artist = albumDashMatch[1].trim();
+    }
+  }
 
   // ARTISTA 2-6 — mesma convenção de empirePlayController.ts buildCleanItem.
   const featArtists = [
