@@ -115,7 +115,7 @@ function buildCatalogItem(
   record: SheetRecord,
   index: number,
 ): CatalogItem {
-  const title =
+  let title =
     getValue(record, [
       "nome_da_musica",
       "nome_do_video",
@@ -134,7 +134,9 @@ function buildCatalogItem(
   // admin publicando por outra pessoa, ou colaboração), não o nome do
   // artista de verdade. O título do álbum SEMPRE vem como "Artista -
   // Título" (mesma convenção de createAlbumController/empirePlayController.ts
-  // buildCleanItem), então o split do título é sempre mais confiável.
+  // buildCleanItem), então o split do título é sempre mais confiável — e
+  // também limpa o título exibido do mesmo prefixo (senão a lista mostra
+  // "Rayna - AFTERPARTY" ao lado de álbuns já limpos tipo "Eternal (2013)").
   // BUG REAL corrigido aqui (reportado em produção, 2026-10): sem esse
   // split, getBannerOpcoesController filtrava álbuns comparando o nome do
   // artista contra "nome_do_criador" — álbuns cujo criador não era
@@ -144,6 +146,7 @@ function buildCatalogItem(
     const albumDashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
     if (albumDashMatch) {
       artist = albumDashMatch[1].trim();
+      title = albumDashMatch[2].trim();
     }
   }
 
