@@ -12,6 +12,10 @@ import { registrarNotificacaoComentario } from "./notificacoesController";
 import { processarComentarioParaBanner } from "./bannerController";
 import { getPreSaveLockParaTopico } from "./preSaveController";
 import { insertComentarioD1 } from "../services/catalogoDbService";
+import {
+  getCatalogoDb,
+  buildComentarioMusicaInsertStatement,
+} from "../services/comentariosMusicasDbService";
 
 const USUARIOS_SHEET = "Usuários";
 
@@ -518,6 +522,35 @@ export async function createCommentController(
         texto: comentario.trim(),
       }),
     );
+
+    // Espelha também na tabela D1 dedicada `comentarios_musicas` (ver
+    // comentariosMusicasDbService.ts) — só pra música, e só dentro do mesmo
+    // runInBackground (nunca bloqueia/falha o comentário). `musica_id` é o
+    // Código único, não o ID do tópico — precisa resolver pela tabela
+    // `musicas` antes do insert; sem match (música ainda não espelhada lá),
+    // pula em silêncio, igual insertComentarioD1 acima.
+    if (tipoMedia === "musica") {
+      runInBackground(ctx, async () => {
+        const db = getCatalogoDb();
+        if (!db) return;
+        const result = await db
+          .prepare("SELECT codigo_unico FROM musicas WHERE id_topico = ?")
+          .bind(topicIdClean)
+          .all<{ codigo_unico: string }>()
+          .catch(() => null);
+        const musicaId = result?.results?.[0]?.codigo_unico;
+        if (!musicaId) return;
+        await buildComentarioMusicaInsertStatement(db, {
+          musicaId,
+          jogadorId: jogadorIdClean || null,
+          jogadorNome: playerClean || null,
+          comentario: comentario.trim(),
+          reacoesJson: null,
+          dataHora: nowStr,
+          replyTo: null,
+        }).run();
+      });
+    }
 
     // Spotlight Banner (Market): se esse comentário veio de alguém que
     // clicou num banner ligado a esse tópico, libera o bônus de playlist

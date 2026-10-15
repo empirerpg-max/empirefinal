@@ -10,6 +10,77 @@ import {
   SheetRecord,
 } from "../services/googleSheetsService";
 import { getUserProfile } from "./userController";
+import { getCatalogoDb } from "../services/musicasDbService";
+
+// Leitura do Catálogo/Fórum de MÚSICA agora vem do D1 (tabela `musicas`),
+// não mais do Sheets (pivot autorizado pelo usuário, 2026-10-15) — vídeo e
+// álbum continuam lendo do Sheets normalmente, fora de escopo aqui. Essa
+// função devolve as linhas no MESMO shape de SheetRecord (chaves de
+// cabeçalho normalizado) que buildCleanItem já espera pra aba "Musicas",
+// pra reusar a função sem duplicar toda a lógica de parsing dela.
+interface MusicaD1Row {
+  codigo_unico: string;
+  id_topico: string | null;
+  titulo: string;
+  artista: string;
+  artista_2: string | null;
+  artista_3: string | null;
+  artista_4: string | null;
+  artista_5: string | null;
+  artista_6: string | null;
+  album: string | null;
+  capa_url: string | null;
+  audio_url: string | null;
+  letra: string | null;
+  letra_sincronizada: string | null;
+  genero: string | null;
+  data_lancamento: string | null;
+  data_lancamento_iso: string | null;
+  weeks: number | null;
+  ordem: number | null;
+  pendente: number;
+}
+
+function musicaD1RowToSheetRecord(row: MusicaD1Row): SheetRecord {
+  return {
+    nome_da_musica: row.titulo || "",
+    act_principal: row.artista || "",
+    artista_2: row.artista_2 || "",
+    artista_3: row.artista_3 || "",
+    artista_4: row.artista_4 || "",
+    artista_5: row.artista_5 || "",
+    artista_6: row.artista_6 || "",
+    album: row.album || "",
+    capa_da_musica: row.capa_url || "",
+    // Mesma coluna que o Sheets usava pra áudio (ver createSongController,
+    // "C - ID do arquivo") — buildCleanItem lê essa mesma chave.
+    id_do_arquivo: row.audio_url || "",
+    letra: row.letra || "",
+    letra_sincronizada: row.letra_sincronizada || "",
+    genero: row.genero || "",
+    data_de_lancamento: row.data_lancamento || "",
+    id_do_topico: row.id_topico || "",
+    ordem: row.ordem != null ? String(row.ordem) : "",
+    weeks: row.weeks != null ? String(row.weeks) : "",
+    codigo_unico: row.codigo_unico || "",
+    // getValue(["pendente"]) compara contra "sim" (ver filtro em
+    // getEmpirePlayMusicasController/getEmpirePlayHomeController) — mesmo
+    // texto que o Sheets guardava na coluna X.
+    pendente: row.pendente ? "Sim" : "Não",
+  };
+}
+
+async function readMusicasFromD1(): Promise<SheetRecord[] | null> {
+  const db = getCatalogoDb();
+  if (!db) return null;
+  try {
+    const result = await db.prepare("SELECT * FROM musicas").all<MusicaD1Row>();
+    return (result?.results || []).map(musicaD1RowToSheetRecord);
+  } catch (err) {
+    console.warn("[empirePlayController] Falha ao ler `musicas` do D1:", err);
+    return null;
+  }
+}
 
 function levenshtein(a: string, b: string): number {
   const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
@@ -920,7 +991,10 @@ export async function getEmpirePlayMusicasController(request: Request): Promise<
   );
 
   try {
-    const records = await sheetsService.readSheetObjects("Musicas");
+    // Catálogo de música agora lê do D1 (ver readMusicasFromD1 acima) — cai
+    // pro Sheets só se o binding D1 não estiver disponível no ambiente
+    // (ex: local sem CATALOGO_DB), nunca em produção.
+    const records = (await readMusicasFromD1()) ?? (await sheetsService.readSheetObjects("Musicas"));
     // Faixa "Pendente" (Sim) nunca aparece no Fórum — só existe internamente
     // até alguém decidir lançar oficialmente nos charts (mesma regra já
     // aplicada na playlist Hot, ver getEmpirePlayHomeController).

@@ -9,6 +9,26 @@ import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { getOwnerIdForArtist } from "./artistasController";
 import { upsertMidiaD1 } from "../services/catalogoDbService";
+import {
+  getCatalogoDb,
+  buildMusicaUpsertStatement,
+  type MusicaUpsert,
+} from "../services/musicasDbService";
+
+// Espelho best-effort pra tabela D1 dedicada `musicas` (ver
+// musicasDbService.ts) — ADITIVO ao upsertMidiaD1 (tabela `midia` antiga,
+// que continua intacta): essa é a 2ª escrita, non-blocking, que alimenta a
+// leitura do Catálogo/Fórum vindo do D1 (ver empirePlayController.ts). Nunca
+// lança — qualquer erro (binding indisponível, SQL, rede) é só logado.
+function upsertMusicaD1(m: MusicaUpsert): void {
+  const db = getCatalogoDb();
+  if (!db) return;
+  buildMusicaUpsertStatement(db, m)
+    .run()
+    .catch((err: unknown) =>
+      console.warn("[gestaoController] Falha ao gravar em `musicas` D1 (ignorado):", err),
+    );
+}
 
 // Coluna H de Musicas sempre guarda "Artista - Título" junto — se algum
 // texto de entrada já vier com esse prefixo (autopreenchimento, busca de
@@ -495,6 +515,32 @@ export async function createSongController(request: Request): Promise<Response> 
         .catch((err) =>
           console.warn("[createSongController] Erro ao copiar Código único pra Musicas!Z:", err),
         );
+    }
+
+    // Espelho best-effort pra `musicas` D1 — só agora porque o Código único
+    // (PK da tabela nova) só existe a partir daqui (gerado em EDIÇÃO CHARTS,
+    // ou copiado da música referenciada na opção c).
+    if (codigoUnicoGerado) {
+      upsertMusicaD1({
+        codigoUnico: codigoUnicoGerado,
+        idTopico: topicId,
+        titulo: fullTitle,
+        artista: artistaPrincipal,
+        artista2: participantesLimpos[0] || null,
+        artista3: participantesLimpos[1] || null,
+        artista4: participantesLimpos[2] || null,
+        artista5: participantesLimpos[3] || null,
+        artista6: participantesLimpos[4] || null,
+        audioUrl: mediaUrl || null,
+        capaUrl: capaUrl || null,
+        letra: letra || null,
+        tipoSingle: tipoSingle || "LEAD SINGLE",
+        tipoMusica: tipoMusica || "SOLO",
+        dataLancamento: dataFormatada,
+        idCriador: jogadorId || null,
+        comentariosPara: topicId,
+        pendente: pendente === "Sim",
+      });
     }
 
     // 2. Gravar em REGISTRO DE MÚSICA na planilha de Registros — só as
@@ -1528,6 +1574,35 @@ async function processarFaixasDoAlbum(
           .catch((err) =>
             console.warn("[processarFaixasDoAlbum] Erro ao copiar Código único:", err),
           );
+
+        // Espelho best-effort pra `musicas` D1 — igual createSongController,
+        // só depois do Código único (PK) existir. Cobre também a faixa
+        // PENDENTE (sem trackTopicId/tópico ainda): ela já tem código único
+        // de verdade aqui, então entra no D1 com idTopico null (preenchido
+        // depois por publicarFaixaPendenteController).
+        upsertMusicaD1({
+          codigoUnico: codigoGerado,
+          idTopico: trackTopicId || null,
+          titulo: songTitle,
+          artista: artistaAlbum,
+          artista2: participantesLimpos[0] || null,
+          artista3: participantesLimpos[1] || null,
+          artista4: participantesLimpos[2] || null,
+          artista5: participantesLimpos[3] || null,
+          artista6: participantesLimpos[4] || null,
+          album: albumFullTitle,
+          audioUrl: faixa.mediaUrl || null,
+          capaUrl: capaUrl || null,
+          letra: faixa.letra || null,
+          tipoSingle: faixa.tipoSingle || "TRACKLIST ALBUM",
+          tipoMusica: faixa.tipoMusica || "SOLO",
+          dataLancamento: dataFormatada,
+          weeks: weeksOverride ? Number(weeksOverride) || null : null,
+          ordem: faixa.num || null,
+          idCriador: jogadorId || null,
+          comentariosPara: trackTopicId || null,
+          pendente: pendente === "Sim",
+        });
       }
     }
   }
@@ -1994,6 +2069,35 @@ export async function publicarFaixaPendenteController(request: Request): Promise
             console.warn("[publicarFaixaPendenteController] Erro ao copiar Código único:", err),
           );
       }
+    }
+
+    // Espelho best-effort pra `musicas` D1 — essa faixa já existia lá desde
+    // processarFaixasDoAlbum (pendente, idTopico null); aqui é um upsert de
+    // verdade sobre a MESMA PK (codigoUnicoFinal), atualizando idTopico,
+    // pendente=false e os campos que podem ter mudado na hora de publicar.
+    if (codigoUnicoFinal) {
+      upsertMusicaD1({
+        codigoUnico: codigoUnicoFinal,
+        idTopico: topicId,
+        titulo: fullTitle,
+        artista: row[13] || "",
+        artista2: row[14] || null,
+        artista3: row[15] || null,
+        artista4: row[16] || null,
+        artista5: row[17] || null,
+        artista6: row[18] || null,
+        album: row[10] || null,
+        audioUrl: audioFinal || null,
+        capaUrl: capaFinal || null,
+        letra: letraEscolhida !== undefined ? letraEscolhida : row[4] || null,
+        tipoSingle,
+        tipoMusica,
+        dataLancamento: dataFormatada,
+        ordem: row[20] ? Number(row[20]) || null : null,
+        idCriador: jogadorId || null,
+        comentariosPara: topicId,
+        pendente: false,
+      });
     }
 
     // REGISTRO é só pra comentários de OUTROS jogadores (ver
