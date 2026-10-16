@@ -1398,21 +1398,45 @@ async function atualizarFaixaNosChartsAoPublicar(params: {
   tipoSingle: string;
   tipoMusica: string;
   dataFormatada: string;
+  // Chave estável pra achar a linha certa — preferida sobre o título.
+  // BUG REAL corrigido aqui (reportado em produção, 2026-10, "I Am
+  // Hollywood" da Rayna): essa busca comparava só por título EXATO contra
+  // Musicas!H, mas H podia ter perdido o prefixo "Artista - " em algum
+  // momento (ex: editada antes via Fórum > Músicas > Editar, bug irmão já
+  // corrigido em editController.ts) — a faixa publicava normal (tópico
+  // criado, Pendente? vira "Não"), mas EDIÇÃO CHARTS nunca atualizava
+  // data/tipo pra essa falha silenciosa de match, e o retorno pro front
+  // continuava "success: true" sem avisar nada.
+  codigoUnico?: string;
 }): Promise<number | null> {
-  const { fullTitle, tipoSingle, tipoMusica, dataFormatada } = params;
+  const { fullTitle, tipoSingle, tipoMusica, dataFormatada, codigoUnico } = params;
   try {
-    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "B2:B20000");
+    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "B2:BD20000");
     let linhaAlvo: number | null = null;
-    for (let i = rows.length - 1; i >= 0; i--) {
-      if ((rows[i]?.[0] || "").trim() === fullTitle.trim()) {
-        linhaAlvo = i + 2;
-        break;
+    if (codigoUnico) {
+      const alvoCodigo = codigoUnico.trim();
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if ((rows[i]?.[54] || "").trim() === alvoCodigo) {
+          // BD é a coluna 55 (índice 54) contando a partir de B (índice 0)
+          linhaAlvo = i + 2;
+          break;
+        }
+      }
+    }
+    if (!linhaAlvo) {
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if ((rows[i]?.[0] || "").trim() === fullTitle.trim()) {
+          linhaAlvo = i + 2;
+          break;
+        }
       }
     }
     if (!linhaAlvo) {
       console.warn(
         "[atualizarFaixaNosChartsAoPublicar] Linha não encontrada em EDIÇÃO CHARTS pra:",
         fullTitle,
+        "código único:",
+        codigoUnico,
       );
       return null;
     }
@@ -1984,13 +2008,33 @@ export async function publicarFaixaPendenteController(request: Request): Promise
       );
     }
 
-    const fullTitle = row[7] || "";
+    // BUG REAL corrigido aqui (mesma classe do fix em editController.ts):
+    // Musicas!H podia ter perdido o prefixo "Artista - " (ex: editada antes
+    // da publicação) — reconstrói sempre com o prefixo certo em vez de
+    // confiar cegamente no que está salvo, pra não quebrar o match com
+    // EDIÇÃO CHARTS por um dado historicamente corrompido.
+    const artistaPrincipalRow = row[13] || "";
+    const tituloSemPrefixo = dedupeArtistPrefix(row[7] || "", artistaPrincipalRow);
+    const fullTitle = artistaPrincipalRow
+      ? `${artistaPrincipalRow.trim()} - ${tituloSemPrefixo.trim()}`
+      : tituloSemPrefixo;
     const topicId =
       (row[1] || "").trim() || `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     await googleSheetsService.principal.updateValues("Musicas", `B${musicaRowIndex}`, [[topicId]]);
     await googleSheetsService.principal.updateValues("Musicas", `F${musicaRowIndex}`, [[topicId]]);
     await googleSheetsService.principal.updateValues("Musicas", `X${musicaRowIndex}`, [["Não"]]);
+    // Auto-corrige H se o título salvo tinha perdido o prefixo (ver
+    // comentário acima) — publicar é um bom momento pra consertar isso de
+    // vez, já que a partir daqui o título precisa bater com EDIÇÃO CHARTS
+    // pra sempre.
+    if (fullTitle && fullTitle !== (row[7] || "")) {
+      await googleSheetsService.principal
+        .updateValues("Musicas", `H${musicaRowIndex}`, [[fullTitle]])
+        .catch((err) =>
+          console.warn("[publicarFaixaPendenteController] Erro ao corrigir título em Musicas:", err),
+        );
+    }
 
     // A linha em EDIÇÃO CHARTS já existe desde a criação do álbum (ver
     // processarFaixasDoAlbum) — publicar só atualiza tipo e data pra agora,
@@ -2053,7 +2097,19 @@ export async function publicarFaixaPendenteController(request: Request): Promise
       tipoSingle,
       tipoMusica,
       dataFormatada,
+      codigoUnico: (row[25] || "").trim() || undefined,
     });
+    // BUG REAL corrigido aqui: antes, não achar a linha em EDIÇÃO CHARTS só
+    // gerava um console.warn (nunca visível pra ninguém) e a resposta
+    // continuava "success: true" — o tópico era criado normal, mas a faixa
+    // ficava de fora dos charts pra sempre, sem ninguém saber até notar a
+    // ausência dias depois (caso real: "I Am Hollywood" da Rayna). Agora
+    // avisa explicitamente no retorno pro front mostrar, sem bloquear o
+    // tópico que já foi criado de verdade (não dá pra desfazer isso, e o
+    // tópico publicado é mais importante que travar a resposta).
+    const avisoCharts = !edicaoChartsRowIndex
+      ? "Tópico publicado, mas não achei a linha dessa faixa em EDIÇÃO CHARTS — fala com o suporte pra conferir os charts dela."
+      : undefined;
     await registrarInfosMusicas({ fullTitle, capaUrl: capaFinal });
     // Mesma cópia de Código único feita na criação normal (createSongController)
     // — sem isso, uma faixa que nasceu pendente nunca teria o código pra
@@ -2115,6 +2171,7 @@ export async function publicarFaixaPendenteController(request: Request): Promise
       JSON.stringify({
         success: true,
         data: { topicId, titulo: fullTitle, codigoUnico: codigoUnicoFinal },
+        ...(avisoCharts ? { aviso: avisoCharts } : {}),
       }),
       {
         status: 200,

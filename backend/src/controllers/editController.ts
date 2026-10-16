@@ -235,6 +235,7 @@ export async function updateReleaseController(request: Request): Promise<Respons
       letra,
       audioUrl,
       encarte,
+      codigoUnico,
     } = body;
 
     const tipoClean = (tipo || "musicas").toLowerCase() as EditCategory;
@@ -279,9 +280,22 @@ export async function updateReleaseController(request: Request): Promise<Respons
     // 2. Atualizar Planilhas conforme Requisitos
     if (tipoClean === "musicas") {
       // Músicas:
+      // BUG REAL corrigido aqui (2026-10, "I Am Hollywood" da Rayna — MESMA
+      // classe do bug já corrigido pra Álbuns logo abaixo, "In Honor of
+      // Music and Life Itself", 2026-09-21, nunca replicado aqui): `titulo`
+      // já passou por dedupeArtistPrefix (tira "Artista - " antes de
+      // editar), mas gravava de volta na coluna H SEM recolocar o artista —
+      // a coluna H SEMPRE guarda "Artista - Título" em todo o resto do app
+      // (createSongController, processarFaixasDoAlbum). Perder esse prefixo
+      // quebra qualquer cruzamento por título exato (EDIÇÃO CHARTS, INFOS
+      // MÚSICAS) silenciosamente: a música edita normal, mas nunca mais
+      // atualiza data/tipo nos charts ao ser publicada, porque o título
+      // armazenado para de bater com a linha correspondente em EDIÇÃO
+      // CHARTS — que sempre guarda o título prefixado.
+      const tituloMusicaComArtista = artista ? `${String(artista).trim()} - ${titulo.trim()}` : titulo.trim();
       // Alterar Título na Coluna H (Col 8) da aba Musicas na planilha principal (1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo)
       await googleSheetsService.principal.updateValues(sheetName, `H${rowIndex}`, [
-        [titulo.trim()],
+        [tituloMusicaComArtista],
       ]);
 
       // Capa nova — Coluna D ("Capa da música"), NUNCA a I (essa é "TIPO DE
@@ -293,7 +307,7 @@ export async function updateReleaseController(request: Request): Promise<Respons
         await googleSheetsService.principal.updateValues(sheetName, `D${rowIndex}`, [
           [finalCapaUrl],
         ]);
-        await propagarCapaParaInfosMusicas(titulo.trim(), finalCapaUrl);
+        await propagarCapaParaInfosMusicas(tituloMusicaComArtista, finalCapaUrl);
       }
 
       // Letra (Coluna E) — opcional, só grava quando o campo veio no body
@@ -324,15 +338,31 @@ export async function updateReleaseController(request: Request): Promise<Respons
       try {
         const edicaoRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
         if (edicaoRows.length > 1) {
-          const normTarget = normalizeComparison(oldTitulo || titulo);
+          // BUG REAL corrigido aqui: EDIÇÃO CHARTS!B sempre guarda o título
+          // PREFIXADO ("Artista - Título"), mas a busca comparava contra
+          // oldTitulo/titulo SEM o prefixo (já passaram por
+          // dedupeArtistPrefix lá em cima) — nunca batia com nada de
+          // verdade, então essa atualização nunca rodava (a linha B jamais
+          // era encontrada). Reconstrói o mesmo valor prefixado pra buscar.
+          const oldTituloComArtista = artista
+            ? `${String(artista).trim()} - ${String(oldTitulo || titulo).trim()}`
+            : String(oldTitulo || titulo).trim();
+          const normTarget = normalizeComparison(oldTituloComArtista);
+          // Código único (coluna BD) é a chave de verdade, nunca muda —
+          // preferida sobre o título quando disponível. Título ainda fica
+          // como fallback (lançamentos antigos sem código, ou se o front
+          // não mandou) e nunca é a única defesa de novo: ver bug acima.
+          const codigoUnicoNorm = codigoUnico ? normalizeComparison(String(codigoUnico)) : "";
           for (let eIdx = 1; eIdx < edicaoRows.length; eIdx++) {
-            if (normalizeComparison(edicaoRows[eIdx][1] || "") === normTarget) {
+            const bateCodigo = codigoUnicoNorm && normalizeComparison(edicaoRows[eIdx][55] || "") === codigoUnicoNorm;
+            const bateTitulo = normalizeComparison(edicaoRows[eIdx][1] || "") === normTarget;
+            if (bateCodigo || bateTitulo) {
               const eRowNumber = eIdx + 1;
               // Mantém o formato "Artista - Título" já usado na coluna B —
               // sem o artista aqui, o valor gravado ficaria inconsistente
               // com o resto da aba e quebraria o cruzamento por título feito
               // em getEmpirePlayLancamentosRecentesController.
-              const novoValor = artista ? `${artista.trim()} - ${titulo.trim()}` : titulo.trim();
+              const novoValor = tituloMusicaComArtista;
               await googleSheetsService.edicaoCharts.updateValues(
                 "EDIÇÃO CHARTS",
                 `B${eRowNumber}`,

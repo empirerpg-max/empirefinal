@@ -631,6 +631,12 @@ export const EditModal: React.FC<EditModalProps> = ({
         descricao: editDescricao.trim(),
         artista: selectedArtist,
         oldCapaUrl: editingItem.capaUrl,
+        // Chave estável pra achar a linha certa em EDIÇÃO CHARTS — buscar só
+        // por título (mesmo já reconstruído com o prefixo do artista) é
+        // frágil contra qualquer divergência de formatação; código único
+        // nunca muda e já existe desde a criação (ver bug real documentado
+        // em updateReleaseController, editController.ts).
+        ...(editingItem.codigoUnico ? { codigoUnico: editingItem.codigoUnico } : {}),
         ...(encarteFinal ? { encarte: encarteFinal } : {}),
         capaBase64,
         capaMimeType,

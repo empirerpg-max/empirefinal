@@ -184,9 +184,16 @@ export function LancarFaixaAlbumModal({
       }
 
       haptic.success();
-      toast.success("Faixa lançada!", {
-        description: `"${selecionada.titulo}" agora tem tópico próprio nos charts.`,
-      });
+      if (data.aviso) {
+        // Tópico foi criado de verdade, mas o backend não achou a linha em
+        // EDIÇÃO CHARTS pra atualizar — avisa explicitamente em vez de só
+        // mostrar sucesso (ver avisoCharts, publicarFaixaPendenteController).
+        toast.warning("Tópico publicado com ressalva", { description: data.aviso, duration: 8000 });
+      } else {
+        toast.success("Faixa lançada!", {
+          description: `"${selecionada.titulo}" agora tem tópico próprio nos charts.`,
+        });
+      }
       onClose();
     } catch (err: any) {
       toast.error(err.message || "Não foi possível lançar essa faixa.");
