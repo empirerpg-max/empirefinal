@@ -2055,6 +2055,28 @@ export async function publicarFaixaPendenteController(request: Request): Promise
         headers: { "Content-Type": "application/json" },
       });
     }
+    // Trava de segurança: visto ao vivo (2026-10-16) um readValues de UMA
+    // linha só devolver o texto do CABEÇALHO ("Código único") em vez do
+    // valor real da linha pedida — causa não totalmente isolada (possível
+    // particularidade da API do Sheets com range de linha única). Publicar
+    // com esse dado corrompido gravaria "Código único" como se fosse o
+    // código de verdade, quebrando EDIÇÃO CHARTS pra essa faixa igual o
+    // bug que estamos corrigindo. Aborta alto e claro em vez de continuar
+    // com dado óbviamente errado.
+    if (normalizeComparison(row[25] || "") === "codigo unico") {
+      console.error(
+        "[publicarFaixaPendenteController] readValues devolveu texto de cabeçalho pra linha",
+        musicaRowIndex,
+        "— abortando.",
+      );
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Falha ao ler os dados da faixa (tenta de novo em alguns segundos).",
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
     // "Já publicada" precisa ser decidido pela coluna X ("Pendente?"), não
     // pela B ("ID do tópico") — desde que createCommentController passou a
     // gerar um ID provisório pra permitir comentar numa faixa ainda

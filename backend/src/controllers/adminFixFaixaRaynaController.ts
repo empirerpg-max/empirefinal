@@ -12,37 +12,41 @@ import { getCatalogoDb, buildMusicaUpsertStatement } from "../services/musicasDb
 // (chamada com o título sem prefixo, que não bate com nada).
 //
 // GET /api/empire-play/admin/fix-faixa-rayna-i-am-hollywood
-const LINHA_MUSICAS = 455;
 const CODIGO_UNICO = "EMP686";
 const TITULO_CORRETO = "Rayna - I Am Hollywood";
 
 export async function adminFixFaixaRaynaController(): Promise<Response> {
   const resultado: Record<string, unknown> = {};
 
-  // 1. Corrige Musicas!H — mesma raiz do bug, pra parar de divergir de
-  // EDIÇÃO CHARTS pra sempre.
-  // BUG REAL corrigido aqui (mesma raiz do bug em
-  // publicarFaixaPendenteController, gestaoController.ts): range só ia até
-  // Z, mas letraSincronizada está em AE (índice 30) — sempre lia vazio,
-  // mascarando a letra sincronizada real que já existia na planilha.
-  const musicasRow = (await googleSheetsService.principal.readValues("Musicas", `A${LINHA_MUSICAS}:AE${LINHA_MUSICAS}`).catch(() => []))[0];
-  if (!musicasRow) {
-    return new Response(JSON.stringify({ success: false, error: `Linha ${LINHA_MUSICAS} não encontrada em Musicas.` }), {
-      status: 404,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
+  // Acha a linha por busca (código único, coluna Z) em vez de um número de
+  // linha fixo — BUG REAL encontrado ao vivo rodando essa correção pela
+  // 2ª vez: `readValues("Musicas", "A455:AE455")` (range de UMA linha só)
+  // devolveu o texto do CABEÇALHO ("Código único") em vez do valor real da
+  // linha 455, por algum motivo nunca totalmente explicado (possível
+  // particularidade da API do Sheets/cache com range de linha única fora
+  // do padrão usado no resto do arquivo, que sempre lê a aba inteira ou um
+  // bloco de várias linhas). Ler a aba inteira e procurar pela linha é o
+  // mesmo padrão já comprovado confiável nos diagnósticos anteriores desta
+  // sessão — mais lento, mas não tem esse risco de desalinhamento.
+  const todasAsLinhas = await googleSheetsService.principal.readValues("Musicas", "A:AE").catch(() => []);
+  let linhaIndex = -1;
+  for (let i = 1; i < todasAsLinhas.length; i++) {
+    if (normalizeText(todasAsLinhas[i]?.[25]) === CODIGO_UNICO) {
+      linhaIndex = i + 1; // 1-based, pra bater com as colunas do Sheets
+      break;
+    }
   }
-  const tituloAtual = normalizeText(musicasRow[7]);
-  const codigoAtual = normalizeText(musicasRow[25]);
-  if (codigoAtual !== CODIGO_UNICO) {
+  if (linhaIndex < 0) {
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: `Linha ${LINHA_MUSICAS} tem código único "${codigoAtual}", esperado "${CODIGO_UNICO}" — abortando pra não corrigir a linha errada.`,
-      }),
-      { status: 409, headers: { "Content-Type": "application/json; charset=utf-8" } },
+      JSON.stringify({ success: false, error: `Nenhuma linha em Musicas com código único "${CODIGO_UNICO}".` }),
+      { status: 404, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );
   }
+  const LINHA_MUSICAS = linhaIndex;
+  resultado.linhaEncontrada = LINHA_MUSICAS;
+  const musicasRow = todasAsLinhas[LINHA_MUSICAS - 1];
+  const tituloAtual = normalizeText(musicasRow[7]);
+  const codigoAtual = normalizeText(musicasRow[25]);
   resultado.tituloAntes = tituloAtual;
   if (tituloAtual !== TITULO_CORRETO) {
     await googleSheetsService.principal.updateValues("Musicas", `H${LINHA_MUSICAS}`, [[TITULO_CORRETO]]);
