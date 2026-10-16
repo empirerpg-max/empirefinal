@@ -30,6 +30,57 @@ function upsertMusicaD1(m: MusicaUpsert): void {
     );
 }
 
+function parseDataBRParaIso(dataBR: string): string | null {
+  const m = dataBR.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+}
+
+// Relê a linha INTEIRA de Musicas (A:AE) e espelha pro D1 — usado por
+// qualquer endpoint que grava um campo isolado direto no Sheets (letra,
+// letra sincronizada) sem passar pelos fluxos de criação/publicação que já
+// espelham sozinhos. BUG REAL corrigido aqui (reportado em produção,
+// 2026-10): updateFaixaLetraController/updateFaixaLetraSincronizadaController
+// só escreviam no Sheets — o D1 (fonte real do Fórum desde o pivot) nunca
+// recebia a letra/sincronização, então sumia pro jogador mesmo gravada com
+// sucesso. Best-effort, nunca lança; sem código único (linha ainda sem
+// nenhum lançamento) não tem PK pra upsert, então só pula.
+async function mirrorMusicaRowParaD1(rowIndex: number): Promise<void> {
+  const db = getCatalogoDb();
+  if (!db) return;
+  try {
+    const row = (await googleSheetsService.principal.readValues("Musicas", `A${rowIndex}:AE${rowIndex}`))[0];
+    const codigoUnico = normalizeText(row?.[25]);
+    if (!row || !codigoUnico) return;
+    const dataLancamento = normalizeText(row[0]);
+    await buildMusicaUpsertStatement(db, {
+      codigoUnico,
+      idTopico: normalizeText(row[1]) || null,
+      titulo: normalizeText(row[7]) || "",
+      artista: normalizeText(row[13]) || "",
+      artista2: normalizeText(row[14]) || null,
+      artista3: normalizeText(row[15]) || null,
+      artista4: normalizeText(row[16]) || null,
+      artista5: normalizeText(row[17]) || null,
+      artista6: normalizeText(row[18]) || null,
+      album: normalizeText(row[10]) || null,
+      capaUrl: normalizeText(row[3]) || null,
+      audioUrl: normalizeText(row[2]) || null,
+      letra: normalizeText(row[4]) || null,
+      letraSincronizada: normalizeText(row[30]) || null,
+      genero: normalizeText(row[19]) || null,
+      tipoSingle: normalizeText(row[8]) || null,
+      tipoMusica: normalizeText(row[9]) || null,
+      dataLancamento: dataLancamento || null,
+      dataLancamentoIso: dataLancamento ? parseDataBRParaIso(dataLancamento) : null,
+      ordem: row[20] ? Number(row[20]) || null : null,
+      comentariosPara: normalizeText(row[5]) || null,
+      pendente: normalizeComparison(normalizeText(row[23])) === "sim",
+    }).run();
+  } catch (err) {
+    console.warn("[mirrorMusicaRowParaD1] Falha ao espelhar linha pro D1 (ignorado):", err);
+  }
+}
+
 // Coluna H de Musicas sempre guarda "Artista - Título" junto — se algum
 // texto de entrada já vier com esse prefixo (autopreenchimento, busca de
 // faixa existente, o jogador digitando o artista de novo), colapsa
@@ -1766,6 +1817,7 @@ export async function updateFaixaLetraController(request: Request): Promise<Resp
     await googleSheetsService.principal.updateValues("Musicas", `E${musicaRowIndex}`, [
       [body.letra || ""],
     ]);
+    await mirrorMusicaRowParaD1(musicaRowIndex);
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -1834,6 +1886,7 @@ export async function updateFaixaLetraSincronizadaController(request: Request): 
     await googleSheetsService.principal.updateValues("Musicas", `AE${rowIndex}`, [
       [body.lrc || ""],
     ]);
+    await mirrorMusicaRowParaD1(rowIndex);
     // +2 de prestígio pra quem sincroniza a letra da própria música — só na
     // gravação de verdade (LRC não vazio), pra não premiar quem só limpou a
     // sincronização.
@@ -2154,6 +2207,13 @@ export async function publicarFaixaPendenteController(request: Request): Promise
         audioUrl: audioFinal || null,
         capaUrl: capaFinal || null,
         letra: letraEscolhida !== undefined ? letraEscolhida : row[4] || null,
+        // BUG REAL corrigido aqui (reportado em produção, 2026-10): esse
+        // upsert não passava letraSincronizada — como o UPDATE sobrescreve
+        // TODAS as colunas sempre (ver buildMusicaUpsertStatement), isso
+        // zerava no D1 qualquer sincronização de letra já feita durante a
+        // edição do álbum (coluna AE do Sheets fica intacta, só o D1
+        // perdia o dado). Preserva o que já estava em row[30].
+        letraSincronizada: row[30] || null,
         tipoSingle,
         tipoMusica,
         dataLancamento: dataFormatada,
