@@ -1448,6 +1448,14 @@ async function atualizarFaixaNosChartsAoPublicar(params: {
       `C${linhaAlvo}:D${linhaAlvo}`,
       [[tipoSingle, tipoMusica]],
     );
+    // WEEKS (F) sempre volta pra 1 ao publicar — é esse o momento em que a
+    // faixa de fato passa a contar semana nos charts de verdade (igual uma
+    // faixa inédita nova já nasce com WEEKS=1, ver registrarFaixaNosCharts);
+    // uma faixa de álbum pendente fica meses "parada" até alguém publicar,
+    // e sem esse reset ela entraria nos charts já com o WEEKS acumulado
+    // (ou vazio) de quando só existia dentro do álbum, nunca contado de
+    // verdade como lançamento próprio.
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `F${linhaAlvo}`, [["1"]]);
     return linhaAlvo;
   } catch (err) {
     console.warn("[atualizarFaixaNosChartsAoPublicar] Erro ao atualizar EDIÇÃO CHARTS:", err);
@@ -2149,6 +2157,7 @@ export async function publicarFaixaPendenteController(request: Request): Promise
         tipoSingle,
         tipoMusica,
         dataLancamento: dataFormatada,
+        weeks: 1, // mesma regra do reset em EDIÇÃO CHARTS!F ao publicar
         ordem: row[20] ? Number(row[20]) || null : null,
         idCriador: jogadorId || null,
         comentariosPara: topicId,

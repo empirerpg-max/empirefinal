@@ -89,6 +89,12 @@ export async function adminFixFaixaRaynaController(): Promise<Response> {
     ]);
     resultado.edicaoChartsDataDepois = dataFormatada;
     resultado.edicaoChartsTipoSingleDepois = tipoSingleMusicas;
+    // WEEKS (F) também reseta pra 1 ao publicar — mesma regra agora
+    // aplicada em atualizarFaixaNosChartsAoPublicar (gestaoController.ts),
+    // faltava aqui na correção retroativa.
+    resultado.edicaoChartsWeeksAntes = normalizeText(chartsRows[linhaCharts - 1]?.[5]);
+    await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `F${linhaCharts}`, [["1"]]);
+    resultado.edicaoChartsWeeksDepois = "1";
   }
 
   // 3. INFOS MÚSICAS — garante que existe uma linha com o título CORRETO
@@ -148,6 +154,7 @@ export async function adminFixFaixaRaynaController(): Promise<Response> {
       tipoMusica: tipoMusicaMusicas,
       dataLancamento: dataFormatadaMusicas,
       dataLancamentoIso: parseDateIso(dataFormatadaMusicas),
+      weeks: 1,
       ordem: musicasRow[20] ? Number(musicasRow[20]) || null : null,
       comentariosPara: normalizeText(musicasRow[5]) || null,
       pendente: normalizeComparison(normalizeText(musicasRow[23])) === "sim",
