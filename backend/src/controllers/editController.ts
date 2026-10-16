@@ -8,6 +8,7 @@ import {
   uploadFileToDrive,
   deleteFileFromDrive,
 } from "../services/googleDriveService";
+import { getCatalogoDb, buildMusicaUpsertStatement } from "../services/musicasDbService";
 
 export type EditCategory = "musicas" | "videos" | "music-videos" | "albuns";
 
@@ -374,6 +375,57 @@ export async function updateReleaseController(request: Request): Promise<Respons
         }
       } catch (errChart) {
         console.warn("[updateReleaseController] Aviso ao atualizar EDIÇÃO CHARTS:", errChart);
+      }
+
+      // Espelha pro D1 — Fórum > Músicas lê exclusivamente de lá (ver
+      // empirePlayController.ts/readMusicasFromD1), não da planilha. SEM
+      // isso, editar uma música (título, letra, áudio, capa) nunca
+      // aparecia no Fórum até a próxima publicação de verdade — a edição
+      // "funcionava" (Sheets atualizado), mas ficava invisível pra sempre
+      // pro jogador, porque nada mais reescreve essa linha no D1 depois da
+      // criação (achado junto do bug "I Am Hollywood" da Rayna). Só roda
+      // se o front mandou codigoUnico (chave do D1); sem ele não dá pra
+      // saber com segurança qual linha atualizar lá.
+      const catalogoDb = codigoUnico ? getCatalogoDb() : null;
+      if (catalogoDb) {
+        try {
+          const linhaAtual = (
+            await googleSheetsService.principal.readValues(sheetName, `A${rowIndex}:AE${rowIndex}`)
+          )[0];
+          if (linhaAtual) {
+            const parseDateIso = (br: string): string | null => {
+              const m = (br || "").match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+              return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+            };
+            const dataLancamento = normalizeText(linhaAtual[0]);
+            await buildMusicaUpsertStatement(catalogoDb, {
+              codigoUnico: String(codigoUnico).trim(),
+              idTopico: normalizeText(linhaAtual[1]) || null,
+              titulo: tituloMusicaComArtista,
+              artista: normalizeText(linhaAtual[13]) || "",
+              artista2: normalizeText(linhaAtual[14]) || null,
+              artista3: normalizeText(linhaAtual[15]) || null,
+              artista4: normalizeText(linhaAtual[16]) || null,
+              artista5: normalizeText(linhaAtual[17]) || null,
+              artista6: normalizeText(linhaAtual[18]) || null,
+              album: normalizeText(linhaAtual[10]) || null,
+              capaUrl: normalizeText(linhaAtual[3]) || null,
+              audioUrl: normalizeText(linhaAtual[2]) || null,
+              letra: normalizeText(linhaAtual[4]) || null,
+              letraSincronizada: normalizeText(linhaAtual[30]) || null,
+              genero: normalizeText(linhaAtual[19]) || null,
+              tipoSingle: normalizeText(linhaAtual[8]) || null,
+              tipoMusica: normalizeText(linhaAtual[9]) || null,
+              dataLancamento: dataLancamento || null,
+              dataLancamentoIso: dataLancamento ? parseDateIso(dataLancamento) : null,
+              ordem: linhaAtual[20] ? Number(linhaAtual[20]) || null : null,
+              comentariosPara: normalizeText(linhaAtual[5]) || null,
+              pendente: normalizeComparison(normalizeText(linhaAtual[23])) === "sim",
+            }).run();
+          }
+        } catch (errD1) {
+          console.warn("[updateReleaseController] Falha ao espelhar edição pro D1 (ignorado):", errD1);
+        }
       }
     } else if (tipoClean === "videos" || tipoClean === "music-videos") {
       // Aba real é "Music Videos" — cabeçalho confirmado: ID do usuário,

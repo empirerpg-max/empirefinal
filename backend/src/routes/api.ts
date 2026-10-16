@@ -209,6 +209,7 @@ import { adminRecriarTabelasMusicasD1Controller } from "../controllers/adminRecr
 import { adminDiagContagemMusicasD1Controller } from "../controllers/adminDiagContagemMusicasD1Controller";
 import { adminDiagFaixaPendenteController } from "../controllers/adminDiagFaixaPendenteController";
 import { adminFixFaixaRaynaController } from "../controllers/adminFixFaixaRaynaController";
+import { adminDiagMusicaD1PorCodigoController } from "../controllers/adminDiagMusicaD1PorCodigoController";
 import {
   adminDiagReconciliacaoGapsController,
   adminDiagAuditoriaColunasMusicasController,
@@ -1931,6 +1932,8 @@ export async function handleEmpireApiRoutes(
     response = await adminMigrarCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {
     response = await adminDiagIdsDuplicadosD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-musica-d1") {
+    response = await adminDiagMusicaD1PorCodigoController(request);
   } else if (url.pathname === "/api/social/admin/fix-posts-shift3") {
     response = await adminFixSocialPostsShift3Controller();
   } else if (url.pathname === "/api/market/produtos") {

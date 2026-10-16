@@ -1,4 +1,5 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import { getCatalogoDb, buildMusicaUpsertStatement } from "../services/musicasDbService";
 
 // Correção retroativa pontual: "I Am Hollywood" (Rayna, código único
 // EMP686, linha 455 de Musicas) foi publicada via "Lançar Faixa de Álbum"
@@ -48,6 +49,19 @@ export async function adminFixFaixaRaynaController(): Promise<Response> {
   const capaUrl = normalizeText(musicasRow[3]);
   const tipoSingleMusicas = normalizeText(musicasRow[8]) || "PÓS-ALBUM";
   const tipoMusicaMusicas = normalizeText(musicasRow[9]) || "SOLO";
+
+  // 1b. Data de lançamento (Musicas!A) — ESQUECIDA na primeira rodada
+  // dessa correção: só a data de EDIÇÃO CHARTS tinha sido atualizada, a de
+  // Musicas (que é a que "Fórum > Músicas"/ordenação por mais recente usa
+  // de verdade, via D1 data_lancamento_iso) continuava com a data velha do
+  // álbum (19/09/2026) — por isso a faixa sumia da lista mesmo já
+  // publicada: longe demais na ordenação/paginação por data pra aparecer
+  // na primeira tela, e a busca no Fórum filtra por pendente+outros campos
+  // que dependiam do D1 estar atualizado (ver passo 4 abaixo).
+  const dataFormatadaMusicas = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  resultado.dataMusicasAntes = normalizeText(musicasRow[0]);
+  await googleSheetsService.principal.updateValues("Musicas", `A${LINHA_MUSICAS}`, [[dataFormatadaMusicas]]);
+  resultado.dataMusicasDepois = dataFormatadaMusicas;
 
   // 2. Corrige EDIÇÃO CHARTS — acha a linha pelo código único (coluna BD,
   // índice 55) e atualiza data (A) + tipo (C:D) pro lançamento real.
@@ -103,6 +117,50 @@ export async function adminFixFaixaRaynaController(): Promise<Response> {
     } else {
       resultado.infosMusicasCriada = false;
     }
+  }
+
+  // 4. Espelha pro D1 DIRETO — Fórum > Músicas lê exclusivamente do D1
+  // (ver empirePlayController.ts/readMusicasFromD1), não da planilha. Sem
+  // isso, nada do que foi corrigido acima (título, data) aparece lá até a
+  // próxima escrita real (editar/publicar de novo) — foi por isso que a
+  // busca "i am" não achava nada mesmo com o Sheets já corrigido.
+  const db = getCatalogoDb();
+  if (db) {
+    const parseDateIso = (br: string): string | null => {
+      const m = br.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+      return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+    };
+    await buildMusicaUpsertStatement(db, {
+      codigoUnico: CODIGO_UNICO,
+      idTopico: normalizeText(musicasRow[1]) || null,
+      titulo: TITULO_CORRETO,
+      artista: normalizeText(musicasRow[13]) || "Rayna",
+      artista2: normalizeText(musicasRow[14]) || null,
+      artista3: normalizeText(musicasRow[15]) || null,
+      artista4: normalizeText(musicasRow[16]) || null,
+      artista5: normalizeText(musicasRow[17]) || null,
+      artista6: normalizeText(musicasRow[18]) || null,
+      album: normalizeText(musicasRow[10]) || null,
+      capaUrl: capaUrl || null,
+      audioUrl: normalizeText(musicasRow[2]) || null,
+      letra: normalizeText(musicasRow[4]) || null,
+      tipoSingle: tipoSingleMusicas,
+      tipoMusica: tipoMusicaMusicas,
+      dataLancamento: dataFormatadaMusicas,
+      dataLancamentoIso: parseDateIso(dataFormatadaMusicas),
+      ordem: musicasRow[20] ? Number(musicasRow[20]) || null : null,
+      comentariosPara: normalizeText(musicasRow[5]) || null,
+      pendente: normalizeComparison(normalizeText(musicasRow[23])) === "sim",
+    })
+      .run()
+      .then(() => {
+        resultado.d1Atualizado = true;
+      })
+      .catch((err) => {
+        resultado.d1Erro = err instanceof Error ? err.message : String(err);
+      });
+  } else {
+    resultado.d1Erro = "Binding CATALOGO_DB não disponível.";
   }
 
   return new Response(JSON.stringify({ success: true, ...resultado }, null, 2), {
