@@ -207,6 +207,7 @@ import { adminDiagOrfaosComentariosController } from "../controllers/adminDiagOr
 import { adminBackfillCodigoUnicoMusicasController } from "../controllers/adminBackfillCodigoUnicoMusicasController";
 import { adminRecriarTabelasMusicasD1Controller } from "../controllers/adminRecriarTabelasMusicasD1Controller";
 import { adminDiagContagemMusicasD1Controller } from "../controllers/adminDiagContagemMusicasD1Controller";
+import { adminDiagFaixaPendenteController } from "../controllers/adminDiagFaixaPendenteController";
 import {
   adminDiagReconciliacaoGapsController,
   adminDiagAuditoriaColunasMusicasController,
@@ -1921,6 +1922,8 @@ export async function handleEmpireApiRoutes(
     response = await adminRecriarTabelasMusicasD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-contagem-musicas-d1") {
     response = await adminDiagContagemMusicasD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-faixa-pendente") {
+    response = await adminDiagFaixaPendenteController(request);
   } else if (url.pathname === "/api/empire-play/admin/migrar-catalogo-d1") {
     response = await adminMigrarCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {
