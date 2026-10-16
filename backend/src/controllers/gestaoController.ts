@@ -2036,9 +2036,17 @@ export async function publicarFaixaPendenteController(request: Request): Promise
       );
     }
 
+    // BUG REAL corrigido aqui (reportado em produção, 2026-10 — letra
+    // sincronizada de "I Am Hollywood" sumindo ao publicar): esse range só
+    // ia até Y (índice 24), mas o código logo abaixo lê row[25] (Código
+    // único), row[26-29] (ALBUM 2-5) e row[30] (Letra Sincronizada) — todos
+    // SEMPRE undefined/vazio com esse range, não importa o que estivesse
+    // de verdade na planilha. Código único "funcionava" por acaso (tinha
+    // um fallback via EDIÇÃO CHARTS que mascarava o problema); letra
+    // sincronizada não tinha fallback nenhum e era sempre perdida.
     const rows = await googleSheetsService.principal.readValues(
       "Musicas",
-      `A${musicaRowIndex}:Y${musicaRowIndex}`,
+      `A${musicaRowIndex}:AE${musicaRowIndex}`,
     );
     const row = rows?.[0];
     if (!row) {

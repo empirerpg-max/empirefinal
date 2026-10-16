@@ -21,7 +21,11 @@ export async function adminFixFaixaRaynaController(): Promise<Response> {
 
   // 1. Corrige Musicas!H — mesma raiz do bug, pra parar de divergir de
   // EDIÇÃO CHARTS pra sempre.
-  const musicasRow = (await googleSheetsService.principal.readValues("Musicas", `A${LINHA_MUSICAS}:Z${LINHA_MUSICAS}`).catch(() => []))[0];
+  // BUG REAL corrigido aqui (mesma raiz do bug em
+  // publicarFaixaPendenteController, gestaoController.ts): range só ia até
+  // Z, mas letraSincronizada está em AE (índice 30) — sempre lia vazio,
+  // mascarando a letra sincronizada real que já existia na planilha.
+  const musicasRow = (await googleSheetsService.principal.readValues("Musicas", `A${LINHA_MUSICAS}:AE${LINHA_MUSICAS}`).catch(() => []))[0];
   if (!musicasRow) {
     return new Response(JSON.stringify({ success: false, error: `Linha ${LINHA_MUSICAS} não encontrada em Musicas.` }), {
       status: 404,
