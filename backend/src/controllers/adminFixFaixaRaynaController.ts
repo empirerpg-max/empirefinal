@@ -150,6 +150,7 @@ export async function adminFixFaixaRaynaController(): Promise<Response> {
       capaUrl: capaUrl || null,
       audioUrl: normalizeText(musicasRow[2]) || null,
       letra: normalizeText(musicasRow[4]) || null,
+      letraSincronizada: normalizeText(musicasRow[30]) || null,
       tipoSingle: tipoSingleMusicas,
       tipoMusica: tipoMusicaMusicas,
       dataLancamento: dataFormatadaMusicas,
