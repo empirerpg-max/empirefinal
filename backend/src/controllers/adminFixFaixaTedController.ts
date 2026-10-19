@@ -49,19 +49,36 @@ export async function adminFixFaixaTedController(): Promise<Response> {
   }
   resultado.d1Row = d1Row;
 
-  // 1. Confirma de novo que a linha em Musicas realmente não existe (já
-  // verificado via diagnóstico, mas sem travar numa condição de corrida
-  // caso alguém já tenha corrigido manualmente desde então).
+  // 1. Procura a linha por código único. BUG REAL encontrado ao vivo rodando
+  // esse diagnóstico (ver adminDiagFaixaPendenteController?codigoUnico=):
+  // a linha 776 EXISTE e já tem "EMP945" na coluna Z, mas todo o resto da
+  // linha (nome, data, capa, áudio, letra...) está VAZIO. Não foi o
+  // appendRow que lançou e foi pulado — ele voltou um rowIndex válido (daí
+  // o passo seguinte, que copia o Código único pra Musicas!Z, ter rodado
+  // normalmente), só que os valores da própria linha nunca foram
+  // persistidos de verdade pela API do Sheets (mesma classe de anomalia
+  // documentada antes nesta sessão: leitura de range de 1 linha devolvendo
+  // texto de cabeçalho — aqui parece ser uma escrita "fantasma", que
+  // reserva a linha mas não grava o conteúdo). Por isso a correção
+  // preenche essa linha existente em vez de criar outra (evita um Código
+  // único duplicado em duas linhas de Musicas).
   const musicasRows = await googleSheetsService.principal.readValues("Musicas", "A:AE").catch(() => []);
-  const jaExiste = musicasRows.slice(1).some((r) => normalizeText(r?.[25]) === CODIGO_UNICO);
-  if (jaExiste) {
+  let linhaExistente = -1;
+  for (let i = 1; i < musicasRows.length; i++) {
+    if (normalizeText(musicasRows[i]?.[25]) === CODIGO_UNICO) {
+      linhaExistente = i + 1;
+      break;
+    }
+  }
+  if (linhaExistente > 0 && normalizeText(musicasRows[linhaExistente - 1]?.[7])) {
     return new Response(
-      JSON.stringify({ success: true, jaExistia: true, mensagem: "Linha já existe em Musicas, nada a fazer." }),
+      JSON.stringify({ success: true, jaExistia: true, mensagem: "Linha já existe em Musicas E JÁ TEM título, nada a fazer." }),
       { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );
   }
 
-  // 2. Recria a linha em Musicas com os dados já confirmados no D1.
+  // 2. Preenche a linha (existente-vazia ou nova) com os dados já
+  // confirmados no D1.
   const novaLinha: string[] = [
     String(d1Row.data_lancamento || ""), // A
     TOPIC_ID, // B
@@ -86,8 +103,17 @@ export async function adminFixFaixaTedController(): Promise<Response> {
     "", // Y
     CODIGO_UNICO, // Z
   ];
-  const novaRowIndex = await googleSheetsService.principal.appendRow("Musicas", novaLinha);
-  resultado.linhaCriada = novaRowIndex;
+  if (linhaExistente > 0) {
+    await googleSheetsService.principal.updateValues(
+      "Musicas",
+      `A${linhaExistente}:Z${linhaExistente}`,
+      [novaLinha],
+    );
+    resultado.linhaPreenchida = linhaExistente;
+  } else {
+    const novaRowIndex = await googleSheetsService.principal.appendRow("Musicas", novaLinha);
+    resultado.linhaCriada = novaRowIndex;
+  }
 
   // 3. Re-espelha pro D1 — só pra preencher data_lancamento_iso/weeks, que
   // estavam nulos no registro original (mesmo bug de dataLancamentoIso
