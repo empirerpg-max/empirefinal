@@ -210,6 +210,7 @@ import { adminDiagContagemMusicasD1Controller } from "../controllers/adminDiagCo
 import { adminDiagFaixaPendenteController } from "../controllers/adminDiagFaixaPendenteController";
 import { adminDiagMusicaPorTopicoController } from "../controllers/adminDiagMusicaPorTopicoController";
 import { adminFixFaixaRaynaController } from "../controllers/adminFixFaixaRaynaController";
+import { adminFixFaixaTedController } from "../controllers/adminFixFaixaTedController";
 import { adminDiagMusicaD1PorCodigoController } from "../controllers/adminDiagMusicaD1PorCodigoController";
 import {
   adminDiagReconciliacaoGapsController,
@@ -1931,6 +1932,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagMusicaPorTopicoController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-faixa-rayna-i-am-hollywood") {
     response = await adminFixFaixaRaynaController();
+  } else if (url.pathname === "/api/empire-play/admin/fix-faixa-ted-nostalgic-traveller") {
+    response = await adminFixFaixaTedController();
   } else if (url.pathname === "/api/empire-play/admin/migrar-catalogo-d1") {
     response = await adminMigrarCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {

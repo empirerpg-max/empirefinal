@@ -462,6 +462,20 @@ export async function createSongController(request: Request): Promise<Response> 
     // ALBUM, WEEKS, WEEKS VIDEO, ACT PRINCIPAL, ARTISTA 2-6, GÊNERO, Ordem,
     // Metacritic por jogador, Média Metacritic, Pendente?, Referência
     // (Substituição/Vínculo) — só preenchida quando opcaoChart é (b) ou (c)).
+    // BUG REAL encontrado (TED, "nostalgic traveller", EMP945, 2026-10-17):
+    // esse appendRow lançou e caía no catch abaixo, que só logava um warn e
+    // seguia o fluxo normalmente — EDIÇÃO CHARTS, REGISTRO DE MÚSICA, INFOS
+    // MÚSICAS e o espelho em D1 (que não depende dessa linha) continuavam
+    // sendo gravados incondicionalmente. Resultado: a música "existia" nos
+    // charts e no D1, mas nunca teve linha em Musicas — e é essa linha que
+    // tanto a tela inicial ("Lançamentos Recentes", cruza por Código único
+    // lendo Musicas da planilha) quanto o tópico do Fórum (ainda lido direto
+    // da planilha, nunca migrado pro D1) precisam pra achar a música. Sem
+    // ela, o tópico não é encontrado (404) — por isso o comentário de um
+    // jogador também parecia ter desaparecido, quando na verdade a página
+    // inteira nunca carregava. Agora, se essa escrita falhar, aborta a
+    // música inteira em vez de deixar um registro "pela metade" espalhado
+    // por 4 abas diferentes sem ninguém notar.
     let musicaRowIndexNova: number | null = null;
     try {
       musicaRowIndexNova = await googleSheetsService.principal.appendRow("Musicas", [
@@ -509,6 +523,14 @@ export async function createSongController(request: Request): Promise<Response> 
       }).catch(() => {});
     } catch (err) {
       console.warn("[createSongController] Erro ao gravar em Musicas (Principal):", err);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error:
+            "Falha ao gravar a música na planilha. Nada foi registrado nos charts — tente lançar de novo.",
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
     }
 
     // Opção (c): essa música NÃO é um lançamento próprio nos charts — os
@@ -588,6 +610,12 @@ export async function createSongController(request: Request): Promise<Response> 
         tipoSingle: tipoSingle || "LEAD SINGLE",
         tipoMusica: tipoMusica || "SOLO",
         dataLancamento: dataFormatada,
+        // Faltava — BUG REAL confirmado em produção (EMP945): essa chamada
+        // nunca passava dataLancamentoIso, então toda música lançada por
+        // aqui ficava com data_lancamento_iso NULL no D1 pra sempre
+        // (nenhum outro fluxo re-grava esse campo depois). Qualquer
+        // ordenação/filtro por essa coluna simplesmente não via a música.
+        dataLancamentoIso: parseDataBRParaIso(dataFormatada),
         idCriador: jogadorId || null,
         comentariosPara: topicId,
         pendente: pendente === "Sim",
