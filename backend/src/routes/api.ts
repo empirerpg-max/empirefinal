@@ -212,6 +212,7 @@ import { adminDiagMusicaPorTopicoController } from "../controllers/adminDiagMusi
 import { adminFixFaixaRaynaController } from "../controllers/adminFixFaixaRaynaController";
 import { adminFixFaixaTedController } from "../controllers/adminFixFaixaTedController";
 import { adminLimparComentariosTedController } from "../controllers/adminLimparComentariosTedController";
+import { adminDiagComentariosTedController } from "../controllers/adminDiagComentariosTedController";
 import { adminDiagMusicaD1PorCodigoController } from "../controllers/adminDiagMusicaD1PorCodigoController";
 import {
   adminDiagReconciliacaoGapsController,
@@ -1937,6 +1938,8 @@ export async function handleEmpireApiRoutes(
     response = await adminFixFaixaTedController();
   } else if (url.pathname === "/api/empire-play/admin/limpar-comentarios-ted") {
     response = await adminLimparComentariosTedController(request);
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-comentarios-ted") {
+    response = await adminDiagComentariosTedController();
   } else if (url.pathname === "/api/empire-play/admin/migrar-catalogo-d1") {
     response = await adminMigrarCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {
