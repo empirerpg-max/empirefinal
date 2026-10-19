@@ -60,6 +60,47 @@ export async function adminDiagFaixaPendenteController(request: Request): Promis
     });
   }
 
+  const registroRows = await googleSheetsService.registrosCharts
+    .readValues("REGISTRO DE MÚSICA")
+    .catch(() => []);
+  const linhasRegistro: Record<string, unknown>[] = [];
+  for (let i = 1; i < registroRows.length; i++) {
+    const row = registroRows[i];
+    if (!row) continue;
+    const nome = normalizeText(row[1]); // B
+    if (!nome || !normalizeComparison(nome).includes(alvoNorm)) continue;
+    linhasRegistro.push({ linha: i + 1, titulo: nome, tipoSingle: row[2] || "", tipoMusica: row[3] || "" });
+  }
+
+  const infosRows = await googleSheetsService.registrosCharts
+    .readValues("INFOS MÚSICAS")
+    .catch(() => []);
+  const linhasInfos: Record<string, unknown>[] = [];
+  for (let i = 1; i < infosRows.length; i++) {
+    const row = infosRows[i];
+    if (!row) continue;
+    const nome = normalizeText(row[0]); // A
+    if (!nome || !normalizeComparison(nome).includes(alvoNorm)) continue;
+    linhasInfos.push({ linha: i + 1, titulo: nome, capaD: row[3] || "", capaG: row[6] || "" });
+  }
+
+  const comentariosRows = await googleSheetsService.principal
+    .readValues("Comentarios_Musicas")
+    .catch(() => []);
+  const linhasComentarios: Record<string, unknown>[] = [];
+  for (let i = 1; i < comentariosRows.length; i++) {
+    const row = comentariosRows[i];
+    if (!row) continue;
+    const comentariosPara = normalizeText(row[0] || "");
+    const nomeJogador = normalizeText(row[2] || "");
+    if (
+      !comentariosPara.toLowerCase().includes("1792252409065") &&
+      !nomeJogador.toLowerCase().includes("daniel")
+    )
+      continue;
+    linhasComentarios.push({ linha: i + 1, row });
+  }
+
   return new Response(
     JSON.stringify(
       {
@@ -67,6 +108,9 @@ export async function adminDiagFaixaPendenteController(request: Request): Promis
         busca: titulo,
         musicas: linhasMusicas,
         edicaoCharts: linhasCharts,
+        registroDeMusica: linhasRegistro,
+        infosMusicas: linhasInfos,
+        comentariosSuspeitos: linhasComentarios,
       },
       null,
       2,
