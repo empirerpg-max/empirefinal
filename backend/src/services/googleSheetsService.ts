@@ -585,6 +585,49 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Apaga linhas específicas (1-based, como aparecem em readValues) de uma
+// aba — usado pra remover duplicatas/spam (ex: comentário repetido por
+// falha de rede no client, jogador achando que não enviou e reenviando).
+// Uma única chamada batchUpdate com um deleteDimension por linha, em
+// ORDEM DECRESCENTE (apagar de baixo pra cima evita que remover uma linha
+// desloque o índice das próximas antes delas serem apagadas).
+export async function deleteRows(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  rowIndexes1Based: number[],
+): Promise<void> {
+  if (rowIndexes1Based.length === 0) return;
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const tabs = await listSheetTabs(spreadsheetId);
+  const tab = tabs.find((t) => t.title === sheetName);
+  if (!tab || tab.sheetId < 0) {
+    throw new Error(`Aba "${sheetName}" não encontrada (sem sheetId) em ${spreadsheetId}.`);
+  }
+  const ordenadoDesc = [...new Set(rowIndexes1Based)].sort((a, b) => b - a);
+  await sheetsRequest(
+    `/${spreadsheetId}:batchUpdate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        requests: ordenadoDesc.map((linha1Based) => ({
+          deleteDimension: {
+            range: {
+              sheetId: tab.sheetId,
+              dimension: "ROWS",
+              // deleteDimension é 0-based e exclusivo no fim — linha 1-based
+              // N vira o índice [N-1, N).
+              startIndex: linha1Based - 1,
+              endIndex: linha1Based,
+            },
+          },
+        })),
+      }),
+    },
+    [SHEETS_READWRITE_SCOPE],
+  );
+  invalidateReadCache(spreadsheetId, sheetName);
+}
+
 /**
  * Anexa uma linha e devolve o número da linha real onde ela caiu (1-based,
  * igual A1) — usado pra permitir reagir com emoji imediatamente após postar
@@ -667,6 +710,7 @@ export const googleSheetsService = {
   updateValues,
   updateValuesBatch,
   appendRow,
+  deleteRows,
   principal: {
     readValues: (sheetName: string, range?: string) => readValues("principal", sheetName, range),
     // Lê o valor REAL da célula, sem aplicar formatação/locale (ver
@@ -690,6 +734,8 @@ export const googleSheetsService = {
     ) => updateValuesBatch("principal", entries),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("principal", sheetName, values, range),
+    deleteRows: (sheetName: string, rowIndexes1Based: number[]) =>
+      deleteRows("principal", sheetName, rowIndexes1Based),
   },
   registrosCharts: {
     readValues: (sheetName: string, range?: string) =>
