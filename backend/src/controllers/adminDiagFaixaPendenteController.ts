@@ -11,21 +11,25 @@ import { googleSheetsService, normalizeText, normalizeComparison } from "../serv
 export async function adminDiagFaixaPendenteController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const titulo = normalizeText(url.searchParams.get("titulo") || "");
-  if (!titulo) {
-    return new Response(JSON.stringify({ success: false, error: "Use ?titulo=<nome da faixa>" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
+  const codigoUnicoBusca = normalizeText(url.searchParams.get("codigoUnico") || "");
+  if (!titulo && !codigoUnicoBusca) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Use ?titulo=<nome da faixa> ou ?codigoUnico=<EMPxxx>" }),
+      { status: 400, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
   }
 
   const alvoNorm = normalizeComparison(titulo);
-  const musicasRows = await googleSheetsService.principal.readValues("Musicas", "A:Z").catch(() => []);
+  const musicasRows = await googleSheetsService.principal.readValues("Musicas", "A:AE").catch(() => []);
   const linhasMusicas: Record<string, unknown>[] = [];
   for (let i = 1; i < musicasRows.length; i++) {
     const row = musicasRows[i];
     if (!row) continue;
     const nome = normalizeText(row[7]);
-    if (!nome || !normalizeComparison(nome).includes(alvoNorm)) continue;
+    const codigo = normalizeText(row[25]);
+    const bateTitulo = titulo && nome && normalizeComparison(nome).includes(alvoNorm);
+    const bateCodigo = codigoUnicoBusca && codigo === codigoUnicoBusca;
+    if (!bateTitulo && !bateCodigo) continue;
     linhasMusicas.push({
       linha: i + 1,
       data: row[0] || "",
