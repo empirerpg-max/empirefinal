@@ -1277,7 +1277,19 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
       sheetsService.readSheetObjects("Musicas"),
     ]);
 
-    const songs = songRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+    // BUG REAL confirmado em produção (Chris comentando em faixas de
+    // tracklist ainda pendentes — "Closure", "Still Here" — do álbum
+    // "AFTERPARTY" da Rayna, sem gerar REGISTRO): essa era a ÚNICA leitura
+    // de Musicas no arquivo que não filtrava "Pendente" antes de montar os
+    // itens (getEmpirePlayMusicasController e getEmpirePlayHomeController
+    // já filtram — ver linhas ~816/1002). Resultado: a tela de Álbuns
+    // mostrava faixas de uma tracklist antes mesmo do álbum/faixa ser
+    // lançado de verdade, e dava pra abrir e comentar nelas como se já
+    // estivessem no ar — não é que "não existe como comentar o que não
+    // está no Fórum": essa tela específica vazava a faixa antes da hora.
+    const songs = songRecords
+      .filter((rec) => (getValue(rec, ["pendente"]) || "").trim().toLowerCase() !== "sim")
+      .map((rec, idx) => buildCleanItem("Musicas", rec, idx));
 
     const albuns: EmpirePlayCleanAlbum[] = albumRecords.map((rec, idx) => {
       const albumTitle =
