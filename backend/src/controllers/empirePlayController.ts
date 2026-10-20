@@ -1496,6 +1496,21 @@ export async function getEmpirePlayForumTopicController(
   const replyToColumnKey = "coluna_7";
 
   try {
+    // Músicas lê do D1 igual ao catálogo (getEmpirePlayMusicasController) —
+    // ANTES só lia direto da planilha "Musicas", nunca migrado junto com o
+    // resto no pivot de 2026-10-15. BUG REAL encontrado em produção
+    // (TED, "nostalgic traveller", EMP945, 2026-10-17): uma escrita
+    // "fantasma" fez a linha de Musicas ficar vazia (sem título) mesmo
+    // com o D1 gravado certinho — o tópico dava 404 porque essa busca
+    // nunca achava a música na planilha, embora ela existisse no D1 o
+    // tempo todo. Ler do D1 primeiro (com fallback pra Sheets se o
+    // binding não estiver disponível) fecha essa lacuna: qualquer
+    // divergência Sheets-vs-D1 futura não derruba mais o tópico inteiro.
+    const mediaRecordsPromise =
+      sheetMedia === "Musicas"
+        ? readMusicasFromD1().then((d1) => d1 ?? sheetsService.readSheetObjects(sheetMedia).catch(() => []))
+        : sheetsService.readSheetObjects(sheetMedia).catch(() => []);
+
     const [
       mediaRecords,
       commentRecordsWithRow,
@@ -1504,7 +1519,7 @@ export async function getEmpirePlayForumTopicController(
       topicCommentsSheet,
       usuariosRecords,
     ] = await Promise.all([
-      sheetsService.readSheetObjects(sheetMedia).catch(() => []),
+      mediaRecordsPromise,
       readSheetObjectsWithRowIndex(sheetComments),
       sheetsService.readSheetObjects("Comentarios").catch(() => []),
       sheetsService.readSheetObjects("Comentarios_EmpirePlay").catch(() => []),
