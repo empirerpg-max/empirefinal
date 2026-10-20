@@ -481,6 +481,44 @@ export async function createCommentController(
         console.warn("[ForumController] Erro ao achar linha/resolver topicId:", err);
       }
 
+    // 1b. Fallback pro D1 — SÓ pra música (Fórum > Músicas é a única parte
+    // já migrada; vídeo/álbum continuam 100% Sheets, sem fallback aqui).
+    // BUG REAL confirmado em produção (Chris comentou em "nostalgic
+    // traveller" antes da correção retroativa de Musicas; TED, EMP945,
+    // 2026-10-17): quando a linha de Musicas está ausente/vazia no Sheets
+    // (mesma classe "escrita fantasma" já documentada), a busca acima
+    // nunca encontra a linha — foundRowIndex fica -1 pra sempre, e isso
+    // pulava TODO o passo 3 (nota, notificação, Audit Log em REGISTRO,
+    // prestígio) em silêncio: o comentário salvava normal (passo 2, que
+    // não depende disso), mas o jogador nunca recebia o registro/prestígio
+    // do comentário, e a linha correspondente em REGISTRO simplesmente não
+    // existia. Com o D1 confirmado confiável mesmo quando o Sheets falha
+    // (ver fix do tópico do TED), busca por lá só o necessário pro Audit
+    // Log/prestígio — não escreve nada no Sheets a partir daqui (nota/
+    // média ficam indisponíveis sem uma linha real pra gravar; o Audit Log
+    // e o prestígio não dependem de linha no Sheets).
+    let usouApenasD1 = false;
+    if (!isReply && tipoMedia === "musica" && foundRowIndex === -1) {
+      try {
+        const db = getCatalogoDb();
+        if (db) {
+          const result = await db
+            .prepare("SELECT codigo_unico, titulo, artista FROM musicas WHERE id_topico = ?")
+            .bind(topicIdClean)
+            .all<{ codigo_unico: string; titulo: string; artista: string }>()
+            .catch(() => null);
+          const row = result?.results?.[0];
+          if (row?.codigo_unico) {
+            codigoUnico = row.codigo_unico;
+            tituloOficial = row.titulo || tituloOficial;
+            usouApenasD1 = true;
+          }
+        }
+      } catch (err) {
+        console.warn("[ForumController] Erro no fallback D1 (comentário em música):", err);
+      }
+    }
+
     // 2. Salvar comentário na aba de comentários correspondente — É O
     // CAMINHO CRÍTICO da resposta: só depende da leitura+resolução do
     // topicId acima, nunca da nota/média, notificação ou Audit Log (passo
@@ -567,70 +605,77 @@ export async function createCommentController(
     // 67080f5, revertido em ed698b8), que derrubava o trabalho assim que a
     // resposta saía porque o runtime não tinha garantia nenhuma de
     // continuar executando. Pulado pra respostas (isReply).
-    if (!isReply && foundRowIndex > 0 && rowDataEncontrada) {
+    if (!isReply && ((foundRowIndex > 0 && rowDataEncontrada) || usouApenasD1)) {
       const rowData = rowDataEncontrada;
       runInBackground(ctx, async () => {
-        if (!topicIdJaTinha) {
-          const colTopicLetter = colIndexToA1Letter(colTopicIdIndex);
-          await googleSheetsService.principal
-            .updateValues(targetSheet, `${colTopicLetter}${foundRowIndex}`, [[topicIdClean]])
-            .catch((err) =>
-              console.warn("[ForumController] Falha ao gravar novo ID do tópico:", err),
-            );
-        }
+        // Tudo nesse bloco depende de uma linha real no Sheets (rowData) —
+        // no fallback D1 (usouApenasD1, linha fantasma/ausente no Sheets),
+        // não tem onde persistir topicId/nota/média nem coluna N (artista)
+        // pra notificar o dono. Pula só essa parte; REGISTRO e prestígio
+        // (abaixo) não dependem de linha no Sheets.
+        if (rowData) {
+          if (!topicIdJaTinha) {
+            const colTopicLetter = colIndexToA1Letter(colTopicIdIndex);
+            await googleSheetsService.principal
+              .updateValues(targetSheet, `${colTopicLetter}${foundRowIndex}`, [[topicIdClean]])
+              .catch((err) =>
+                console.warn("[ForumController] Falha ao gravar novo ID do tópico:", err),
+              );
+          }
 
-        // Se essa linha carrega o Código único de OUTRA música (ex: um
-        // vídeo vinculado, ou uma faixa criada com "conta pra uma música já
-        // lançada"), o título de verdade pro REGISTRO é o da música dona
-        // desse código, não o título da própria linha (topic/vídeo).
-        if (tipoMedia !== "album" && codigoUnico) {
-          const tituloReal = await resolverTituloPorCodigoUnico(codigoUnico);
-          if (tituloReal) tituloOficial = tituloReal;
-        }
+          // Se essa linha carrega o Código único de OUTRA música (ex: um
+          // vídeo vinculado, ou uma faixa criada com "conta pra uma música já
+          // lançada"), o título de verdade pro REGISTRO é o da música dona
+          // desse código, não o título da própria linha (topic/vídeo).
+          if (tipoMedia !== "album" && codigoUnico) {
+            const tituloReal = await resolverTituloPorCodigoUnico(codigoUnico);
+            if (tituloReal) tituloOficial = tituloReal;
+          }
 
-        const currentRatings = rowData[colRatingsIndex] || "";
-        const updatedRatings = currentRatings.trim()
-          ? `${currentRatings.trim()}, ${playerClean}: ${score}`
-          : `${playerClean}: ${score}`;
-        const newAvg = calculateAverageFromRatings(updatedRatings);
-        const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
-        const avgColLetter = colIndexToA1Letter(colAvgIndex);
+          const currentRatings = rowData[colRatingsIndex] || "";
+          const updatedRatings = currentRatings.trim()
+            ? `${currentRatings.trim()}, ${playerClean}: ${score}`
+            : `${playerClean}: ${score}`;
+          const newAvg = calculateAverageFromRatings(updatedRatings);
+          const ratingColLetter = colIndexToA1Letter(colRatingsIndex);
+          const avgColLetter = colIndexToA1Letter(colAvgIndex);
 
-        // Rating por jogador e média sempre ficam em colunas adjacentes
-        // (N/O, H/I, V/W conforme a aba) — uma updateValues só cobrindo o
-        // intervalo, em vez de duas chamadas sequenciais.
-        await googleSheetsService.principal.updateValues(
-          targetSheet,
-          `${ratingColLetter}${foundRowIndex}:${avgColLetter}${foundRowIndex}`,
-          [[updatedRatings, String(newAvg)]],
-        );
+          // Rating por jogador e média sempre ficam em colunas adjacentes
+          // (N/O, H/I, V/W conforme a aba) — uma updateValues só cobrindo o
+          // intervalo, em vez de duas chamadas sequenciais.
+          await googleSheetsService.principal.updateValues(
+            targetSheet,
+            `${ratingColLetter}${foundRowIndex}:${avgColLetter}${foundRowIndex}`,
+            [[updatedRatings, String(newAvg)]],
+          );
 
-        // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
-        // Monroe de Rose Thompson" pra quem é dono de Rose Thompson) — nunca
-        // a si mesmo. Pra "musica" o nome do artista vem da coluna N (ACT
-        // PRINCIPAL); álbum/vídeo usam o título "Artista - Título" (mesmo
-        // formato confirmado em Music Videos/Albuns).
-        const artistaNome =
-          tipoMedia === "musica"
-            ? normalizeText(rowData[13])
-            : (() => {
-                const sep = tituloOficial.indexOf(" - ");
-                return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
-              })();
-        if (artistaNome) {
-          const ownerId = await getOwnerIdForArtist(artistaNome).catch(() => undefined);
-          if (ownerId) {
-            await registrarNotificacaoComentario({
-              ownerId,
-              autorId: jogadorIdClean,
-              autorNome: playerClean,
-              tipoMedia,
-              tituloMedia: tituloOficial,
-              topicId: topicIdClean,
-              comentario: comentario.trim(),
-            }).catch((err) => {
-              console.warn("[ForumController] Erro ao notificar dono do artista:", err);
-            });
+          // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
+          // Monroe de Rose Thompson" pra quem é dono de Rose Thompson) — nunca
+          // a si mesmo. Pra "musica" o nome do artista vem da coluna N (ACT
+          // PRINCIPAL); álbum/vídeo usam o título "Artista - Título" (mesmo
+          // formato confirmado em Music Videos/Albuns).
+          const artistaNome =
+            tipoMedia === "musica"
+              ? normalizeText(rowData[13])
+              : (() => {
+                  const sep = tituloOficial.indexOf(" - ");
+                  return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
+                })();
+          if (artistaNome) {
+            const ownerId = await getOwnerIdForArtist(artistaNome).catch(() => undefined);
+            if (ownerId) {
+              await registrarNotificacaoComentario({
+                ownerId,
+                autorId: jogadorIdClean,
+                autorNome: playerClean,
+                tipoMedia,
+                tituloMedia: tituloOficial,
+                topicId: topicIdClean,
+                comentario: comentario.trim(),
+              }).catch((err) => {
+                console.warn("[ForumController] Erro ao notificar dono do artista:", err);
+              });
+            }
           }
         }
 
