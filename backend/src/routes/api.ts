@@ -218,6 +218,7 @@ import { adminDiagVideoController } from "../controllers/adminDiagVideoControlle
 import { adminDiagVideoWesleyController } from "../controllers/adminDiagVideoWesleyController";
 import { adminDiagRegistroController } from "../controllers/adminDiagRegistroController";
 import { adminFixRegistroChrisController } from "../controllers/adminFixRegistroChrisController";
+import { adminDiagComentariosChrisController } from "../controllers/adminDiagComentariosChrisController";
 import { adminDiagMusicaD1PorCodigoController } from "../controllers/adminDiagMusicaD1PorCodigoController";
 import {
   adminDiagReconciliacaoGapsController,
@@ -1955,6 +1956,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagRegistroController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-nostalgic-traveller") {
     response = await adminFixRegistroChrisController(request);
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-comentarios-chris") {
+    response = await adminDiagComentariosChrisController();
   } else if (url.pathname === "/api/empire-play/admin/migrar-catalogo-d1") {
     response = await adminMigrarCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {
