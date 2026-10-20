@@ -794,10 +794,22 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       console.warn("[Gestao] Upload por Base64 falhou:", err);
     }
 
-    // 3. Fallback final seguro para a pasta pública
-    return folderType === "album"
-      ? "https://drive.google.com/drive/folders/1Teo9x2yBAJSmdUV23e6cO6EkyCdddZBS"
-      : "https://drive.google.com/drive/folders/1hd_ZJwbVsESwtGniorw0bxQmkhsKcslT";
+    // BUG REAL confirmado em produção (relatado por vários jogadores,
+    // música/vídeo/áudio): quando as duas tentativas acima falhavam (ex:
+    // upload grande estourando os 45s, erro transitório no backend), esse
+    // "fallback seguro" devolvia o link da PASTA pública do Drive como se
+    // fosse a URL do arquivo recém-enviado — nada aqui detectava isso, e o
+    // formulário seguia em frente gravando esse link de pasta (nunca
+    // reproduzível, não existe arquivo nenhum ali) como se o upload tivesse
+    // dado certo. Resultado: vídeos/áudios/capas que pareciam "publicados"
+    // mas na real nunca tiveram arquivo nenhum enviado — só descoberto
+    // quando o jogador tentava tocar e via "Não foi possível carregar".
+    // Agora lança erro de verdade — todo chamador já está dentro de um
+    // try/catch que mostra isso pro jogador (setErrorMsg) em vez de deixar
+    // a publicação seguir com um link que nunca vai funcionar.
+    throw new Error(
+      "Não foi possível enviar o arquivo pro Drive (tentativas esgotadas). Tente novamente — se o arquivo for grande, uma conexão mais estável pode ajudar.",
+    );
   };
 
   // Participantes handlers
