@@ -216,6 +216,7 @@ import { adminDiagComentariosTedController } from "../controllers/adminDiagComen
 import { adminFixTopicIdComentariosTedController } from "../controllers/adminFixTopicIdComentariosTedController";
 import { adminDiagVideoController } from "../controllers/adminDiagVideoController";
 import { adminDiagVideoWesleyController } from "../controllers/adminDiagVideoWesleyController";
+import { adminDiagRegistroController } from "../controllers/adminDiagRegistroController";
 import { adminDiagMusicaD1PorCodigoController } from "../controllers/adminDiagMusicaD1PorCodigoController";
 import {
   adminDiagReconciliacaoGapsController,
@@ -1949,6 +1950,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagVideoController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-video-wesley") {
     response = await adminDiagVideoWesleyController();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-registro") {
+    response = await adminDiagRegistroController(request);
   } else if (url.pathname === "/api/empire-play/admin/migrar-catalogo-d1") {
     response = await adminMigrarCatalogoD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ids-duplicados-d1") {
