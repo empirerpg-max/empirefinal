@@ -1848,40 +1848,38 @@ async function lancarCampanhaPreSave(c: PreSaveCampanha): Promise<void> {
   aplicarDiasPerdidos(c);
     const acumuladoFinal = calcularAcumulado(c);
 
-        // Só faixas INÉDITAS entram no payload de lançamento — faixa já
-        // existente (inedita=false) já está nos charts/catálogo de antes e
-        // continua como está (mesma regra do lançamento normal de álbum,
-        // ver publicarAlbum/processarFaixasDoAlbum). O título real já é o
-        // que foi coletado na criação da campanha (nunca "Track N" — esse
-        // nome oculto é só de exibição pré-lançamento, ver campanhaDoDono/
-        // front; o backend sempre guarda o título real).
-        // Faixa inédita SEM áudio até o dia D (permitido na criação da
-        // campanha — ver criarCampanhaPreSaveController — já que o jogador
-        // pode cadastrar sem o áudio final ainda pronto) não pode virar um
-        // lançamento "mudo" silencioso: fica de fora do payload de
-        // lançamento (não publica faixa sem áudio nenhum) e é registrada
-        // no LOGS didático pra alguém notar e completar depois (mesma
-        // degradação que publicarAlbum já usa pra faixa que falha ao
-        // gravar — nunca trava o álbum inteiro por causa de 1 faixa).
+        // BUG REAL confirmado em produção (FOLLIA, Max Gorghan): esse
+        // filtro excluía TODA faixa não-inédita (já existente, vinculada
+        // pelo jogador na criação da campanha — ex: músicas já lançadas
+        // antes do pre-save) e TODA faixa inédita sem áudio ainda —
+        // sumindo essas faixas do catálogo inteiramente em vez de
+        // registrá-las como pendente. processarFaixasDoAlbum (chamado
+        // logo abaixo via publicarAlbum) já sabe lidar com os dois casos
+        // sem precisar desse pré-filtro: faixa não-inédita vai por
+        // vincularFaixaExistenteAoAlbum (não depende de mediaUrl) e faixa
+        // inédita sem áudio é gravada mesmo assim (campo C vazio, mesma
+        // degradação graciosa já usada no lançamento normal de álbum) —
+        // o jogador só precisa subir o áudio depois, a faixa (nome,
+        // participantes, letra etc.) já fica cadastrada no catálogo
+        // desde o dia D, como deveria. Passa TODAS as faixas da campanha,
+        // sem excluir nenhuma.
         const faixasSemAudio = c.faixas.filter((f) => f.inedita && !normalizeText(f.mediaUrl));
-        const faixasPayload: TrackItemPayload[] = c.faixas
-          .filter((f) => f.inedita && normalizeText(f.mediaUrl))
-          .map((f) => ({
-            num: f.num,
-            inedita: true,
-            titulo: f.titulo,
-            tipoSingle: f.tipoSingle,
-            tipoMusica: f.tipoMusica,
-            participantes: f.participantes,
-            mediaUrl: f.mediaUrl,
-            letra: f.letra,
-            abrirTopico: f.abrirTopico,
-          }));
+        const faixasPayload: TrackItemPayload[] = c.faixas.map((f) => ({
+          num: f.num,
+          inedita: f.inedita,
+          titulo: f.titulo,
+          tipoSingle: f.tipoSingle,
+          tipoMusica: f.tipoMusica,
+          participantes: f.participantes,
+          mediaUrl: f.mediaUrl,
+          letra: f.letra,
+          abrirTopico: f.abrirTopico,
+        }));
 
         if (faixasSemAudio.length > 0) {
           registrarLogSistema({
-            categoria: "Falha de escrita",
-            oQueAconteceu: `Pre-save de "${c.albumTituloFull}" lançado no dia D, mas ${faixasSemAudio.length} faixa(s) sem áudio ficaram de fora: ${faixasSemAudio.map((f) => f.titulo).join(", ")}. Suba o áudio e publique essas faixas manualmente (faixa pendente) depois.`,
+            categoria: "Ação concluída",
+            oQueAconteceu: `Pre-save de "${c.albumTituloFull}" lançado no dia D com ${faixasSemAudio.length} faixa(s) ainda sem áudio: ${faixasSemAudio.map((f) => f.titulo).join(", ")}. Já estão cadastradas no catálogo (pendente) — suba o áudio e publique quando estiver pronto.`,
             onde: "processarLancamentosPreSaveScheduled",
           }).catch(() => {});
         }

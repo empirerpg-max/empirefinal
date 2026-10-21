@@ -1545,7 +1545,7 @@ async function atualizarFaixaNosChartsAoPublicar(params: {
 // Processa a lista de faixas de um álbum (criação ou substituição): faixa
 // existente vincula na aba Musicas/EDIÇÃO CHARTS; faixa inédita registra do
 // zero em Musicas + REGISTRO DE MÚSICA, pendente até virar tópico próprio.
-async function processarFaixasDoAlbum(
+export async function processarFaixasDoAlbum(
   faixas: TrackItemPayload[],
   albumFullTitle: string,
   artistaAlbum: string,

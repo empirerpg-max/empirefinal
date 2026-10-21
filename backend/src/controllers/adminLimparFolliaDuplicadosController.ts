@@ -113,25 +113,65 @@ export async function adminLimparFolliaDuplicadosController(request: Request): P
     );
   }
 
+  // BUG REAL confirmado em produção: a primeira rodada desse fix fez 100+
+  // chamadas de updateValues seguidas sem pausa nenhuma, estourou a cota
+  // de escrita por minuto da API do Sheets no meio do caminho — as
+  // últimas chamadas falharam (429), foram engolidas pelo .catch() e o
+  // endpoint reportou sucesso mesmo assim (resumo "planejado", nunca
+  // verificado). Fix: pausa entre cada escrita + 1 retry com backoff +
+  // contadores de sucesso/falha REAIS no retorno, em vez de confiar que
+  // o plano = o que realmente foi gravado.
+  const dormir = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  async function escreverComRetry(fn: () => Promise<unknown>, label: string): Promise<boolean> {
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      try {
+        await fn();
+        return true;
+      } catch (err) {
+        console.warn(`[adminLimparFolliaDuplicados] Falha ao ${label} (tentativa ${tentativa + 1}):`, err);
+        if (tentativa === 0) await dormir(1500);
+      }
+    }
+    return false;
+  }
+
+  let albunsOk = 0;
+  let albunsFalha = 0;
   const ALBUNS_VAZIO = Array(11).fill("");
   for (const d of duplicados) {
-    await googleSheetsService.principal
-      .updateValues("Albuns", `A${d.linha}:K${d.linha}`, [ALBUNS_VAZIO])
-      .catch((err) => console.warn("[adminLimparFolliaDuplicados] Falha ao esvaziar Albuns linha", d.linha, err));
+    const ok = await escreverComRetry(
+      () => googleSheetsService.principal.updateValues("Albuns", `A${d.linha}:K${d.linha}`, [ALBUNS_VAZIO]),
+      `esvaziar Albuns linha ${d.linha}`,
+    );
+    if (ok) albunsOk++;
+    else albunsFalha++;
+    await dormir(400);
   }
 
+  let edicaoChartsOk = 0;
+  let edicaoChartsFalha = 0;
   const EDICAO_CHARTS_ALBUNS_VAZIO = Array(18).fill("");
   for (const linha of linhasEdicaoChartsParaLimpar) {
-    await googleSheetsService.edicaoCharts
-      .updateValues("EDIÇÃO CHARTS ÁLBUMS", `A${linha}:R${linha}`, [EDICAO_CHARTS_ALBUNS_VAZIO])
-      .catch((err) => console.warn("[adminLimparFolliaDuplicados] Falha ao esvaziar EDIÇÃO CHARTS ÁLBUMS linha", linha, err));
+    const ok = await escreverComRetry(
+      () => googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS ÁLBUMS", `A${linha}:R${linha}`, [EDICAO_CHARTS_ALBUNS_VAZIO]),
+      `esvaziar EDIÇÃO CHARTS ÁLBUMS linha ${linha}`,
+    );
+    if (ok) edicaoChartsOk++;
+    else edicaoChartsFalha++;
+    await dormir(400);
   }
 
+  let faixasOk = 0;
+  let faixasFalha = 0;
   const MUSICAS_VAZIO = Array(24).fill("");
   for (const f of faixasParaLimpar) {
-    await googleSheetsService.principal
-      .updateValues("Musicas", `A${f.linha}:X${f.linha}`, [MUSICAS_VAZIO])
-      .catch((err) => console.warn("[adminLimparFolliaDuplicados] Falha ao esvaziar Musicas linha", f.linha, err));
+    const ok = await escreverComRetry(
+      () => googleSheetsService.principal.updateValues("Musicas", `A${f.linha}:X${f.linha}`, [MUSICAS_VAZIO]),
+      `esvaziar Musicas linha ${f.linha}`,
+    );
+    if (ok) faixasOk++;
+    else faixasFalha++;
+    await dormir(400);
   }
 
   // D1 é só espelho best-effort — apaga de vez (PK codigo_unico/id, sem
@@ -147,7 +187,16 @@ export async function adminLimparFolliaDuplicadosController(request: Request): P
   }
 
   return new Response(
-    JSON.stringify({ success: true, dryRun: false, ...resumo }, null, 2),
+    JSON.stringify(
+      {
+        success: true,
+        dryRun: false,
+        ...resumo,
+        resultadoReal: { albunsOk, albunsFalha, edicaoChartsOk, edicaoChartsFalha, faixasOk, faixasFalha },
+      },
+      null,
+      2,
+    ),
     { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
   );
 }
