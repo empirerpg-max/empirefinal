@@ -110,7 +110,12 @@ export async function adminRecuperarFolliaFaixasController(request: Request): Pr
       for (let c = 0; c < row.length; c++) {
         if (normalizeComparison(normalizeText(row[c])) !== normalizeComparison(albumFullTitle)) continue;
         const colInicioRegistro = c - 10; // K está 10 células depois de A no layout A..X
-        if (colInicioRegistro < 0) continue;
+        // colInicio === 0 = registro começando na coluna A de verdade —
+        // ou é uma faixa já bem formada (ex: as 9 recém-gravadas por
+        // este mesmo endpoint, se rodado de novo) ou pertence a outra
+        // função que já escreve certo. NUNCA trata como lixo — só o que
+        // está deslocado (colInicio > 0) é sobra do bug.
+        if (colInicioRegistro <= 0) continue;
         linhasParaLimpar.push({ linha, colInicio: colInicioRegistro });
       }
     }
@@ -147,10 +152,31 @@ export async function adminRecuperarFolliaFaixasController(request: Request): Pr
     });
   }
 
-  const gravadas: { titulo: string; linhaNova: number }[] = [];
+  // Idempotência: se rodado de novo, não duplica faixa que já está bem
+  // formada (começando na coluna A de verdade) — usa o mesmo mapa de
+  // ocorrências coletado acima pra saber quais títulos já existem limpos.
+  const titulosJaCorretos = new Set<string>();
+  for (let inicio = LINHA_INICIO; inicio <= LINHA_FIM; inicio += LOTE) {
+    const fim = Math.min(inicio + LOTE - 1, LINHA_FIM);
+    const rows = await googleSheetsService.principal.readValues("Musicas", `H${inicio}:K${fim}`).catch(() => []);
+    for (const row of rows) {
+      const titulo = normalizeText(row?.[0]);
+      const album = normalizeText(row?.[3]);
+      if (titulo && normalizeComparison(album) === normalizeComparison(albumFullTitle)) {
+        titulosJaCorretos.add(normalizeComparison(titulo));
+      }
+    }
+  }
+
+  const gravadas: { titulo: string; linhaNova: number | null; pulada?: boolean }[] = [];
   for (const registro of registrosParaGravar) {
+    const titulo = String(registro[7]);
+    if (titulosJaCorretos.has(normalizeComparison(titulo))) {
+      gravadas.push({ titulo, linhaNova: null, pulada: true });
+      continue;
+    }
     const linhaNova = await appendRowMusicasSeguro(registro);
-    gravadas.push({ titulo: String(registro[7]), linhaNova });
+    gravadas.push({ titulo, linhaNova });
     await new Promise((resolve) => setTimeout(resolve, 400));
   }
 
