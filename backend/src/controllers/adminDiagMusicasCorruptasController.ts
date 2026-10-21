@@ -15,8 +15,11 @@ export async function adminDiagMusicasCorruptasController(request: Request): Pro
   const inicio = Number(url.searchParams.get("inicio") || "770");
   const fim = Number(url.searchParams.get("fim") || "800");
 
+  // BZ (coluna 77) cortava dado real de linhas com deslocamento grande
+  // (confirmado ao vivo: linha 778 continuava além de BZ) — ZZ (coluna
+  // 701) dá folga de sobra pro pior caso já visto.
   const rows = await googleSheetsService.principal
-    .readValues("Musicas", `A${inicio}:BZ${fim}`)
+    .readValues("Musicas", `A${inicio}:ZZ${fim}`)
     .catch(() => []);
 
   const achadas = rows.map((row, i) => {
