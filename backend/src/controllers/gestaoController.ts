@@ -364,11 +364,6 @@ export interface CreateAlbumPayload {
   // calcularSemanasRetroativas. Toda faixa entra pendente (nunca abre
   // tópico próprio na hora), mesmo que o payload mande abrirTopico=true.
   dataLancamento?: string;
-  // Marca a coluna "PRE-SAVE" (S) de EDIÇÃO CHARTS ÁLBUMS quando o álbum
-  // foi lançado automaticamente pelo cron de pre-save (ver
-  // lancarCampanhaPreSave em preSaveController.ts) — nunca setado por
-  // lançamento manual via Gestão.
-  veioDoPreSave?: boolean;
 }
 
 // Semanas já "passadas" no chart pra um álbum lançado retroativamente —
@@ -2591,7 +2586,6 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
   numeroSemanas: number;
   numeroFaixas: number;
   albumRowIndexEmAlbuns?: number | null;
-  veioDoPreSave?: boolean;
 }): Promise<string> {
   const {
     artistaAlbum,
@@ -2601,7 +2595,6 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
     numeroSemanas,
     numeroFaixas,
     albumRowIndexEmAlbuns,
-    veioDoPreSave = false,
   } = params;
   // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") — esta
   // função inteira (gerar Código único + achar linha livre + escrever +
@@ -2630,7 +2623,7 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
       const linhaAlvoAlbum = ultimaLinhaComAlbum + 1;
       await googleSheetsService.edicaoCharts.updateValues(
         "EDIÇÃO CHARTS ÁLBUMS",
-        `A${linhaAlvoAlbum}:S${linhaAlvoAlbum}`,
+        `A${linhaAlvoAlbum}:R${linhaAlvoAlbum}`,
         [
           [
             artistaAlbum, // A - ARTISTA
@@ -2651,10 +2644,14 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
             "", // G-P (streams/vendas/certificação/multiplicador — calculados à parte)
             "", // Q - CÁLCULO 1
             codigoUnico, // R - Código único
-            veioDoPreSave ? "SIM" : "", // S - PRE-SAVE
           ],
         ],
       );
+      // NÃO escreve a coluna S ("PRE-SAVE") aqui — isso é feito só pelo
+      // chamador pre-save (processarLancamentosPreSaveScheduled, modo
+      // "missao"), que já tem a fórmula real combinada (acumulado de fãs
+      // da campanha) e escreve o valor numérico depois que o código único
+      // existe. Lançamento manual via Gestão nunca toca essa coluna.
       // Como esse código é gerado pelo próprio app (não por fórmula), já
       // temos o valor em mãos — leva a mesma cópia pro catálogo (Albuns!L),
       // sem precisar reler nada.
@@ -2695,7 +2692,6 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
     jogadorId = "",
     faixas = [],
     dataLancamento = "",
-    veioDoPreSave = false,
   } = body;
 
   if (!tituloAlbum || !artistaAlbum || !nomeJogador) {
@@ -2819,7 +2815,6 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
     numeroSemanas,
     numeroFaixas: faixasFinal.length,
     albumRowIndexEmAlbuns: albumRowIndexNovo,
-    veioDoPreSave,
   });
 
   // 3. Processar cada faixa (existente ou inédita) — só depois do álbum

@@ -348,7 +348,7 @@ async function ensureHeader(): Promise<void> {
 // 11 = L (TetoFinal).
 const PRESAVE_COLUNAS_NUMERICAS = [10, 11];
 
-async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
+export async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
   // Regressão real encontrada e corrigida: ler a aba INTEIRA com
   // UNFORMATTED_VALUE resolveu o teto (ver bug "tetoFinal virava 2" —
   // comentário mais abaixo), mas quebrou toda coluna de DATA (ex.
@@ -1895,7 +1895,6 @@ async function lancarCampanhaPreSave(c: PreSaveCampanha): Promise<void> {
           nomeJogador: c.jogadorNome,
           jogadorId: c.jogadorId,
           faixas: faixasPayload,
-          veioDoPreSave: true,
         });
 
         // Material extra (Shop/Info/Visual) coletado na criação da
