@@ -45,7 +45,7 @@ function parseDataBRParaIso(dataBR: string): string | null {
 // recebia a letra/sincronização, então sumia pro jogador mesmo gravada com
 // sucesso. Best-effort, nunca lança; sem código único (linha ainda sem
 // nenhum lançamento) não tem PK pra upsert, então só pula.
-async function mirrorMusicaRowParaD1(rowIndex: number): Promise<void> {
+export async function mirrorMusicaRowParaD1(rowIndex: number): Promise<void> {
   const db = getCatalogoDb();
   if (!db) return;
   try {
@@ -234,7 +234,7 @@ async function registrarNaEdicaoChartsSemTrava(params: {
 // normalmente já recalcula na mesma escrita, mas por segurança tenta de
 // novo uma vez com um pequeno atraso antes de desistir (nunca bloqueia o
 // fluxo principal: se não achar, quem chama só deixa o código em branco).
-async function lerCodigoUnicoGerado(rowIndex: number): Promise<string> {
+export async function lerCodigoUnicoGerado(rowIndex: number): Promise<string> {
   for (let tentativa = 1; tentativa <= 2; tentativa++) {
     try {
       const rows = await googleSheetsService.edicaoCharts.readValues(

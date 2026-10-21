@@ -226,6 +226,7 @@ import { adminFixFolliaFaixasController } from "../controllers/adminFixFolliaFai
 import { adminFixFolliaColunaLController } from "../controllers/adminFixFolliaColunaLController";
 import { adminDiagMusicasCorruptasController } from "../controllers/adminDiagMusicasCorruptasController";
 import { adminRecuperarFolliaFaixasController } from "../controllers/adminRecuperarFolliaFaixasController";
+import { adminFinalizarFolliaFaixasController } from "../controllers/adminFinalizarFolliaFaixasController";
 import { adminFixRegistroChrisController } from "../controllers/adminFixRegistroChrisController";
 import { adminFixRegistroChrisFolliaController } from "../controllers/adminFixRegistroChrisFolliaController";
 import { adminDiagComentariosChrisController } from "../controllers/adminDiagComentariosChrisController";
@@ -1983,6 +1984,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagMusicasCorruptasController(request);
   } else if (url.pathname === "/api/empire-play/admin/recuperar-follia-faixas") {
     response = await adminRecuperarFolliaFaixasController(request);
+  } else if (url.pathname === "/api/empire-play/admin/finalizar-follia-faixas") {
+    response = await adminFinalizarFolliaFaixasController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-nostalgic-traveller") {
     response = await adminFixRegistroChrisController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-follia") {
