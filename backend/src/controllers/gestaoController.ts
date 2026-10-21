@@ -1247,30 +1247,53 @@ async function vincularFaixaExistenteAoAlbum(
       "Musicas",
       (row) => normalizeComparison(row[7] || "") === alvoNorm,
     );
-    // Regra de negócio confirmada: uma faixa já lançada pode pertencer a
-    // MÚLTIPLOS álbuns (ex: single que depois entra numa coletânea/deluxe)
-    // — selecioná-la como "Música Existente" NUNCA deve ser tratada como
-    // erro/duplicata/pulada. Bug real corrigido aqui: antes, toda linha
-    // encontrada em Musicas (coluna K = álbum da faixa) tinha o K
-    // SOBRESCRITO pelo álbum novo, mesmo quando já pertencia a outro álbum
-    // — "roubando" a faixa do álbum original em vez de linká-la aos dois.
-    // Agora só atualiza em cima de uma linha livre (K vazio) ou já do MESMO
-    // álbum (re-run idempotente); se toda linha encontrada já pertence a um
-    // álbum DIFERENTE, cai no mesmo ramo de "não encontrada" abaixo, que
-    // cria uma linha PRÓPRIA pra essa faixa dentro do álbum novo — sem
-    // nunca tocar na linha/álbum original.
+    // Regra de negócio confirmada (e reafirmada pelo usuário no incidente
+    // FOLLIA): uma faixa já lançada pode pertencer a MÚLTIPLOS álbuns (ex:
+    // single que depois entra numa coletânea/deluxe) — selecioná-la como
+    // "Música Existente" NUNCA deve ser tratada como erro/duplicata/
+    // pulada, e NUNCA deve criar uma linha nova pra ela. "Musicas" já tem
+    // colunas próprias pra isso — ALBUM 2 a ALBUM 5 (AA-AD, índices
+    // 26-29, mesmo padrão já usado em EDIÇÃO CHARTS!N-Q, ver
+    // registrarNaEdicaoChartsSemTrava) — nunca utilizadas aqui antes.
+    // BUG REAL corrigido aqui: quando a linha encontrada já pertencia a
+    // um álbum DIFERENTE, o código antigo desistia de vincular e caía no
+    // ramo de "não encontrada" abaixo, que cria uma linha NOVA pendente
+    // pra essa faixa — duplicando a música inteira em vez de só anotar o
+    // segundo álbum na linha já existente (confirmado ao vivo: "Follia"
+    // e "Fuori Rotta" do Max Gorghan viraram duplicatas fantasma assim).
+    // Agora: K vazio ou já = álbum novo → escreve ali (como antes); K
+    // ocupado por álbum diferente → procura o primeiro slot livre entre
+    // ALBUM 2-5 na MESMA linha e escreve lá; só cria linha nova se os 4
+    // slots extras também já estiverem todos ocupados (não deveria
+    // acontecer na prática).
+    const COLUNAS_ALBUM_EXTRA = ["AA", "AB", "AC", "AD"]; // ALBUM 2-5
     let atualizouLinhaLivre = false;
     for (const { rowIndex, row } of musicasMatches) {
       const albumAtual = normalizeComparison(row[10] || ""); // K
       const albumNovoNorm = normalizeComparison(albumFullTitle);
-      if (albumAtual && albumAtual !== albumNovoNorm) continue; // pertence a outro álbum — não sobrescreve
-      await googleSheetsService.principal.updateValues("Musicas", `K${rowIndex}`, [
-        [albumFullTitle],
-      ]);
-      await googleSheetsService.principal.updateValues("Musicas", `U${rowIndex}`, [
-        [String(ordem)],
-      ]);
-      atualizouLinhaLivre = true;
+      if (!albumAtual || albumAtual === albumNovoNorm) {
+        await googleSheetsService.principal.updateValues("Musicas", `K${rowIndex}`, [[albumFullTitle]]);
+        await googleSheetsService.principal.updateValues("Musicas", `U${rowIndex}`, [[String(ordem)]]);
+        atualizouLinhaLivre = true;
+        continue;
+      }
+      // Já pertence a outro álbum — procura slot livre em ALBUM 2-5 (ou
+      // já igual ao novo álbum, pra idempotência num re-run).
+      const albunsExtrasAtuais = [row[26], row[27], row[28], row[29]].map((v) => normalizeComparison(v || ""));
+      const jaTemComoExtra = albunsExtrasAtuais.includes(albumNovoNorm);
+      const slotLivre = albunsExtrasAtuais.indexOf("");
+      if (jaTemComoExtra) {
+        atualizouLinhaLivre = true;
+      } else if (slotLivre >= 0) {
+        await googleSheetsService.principal.updateValues(
+          "Musicas",
+          `${COLUNAS_ALBUM_EXTRA[slotLivre]}${rowIndex}`,
+          [[albumFullTitle]],
+        );
+        atualizouLinhaLivre = true;
+      }
+      // Nenhum slot livre (raríssimo, faixa já em 5 álbuns) — segue sem
+      // marcar atualizouLinhaLivre, cai no fallback de linha nova abaixo.
     }
     musicasOk = atualizouLinhaLivre;
     // Migração antiga: algumas faixas de álbum contabilizavam vendas/streams
