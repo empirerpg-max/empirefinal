@@ -397,10 +397,32 @@ async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
 // de campanhas DIFERENTES em paralelo, sem fila desnecessária.
 async function writeCampanha(c: PreSaveCampanha): Promise<void> {
   await withWriteLock(`presave:campanha:${c.id}`, async () => {
+    // TRAVA ESTRUTURAL (pós-incidente FOLLIA, ver writeMissoesCampanha
+    // acima) — nunca deixar uma escrita de linha inteira regredir o
+    // status pra "ativa" depois de já ter virado "lancada"/"cancelada" de
+    // verdade na planilha. Não depende de achar e corrigir CADA call site
+    // que possa carregar um `c` desatualizado em memória — relê o status
+    // atual direto da célula, DENTRO da trava, e se a planilha já avançou
+    // pra um estado final, mantém esse estado final (ignora o "ativa"
+    // desatualizado que está em `c`), em vez de sobrescrever. Único jeito
+    // de regredir de "lancada"/"cancelada" pra "ativa" é um bug novo
+    // tentando ativamente fazer isso — e mesmo esse caso passaria a
+    // precisar MUDAR este guard pra funcionar, não só esquecer de travar.
+    const statusAtualRaw = await googleSheetsService.principal
+      .readValues(PRESAVE_SHEET, `M${c._rowIndex}:M${c._rowIndex}`)
+      .catch(() => []);
+    const statusAtual = normalizeComparison(statusAtualRaw?.[0]?.[0] || "");
+    const linha = campanhaToRow(c);
+    if ((statusAtual === "lancada" || statusAtual === "cancelada") && normalizeComparison(c.status) === "ativa") {
+      linha[12] = statusAtualRaw?.[0]?.[0] || c.status;
+      console.warn(
+        `[writeCampanha] Bloqueado: tentativa de regravar campanha ${c.id} com status desatualizado ("ativa" em memória, já "${statusAtual}" na planilha) — status final preservado.`,
+      );
+    }
     await googleSheetsService.principal.updateValues(
       PRESAVE_SHEET,
       `A${c._rowIndex}:U${c._rowIndex}`,
-      [campanhaToRow(c)],
+      [linha],
     );
   });
 }
