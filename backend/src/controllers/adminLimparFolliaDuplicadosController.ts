@@ -121,26 +121,42 @@ export async function adminLimparFolliaDuplicadosController(request: Request): P
   // verificado). Fix: pausa entre cada escrita + 1 retry com backoff +
   // contadores de sucesso/falha REAIS no retorno, em vez de confiar que
   // o plano = o que realmente foi gravado.
+  // IMPORTANTE: updateValues (googleSheetsService.ts) NUNCA lança exceção
+  // — ela já tem seu próprio retry (3x) por dentro e, se todas falharem,
+  // só RETORNA false. Um try/catch em volta dela nunca pega nada; é
+  // preciso checar o valor booleano de retorno pra saber se a escrita
+  // realmente aconteceu (bug real: a primeira versão deste helper usava
+  // só try/catch, sempre devolvia true, e os contadores de sucesso
+  // reportados eram mentira).
   const dormir = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  async function escreverComRetry(fn: () => Promise<unknown>, label: string): Promise<boolean> {
+  async function escreverComRetry(fn: () => Promise<boolean>, label: string): Promise<boolean> {
     for (let tentativa = 0; tentativa < 2; tentativa++) {
       try {
-        await fn();
-        return true;
+        const sucesso = await fn();
+        if (sucesso) return true;
+        console.warn(`[adminLimparFolliaDuplicados] updateValues retornou false ao ${label} (tentativa ${tentativa + 1})`);
       } catch (err) {
         console.warn(`[adminLimparFolliaDuplicados] Falha ao ${label} (tentativa ${tentativa + 1}):`, err);
-        if (tentativa === 0) await dormir(1500);
       }
+      if (tentativa === 0) await dormir(1500);
     }
     return false;
   }
 
   let albunsOk = 0;
   let albunsFalha = 0;
-  const ALBUNS_VAZIO = Array(11).fill("");
+  // A:L (12 colunas) — NÃO só A:K. Coluna L (Código único) é copiada à
+  // parte por registrarAlbumNaEdicaoChartsAlbuns (gestaoController.ts) e
+  // fica fora do range A:K que publicarAlbum escreve. Bug real: a
+  // primeira versão esvaziava só A:K, deixando L preenchida — a linha
+  // deixava de ficar 100% vazia e readSheetObjects parava de filtrá-la,
+  // virando um álbum "fantasma" sem título/capa (fallback "Álbum N") no
+  // Fórum > Álbuns. Ver adminFixFolliaColunaLController (fix retroativo
+  // pras linhas já esvaziadas erradas antes deste fix).
+  const ALBUNS_VAZIO = Array(12).fill("");
   for (const d of duplicados) {
     const ok = await escreverComRetry(
-      () => googleSheetsService.principal.updateValues("Albuns", `A${d.linha}:K${d.linha}`, [ALBUNS_VAZIO]),
+      () => googleSheetsService.principal.updateValues("Albuns", `A${d.linha}:L${d.linha}`, [ALBUNS_VAZIO]),
       `esvaziar Albuns linha ${d.linha}`,
     );
     if (ok) albunsOk++;
