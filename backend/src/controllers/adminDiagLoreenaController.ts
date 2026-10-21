@@ -36,8 +36,57 @@ export async function adminDiagLoreenaController(): Promise<Response> {
     });
   }
 
+  // getMusicasEmChartController (usado no picker "Música Existente" da
+  // Gestão) NÃO lê Musicas/D1 — lê EDIÇÃO CHARTS + REGISTRO DE MÚSICA +
+  // SPOTIFY. Ainda não tinha checado essas 3 abas por duplicata.
+  const edicaoChartsRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS").catch(() => []);
+  const edicaoChartsAchadas: Record<string, unknown>[] = [];
+  for (let i = 1; i < edicaoChartsRows.length; i++) {
+    const row = edicaoChartsRows[i];
+    if (!row) continue;
+    const artista = normalizeText(row[7]);
+    if (normalizeComparison(artista) !== "loreena") continue;
+    edicaoChartsAchadas.push({ linha: i + 1, titulo: normalizeText(row[1]), artista, codigoUnico: normalizeText(row[55]) });
+  }
+
+  const registroMusicaRows = await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA").catch(() => []);
+  const registroMusicaAchadas: Record<string, unknown>[] = [];
+  for (let i = 1; i < registroMusicaRows.length; i++) {
+    const row = registroMusicaRows[i];
+    if (!row) continue;
+    const artista = normalizeText(row[7]);
+    if (normalizeComparison(artista) !== "loreena") continue;
+    registroMusicaAchadas.push({ linha: i + 1, titulo: normalizeText(row[1]), artista });
+  }
+
+  const spotifyRows = await googleSheetsService.chartsBase.readValues("SPOTIFY").catch(() => []);
+  const spotifyAchadas: Record<string, unknown>[] = [];
+  for (let i = 1; i < spotifyRows.length; i++) {
+    const row = spotifyRows[i];
+    if (!row) continue;
+    const artista = normalizeText(row[7]);
+    if (normalizeComparison(artista) !== "loreena") continue;
+    spotifyAchadas.push({ linha: i + 1, titulo: normalizeText(row[3]), artista });
+  }
+
   return new Response(
-    JSON.stringify({ success: true, totalD1: d1Rows.length, d1Rows, totalSheets: sheetAchadas.length, sheetAchadas }, null, 2),
+    JSON.stringify(
+      {
+        success: true,
+        totalD1: d1Rows.length,
+        d1Rows,
+        totalSheets: sheetAchadas.length,
+        sheetAchadas,
+        totalEdicaoCharts: edicaoChartsAchadas.length,
+        edicaoChartsAchadas,
+        totalRegistroMusica: registroMusicaAchadas.length,
+        registroMusicaAchadas,
+        totalSpotify: spotifyAchadas.length,
+        spotifyAchadas,
+      },
+      null,
+      2,
+    ),
     { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
   );
 }
