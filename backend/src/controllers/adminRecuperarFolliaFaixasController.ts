@@ -1,5 +1,5 @@
 import { getCatalogoDb } from "../services/musicasDbService";
-import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeText, normalizeComparison, updateValuesBatch } from "../services/googleSheetsService";
 import { withWriteLock } from "../services/writeLockService";
 
 // Recuperação definitiva do incidente FOLLIA (Max Gorghan) em "Musicas":
@@ -183,18 +183,27 @@ export async function adminRecuperarFolliaFaixasController(request: Request): Pr
   // 2. Esvazia TODAS as ocorrências deslocadas encontradas — agora que as
   // faixas reais já estão gravadas limpas em linhas próprias, toda
   // ocorrência antiga (certa ou quebrada) é só lixo deixado pelo bug.
+  //
+  // BUG REAL confirmado em produção: N chamadas sequenciais de
+  // updateValues (mesmo com pausa de 350ms) ainda estouravam a cota de
+  // escrita por minuto da API do Sheets bem antes de terminar (102 de
+  // 141 falharam numa rodada). Fix definitivo: values:batchUpdate — UMA
+  // chamada de rede grava dezenas de ranges de uma vez (atômico por
+  // chamada), em vez de uma chamada por célula. Em lotes de 80 pra não
+  // estourar o tamanho máximo de uma requisição batchUpdate.
+  const LOTE_BATCH = 80;
   let limposOk = 0;
   let limposFalha = 0;
-  for (const l of linhasParaLimpar) {
-    const vazio = Array(24).fill("");
-    const primeiraCol = toColLetter(l.colInicio);
-    const ultimaCol = toColLetter(l.colInicio + 23);
-    const sucesso = await googleSheetsService.principal
-      .updateValues("Musicas", `${primeiraCol}${l.linha}:${ultimaCol}${l.linha}`, [vazio])
-      .catch(() => false);
-    if (sucesso) limposOk++;
-    else limposFalha++;
-    await new Promise((resolve) => setTimeout(resolve, 350));
+  for (let i = 0; i < linhasParaLimpar.length; i += LOTE_BATCH) {
+    const lote = linhasParaLimpar.slice(i, i + LOTE_BATCH);
+    const entries = lote.map((l) => ({
+      sheetName: "Musicas",
+      range: `${toColLetter(l.colInicio)}${l.linha}:${toColLetter(l.colInicio + 23)}${l.linha}`,
+      values: [Array(24).fill("")],
+    }));
+    const sucesso = await updateValuesBatch("principal", entries);
+    if (sucesso) limposOk += lote.length;
+    else limposFalha += lote.length;
   }
 
   // 3. Confirma D1 — upsertMidiaD1/upsertMusicaD1 usam os campos em

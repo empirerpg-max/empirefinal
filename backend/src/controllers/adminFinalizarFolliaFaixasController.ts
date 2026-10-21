@@ -2,6 +2,7 @@ import {
   googleSheetsService,
   normalizeText,
   normalizeComparison,
+  updateValuesBatch,
 } from "../services/googleSheetsService";
 import {
   registrarNaEdicaoCharts,
@@ -110,33 +111,42 @@ export async function adminFinalizarFolliaFaixasController(request: Request): Pr
 
   // Limpa duplicata REAL em EDIÇÃO CHARTS (mantém a 1ª ocorrência de cada
   // título, esvazia o resto) — nunca exclui linha, só esvazia (regra do
-  // usuário pra qualquer limpeza de planilha nesta sessão).
+  // usuário pra qualquer limpeza de planilha nesta sessão). Em lote
+  // (values:batchUpdate, uma chamada de rede só) — N chamadas sequenciais
+  // de updateValues estouravam a cota de escrita por minuto do Sheets
+  // bem antes de terminar (confirmado ao vivo nesta mesma sessão).
+  const linhasEdicaoChartsParaLimpar = edicaoChartsDuplicadas.flatMap((dup) => dup.linhasParaLimpar);
   let edicaoChartsDupOk = 0;
   let edicaoChartsDupFalha = 0;
-  for (const dup of edicaoChartsDuplicadas) {
-    for (const linha of dup.linhasParaLimpar) {
-      const vazio = Array(17).fill(""); // A..Q
-      const sucesso = await googleSheetsService.edicaoCharts
-        .updateValues("EDIÇÃO CHARTS", `A${linha}:Q${linha}`, [vazio])
-        .catch(() => false);
-      if (sucesso) edicaoChartsDupOk++;
-      else edicaoChartsDupFalha++;
-      await new Promise((resolve) => setTimeout(resolve, 350));
-    }
+  const LOTE_BATCH = 80;
+  for (let i = 0; i < linhasEdicaoChartsParaLimpar.length; i += LOTE_BATCH) {
+    const lote = linhasEdicaoChartsParaLimpar.slice(i, i + LOTE_BATCH);
+    const entries = lote.map((linha) => ({
+      sheetName: "EDIÇÃO CHARTS",
+      range: `A${linha}:Q${linha}`,
+      values: [Array(17).fill("")],
+    }));
+    const sucesso = await updateValuesBatch("edicaoCharts", entries);
+    if (sucesso) edicaoChartsDupOk += lote.length;
+    else edicaoChartsDupFalha += lote.length;
   }
 
   // EDIÇÃO CHARTS ÁLBUMS: se sobrou mais de 1 linha pro FOLLIA (não
-  // deveria, já limpo antes), mantém a 1ª e esvazia o resto.
+  // deveria, já limpo antes), mantém a 1ª e esvazia o resto — mesmo
+  // padrão em lote.
+  const linhasAlbunsParaLimpar = linhasAlbumPorNome.slice(1);
   let albunsDupOk = 0;
   let albunsDupFalha = 0;
-  for (const linha of linhasAlbumPorNome.slice(1)) {
-    const vazio = Array(18).fill(""); // A..R
-    const sucesso = await googleSheetsService.edicaoCharts
-      .updateValues("EDIÇÃO CHARTS ÁLBUMS", `A${linha}:R${linha}`, [vazio])
-      .catch(() => false);
-    if (sucesso) albunsDupOk++;
-    else albunsDupFalha++;
-    await new Promise((resolve) => setTimeout(resolve, 350));
+  for (let i = 0; i < linhasAlbunsParaLimpar.length; i += LOTE_BATCH) {
+    const lote = linhasAlbunsParaLimpar.slice(i, i + LOTE_BATCH);
+    const entries = lote.map((linha) => ({
+      sheetName: "EDIÇÃO CHARTS ÁLBUMS",
+      range: `A${linha}:R${linha}`,
+      values: [Array(18).fill("")],
+    }));
+    const sucesso = await updateValuesBatch("edicaoCharts", entries);
+    if (sucesso) albunsDupOk += lote.length;
+    else albunsDupFalha += lote.length;
   }
 
   const resultado: { titulo: string; edicaoChartsRowIndex: number | null; codigo: string; d1Ok: boolean }[] = [];
