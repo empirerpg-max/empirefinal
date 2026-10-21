@@ -60,6 +60,16 @@ export async function adminVincularFaixasExistentesFolliaController(request: Req
         linhaPendenteDuplicada = i + 1;
         continue;
       }
+      // BUG REAL confirmado: busca por substring pegava falso positivo —
+      // "Abbiso di Follia" (uma das 9 faixas novas, contém "follia") e
+      // os remixes de "Fuori Rotta [Remixes]" (contêm "fuori rotta") —
+      // nenhum é o single de verdade. O single real nunca foi vinculado
+      // a NENHUM álbum ainda (campo ALBUM vazio) — é o único filtro que
+      // separa o single de verdade de qualquer faixa que só cite o
+      // termo no título.
+      if (album) {
+        continue;
+      }
       candidatos.push({ linha: i + 1, titulo, album });
     }
     achados.push({ termo: alvo.termo, ordem: alvo.ordem, candidatos, linhaPendenteDuplicada });
