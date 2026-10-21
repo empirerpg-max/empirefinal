@@ -1,13 +1,13 @@
 import { googleSheetsService, normalizeText } from "../services/googleSheetsService";
 
-// Diagnóstico read-only: usuário identificou que as 10 faixas inéditas do
-// FOLLIA (gravadas por adminFixFolliaFaixasController via
-// processarFaixasDoAlbum -> appendRow("Musicas", ...)) caíram "colunas e
-// colunas à frente" a partir da linha ~777 — o mesmo bug de
-// deslocamento de coluna do :append do Sheets já documentado e corrigido
-// pra "Albuns"/"EDIÇÃO CHARTS ÁLBUMS", mas que processarFaixasDoAlbum
-// ainda não evita pra "Musicas". Dump bruto (sem range limitado) de uma
-// faixa de linhas pra confirmar visualmente onde o conteúdo real caiu.
+// Diagnóstico read-only: dump ESPARSO (só células não-vazias, com índice
+// 0-based exato) de um intervalo de linhas de "Musicas" — usado pra
+// mapear com precisão onde o conteúdo real de cada linha caiu depois do
+// bug de deslocamento de coluna do :append (ver appendRowMusicasSeguro
+// em gestaoController.ts). Formato esparso em vez de slice/sample
+// porque o deslocamento varia MUITO linha a linha (visto ao vivo: de 23
+// a 50+ colunas de distância), e um range fixo de amostra corta dados
+// importantes.
 //
 // GET /api/empire-play/admin/diagnostico-musicas-corruptas?inicio=770&fim=800
 export async function adminDiagMusicasCorruptasController(request: Request): Promise<Response> {
@@ -21,22 +21,12 @@ export async function adminDiagMusicasCorruptasController(request: Request): Pro
 
   const achadas = rows.map((row, i) => {
     const linha = inicio + i;
-    // Índice da primeira célula preenchida e da última, pra visualizar o
-    // "bloco" de dados de verdade na linha, onde quer que ele esteja.
-    let primeiraPreenchida = -1;
-    let ultimaPreenchida = -1;
+    const celulas: { col: number; valor: string }[] = [];
     for (let c = 0; c < row.length; c++) {
-      if (normalizeText(row[c])) {
-        if (primeiraPreenchida < 0) primeiraPreenchida = c;
-        ultimaPreenchida = c;
-      }
+      const v = normalizeText(row[c]);
+      if (v) celulas.push({ col: c, valor: v.length > 80 ? `${v.slice(0, 80)}…(${v.length} chars)` : v });
     }
-    return {
-      linha,
-      primeiraColunaPreenchida: primeiraPreenchida >= 0 ? primeiraPreenchida : null,
-      ultimaColunaPreenchida: ultimaPreenchida >= 0 ? ultimaPreenchida : null,
-      amostra: primeiraPreenchida >= 0 ? row.slice(primeiraPreenchida) : [],
-    };
+    return { linha, celulas };
   });
 
   return new Response(JSON.stringify({ success: true, inicio, fim, achadas }, null, 2), {
