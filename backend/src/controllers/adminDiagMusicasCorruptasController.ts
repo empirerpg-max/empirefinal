@@ -35,7 +35,7 @@ export async function adminDiagMusicasCorruptasController(request: Request): Pro
       linha,
       primeiraColunaPreenchida: primeiraPreenchida >= 0 ? primeiraPreenchida : null,
       ultimaColunaPreenchida: ultimaPreenchida >= 0 ? ultimaPreenchida : null,
-      amostra: primeiraPreenchida >= 0 ? row.slice(primeiraPreenchida, primeiraPreenchida + 6) : [],
+      amostra: primeiraPreenchida >= 0 ? row.slice(primeiraPreenchida) : [],
     };
   });
 
