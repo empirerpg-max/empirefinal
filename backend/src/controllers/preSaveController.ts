@@ -1895,6 +1895,7 @@ async function lancarCampanhaPreSave(c: PreSaveCampanha): Promise<void> {
           nomeJogador: c.jogadorNome,
           jogadorId: c.jogadorId,
           faixas: faixasPayload,
+          veioDoPreSave: true,
         });
 
         // Material extra (Shop/Info/Visual) coletado na criação da
