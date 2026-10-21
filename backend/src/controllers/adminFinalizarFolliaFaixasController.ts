@@ -167,6 +167,18 @@ export async function adminFinalizarFolliaFaixasController(request: Request): Pr
       if (edicaoChartsRowIndex) {
         codigo = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
       }
+    } else if (!codigo) {
+      // BUG REAL confirmado: já existia uma linha em EDIÇÃO CHARTS (a
+      // mantida após a dedup acima), então pulava registrarNaEdicaoCharts
+      // certo — mas aí nunca buscava o Código único dessa linha JÁ
+      // existente pra copiar em Musicas!Z, deixando a faixa sem código
+      // mesmo com a linha do chart presente. Usa a 1ª linha mantida
+      // (linhasPorTitulo, calculado antes da dedup) pra ler o código.
+      const linhaMantida = linhasPorTitulo.get(normalizeComparison(f.titulo))?.[0];
+      if (linhaMantida) {
+        edicaoChartsRowIndex = linhaMantida;
+        codigo = await lerCodigoUnicoGerado(linhaMantida);
+      }
     }
 
     if (codigo && !f.codigoAtual) {
