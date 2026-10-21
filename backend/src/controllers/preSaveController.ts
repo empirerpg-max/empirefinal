@@ -1740,8 +1740,65 @@ export async function processarLancamentosPreSaveScheduled(): Promise<{
 
     for (const c of paraLancar) {
       try {
-        aplicarDiasPerdidos(c);
-        const acumuladoFinal = calcularAcumulado(c);
+        // BUG REAL confirmado em produção (Max Gorghan, "Follia", lançou 4
+        // vezes no mesmo dia D): nada aqui impedia duas execuções do cron
+        // (rodando a cada 10min, mas que pode sobrepor se uma invocação
+        // demorar mais que isso, ou disparar de novo antes da anterior
+        // terminar) de lerem a MESMA campanha como "ativa" e publicarem o
+        // álbum duas (ou mais) vezes em paralelo — o status só virava
+        // "lancada" no FIM do processamento (linha ~1875, bem depois de
+        // publicarAlbum já ter rodado), quando já era tarde demais pra
+        // impedir a segunda cópia. withWriteLock trava por campanha
+        // (chave própria, D1) ANTES de publicar, e TTL generoso (5min,
+        // cobre o publicarAlbum inteiro — o TTL padrão de 20s é curto
+        // demais pra isso, pensado pra round-trips rápidos de Sheets).
+        // Dentro da trava, relê o status direto da planilha — se outra
+        // execução já lançou essa campanha enquanto esperava a trava
+        // liberar, pula sem publicar de novo.
+        const lancou = await withWriteLock(
+          `presave:lancamento:${c.id}`,
+          async () => {
+            const statusAtual = await googleSheetsService.principal
+              .readValues(PRESAVE_SHEET, `M${c._rowIndex}:M${c._rowIndex}`)
+              .catch(() => []);
+            // Coluna M (índice 12, 0-based) = "Status" — ver campanhaToRow/
+            // rowToCampanha acima; confirmado lendo o mapeamento real, não
+            // assumido.
+            const statusJaMudou = normalizeComparison(statusAtual?.[0]?.[0] || "") !== "ativa";
+            if (statusJaMudou) {
+              return false; // outra execução concorrente já lançou essa campanha
+            }
+            await lancarCampanhaPreSave(c);
+            return true;
+          },
+          { ttlMs: 5 * 60_000 },
+        );
+        if (lancou) lancados++;
+      } catch (err: any) {
+        falhas++;
+        console.error(
+          `[processarLancamentosPreSaveScheduled] Falha ao lançar campanha ${c.id}:`,
+          err,
+        );
+        registrarLogSistema({
+          categoria: "Falha de escrita",
+          oQueAconteceu: `Falha ao lançar automaticamente o pre-save de "${c.albumTituloFull}": ${err?.message || err}`,
+          onde: "processarLancamentosPreSaveScheduled",
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error("[processarLancamentosPreSaveScheduled] Erro geral:", err);
+  }
+  return { lancados, falhas };
+}
+
+// Extraído de dentro do loop de processarLancamentosPreSaveScheduled —
+// roda inteiro dentro da trava por campanha (ver acima), nunca chamado
+// direto de outro lugar.
+async function lancarCampanhaPreSave(c: PreSaveCampanha): Promise<void> {
+  aplicarDiasPerdidos(c);
+    const acumuladoFinal = calcularAcumulado(c);
 
         // Só faixas INÉDITAS entram no payload de lançamento — faixa já
         // existente (inedita=false) já está nos charts/catálogo de antes e
@@ -1872,33 +1929,15 @@ export async function processarLancamentosPreSaveScheduled(): Promise<{
           }
         }
 
-        c.status = "lancada";
-        c.codigoUnicoAlbum = resultado.codigoUnico || "";
-        await writeCampanha(c);
-        lancados++;
+  c.status = "lancada";
+  c.codigoUnicoAlbum = resultado.codigoUnico || "";
+  await writeCampanha(c);
 
-        registrarLogSistema({
-          categoria: "Ação concluída",
-          oQueAconteceu: `Pre-save de "${c.albumTituloFull}" lançado automaticamente no dia D (modo ${c.modo}).`,
-          onde: "processarLancamentosPreSaveScheduled",
-        }).catch(() => {});
-      } catch (err: any) {
-        falhas++;
-        console.error(
-          `[processarLancamentosPreSaveScheduled] Falha ao lançar campanha ${c.id}:`,
-          err,
-        );
-        registrarLogSistema({
-          categoria: "Falha de escrita",
-          oQueAconteceu: `Falha ao lançar automaticamente o pre-save de "${c.albumTituloFull}": ${err?.message || err}`,
-          onde: "processarLancamentosPreSaveScheduled",
-        }).catch(() => {});
-      }
-    }
-  } catch (err) {
-    console.error("[processarLancamentosPreSaveScheduled] Erro geral:", err);
-  }
-  return { lancados, falhas };
+  registrarLogSistema({
+    categoria: "Ação concluída",
+    oQueAconteceu: `Pre-save de "${c.albumTituloFull}" lançado automaticamente no dia D (modo ${c.modo}).`,
+    onde: "processarLancamentosPreSaveScheduled",
+  }).catch(() => {});
 }
 
 // -------------------- LOCK DE COMENTÁRIOS (pré-lançamento) --------------------
