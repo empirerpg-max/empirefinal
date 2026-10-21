@@ -2,23 +2,22 @@ import { getCatalogoDb } from "../services/musicasDbService";
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 import { withWriteLock } from "../services/writeLockService";
 
-// Recuperação definitiva: o fix retroativo das faixas do FOLLIA (antes de
-// appendRowMusicasSeguro existir) usou o appendRow("Musicas") antigo, que
-// deslocou cada escrita pra bem longe da coluna A (mesmo bug do :append já
-// documentado) — e o PRÓPRIO retry interno do appendRow (3 tentativas)
-// multiplicou isso em várias cópias deslocadas progressivamente mais pra
-// direita, dentro de um campo muito maior de linhas "fantasma" (só com
-// Código único na coluna Z, sem mais nada) que já existia antes de hoje.
+// Recuperação definitiva do incidente FOLLIA (Max Gorghan) em "Musicas":
 //
-// Estratégia: busca TODA ocorrência da âncora "Max Gorghan - FOLLIA" (a
-// coluna ALBUM de cada faixa, sempre 3 células depois do título, pelo
-// layout fixo A..X) num range largo de linhas/colunas, reconstrói o
-// registro completo a partir de cada âncora, deduplica por TÍTULO (só a
-// primeira ocorrência de cada título único é a "boa" — as repetidas são
-// todas idênticas, puro efeito do retry), grava cada uma na posição
-// certa via appendRowMusicasSeguro (agora seguro) e esvazia só a região
-// de dado real deslocado em cada linha-origem (nunca a coluna do Código
-// único pré-existente, que não tem nada a ver com isso).
+// 1. GRAVA DO ZERO as 9 faixas reais da campanha (fonte de verdade: JSON
+//    intacto em PreSave_Album, nunca tocado por nenhum bug) usando o
+//    helper seguro (appendRowMusicasSeguro, já corrigido) — mais
+//    confiável do que tentar reconstruir dado de linhas bagunçadas: a
+//    varredura anterior achou só 3 das 9 faixas reais, mais 2 variantes
+//    QUEBRADAS (título com erro de digitação/capitalização e campos com
+//    lixo tipo "1111"/"111") que não podem virar catálogo de verdade.
+// 2. VARRE um intervalo bem maior de linhas pra achar e ESVAZIAR toda
+//    ocorrência deslocada (âncora = coluna ALBUM = "Max Gorghan -
+//    FOLLIA", sempre 3 células depois do título, layout fixo A..X) —
+//    sobra do appendRow antigo + seu próprio retry interno (3
+//    tentativas) multiplicando cópias cada vez mais deslocadas. NUNCA
+//    toca na coluna do Código único pré-existente de cada linha (não
+//    relacionado a este incidente).
 //
 // ?dryRun=1 só mostra o plano.
 // GET /api/empire-play/admin/recuperar-follia-faixas?dryRun=1
@@ -26,48 +25,96 @@ export async function adminRecuperarFolliaFaixasController(request: Request): Pr
   const url = new URL(request.url);
   const dryRun = url.searchParams.get("dryRun") === "1";
 
-  const LINHA_INICIO = 760;
-  const LINHA_FIM = 900;
-  const COL_FIM = "BZZ"; // folga generosa — pior deslocamento visto ao vivo foi ~700 colunas
-
-  const rows = await googleSheetsService.principal
-    .readValues("Musicas", `A${LINHA_INICIO}:${COL_FIM}${LINHA_FIM}`)
-    .catch(() => []);
-
-  type Achado = {
-    linha: number;
-    colTitulo: number; // onde a reconstrução A..X começa (col do campo "Data")
-    valores: string[]; // A..X reconstruído (24 campos)
-  };
-  const achados: Achado[] = [];
-
-  for (let i = 0; i < rows.length; i++) {
-    const linha = LINHA_INICIO + i;
-    const row = rows[i];
-    if (!row) continue;
-    for (let c = 0; c < row.length; c++) {
-      if (normalizeComparison(normalizeText(row[c])) !== normalizeComparison("Max Gorghan - FOLLIA")) continue;
-      // c = coluna K (índice 10 relativo ao início do registro A..X) —
-      // layout fixo de processarFaixasDoAlbum (gestaoController.ts).
-      const colInicioRegistro = c - 10;
-      if (colInicioRegistro < 0) continue;
-      const valores = row.slice(colInicioRegistro, colInicioRegistro + 24).map((v) => normalizeText(v));
-      achados.push({ linha, colTitulo: colInicioRegistro, valores });
+  // ---- 1. Faixas reais, direto da fonte de verdade (campanha) ----
+  const presaveRows = await googleSheetsService.principal.readValues("PreSave_Album", "A1:U2000").catch(() => []);
+  let campanhaRow: string[] | null = null;
+  for (let i = 1; i < presaveRows.length; i++) {
+    if (normalizeText(presaveRows[i]?.[0]) === "PRESAVE-7da5f189") {
+      campanhaRow = presaveRows[i];
+      break;
     }
   }
-
-  // Dedup por título (campo H, índice 7) — todas as cópias de uma mesma
-  // faixa têm o MESMO conteúdo (confirmado ao vivo), então a primeira
-  // encontrada já serve.
-  const porTitulo = new Map<string, Achado>();
-  for (const a of achados) {
-    const titulo = a.valores[7];
-    if (!titulo) continue;
-    if (!porTitulo.has(titulo)) porTitulo.set(titulo, a);
+  if (!campanhaRow) {
+    return new Response(JSON.stringify({ success: false, error: "Campanha PRESAVE-7da5f189 não encontrada." }, null, 2), {
+      status: 404,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  }
+  const artista = normalizeText(campanhaRow[3]);
+  const albumFullTitle = normalizeText(campanhaRow[4]);
+  const capaUrl = normalizeText(campanhaRow[5]);
+  const jogadorId = normalizeText(campanhaRow[1]);
+  const dataFormatada = "21/10/2026";
+  let faixasCampanha: Record<string, unknown>[] = [];
+  try {
+    faixasCampanha = JSON.parse(normalizeText(campanhaRow[13]) || "[]");
+  } catch {
+    faixasCampanha = [];
   }
 
-  const unicos = [...porTitulo.values()];
-  const linhasParaLimpar = achados.map((a) => ({ linha: a.linha, colInicio: a.colTitulo }));
+  // Só faixa INÉDITA com título real (exclui a "-" vazia e as
+  // não-inéditas, que são vinculação de faixa já existente — tratadas
+  // à parte, não aqui).
+  const faixasValidas = faixasCampanha.filter(
+    (f) => f.inedita && normalizeText(String(f.titulo || "")) && normalizeText(String(f.titulo || "")) !== "-",
+  );
+
+  const registrosParaGravar = faixasValidas.map((f) => {
+    const participantes = Array.isArray(f.participantes) ? (f.participantes as string[]).filter(Boolean) : [];
+    const tituloBruto = String(f.titulo || "");
+    const songTitle = tituloBruto.includes(" - ") ? tituloBruto : `${artista} - ${tituloBruto}`;
+    return [
+      dataFormatada, // A
+      "", // B topicId (abrirTopico sempre false aqui, confirmado no payload original)
+      f.mediaUrl && String(f.mediaUrl) !== "-" ? String(f.mediaUrl) : "", // C
+      capaUrl || "", // D
+      f.letra ? String(f.letra) : "", // E
+      "", // F
+      jogadorId || "", // G
+      songTitle, // H
+      f.tipoSingle ? String(f.tipoSingle) : "TRACKLIST ALBUM", // I
+      f.tipoMusica ? String(f.tipoMusica) : "SOLO", // J
+      albumFullTitle, // K
+      "", // L
+      "", // M
+      artista, // N
+      participantes[0] || "", // O
+      participantes[1] || "", // P
+      participantes[2] || "", // Q
+      participantes[3] || "", // R
+      participantes[4] || "", // S
+      "", // T
+      String(f.num || ""), // U
+      "", // V
+      "", // W
+      "Sim", // X
+    ];
+  });
+
+  // ---- 2. Varredura ampla pra achar e limpar toda ocorrência deslocada ----
+  const LINHA_INICIO = 760;
+  const LINHA_FIM = 1100;
+  const COL_FIM = "BZZ";
+  const LOTE = 100; // lê em lotes pra não estourar timeout numa leitura só
+
+  const linhasParaLimpar: { linha: number; colInicio: number }[] = [];
+  for (let inicio = LINHA_INICIO; inicio <= LINHA_FIM; inicio += LOTE) {
+    const fim = Math.min(inicio + LOTE - 1, LINHA_FIM);
+    const rows = await googleSheetsService.principal
+      .readValues("Musicas", `A${inicio}:${COL_FIM}${fim}`)
+      .catch(() => []);
+    for (let i = 0; i < rows.length; i++) {
+      const linha = inicio + i;
+      const row = rows[i];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        if (normalizeComparison(normalizeText(row[c])) !== normalizeComparison(albumFullTitle)) continue;
+        const colInicioRegistro = c - 10; // K está 10 células depois de A no layout A..X
+        if (colInicioRegistro < 0) continue;
+        linhasParaLimpar.push({ linha, colInicio: colInicioRegistro });
+      }
+    }
+  }
 
   if (dryRun) {
     return new Response(
@@ -75,10 +122,9 @@ export async function adminRecuperarFolliaFaixasController(request: Request): Pr
         {
           success: true,
           dryRun: true,
-          totalOcorrencias: achados.length,
-          totalFaixasUnicas: unicos.length,
-          faixasUnicas: unicos.map((a) => ({ linha: a.linha, titulo: a.valores[7], valores: a.valores })),
-          linhasParaLimpar,
+          totalFaixasParaGravar: registrosParaGravar.length,
+          titulosParaGravar: registrosParaGravar.map((r) => r[7]),
+          totalOcorrenciasParaLimpar: linhasParaLimpar.length,
         },
         null,
         2,
@@ -87,9 +133,7 @@ export async function adminRecuperarFolliaFaixasController(request: Request): Pr
     );
   }
 
-  // 1. Grava cada faixa única numa linha de verdade, via a MESMA trava e
-  // lógica de appendRowMusicasSeguro (gestaoController.ts) — replicada
-  // aqui pra não criar ciclo de import entre os dois controllers.
+  // 1. Grava as 9 faixas reais do zero, via escrita segura.
   async function appendRowMusicasSeguro(values: string[]): Promise<number> {
     return withWriteLock("gestao:musicas-append", async () => {
       const r = await googleSheetsService.principal.readValues("Musicas", "H2:H50000");
@@ -104,33 +148,32 @@ export async function adminRecuperarFolliaFaixasController(request: Request): Pr
   }
 
   const gravadas: { titulo: string; linhaNova: number }[] = [];
-  for (const a of unicos) {
-    const linhaNova = await appendRowMusicasSeguro(a.valores);
-    gravadas.push({ titulo: a.valores[7], linhaNova });
+  for (const registro of registrosParaGravar) {
+    const linhaNova = await appendRowMusicasSeguro(registro);
+    gravadas.push({ titulo: String(registro[7]), linhaNova });
     await new Promise((resolve) => setTimeout(resolve, 400));
   }
 
-  // 2. Esvazia SÓ a região de dado real deslocado em cada linha de
-  // origem (24 colunas a partir de colInicio) — nunca mexe na coluna Z
-  // pré-existente nem em nenhuma outra célula fora dessa janela.
+  // 2. Esvazia TODAS as ocorrências deslocadas encontradas — agora que as
+  // faixas reais já estão gravadas limpas em linhas próprias, toda
+  // ocorrência antiga (certa ou quebrada) é só lixo deixado pelo bug.
   let limposOk = 0;
   let limposFalha = 0;
   for (const l of linhasParaLimpar) {
     const vazio = Array(24).fill("");
-    const ultimaCol = toColLetter(l.colInicio + 23);
     const primeiraCol = toColLetter(l.colInicio);
+    const ultimaCol = toColLetter(l.colInicio + 23);
     const sucesso = await googleSheetsService.principal
       .updateValues("Musicas", `${primeiraCol}${l.linha}:${ultimaCol}${l.linha}`, [vazio])
       .catch(() => false);
     if (sucesso) limposOk++;
     else limposFalha++;
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await new Promise((resolve) => setTimeout(resolve, 350));
   }
 
-  // 3. Checa D1 — upsertMidiaD1/upsertMusicaD1 usam os CAMPOS em memória
-  // (não leem de volta a linha do Sheets), então não deveriam ter herdado
-  // o deslocamento. Confirma mesmo assim: procura por "FOLLIA" no título
-  // de qualquer linha de midia/musicas no D1.
+  // 3. Confirma D1 — upsertMidiaD1/upsertMusicaD1 usam os campos em
+  // memória direto (nunca leem de volta a linha do Sheets), então não
+  // deveriam ter herdado o deslocamento.
   const db = getCatalogoDb();
   let d1Achados: unknown[] = [];
   if (db) {
@@ -146,10 +189,8 @@ export async function adminRecuperarFolliaFaixasController(request: Request): Pr
       {
         success: true,
         dryRun: false,
-        totalOcorrencias: achados.length,
-        totalFaixasUnicas: unicos.length,
         gravadas,
-        limpeza: { ok: limposOk, falha: limposFalha },
+        limpeza: { ok: limposOk, falha: limposFalha, total: linhasParaLimpar.length },
         d1Achados,
       },
       null,
