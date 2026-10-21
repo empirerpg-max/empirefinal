@@ -405,6 +405,31 @@ async function writeCampanha(c: PreSaveCampanha): Promise<void> {
   });
 }
 
+// BUG REAL confirmado em produção (Max Gorghan, "FOLLIA" — 53 lançamentos
+// duplicados num único dia D): getCampanhaPreSaveController/
+// getMinhasCampanhasPreSaveController leem a campanha, rodam
+// aplicarDiasPerdidos (que só mexe em c.missoes) e, se algo mudou, salvam
+// com writeCampanha(c) — só que writeCampanha regrava a LINHA INTEIRA
+// (campanhaToRow, A:U) a partir do objeto `c` em memória, lido no INÍCIO
+// daquele request. Se o cron (processarLancamentosPreSaveScheduled)
+// gravar status="lancada" ENTRE a leitura desses endpoints de consulta e
+// a escrita deles, a escrita de "dias perdidos" sobrescreve esse
+// "lancada" de volta pra "ativa" (lost update clássico — a linha inteira
+// é regravada com um status já desatualizado) — e o cron, no próximo
+// ciclo, vê "ativa" de novo e lança o álbum outra vez. Fix: escrever só
+// a coluna de missões (O) quando a mudança é exclusivamente de
+// aplicarDiasPerdidos, nunca a linha inteira — assim nenhum outro campo
+// (sobretudo status) pode ser sobrescrito com um valor desatualizado.
+async function writeMissoesCampanha(c: PreSaveCampanha): Promise<void> {
+  await withWriteLock(`presave:campanha:${c.id}`, async () => {
+    await googleSheetsService.principal.updateValues(
+      PRESAVE_SHEET,
+      `O${c._rowIndex}:O${c._rowIndex}`,
+      [[JSON.stringify(c.missoes)]],
+    );
+  });
+}
+
 // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") — mesmo
 // padrão de risco de "achar última linha + escrever" sem proteção; duas
 // campanhas criadas quase ao mesmo tempo podiam calcular a mesma linha.
@@ -852,9 +877,10 @@ export async function getMinhasCampanhasPreSaveController(request: Request): Pro
     const jogadorId = normalizeText(url.searchParams.get("jogadorId") || "");
     const campanhas = await readAllCampanhas();
     const minhas = jogadorId ? campanhas.filter((c) => c.jogadorId === jogadorId) : campanhas;
-    // Persiste dias perdidos encontrados na leitura (best-effort).
+    // Persiste dias perdidos encontrados na leitura (best-effort) — só a
+    // coluna de missões, nunca a linha inteira (ver writeMissoesCampanha).
     for (const c of minhas) {
-      if (aplicarDiasPerdidos(c)) await writeCampanha(c).catch(() => {});
+      if (aplicarDiasPerdidos(c)) await writeMissoesCampanha(c).catch(() => {});
     }
     return jsonResponse({ success: true, data: minhas.map(campanhaDoDono) });
   } catch (error: any) {
@@ -873,7 +899,7 @@ export async function getCampanhaPreSaveController(request: Request): Promise<Re
     const campanhas = await readAllCampanhas();
     const c = campanhas.find((x) => x.id === id);
     if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
-    if (aplicarDiasPerdidos(c)) await writeCampanha(c).catch(() => {});
+    if (aplicarDiasPerdidos(c)) await writeMissoesCampanha(c).catch(() => {});
     return jsonResponse({ success: true, data: campanhaDoDono(c) });
   } catch (error: any) {
     console.error("[getCampanhaPreSaveController] Erro:", error);
