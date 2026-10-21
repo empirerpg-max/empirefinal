@@ -2,6 +2,7 @@ import {
   googleSheetsService,
   normalizeComparison,
   normalizeText,
+  type GoogleSheetRow,
 } from "../services/googleSheetsService";
 import { withWriteLock } from "../services/writeLockService";
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
@@ -478,7 +479,7 @@ export async function createSongController(request: Request): Promise<Response> 
     // por 4 abas diferentes sem ninguém notar.
     let musicaRowIndexNova: number | null = null;
     try {
-      musicaRowIndexNova = await googleSheetsService.principal.appendRow("Musicas", [
+      musicaRowIndexNova = await appendRowMusicasSeguro([
         dataFormatada, // A - Data de lançamento
         topicId, // B - ID do tópico
         mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
@@ -1283,7 +1284,7 @@ async function vincularFaixaExistenteAoAlbum(
     // "Publicar" quando alguém quiser abrir o tópico dela de verdade.
     if (!musicasOk) {
       try {
-        await googleSheetsService.principal.appendRow("Musicas", [
+        await appendRowMusicasSeguro([
           dataFormatada, // A - Data
           "", // B - ID do tópico (pendente)
           "", // C - ID do arquivo
@@ -1542,6 +1543,39 @@ async function atualizarFaixaNosChartsAoPublicar(params: {
   }
 }
 
+// BUG REAL confirmado em produção (faixas do pre-save do FOLLIA caindo
+// "colunas e colunas à frente" a partir da linha ~777 de "Musicas"):
+// appendRow usa o :append da API do Sheets com range default "A:ZZ" —
+// mesmo problema já documentado e corrigido pra "Albuns"/"EDIÇÃO CHARTS
+// ÁLBUMS" (ver publicarAlbum/registrarAlbumNaEdicaoChartsAlbuns): o
+// algoritmo de detecção de "tabela" do :append escaneia a LINHA INTEIRA
+// pra achar a próxima livre, não só as colunas que a gente de fato
+// escreve — se alguma coluna bem à direita (cálculo/código auto-gerado
+// de uma linha mais antiga) tiver conteúdo, ele conclui que a linha
+// "já tem dado" e passa pra próxima, ou pior, começa a escrever a partir
+// da primeira coluna livre que encontrar NAQUELA linha, deslocando tudo
+// pra direita. Fix: acha a última linha com "Nome da música" de verdade
+// (coluna H, índice 7) e escreve direto na seguinte via updateValues
+// (range fixo, nunca deslocável) — dentro de uma trava pra evitar duas
+// chamadas calculando a mesma "próxima linha livre" em paralelo.
+async function appendRowMusicasSeguro(values: GoogleSheetRow): Promise<number> {
+  return withWriteLock("gestao:musicas-append", async () => {
+    const rows = await googleSheetsService.principal.readValues("Musicas", "H2:H50000");
+    let ultimaLinhaComMusica = 1;
+    for (let i = 0; i < rows.length; i++) {
+      if ((rows[i]?.[0] || "").trim()) ultimaLinhaComMusica = i + 2;
+    }
+    const linhaAlvo = ultimaLinhaComMusica + 1;
+    const ultimaColuna = String.fromCharCode(65 + values.length - 1); // A=65
+    await googleSheetsService.principal.updateValues(
+      "Musicas",
+      `A${linhaAlvo}:${ultimaColuna}${linhaAlvo}`,
+      [values],
+    );
+    return linhaAlvo;
+  });
+}
+
 // Processa a lista de faixas de um álbum (criação ou substituição): faixa
 // existente vincula na aba Musicas/EDIÇÃO CHARTS; faixa inédita registra do
 // zero em Musicas + REGISTRO DE MÚSICA, pendente até virar tópico próprio.
@@ -1603,7 +1637,7 @@ export async function processarFaixasDoAlbum(
     faixasIneditasEsperadas++;
     let faixaRowIndex: number | null = null;
     try {
-      faixaRowIndex = await googleSheetsService.principal.appendRow("Musicas", [
+      faixaRowIndex = await appendRowMusicasSeguro([
         dataFormatada, // A - Data de lançamento
         trackTopicId, // B - ID do tópico (só se abrir tópico próprio)
         faixa.mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
