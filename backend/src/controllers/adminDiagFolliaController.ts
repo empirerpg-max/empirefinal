@@ -53,9 +53,34 @@ export async function adminDiagFolliaController(): Promise<Response> {
     });
   }
 
+  // Campanha segue "ativa" mesmo após dezenas de lançamentos — sinal de
+  // que publicarAlbum (ou o código logo depois) está lançando exceção
+  // DEPOIS de já ter criado a linha em Albuns (passo 1, sempre primeiro,
+  // ver publicarAlbum), impedindo c.status="lancada"/writeCampanha de
+  // rodar — não é (só) corrida de concorrência. Dump dos logs didáticos
+  // recentes sobre "Follia"/"Max Gorghan" pra achar o erro real.
+  const logsRows = await googleSheetsService.logsSistema
+    .readValues("LOGS", "A1:G5000")
+    .catch(() => []);
+  const logsFollia: Record<string, unknown>[] = [];
+  for (let i = 1; i < logsRows.length; i++) {
+    const row = logsRows[i];
+    if (!row) continue;
+    const texto = `${normalizeText(row[2])} ${normalizeText(row[6])}`;
+    if (!/follia|gorghan/i.test(texto)) continue;
+    logsFollia.push({
+      linha: i + 1,
+      dataHora: normalizeText(row[0]),
+      categoria: normalizeText(row[1]),
+      oQueAconteceu: normalizeText(row[2]),
+      onde: normalizeText(row[3]),
+      detalheTecnico: normalizeText(row[6]),
+    });
+  }
+
   return new Response(
     JSON.stringify(
-      { success: true, totalAlbuns: achadas.length, achadas, campanhasFollia },
+      { success: true, totalAlbuns: achadas.length, achadas, campanhasFollia, logsFollia },
       null,
       2,
     ),

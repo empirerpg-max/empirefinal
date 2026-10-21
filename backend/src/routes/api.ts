@@ -219,6 +219,7 @@ import { adminDiagVideoWesleyController } from "../controllers/adminDiagVideoWes
 import { adminDiagRegistroController } from "../controllers/adminDiagRegistroController";
 import { adminDiagLoreenaController } from "../controllers/adminDiagLoreenaController";
 import { adminDiagFolliaController } from "../controllers/adminDiagFolliaController";
+import { adminStopFolliaPresaveController } from "../controllers/adminStopFolliaPresaveController";
 import { adminFixRegistroChrisController } from "../controllers/adminFixRegistroChrisController";
 import { adminFixRegistroChrisFolliaController } from "../controllers/adminFixRegistroChrisFolliaController";
 import { adminDiagComentariosChrisController } from "../controllers/adminDiagComentariosChrisController";
@@ -1962,6 +1963,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagLoreenaController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-follia") {
     response = await adminDiagFolliaController();
+  } else if (url.pathname === "/api/empire-play/admin/parar-presave-follia") {
+    response = await adminStopFolliaPresaveController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-nostalgic-traveller") {
     response = await adminFixRegistroChrisController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-follia") {
