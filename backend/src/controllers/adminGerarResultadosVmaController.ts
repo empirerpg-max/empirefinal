@@ -114,8 +114,12 @@ export async function adminGerarResultadosVmaController(request: Request): Promi
       return { titulo: ind.titulo, artista: ind.artista, score };
     });
 
-    const maiorScore = Math.max(...comScoreFiltrado.map((r) => r.score));
-    const linhas: LinhaResultado[] = comScoreFiltrado
+    // "São 6 por categoria" — pega só os 6 de maior score (a aba de
+    // votação real guarda TODOS os indicados originais, não só os 6
+    // oficiais), e só DEPOIS ordena esses 6 alfabeticamente pra exibição.
+    const top6 = [...comScoreFiltrado].sort((a, b) => b.score - a.score).slice(0, 6);
+    const maiorScore = Math.max(...top6.map((r) => r.score));
+    const linhas: LinhaResultado[] = top6
       .map((r) => ({
         titulo: r.titulo,
         artista: r.artista,
