@@ -293,7 +293,22 @@ export async function updateReleaseController(request: Request): Promise<Respons
       // atualiza data/tipo nos charts ao ser publicada, porque o título
       // armazenado para de bater com a linha correspondente em EDIÇÃO
       // CHARTS — que sempre guarda o título prefixado.
-      const tituloMusicaComArtista = artista ? `${String(artista).trim()} - ${titulo.trim()}` : titulo.trim();
+      //
+      // BUG REAL corrigido aqui (2026-10-22, faixa "Alchimia" do Max
+      // Gorghan/FOLLIA — reportado pelo Wesley: MV não vinculava porque a
+      // busca não achava a faixa): `artista` vem cru do body (front-end),
+      // nunca validado — se o front mandar um valor errado/truncado (aqui
+      // veio "Alchimi" em vez de "Max Gorghan"), H vira "Alchimi - Alchimia"
+      // e a coluna N ("Artista Principal", nunca tocada por essa rota)
+      // continua com o nome certo, divergindo silenciosamente do título.
+      // Mesmo padrão já usado em publicarFaixaPendenteController: a coluna
+      // N é a fonte de verdade do artista principal — só cai pro `artista`
+      // do body se N estiver vazia (linha nova ainda sem esse campo).
+      const linhaAtualRow = (
+        await googleSheetsService.principal.readValues("Musicas", `A${rowIndex}:N${rowIndex}`).catch(() => [])
+      )[0];
+      const artistaReal = (linhaAtualRow?.[13] || "").trim() || String(artista || "").trim();
+      const tituloMusicaComArtista = artistaReal ? `${artistaReal} - ${titulo.trim()}` : titulo.trim();
       // Alterar Título na Coluna H (Col 8) da aba Musicas na planilha principal (1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo)
       await googleSheetsService.principal.updateValues(sheetName, `H${rowIndex}`, [
         [tituloMusicaComArtista],
@@ -345,8 +360,8 @@ export async function updateReleaseController(request: Request): Promise<Respons
           // dedupeArtistPrefix lá em cima) — nunca batia com nada de
           // verdade, então essa atualização nunca rodava (a linha B jamais
           // era encontrada). Reconstrói o mesmo valor prefixado pra buscar.
-          const oldTituloComArtista = artista
-            ? `${String(artista).trim()} - ${String(oldTitulo || titulo).trim()}`
+          const oldTituloComArtista = artistaReal
+            ? `${artistaReal} - ${String(oldTitulo || titulo).trim()}`
             : String(oldTitulo || titulo).trim();
           const normTarget = normalizeComparison(oldTituloComArtista);
           // Código único (coluna BD) é a chave de verdade, nunca muda —

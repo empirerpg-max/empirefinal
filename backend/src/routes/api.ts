@@ -237,6 +237,7 @@ import { adminDiagEdicaoChartsAlbunsHeaderController } from "../controllers/admi
 import { adminFixFolliaPresaveColunaController } from "../controllers/adminFixFolliaPresaveColunaController";
 import { adminDiagFolliaPresaveCampanhaController } from "../controllers/adminDiagFolliaPresaveCampanhaController";
 import { adminDiagAlchimiaFaixaController } from "../controllers/adminDiagAlchimiaFaixaController";
+import { adminFixAlchimiaTituloController } from "../controllers/adminFixAlchimiaTituloController";
 import { adminFixRegistroChrisController } from "../controllers/adminFixRegistroChrisController";
 import { adminFixRegistroChrisFolliaController } from "../controllers/adminFixRegistroChrisFolliaController";
 import { adminDiagComentariosChrisController } from "../controllers/adminDiagComentariosChrisController";
@@ -2014,6 +2015,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagFolliaPresaveCampanhaController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-alchimia-faixa") {
     response = await adminDiagAlchimiaFaixaController();
+  } else if (url.pathname === "/api/empire-play/admin/fix-alchimia-titulo") {
+    response = await adminFixAlchimiaTituloController();
   } else if (url.pathname === "/api/empire-play/admin/fix-follia-d1-sync") {
     response = await adminFixFolliaD1SyncController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-nostalgic-traveller") {
