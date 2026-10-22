@@ -242,6 +242,7 @@ import { adminVincularMvAlchimiaController } from "../controllers/adminVincularM
 import { adminDiagMusicVideosAlchimiaController } from "../controllers/adminDiagMusicVideosAlchimiaController";
 import { adminFixDuplicataMvAlchimiaController } from "../controllers/adminFixDuplicataMvAlchimiaController";
 import { adminDiagMidiaFantasmaAlchimiaController } from "../controllers/adminDiagMidiaFantasmaAlchimiaController";
+import { adminGerarResultadosVmaController } from "../controllers/adminGerarResultadosVmaController";
 import { adminFixRegistroChrisController } from "../controllers/adminFixRegistroChrisController";
 import { adminFixRegistroChrisFolliaController } from "../controllers/adminFixRegistroChrisFolliaController";
 import { adminDiagComentariosChrisController } from "../controllers/adminDiagComentariosChrisController";
@@ -2029,6 +2030,8 @@ export async function handleEmpireApiRoutes(
     response = await adminFixDuplicataMvAlchimiaController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-midia-fantasma-alchimia") {
     response = await adminDiagMidiaFantasmaAlchimiaController();
+  } else if (url.pathname === "/api/empire-play/admin/gerar-resultados-vma") {
+    response = await adminGerarResultadosVmaController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-follia-d1-sync") {
     response = await adminFixFolliaD1SyncController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-nostalgic-traveller") {

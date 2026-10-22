@@ -221,6 +221,23 @@ export async function ensureSheetTab(
   );
 }
 
+// Wrapper genérico pro `spreadsheets.batchUpdate` cru da API — usado por
+// qualquer request de formatação (cor de fundo, negrito etc.) que não
+// mexe em VALORES de célula (isso já é coberto por updateValues/appendRow).
+// `requests` é o array de requests do batchUpdate, exatamente como a API
+// do Sheets espera (ex: `{ repeatCell: { ... } }`).
+export async function spreadsheetBatchUpdate(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  requests: unknown[],
+): Promise<void> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  await sheetsRequest(
+    `/${spreadsheetId}:batchUpdate`,
+    { method: "POST", body: JSON.stringify({ requests }) },
+    [SHEETS_READWRITE_SCOPE],
+  );
+}
+
 // Cache curto em memória (por isolate do Worker) + coalescing de chamadas
 // simultâneas — adicionado em 2026-09-16 durante um evento ao vivo
 // (Grammys) que estourou a cota "Read requests per minute" mesmo depois de

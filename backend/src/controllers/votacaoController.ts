@@ -395,13 +395,13 @@ export async function lerFaseVotacao(awardId: string): Promise<FaseVotacao | nul
   };
 }
 
-interface CategoriaVotacao {
+export interface CategoriaVotacao {
   categoria: string;
   descritivo: string;
   tipo: "nota" | "voto";
 }
 
-async function lerCategoriasVotacao(awardId: string): Promise<CategoriaVotacao[]> {
+export async function lerCategoriasVotacao(awardId: string): Promise<CategoriaVotacao[]> {
   const rows = await readValues(awardId, "Categorias", "A2:F1000").catch(() => []);
   return rows
     .filter((r) => normalizeText(r[0]))
@@ -412,7 +412,7 @@ async function lerCategoriasVotacao(awardId: string): Promise<CategoriaVotacao[]
     });
 }
 
-interface IndicadoBloco {
+export interface IndicadoBloco {
   rowNumber: number;
   titulo: string;
   artista: string;
@@ -420,7 +420,7 @@ interface IndicadoBloco {
   valores: string[]; // paralelo a bloco.colunas
 }
 
-interface BlocoVoto {
+export interface BlocoVoto {
   categoria: string;
   headerRowNumber: number;
   headerLabels: [string, string, string]; // "MÚSICA"/"ÁLBUM" | "ARTISTA" | "CÓDIGO ÚNICO", como já estava na planilha
@@ -430,7 +430,7 @@ interface BlocoVoto {
 
 // Lê a aba inteira (sem limite de range — o número de colunas cresce
 // conforme mais jogadores votam) e separa em blocos por categoria.
-function parseBlocos(rows: string[][]): BlocoVoto[] {
+export function parseBlocos(rows: string[][]): BlocoVoto[] {
   const blocos: BlocoVoto[] = [];
   let i = 0;
   while (i < rows.length) {
@@ -504,7 +504,7 @@ async function regravarBloco(awardId: string, aba: string, bloco: BlocoVoto, ord
 // que dar nota não é obrigatório pra todos os indicados). Sem nenhuma nota
 // ainda, fica no fim do ranking (score -1, sempre menor que qualquer nota
 // válida de 5-10).
-function scoreNota(valores: string[]): number {
+export function scoreNota(valores: string[]): number {
   const nums = valores
     .map((v) => parseFloat(normalizeText(v).replace(",", ".")))
     .filter((n) => Number.isFinite(n));
@@ -513,7 +513,7 @@ function scoreNota(valores: string[]): number {
 }
 
 // Voto: quantidade de marcações recebidas (qualquer célula não-vazia conta).
-function scoreVoto(valores: string[]): number {
+export function scoreVoto(valores: string[]): number {
   return valores.filter((v) => normalizeText(v)).length;
 }
 
@@ -538,7 +538,7 @@ export async function listarCategoriasVotacaoController(request: Request): Promi
   return jsonResponse({ success: true, data: { detalhes, categorias } });
 }
 
-async function carregarBlocoDaCategoria(
+export async function carregarBlocoDaCategoria(
   awardId: string,
   detalhes: FaseVotacao,
   categoriaInfo: CategoriaVotacao,
