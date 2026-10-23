@@ -35,16 +35,28 @@ export async function adminBackfillInfosActsController(request: Request): Promis
     });
   }
 
+  // appendRow nunca lança: em falha (mesmo após retry interno) ela já loga em
+  // LOGS e devolve null silenciosamente — por isso o sucesso real só pode ser
+  // confirmado pelo retorno (linha gravada), nunca por try/catch nem por só
+  // ter sido "chamada". Essa distinção faltava aqui e fez o backfill reportar
+  // "criadas" mesmo quando a escrita falhava de verdade (caso real: Hayley
+  // Wonderwall, relatada como criada 2x sem nunca aparecer na planilha).
   let criadas = 0;
+  const falharam: string[] = [];
   for (const nome of faltando) {
-    await googleSheetsService.registrosCharts.appendRow("INFOS ACTS", [nome]).catch((err) =>
-      console.warn("[adminBackfillInfosActsController] Erro ao criar linha pra", nome, err),
-    );
-    criadas++;
+    const linha = await googleSheetsService.registrosCharts.appendRow("INFOS ACTS", [nome]);
+    if (linha !== null) {
+      criadas++;
+    } else {
+      falharam.push(nome);
+    }
   }
 
-  return new Response(JSON.stringify({ success: true, totalFaltando: faltando.length, criadas }, null, 2), {
-    status: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-  });
+  return new Response(
+    JSON.stringify({ success: falharam.length === 0, totalFaltando: faltando.length, criadas, falharam }, null, 2),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    },
+  );
 }
