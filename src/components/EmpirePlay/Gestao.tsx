@@ -461,6 +461,14 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   // Capa & Mídia
   const [capaFile, setCapaFile] = useState<File | null>(null);
   const [capaPreview, setCapaPreview] = useState<string | null>(null);
+  // Alternativa de EMERGÊNCIA ao upload de capa de álbum: colar o link de
+  // uma imagem já no Drive (ou qualquer link público), igual já existe pra
+  // faixa (mediaUrlInput, "Drive ou YouTube") — usado quando o upload do
+  // arquivo trava sem erro nenhum (caso real: requisição nunca chega no
+  // servidor, nenhum log gravado em nenhum dos dois pontos já
+  // instrumentados, sinal de falha de rede/cliente antes de sair do
+  // navegador). Sempre que preenchido, tem prioridade sobre capaFile.
+  const [capaUrlAlbumInput, setCapaUrlAlbumInput] = useState<string>("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaUrlInput, setMediaUrlInput] = useState<string>("");
   // Só pra capa de VÍDEO — capa de música/álbum (single/álbum de verdade)
@@ -611,6 +619,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   // Reset de formulários ao trocar de aba
   const resetFormState = () => {
     setCapaFile(null);
+    setCapaUrlAlbumInput("");
     setCapaPreview(null);
     setMediaFile(null);
     setMediaUrlInput("");
@@ -1002,6 +1011,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setSuccessMsg("Lançamento de Música publicado com sucesso!");
       setNomeMusica("");
       setCapaFile(null);
+      setCapaUrlAlbumInput("");
       setCapaPreview(null);
       setMediaFile(null);
       setParticipantes([""]);
@@ -1132,6 +1142,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setMusicaVinculadaQuery("");
       setMusicasVinculadas([]);
       setCapaFile(null);
+      setCapaUrlAlbumInput("");
       setCapaPreview(null);
       setMediaFile(null);
       setParticipantes([""]);
@@ -1190,8 +1201,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     setUploadProgress("Fazendo upload da capa do álbum...");
 
     try {
-      let capaUrl = "";
-      if (capaFile) {
+      let capaUrl = capaUrlAlbumInput.trim();
+      if (!capaUrl && capaFile) {
         // A capa do álbum usa a mesma pasta das capas de música — só o
         // encarte (abaixo) tem pasta própria. Antes os dois iam pra pasta
         // de encarte, o que estava errado.
@@ -1287,6 +1298,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       );
       setTituloAlbum("");
       setCapaFile(null);
+      setCapaUrlAlbumInput("");
       setCapaPreview(null);
       setEncartesFiles([]);
       setExtraAlbum(emptyExtraMaterialEditorValue());
@@ -1334,8 +1346,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     setUploadProgress("Registrando alterações...");
 
     try {
-      let novaCapaUrl = "";
-      if (capaFile) {
+      let novaCapaUrl = capaUrlAlbumInput.trim();
+      if (!novaCapaUrl && capaFile) {
         setUploadProgress("Fazendo upload da nova capa...");
         novaCapaUrl = await handleUploadToDrive(
           capaFile,
@@ -1415,6 +1427,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setAlbumSubstQuery("");
       setSubstNovasFaixasCount(0);
       setCapaFile(null);
+      setCapaUrlAlbumInput("");
       setCapaPreview(null);
       setEncartesFiles([]);
       setEncarteAtual([]);
@@ -2679,6 +2692,17 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                           />
                         </label>
                       </div>
+                      {/* Alternativa de emergência: se o upload do arquivo
+                          travar sem erro, cola o link direto (mesmo padrão
+                          já usado pra faixa de música) e publica sem
+                          depender do upload. */}
+                      <input
+                        type="text"
+                        value={capaUrlAlbumInput}
+                        onChange={(e) => setCapaUrlAlbumInput(e.target.value)}
+                        placeholder="Ou cole o link da capa (Drive) aqui"
+                        className="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-white/10 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-emerald-500/50"
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -2880,6 +2904,13 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                               />
                             </label>
                           </div>
+                          <input
+                            type="text"
+                            value={capaUrlAlbumInput}
+                            onChange={(e) => setCapaUrlAlbumInput(e.target.value)}
+                            placeholder="Ou cole o link da nova capa (Drive) aqui"
+                            className="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-white/10 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-emerald-500/50"
+                          />
                         </div>
 
                         <div className="space-y-2">
