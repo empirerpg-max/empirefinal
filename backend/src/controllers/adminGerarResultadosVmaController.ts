@@ -114,12 +114,15 @@ export async function adminGerarResultadosVmaController(request: Request): Promi
       return { titulo: ind.titulo, artista: ind.artista, score };
     });
 
-    // "São 6 por categoria" — pega só os 6 de maior score (a aba de
-    // votação real guarda TODOS os indicados originais, não só os 6
-    // oficiais), e só DEPOIS ordena esses 6 alfabeticamente pra exibição.
-    const top6 = [...comScoreFiltrado].sort((a, b) => b.score - a.score).slice(0, 6);
-    const maiorScore = Math.max(...top6.map((r) => r.score));
-    const linhas: LinhaResultado[] = top6
+    // "São 6 por categoria" — pega só os de maior score (a aba de votação
+    // real guarda TODOS os indicados originais, não só os oficiais), e só
+    // DEPOIS ordena esses alfabeticamente pra exibição. Categorias "of the
+    // year" (Song/Artist/Video of The Year) são 8, não 6 — correção
+    // explícita do usuário.
+    const tetoIndicados = /of the year/i.test(categoria) ? 8 : 6;
+    const topN = [...comScoreFiltrado].sort((a, b) => b.score - a.score).slice(0, tetoIndicados);
+    const maiorScore = Math.max(...topN.map((r) => r.score));
+    const linhas: LinhaResultado[] = topN
       .map((r) => ({
         titulo: r.titulo,
         artista: r.artista,
