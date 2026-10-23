@@ -334,6 +334,12 @@ export async function criarArtistaController(request: Request): Promise<Response
 
     await googleSheetsService.usuarios.appendRow(ARTISTAS_SHEET, row);
     await registrarGravadoraNoBancoDeDados(nome, gravadora);
+    // Combinado com o usuário: todo artista criado precisa já ter sua
+    // linha em "INFOS ACTS" — antes ela só nascia preguiçosamente na
+    // primeira vez que o dono editava foto/bio/capa pelo app, deixando o
+    // artista sem perfil nenhum (foto/bio em branco, sem jeito óbvio de
+    // saber por quê) até essa primeira edição acontecer.
+    await garantirLinhaInfosActs(nome, foto);
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -393,19 +399,45 @@ async function registrarGravadoraNoBancoDeDados(nome: string, gravadora: string)
 
 const INFOS_ACTS_SHEET = "INFOS ACTS";
 
+// Garante que o artista já nasce com uma linha em "INFOS ACTS" (combinado
+// com o usuário: todo artista criado precisa aparecer lá, não só quando o
+// dono mexer em foto/bio/capa pela primeira vez). C = foto "oficial"
+// (opcional, só se já veio uma na criação); resto fica em branco pro dono
+// preencher depois. Nunca sobrescreve se a linha já existir (idempotente —
+// pode ser chamado em cima de artista já cadastrado sem perder nada).
+async function garantirLinhaInfosActs(nome: string, fotoInicial?: string): Promise<void> {
+  try {
+    const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+    const normNome = normalizeComparison(nome);
+    const jaExiste = rows.slice(1).some((r) => normalizeComparison(r[0]) === normNome);
+    if (jaExiste) return;
+    await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
+      nome, "", (fotoInicial || "").trim(),
+    ]);
+  } catch (err) {
+    console.warn("[garantirLinhaInfosActs] Erro ao criar linha em INFOS ACTS:", err);
+  }
+}
+
 /**
  * GET /api/artistas/infos?nome=<nome>
  * Biografia, foto e capa do perfil do artista — vive numa aba própria
  * ("INFOS ACTS", planilha registrosCharts): A nome | C foto curada à mão |
- * E biografia | G foto RESOLVIDA (fórmula da própria planilha: usa I se
- * preenchida, senão cai pra C — confirmado com a produção) | I upload mais
- * recente do dono | R capa do perfil (desktop) | S capa do perfil (mobile).
- * O dono do artista edita biografia e capa pelo app (ver
- * setArtistBiografiaController/setArtistCapaController) — antes só dava
- * direto na planilha. O upload de foto novo grava em I, não em C (ver
- * setArtistFotoController) — por isso a leitura usa G (o resultado já
- * pronto da fórmula) em vez de replicar a lógica "C se I vazio" na mão:
- * se a fórmula mudar um dia, o código não precisa acompanhar.
+ * E biografia | I upload mais recente do dono | R capa do perfil (desktop)
+ * | S capa do perfil (mobile). O dono do artista edita biografia, foto e
+ * capa pelo app (ver setArtist*Controller abaixo) — antes só dava direto
+ * na planilha.
+ *
+ * BUG REAL corrigido aqui (2026-10-23, artista "Hayley Wonderwall" recém-
+ * criada: foto/bio enviadas pelo dono não apareciam em lugar nenhum): a
+ * "foto resolvida" vinha da coluna G, uma FÓRMULA da própria planilha
+ * (usa I se preenchida, senão cai pra C) — mas uma linha NOVA criada pelo
+ * app via appendRow nunca herda fórmula nenhuma (só arrastar manualmente
+ * no Google Sheets propaga uma fórmula pra linha de baixo), então G ficava
+ * pra sempre vazia pra qualquer artista criado/editado pela primeira vez
+ * via app, mesmo com a foto certinha gravada em I. Calcula "I senão C" em
+ * código agora — nunca mais depende de fórmula nenhuma da planilha pra um
+ * dado que o próprio app escreve.
  */
 export async function getArtistInfoController(request: Request): Promise<Response> {
   try {
@@ -426,9 +458,10 @@ export async function getArtistInfoController(request: Request): Promise<Respons
       JSON.stringify({
         success: true,
         data: {
-          // G = foto já resolvida pela fórmula da planilha (I se tiver,
-          // senão C) — nunca mais replica essa lógica na mão aqui.
-          foto: row ? normalizeText(row[6]) || normalizeText(row[2]) : "",
+          // I (upload mais recente do dono) se preenchida, senão C (foto
+          // "oficial" curada à mão) — calculado em código, nunca mais via
+          // fórmula da planilha (ver comentário acima).
+          foto: row ? normalizeText(row[8]) || normalizeText(row[2]) : "",
           biografia: row ? normalizeText(row[4]) : "",
           capa: row ? normalizeText(row[17]) : "",
           capaMobile: row ? normalizeText(row[18]) : "",
