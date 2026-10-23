@@ -514,6 +514,18 @@ export async function setArtistFotoController(request: Request): Promise<Respons
         nome, "", "", "", "", "", fotoUrl,
       ]);
     }
+
+    // Combinado com o dono do produto: upload de foto sempre grava nas DUAS
+    // planilhas — INFOS ACTS!G (acima) e ARTISTAS!Foto (coluna B) — nunca só
+    // numa delas. ARTISTAS!Foto alimenta a listagem geral de artistas
+    // (getAllArtistasController só cai pra INFOS ACTS!C/G quando preenchida);
+    // sem essa segunda escrita, o upload não refletia lá.
+    const artistasRows = await googleSheetsService.usuarios.readValues(ARTISTAS_SHEET).catch(() => []);
+    const artistaRowIndex = artistasRows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
+    if (artistaRowIndex !== -1) {
+      await googleSheetsService.usuarios.updateValues(ARTISTAS_SHEET, `B${artistaRowIndex + 1}`, [[fotoUrl]]);
+    }
+
     // Registro didático (aba LOGS) — nenhuma escrita de perfil de artista
     // deixava rastro nenhum antes disso, então uma foto/bio que sumisse
     // (ex: caso real da Hayley Wonderwall) não tinha como ser investigada
@@ -521,7 +533,7 @@ export async function setArtistFotoController(request: Request): Promise<Respons
     // verdade e o quê exatamente.
     registrarLogSistema({
       categoria: "Ação concluída",
-      oQueAconteceu: `Foto do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "G" : "linha nova"}).`,
+      oQueAconteceu: `Foto do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "G" : "linha nova"}${artistaRowIndex !== -1 ? " + ARTISTAS!B" : ""}).`,
       onde: "setArtistFotoController",
       detalheTecnico: fotoUrl,
     }).catch(() => {});

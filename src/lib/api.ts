@@ -448,7 +448,7 @@ export const api = {
   },
   // Grava o link do novo upload de foto na coluna F da aba INFOS ACTS —
   // nunca sobrescreve a foto "oficial" (coluna C, editada à mão pelo dono).
-  async setArtistFoto(nome: string, fotoUrl: string): Promise<CommonResponse> {
+  async setArtistFoto(nome: string, fotoUrl: string): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/artistas/foto", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -1327,7 +1327,8 @@ function FotoModal({ nome, onClose, onDone }: { nome: string; onClose: () => voi
       const json = await res.json().catch(() => null);
       const fileUrl = json?.data?.fileUrl;
       if (!fileUrl) throw new Error("Falha ao subir a foto.");
-      await api.setArtistFoto(nome, fileUrl);
+      const salvou = await api.setArtistFoto(nome, fileUrl);
+      if (!salvou?.success) throw new Error(salvou?.error || "Falha ao salvar a foto.");
       onDone();
       onClose();
     } catch (err: any) {
