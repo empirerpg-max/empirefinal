@@ -23,7 +23,7 @@ export async function adminDiagInfosActsHayleyController(): Promise<Response> {
     const row = rows[i];
     if (!row) continue;
     const nomeNorm = normalizeComparison(row[0]);
-    if (nomeNorm !== normAlvo && !nomeNorm.includes(normAlvo) && !normAlvo.includes(nomeNorm)) continue;
+    if (!nomeNorm || nomeNorm !== normAlvo) continue;
     const colunas: Record<string, string> = {};
     for (let c = 0; c < Math.max(row.length, 20); c++) {
       colunas[String.fromCharCode(65 + c)] = normalizeText(row[c]);
