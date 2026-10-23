@@ -1,4 +1,5 @@
 import { readRuntimeEnv } from "../google/service-account";
+import { googleSheetsService, normalizeComparison } from "./googleSheetsService";
 
 // Token de sessão assinado (HMAC-SHA256), gerado no login/heartbeat e
 // verificado nas ações administrativas sensíveis (ex: bypass de admin em
@@ -100,14 +101,49 @@ export function extractBearerToken(request: Request): string | null {
 }
 
 /**
- * Confere se a requisição carrega um token de sessão válido cujo `id`
- * bate com o admin hardcoded (ADMIN_TG_ID). Usado nos pontos que antes só
- * confiavam num `tgId`/`telegramId` de corpo de requisição pra liberar
- * ações de admin — agora isso só passa se o cliente de fato autenticou como
- * esse usuário no login.
+ * Confere se a requisição carrega um token de sessão válido cujo dono é
+ * admin de verdade. Usado nos pontos que antes só confiavam num
+ * `tgId`/`telegramId` de corpo de requisição pra liberar ações de admin —
+ * agora isso só passa se o cliente de fato autenticou como esse usuário no
+ * login.
+ *
+ * BUG REAL confirmado (2026-10-23, admin "Hugo" — tipo_de_perfil=Admin na
+ * planilha, visível no próprio perfil dele com o badge "ADMIN" — levando
+ * "Acesso restrito ao admin." ao tentar usar "Entrar como usuário"): esta
+ * função só reconhecia UM id hardcoded (ADMIN_TG_ID, histórico, de outra
+ * pessoa) como admin de verdade, ignorando completamente qualquer usuário
+ * marcado como Admin na planilha (coluna "Tipo de Perfil") — a mesma
+ * condição que o FRONTEND já usa pra decidir se mostra os controles de
+ * admin (ver `isAdminUser` em Gestao.tsx/perfil.tsx: `id === ADMIN_TG_ID
+ * || tipoPerfil === "Admin"`), mas o backend só reconhecia metade dela.
+ * Resultado: qualquer admin "de planilha" via os controles normalmente,
+ * clicava, e sempre batia num 403 sem explicação nenhuma. Agora confere a
+ * mesma condição dos dois lados: ID hardcoded OU tipo_de_perfil=Admin na
+ * aba Usuários.
  */
 export async function requestProvesAdmin(request: Request): Promise<boolean> {
   const token = extractBearerToken(request);
   const payload = await verifySessionToken(token);
-  return !!payload && payload.id.trim() === ADMIN_TG_ID;
+  if (!payload) return false;
+  if (payload.id.trim() === ADMIN_TG_ID) return true;
+
+  const rows = await googleSheetsService.usuarios.readValues("Usuários").catch(() => []);
+  if (rows.length < 2) return false;
+  const header = rows[0];
+  const idxId = header.findIndex((h) => normalizeComparison(h) === normalizeComparison("ID"));
+  const idxUsuario = header.findIndex((h) => normalizeComparison(h) === normalizeComparison("Usuário"));
+  const idxTipoPerfil = header.findIndex(
+    (h) => normalizeComparison(h) === normalizeComparison("Tipo de Perfil"),
+  );
+  if (idxTipoPerfil === -1) return false;
+
+  const normId = normalizeComparison(payload.id);
+  const normUsuario = normalizeComparison(payload.usuario);
+  const match = rows.slice(1).find((row) => {
+    const matchId = idxId >= 0 && !!normId && normalizeComparison(row[idxId] || "") === normId;
+    const matchUsuario =
+      idxUsuario >= 0 && !!normUsuario && normalizeComparison(row[idxUsuario] || "") === normUsuario;
+    return matchId || matchUsuario;
+  });
+  return !!match && normalizeComparison(match[idxTipoPerfil] || "") === normalizeComparison("Admin");
 }
