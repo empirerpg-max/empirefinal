@@ -142,6 +142,11 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [editEncarte, setEditEncarte] = useState<string[]>([]);
   const [editEncarteNewFiles, setEditEncarteNewFiles] = useState<File[]>([]);
   const [uploadingEncarte, setUploadingEncarte] = useState(false);
+  // Arrastar-e-soltar pra reordenar o encarte (desktop/mouse) — índice do
+  // item sendo arrastado no momento, só enquanto o drag está ativo. As
+  // setas (mobile/touch, onde drag nativo HTML5 não funciona) continuam
+  // sendo o jeito principal de reordenar; isso é um atalho a mais.
+  const [encarteDragIndex, setEncarteDragIndex] = useState<number | null>(null);
 
   const [saving, setSaving] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -829,7 +834,29 @@ export const EditModal: React.FC<EditModalProps> = ({
                   {editEncarte.length > 0 && (
                     <div className="grid grid-cols-4 gap-2">
                       {editEncarte.map((url, i) => (
-                        <div key={`${url}-${i}`} className="relative aspect-square rounded-lg overflow-hidden border border-white/10 bg-neutral-900">
+                        <div
+                          key={`${url}-${i}`}
+                          draggable
+                          onDragStart={() => setEncarteDragIndex(i)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setEncarteDragIndex((from) => {
+                              if (from === null || from === i) return null;
+                              setEditEncarte((prev) => {
+                                const next = [...prev];
+                                const [moved] = next.splice(from, 1);
+                                next.splice(i, 0, moved);
+                                return next;
+                              });
+                              return null;
+                            });
+                          }}
+                          onDragEnd={() => setEncarteDragIndex(null)}
+                          className={`relative aspect-square rounded-lg overflow-hidden border bg-neutral-900 cursor-grab active:cursor-grabbing transition ${
+                            encarteDragIndex === i ? "border-emerald-400 opacity-50" : "border-white/10"
+                          }`}
+                        >
                           <SmartImg
                             src={url}
                             size={300}
@@ -850,6 +877,42 @@ export const EditModal: React.FC<EditModalProps> = ({
                           >
                             <X className="size-3.5" />
                           </button>
+                          {/* Reordenar — só muda o estado local (editEncarte);
+                              a ordem nova só grava de verdade quando o jogador
+                              clicar em "Salvar alterações", igual o resto do
+                              formulário (nunca salva sozinho ao clicar aqui). */}
+                          <div className="absolute bottom-1 right-1 flex gap-1">
+                            <button
+                              type="button"
+                              disabled={i === 0}
+                              onClick={() =>
+                                setEditEncarte((prev) => {
+                                  const next = [...prev];
+                                  [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                                  return next;
+                                })
+                              }
+                              className="size-6 rounded-full bg-black/70 text-neutral-300 hover:text-white hover:bg-black/90 grid place-items-center disabled:opacity-30 disabled:pointer-events-none"
+                              title="Mover pra trás"
+                            >
+                              <ArrowUp className="size-3 -rotate-90" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={i === editEncarte.length - 1}
+                              onClick={() =>
+                                setEditEncarte((prev) => {
+                                  const next = [...prev];
+                                  [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                                  return next;
+                                })
+                              }
+                              className="size-6 rounded-full bg-black/70 text-neutral-300 hover:text-white hover:bg-black/90 grid place-items-center disabled:opacity-30 disabled:pointer-events-none"
+                              title="Mover pra frente"
+                            >
+                              <ArrowDown className="size-3 -rotate-90" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
