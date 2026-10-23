@@ -1131,22 +1131,13 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
  */
 export async function getEmpirePlayLancamentosRecentesController(): Promise<Response> {
   try {
-    const [
-      edicaoMusicasRows,
-      edicaoAlbunsRows,
-      musicaRecords,
-      albumRecords,
-      musicasRawRows,
-      albunsRawRows,
-    ] = await Promise.all([
+    const [edicaoMusicasRows, edicaoAlbunsRows, musicaRecords, albumRecords] = await Promise.all([
       // BD = coluna 56 (índice 55) — "Código único" gerado por fórmula.
       googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD5000"),
       // R = coluna 18 (índice 17) — "Código único".
       googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000"),
       sheetsService.readSheetObjects("Musicas"),
       sheetsService.readSheetObjects("Albuns"),
-      googleSheetsService.principal.readValues("Musicas"),
-      googleSheetsService.principal.readValues("Albuns"),
     ]);
 
     const musicaItems = musicaRecords
@@ -1158,17 +1149,31 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
     // CHARTS ÁLBUMS e o catálogo — mesma lógica de buscarNomeCanonico em
     // registroLogController.ts. Muito mais confiável que casar por texto de
     // título (que quebra com qualquer diferença de acento/"feat."/espaço).
-    // Musicas!Z (índice 25) e Albuns!L (índice 11) — alinhados por posição
-    // com musicaItems/albumItems porque vêm da mesma leitura em ordem.
+    //
+    // BUG REAL encontrado (reportado: vários lançamentos recentes de Rayna/
+    // LOREENA/TED/Brida sumindo de Lançamentos Recentes, deixando um single
+    // antigo "Follia" de 30/09 aparecer no lugar deles): este mapa era
+    // montado casando `musicaItems[i]`/`albumItems[i]` por POSIÇÃO com
+    // `musicasRawRows`/`albunsRawRows` (índice `i` do forEach) — mas
+    // `musicaItems` já tinha passado pelo filtro de pendente (remove linhas
+    // do meio do array, desalinhando todo índice posterior ao primeiro
+    // filtrado) e `albumItems`/`musicaItems` vêm de `readSheetObjects`, que
+    // pode pular linhas sem dar no mesmo passo que uma leitura crua mantém.
+    // Qualquer uma dessas diferenças faz o código único bater com o item
+    // ERRADO (ou com nenhum) a partir daí. Lê o código direto de cada
+    // próprio record (coluna "codigo_unico" já normalizada por
+    // readSheetObjects) em vez de depender de alinhamento posicional entre
+    // dois arrays diferentes — nunca mais desalinha.
     const codigoParaMusica = new Map<string, EmpirePlayCleanItem>();
-    musicasRawRows.slice(1).forEach((row, i) => {
-      const codigo = normalizeComparison(row[25] || "");
-      if (codigo && musicaItems[i]) codigoParaMusica.set(codigo, musicaItems[i]);
+    musicaRecords.forEach((rec, idx) => {
+      if ((getValue(rec, ["pendente"]) || "").trim().toLowerCase() === "sim") return;
+      const codigo = normalizeComparison(getValue(rec, ["codigo_unico"]) || "");
+      if (codigo) codigoParaMusica.set(codigo, buildCleanItem("Musicas", rec, idx));
     });
     const codigoParaAlbum = new Map<string, EmpirePlayCleanItem>();
-    albunsRawRows.slice(1).forEach((row, i) => {
-      const codigo = normalizeComparison(row[11] || "");
-      if (codigo && albumItems[i]) codigoParaAlbum.set(codigo, albumItems[i]);
+    albumRecords.forEach((rec, idx) => {
+      const codigo = normalizeComparison(getValue(rec, ["codigo_unico"]) || "");
+      if (codigo) codigoParaAlbum.set(codigo, buildCleanItem("Albuns", rec, idx));
     });
 
     type Candidato = { dataIso: string; titulo: string; codigoUnico: string; isAlbum: boolean };
