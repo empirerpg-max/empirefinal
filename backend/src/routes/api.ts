@@ -431,6 +431,7 @@ export async function handleEmpireApiRoutes(
     "/api/acervo/pitchfork/meses",
     "/api/acervo/pitchfork/arquivo",
     "/api/auth/login",
+    "/api/auth/admin-impersonar",
     "/api/auth/heartbeat",
     "/api/auth/perfil",
     "/api/auth/trocar-senha",
