@@ -1538,15 +1538,12 @@ export const Forum: React.FC<ForumProps> = ({
                         style={{ backgroundColor: color }}
                       >
                         {c.foto ? (
-                          <img
-                            src={driveImg(c.foto)}
+                          <SmartImg
+                            src={c.foto}
                             alt=""
                             className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
                             loading="lazy"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).style.display = "none";
-                            }}
+                            fallback={initialsFor(c.jogador)}
                           />
                         ) : (
                           initialsFor(c.jogador)
