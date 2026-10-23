@@ -303,6 +303,12 @@ export interface CreateSongPayload {
   // "Artista - Título" da música existente referenciada, obrigatório quando
   // opcaoChart é (b) substituir ou (c) vincular comentários.
   musicaReferencia?: string;
+  // "Material Antigo" (Gestão): data real de lançamento (formato
+  // "YYYY-MM-DD", de um <input type="date">) — usada no lugar de hoje pra
+  // Data de lançamento e pro NÚMERO DE SEMANAS já "correndo" no chart em
+  // vez de estrear na semana 1, mesma lógica do álbum retroativo (ver
+  // calcularSemanasRetroativas).
+  dataLancamento?: string;
 }
 
 export interface CreateVideoPayload {
@@ -328,6 +334,11 @@ export interface CreateVideoPayload {
   musicaVinculada?: string;
   musicasVinculadas?: string[];
   nomeJogador: string;
+  // "Material Antigo" (Gestão): data real de lançamento (formato
+  // "YYYY-MM-DD", de um <input type="date">) — usada no lugar de hoje pra
+  // Data do envio (coluna J de Music Videos) e pra data que marca o
+  // videoclipe na aba Pontos, quando "Music Video".
+  dataLancamento?: string;
 }
 
 export interface TrackItemPayload {
@@ -383,6 +394,16 @@ export function calcularSemanasRetroativas(dataLancamento: string): number {
   return Math.max(1, semanas);
 }
 
+// "YYYY-MM-DD" (valor nativo de <input type="date">) -> "DD/MM/AAAA", mesmo
+// formato que new Date().toLocaleDateString("pt-BR") já produz pra
+// lançamento feito hoje — usado por "Material Antigo" (música/vídeo) pra
+// gravar a Data de lançamento real escolhida em vez da data de hoje.
+function formatarDataBR(dataIso: string): string {
+  const [ano, mes, dia] = dataIso.split("-");
+  if (!ano || !mes || !dia) return "";
+  return `${dia}/${mes}/${ano}`;
+}
+
 export type UploadFolderType =
   | "musica"
   | "musicaAudio"
@@ -431,6 +452,7 @@ export async function createSongController(request: Request): Promise<Response> 
       jogadorId = "",
       pendente = "Não",
       musicaReferencia = "",
+      dataLancamento = "",
     } = body;
 
     if (!tituloMusica || !artistaPrincipal || !nomeJogador) {
@@ -444,7 +466,13 @@ export async function createSongController(request: Request): Promise<Response> 
     }
 
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    // "Material Antigo": usa a data real escolhida em vez de hoje, e as
+    // semanas de chart já "correndo" (calcularSemanasRetroativas) em vez de
+    // estrear na semana 1 — mesma lógica do álbum retroativo.
+    const dataFormatada = dataLancamento
+      ? formatarDataBR(dataLancamento) || new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+      : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const weeksOverrideMusica = dataLancamento ? String(calcularSemanasRetroativas(dataLancamento)) : undefined;
     const participantesLimpos = participantes.filter(Boolean);
     // Rede de segurança contra "Artista - Artista - Nome" — ver
     // dedupeArtistPrefix no topo do arquivo.
@@ -569,6 +597,7 @@ export async function createSongController(request: Request): Promise<Response> 
         tipoMusica: tipoMusica || "SOLO",
         artistaPrincipal,
         participantes: participantesLimpos,
+        weeksOverride: weeksOverrideMusica,
       });
       if (musicaRowIndexNova && edicaoChartsRowIndex) {
         codigoUnicoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
@@ -808,6 +837,7 @@ export async function createVideoController(request: Request): Promise<Response>
       capaUrl = "",
       mediaUrl = "",
       nomeJogador,
+      dataLancamento = "",
     } = body;
 
     if (!tituloVideo || !artistaResponsavel || !nomeJogador) {
@@ -861,7 +891,12 @@ export async function createVideoController(request: Request): Promise<Response>
     }
 
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    // "Material Antigo": usa a data real escolhida (vídeo não tem conceito
+    // de "semanas" próprio — ele só reaproveita o Código único da música já
+    // lançada, ver resolverLinhaEdicaoCharts abaixo) em vez de hoje.
+    const dataFormatada = dataLancamento
+      ? formatarDataBR(dataLancamento) || new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+      : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const fullTitle = tituloVideo.includes(" - ")
       ? tituloVideo
       : `${artistaResponsavel} - ${tituloVideo}`;

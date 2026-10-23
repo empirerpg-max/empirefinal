@@ -22,6 +22,7 @@ import {
   Link2,
   Rocket,
   Mic2,
+  Clock,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { driveImg, api, normalizeNome } from "@/lib/api";
@@ -569,6 +570,25 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [albumRetroativo, setAlbumRetroativo] = useState<boolean>(false);
   const [dataLancamentoRetroativo, setDataLancamentoRetroativo] = useState<string>("");
 
+  // "Material Antigo" — entrada única (botão na landing) pras 3 abas
+  // (Música/Vídeo/Álbum) quando o material já é antigo (lançado antes, só
+  // agora sendo cadastrado no app): data de lançamento real obrigatória em
+  // vez de hoje, e as semanas de chart já "correndo" a partir dela em vez
+  // de estrear na semana 1 (mesma lógica que já existia só pra álbum
+  // retroativo — ver weeksOverride/calcularSemanasRetroativas no backend).
+  // Pra álbum especificamente, reaproveita o mecanismo de álbum retroativo
+  // já existente (albumRetroativo/dataLancamentoRetroativo) em vez de
+  // duplicar — ver efeito logo abaixo que sincroniza os dois.
+  const [materialAntigo, setMaterialAntigo] = useState<boolean>(false);
+  const [dataLancamentoAntigo, setDataLancamentoAntigo] = useState<string>("");
+
+  useEffect(() => {
+    if (materialAntigo && activeTab === "album") {
+      setAlbumRetroativo(true);
+      setDataLancamentoRetroativo(dataLancamentoAntigo);
+    }
+  }, [materialAntigo, activeTab, dataLancamentoAntigo]);
+
   // Form Álbum — Substituir (troca capa/encarte/adiciona faixas a um álbum
   // já lançado, sem duplicar o registro nos charts)
   const [albumSubstQuery, setAlbumSubstQuery] = useState<string>("");
@@ -855,6 +875,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setErrorMsg("Selecione qual música existente essa opção se refere.");
       return;
     }
+    if (materialAntigo && !dataLancamentoAntigo) {
+      setErrorMsg("Informe a data real de lançamento do material antigo.");
+      return;
+    }
 
     // Duplo aviso antes de publicar de fato — mostra um resumo do que foi
     // preenchido pro jogador conferir (a pedido do usuário, depois do erro
@@ -935,6 +959,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         musicaReferencia: musicaReferencia
           ? `${musicaReferencia.artist} - ${musicaReferencia.title}`
           : "",
+        ...(materialAntigo ? { dataLancamento: dataLancamentoAntigo } : {}),
       };
 
       const res = await fetch("/api/gestao/musica", {
@@ -973,6 +998,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setMusicaReferencia(null);
       setOpcaoChart(OPCOES_CHART[0].value);
       setExtraMusica(emptyExtraMaterialEditorValue());
+      setDataLancamentoAntigo("");
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro inesperado ao publicar música.");
@@ -1002,6 +1028,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     }
     if (categoriaVideo === "Music Video" && musicasVinculadas.length > 1) {
       setErrorMsg("Music Video só pode ter uma única Música Vinculada.");
+      return;
+    }
+    if (materialAntigo && !dataLancamentoAntigo) {
+      setErrorMsg("Informe a data real de lançamento do material antigo.");
       return;
     }
 
@@ -1068,6 +1098,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         capaUrl,
         mediaUrl,
         nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
+        ...(materialAntigo ? { dataLancamento: dataLancamentoAntigo } : {}),
       };
 
       const res = await fetch("/api/gestao/video", {
@@ -1093,6 +1124,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setCapaPreview(null);
       setMediaFile(null);
       setParticipantes([""]);
+      setDataLancamentoAntigo("");
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro ao publicar vídeo.");
@@ -1249,6 +1281,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setExtraAlbum(emptyExtraMaterialEditorValue());
       setAlbumRetroativo(false);
       setDataLancamentoRetroativo("");
+      setDataLancamentoAntigo("");
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro inesperado ao publicar álbum.");
@@ -1427,6 +1460,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 onClick={() => {
                   setActiveTab(tab);
                   resetFormState();
+                  setMaterialAntigo(false);
+                  setDataLancamentoAntigo("");
                   setShowLanding(false);
                 }}
                 className="flex flex-col items-center gap-2 text-center group"
@@ -1445,6 +1480,23 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 </span>
               </button>
             ))}
+            <button
+              onClick={() => {
+                setActiveTab("musica");
+                resetFormState();
+                setMaterialAntigo(true);
+                setDataLancamentoAntigo("");
+                setShowLanding(false);
+              }}
+              className="flex flex-col items-center gap-2 text-center group"
+            >
+              <div className="w-full aspect-square rounded-2xl bg-neutral-900 border border-white/10 text-neutral-200 grid place-items-center group-hover:border-white/20 transition">
+                <Clock className="size-5" />
+              </div>
+              <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
+                Material Antigo
+              </span>
+            </button>
             <button
               onClick={() => {
                 // Sincronizar letra só faz sentido pra música já postada —
@@ -1530,6 +1582,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             </button>
             <div className="min-w-0 flex-1">
               <h2 className="text-lg sm:text-xl font-black italic uppercase tracking-tight text-white truncate">
+                {materialAntigo && activeTab !== "banners" ? "Material Antigo — " : ""}
                 {activeTab === "musica"
                   ? "Nova Música"
                   : activeTab === "video"
@@ -1624,6 +1677,25 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               onSubmit={handleSubmitMusica}
               className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
             >
+              {materialAntigo && (
+                <div className="p-4 rounded-2xl bg-neutral-900/90 border border-emerald-500/30 space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    Data real de lançamento
+                  </label>
+                  <input
+                    type="date"
+                    value={dataLancamentoAntigo}
+                    onChange={(e) => setDataLancamentoAntigo(e.target.value)}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="w-full p-3 rounded-xl bg-neutral-950/60 border border-white/10 text-white text-sm"
+                  />
+                  <p className="text-[11px] text-neutral-400">
+                    A música entra nos charts já na semana correspondente a essa data (em vez de
+                    estrear na semana 1).
+                  </p>
+                </div>
+              )}
+
               {/* SELEÇÃO DO ARTISTA RESPONSÁVEL */}
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
@@ -2011,6 +2083,25 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               onSubmit={handleSubmitVideo}
               className="bg-white/[0.04] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 backdrop-blur-2xl shadow-2xl shadow-black/40"
             >
+              {materialAntigo && (
+                <div className="p-4 rounded-2xl bg-neutral-900/90 border border-emerald-500/30 space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    Data real de lançamento
+                  </label>
+                  <input
+                    type="date"
+                    value={dataLancamentoAntigo}
+                    onChange={(e) => setDataLancamentoAntigo(e.target.value)}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="w-full p-3 rounded-xl bg-neutral-950/60 border border-white/10 text-white text-sm"
+                  />
+                  <p className="text-[11px] text-neutral-400">
+                    Vídeo antigo só pode ser vinculado a uma música que já existe no catálogo —
+                    selecione abaixo.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
                   <User className="size-4 text-emerald-400" />
@@ -2321,44 +2412,61 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           {/* FORMULÁRIO DE ÁLBUM */}
           {activeTab === "album" && (
             <div className="space-y-6">
-              <button
-                type="button"
-                onClick={() => {
-                  setAlbumObjetivo("a");
-                  setAlbumRetroativo((v) => !v);
-                }}
-                className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-colors ${
-                  albumRetroativo
-                    ? "bg-emerald-500/20 border-emerald-500 text-white"
-                    : "bg-emerald-500/10 border-emerald-500/30 text-white hover:bg-emerald-500/20"
-                }`}
-              >
-                <span className="text-xs font-bold text-left">
-                  Tem um álbum <span className="text-emerald-400">retroativo</span> pra cadastrar?
-                  Ele vira tópico no fórum e entra nos charts na semana certa.
-                </span>
-                <span className="text-[11px] font-black uppercase text-emerald-400 shrink-0 ml-3">
-                  {albumRetroativo ? "Ativado ✓" : "Ativar →"}
-                </span>
-              </button>
+              {materialAntigo ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-white">
+                  <span className="text-xs font-bold">
+                    Material <span className="text-emerald-400">Antigo</span> — a data real de
+                    lançamento abaixo é obrigatória; o álbum entra nos charts já na semana
+                    correspondente a ela (em vez de estrear na semana 1), e todas as faixas entram
+                    como pendentes.
+                  </span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAlbumObjetivo("a");
+                    setAlbumRetroativo((v) => !v);
+                  }}
+                  className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-colors ${
+                    albumRetroativo
+                      ? "bg-emerald-500/20 border-emerald-500 text-white"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-white hover:bg-emerald-500/20"
+                  }`}
+                >
+                  <span className="text-xs font-bold text-left">
+                    Tem um álbum <span className="text-emerald-400">retroativo</span> pra cadastrar?
+                    Ele vira tópico no fórum e entra nos charts na semana certa.
+                  </span>
+                  <span className="text-[11px] font-black uppercase text-emerald-400 shrink-0 ml-3">
+                    {albumRetroativo ? "Ativado ✓" : "Ativar →"}
+                  </span>
+                </button>
+              )}
 
-              {albumRetroativo && (
+              {(albumRetroativo || materialAntigo) && (
                 <div className="p-4 rounded-2xl bg-neutral-900/90 border border-emerald-500/30 space-y-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
                     Data real de lançamento
                   </label>
                   <input
                     type="date"
-                    value={dataLancamentoRetroativo}
-                    onChange={(e) => setDataLancamentoRetroativo(e.target.value)}
+                    value={materialAntigo ? dataLancamentoAntigo : dataLancamentoRetroativo}
+                    onChange={(e) =>
+                      materialAntigo
+                        ? setDataLancamentoAntigo(e.target.value)
+                        : setDataLancamentoRetroativo(e.target.value)
+                    }
                     max={new Date().toISOString().slice(0, 10)}
                     className="w-full p-3 rounded-xl bg-neutral-950/60 border border-white/10 text-white text-sm"
                   />
-                  <p className="text-[11px] text-neutral-400">
-                    O álbum entra nos charts já na semana correspondente a essa data (em vez de
-                    estrear na semana 1), e todas as faixas entram como pendentes — você relança
-                    cada uma quando quiser.
-                  </p>
+                  {!materialAntigo && (
+                    <p className="text-[11px] text-neutral-400">
+                      O álbum entra nos charts já na semana correspondente a essa data (em vez de
+                      estrear na semana 1), e todas as faixas entram como pendentes — você relança
+                      cada uma quando quiser.
+                    </p>
+                  )}
                 </div>
               )}
 
