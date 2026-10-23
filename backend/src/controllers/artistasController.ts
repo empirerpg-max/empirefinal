@@ -428,22 +428,15 @@ async function garantirLinhaInfosActs(nome: string, fotoInicial?: string): Promi
 /**
  * GET /api/artistas/infos?nome=<nome>
  * Biografia, foto e capa do perfil do artista — vive numa aba própria
- * ("INFOS ACTS", planilha registrosCharts): A nome | C foto curada à mão |
- * E biografia | I upload mais recente do dono | R capa do perfil (desktop)
- * | S capa do perfil (mobile). O dono do artista edita biografia, foto e
- * capa pelo app (ver setArtist*Controller abaixo) — antes só dava direto
- * na planilha.
- *
- * BUG REAL corrigido aqui (2026-10-23, artista "Hayley Wonderwall" recém-
- * criada: foto/bio enviadas pelo dono não apareciam em lugar nenhum): a
- * "foto resolvida" vinha da coluna G, uma FÓRMULA da própria planilha
- * (usa I se preenchida, senão cai pra C) — mas uma linha NOVA criada pelo
- * app via appendRow nunca herda fórmula nenhuma (só arrastar manualmente
- * no Google Sheets propaga uma fórmula pra linha de baixo), então G ficava
- * pra sempre vazia pra qualquer artista criado/editado pela primeira vez
- * via app, mesmo com a foto certinha gravada em I. Calcula "I senão C" em
- * código agora — nunca mais depende de fórmula nenhuma da planilha pra um
- * dado que o próprio app escreve.
+ * ("INFOS ACTS", planilha registrosCharts): A nome | C Link (foto "real"
+ * exibida no app) | E "ESCREVA SOBRE O SEU ARTISTA" (biografia) | G
+ * "IMAGEM PERFIL" (upload mais recente do dono, via app) | R capa do
+ * perfil (desktop) | S capa do perfil (mobile). Mapeamento confirmado
+ * direto pelo dono do produto em 2026-10-23 — nunca mais por suposição
+ * (ver histórico: versões anteriores deste comentário chutaram colunas
+ * erradas, causando o bug real da Hayley Wonderwall). Foto exibida sempre
+ * prioriza C; só cai pra G quando C está vazia (artista cujo dono já
+ * mandou upload mas ainda não tem foto "oficial" curada em C).
  */
 export async function getArtistInfoController(request: Request): Promise<Response> {
   try {
@@ -464,10 +457,9 @@ export async function getArtistInfoController(request: Request): Promise<Respons
       JSON.stringify({
         success: true,
         data: {
-          // I (upload mais recente do dono) se preenchida, senão C (foto
-          // "oficial" curada à mão) — calculado em código, nunca mais via
-          // fórmula da planilha (ver comentário acima).
-          foto: row ? normalizeText(row[8]) || normalizeText(row[2]) : "",
+          // C (Link, foto "real" exibida) tem prioridade; só cai pra G
+          // (upload mais recente do dono) quando C está vazia.
+          foto: row ? normalizeText(row[2]) || normalizeText(row[6]) : "",
           biografia: row ? normalizeText(row[4]) : "",
           capa: row ? normalizeText(row[17]) : "",
           capaMobile: row ? normalizeText(row[18]) : "",
@@ -486,13 +478,12 @@ export async function getArtistInfoController(request: Request): Promise<Respons
 
 /**
  * POST /api/artistas/foto
- * Grava o link do novo upload de foto do artista na coluna I da aba
- * "INFOS ACTS" — é literalmente o campo com esse propósito na planilha
- * ("Caso deseje uma nova capa pro seu act, insira no seu Google Drive >
- * Clique em Compartilhar > Insira o link aqui"). Nunca sobrescreve a
- * coluna C (foto "oficial", editada à mão pelo dono/admin direto na
- * planilha) nem a F/F1 (flags de admin, não é campo de link). Cria a linha
- * se o artista ainda não tiver uma nessa aba.
+ * Grava o link do novo upload de foto do artista na coluna G ("IMAGEM
+ * PERFIL") da aba "INFOS ACTS" — upload do dono, pendente até virar a foto
+ * "oficial" em C (ver getArtistInfoController: exibição prioriza C, cai
+ * pra G só se C estiver vazia). Nunca sobrescreve a coluna C nem a D/F
+ * (flags de admin, não é campo de link). Cria a linha se o artista ainda
+ * não tiver uma nessa aba.
  */
 export async function setArtistFotoController(request: Request): Promise<Response> {
   try {
@@ -511,10 +502,16 @@ export async function setArtistFotoController(request: Request): Promise<Respons
     const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
 
     if (rowIndex !== -1) {
-      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `I${rowIndex + 1}`, [[fotoUrl]]);
+      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `G${rowIndex + 1}`, [[fotoUrl]]);
     } else {
+      // Array completo até G (índice 6), nunca um array de 1 elemento só —
+      // appendRow("A:ZZ") deixa a API do Sheets adivinhar a coluna olhando
+      // o range inteiro, e quando a coluna A tem linhas vazias no meio
+      // (caso real desta aba) ela acerta errado e grava mais pra direita
+      // do que devia (bug real encontrado e corrigido em 2026-10-23, ver
+      // adminBackfillInfosActsController).
       await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
-        nome, "", "", "", "", "", "", "", fotoUrl,
+        nome, "", "", "", "", "", fotoUrl,
       ]);
     }
     // Registro didático (aba LOGS) — nenhuma escrita de perfil de artista
@@ -524,7 +521,7 @@ export async function setArtistFotoController(request: Request): Promise<Respons
     // verdade e o quê exatamente.
     registrarLogSistema({
       categoria: "Ação concluída",
-      oQueAconteceu: `Foto do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "I" : "linha nova"}).`,
+      oQueAconteceu: `Foto do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "G" : "linha nova"}).`,
       onde: "setArtistFotoController",
       detalheTecnico: fotoUrl,
     }).catch(() => {});
@@ -743,14 +740,15 @@ export async function getAllArtistasController(): Promise<Response> {
     // (mesmo uma foto antiga de anos atrás), ela nunca é substituída pela
     // mais recente — era por isso que a lista/busca de artistas mostrava
     // foto trocada/desatualizada mesmo depois do artista atualizar pelo
-    // app. Agora INFOS ACTS!G (foto já resolvida pela fórmula da planilha)
-    // tem prioridade sobre ARTISTAS!foto sempre que existir — só cai pra
-    // ARTISTAS!foto quando o artista não tiver nenhuma linha em INFOS ACTS.
+    // app. Agora INFOS ACTS!C (Link, foto "real" exibida — cai pra G, o
+    // upload mais recente do dono, só se C estiver vazia) tem prioridade
+    // sobre ARTISTAS!foto sempre que existir — só cai pra ARTISTAS!foto
+    // quando o artista não tiver nenhuma linha em INFOS ACTS.
     const infosRows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
     const fotoPorNome = new Map<string, string>();
     for (const row of infosRows.slice(1)) {
       const nome = normalizeComparison(row[0]);
-      const foto = normalizeText(row[6]) || normalizeText(row[2]);
+      const foto = normalizeText(row[2]) || normalizeText(row[6]);
       if (nome && foto) fotoPorNome.set(nome, foto);
     }
     data = data.map((a) => {
