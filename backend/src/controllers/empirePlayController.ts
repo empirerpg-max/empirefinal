@@ -377,7 +377,7 @@ function resolveVideoUrlAndSource(record: SheetRecord): {
   return { videoUrl: match.value, videoSource: resolveVideoSource(match.value, match.alias) };
 }
 
-function parseDateToIso(value: string | null): string | null {
+export function parseDateToIso(value: string | null): string | null {
   if (!value) return null;
 
   const ddmmyyyy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
