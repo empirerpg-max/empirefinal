@@ -35,18 +35,23 @@ export async function adminBackfillInfosActsController(request: Request): Promis
     });
   }
 
-  // appendRow nunca lança: em falha (mesmo após retry interno) ela já loga em
-  // LOGS e devolve null silenciosamente — por isso o sucesso real só pode ser
-  // confirmado pelo retorno (linha gravada), nunca por try/catch nem por só
-  // ter sido "chamada". Essa distinção faltava aqui e fez o backfill reportar
-  // "criadas" mesmo quando a escrita falhava de verdade (caso real: Hayley
-  // Wonderwall, relatada como criada 2x sem nunca aparecer na planilha).
+  // appendRow("A:ZZ") deixa a API do Sheets ADIVINHAR em que coluna a "tabela"
+  // começa, olhando o range inteiro — como a coluna A está vazia em várias
+  // linhas (estrutura legada da aba), ela "detectou" a tabela começando na
+  // coluna C e jogou o nome ali, não em A. Resultado real visto na planilha:
+  // os 11 artistas (inclusive Hayley Wonderwall) foram gravados como
+  // ["","","Hayley Wonderwall"] em vez de ["Hayley Wonderwall"] — toda
+  // leitura que espera o nome em A (inclusive este próprio endpoint, rodando
+  // de novo) continuava achando a linha "vazia". Fix: escreve direto na
+  // célula A{linha}, sem passar pela heurística de append.
+  let nextRow = infosRows.length + 1;
   let criadas = 0;
   const falharam: string[] = [];
   for (const nome of faltando) {
-    const linha = await googleSheetsService.registrosCharts.appendRow("INFOS ACTS", [nome]);
-    if (linha !== null) {
+    const ok = await googleSheetsService.registrosCharts.updateValues("INFOS ACTS", `A${nextRow}`, [[nome]]);
+    if (ok) {
       criadas++;
+      nextRow++;
     } else {
       falharam.push(nome);
     }

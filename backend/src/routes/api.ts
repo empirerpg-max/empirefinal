@@ -252,6 +252,7 @@ import { adminDiagInfosActsHayleyController } from "../controllers/adminDiagInfo
 import { adminBackfillInfosActsController } from "../controllers/adminBackfillInfosActsController";
 import { adminDiagUltimosLogsController } from "../controllers/adminDiagUltimosLogsController";
 import { adminDiagUltimasLinhasInfosActsController } from "../controllers/adminDiagUltimasLinhasInfosActsController";
+import { adminFixColunaErradaInfosActsController } from "../controllers/adminFixColunaErradaInfosActsController";
 import { adminFixRegistroChrisController } from "../controllers/adminFixRegistroChrisController";
 import { adminFixRegistroChrisFolliaController } from "../controllers/adminFixRegistroChrisFolliaController";
 import { adminDiagComentariosChrisController } from "../controllers/adminDiagComentariosChrisController";
@@ -2059,6 +2060,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagUltimosLogsController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ultimas-linhas-infos-acts") {
     response = await adminDiagUltimasLinhasInfosActsController(request);
+  } else if (url.pathname === "/api/empire-play/admin/fix-coluna-errada-infos-acts") {
+    response = await adminFixColunaErradaInfosActsController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-follia-d1-sync") {
     response = await adminFixFolliaD1SyncController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-nostalgic-traveller") {
