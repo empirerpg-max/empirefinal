@@ -5,6 +5,7 @@ import {
   normalizeComparison,
   dedupeHeaders,
 } from "../services/googleSheetsService";
+import { registrarLogSistema } from "../services/logSistemaService";
 
 const ARTISTAS_SHEET = "ARTISTAS";
 const USUARIOS_SHEET = "Usuários";
@@ -340,6 +341,11 @@ export async function criarArtistaController(request: Request): Promise<Response
     // artista sem perfil nenhum (foto/bio em branco, sem jeito óbvio de
     // saber por quê) até essa primeira edição acontecer.
     await garantirLinhaInfosActs(nome, foto);
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Artista "${nome}" criado por telegramId ${telegramId} (gravadora: ${gravadora}), já com linha em INFOS ACTS.`,
+      onde: "criarArtistaController",
+    }).catch(() => {});
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -511,6 +517,17 @@ export async function setArtistFotoController(request: Request): Promise<Respons
         nome, "", "", "", "", "", "", "", fotoUrl,
       ]);
     }
+    // Registro didático (aba LOGS) — nenhuma escrita de perfil de artista
+    // deixava rastro nenhum antes disso, então uma foto/bio que sumisse
+    // (ex: caso real da Hayley Wonderwall) não tinha como ser investigada
+    // depois: sem log, sem jeito de confirmar se o jogador enviou de
+    // verdade e o quê exatamente.
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Foto do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "I" : "linha nova"}).`,
+      onde: "setArtistFotoController",
+      detalheTecnico: fotoUrl,
+    }).catch(() => {});
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -553,6 +570,12 @@ export async function setArtistBiografiaController(request: Request): Promise<Re
     } else {
       await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [nome, "", "", "", biografia]);
     }
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Biografia do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "E" : "linha nova"}).`,
+      onde: "setArtistBiografiaController",
+      detalheTecnico: biografia,
+    }).catch(() => {});
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -610,6 +633,12 @@ export async function setArtistCapaController(request: Request): Promise<Respons
         nome, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", capaUrl, capaMobileUrl,
       ]);
     }
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Capa do perfil do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "R/S" : "linha nova"}).`,
+      onde: "setArtistCapaController",
+      detalheTecnico: `desktop=${capaUrl} mobile=${capaMobileUrl}`,
+    }).catch(() => {});
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
