@@ -473,6 +473,11 @@ export async function createSongController(request: Request): Promise<Response> 
       ? formatarDataBR(dataLancamento) || new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
       : new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const weeksOverrideMusica = dataLancamento ? String(calcularSemanasRetroativas(dataLancamento)) : undefined;
+    // "Material Antigo": toda música entra pendente, mesmo que o front tenha
+    // mandado pendente="Não" — mesma decisão já tomada pro álbum retroativo
+    // (ver publicarAlbum): relançar (abrir tópico próprio) é uma ação
+    // separada, feita depois via publicarFaixaPendente.
+    const pendenteFinal = dataLancamento ? "Sim" : pendente;
     const participantesLimpos = participantes.filter(Boolean);
     // Rede de segurança contra "Artista - Artista - Nome" — ver
     // dedupeArtistPrefix no topo do arquivo.
@@ -531,7 +536,7 @@ export async function createSongController(request: Request): Promise<Response> 
         "", // U - Ordem
         "", // V - Metacritic por jogador
         "", // W - Média Metacritic
-        pendente, // X - Pendente?
+        pendenteFinal, // X - Pendente?
         musicaReferencia || "", // Y - Referência (Substituição/Vínculo)
       ]);
       // Espelha pro D1 em tempo real — combinado: toda escrita nova vai pros
@@ -548,7 +553,7 @@ export async function createSongController(request: Request): Promise<Response> 
         dataLancamento: dataFormatada,
         idCriador: jogadorId || null,
         comentariosPara: topicId,
-        pendente: pendente === "Sim",
+        pendente: pendenteFinal === "Sim",
       }).catch(() => {});
     } catch (err) {
       console.warn("[createSongController] Erro ao gravar em Musicas (Principal):", err);
@@ -602,7 +607,7 @@ export async function createSongController(request: Request): Promise<Response> 
       if (musicaRowIndexNova && edicaoChartsRowIndex) {
         codigoUnicoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
       }
-      if (pendente !== "Sim") {
+      if (pendenteFinal !== "Sim") {
         await registrarInfosMusicas({ fullTitle, capaUrl });
       }
     }
@@ -648,7 +653,7 @@ export async function createSongController(request: Request): Promise<Response> 
         dataLancamentoIso: parseDataBRParaIso(dataFormatada),
         idCriador: jogadorId || null,
         comentariosPara: topicId,
-        pendente: pendente === "Sim",
+        pendente: pendenteFinal === "Sim",
       });
     }
 
