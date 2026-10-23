@@ -6,7 +6,8 @@ import {
   dedupeHeaders,
 } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
-import { issueSessionToken } from "../services/sessionService";
+import { issueSessionToken, requestProvesAdmin } from "../services/sessionService";
+import { registrarLogSistema } from "../services/logSistemaService";
 
 const USUARIOS_SHEET = "Usuários";
 
@@ -308,6 +309,79 @@ export async function loginController(request: Request): Promise<Response> {
     console.error("[loginController] Erro:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message || "Erro ao processar login." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
+/**
+ * POST /api/auth/admin-impersonar
+ * Admin pedir "poder acessar tudo na visão do usuário, pra simular daqui o
+ * que ocorre" — em vez de uma senha mestra nova (superfície de ataque a
+ * mais, compartilhável, difícil de revogar), reaproveita a MESMA sessão de
+ * admin que o app já confia em todo canto (requestProvesAdmin/ADMIN_TG_ID,
+ * ver sessionService.ts) pra emitir um token de sessão válido PRO USUÁRIO
+ * ALVO — o navegador do admin passa a estar logado como esse jogador,
+ * igual se tivesse feito login com a senha dele, sem nunca ver/saber a
+ * senha real. Exige Authorization: Bearer <token de admin válido> (o front
+ * guarda isso automaticamente desde o login do próprio admin).
+ */
+export async function adminImpersonarController(request: Request): Promise<Response> {
+  try {
+    if (!(await requestProvesAdmin(request))) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Acesso restrito ao admin." }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const body = (await request.json().catch(() => ({}))) as { usuario?: string };
+    const usuarioAlvo = (body.usuario || "").trim();
+    if (!usuarioAlvo) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Informe o nome de usuário do jogador." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const rows = await readUsuariosWithRowIndex();
+    const match = resolverLinhaUsuario(rows, { usuario: usuarioAlvo });
+    if (!match) {
+      return new Response(
+        JSON.stringify({ success: false, error: `Usuário "${usuarioAlvo}" não encontrado.` }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const token = await issueSessionToken(match.rec["usuario"] || usuarioAlvo, match.rec["id"] || "");
+
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Admin entrou como o usuário "${match.rec["usuario"] || usuarioAlvo}" (simulação/diagnóstico).`,
+      onde: "adminImpersonarController",
+    }).catch(() => {});
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        token,
+        data: {
+          id: match.rec["id"] || "",
+          nome: match.rec["usuario"] || usuarioAlvo,
+          usuario: match.rec["usuario"] || usuarioAlvo,
+          tipoPerfil: match.rec["tipo_de_perfil"] || "Usuário",
+          fotoPerfil: match.rec["foto_do_perfil"] || "",
+          prestigio: match.rec["prestigio"] || "",
+          aniversario: match.rec["aniversario"] || "",
+          precisaTrocarSenha: false,
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  } catch (error: any) {
+    console.error("[adminImpersonarController] Erro:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro ao entrar como usuário." }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }

@@ -56,6 +56,52 @@ export function setStoredSessionToken(token: string | null | undefined) {
   }
 }
 
+// "Entrar como usuário" (admin) — guarda a sessão REAL do admin de lado
+// antes de trocar pra sessão do jogador simulado, pra "Voltar a ser admin"
+// não precisar digitar a senha de novo. A mera presença dessa chave já diz
+// "estou simulando alguém agora" (ver isImpersonating).
+const IMPERSONATE_BACKUP_KEY = "empire_admin_impersonate_backup";
+
+export function startImpersonating(targetUser: LoginResult, targetToken: string) {
+  if (typeof window === "undefined") return;
+  // Só guarda backup se ainda não tiver um — evita que simular um segundo
+  // usuário sem voltar pro admin antes sobrescreva o admin real pelo
+  // primeiro jogador simulado.
+  if (!localStorage.getItem(IMPERSONATE_BACKUP_KEY)) {
+    const adminUser = getStoredLogin();
+    const adminToken = getStoredSessionToken();
+    if (adminUser && adminToken) {
+      localStorage.setItem(
+        IMPERSONATE_BACKUP_KEY,
+        JSON.stringify({ user: adminUser, token: adminToken }),
+      );
+    }
+  }
+  setStoredLogin(targetUser);
+  setStoredSessionToken(targetToken);
+}
+
+export function isImpersonating(): boolean {
+  if (typeof window === "undefined") return false;
+  return !!localStorage.getItem(IMPERSONATE_BACKUP_KEY);
+}
+
+export function stopImpersonating(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(IMPERSONATE_BACKUP_KEY);
+    if (!raw) return false;
+    const { user, token } = JSON.parse(raw) as { user: LoginResult; token: string };
+    setStoredLogin(user);
+    setStoredSessionToken(token);
+    localStorage.removeItem(IMPERSONATE_BACKUP_KEY);
+    return true;
+  } catch {
+    localStorage.removeItem(IMPERSONATE_BACKUP_KEY);
+    return false;
+  }
+}
+
 function TrocarSenhaInicialScreen({
   usuario,
   senhaAtual,

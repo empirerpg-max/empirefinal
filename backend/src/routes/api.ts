@@ -91,6 +91,7 @@ import { adminFixAlbumArtistController } from "../controllers/adminFixAlbumArtis
 import { adminFixLegacyVideoTitlesController } from "../controllers/adminFixLegacyVideoTitlesController";
 import {
   loginController,
+  adminImpersonarController,
   updateProfileController,
   trocarSenhaController,
   authHeartbeatController,
@@ -1515,6 +1516,14 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await loginController(request);
+  } else if (url.pathname === "/api/auth/admin-impersonar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/auth/admin-impersonar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await adminImpersonarController(request);
   } else if (url.pathname === "/api/charts") {
     response = await chartsApiController(request);
   } else if (url.pathname === "/api/charts/admin/debug-realtime-covers") {

@@ -15,6 +15,7 @@ import {
   ListMusic,
   Trophy,
   Cake,
+  UserCog,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import {
@@ -27,7 +28,16 @@ import {
   type PlaylistPayload,
   type PlaylistTrack,
 } from "@/lib/api";
-import { getStoredLogin, setStoredLogin, clearStoredLogin } from "@/components/LoginScreen";
+import {
+  getStoredLogin,
+  setStoredLogin,
+  clearStoredLogin,
+  getStoredSessionToken,
+  startImpersonating,
+  isImpersonating,
+  stopImpersonating,
+  type LoginResult,
+} from "@/components/LoginScreen";
 import { BUILD_ID } from "@/lib/pwa";
 import { toast } from "sonner";
 import { useImageCrop } from "@/hooks/use-image-crop";
@@ -58,6 +68,47 @@ function Perfil() {
   const { user } = useTelegramUser();
   const [login, setLogin] = useState(getStoredLogin());
   const [premiacoesAberta, setPremiacoesAberta] = useState(false);
+  // "Entrar como usuário" (admin) — ver LoginScreen.tsx (startImpersonating/
+  // stopImpersonating). loginTgId usa o MESMO critério já estabelecido em
+  // Gestao.tsx (isAdminUser) pra decidir quem vê esse bloco.
+  const loginTgIdPerfil = user?.id?.toString() || login?.id || "";
+  const isAdminUser = loginTgIdPerfil === "810141686" || login?.tipoPerfil === "Admin";
+  const [impersonando, setImpersonando] = useState(() => isImpersonating());
+  const [impersonarUsuario, setImpersonarUsuario] = useState("");
+  const [impersonarCarregando, setImpersonarCarregando] = useState(false);
+  const [impersonarErro, setImpersonarErro] = useState<string | null>(null);
+
+  async function handleEntrarComoUsuario() {
+    const alvo = impersonarUsuario.trim();
+    if (!alvo) return;
+    setImpersonarCarregando(true);
+    setImpersonarErro(null);
+    try {
+      const res = await fetch("/api/auth/admin-impersonar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getStoredSessionToken() || ""}`,
+        },
+        body: JSON.stringify({ usuario: alvo }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!json?.success) throw new Error(json?.error || "Não achei esse usuário.");
+      startImpersonating(json.data as LoginResult, json.token as string);
+      window.location.reload();
+    } catch (err: any) {
+      setImpersonarErro(err?.message || "Falha ao entrar como esse usuário.");
+      setImpersonarCarregando(false);
+    }
+  }
+
+  function handleVoltarAdmin() {
+    if (stopImpersonating()) {
+      window.location.reload();
+    } else {
+      setImpersonando(false);
+    }
+  }
   // "sized" (thumbnail público lh3.googleusercontent.com, mais rápido) →
   // "raw" (proxy autenticado /api/media/image, funciona mesmo se o arquivo
   // do Drive não estiver compartilhado publicamente — caso do jogador
@@ -585,6 +636,43 @@ function Perfil() {
           </span>
           <ChevronRight className="size-4 text-muted-foreground" />
         </Link>
+        {impersonando && (
+          <button
+            onClick={handleVoltarAdmin}
+            className="w-full flex items-center gap-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/15 transition-all"
+          >
+            <UserCog className="size-5" />
+            <span className="flex-1 text-left font-black uppercase text-xs tracking-widest">
+              Vendo como "{login?.usuario}" — Voltar a ser admin
+            </span>
+          </button>
+        )}
+        {isAdminUser && !impersonando && (
+          <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <UserCog className="size-4 text-primary shrink-0" />
+              <span className="font-black uppercase text-xs tracking-widest truncate">
+                Entrar como usuário (admin)
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={impersonarUsuario}
+                onChange={(e) => setImpersonarUsuario(e.target.value)}
+                placeholder="usuário do jogador"
+                className="min-w-0 flex-1 px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-xs text-white placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+              />
+              <button
+                onClick={handleEntrarComoUsuario}
+                disabled={impersonarCarregando || !impersonarUsuario.trim()}
+                className="shrink-0 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-widest disabled:opacity-50"
+              >
+                {impersonarCarregando ? <Loader2 className="size-3.5 animate-spin" /> : "Entrar"}
+              </button>
+            </div>
+            {impersonarErro && <p className="text-[11px] text-red-400">{impersonarErro}</p>}
+          </div>
+        )}
         <button
           onClick={() => {
             clearStoredLogin();
