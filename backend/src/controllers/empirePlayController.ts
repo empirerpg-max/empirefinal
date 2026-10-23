@@ -1210,6 +1210,13 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
       normalizeComparison(`${m.artist} - ${m.title}`) === normalizeComparison(tituloCompleto) ||
       normalizeComparison(tituloCompleto).endsWith(normalizeComparison(m.title));
 
+    // Dedup pelo ID real do item casado no catálogo (tab+id), não pelo texto
+    // do título — BUG REAL confirmado (FOLLIA/Max Gorghan aparecendo 2x em
+    // Lançamentos Recentes): mais de uma linha em EDIÇÃO CHARTS/EDIÇÃO
+    // CHARTS ÁLBUMS pode resolver pro MESMO item do catálogo (resíduo de
+    // linha duplicada, ou pequena diferença de texto que normalizeComparison
+    // não pega) — dedup por texto de título deixava as duas passarem.
+    const idsVistos = new Set<string>();
     const titulosVistos = new Set<string>();
     // BUG REAL encontrado (reportado: "AFTERPARTY" e outros álbuns no Home
     // não levavam pro tópico certo): a flag `isAlbum`/`c.isAlbum` que
@@ -1236,6 +1243,9 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
         (c.codigoUnico && mapaCodigo.get(c.codigoUnico)) ||
         catalogo.find((m) => matchByTituloCompleto(m, c.titulo));
       if (!match) continue;
+      const idKey = `${c.isAlbum ? "album" : "musica"}:${match.id}`;
+      if (idsVistos.has(idKey)) continue;
+      idsVistos.add(idKey);
       titulosVistos.add(norm);
       lancamentos.push({
         id: match.id,
