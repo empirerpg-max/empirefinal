@@ -761,7 +761,18 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     // (ex: áudio de álbum) que trava no servidor deixa o fetch pendurado
     // pra sempre, o botão "enviando" nunca termina, e o jogador acha que
     // "não aconteceu nada" (quando na real nunca ia terminar mesmo).
-    const TIMEOUT_MS = 45_000;
+    //
+    // BUG REAL suspeito (reportado: upload de álbum falhando com
+    // "tentativas esgotadas" sem log nenhum do lado do servidor — nem
+    // depois de instrumentar as duas camadas de erro no backend): 45s é
+    // curto demais pra um arquivo de ÁUDIO de verdade passando por dois
+    // saltos (navegador → Worker → Drive), em especial numa conexão de
+    // celular — o navegador desiste e corta a conexão ANTES do servidor
+    // terminar, o que explica a ausência total de log (a requisição nunca
+    // chega a dar erro no servidor, só é abortada no meio do caminho).
+    // Arquivo de áudio ganha bem mais tempo; imagem/capa/encarte continua
+    // com o teto original (não tem motivo pra demorar).
+    const TIMEOUT_MS = folderType === "musicaAudio" ? 120_000 : 45_000;
     const fetchComTimeout = (input: string, init: RequestInit) => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
