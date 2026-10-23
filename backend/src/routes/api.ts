@@ -256,6 +256,7 @@ import { adminDiagUltimasLinhasInfosActsController } from "../controllers/adminD
 import { adminFixColunaErradaInfosActsController } from "../controllers/adminFixColunaErradaInfosActsController";
 import { adminDiagCabecalhoInfosActsController } from "../controllers/adminDiagCabecalhoInfosActsController";
 import { adminDiagFotoArtistasAntigaController } from "../controllers/adminDiagFotoArtistasAntigaController";
+import { adminDiagBuscarUsuarioController } from "../controllers/adminDiagBuscarUsuarioController";
 import { adminFixRegistroChrisController } from "../controllers/adminFixRegistroChrisController";
 import { adminFixRegistroChrisFolliaController } from "../controllers/adminFixRegistroChrisFolliaController";
 import { adminDiagComentariosChrisController } from "../controllers/adminDiagComentariosChrisController";
@@ -2077,6 +2078,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagCabecalhoInfosActsController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-foto-artistas-antiga") {
     response = await adminDiagFotoArtistasAntigaController();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-buscar-usuario") {
+    response = await adminDiagBuscarUsuarioController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-follia-d1-sync") {
     response = await adminFixFolliaD1SyncController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-nostalgic-traveller") {
