@@ -1291,10 +1291,22 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         }).catch(() => {});
       }
 
+      // BUG REAL encontrado (álbum de 12 faixas publicando só 5, sem
+      // aviso nenhum): o backend já calcula e devolve quantas faixas
+      // inéditas falharam (faixasIneditasEsperadas - faixasIneditasGravadas),
+      // mas isso nunca era lido aqui — o toast de sucesso aparecia igual,
+      // escondendo a perda. Agora avisa explicitamente quando faltar faixa.
+      const esperadas = data.data?.faixasIneditasEsperadas ?? 0;
+      const gravadas = data.data?.faixasIneditasGravadas ?? 0;
+      const faltaram = esperadas - gravadas;
+      const avisoFaltaram =
+        faltaram > 0
+          ? ` ATENÇÃO: ${faltaram} de ${esperadas} faixa(s) inédita(s) não foram gravadas (provável limite da API do Sheets) — confira quais faltaram e tente de novo.`
+          : "";
       setSuccessMsg(
-        albumRetroativo
+        (albumRetroativo
           ? "Álbum retroativo publicado! As faixas entraram como pendentes — relance cada uma quando quiser."
-          : "Álbum e faixas publicados com sucesso!",
+          : "Álbum e faixas publicados com sucesso!") + avisoFaltaram,
       );
       setTituloAlbum("");
       setCapaFile(null);

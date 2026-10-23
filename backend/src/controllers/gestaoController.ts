@@ -1661,6 +1661,40 @@ export async function processarFaixasDoAlbum(
   let faixasIneditasEsperadas = 0;
   let faixasIneditasGravadas = 0;
 
+  // BUG REAL encontrado (álbum retroativo de 12 faixas publicando só 5):
+  // appendRowMusicasSeguro relia H2:H50000 (quase 50 mil células) TODA VEZ
+  // que era chamada, pra achar a próxima linha livre — um álbum de N
+  // faixas inéditas disparava N leituras gigantes seguidas, estourando o
+  // limite de requisições por minuto da API do Sheets (mesmo erro de quota
+  // já visto hoje em outros fluxos) depois de só algumas faixas, e cada
+  // uma que falhava a partir daí caía num console.warn silencioso (nunca
+  // logado, nunca reportado pro jogador). Lê a posição UMA VEZ só (cache
+  // local, por chamada de processarFaixasDoAlbum) e incrementa localmente
+  // a cada escrita bem-sucedida — nunca mais N leituras pra um álbum de N
+  // faixas.
+  let cursorLinhaMusicas: number | null = null;
+  async function appendRowMusicasComCursor(values: GoogleSheetRow): Promise<number> {
+    return withWriteLock("gestao:musicas-append", async () => {
+      if (cursorLinhaMusicas === null) {
+        const rows = await googleSheetsService.principal.readValues("Musicas", "H2:H50000");
+        let ultimaLinhaComMusica = 1;
+        for (let i = 0; i < rows.length; i++) {
+          if ((rows[i]?.[0] || "").trim()) ultimaLinhaComMusica = i + 2;
+        }
+        cursorLinhaMusicas = ultimaLinhaComMusica;
+      }
+      const linhaAlvo = cursorLinhaMusicas + 1;
+      const ultimaColuna = String.fromCharCode(65 + values.length - 1); // A=65
+      await googleSheetsService.principal.updateValues(
+        "Musicas",
+        `A${linhaAlvo}:${ultimaColuna}${linhaAlvo}`,
+        [values],
+      );
+      cursorLinhaMusicas = linhaAlvo;
+      return linhaAlvo;
+    });
+  }
+
   for (const faixa of faixas) {
     if (!faixa.inedita) {
       // Faixa existente, selecionada na busca da aba Pontos.
@@ -1700,7 +1734,7 @@ export async function processarFaixasDoAlbum(
     faixasIneditasEsperadas++;
     let faixaRowIndex: number | null = null;
     try {
-      faixaRowIndex = await appendRowMusicasSeguro([
+      faixaRowIndex = await appendRowMusicasComCursor([
         dataFormatada, // A - Data de lançamento
         trackTopicId, // B - ID do tópico (só se abrir tópico próprio)
         faixa.mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
@@ -1750,6 +1784,19 @@ export async function processarFaixasDoAlbum(
         "[processarFaixasDoAlbum] Erro ao registrar faixa inédita em Musicas:",
         faixaErr,
       );
+      // Antes essa falha só existia num console.warn — invisível pra
+      // qualquer um aqui fora. Faixa #N de um álbum simplesmente sumia sem
+      // deixar rastro nenhum (nem aba LOGS, nem resposta pro jogador que o
+      // frontend de fato mostrasse).
+      registrarLogSistema({
+        categoria: "Falha de escrita",
+        oQueAconteceu: `Faixa #${faixa.num} ("${faixa.titulo}") do álbum "${albumFullTitle}" não foi gravada em Musicas.`,
+        onde: "processarFaixasDoAlbum",
+        causaProvavel:
+          "Provavelmente limite de requisições da API do Google Sheets (álbum com muitas faixas inéditas seguidas).",
+        comoResolver: "Relance essa faixa manualmente depois, ou publique o álbum de novo com menos faixas por vez.",
+        detalheTecnico: faixaErr instanceof Error ? faixaErr.message : String(faixaErr),
+      }).catch(() => {});
       continue;
     }
 
