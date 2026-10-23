@@ -482,7 +482,24 @@ export async function updateReleaseController(request: Request): Promise<Respons
       // coluna G perdia o prefixo do artista pra sempre, e a tela do
       // catálogo caía no fallback "Nome do criador" (o JOGADOR que
       // cadastrou, não o artista fictício).
-      const tituloAlbumComArtista = artista ? `${String(artista).trim()} - ${titulo.trim()}` : titulo.trim();
+      //
+      // BUG REAL corrigido aqui (2026-10-23, álbum FOLLIA do Max Gorghan —
+      // reportado: card em Lançamentos Recentes mostrando artista "Max"
+      // truncado): a reincidência do bug acima, mas com `artista` vindo
+      // errado/truncado do front ("Max" em vez de "Max Gorghan") — Albuns
+      // não tem coluna própria de artista pra validar contra (confirmado no
+      // comentário acima), então confiar cegamente no `artista` do body é
+      // ainda mais arriscado aqui do que era em Musicas (que tem a coluna
+      // N). Fonte de verdade agora é o título JÁ GRAVADO na própria linha
+      // (G{rowIndex}, antes dessa edição) — extrai o artista de lá; só cai
+      // pro `artista` do body se essa linha ainda não tiver um "Artista -
+      // Título" reconhecível (álbum novo, nunca editado antes).
+      const tituloAtualRow = (
+        await googleSheetsService.principal.readValues(sheetName, `G${rowIndex}:G${rowIndex}`).catch(() => [])
+      )[0]?.[0] as string | undefined;
+      const dashMatchAtual = (tituloAtualRow || "").match(/^(.+?)\s[-–—]\s(.+)$/);
+      const artistaReal = dashMatchAtual ? dashMatchAtual[1].trim() : String(artista || "").trim();
+      const tituloAlbumComArtista = artistaReal ? `${artistaReal} - ${titulo.trim()}` : titulo.trim();
       await googleSheetsService.principal.updateValues(sheetName, `G${rowIndex}`, [
         [tituloAlbumComArtista],
       ]);
