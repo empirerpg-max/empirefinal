@@ -1131,14 +1131,23 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
  */
 export async function getEmpirePlayLancamentosRecentesController(): Promise<Response> {
   try {
-    const [edicaoMusicasRows, edicaoAlbunsRows, musicaRecords, albumRecords] = await Promise.all([
+    const [edicaoMusicasRows, edicaoAlbunsRows, musicaRecordsD1, albumRecords] = await Promise.all([
       // BD = coluna 56 (índice 55) — "Código único" gerado por fórmula.
       googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD5000"),
       // R = coluna 18 (índice 17) — "Código único".
       googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000"),
-      sheetsService.readSheetObjects("Musicas"),
+      readMusicasFromD1(),
       sheetsService.readSheetObjects("Albuns"),
     ]);
+    // BUG REAL encontrado (reportado: "Follia" single aparecendo em
+    // Lançamentos Recentes sem existir no Fórum > Músicas): este endpoint
+    // lia Musicas direto da planilha (sheetsService.readSheetObjects),
+    // enquanto getEmpirePlayMusicasController (o Fórum de verdade) já lê do
+    // D1 (readMusicasFromD1) — as duas fontes podem divergir (D1 é mirror,
+    // Sheets é a fonte "ao vivo"), fazendo um item existir numa mas não na
+    // outra. Usa a MESMA fonte do Fórum agora, com o mesmo fallback pra
+    // Sheets só quando o D1 não está disponível.
+    const musicaRecords = musicaRecordsD1 ?? (await sheetsService.readSheetObjects("Musicas"));
 
     const musicaItems = musicaRecords
       .filter((rec) => (getValue(rec, ["pendente"]) || "").trim().toLowerCase() !== "sim")
