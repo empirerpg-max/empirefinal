@@ -1,4 +1,5 @@
 import { getDriveOAuthAccessToken } from "../google/service-account";
+import { registrarLogSistema } from "./logSistemaService";
 
 export const DRIVE_FOLDERS = {
   musicas: "1hd_ZJwbVsESwtGniorw0bxQmkhsKcslT",
@@ -142,6 +143,26 @@ export async function uploadFileToDrive(
       // que uma foto de perfil upada "quebra" sem nenhum aviso). Agora o
       // erro sobe de verdade, pro chamador reportar falha real.
       console.error("[uploadFileToDrive] Erro Google Drive API:", json);
+      // Registro didático — sem isso, uma falha de upload (relatada pelo
+      // jogador como "deu erro") não deixava rastro nenhum acessível além
+      // do console.error do Worker, que ninguém aqui consegue ler sem
+      // acesso ao Cloudflare. Agora toda falha real de upload fica
+      // registrada com o status HTTP e a resposta crua da API do Drive.
+      registrarLogSistema({
+        categoria: "Falha de escrita",
+        oQueAconteceu: `Não consegui enviar o arquivo "${fileName}" pro Google Drive (pasta ${folderId}).`,
+        onde: "googleDriveService.uploadFileToDrive",
+        causaProvavel:
+          response.status === 403
+            ? "Permissão negada pela API do Drive — pode ser quota da conta de serviço ou a pasta de destino sem acesso."
+            : response.status === 401
+              ? "Token de acesso do Drive inválido/expirado."
+              : response.status === 413 || response.status === 400
+                ? "Arquivo rejeitado pela API do Drive (tamanho ou formato)."
+                : "Erro retornado pela própria API do Google Drive — ver detalhe técnico.",
+        comoResolver: "Copie o detalhe técnico e mande pro Claude investigar a causa exata.",
+        detalheTecnico: `HTTP ${response.status} | mimeType=${mimeType} | tamanhoBase64=${cleanBase64.length} | resposta=${JSON.stringify(json).slice(0, 500)}`,
+      }).catch(() => {});
       throw new Error(`Falha ao enviar arquivo pro Drive (HTTP ${response.status}).`);
     }
 
@@ -176,8 +197,19 @@ export async function uploadFileToDrive(
     // verdade — não funciona pra áudio/vídeo.
     return `https://drive.google.com/file/d/${json.id}/view?usp=drivesdk`;
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith("Falha ao enviar arquivo pro Drive")) throw err;
+    if (err instanceof Error && err.message.startsWith("Falha ao enviar arquivo pro Drive (HTTP")) throw err;
     console.error("[uploadFileToDrive] Erro ao enviar arquivo:", err);
+    const mensagem = err instanceof Error ? err.message : String(err);
+    registrarLogSistema({
+      categoria: "Falha de escrita",
+      oQueAconteceu: `Não consegui enviar o arquivo "${fileName}" pro Google Drive (pasta ${folderId}) — erro antes de chegar a resposta da API.`,
+      onde: "googleDriveService.uploadFileToDrive",
+      causaProvavel: /token|oauth|401|403/i.test(mensagem)
+        ? "Falha ao obter/usar o token de acesso da conta de serviço do Drive."
+        : "Erro de rede/timeout ao chamar a API do Google Drive, ou exceção inesperada no processamento do arquivo.",
+      comoResolver: "Copie o detalhe técnico e mande pro Claude investigar a causa exata.",
+      detalheTecnico: mensagem,
+    }).catch(() => {});
     throw new Error("Falha ao enviar arquivo pro Drive.");
   }
 }
