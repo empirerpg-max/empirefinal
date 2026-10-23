@@ -1216,10 +1216,6 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
       })
       .filter((c): c is Candidato => !!c.dataIso && !!c.titulo);
 
-    const candidatos = [...candidatosMusicas, ...candidatosAlbuns].sort((a, b) =>
-      b.dataIso.localeCompare(a.dataIso),
-    );
-
     const matchByTituloCompleto = (m: EmpirePlayCleanItem, tituloCompleto: string) =>
       normalizeComparison(`${m.artist} - ${m.title}`) === normalizeComparison(tituloCompleto) ||
       normalizeComparison(tituloCompleto).endsWith(normalizeComparison(m.title));
@@ -1231,7 +1227,40 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
     // linha duplicada, ou pequena diferença de texto que normalizeComparison
     // não pega) — dedup por texto de título deixava as duas passarem.
     const idsVistos = new Set<string>();
-    const titulosVistos = new Set<string>();
+
+    // BUG REAL encontrado (reportado: single "Follia" aparecendo como
+    // lançamento recente com data 21/10, mas a data REAL de lançamento
+    // dessa faixa — a que o Fórum mostra — é 30/09): a data usada aqui
+    // vinha da linha de EDIÇÃO CHARTS (coluna A), que pode ficar
+    // desatualizada/reaproveitada (ex: reentrada no chart, linha duplicada)
+    // sem refletir a data real do lançamento. A data de verdade é a do
+    // próprio catálogo (Musicas/Albuns, "releaseDateIso" — a mesma usada
+    // pelo Fórum pra ordenar e exibir). Resolve o match de cada candidato
+    // ANTES de decidir a data/ordem, usa a data do catálogo quando existir
+    // (só cai pra data do chart se o item não tiver data própria), e só
+    // DEPOIS ordena pela data real — nunca mais confia cegamente na data
+    // da linha de chart pra decidir o que é "recente".
+    type Resolvido = {
+      match: EmpirePlayCleanItem;
+      dataIso: string;
+      isAlbum: boolean;
+    };
+    const candidatosResolvidos: Resolvido[] = [];
+    for (const c of [...candidatosMusicas, ...candidatosAlbuns]) {
+      const catalogo = c.isAlbum ? albumItems : musicaItems;
+      const mapaCodigo = c.isAlbum ? codigoParaAlbum : codigoParaMusica;
+      const match =
+        (c.codigoUnico && mapaCodigo.get(c.codigoUnico)) ||
+        catalogo.find((m) => matchByTituloCompleto(m, c.titulo));
+      if (!match) continue;
+      candidatosResolvidos.push({
+        match,
+        dataIso: match.releaseDateIso || c.dataIso,
+        isAlbum: c.isAlbum,
+      });
+    }
+    candidatosResolvidos.sort((a, b) => b.dataIso.localeCompare(a.dataIso));
+
     // BUG REAL encontrado (reportado: "AFTERPARTY" e outros álbuns no Home
     // não levavam pro tópico certo): a flag `isAlbum`/`c.isAlbum` que
     // distingue música de álbum era calculada aqui mas NUNCA chegava na
@@ -1247,20 +1276,11 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
       dataIso: string;
       tipo: "album" | "musica";
     }[] = [];
-    for (const c of candidatos) {
+    for (const { match, dataIso, isAlbum } of candidatosResolvidos) {
       if (lancamentos.length >= 3) break;
-      const norm = normalizeComparison(c.titulo);
-      if (titulosVistos.has(norm)) continue;
-      const catalogo = c.isAlbum ? albumItems : musicaItems;
-      const mapaCodigo = c.isAlbum ? codigoParaAlbum : codigoParaMusica;
-      const match =
-        (c.codigoUnico && mapaCodigo.get(c.codigoUnico)) ||
-        catalogo.find((m) => matchByTituloCompleto(m, c.titulo));
-      if (!match) continue;
-      const idKey = `${c.isAlbum ? "album" : "musica"}:${match.id}`;
+      const idKey = `${isAlbum ? "album" : "musica"}:${match.id}`;
       if (idsVistos.has(idKey)) continue;
       idsVistos.add(idKey);
-      titulosVistos.add(norm);
       lancamentos.push({
         id: match.id,
         titulo: match.title,
@@ -1269,8 +1289,8 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
         // Home mesmo quando o catálogo já tinha esse dado calculado.
         artista: match.displayArtists || match.artist,
         coverUrl: match.coverUrl || null,
-        dataIso: c.dataIso,
-        tipo: c.isAlbum ? "album" : "musica",
+        dataIso,
+        tipo: isAlbum ? "album" : "musica",
       });
     }
 
