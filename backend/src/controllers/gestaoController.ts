@@ -3052,6 +3052,21 @@ export async function uploadDriveController(request: Request): Promise<Response>
     );
   } catch (error: any) {
     console.error("[uploadDriveController] Erro:", error);
+    // Registro didático — cobre falhas ANTES de chegar em uploadFileToDrive
+    // (parse de FormData/JSON, arquivo grande demais, exceção inesperada no
+    // próprio controller) que o log de dentro de uploadFileToDrive não
+    // alcança. Reportado: upload de álbum falhando com "tentativas
+    // esgotadas" sem log nenhum — se a falha é aqui em cima, é porque nunca
+    // chegou nem a tentar o Drive de fato.
+    registrarLogSistema({
+      categoria: "Erro do app",
+      oQueAconteceu: "Falha no upload de arquivo (/api/gestao/upload) antes de tentar enviar pro Drive.",
+      onde: "uploadDriveController",
+      causaProvavel:
+        "Erro ao processar a requisição (parse de FormData/JSON, arquivo grande demais, ou exceção inesperada) — ver detalhe técnico.",
+      comoResolver: "Copie o detalhe técnico e mande pro Claude investigar a causa exata.",
+      detalheTecnico: error?.message || String(error),
+    }).catch(() => {});
     return new Response(
       JSON.stringify({
         success: false,
