@@ -1341,8 +1341,7 @@ function FotoModal({ nome, onClose, onDone }: { nome: string; onClose: () => voi
   return (
     <Modal title="Trocar foto do artista" onClose={onClose}>
       <p className="text-xs text-muted-foreground mb-3">
-        Isso envia uma foto nova pra revisão — não substitui a foto oficial na hora. Pra foto definitiva, edite
-        direto na planilha INFOS ACTS.
+        A foto nova já substitui a atual na hora, pra todo mundo ver.
       </p>
       <label className="block mb-3">
         <div className="aspect-square w-32 mx-auto rounded-2xl overflow-hidden bg-secondary border border-white/10 grid place-items-center">

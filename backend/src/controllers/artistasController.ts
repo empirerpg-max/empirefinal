@@ -478,10 +478,13 @@ export async function getArtistInfoController(request: Request): Promise<Respons
 
 /**
  * POST /api/artistas/foto
- * Grava o link do novo upload de foto do artista na coluna G ("IMAGEM
- * PERFIL") da aba "INFOS ACTS" — upload do dono, pendente até virar a foto
- * "oficial" em C (ver getArtistInfoController: exibição prioriza C, cai
- * pra G só se C estiver vazia). Nunca sobrescreve a coluna C nem a D/F
+ * Troca a foto do artista e ela já vale NA HORA — grava direto na coluna C
+ * ("Link", a que o app de fato exibe) da aba "INFOS ACTS", e também em G
+ * ("IMAGEM PERFIL") só como histórico do upload original. Decisão
+ * explícita do dono do produto (2026-10-24): antes só gravava em G
+ * ("pendente até virar foto oficial"), mas como a exibição sempre
+ * prioriza C sobre G, a troca nunca aparecia sozinha — precisava de
+ * alguém copiar manualmente G pra C na planilha. Nunca sobrescreve D/F
  * (flags de admin, não é campo de link). Cria a linha se o artista ainda
  * não tiver uma nessa aba.
  */
@@ -501,8 +504,19 @@ export async function setArtistFotoController(request: Request): Promise<Respons
     const normNome = normalizeComparison(nome);
     const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
 
+    // Combinado com o dono do produto (2026-10-24): trocar a foto já vale
+    // NA HORA, sem fila de revisão — antes gravava só em G (upload
+    // "pendente"), e a exibição sempre prioriza C sobre G, então uma troca
+    // de foto nunca aparecia até alguém copiar manualmente G pra C na
+    // planilha (bug real visto ao vivo: Samantha Cooper trocou a foto,
+    // "Enviar" terminou sem erro, mas o perfil continuou mostrando a foto
+    // antiga). Agora grava direto em C (a coluna que o app realmente
+    // exibe) — e também em G, só como histórico do upload original.
     if (rowIndex !== -1) {
-      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `G${rowIndex + 1}`, [[fotoUrl]]);
+      await googleSheetsService.registrosCharts.updateValuesBatch([
+        { sheetName: INFOS_ACTS_SHEET, range: `C${rowIndex + 1}`, values: [[fotoUrl]] },
+        { sheetName: INFOS_ACTS_SHEET, range: `G${rowIndex + 1}`, values: [[fotoUrl]] },
+      ]);
     } else {
       // Array completo até G (índice 6), nunca um array de 1 elemento só —
       // appendRow("A:ZZ") deixa a API do Sheets adivinhar a coluna olhando
@@ -511,7 +525,7 @@ export async function setArtistFotoController(request: Request): Promise<Respons
       // do que devia (bug real encontrado e corrigido em 2026-10-23, ver
       // adminBackfillInfosActsController).
       await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
-        nome, "", "", "", "", "", fotoUrl,
+        nome, "", fotoUrl, "", "", "", fotoUrl,
       ]);
     }
 
@@ -533,7 +547,7 @@ export async function setArtistFotoController(request: Request): Promise<Respons
     // verdade e o quê exatamente.
     registrarLogSistema({
       categoria: "Ação concluída",
-      oQueAconteceu: `Foto do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "G" : "linha nova"}${artistaRowIndex !== -1 ? " + ARTISTAS!B" : ""}).`,
+      oQueAconteceu: `Foto do artista "${nome}" atualizada, já valendo na hora (INFOS ACTS!C${rowIndex !== -1 ? "/G" : " (linha nova)"}${artistaRowIndex !== -1 ? " + ARTISTAS!B" : ""}).`,
       onde: "setArtistFotoController",
       detalheTecnico: fotoUrl,
     }).catch(() => {});

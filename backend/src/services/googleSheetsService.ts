@@ -766,6 +766,9 @@ export const googleSheetsService = {
     ) => findRows("registrosCharts", sheetName, predicate, range),
     updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
       updateValues("registrosCharts", sheetName, range, values),
+    updateValuesBatch: (
+      entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[],
+    ) => updateValuesBatch("registrosCharts", entries),
     appendRow: (
       sheetName: string,
       values: GoogleSheetRow,
