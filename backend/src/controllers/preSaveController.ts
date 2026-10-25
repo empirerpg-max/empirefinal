@@ -77,6 +77,16 @@ export const PRESAVE_DURACAO_DIAS_DEFAULT = 14;
 const TETO_PCT_BASE = 0.003; // 0,3% do valTotal
 const TETO_PCT_MODO_CONTAGEM = 0.35; // 35% do teto-base quando não tem missão
 
+// Teto-base pra artista que nunca apareceu no chart Spotify (valTotal
+// real = 0) — sem isso o teto fica travado em 0 pra sempre, não importa
+// quantos dias passem (reportado: pre-save da Amanda Brokne zerado).
+// Escolhido BEM abaixo do pior artista REAL já visto no chart (mínimo
+// observado ~10,3M via /admin/diagnostico-valtotal-distribuicao,
+// 2026-10-25 — mediana ~811M) pra nunca ultrapassar o teto de quem já
+// tem música rodando de verdade, só dar um piso mínimo pra campanha não
+// ficar inteiramente zerada.
+const VALTOTAL_BASE_SEM_CHART = 2_000_000;
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -506,7 +516,7 @@ async function getMelhorValTotalArtista(artista: string): Promise<number> {
       ) || 0;
     if (valTotal > melhor) melhor = valTotal;
   }
-  return melhor;
+  return melhor > 0 ? melhor : VALTOTAL_BASE_SEM_CHART;
 }
 
 async function calcularTetos(
