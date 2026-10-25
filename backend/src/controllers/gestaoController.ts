@@ -3082,9 +3082,27 @@ export async function uploadDriveController(request: Request): Promise<Response>
                                           DRIVE_FOLDERS.musicVideos
                                         : DRIVE_FOLDERS.musicas;
 
-    const fileUrl = base64Data
-      ? await uploadFileToDrive(fileName, folderId, mimeType, base64Data)
-      : `https://drive.google.com/drive/folders/${folderId}`;
+    // BUG REAL corrigido aqui (reportado em produção — TED/"nostalgic
+    // traveller" e outros antes dela, mesmo padrão sempre): quando
+    // base64Data chegava vazio (arquivo não foi lido de verdade no
+    // navegador, FormData sem o campo "file", etc.), esse endpoint
+    // devolvia `success: true` com um LINK DA PASTA inteira do Drive no
+    // lugar do arquivo — a pessoa via "sucesso" no upload, mas o que
+    // ficava salvo como URL da faixa era a pasta, não o arquivo, e a
+    // reprodução sempre falhava depois, sem nenhuma mensagem clara
+    // explicando o que deu errado. Agora isso é um erro explícito, nunca
+    // mais um "sucesso" fingido.
+    if (!base64Data) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error:
+            "Nenhum arquivo foi recebido de verdade (upload vazio) — tente selecionar o arquivo de novo.",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    const fileUrl = await uploadFileToDrive(fileName, folderId, mimeType, base64Data);
 
     return new Response(
       JSON.stringify({
