@@ -51,8 +51,8 @@ export function PreSaveBannerCarousel() {
     <div className="mb-8">
       <button
         onClick={() => navigate({ to: "/empire-play/presave/$id", params: { id: atual.id } })}
-        className="relative w-full rounded-2xl overflow-hidden text-left"
-        style={{ height: 112, boxShadow: "0 8px 22px rgba(0,0,0,0.35)" }}
+        className="relative w-full rounded-2xl overflow-hidden text-left flex flex-col justify-end"
+        style={{ minHeight: 112, boxShadow: "0 8px 22px rgba(0,0,0,0.35)" }}
       >
         <img
           src={driveImgWide(atual.capaUrl, 800)}
@@ -70,11 +70,14 @@ export function PreSaveBannerCarousel() {
           <Rocket className="size-2.5" />
           PRE-SAVE
         </div>
-        <div className="absolute left-3 bottom-2.5 right-16 min-w-0">
-          <div className="text-[15px] font-black text-white leading-tight truncate">
+        {/* Sem truncate/"..." no nome (regra do projeto): fica em fluxo
+            normal (não absolute) pra empurrar a altura do banner pra baixo
+            quando o nome quebra em mais de uma linha, em vez de cortar. */}
+        <div className="relative z-10 pr-16 pl-3 pb-2.5 pt-6 min-w-0">
+          <div className="text-[15px] font-black text-white leading-tight break-words">
             {atual.albumTituloFull}
           </div>
-          <div className="text-[11px] text-neutral-200 mt-0.5 truncate">
+          <div className="text-[11px] text-neutral-200 mt-0.5">
             Faltam {diasFaltando} dia{diasFaltando === 1 ? "" : "s"} ·{" "}
             {atual.acumuladoAtual.toLocaleString("pt-BR")} fãs já aderiram
           </div>
