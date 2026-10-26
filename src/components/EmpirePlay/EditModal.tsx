@@ -88,6 +88,9 @@ interface EditModalProps {
   onClose: () => void;
   associatedArtists?: string[];
   defaultArtist?: string;
+  /** Categoria inicial (ex: admin abrindo edição direto de um tópico de
+   * vídeo/álbum no Fórum) — sem isso, sempre abria em "Músicas". */
+  defaultCategory?: EditCategory;
 }
 
 const CATEGORIES = [
@@ -101,11 +104,19 @@ export const EditModal: React.FC<EditModalProps> = ({
   onClose,
   associatedArtists = [],
   defaultArtist = "",
+  defaultCategory,
 }) => {
   const [selectedArtist, setSelectedArtist] = useState<string>(
     defaultArtist || associatedArtists[0] || "",
   );
-  const [category, setCategory] = useState<EditCategory>("musicas");
+  const [category, setCategory] = useState<EditCategory>(defaultCategory || "musicas");
+
+  // Reabrir o modal (ex: admin clicando "Editar" num tópico diferente,
+  // sem a modal ter sido desmontada) precisa resincronizar a categoria —
+  // sem isso, a 2ª abertura herdava a categoria da 1ª.
+  useEffect(() => {
+    if (isOpen && defaultCategory) setCategory(defaultCategory);
+  }, [isOpen, defaultCategory]);
 
   const [releases, setReleases] = useState<ReleaseItem[]>([]);
   const [loadingReleases, setLoadingReleases] = useState<boolean>(false);

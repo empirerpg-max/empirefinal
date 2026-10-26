@@ -72,6 +72,10 @@ import {
   updateReleaseController,
 } from "../controllers/editController";
 import {
+  marcarPendenteController,
+  excluirTopicoController,
+} from "../controllers/adminForumActionsController";
+import {
   getExtraMaterialController,
   saveExtraMaterialController,
 } from "../controllers/extraMaterialController";
@@ -680,6 +684,22 @@ export async function handleEmpireApiRoutes(
     response = await adminFixAlbumArtistController();
   } else if (url.pathname === "/api/empire-play/admin/fix-legacy-video-titles") {
     response = await adminFixLegacyVideoTitlesController();
+  } else if (url.pathname === "/api/empire-play/admin/marcar-pendente") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/empire-play/admin/marcar-pendente." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await marcarPendenteController(request);
+  } else if (url.pathname === "/api/empire-play/admin/excluir-topico") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/empire-play/admin/excluir-topico." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await excluirTopicoController(request);
   } else if (isEditarPath) {
     if (request.method === "GET") {
       response = await getReleasesForEditController(request);

@@ -24,7 +24,7 @@ import {
   Maximize2,
   TrendingUp,
 } from "lucide-react";
-import { driveImg, driveRawImg, api, normalizeNome } from "@/lib/api";
+import { driveImg, driveRawImg, api, normalizeNome, authHeaders } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { PreSaveCounterBadge } from "@/components/PreSaveCounterBadge";
 import { AwardBadge, type AwardBadgeInfo } from "@/components/AwardBadge";
@@ -40,6 +40,8 @@ import { RichTextToolbar } from "./RichTextToolbar";
 import { renderRichText } from "@/lib/richText";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
+import { EditModal } from "./EditModal";
+import { ShieldAlert, Trash2, Loader2, RotateCcw } from "lucide-react";
 
 // "music-videos" foi consolidado dentro de "videos" — Vídeos e Music Videos
 // vivem na mesma aba da planilha ("Music Videos"), diferenciados por tag
@@ -258,6 +260,20 @@ export const Forum: React.FC<ForumProps> = ({
 }) => {
   const { user: telegramUser } = useTelegramUser();
   const myId = telegramUser?.id ? String(telegramUser.id) : "";
+
+  // Admin-only: mesma condição já usada em Gestao.tsx/perfil.tsx
+  // (isAdminUser) — ID hardcoded OU tipo_de_perfil=Admin na planilha.
+  const loginForum = getStoredLogin();
+  const isAdminUser = myId === "810141686" || loginForum?.tipoPerfil === "Admin";
+
+  // Ações admin do tópico (ver CLAUDE.md desta task) — editar qualquer
+  // material, desfazer um tópico aberto por engano ("marcar pendente") ou
+  // excluir o tópico de verdade (irreversível).
+  const [showAdminEditModal, setShowAdminEditModal] = useState(false);
+  const [adminActionLoading, setAdminActionLoading] = useState<"pendente" | "excluir" | null>(null);
+  const [adminActionMsg, setAdminActionMsg] = useState<string | null>(null);
+  const [showExcluirConfirm, setShowExcluirConfirm] = useState(false);
+  const [excluirConfirmText, setExcluirConfirmText] = useState("");
 
   const initialSubmenu: ForumSubmenu =
     initialTab && (FORUM_SUBMENUS as string[]).includes(initialTab)
@@ -897,6 +913,50 @@ export const Forum: React.FC<ForumProps> = ({
     return "album";
   };
 
+  // "ID do tópico" de verdade (o mesmo gravado nas abas Comentarios_* e
+  // usado pelos novos endpoints admin) — resolvedTopicId é o valor vindo
+  // de /api/empire-play/forum/:tipo/:topicId (media.topicId); cai pro id
+  // sintético do item quando a resolução ainda não chegou.
+  const idTopicoAdmin = resolvedTopicId || selectedTopic?.id || "";
+
+  async function chamarAcaoAdmin(acao: "marcar-pendente" | "excluir-topico") {
+    if (!selectedTopic || !idTopicoAdmin) return;
+    const tipo = getMediaTypeForModal();
+    setAdminActionLoading(acao === "marcar-pendente" ? "pendente" : "excluir");
+    setAdminActionMsg(null);
+    try {
+      const res = await fetch(`/api/empire-play/admin/${acao}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({ tipo, idTopico: idTopicoAdmin }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        setAdminActionMsg(json?.error || "Erro ao executar ação de admin.");
+        return;
+      }
+      if (acao === "marcar-pendente") {
+        setAdminActionMsg(`"${json.data?.titulo || selectedTopic.title}" marcado como pendente — tópico desfeito.`);
+        // Não existe mais tópico pra ver — volta pra lista, igual uma
+        // exclusão (a diferença é que o material em si continua existindo,
+        // só pendente de novo publicação).
+        setTimeout(() => setSelectedTopic(null), 1200);
+      } else {
+        setAdminActionMsg(`Tópico "${json.data?.titulo || selectedTopic.title}" excluído.`);
+        setShowExcluirConfirm(false);
+        setExcluirConfirmText("");
+        setTimeout(() => setSelectedTopic(null), 1200);
+      }
+    } catch (err) {
+      setAdminActionMsg("Erro de rede ao executar ação de admin.");
+    } finally {
+      setAdminActionLoading(null);
+    }
+  }
+
   // Tags disponíveis pro filtro do submenu Vídeos (derivadas dos itens
   // carregados, igual ao catálogo em /empire-play/videos).
   const videoTags = useMemo(() => {
@@ -996,6 +1056,61 @@ export const Forum: React.FC<ForumProps> = ({
               <ChevronLeft className="size-4" />
               Voltar para lista de {activeSubmenu}
             </button>
+
+            {/* BARRA ADMIN — só pra admin de verdade (ver isAdminUser acima).
+                Editar sempre disponível; "Marcar como pendente" só quando o
+                tópico de fato existe (idTopicoAdmin resolvido); "Excluir
+                tópico" é irreversível e exige confirmação por digitação. */}
+            {isAdminUser && (
+              <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 min-w-0">
+                <span className="inline-flex items-center gap-1.5 px-2 text-[10px] font-black uppercase tracking-wider text-amber-400 shrink-0">
+                  <ShieldAlert className="size-3.5 shrink-0" />
+                  Admin
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAdminEditModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition min-w-0"
+                >
+                  <Pencil className="size-3.5 shrink-0" />
+                  <span className="truncate">Editar</span>
+                </button>
+                {!!idTopicoAdmin && (
+                  <button
+                    type="button"
+                    disabled={!!adminActionLoading}
+                    onClick={() => {
+                      if (window.confirm(`Marcar "${selectedTopic.title}" como pendente? Isso remove o tópico e os comentários, mas NÃO apaga a música/vídeo/álbum.`)) {
+                        chamarAcaoAdmin("marcar-pendente");
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold transition disabled:opacity-50 min-w-0"
+                  >
+                    {adminActionLoading === "pendente" ? (
+                      <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                    ) : (
+                      <RotateCcw className="size-3.5 shrink-0" />
+                    )}
+                    <span className="truncate">Marcar como pendente</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={!!adminActionLoading}
+                  onClick={() => {
+                    setExcluirConfirmText("");
+                    setShowExcluirConfirm(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-bold transition disabled:opacity-50 min-w-0"
+                >
+                  <Trash2 className="size-3.5 shrink-0" />
+                  <span className="truncate">Excluir tópico</span>
+                </button>
+                {adminActionMsg && (
+                  <span className="w-full text-[11px] font-medium text-neutral-300 mt-1">{adminActionMsg}</span>
+                )}
+              </div>
+            )}
 
             {/* DADOS DO TÓPICO DEPENDENDO DA MÍDIA */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10 items-start">
@@ -1486,6 +1601,73 @@ export const Forum: React.FC<ForumProps> = ({
                 }}
                 variant="inline"
               />
+            )}
+
+            {/* Admin: reaproveita a MESMA EditModal já usada pelo dono do
+                artista (Gestao.tsx) — só pré-carregada com artista/categoria
+                deste tópico específico, em vez da lista de artistas do
+                próprio jogador. O backend (/api/editar) não tem gate de
+                ownership nenhum pra bypassar — qualquer sessão de admin
+                comprovado (requestProvesAdmin) já edita qualquer material. */}
+            {isAdminUser && showAdminEditModal && (
+              <EditModal
+                isOpen={showAdminEditModal}
+                onClose={() => setShowAdminEditModal(false)}
+                defaultArtist={selectedTopic.artist}
+                associatedArtists={[selectedTopic.artist]}
+                defaultCategory={
+                  activeSubmenu === "musicas"
+                    ? "musicas"
+                    : activeSubmenu === "videos"
+                      ? "videos"
+                      : "albuns"
+                }
+              />
+            )}
+
+            {/* Admin: confirmação "digite o título" pra excluir — ação
+                irreversível, exige mais atrito que window.confirm. */}
+            {isAdminUser && showExcluirConfirm && (
+              <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowExcluirConfirm(false)}>
+                <div
+                  className="bg-neutral-900 border border-red-500/30 rounded-2xl p-5 max-w-sm w-full space-y-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 className="text-sm font-black text-red-400 flex items-center gap-2">
+                    <Trash2 className="size-4 shrink-0" />
+                    Excluir tópico — irreversível
+                  </h3>
+                  <p className="text-xs text-neutral-300">
+                    Isso apaga a linha de verdade da planilha, o D1, EDIÇÃO CHARTS e todos os comentários. Pra confirmar, digite o título exato:
+                  </p>
+                  <p className="text-xs font-bold text-white bg-white/5 rounded-lg px-3 py-2 break-words">{selectedTopic.title}</p>
+                  <input
+                    type="text"
+                    value={excluirConfirmText}
+                    onChange={(e) => setExcluirConfirmText(e.target.value)}
+                    placeholder="Digite o título aqui"
+                    className="w-full px-3 py-2 rounded-lg bg-neutral-800 border border-white/10 text-white text-sm outline-none focus:border-red-500/50"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowExcluirConfirm(false)}
+                      className="flex-1 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={excluirConfirmText.trim() !== selectedTopic.title.trim() || adminActionLoading === "excluir"}
+                      onClick={() => chamarAcaoAdmin("excluir-topico")}
+                      className="flex-1 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition inline-flex items-center justify-center gap-1.5"
+                    >
+                      {adminActionLoading === "excluir" && <Loader2 className="size-3.5 animate-spin" />}
+                      Excluir de verdade
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* LISTA DE COMENTÁRIOS — feed estilo tópico do Telegram: avatar +
