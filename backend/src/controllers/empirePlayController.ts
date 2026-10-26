@@ -1565,9 +1565,19 @@ export async function getEmpirePlayForumTopicController(
     ] = await Promise.all([
       mediaRecordsPromise,
       readSheetObjectsWithRowIndex(sheetComments),
-      sheetsService.readSheetObjects("Comentarios").catch(() => []),
-      sheetsService.readSheetObjects("Comentarios_EmpirePlay").catch(() => []),
-      sheetsService.readSheetObjects("Topicos_EmpirePlay").catch(() => []),
+      // Abas de fallback LEGADAS (não é onde comentário novo de verdade
+      // entra — isso é sempre em sheetComments, lido ao vivo acima, sem
+      // cache) — cache curto só reduz o custo de CPU/tempo por request sem
+      // atrasar comentário real nenhum.
+      cachedRead("forum:comentarios-legado", 60_000, () =>
+        sheetsService.readSheetObjects("Comentarios"),
+      ).catch(() => []),
+      cachedRead("forum:comentarios-empireplay-legado", 60_000, () =>
+        sheetsService.readSheetObjects("Comentarios_EmpirePlay"),
+      ).catch(() => []),
+      cachedRead("forum:topicos-empireplay-legado", 60_000, () =>
+        sheetsService.readSheetObjects("Topicos_EmpirePlay"),
+      ).catch(() => []),
       // Foto de perfil de quem comentou (config padrão de imagem da conta,
       // não a foto do artista) — cacheada porque é a aba inteira de
       // usuários, lida de novo a cada tópico de fórum aberto senão. TTL
@@ -1649,9 +1659,17 @@ export async function getEmpirePlayForumTopicController(
       // EDIÇÃO CHARTS: BD (índice 55) = Código único, F (índice 5) = WEEKS.
       const codigoUnico = normalizeComparison(getValue(rawMedia, ["codigo_unico"]) || "");
       if (codigoUnico) {
-        const edicaoChartsRows = await googleSheetsService.edicaoCharts
-          .readValues("EDIÇÃO CHARTS", "A2:BD5000")
-          .catch(() => []);
+        // BUG REAL de produção (2026-10-26): essa leitura de ~5000 linhas x
+        // 56 colunas rodava TODA VEZ que um tópico de música era aberto, sem
+        // cache nenhum — sob pico de acesso (vários jogadores abrindo
+        // tópicos ao mesmo tempo), isso estourava o limite de CPU/tempo do
+        // Worker e a plataforma devolvia 503 (confirmado ao vivo via
+        // DevTools, aba Network: "nostalgic traveller" com comentários reais
+        // existentes nunca carregava, 503 puro). Cache curto (60s) é mais
+        // que suficiente — EDIÇÃO CHARTS não muda a cada segundo.
+        const edicaoChartsRows = await cachedRead("forum:edicao-charts", 60_000, () =>
+          googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD5000"),
+        ).catch(() => []);
         for (const row of edicaoChartsRows) {
           if (normalizeComparison(row[55] || "") === codigoUnico) {
             const semanas = Number(row[5]);
@@ -1684,9 +1702,9 @@ export async function getEmpirePlayForumTopicController(
           }
         }
         if (codigoUnicoMusica) {
-          const edicaoChartsRows = await googleSheetsService.edicaoCharts
-            .readValues("EDIÇÃO CHARTS", "A2:BD5000")
-            .catch(() => []);
+          const edicaoChartsRows = await cachedRead("forum:edicao-charts", 60_000, () =>
+            googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD5000"),
+          ).catch(() => []);
           for (const row of edicaoChartsRows) {
             if (normalizeComparison(row[55] || "") === codigoUnicoMusica) {
               const semanas = Number(row[5]);
@@ -1703,9 +1721,9 @@ export async function getEmpirePlayForumTopicController(
       // EDIÇÃO CHARTS ÁLBUMS: R (índice 17) = Código único, C (índice 2) =
       // Semanas, D (índice 3) = nome do álbum (usado só de fallback).
       const codigoUnico = normalizeComparison(getValue(rawMedia, ["codigo_unico"]) || "");
-      const edicaoAlbunsRows = await googleSheetsService.edicaoCharts
-        .readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000")
-        .catch(() => []);
+      const edicaoAlbunsRows = await cachedRead("forum:edicao-charts-albuns", 60_000, () =>
+        googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000"),
+      ).catch(() => []);
       if (codigoUnico) {
         for (const row of edicaoAlbunsRows) {
           if (normalizeComparison(row[17] || "") === codigoUnico) {
