@@ -19,11 +19,15 @@ const MUSICAS_ROW = 792;
 const ID_TOPICO_ANTIGO = "musica_1792785481092_f3plki";
 
 export async function adminFixHeHayleyPendenteController(): Promise<Response> {
-  const rows = await googleSheetsService.principal.readValues("Musicas", `A${MUSICAS_ROW}:Z${MUSICAS_ROW}`);
-  const row = rows?.[0];
-  if (!row || (row[7] || "").trim() !== "He") {
+  const rows = await googleSheetsService.principal.readValues("Musicas");
+  const row = rows?.[MUSICAS_ROW - 1];
+  if (!row || normalizeComparison(row[7] || "") !== normalizeComparison("He")) {
     return new Response(
-      JSON.stringify({ success: false, error: `Musicas!linha ${MUSICAS_ROW} não é mais "He" — abortado, confira manualmente.` }),
+      JSON.stringify({
+        success: false,
+        error: `Musicas!linha ${MUSICAS_ROW} não é mais "He" — abortado, confira manualmente.`,
+        linhaLida: row || null,
+      }),
       { status: 409, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );
   }
