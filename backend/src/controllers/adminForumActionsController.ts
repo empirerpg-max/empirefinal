@@ -493,7 +493,7 @@ export async function excluirTopicoController(request: Request): Promise<Respons
 
 const LAST_COL_POR_SHEET: Record<string, string> = {
   Musicas: "AE",
-  "Music Videos": "V",
+  "Music Videos": "U",
   Albuns: "L",
 };
 
