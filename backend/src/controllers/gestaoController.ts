@@ -43,15 +43,31 @@ function parseDataBRParaIso(dataBR: string): string | null {
 // 2026-10): updateFaixaLetraController/updateFaixaLetraSincronizadaController
 // só escreviam no Sheets — o D1 (fonte real do Fórum desde o pivot) nunca
 // recebia a letra/sincronização, então sumia pro jogador mesmo gravada com
-// sucesso. Best-effort, nunca lança; sem código único (linha ainda sem
-// nenhum lançamento) não tem PK pra upsert, então só pula.
-export async function mirrorMusicaRowParaD1(rowIndex: number): Promise<void> {
+// sucesso. Best-effort pros chamadores que já existiam (nunca lança) — mas
+// agora DEVOLVE se conseguiu de verdade ou não (true/false), pra quem
+// precisa ter certeza que Sheets e D1 ficaram sincronizados (ver
+// marcarPendenteController) poder checar e reportar falha de verdade em
+// vez de assumir sucesso silenciosamente. BUG REAL #2 encontrado em
+// produção em 2026-10-26 (álbum "Hayley Wonderwall - Overhated"): uma
+// leitura de range estreito (só essa linha) logo em seguida de um
+// updateValuesBatch na mesma linha podia voltar sem o código único —
+// por isso agora tenta de novo uma vez com um pequeno atraso antes de
+// desistir, mesmo padrão já usado em lerCodigoUnicoGerado.
+export async function mirrorMusicaRowParaD1(rowIndex: number): Promise<boolean> {
   const db = getCatalogoDb();
-  if (!db) return;
+  if (!db) return false;
   try {
-    const row = (await googleSheetsService.principal.readValues("Musicas", `A${rowIndex}:AE${rowIndex}`))[0];
-    const codigoUnico = normalizeText(row?.[25]);
-    if (!row || !codigoUnico) return;
+    let row = (await googleSheetsService.principal.readValues("Musicas", `A${rowIndex}:AE${rowIndex}`))[0];
+    let codigoUnico = normalizeText(row?.[25]);
+    if ((!row || !codigoUnico)) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      row = (await googleSheetsService.principal.readValues("Musicas", `A${rowIndex}:AE${rowIndex}`))[0];
+      codigoUnico = normalizeText(row?.[25]);
+    }
+    // Sem código único (linha ainda sem nenhum lançamento, ou a leitura
+    // estreita realmente não achou nada mesmo depois do retry) não tem PK
+    // pra upsert — não é erro, só não tem o que espelhar ainda.
+    if (!row || !codigoUnico) return false;
     const dataLancamento = normalizeText(row[0]);
     await buildMusicaUpsertStatement(db, {
       codigoUnico,
@@ -77,8 +93,10 @@ export async function mirrorMusicaRowParaD1(rowIndex: number): Promise<void> {
       comentariosPara: normalizeText(row[5]) || null,
       pendente: normalizeComparison(normalizeText(row[23])) === "sim",
     }).run();
+    return true;
   } catch (err) {
     console.warn("[mirrorMusicaRowParaD1] Falha ao espelhar linha pro D1 (ignorado):", err);
+    return false;
   }
 }
 

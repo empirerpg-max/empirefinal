@@ -178,11 +178,26 @@ export async function marcarPendenteController(request: Request): Promise<Respon
       // Relê a linha inteira (já com os campos limpos) e reespelha pro D1
       // `musicas` (mesmo padrão de updateFaixaLetraController) EM PARALELO
       // com a limpeza dos comentários — ver nota acima.
-      const [, apagados] = await Promise.all([
+      const [d1Ok, apagados] = await Promise.all([
         mirrorMusicaRowParaD1(alvo.rowIndex),
         apagarComentariosDoTopico(tipo, idTopico),
       ]);
       comentariosApagados = apagados;
+      // EXIGÊNCIA do usuário (2026-10-26): essa ação NUNCA pode reportar
+      // sucesso se Sheets e D1 não ficaram de verdade sincronizados — antes
+      // mirrorMusicaRowParaD1 era best-effort silencioso (void), então uma
+      // falha de espelhamento (como a que corrompeu várias faixas do álbum
+      // da Hayley) passava batido como "sucesso". Agora é erro real.
+      if (!d1Ok) {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "A planilha foi atualizada mas o espelho no D1 falhou — Sheets e D1 ficariam dessincronizados. Tente de novo; se persistir, avise.",
+          },
+          500,
+        );
+      }
     } else if (tipo === "video") {
       // Music Videos não tem coluna "pendente"/"comentariosPara" própria —
       // só dá pra desvincular o tópico mesmo (limpa F, o message_thread_id).

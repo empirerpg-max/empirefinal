@@ -267,6 +267,7 @@ import { adminFixBackfillMusicaD1Controller } from "../controllers/adminFixBackf
 import { adminDiagEdicaoChartsCodigoController } from "../controllers/adminDiagEdicaoChartsCodigoController";
 import { adminDiagValTotalDistribuicaoController } from "../controllers/adminDiagValTotalDistribuicaoController";
 import { adminFixHeHayleyPendenteController } from "../controllers/adminFixHeHayleyPendenteController";
+import { adminFixVarreduraPendentesD1Controller } from "../controllers/adminFixVarreduraPendentesD1Controller";
 import { adminFixRegistroChrisController } from "../controllers/adminFixRegistroChrisController";
 import { adminFixRegistroChrisFolliaController } from "../controllers/adminFixRegistroChrisFolliaController";
 import { adminDiagComentariosChrisController } from "../controllers/adminDiagComentariosChrisController";
@@ -2132,6 +2133,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagValTotalDistribuicaoController();
   } else if (url.pathname === "/api/empire-play/admin/fix-he-hayley-pendente") {
     response = await adminFixHeHayleyPendenteController();
+  } else if (url.pathname === "/api/empire-play/admin/fix-varredura-pendentes-d1") {
+    response = await adminFixVarreduraPendentesD1Controller(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-follia-d1-sync") {
     response = await adminFixFolliaD1SyncController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-nostalgic-traveller") {
