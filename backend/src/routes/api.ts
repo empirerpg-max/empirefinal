@@ -272,6 +272,7 @@ import { adminDiagChartSheetRowController } from "../controllers/adminDiagChartS
 import { adminFixCapaStampOnItController } from "../controllers/adminFixCapaStampOnItController";
 import { adminDiagVarreduraChartCapasController } from "../controllers/adminDiagVarreduraChartCapasController";
 import { adminFixVarreduraChartCapasController } from "../controllers/adminFixVarreduraChartCapasController";
+import { adminFixColisaoEmp663Controller } from "../controllers/adminFixColisaoEmp663Controller";
 import { adminFixRegistroChrisController } from "../controllers/adminFixRegistroChrisController";
 import { adminFixRegistroChrisFolliaController } from "../controllers/adminFixRegistroChrisFolliaController";
 import { adminDiagComentariosChrisController } from "../controllers/adminDiagComentariosChrisController";
@@ -2147,6 +2148,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagVarreduraChartCapasController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-varredura-chart-capas") {
     response = await adminFixVarreduraChartCapasController(request);
+  } else if (url.pathname === "/api/empire-play/admin/fix-colisao-emp663") {
+    response = await adminFixColisaoEmp663Controller();
   } else if (url.pathname === "/api/empire-play/admin/fix-follia-d1-sync") {
     response = await adminFixFolliaD1SyncController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-registro-chris-nostalgic-traveller") {
