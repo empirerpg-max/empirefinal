@@ -11,8 +11,9 @@ import {
   googleSheetsService,
   normalizeComparison,
   normalizeText,
+  ensureSheetTab,
 } from "../services/googleSheetsService";
-import { requestProvesAdmin } from "../services/sessionService";
+import { requestProvesAdmin, extractBearerToken, verifySessionToken } from "../services/sessionService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { getCatalogoDb } from "../services/catalogoDbService";
 import { mirrorMusicaRowParaD1 } from "./gestaoController";
@@ -32,6 +33,22 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+// Aceita GET (querystring) OU POST (corpo) de propósito — mesmo padrão já
+// usado em preSaveController.ts/recalcularTetoPreSaveController, pra dar
+// pra diagnosticar via admin-call.yml (workflow do GitHub Actions, que só
+// faz GET) quando o front devolve um erro genérico sem detalhe nenhum (ver
+// bug real investigado em 2026-10-26: admin usando "Marcar como pendente"
+// em produção recebeu "Erro ao executar ação de admin." sem causa visível
+// — via GET dá pra ver a resposta/exceção crua, sem depender do navegador).
+async function readParamsBodyOrQuery(request: Request): Promise<Record<string, string>> {
+  if (request.method === "GET") {
+    const url = new URL(request.url);
+    return Object.fromEntries(url.searchParams.entries());
+  }
+  const body = await request.json().catch(() => ({}));
+  return (body && typeof body === "object" ? body : {}) as Record<string, string>;
+}
+
 // Comentários (e reações — gravadas na MESMA linha, colunas E/F conforme a
 // aba, ver forumController.ts/buildCommentRow) tratados pelo ID do tópico
 // na coluna A, igual nas 3 abas de comentário. Devolve quantas linhas
@@ -48,6 +65,27 @@ async function apagarComentariosDoTopico(tipo: TipoTopico, idTopico: string): Pr
     await googleSheetsService.principal.deleteRows(sheet, linhas);
   }
   return linhas.length;
+}
+
+// Mesma varredura de apagarComentariosDoTopico, mas devolve a linha
+// completa de cada comentário encontrado (pra guardar no backup) ANTES de
+// apagar — usado só por excluirTopicoController, que precisa do conteúdo
+// pra poder restaurar depois.
+async function capturarEApagarComentarios(
+  tipo: TipoTopico,
+  idTopico: string,
+): Promise<{ sheetName: string; linhas: { rowIndex: number; row: string[] }[] }> {
+  const sheet = COMENTARIOS_SHEET_POR_TIPO[tipo];
+  const rows = await googleSheetsService.principal.readValues(sheet).catch(() => []);
+  const idNorm = normalizeComparison(idTopico);
+  const linhas: { rowIndex: number; row: string[] }[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (normalizeComparison(rows[i]?.[0] || "") === idNorm) linhas.push({ rowIndex: i + 1, row: rows[i] });
+  }
+  if (linhas.length > 0) {
+    await googleSheetsService.principal.deleteRows(sheet, linhas.map((l) => l.rowIndex));
+  }
+  return { sheetName: sheet, linhas };
 }
 
 interface LinhaAlvo {
@@ -88,9 +126,9 @@ export async function marcarPendenteController(request: Request): Promise<Respon
     if (!(await requestProvesAdmin(request))) {
       return jsonResponse({ success: false, error: "Acesso restrito ao admin." }, 403);
     }
-    const body = (await request.json()) as { tipo?: TipoTopico; idTopico?: string };
-    const tipo = body.tipo;
-    const idTopico = (body.idTopico || "").trim();
+    const params = await readParamsBodyOrQuery(request);
+    const tipo = params.tipo as TipoTopico | undefined;
+    const idTopico = (params.idTopico || "").trim();
     if (!tipo || !idTopico || !COMENTARIOS_SHEET_POR_TIPO[tipo]) {
       return jsonResponse(
         { success: false, error: "Campos 'tipo' (musica/video/album) e 'idTopico' são obrigatórios." },
@@ -110,6 +148,24 @@ export async function marcarPendenteController(request: Request): Promise<Respon
           ? normalizeText(alvo.row[1])
           : normalizeText(alvo.row[6]);
 
+    // BUG REAL investigado em 2026-10-26 (admin usando "Marcar como
+    // pendente" em "He"/Hayley em produção, recebeu "Erro ao executar ação
+    // de admin." genérico, sem detalhe — só possível quando res.json() no
+    // front falha de verdade, ou seja, a resposta NEM chegou a ser o JSON
+    // que este controller sempre devolve, mesmo nos erros: o motivo mais
+    // plausível, dado o padrão de código daqui (ver googleSheetsService.ts,
+    // "Grammys" nos comentários — retry com backoff de até 1.5s*3 e
+    // fallback GViz CSV por leitura, tudo sob pressão de cota real já
+    // confirmada em produção), é o limite de CPU/tempo do Worker sendo
+    // ultrapassado quando várias chamadas ao Sheets rodam EM SÉRIE sob
+    // pico de cota — cada uma com seu próprio retry — e a plataforma
+    // devolve a própria página de erro (não-JSON) em vez da resposta do
+    // Worker. Antes daqui, 3 chamadas de rede (updateValuesBatch, a releitura
+    // de mirrorMusicaRowParaD1, e a leitura cheia da aba de comentários)
+    // rodavam 100% em série. As duas últimas não dependem uma da outra —
+    // só dependem do updateValuesBatch já ter terminado — então agora rodam
+    // em paralelo, cortando essa parte do tempo total praticamente à
+    // metade e reduzindo o risco de estourar o limite de novo.
     let comentariosApagados = 0;
     if (tipo === "musica") {
       // B (idTopico) e F (comentariosPara) em branco, X (pendente) = "Sim".
@@ -120,33 +176,43 @@ export async function marcarPendenteController(request: Request): Promise<Respon
         { sheetName: "Musicas", range: `X${alvo.rowIndex}`, values: [["Sim"]] },
       ]);
       // Relê a linha inteira (já com os campos limpos) e reespelha pro D1
-      // `musicas` — mesmo padrão de updateFaixaLetraController.
-      await mirrorMusicaRowParaD1(alvo.rowIndex);
+      // `musicas` (mesmo padrão de updateFaixaLetraController) EM PARALELO
+      // com a limpeza dos comentários — ver nota acima.
+      const [, apagados] = await Promise.all([
+        mirrorMusicaRowParaD1(alvo.rowIndex),
+        apagarComentariosDoTopico(tipo, idTopico),
+      ]);
+      comentariosApagados = apagados;
     } else if (tipo === "video") {
       // Music Videos não tem coluna "pendente"/"comentariosPara" própria —
       // só dá pra desvincular o tópico mesmo (limpa F, o message_thread_id).
-      await googleSheetsService.principal.updateValues("Music Videos", `F${alvo.rowIndex}`, [[""]]);
       // O espelho D1 (`midia`, legado) usa o próprio ID do tópico como PK —
       // não tem como "zerar" essa chave num upsert, então a linha é
       // removida: o efeito pro Fórum/Catálogo (que leem do D1) é o mesmo de
       // "esse tópico nunca existiu", sem tocar a linha real da planilha.
+      // As 3 chamadas (planilha, D1, comentários) são independentes entre
+      // si — rodam em paralelo, mesma lógica da nota acima.
       const db = getCatalogoDb();
-      if (db) {
-        await db.prepare("DELETE FROM midia WHERE id = ?").bind(idTopico).run().catch(() => {});
-      }
-    } else {
-      // Albuns: B (ID do tópico) e D (comentários para) em branco.
-      await googleSheetsService.principal.updateValuesBatch([
-        { sheetName: "Albuns", range: `B${alvo.rowIndex}`, values: [[""]] },
-        { sheetName: "Albuns", range: `D${alvo.rowIndex}`, values: [[""]] },
+      const [, , apagados] = await Promise.all([
+        googleSheetsService.principal.updateValues("Music Videos", `F${alvo.rowIndex}`, [[""]]),
+        db ? db.prepare("DELETE FROM midia WHERE id = ?").bind(idTopico).run().catch(() => {}) : Promise.resolve(),
+        apagarComentariosDoTopico(tipo, idTopico),
       ]);
+      comentariosApagados = apagados;
+    } else {
+      // Albuns: B (ID do tópico) e D (comentários para) em branco. Mesma
+      // paralelização.
       const db = getCatalogoDb();
-      if (db) {
-        await db.prepare("DELETE FROM midia WHERE id = ?").bind(idTopico).run().catch(() => {});
-      }
+      const [, , apagados] = await Promise.all([
+        googleSheetsService.principal.updateValuesBatch([
+          { sheetName: "Albuns", range: `B${alvo.rowIndex}`, values: [[""]] },
+          { sheetName: "Albuns", range: `D${alvo.rowIndex}`, values: [[""]] },
+        ]),
+        db ? db.prepare("DELETE FROM midia WHERE id = ?").bind(idTopico).run().catch(() => {}) : Promise.resolve(),
+        apagarComentariosDoTopico(tipo, idTopico),
+      ]);
+      comentariosApagados = apagados;
     }
-
-    comentariosApagados = await apagarComentariosDoTopico(tipo, idTopico);
 
     await registrarLogSistema({
       categoria: "Ação concluída",
@@ -198,6 +264,85 @@ function colLetterToIndex(letter: string): number {
   return idx - 1;
 }
 
+// Log dedicado (planilha logsSistema, mesma da aba "LOGS" didática) com
+// backup restaurável de cada exclusão de tópico — SEPARADO do log genérico
+// de registrarLogSistema (aba LOGS, só texto, sem dado pra restaurar).
+// Colunas: A Timestamp ISO | B Quem excluiu (usuário) | C ID do admin |
+// D Tipo | E idTopico | F Identificação legível | G Backup completo em
+// JSON (linha da planilha + linhas do D1 + comentários apagados — tudo que
+// excluirTopicoController precisa pra desfazer) | H Restaurado em (ISO,
+// preenchido só se essa entrada já foi usada pra restaurar).
+const SHEET_LOG_EXCLUSOES = "LOG_EXCLUSOES_TOPICOS";
+let logExclusoesAbaGarantida = false;
+
+async function garantirAbaLogExclusoes(): Promise<void> {
+  if (logExclusoesAbaGarantida) return;
+  await ensureSheetTab("logsSistema", SHEET_LOG_EXCLUSOES);
+  const rows = await googleSheetsService.logsSistema.readValues(SHEET_LOG_EXCLUSOES, "A1:A1");
+  if (!rows.length) {
+    await googleSheetsService.logsSistema.appendRow(
+      SHEET_LOG_EXCLUSOES,
+      [
+        "Timestamp",
+        "Quem excluiu",
+        "ID do admin",
+        "Tipo",
+        "idTopico",
+        "Identificação",
+        "Backup JSON",
+        "Restaurado em",
+      ],
+      "A:H",
+    );
+  }
+  logExclusoesAbaGarantida = true;
+}
+
+// Extrai usuário/id do admin que fez a chamada, a partir do mesmo token de
+// sessão que requestProvesAdmin já validou — só pra identificação no log,
+// nunca usado pra decidir permissão (isso é só o requestProvesAdmin).
+async function identificarAdminDaRequisicao(request: Request): Promise<{ usuario: string; id: string }> {
+  const token = extractBearerToken(request);
+  const payload = await verifySessionToken(token);
+  return { usuario: payload?.usuario || "desconhecido", id: payload?.id || "—" };
+}
+
+interface BackupTopicoExcluido {
+  sheet: { sheetName: string; rowIndex: number; row: string[] };
+  d1: { musicas: Record<string, unknown>[]; midia: Record<string, unknown>[] };
+  comentarios: { sheetName: string; linhas: { rowIndex: number; row: string[] }[] };
+}
+
+// Retenção de 7 dias: backup completo (coluna G) só fica restaurável por 7
+// dias — depois disso a célula é limpa (não a linha: a linha some como
+// histórico "X excluiu Y nesse dia" mesmo sem poder restaurar mais).
+// Escolha arbitrária, mas intencional: tempo suficiente pra alguém notar um
+// engano sem deixar a planilha (e o JSON, que pode ficar grande com muitos
+// comentários) crescer sem limite.
+const RETENCAO_BACKUP_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function purgarBackupsAntigos(): Promise<void> {
+  try {
+    const rows = await googleSheetsService.logsSistema.readValues(SHEET_LOG_EXCLUSOES, "A:H");
+    const limite = Date.now() - RETENCAO_BACKUP_MS;
+    const entries: { sheetName: string; range: string; values: (string | null)[][] }[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const timestamp = rows[i]?.[0];
+      const backup = rows[i]?.[6];
+      if (!timestamp || !backup) continue;
+      const t = new Date(timestamp).getTime();
+      if (!Number.isNaN(t) && t < limite) {
+        entries.push({ sheetName: SHEET_LOG_EXCLUSOES, range: `G${i + 1}`, values: [[""]] });
+      }
+    }
+    if (entries.length > 0) {
+      await googleSheetsService.logsSistema.updateValuesBatch(entries);
+    }
+  } catch (err) {
+    console.warn("[excluirTopicoController] Falha ao purgar backups antigos (ignorado):", err);
+  }
+}
+
 /**
  * POST /api/empire-play/admin/excluir-topico
  * Body: { tipo: "musica" | "video" | "album", idTopico: string }
@@ -244,10 +389,36 @@ export async function excluirTopicoController(request: Request): Promise<Respons
           ? normalizeText(alvo.row[20])
           : normalizeText(alvo.row[11]);
 
+    // 0. Captura o estado do D1 ANTES de apagar — vai pro backup
+    // restaurável do passo novo abaixo. Melhor esforço: se o D1 não
+    // responder, o backup fica sem essa parte, mas a exclusão em si não é
+    // bloqueada por isso.
+    const db = getCatalogoDb();
+    let musicasD1Antes: Record<string, unknown>[] = [];
+    let midiaD1Antes: Record<string, unknown>[] = [];
+    if (db) {
+      if (tipo === "musica" && codigoUnico) {
+        musicasD1Antes = await db
+          .prepare("SELECT * FROM musicas WHERE codigo_unico = ?")
+          .bind(codigoUnico)
+          .all<Record<string, unknown>>()
+          .then((r) => r.results || [])
+          .catch(() => []);
+      }
+      midiaD1Antes = await db
+        .prepare("SELECT * FROM midia WHERE id = ?")
+        .bind(idTopico)
+        .all<Record<string, unknown>>()
+        .then((r) => r.results || [])
+        .catch(() => []);
+    }
+
     // 1. Comentários + reações do tópico (sempre primeiro — se algo mais
     // abaixo falhar, não sobra comentário órfão apontando pra uma linha
-    // que já vai deixar de existir).
-    const comentariosApagados = await apagarComentariosDoTopico(tipo, idTopico);
+    // que já vai deixar de existir). Captura o conteúdo completo antes de
+    // apagar, pro backup restaurável.
+    const comentariosCapturados = await capturarEApagarComentarios(tipo, idTopico);
+    const comentariosApagados = comentariosCapturados.linhas.length;
 
     // 2. EDIÇÃO CHARTS / EDIÇÃO CHARTS ÁLBUMS — limpa a linha pelo código
     // único (vídeo não tem linha própria aqui, pula).
@@ -258,7 +429,6 @@ export async function excluirTopicoController(request: Request): Promise<Respons
 
     // 3. D1 — tabela dedicada `musicas` (por código único) e/ou `midia`
     // legada (por id = idTopico).
-    const db = getCatalogoDb();
     if (db) {
       if (tipo === "musica" && codigoUnico) {
         await db.prepare("DELETE FROM musicas WHERE codigo_unico = ?").bind(codigoUnico).run().catch(() => {});
@@ -271,9 +441,43 @@ export async function excluirTopicoController(request: Request): Promise<Respons
     // pra esta ação.
     await googleSheetsService.principal.deleteRows(sheetName, [alvo.rowIndex]);
 
+    // 5. Log restaurável (NOVO, ver CLAUDE.md/pedido do admin: "manter
+    // backup de até 7 dias pra poder restaurar"). Best-effort — se essa
+    // gravação falhar, a exclusão já aconteceu de verdade e não deve ser
+    // desfeita nem travada por causa de um log que não escreveu.
+    const admin = await identificarAdminDaRequisicao(request);
+    const backup: BackupTopicoExcluido = {
+      sheet: { sheetName, rowIndex: alvo.rowIndex, row: alvo.row },
+      d1: { musicas: musicasD1Antes, midia: midiaD1Antes },
+      comentarios: comentariosCapturados,
+    };
+    await garantirAbaLogExclusoes()
+      .then(() =>
+        googleSheetsService.logsSistema.appendRow(
+          SHEET_LOG_EXCLUSOES,
+          [
+            new Date().toISOString(),
+            admin.usuario,
+            admin.id,
+            tipo,
+            idTopico,
+            titulo || idTopico,
+            JSON.stringify(backup),
+            "",
+          ],
+          "A:H",
+        ),
+      )
+      .catch((err) => console.warn("[excluirTopicoController] Falha ao gravar log restaurável (ignorado):", err));
+
+    // 6. Limpeza oportunista dos backups com mais de 7 dias (ver
+    // RETENCAO_BACKUP_MS acima) — feito a cada exclusão nova, só nessa aba
+    // pequena, nunca bloqueia a resposta em caso de falha.
+    await purgarBackupsAntigos();
+
     await registrarLogSistema({
       categoria: "Ação concluída",
-      oQueAconteceu: `Admin EXCLUIU o tópico "${titulo || idTopico}" (${tipo}, idTopico=${idTopico}, código único=${codigoUnico || "—"}) — linha ${alvo.rowIndex} de "${sheetName}" apagada, ${comentariosApagados} comentário(s) removido(s), EDIÇÃO CHARTS ${edicaoChartsLimpa ? "limpa" : "não encontrada/ignorada"}, D1 limpo. Ação irreversível.`,
+      oQueAconteceu: `Admin ${admin.usuario} EXCLUIU o tópico "${titulo || idTopico}" (${tipo}, idTopico=${idTopico}, código único=${codigoUnico || "—"}) — linha ${alvo.rowIndex} de "${sheetName}" apagada, ${comentariosApagados} comentário(s) removido(s), EDIÇÃO CHARTS ${edicaoChartsLimpa ? "limpa" : "não encontrada/ignorada"}, D1 limpo. Backup restaurável por 7 dias em "${SHEET_LOG_EXCLUSOES}".`,
       onde: "excluirTopicoController",
     }).catch(() => {});
 
@@ -284,5 +488,136 @@ export async function excluirTopicoController(request: Request): Promise<Respons
   } catch (err: any) {
     console.error("[excluirTopicoController] Erro:", err);
     return jsonResponse({ success: false, error: err?.message || "Erro ao excluir tópico." }, 500);
+  }
+}
+
+const LAST_COL_POR_SHEET: Record<string, string> = {
+  Musicas: "AE",
+  "Music Videos": "V",
+  Albuns: "L",
+};
+
+// INSERT OR REPLACE dinâmico a partir de um objeto {coluna: valor} capturado
+// via SELECT * — funciona pra `musicas` e `midia` sem precisar reproduzir
+// manualmente cada campo de MusicaUpsert/MidiaUpsert (o snapshot já É a
+// linha real do D1, então reinserir ela de volta, coluna a coluna, é mais
+// fiel do que remontar via upsert "normal").
+async function reinserirLinhaD1(
+  db: NonNullable<ReturnType<typeof getCatalogoDb>>,
+  tabela: "musicas" | "midia",
+  linha: Record<string, unknown>,
+): Promise<void> {
+  const colunas = Object.keys(linha);
+  if (colunas.length === 0) return;
+  const placeholders = colunas.map(() => "?").join(", ");
+  const sql = `INSERT OR REPLACE INTO ${tabela} (${colunas.join(", ")}) VALUES (${placeholders})`;
+  await db
+    .prepare(sql)
+    .bind(...colunas.map((c) => linha[c]))
+    .run();
+}
+
+/**
+ * POST /api/empire-play/admin/restaurar-topico-excluido
+ * Body: { logRowIndex: number }
+ *
+ * Desfaz uma exclusão feita por excluirTopicoController, a partir do
+ * backup completo guardado em LOG_EXCLUSOES_TOPICOS (coluna G) — só
+ * funciona dentro da janela de 7 dias (ver RETENCAO_BACKUP_MS); passado
+ * isso a célula já foi limpa e não tem mais como restaurar. `logRowIndex`
+ * é o número da linha de verdade na aba (1-based, como aparece ao abrir a
+ * planilha) — sem UI pra isso ainda, o admin lê a aba direto (ou via
+ * admin-call.yml) pra achar a linha certa pelo idTopico/identificação.
+ */
+export async function restaurarTopicoExcluidoController(request: Request): Promise<Response> {
+  try {
+    if (!(await requestProvesAdmin(request))) {
+      return jsonResponse({ success: false, error: "Acesso restrito ao admin." }, 403);
+    }
+    const params = await readParamsBodyOrQuery(request);
+    const logRowIndex = Number(params.logRowIndex);
+    if (!logRowIndex || logRowIndex < 2) {
+      return jsonResponse({ success: false, error: "'logRowIndex' é obrigatório (linha da aba LOG_EXCLUSOES_TOPICOS, >= 2)." }, 400);
+    }
+
+    const row = (
+      await googleSheetsService.logsSistema.readValues(SHEET_LOG_EXCLUSOES, `A${logRowIndex}:H${logRowIndex}`)
+    )[0];
+    if (!row || !row[0]) {
+      return jsonResponse({ success: false, error: `Linha ${logRowIndex} não encontrada em "${SHEET_LOG_EXCLUSOES}".` }, 404);
+    }
+    const backupJson = row[6];
+    if (!backupJson) {
+      return jsonResponse(
+        {
+          success: false,
+          error:
+            "Essa entrada não tem mais backup restaurável — ou já passou da janela de 7 dias (foi purgado automaticamente) ou já foi restaurada antes.",
+        },
+        400,
+      );
+    }
+
+    let backup: BackupTopicoExcluido;
+    try {
+      backup = JSON.parse(backupJson);
+    } catch {
+      return jsonResponse({ success: false, error: "Backup JSON dessa linha está corrompido/ilegível." }, 500);
+    }
+
+    const admin = await identificarAdminDaRequisicao(request);
+
+    // 1. Linha da planilha (Musicas/Music Videos/Albuns) — appendRow de
+    // volta, com exatamente os mesmos valores que foram apagados.
+    const lastCol = LAST_COL_POR_SHEET[backup.sheet.sheetName] || "ZZ";
+    await googleSheetsService.principal.appendRow(backup.sheet.sheetName, backup.sheet.row, `A:${lastCol}`);
+
+    // 2. D1 — `musicas` e/ou `midia`, linha a linha, exatamente como
+    // estavam (ver reinserirLinhaD1).
+    const db = getCatalogoDb();
+    let d1Restaurado = 0;
+    if (db) {
+      for (const linhaMusica of backup.d1.musicas) {
+        await reinserirLinhaD1(db, "musicas", linhaMusica).catch((err) =>
+          console.warn("[restaurarTopicoExcluidoController] Falha ao restaurar linha `musicas` (ignorado):", err),
+        );
+        d1Restaurado++;
+      }
+      for (const linhaMidia of backup.d1.midia) {
+        await reinserirLinhaD1(db, "midia", linhaMidia).catch((err) =>
+          console.warn("[restaurarTopicoExcluidoController] Falha ao restaurar linha `midia` (ignorado):", err),
+        );
+        d1Restaurado++;
+      }
+    }
+
+    // 3. Comentários/reações — appendRow de volta na mesma aba, uma a uma
+    // (poucas linhas, não compensa paralelizar/batch aqui).
+    let comentariosRestaurados = 0;
+    for (const linha of backup.comentarios.linhas) {
+      await googleSheetsService.principal.appendRow(backup.comentarios.sheetName, linha.row, "A:F");
+      comentariosRestaurados++;
+    }
+
+    // 4. Marca a entrada do log como já restaurada (não apaga — o log em
+    // si é histórico permanente), pra não confundir uma tentativa futura
+    // de restaurar a mesma entrada de novo.
+    await googleSheetsService.logsSistema
+      .updateValues(SHEET_LOG_EXCLUSOES, `H${logRowIndex}`, [[new Date().toISOString()]])
+      .catch(() => {});
+
+    await registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Admin ${admin.usuario} RESTAUROU o tópico excluído "${row[5] || row[4]}" (linha ${logRowIndex} de "${SHEET_LOG_EXCLUSOES}") — linha da planilha "${backup.sheet.sheetName}" recriada, ${d1Restaurado} linha(s) de D1 restaurada(s), ${comentariosRestaurados} comentário(s) restaurado(s).`,
+      onde: "restaurarTopicoExcluidoController",
+    }).catch(() => {});
+
+    return jsonResponse({
+      success: true,
+      data: { sheetName: backup.sheet.sheetName, d1Restaurado, comentariosRestaurados },
+    });
+  } catch (err: any) {
+    console.error("[restaurarTopicoExcluidoController] Erro:", err);
+    return jsonResponse({ success: false, error: err?.message || "Erro ao restaurar tópico excluído." }, 500);
   }
 }

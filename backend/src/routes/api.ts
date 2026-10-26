@@ -74,6 +74,7 @@ import {
 import {
   marcarPendenteController,
   excluirTopicoController,
+  restaurarTopicoExcluidoController,
 } from "../controllers/adminForumActionsController";
 import {
   getExtraMaterialController,
@@ -685,9 +686,13 @@ export async function handleEmpireApiRoutes(
   } else if (url.pathname === "/api/empire-play/admin/fix-legacy-video-titles") {
     response = await adminFixLegacyVideoTitlesController();
   } else if (url.pathname === "/api/empire-play/admin/marcar-pendente") {
-    if (request.method !== "POST") {
+    // Aceita GET além de POST (ver readParamsBodyOrQuery em
+    // adminForumActionsController.ts) de propósito — precisa ser
+    // diagnosticável via admin-call.yml, que só faz GET, sem depender do
+    // navegador/sessão do admin pra investigar um erro em produção.
+    if (request.method !== "POST" && request.method !== "GET") {
       return new Response(
-        JSON.stringify({ success: false, error: "Use POST para /api/empire-play/admin/marcar-pendente." }),
+        JSON.stringify({ success: false, error: "Use GET ou POST para /api/empire-play/admin/marcar-pendente." }),
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
@@ -700,6 +705,17 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await excluirTopicoController(request);
+  } else if (url.pathname === "/api/empire-play/admin/restaurar-topico-excluido") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Use POST para /api/empire-play/admin/restaurar-topico-excluido.",
+        }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await restaurarTopicoExcluidoController(request);
   } else if (isEditarPath) {
     if (request.method === "GET") {
       response = await getReleasesForEditController(request);

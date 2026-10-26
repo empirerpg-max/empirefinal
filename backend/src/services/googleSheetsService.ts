@@ -875,5 +875,9 @@ export const googleSheetsService = {
     readValues: (sheetName: string, range?: string) => readValues("logsSistema", sheetName, range),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("logsSistema", sheetName, values, range),
+    updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
+      updateValues("logsSistema", sheetName, range, values),
+    updateValuesBatch: (entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[]) =>
+      updateValuesBatch("logsSistema", entries),
   },
 };
