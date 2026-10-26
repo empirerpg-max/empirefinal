@@ -70,7 +70,7 @@ function musicaD1RowToSheetRecord(row: MusicaD1Row): SheetRecord {
   };
 }
 
-async function readMusicasFromD1(): Promise<SheetRecord[] | null> {
+export async function readMusicasFromD1(): Promise<SheetRecord[] | null> {
   const db = getCatalogoDb();
   if (!db) return null;
   try {
