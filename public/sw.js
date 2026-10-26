@@ -73,6 +73,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // BUG REAL confirmado em produção (2026-10-26, recorrente — já tinha
+  // acontecido antes): chamadas de DADO (/api/...) caíam no mesmo timeout de
+  // 10s pensado só pra não travar NAVEGAÇÃO (ver bloco acima) — mas uma
+  // busca que lê a aba inteira de comentários no Sheets pode legitimamente
+  // passar de 10s quando a API do Sheets está sob pressão (padrão já visto
+  // várias vezes neste app). Resultado: o SW matava a conexão achando que
+  // tinha travado, e a tela mostrava "nenhum comentário" mesmo com os
+  // comentários existindo de verdade — o app nunca recebia a resposta real.
+  // /api/* passa direto (fetch cru do navegador, sem o teto artificial do
+  // SW) — só asset estático (script/style/imagem, o único caso que
+  // realmente precisa de cache+timeout aqui) continua pelo caminho com
+  // timeout + cache abaixo.
+  if (url.pathname.startsWith("/api/")) {
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then(
       (cached) =>
