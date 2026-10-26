@@ -1,4 +1,4 @@
-const CACHE = "empire-shell-v2";
+const CACHE = "empire-shell-v3";
 // "/" não entra mais aqui — navegação nunca serve HTML cacheado (ver
 // comentário no listener de "fetch"), então pré-cachear a home só ocuparia
 // espaço à toa.

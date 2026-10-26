@@ -335,6 +335,11 @@ export const Forum: React.FC<ForumProps> = ({
   // State para comentários do tópico selecionado
   const [topicComments, setTopicComments] = useState<CommentItem[]>([]);
   const [loadingComments, setLoadingComments] = useState<boolean>(false);
+  // Distingue "de verdade sem comentário" de "deu erro/timeout buscando" —
+  // sem isso, qualquer falha de rede (ex: timeout) fazia a tela mentir
+  // "Nenhum comentário registrado ainda" pra um tópico que tem comentário
+  // de verdade, só porque a busca não concluiu a tempo.
+  const [commentsLoadError, setCommentsLoadError] = useState<boolean>(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const editTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -598,9 +603,23 @@ export const Forum: React.FC<ForumProps> = ({
   // certos com os do tópico errado. O token abaixo garante que só a busca
   // mais recente é aplicada.
   const commentsFetchToken = React.useRef(0);
+  // BUG REAL confirmado em produção (2026-10-26, recorrente): sem limite de
+  // tempo nenhum aqui, qualquer coisa que trave essa chamada (rede, Service
+  // Worker antigo ainda ativo, API do Sheets lenta) deixava "Carregando
+  // comentários..." preso pra sempre — nada no código revertia
+  // loadingComments pra false se o fetch nunca resolvesse NEM rejeitasse.
+  // AbortController com teto garante que SEMPRE cai no catch/finally em no
+  // máximo 20s, não importa a causa real do travamento.
+  const COMMENTS_FETCH_TIMEOUT_MS = 20_000;
+  const fetchComTimeout = (url: string) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), COMMENTS_FETCH_TIMEOUT_MS);
+    return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+  };
   const fetchTopicComments = async (topicOrTitle: ForumTopicItem | string) => {
     const myToken = ++commentsFetchToken.current;
     setLoadingComments(true);
+    setCommentsLoadError(false);
     const topic: ForumTopicItem =
       typeof topicOrTitle === "string"
         ? ({ id: topicOrTitle, title: topicOrTitle } as ForumTopicItem)
@@ -608,7 +627,7 @@ export const Forum: React.FC<ForumProps> = ({
 
     try {
       const topicIdentifier = topic.id || topic.title;
-      const resForum = await fetch(
+      const resForum = await fetchComTimeout(
         `/api/empire-play/forum/${activeSubmenu}/${encodeURIComponent(topicIdentifier)}`,
       )
         .then((r) => (r.ok ? r.json() : null))
@@ -667,7 +686,7 @@ export const Forum: React.FC<ForumProps> = ({
           albuns: "album",
         };
         const tipoMedia = tipoMediaMap[activeSubmenu];
-        const res = await fetch(
+        const res = await fetchComTimeout(
           `/api/forum/comments?titulo=${encodeURIComponent(topic.title)}&idTopico=${encodeURIComponent(topic.id || "")}&tipoMedia=${tipoMedia}`,
         );
         const json = await res.json();
@@ -694,7 +713,10 @@ export const Forum: React.FC<ForumProps> = ({
       setTopicComments(commentsFromApi);
     } catch (err) {
       console.error("Erro ao carregar comentários:", err);
-      if (myToken === commentsFetchToken.current) setTopicComments([]);
+      if (myToken === commentsFetchToken.current) {
+        setTopicComments([]);
+        setCommentsLoadError(true);
+      }
     } finally {
       if (myToken === commentsFetchToken.current) setLoadingComments(false);
     }
@@ -1676,6 +1698,17 @@ export const Forum: React.FC<ForumProps> = ({
             {loadingComments ? (
               <div className="p-6 text-center text-xs text-neutral-400 bg-neutral-800/30 rounded-2xl border border-white/5">
                 Carregando comentários...
+              </div>
+            ) : commentsLoadError ? (
+              <div className="p-6 text-center text-xs text-amber-400 bg-amber-500/5 rounded-2xl border border-amber-500/20 space-y-2">
+                <p>Não deu pra carregar os comentários agora (pode já existir comentário real aqui).</p>
+                <button
+                  type="button"
+                  onClick={() => selectedTopic && fetchTopicComments(selectedTopic)}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-bold transition"
+                >
+                  Tentar de novo
+                </button>
               </div>
             ) : topicComments.length === 0 ? (
               <div className="p-6 text-center text-xs text-neutral-500 bg-neutral-800/30 rounded-2xl border border-white/5">
