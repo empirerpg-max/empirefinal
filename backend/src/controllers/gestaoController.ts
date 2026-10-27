@@ -31,6 +31,23 @@ function upsertMusicaD1(m: MusicaUpsert): void {
     );
 }
 
+// BUG REAL de produção (2026-10-27): um admin colou, no campo de link
+// manual ("Drive ou YouTube"), o link de COMPARTILHAMENTO DA PASTA do
+// Drive (drive.google.com/drive/folders/...) em vez do link do ARQUIVO —
+// fácil de confundir ao copiar do próprio Drive. Isso nunca é reproduzível
+// como vídeo/áudio (é uma página de listagem, não um stream), mas era
+// salvo sem nenhuma validação: o upload "dava certo" e só quebrava depois,
+// na hora de tocar — exigindo reenviar tudo de novo e deixando uma linha
+// duplicada pra trás. Barra ANTES de gravar, com uma mensagem que diz
+// exatamente o que fazer (abrir o arquivo em si e copiar o link dele).
+function erroSeLinkDePastaDrive(url: string, campo: string): string | null {
+  if (!url) return null;
+  if (/drive\.google\.com\/drive\/(u\/\d+\/)?folders\//i.test(url)) {
+    return `${campo}: esse é um link de PASTA do Drive, não de um arquivo — abra o arquivo dentro da pasta e copie o link dele (ou use o botão de upload em vez de colar o link).`;
+  }
+  return null;
+}
+
 function parseDataBRParaIso(dataBR: string): string | null {
   const m = dataBR.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
@@ -482,6 +499,13 @@ export async function createSongController(request: Request): Promise<Response> 
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
+    const erroLinkPasta = erroSeLinkDePastaDrive(mediaUrl, "Áudio") || erroSeLinkDePastaDrive(capaUrl, "Capa");
+    if (erroLinkPasta) {
+      return new Response(JSON.stringify({ success: false, error: erroLinkPasta }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
     // "Material Antigo": usa a data real escolhida em vez de hoje, e as
@@ -871,6 +895,13 @@ export async function createVideoController(request: Request): Promise<Response>
         }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
+    }
+    const erroLinkPasta = erroSeLinkDePastaDrive(mediaUrl, "Vídeo") || erroSeLinkDePastaDrive(capaUrl, "Capa");
+    if (erroLinkPasta) {
+      return new Response(JSON.stringify({ success: false, error: erroLinkPasta }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const tipo = tipoVideo || categoriaVideo || "Video";

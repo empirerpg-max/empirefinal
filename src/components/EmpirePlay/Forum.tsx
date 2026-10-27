@@ -620,6 +620,16 @@ export const Forum: React.FC<ForumProps> = ({
     const myToken = ++commentsFetchToken.current;
     setLoadingComments(true);
     setCommentsLoadError(false);
+    // BUG REAL de produção (2026-10-27): resolvedTopicId não era limpo ao
+    // trocar de tópico — enquanto o fetch abaixo não respondia (ex: durante
+    // o 503 sob pico já visto nesse endpoint), um clique em "Excluir
+    // tópico"/"Marcar como pendente" nesse intervalo usava o id RESOLVIDO
+    // DO TÓPICO ANTERIOR (ou, pior, o id sintético prefixado do catálogo —
+    // ver fallback abaixo), batendo em "Tópico não encontrado na
+    // planilha." ou, em tese, mexendo no tópico errado. Limpa já aqui pra
+    // nenhuma ação admin poder usar um id desatualizado/errado enquanto a
+    // resolução real não chega.
+    setResolvedTopicId("");
     const topic: ForumTopicItem =
       typeof topicOrTitle === "string"
         ? ({ id: topicOrTitle, title: topicOrTitle } as ForumTopicItem)
@@ -636,7 +646,16 @@ export const Forum: React.FC<ForumProps> = ({
       let commentsFromApi: CommentItem[] = [];
 
       if (myToken !== commentsFetchToken.current) return;
-      setResolvedTopicId(resForum?.data?.media?.topicId || resForum?.data?.media?.id || topic.id || "");
+      // Só aceita o "ID do tópico" REAL da planilha (media.topicId) — os
+      // fallbacks antigos (media.id / topic.id) são o id SINTÉTICO do
+      // catálogo (ex: "videos_video_123..."), com prefixo diferente do que
+      // existe na coluna da planilha: usá-los aqui fazia as ações admin
+      // (marcar pendente/excluir) procurarem um id que nunca bate com
+      // nenhuma linha. Sem o id real, resolvedTopicId fica vazio mesmo —
+      // as ações admin ficam desabilitadas em vez de arriscar o id errado.
+      if (resForum?.data?.media?.topicId) {
+        setResolvedTopicId(resForum.data.media.topicId);
+      }
 
       // Semanas no chart: a listagem só traz isso de graça pra música
       // (mesma linha). Vídeo/álbum exigem cruzar com outra aba — feito só
@@ -936,10 +955,16 @@ export const Forum: React.FC<ForumProps> = ({
   };
 
   // "ID do tópico" de verdade (o mesmo gravado nas abas Comentarios_* e
-  // usado pelos novos endpoints admin) — resolvedTopicId é o valor vindo
-  // de /api/empire-play/forum/:tipo/:topicId (media.topicId); cai pro id
-  // sintético do item quando a resolução ainda não chegou.
-  const idTopicoAdmin = resolvedTopicId || selectedTopic?.id || "";
+  // usado pelos novos endpoints admin) — SÓ o valor real vindo de
+  // /api/empire-play/forum/:tipo/:topicId (media.topicId). BUG REAL
+  // corrigido em 2026-10-27: antes caía pro id sintético do catálogo
+  // (selectedTopic.id, ex: "videos_video_123...") enquanto a resolução
+  // real não chegava — esse id nunca bate com a coluna da planilha, então
+  // "Excluir tópico"/"Marcar como pendente" falhavam com "Tópico não
+  // encontrado" (ou, pior, agiriam sobre o tópico errado se por acaso
+  // batesse com outra linha). Sem o id real ainda carregado, as ações
+  // ficam desabilitadas — nunca mandam um id arriscado.
+  const idTopicoAdmin = resolvedTopicId;
 
   async function chamarAcaoAdmin(acao: "marcar-pendente" | "excluir-topico") {
     if (!selectedTopic || !idTopicoAdmin) return;
