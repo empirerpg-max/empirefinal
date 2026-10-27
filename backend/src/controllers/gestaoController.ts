@@ -3142,6 +3142,21 @@ export async function uploadDriveController(request: Request): Promise<Response>
     // explicando o que deu errado. Agora isso é um erro explícito, nunca
     // mais um "sucesso" fingido.
     if (!base64Data) {
+      // Esse branch nunca gravava em LOGS (categoria "Falha de escrita") —
+      // era um ponto cego de verdade: se isso continuasse acontecendo (ex:
+      // FileReader falhando num arquivo de vídeo grande, ou o campo "file"
+      // vindo vazio do FormData em alguns navegadores/condições de rede),
+      // não tinha nenhum rastro acessível além do 400 que o jogador via na
+      // hora — impossível confirmar se é raro ou recorrente sem isso.
+      registrarLogSistema({
+        categoria: "Falha de escrita",
+        oQueAconteceu: `Upload de "${fileName || "(sem nome)"}" (folderType=${folderType}) chegou vazio — nenhum arquivo de verdade foi enviado pro Drive.`,
+        onde: "gestaoController.uploadMidiaController",
+        causaProvavel:
+          "O navegador não conseguiu ler o arquivo de verdade antes de enviar (FileReader falhou, ou o campo 'file' do FormData chegou vazio) — comum em arquivos grandes de vídeo numa conexão instável.",
+        comoResolver: "Tente selecionar o arquivo de novo; se persistir, teste noutra rede/navegador e avise com o tamanho do arquivo.",
+        detalheTecnico: `fileName=${fileName} mimeType=${mimeType} folderType=${folderType}`,
+      }).catch(() => {});
       return new Response(
         JSON.stringify({
           success: false,
