@@ -1146,6 +1146,7 @@ export const Forum: React.FC<ForumProps> = ({
                   disabled={!!adminActionLoading}
                   onClick={() => {
                     setExcluirConfirmText("");
+                    setAdminActionMsg(null);
                     setShowExcluirConfirm(true);
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-bold transition disabled:opacity-50 min-w-0"
@@ -1695,6 +1696,19 @@ export const Forum: React.FC<ForumProps> = ({
                     placeholder="Digite o título aqui"
                     className="w-full px-3 py-2 rounded-lg bg-neutral-800 border border-white/10 text-white text-sm outline-none focus:border-red-500/50"
                   />
+                  {/* BUG REAL de UI (2026-10-27): adminActionMsg (erro de
+                      "Excluir de verdade"/"Marcar como pendente") renderiza
+                      lá embaixo, na barra de ferramentas do tópico — atrás
+                      DESTE modal (z-[60], fundo opaco). Quando a exclusão
+                      falhava, o admin via o modal continuar aberto sem
+                      NENHUMA explicação visível — a mensagem real existia,
+                      só ficava tapada. Mostra também aqui dentro, onde dá
+                      pra ler de verdade. */}
+                  {adminActionMsg && (
+                    <p className="text-xs font-semibold text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 break-words">
+                      {adminActionMsg}
+                    </p>
+                  )}
                   <div className="flex gap-2">
                     <button
                       type="button"
