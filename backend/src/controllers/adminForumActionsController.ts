@@ -106,6 +106,32 @@ async function acharLinhaPorTopico(tipo: TipoTopico, idTopico: string): Promise<
       return { rowIndex: i + 1, row: rows[i] };
     }
   }
+  // DIAGNÓSTICO TEMPORÁRIO (2026-10-27): "Excluir tópico"/"Marcar como
+  // pendente" continuavam devolvendo "não encontrado" pro vídeo
+  // video_1792938342534_3pzg93 mesmo com a linha comprovadamente existindo
+  // na planilha (confirmado via leitura direta minutos antes). Sem acesso
+  // ao token de sessão do admin pra reproduzir a chamada exata, não dá pra
+  // saber se o "tipo"/"idTopico" que CHEGA aqui é mesmo o esperado (bundle
+  // antigo em cache no navegador do admin? Service Worker sem atualizar?
+  // caractere invisível no id?) — loga o valor exato recebido (com
+  // comprimento e cada char code) e os primeiros ids reais da coluna, pra
+  // comparar byte a byte na próxima tentativa real, em vez de continuar
+  // só supondo.
+  registrarLogSistema({
+    categoria: "Erro do app",
+    oQueAconteceu: `acharLinhaPorTopico não achou nenhuma linha em "${sheetName}" pro tipo="${tipo}" idTopico="${idTopico}".`,
+    onde: "adminForumActionsController.acharLinhaPorTopico",
+    causaProvavel: "Investigação em andamento — ver detalhe técnico pra comparar com os ids reais da planilha.",
+    comoResolver: "Mandar pro Claude: detalheTecnico tem o id recebido (com códigos de caractere) e uma amostra dos ids reais da coluna.",
+    detalheTecnico: JSON.stringify({
+      tipo,
+      idTopicoRecebido: idTopico,
+      tamanho: idTopico.length,
+      charCodes: Array.from(idTopico).map((c) => c.charCodeAt(0)),
+      idNormalizado: idNorm,
+      amostraIdsReais: rows.slice(1, 400).map((r) => r[colIdTopico]).filter(Boolean).slice(0, 15),
+    }),
+  }).catch(() => {});
   return null;
 }
 
