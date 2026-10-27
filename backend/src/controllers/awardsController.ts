@@ -5,6 +5,7 @@ import {
   normalizeComparison,
 } from "../services/googleSheetsService";
 import { buildCleanItem } from "./empirePlayController";
+import { cachedRead } from "../services/shortCache";
 
 // Fonte: mesma planilha "premiacoes" usada em Perfil > Premiações
 // (premiacoesController.ts), mas aqui é leitura pública/histórica pro botão
@@ -120,7 +121,22 @@ type EntradaFlat = {
 // hardcoded) e devolve só as linhas com resultado de verdade (Artista
 // preenchido) — base compartilhada pro agregado por artista (aba "Awards"
 // no perfil) e pro badge de vencedor/indicado no Fórum.
+// BUG REAL de produção (2026-10-27): essa função lê a aba mestre + TODAS as
+// abas de premiação individuais (Grammy, Billboard, BRIT, MTV VMAs, AMAs,
+// Latin Grammys, MTV EMAs, MAMA, People's Choice...) EM PARALELO, sem cache
+// nenhum, toda vez que alguém abre "Awards" no Acervo ou um perfil de
+// artista. Confirmado nos logs reais (logsSistema!LOGS): rajadas de 5-9
+// "Quota exceeded" simultâneas vindas exatamente dessas leituras, batendo no
+// limite de requisições/minuto da API do Sheets e derrubando OUTRAS telas
+// sem relação nenhuma (charts, fórum) que tentavam ler na mesma janela —
+// exatamente o padrão "several people reporting random failures" relatado.
+// Resultado de premiação passada não muda sozinho — cache de 10min é
+// seguro e corta esse fan-out de ~9 leituras pra 0 na maioria das chamadas.
 async function readAllPremiacoesFlat(): Promise<EntradaFlat[]> {
+  return cachedRead("awards:flat-all", 10 * 60_000, () => readAllPremiacoesFlatUncached());
+}
+
+async function readAllPremiacoesFlatUncached(): Promise<EntradaFlat[]> {
   const awardsRows = await readValues(SPREADSHEET_KEY, AWARDS_MASTER_SHEET, "A:B");
   const awardNames = awardsRows.slice(1).map((row) => normalizeText(row[0])).filter(Boolean);
 
