@@ -944,7 +944,11 @@ export async function handleEmpireApiRoutes(
     // reconciliacaoRegistroController.ts/reconciliarTudoAditivo. DRY-RUN
     // por padrão; só grava com ?confirmar=1.
     const confirmarAditivo = url.searchParams.get("confirmar") === "1";
-    const resultadoAditivo = await reconciliarTudoAditivo(confirmarAditivo);
+    const artistasParam = url.searchParams.get("artistas") || "";
+    const filtrarArtistasParam = artistasParam
+      ? artistasParam.split(",").map((a) => a.trim()).filter(Boolean)
+      : undefined;
+    const resultadoAditivo = await reconciliarTudoAditivo(confirmarAditivo, filtrarArtistasParam);
     response = new Response(JSON.stringify({ success: true, data: resultadoAditivo }), {
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },

@@ -123,7 +123,15 @@ async function coletarComentariosResolvidos(): Promise<ComentarioResolvido[]> {
 // Pedido explícito do usuário (2026-10-28): comentários reais de Max
 // Gorghan/TED/Rayna/Hayley (e qualquer outro jogador) da semana sem
 // registro correspondente. DRY-RUN por padrão; só grava com confirmar=true.
-export async function reconciliarTudoAditivo(confirmar: boolean): Promise<{
+export async function reconciliarTudoAditivo(
+  confirmar: boolean,
+  // Filtro opcional: só processa chaves cujo `conteudo` contenha algum
+  // desses nomes de artista (normalizado) — usado pra escopos retroativos
+  // pontuais (ex: só os 4 artistas pedidos, não o backlog histórico
+  // inteiro, que é um universo bem maior — 1921 linhas em todo o histórico
+  // vs. um punhado desses 4 artistas).
+  filtrarArtistas?: string[],
+): Promise<{
   confirmar: boolean;
   chavesFaltantes: number;
   linhasFaltantes: number;
@@ -184,9 +192,12 @@ export async function reconciliarTudoAditivo(confirmar: boolean): Promise<{
     contagemRegistro.set(chave, (contagemRegistro.get(chave) || 0) + 1);
   }
 
+  const artistasNorm = (filtrarArtistas || []).map((a) => normalizeComparison(a)).filter(Boolean);
+
   const faltantes = [...contagemComentarios.entries()]
     .map(([chave, dado]) => ({ ...dado, faltam: dado.count - (contagemRegistro.get(chave) || 0) }))
     .filter((d) => d.faltam > 0)
+    .filter((d) => artistasNorm.length === 0 || artistasNorm.some((a) => normalizeComparison(d.conteudo).includes(a)))
     .sort((a, b) => a.jogador.localeCompare(b.jogador));
 
   const linhasFaltantes = faltantes.reduce((soma, d) => soma + d.faltam, 0);
