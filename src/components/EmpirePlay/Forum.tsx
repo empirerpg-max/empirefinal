@@ -861,7 +861,7 @@ export const Forum: React.FC<ForumProps> = ({
           replyTo: replyBoxFor.rootId,
         }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (json?.success) {
         setExpandedReplies((prev) => new Set(prev).add(replyBoxFor.rootId));
         fetchTopicComments(selectedTopic);
@@ -869,9 +869,18 @@ export const Forum: React.FC<ForumProps> = ({
         if (topicKey) setCommentedTopicIds((prev) => new Set(prev).add(topicKey));
         setReplyBoxFor(null);
         setReplyText("");
+      } else {
+        // BUG REAL (2026-10-28, "comentários sumindo"): quando a resposta
+        // falhava (agora reportada de verdade pelo backend — ver
+        // createCommentController), nada acontecia aqui, sem nenhum aviso —
+        // o jogador achava que tinha respondido e seguia em frente, mas a
+        // linha nunca existiu na planilha. O texto digitado fica no campo
+        // (não perde nada), mas o erro agora é visível de verdade.
+        alert(json?.error || "Não deu pra enviar sua resposta. Tente de novo.");
       }
     } catch (err) {
       console.error("Erro ao responder comentário:", err);
+      alert("Não deu pra enviar sua resposta (falha de rede). Tente de novo.");
     } finally {
       setSendingReply(false);
     }

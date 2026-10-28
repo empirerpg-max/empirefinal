@@ -187,34 +187,33 @@ const COMMENT_ROW_WIDTH = 7;
  * num intervalo FIXO A{linha}:G{linha}, relendo pra confirmar que ninguém
  * colidiu antes de considerar salvo.
  */
-async function acharProximaLinhaVaziaComentarios(sheet: string): Promise<number> {
-  const rows = await googleSheetsService.principal.readValues(sheet, "A:G");
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i] || [];
-    const vazia = !row.slice(0, COMMENT_ROW_WIDTH).some((c) => normalizeText(c));
-    if (vazia) return i + 1;
-  }
-  return rows.length + 1;
-}
-
+// BUG REAL definitivo (2026-10-28, relatado mais de uma vez: comentários do
+// catálogo "sumindo" / registro nunca existiu na planilha): a versão antiga
+// aqui achava a "primeira linha vazia" numa leitura própria e gravava por
+// cima dela com updateValues — sob VÁRIOS jogadores comentando ao mesmo
+// tempo (pico de acesso real, catálogo/fórum movimentado), duas requisições
+// podiam escolher a MESMA linha vazia antes de qualquer uma escrever; quem
+// escrevia por último "vencia" a linha, e a leitura de confirmação do
+// perdedor via o dado do outro jogador ali, disparando um retry (até 3x).
+// Sob carga sustentada isso podia colidir nas 3 tentativas e DESISTIR —
+// devolvendo null pro chamador, que (bug irmão, corrigido logo abaixo)
+// reportava "sucesso" mesmo assim: o comentário nunca existiu na planilha,
+// mas o jogador via a mensagem de confirmação normal. Isso também
+// explicava o rating/nota às vezes sumindo junto (gravado pela mesma
+// lógica de linha).
+//
+// Correção definitiva: usa o :append nativo da API do Sheets
+// (googleSheetsService.appendRow), que o Google já serializa no lado dele
+// — duas gravações concorrentes na mesma aba NUNCA colidem na mesma linha,
+// sem precisar de leitura+escrita+confirmação própria nenhuma. Já vem com
+// retry embutido (3x) e, se mesmo assim falhar de verdade, já grava em
+// LOGS (logsSistema) sozinho — nenhuma lógica extra precisa reimplementar
+// isso aqui.
 async function gravarComentario(sheet: string, valores: string[]): Promise<number | null> {
-  const MAX_TENTATIVAS = 3;
-  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
-    const linha = await acharProximaLinhaVaziaComentarios(sheet);
-    await googleSheetsService.principal.updateValues(sheet, `A${linha}:G${linha}`, [valores]);
-
-    const confirmacao = await googleSheetsService.principal.readValues(sheet, `A${linha}`);
-    if (normalizeText(confirmacao?.[0]?.[0]) === normalizeText(String(valores[0]))) {
-      return linha;
-    }
-    console.warn(
-      `[ForumController] Colisão ao gravar comentário em ${sheet} na linha ${linha} (tentativa ${tentativa}/${MAX_TENTATIVAS}) — tentando de novo.`,
-    );
-  }
-  console.warn(
-    `[ForumController] Não foi possível gravar comentário em ${sheet} após retries — colisão persistente.`,
-  );
-  return null;
+  return googleSheetsService.principal.appendRow(sheet, valores, "A:G").catch((err) => {
+    console.warn(`[ForumController] Falha definitiva ao gravar comentário em ${sheet}:`, err);
+    return null;
+  });
 }
 
 export function rollRandomScore(intervaloStr: string): number {
@@ -547,6 +546,23 @@ export async function createCommentController(
       return null;
     });
     invalidarCacheComentariosForum();
+
+    // EXIGÊNCIA do usuário (regra permanente desta sessão): uma ação nunca
+    // pode reportar sucesso quando a escrita real na planilha falhou — era
+    // exatamente isso que fazia comentários "sumirem" (o jogador via "sucesso"
+    // e seguia em frente, mas a linha nunca existiu). gravarComentario() já
+    // tenta 3x via appendRow nativo (ver comentário lá); null aqui significa
+    // falha definitiva de verdade, não colisão — erro real pro jogador, com
+    // instrução clara de reenviar, em vez de um "sucesso" fingido.
+    if (newRowIndex === null) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Não consegui salvar seu comentário agora (falha na planilha). Tente enviar de novo em alguns segundos.",
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
 
     // Espelha no D1 (Fase 1 da migração, ver catalogoDbService.ts) — nunca
     // bloqueia nem falha o comentário (Sheets já é a resposta real acima);
