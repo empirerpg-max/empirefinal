@@ -131,6 +131,10 @@ export async function reconciliarTudoAditivo(
   // inteiro, que é um universo bem maior — 1921 linhas em todo o histórico
   // vs. um punhado desses 4 artistas).
   filtrarArtistas?: string[],
+  // Filtro opcional extra: só processa chaves de UM jogador específico
+  // (comparado normalizado) — pedido explícito: só o Daniel, não todo
+  // mundo que comentou nos 4 artistas.
+  filtrarJogador?: string,
 ): Promise<{
   confirmar: boolean;
   chavesFaltantes: number;
@@ -193,11 +197,13 @@ export async function reconciliarTudoAditivo(
   }
 
   const artistasNorm = (filtrarArtistas || []).map((a) => normalizeComparison(a)).filter(Boolean);
+  const jogadorNorm = filtrarJogador ? normalizeComparison(filtrarJogador) : "";
 
   const faltantes = [...contagemComentarios.entries()]
     .map(([chave, dado]) => ({ ...dado, faltam: dado.count - (contagemRegistro.get(chave) || 0) }))
     .filter((d) => d.faltam > 0)
     .filter((d) => artistasNorm.length === 0 || artistasNorm.some((a) => normalizeComparison(d.conteudo).includes(a)))
+    .filter((d) => !jogadorNorm || normalizeComparison(d.jogador) === jogadorNorm)
     .sort((a, b) => a.jogador.localeCompare(b.jogador));
 
   const linhasFaltantes = faltantes.reduce((soma, d) => soma + d.faltam, 0);

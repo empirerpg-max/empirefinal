@@ -948,7 +948,8 @@ export async function handleEmpireApiRoutes(
     const filtrarArtistasParam = artistasParam
       ? artistasParam.split(",").map((a) => a.trim()).filter(Boolean)
       : undefined;
-    const resultadoAditivo = await reconciliarTudoAditivo(confirmarAditivo, filtrarArtistasParam);
+    const filtrarJogadorParam = url.searchParams.get("jogador") || undefined;
+    const resultadoAditivo = await reconciliarTudoAditivo(confirmarAditivo, filtrarArtistasParam, filtrarJogadorParam);
     response = new Response(JSON.stringify({ success: true, data: resultadoAditivo }), {
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
