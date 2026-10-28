@@ -7,6 +7,7 @@ import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, t
 import { SmartImg } from "@/components/SmartImg";
 import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin } from "@/components/LoginScreen";
+import { useTelegramUser } from "@/lib/telegram";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
 import { resolveStreamEmbed, kickChannelFromUrl, forceUnmuteIframe, hasUnmutedThisSession } from "@/lib/tvEmbed";
@@ -2087,6 +2088,14 @@ function RedCarpetPanel({
   onHighlightConsumed: () => void;
 }) {
   const login = getStoredLogin();
+  // Exibição dos artistas copiada direto do Social (ver social.tsx,
+  // loadContext): mesma fonte de identidade (useTelegramUser), mesma
+  // chamada (api.meusArtistas). O Red Carpet usava getStoredLogin() aqui,
+  // uma fonte de id DIFERENTE da que o Social usa — pra um jogador cujo
+  // login salvo não bate 1:1 com o id em ARTISTAS, os artistas sumiam só
+  // no Red Carpet, mesmo aparecendo certinho no Social. Sem mistério:
+  // mesma lógica, mesmo resultado nos dois lugares.
+  const { user: tgUser } = useTelegramUser();
   const storiesStripScroll = useDragScroll<HTMLDivElement>();
   const [posts, setPosts] = useState<RedCarpetPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2107,9 +2116,10 @@ function RedCarpetPanel({
 
   useEffect(() => {
     load();
-    if (login?.id) api.meusArtistas(login.id, login.usuario).then(setMyArtists);
+    const tgId = tgUser?.id || "";
+    if (tgId) api.meusArtistas(tgId).then(setMyArtists);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [programa.id]);
+  }, [programa.id, tgUser?.id]);
 
   useEffect(() => {
     if (!highlightPostId || posts.length === 0) return;
