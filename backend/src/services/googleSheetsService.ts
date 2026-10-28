@@ -289,7 +289,7 @@ function invalidateReadCache(spreadsheetId: string, sheetName: string): void {
 // ser lido com garantia de ser o valor de verdade (ver
 // googleSheetsService.principal.readValuesRaw, usado por
 // preSaveController.ts/readAllCampanhas).
-type ValueRenderOption = "FORMATTED_VALUE" | "UNFORMATTED_VALUE";
+type ValueRenderOption = "FORMATTED_VALUE" | "UNFORMATTED_VALUE" | "FORMULA";
 
 export async function readValues(
   spreadsheetKeyOrId: SpreadsheetKey | string,
@@ -838,7 +838,10 @@ export const googleSheetsService = {
   },
   // Charts — só leitura, planilhas editoriais mantidas fora do app.
   chartsBase: {
-    readValues: (sheetName: string, range?: string) => readValues("chartsBase", sheetName, range),
+    readValues: (sheetName: string, range?: string, valueRenderOption?: "FORMATTED_VALUE" | "UNFORMATTED_VALUE" | "FORMULA") =>
+      readValues("chartsBase", sheetName, range, valueRenderOption),
+    updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
+      updateValues("chartsBase", sheetName, range, values),
   },
   chartsCountries: {
     readValues: (sheetName: string, range?: string) =>

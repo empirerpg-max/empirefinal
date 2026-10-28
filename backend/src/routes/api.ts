@@ -270,6 +270,7 @@ import { adminFixHeHayleyPendenteController } from "../controllers/adminFixHeHay
 import { adminFixVarreduraPendentesD1Controller } from "../controllers/adminFixVarreduraPendentesD1Controller";
 import { adminDiagChartSheetRowController } from "../controllers/adminDiagChartSheetRowController";
 import { adminDiagUsuarioArtistaController } from "../controllers/adminDiagUsuarioArtistaController";
+import { adminDiagFormulaPaisController } from "../controllers/adminDiagFormulaPaisController";
 import { adminFixCapaStampOnItController } from "../controllers/adminFixCapaStampOnItController";
 import { adminDiagVarreduraChartCapasController } from "../controllers/adminDiagVarreduraChartCapasController";
 import { adminFixVarreduraChartCapasController } from "../controllers/adminFixVarreduraChartCapasController";
@@ -2162,6 +2163,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagChartSheetRowController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-usuario-artista") {
     response = await adminDiagUsuarioArtistaController(request);
+  } else if (url.pathname === "/api/empire-play/admin/diag-formula-pais") {
+    response = await adminDiagFormulaPaisController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-capa-stamp-on-it") {
     response = await adminFixCapaStampOnItController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-varredura-chart-capas") {
