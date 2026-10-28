@@ -6,6 +6,7 @@ import {
   dedupeHeaders,
 } from "../services/googleSheetsService";
 import { registrarLogSistema } from "../services/logSistemaService";
+import { cachedRead } from "../services/shortCache";
 
 const ARTISTAS_SHEET = "ARTISTAS";
 const USUARIOS_SHEET = "Usuários";
@@ -143,7 +144,18 @@ interface ArtistasRow {
 }
 
 async function readArtistasRows(): Promise<ArtistasRow[]> {
-  const rawRows = await googleSheetsService.usuarios.readValues(ARTISTAS_SHEET).catch(() => []);
+  // BUG REAL de produção (2026-10-28, evento ao vivo VMAs): ARTISTAS é a
+  // aba mais lida do app inteiro — toda tela que mostra "postando como",
+  // lista de artistas do jogador, ou o catálogo completo, passa por aqui.
+  // O cache embutido em readValues() já ajuda (15s), mas é por isolate —
+  // sob pico real de acesso simultâneo (vários jogadores, vários isolates
+  // "frios" ao mesmo tempo), isso sozinho não bastou: "Quota exceeded"
+  // apareceu pro jogador tentando postar no Red Carpet. Cache mais longo
+  // (45s) aqui, explícito, dá mais margem sem defasar visivelmente (saldo/
+  // seguidores não mudam segundo a segundo).
+  const rawRows = await cachedRead("artistas:raw-rows", 45_000, () =>
+    googleSheetsService.usuarios.readValues(ARTISTAS_SHEET).catch(() => []),
+  );
   if (!rawRows || rawRows.length < 2) return [];
   const headers = dedupeHeaders(
     ARTISTAS_SHEET,
