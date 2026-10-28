@@ -212,11 +212,41 @@ export async function reconciliarTudoAditivo(
     };
   }
 
-  let linhasGravadas = 0;
+  // BUG DE DESEMPENHO achado ao vivo (2026-10-28): gravarLinhaRegistro()
+  // relê a aba REGISTRO INTEIRA do zero a cada chamada (pra achar "a
+  // próxima linha livre" com segurança contra colisão de outro escritor
+  // concorrente) — ótimo pra 1 gravação isolada (reação a um comentário
+  // novo), péssimo aqui: com centenas de linhas faltando, isso é centenas
+  // de leituras completas + escritas + confirmações, sequenciais, uma por
+  // uma. Na prática estourava o tempo do Worker antes de terminar (visto
+  // ao vivo: só ~11 de 334 linhas gravadas antes do "Erro interno").
+  // Esse backfill roda isolado (não há jogador comentando ENQUANTO o admin
+  // roda essa reconciliação pontual), então não precisa da proteção
+  // anti-colisão por linha — já leu `registroRows` UMA vez (acima, pra
+  // contagem) e escreve tudo de uma vez só, num único updateValuesBatch.
+  const todasLinhas: string[][] = [];
   for (const d of faltantes) {
-    for (let n = 0; n < d.faltam; n++) {
-      const ok = await gravarLinhaRegistro([d.jogador, d.conteudo, d.tipo]);
-      if (ok) linhasGravadas++;
+    for (let n = 0; n < d.faltam; n++) todasLinhas.push([d.jogador, d.conteudo, d.tipo]);
+  }
+
+  let linhasGravadas = 0;
+  if (todasLinhas.length > 0) {
+    const ultimaLinhaComConteudo = registroRows.length; // readValues já exclui linhas vazias no fim
+    const primeiraLinhaLivre = ultimaLinhaComConteudo + 1;
+    const entries = todasLinhas.map((valores, i) => ({
+      sheetName: "REGISTRO",
+      range: `B${primeiraLinhaLivre + i}:D${primeiraLinhaLivre + i}`,
+      values: [valores],
+    }));
+    // Lotes de 100 — updateValuesBatch numa chamada só de milhares de
+    // células é arriscado demais (um timeout no meio perde tudo); lotes
+    // menores progridem e cada um já é MUITO mais rápido que o caminho
+    // antigo (1 chamada em vez de 3 POR LINHA).
+    const TAMANHO_LOTE = 100;
+    for (let i = 0; i < entries.length; i += TAMANHO_LOTE) {
+      const lote = entries.slice(i, i + TAMANHO_LOTE);
+      await googleSheetsService.registrosCharts.updateValuesBatch(lote);
+      linhasGravadas += lote.length;
     }
   }
 
