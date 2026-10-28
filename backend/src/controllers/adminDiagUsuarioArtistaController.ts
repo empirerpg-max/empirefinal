@@ -9,11 +9,41 @@ import { googleSheetsService, normalizeComparison, normalizeText, dedupeHeaders,
 export async function adminDiagUsuarioArtistaController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const alvo = normalizeComparison(url.searchParams.get("usuario") || "");
-  if (!alvo) {
-    return new Response(JSON.stringify({ success: false, error: "usuario é obrigatório." }), {
+  const alvoArtista = normalizeComparison(url.searchParams.get("artista") || "");
+  if (!alvo && !alvoArtista) {
+    return new Response(JSON.stringify({ success: false, error: "usuario ou artista é obrigatório." }), {
       status: 400,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
+  }
+
+  // Busca direto por nome de artista em ARTISTAS — acha o id_usuario (dono)
+  // cadastrado e cruza de volta com a linha dele em Usuários, pro caso de o
+  // nome de login não ter nada a ver com o nome do artista (ex: "Samantha
+  // Cooper" pode pertencer a um login "wesley123").
+  if (alvoArtista) {
+    const artistasRaw = await googleSheetsService.usuarios.readValues("ARTISTAS").catch(() => []);
+    const aHeaders = dedupeHeaders("ARTISTAS", artistasRaw[0]?.map((h, i) => normalizeHeader(h) || `coluna_${i + 1}`) || []);
+    const aNomeCol = aHeaders.indexOf("nome");
+    const aOwnerCol = aHeaders.indexOf("id_usuario");
+    const linhasArtista = artistasRaw.slice(1)
+      .filter((r) => normalizeComparison(r[aNomeCol] || "").includes(alvoArtista))
+      .map((r) => ({ nome: r[aNomeCol] || "", id_usuario_raw: r[aOwnerCol] || "" }));
+
+    const usuariosRaw = await googleSheetsService.usuarios.readValues("Usuários").catch(() => []);
+    const uHeaders = dedupeHeaders("Usuários", usuariosRaw[0]?.map((h, i) => normalizeHeader(h) || `coluna_${i + 1}`) || []);
+    const uUsuarioCol = uHeaders.indexOf("usuario");
+    const uNomeCol = uHeaders.indexOf("nome");
+    const uIdCol = uHeaders.indexOf("id");
+    const idsAlvo = new Set(linhasArtista.map((l) => normalizeText(l.id_usuario_raw)));
+    const donosEncontrados = usuariosRaw.slice(1)
+      .filter((r) => idsAlvo.has(normalizeText(r[uIdCol] || "")))
+      .map((r) => ({ usuario: r[uUsuarioCol] || "", nome: r[uNomeCol] || "", id_raw: r[uIdCol] || "" }));
+
+    return new Response(
+      JSON.stringify({ success: true, buscaPorArtista: alvoArtista, linhasArtista, donosEncontrados }, null, 2),
+      { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
+    );
   }
 
   const usuariosRaw = await googleSheetsService.usuarios.readValues("Usuários").catch(() => []);
