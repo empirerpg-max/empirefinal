@@ -1901,14 +1901,32 @@ function RedCarpetComposer({
         formData.append("file", file);
         formData.append("fileName", file.name);
         formData.append("folderType", "redCarpet");
-        const res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
+        // BUG REAL de UI (2026-10-28, reportado como "Red Carpet não
+        // funciona"): quando o upload falhava (rede, erro do servidor,
+        // arquivo rejeitado), nada acontecia aqui — sem foto adicionada,
+        // sem NENHUM aviso. Quem tentava postar via tv a via só o quadrado
+        // tracejado vazio de novo, sem pista nenhuma do motivo, e o botão
+        // "Publicar" continuava travado (exige fotos.length > 0) sem
+        // explicação. Agora todo erro real vira um alert com o motivo.
+        let res: Response;
+        try {
+          res = await fetch("/api/gestao/upload", { method: "POST", body: formData });
+        } catch (networkErr) {
+          console.error("[RedCarpetComposer] Erro de rede no upload:", networkErr);
+          alert("Não deu pra enviar a foto (falha de rede). Tente de novo.");
+          continue;
+        }
         const data = await res.json().catch(() => null);
         if (res.ok && data?.success && data?.data?.fileUrl) {
           setFotos((prev) => [...prev, data.data.fileUrl as string]);
+        } else {
+          console.error("[RedCarpetComposer] Upload falhou:", res.status, data);
+          alert(data?.error || `Não deu pra enviar a foto (erro ${res.status}). Tente de novo.`);
         }
       }
     } catch (err) {
       console.error("[RedCarpetComposer] Erro no upload:", err);
+      alert("Não deu pra enviar a foto. Tente de novo.");
     } finally {
       setUploading(false);
     }
