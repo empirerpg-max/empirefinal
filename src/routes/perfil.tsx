@@ -151,7 +151,7 @@ function Perfil() {
       return;
     }
     api
-      .meusArtistas(user.id, user.name)
+      .meusArtistas(user.id)
       .then((d) => setMyArtists({ status: "ok", data: d }))
       .catch(() => setMyArtists({ status: "error" }));
   }, [user]);

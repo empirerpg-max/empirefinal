@@ -1050,10 +1050,7 @@ function SocialPage() {
 
   async function loadContext() {
     const tgId = user?.id || "";
-    // Mesmo fallback do Red Carpet (ver api.meusArtistas): cobre sessão de
-    // teste/manual fora do Telegram (setUserManually, ver lib/telegram.ts)
-    // cujo id não bate com o dono cadastrado em ARTISTAS.
-    const arts = await api.meusArtistas(tgId, user?.name);
+    const arts = await api.meusArtistas(tgId);
     setMyArtists(arts);
 
     const allArts = await api.listarTodos();
