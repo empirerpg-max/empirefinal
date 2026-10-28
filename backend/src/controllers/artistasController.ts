@@ -885,7 +885,23 @@ export async function getMeusArtistasNomesController(request: Request): Promise<
       });
     }
 
-    const nomes = await getArtistNamesForOwner(telegramId);
+    let nomes = await getArtistNamesForOwner(telegramId);
+    // BUG REAL de produção (2026-10-28): fallback por `usuario` só rodava
+    // quando `telegramId` vinha TOTALMENTE vazio — mas o caso real
+    // encontrado foi um `telegramId` preenchido (ex: vindo de
+    // getStoredLogin()/impersonação) que simplesmente não bate com o dono
+    // cadastrado em ARTISTAS!id_usuario (IDs históricos divergentes,
+    // sessão de login diferente da de Telegram, etc). Nesse caso a busca
+    // silenciosamente devolvia lista vazia — "sumiram meus artistas" sem
+    // erro nenhum, mesmo com `usuario` disponível e resolvendo certinho.
+    // Tenta de novo por `usuario`/`nome` sempre que o telegramId não achar
+    // nada, não só quando ele vier vazio.
+    if (nomes.length === 0 && usuario) {
+      const idPorUsuario = await resolveIdByUsuario(usuario);
+      if (idPorUsuario && idPorUsuario !== telegramId) {
+        nomes = await getArtistNamesForOwner(idPorUsuario);
+      }
+    }
 
     return new Response(JSON.stringify({ success: true, data: nomes }), {
       status: 200,

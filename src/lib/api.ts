@@ -389,10 +389,17 @@ export const api = {
   // jogador e casa contra a aba ARTISTAS; aqui só cruzamos os nomes
   // devolvidos com a lista completa de artistas (ainda vinda do Apps
   // Script) pra ter os dados econômicos de cada um.
-  async meusArtistas(telegramId: string): Promise<Artist[]> {
+  async meusArtistas(telegramId: string, usuarioFallback?: string): Promise<Artist[]> {
     if (!telegramId || telegramId === "guest") return [];
+    // `usuarioFallback` (login.usuario, quando disponível): o backend tenta
+    // de novo por nome de usuário se o telegramId não achar nenhum artista
+    // — cobre o caso real de telegramId divergente do dono cadastrado em
+    // ARTISTAS (ex: sessão de impersonação/login fora do Telegram) sem
+    // quebrar nada pra quem já funciona normalmente.
+    const qs = new URLSearchParams({ telegramId });
+    if (usuarioFallback) qs.set("usuario", usuarioFallback);
     const [nomesRes, todos] = await Promise.all([
-      fetch(`/api/artistas/meus-nomes?telegramId=${encodeURIComponent(telegramId)}`)
+      fetch(`/api/artistas/meus-nomes?${qs.toString()}`)
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
       api.listarTodos(),

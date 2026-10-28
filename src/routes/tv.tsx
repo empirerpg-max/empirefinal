@@ -2107,7 +2107,7 @@ function RedCarpetPanel({
 
   useEffect(() => {
     load();
-    if (login?.id) api.meusArtistas(login.id).then(setMyArtists);
+    if (login?.id) api.meusArtistas(login.id, login.usuario).then(setMyArtists);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programa.id]);
 
