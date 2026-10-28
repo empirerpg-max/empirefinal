@@ -200,6 +200,20 @@ export async function listSheetTabs(
   }));
 }
 
+// Lê o locale configurado na planilha (ex: "pt_BR", "en_US") — determina
+// se fórmulas usam "," ou ";" como separador de argumento de função. Usado
+// pra diagnosticar "Erro de análise de fórmula" quando o texto de uma
+// fórmula colada usa o separador errado pro locale real da planilha.
+export async function getSpreadsheetLocale(spreadsheetKeyOrId: SpreadsheetKey | string): Promise<string> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const response = await sheetsRequest<{ properties?: { locale?: string } }>(
+    `/${spreadsheetId}?fields=properties.locale`,
+    { method: "GET" },
+    [SHEETS_READONLY_SCOPE],
+  );
+  return response.properties?.locale || "";
+}
+
 // Cria uma aba nova numa planilha, se ainda não existir (idempotente —
 // usado pra abas auxiliares de importação em lote).
 export async function ensureSheetTab(

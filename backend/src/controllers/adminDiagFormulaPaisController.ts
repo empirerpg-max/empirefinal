@@ -1,4 +1,4 @@
-import { googleSheetsService } from "../services/googleSheetsService";
+import { googleSheetsService, getSpreadsheetLocale } from "../services/googleSheetsService";
 
 // Só leitura. Lê a fórmula RAW (valueRenderOption=FORMULA, não o valor
 // calculado) da célula A2 de uma ou mais abas de país em "chartsBase"
@@ -23,6 +23,8 @@ export async function adminDiagFormulaPaisController(request: Request): Promise<
     });
   }
 
+  const locale = await getSpreadsheetLocale("chartsBase").catch((err) => `erro: ${err instanceof Error ? err.message : String(err)}`);
+
   const resultados: Record<string, { formula: string | null; length: number; erro?: string }> = {};
 
   for (const sheet of sheets) {
@@ -35,7 +37,7 @@ export async function adminDiagFormulaPaisController(request: Request): Promise<
     }
   }
 
-  return new Response(JSON.stringify({ success: true, resultados }, null, 2), {
+  return new Response(JSON.stringify({ success: true, locale, resultados }, null, 2), {
     status: 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
