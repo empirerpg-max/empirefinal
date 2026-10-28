@@ -903,6 +903,19 @@ export async function getMeusArtistasNomesController(request: Request): Promise<
       }
     }
 
+    // DIAGNÓSTICO TEMPORÁRIO (2026-10-28): "meus artistas" devolvendo vazio
+    // pro daniel/vicccky mesmo com o dado da planilha comprovadamente
+    // batendo (ver diagnostico-usuario-artista) — só uma forma de ver o que
+    // o NAVEGADOR de verdade manda nessa chamada, sem adivinhar mais.
+    if (nomes.length === 0) {
+      registrarLogSistema({
+        categoria: "Erro do app",
+        oQueAconteceu: `getMeusArtistasNomesController devolveu 0 artistas — telegramId="${telegramId}" usuario="${usuario}".`,
+        onde: "artistasController.getMeusArtistasNomesController",
+        detalheTecnico: `url=${request.url} | telegramIdParam=${url.searchParams.get("telegramId")} | usuarioParam=${url.searchParams.get("usuario")} | nomeParam=${url.searchParams.get("nome")} | userAgent=${request.headers.get("user-agent") || ""}`,
+      }).catch(() => {});
+    }
+
     return new Response(JSON.stringify({ success: true, data: nomes }), {
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },

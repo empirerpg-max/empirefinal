@@ -2117,7 +2117,7 @@ function RedCarpetPanel({
   useEffect(() => {
     load();
     const tgId = tgUser?.id || "";
-    if (tgId) api.meusArtistas(tgId).then(setMyArtists);
+    if (tgId) api.meusArtistas(tgId, login?.usuario).then(setMyArtists);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programa.id, tgUser?.id]);
 
