@@ -1894,16 +1894,15 @@ function RedCarpetComposer({
     setUploading(true);
     try {
       for (const original of escolhidas) {
-        // URGENTE (2026-10-28, VMAs ao vivo): tirado o passo de recorte
-        // (useImageCrop/ImageCropModal) daqui — relatado por vários
-        // jogadores ao mesmo tempo como "escolho a foto e não acontece
-        // nada", exatamente a assinatura de uma Promise que nunca resolve
-        // nem rejeita (o modal de recorte não aparecendo/travando por
-        // algum motivo ainda não isolado). Recorte aqui é só um "nice to
-        // have" (o app já lida com qualquer proporção) — sobe a foto
-        // original direto, sem esse passo a mais no meio, pra destravar
-        // a publicação agora.
-        const file = original;
+        // Recorte restaurado (2026-10-28): a causa real do travamento era a
+        // FileList esvaziada antes de ler (ver onChange do input abaixo),
+        // não o modal de recorte em si — removê-lo foi só um corte de
+        // escopo temporário pra destravar rápido durante o evento ao vivo.
+        // Com os arquivos agora chegando aqui de verdade (snapshot já
+        // tirado no onChange), cropFoto() volta a funcionar normalmente.
+        const cropped = await cropFoto(original);
+        if (!cropped) continue; // pulou essa foto
+        const file = cropped;
         const formData = new FormData();
         formData.append("file", file);
         formData.append("fileName", file.name);
