@@ -465,6 +465,7 @@ export async function handleEmpireApiRoutes(
     "/api/social/admin/dump-tail-posts",
     "/api/forum/rechavear-comentarios",
     "/api/registro/reconstruir",
+    "/api/registro/reconciliar-aditivo",
     "/api/tv/programas",
     "/api/tv/presenca",
     "/api/tv/processar-participacao",
