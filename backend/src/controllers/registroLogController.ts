@@ -1,4 +1,5 @@
 import { googleSheetsService, normalizeComparison, normalizeText } from "../services/googleSheetsService";
+import { registrarLogSistema } from "../services/logSistemaService";
 
 // Aba REGISTRO (planilha registrosCharts) — layout confirmado ao vivo:
 // A não é usada (fica sempre em branco); B = "NOME DO OFF" (nome do
@@ -149,8 +150,30 @@ export async function registrarAuditLog(params: {
   try {
     const nomeCanonico = await buscarNomeCanonico({ titulo, isAlbum: !!isAlbum, codigoUnico });
     const conteudo = isAlbum ? `(ALBUM) - ${nomeCanonico}` : nomeCanonico;
-    await gravarLinhaRegistro([nomeJogador, conteudo, tipo]);
+    const ok = await gravarLinhaRegistro([nomeJogador, conteudo, tipo]);
+    // BUG REAL de produção (2026-10-28, relatado como "comentário sem
+    // registro"): gravarLinhaRegistro() já tenta 3x em caso de colisão,
+    // mas o retorno `false` (desistiu de verdade) nunca era checado aqui —
+    // a falha ficava só num console.warn que ninguém vê, e o jogador
+    // perdia o ponto do comentário em silêncio, sem rastro nenhum pra
+    // investigar depois. Agora toda falha definitiva fica registrada em
+    // LOGS, com os dados pra reconciliar manualmente se precisar (ver
+    // reconciliacaoRegistroController.ts/reconciliarTudoAditivo).
+    if (!ok) {
+      registrarLogSistema({
+        categoria: "Falha de escrita",
+        oQueAconteceu: `Não consegui gravar em REGISTRO o ponto de "${nomeJogador}" por "${conteudo}" (${tipo}) — colisão persistente mesmo após retries.`,
+        onde: "registroLogController.registrarAuditLog",
+        comoResolver: "Rodar GET /api/registro/reconciliar-aditivo (dry-run) pra conferir e completar com ?confirmar=1.",
+      }).catch(() => {});
+    }
   } catch (err) {
     console.warn("[registroLog] Erro ao gravar em REGISTRO:", err);
+    registrarLogSistema({
+      categoria: "Falha de escrita",
+      oQueAconteceu: `Erro ao gravar em REGISTRO o ponto de "${nomeJogador}" por "${titulo}" (${tipo}).`,
+      onde: "registroLogController.registrarAuditLog",
+      detalheTecnico: err instanceof Error ? err.message : String(err),
+    }).catch(() => {});
   }
 }
