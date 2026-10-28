@@ -24,7 +24,7 @@ import {
   restaurarPrestigioAteData,
   corrigirPrestigioAssistirTvPorJanela,
 } from "../services/prestigioService";
-import { reconstruirRegistroDesdeCorte } from "../controllers/reconciliacaoRegistroController";
+import { reconstruirRegistroDesdeCorte, reconciliarTudoAditivo } from "../controllers/reconciliacaoRegistroController";
 import {
   getPitchforkController,
   getPitchforkComentariosController,
@@ -934,6 +934,17 @@ export async function handleEmpireApiRoutes(
     const confirmar = url.searchParams.get("confirmar") === "1";
     const resultadoReconstrucao = await reconstruirRegistroDesdeCorte(confirmar);
     response = new Response(JSON.stringify({ success: true, data: resultadoReconstrucao }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } else if (url.pathname === "/api/registro/reconciliar-aditivo") {
+    // Preenche só a DIFERENÇA entre comentários reais e linhas já em
+    // REGISTRO (jamais apaga/toca em linha existente) — ver
+    // reconciliacaoRegistroController.ts/reconciliarTudoAditivo. DRY-RUN
+    // por padrão; só grava com ?confirmar=1.
+    const confirmarAditivo = url.searchParams.get("confirmar") === "1";
+    const resultadoAditivo = await reconciliarTudoAditivo(confirmarAditivo);
+    response = new Response(JSON.stringify({ success: true, data: resultadoAditivo }), {
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });

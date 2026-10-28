@@ -114,6 +114,110 @@ async function coletarComentariosResolvidos(): Promise<ComentarioResolvido[]> {
   return resolvidos;
 }
 
+// Reconciliação ADITIVA completa, sob demanda (admin) — mesma lógica de
+// contagem de reconciliarPontosComentariosScheduled (comentários reais vs.
+// linhas já em REGISTRO pra cada chave jogador+conteúdo+tipo, só grava a
+// DIFERENÇA que falta), mas SEM o limite de 5 chaves por chamada (esse
+// limite existe só pro cron rodar em fatias pequenas) e SEM apagar nada em
+// REGISTRO — nunca toca numa linha já existente, só ADICIONA o que falta.
+// Pedido explícito do usuário (2026-10-28): comentários reais de Max
+// Gorghan/TED/Rayna/Hayley (e qualquer outro jogador) da semana sem
+// registro correspondente. DRY-RUN por padrão; só grava com confirmar=true.
+export async function reconciliarTudoAditivo(confirmar: boolean): Promise<{
+  confirmar: boolean;
+  chavesFaltantes: number;
+  linhasFaltantes: number;
+  linhasGravadas: number;
+  detalhe: { jogador: string; conteudo: string; tipo: string; faltam: number }[];
+}> {
+  const [comentarios, edicaoMusicas, edicaoAlbuns] = await Promise.all([
+    coletarComentariosResolvidos(),
+    googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS"),
+    googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS"),
+  ]);
+
+  const porCodigoMusicas = new Map<string, string>();
+  const porTituloMusicas = new Map<string, string>();
+  for (let i = 1; i < edicaoMusicas.length; i++) {
+    const codigo = normalizeComparison(edicaoMusicas[i]?.[55] || "");
+    const titulo = normalizeText(edicaoMusicas[i]?.[1]);
+    if (codigo && titulo) porCodigoMusicas.set(codigo, titulo);
+    if (titulo) porTituloMusicas.set(normalizeComparison(titulo), titulo);
+  }
+  const porCodigoAlbuns = new Map<string, string>();
+  const porTituloAlbuns = new Map<string, string>();
+  for (let i = 1; i < edicaoAlbuns.length; i++) {
+    const codigo = normalizeComparison(edicaoAlbuns[i]?.[17] || "");
+    const titulo = normalizeText(edicaoAlbuns[i]?.[3]);
+    if (codigo && titulo) porCodigoAlbuns.set(codigo, titulo);
+    if (titulo) porTituloAlbuns.set(normalizeComparison(titulo), titulo);
+  }
+  const resolverNomeCanonicoLocal = (titulo: string, isAlbum: boolean, codigoUnico: string): string => {
+    const porCodigo = isAlbum ? porCodigoAlbuns : porCodigoMusicas;
+    const porTitulo = isAlbum ? porTituloAlbuns : porTituloMusicas;
+    const codigoNorm = codigoUnico ? normalizeComparison(codigoUnico) : "";
+    if (codigoNorm && porCodigo.has(codigoNorm)) return porCodigo.get(codigoNorm)!;
+    const tituloNorm = normalizeComparison(titulo);
+    if (porTitulo.has(tituloNorm)) return porTitulo.get(tituloNorm)!;
+    return titulo;
+  };
+
+  const contagemComentarios = new Map<string, { jogador: string; conteudo: string; tipo: string; count: number }>();
+  for (const c of comentarios) {
+    const nomeCanonico = resolverNomeCanonicoLocal(c.titulo, c.isAlbum, c.codigoUnico);
+    const conteudo = c.isAlbum ? `(ALBUM) - ${nomeCanonico}` : nomeCanonico;
+    const chave = `${normalizeComparison(c.jogador)}|${normalizeComparison(conteudo)}|${normalizeComparison(c.tipo)}`;
+    const atual = contagemComentarios.get(chave);
+    if (atual) atual.count++;
+    else contagemComentarios.set(chave, { jogador: c.jogador, conteudo, tipo: c.tipo, count: 1 });
+  }
+
+  const registroRows = await googleSheetsService.registrosCharts.readValues("REGISTRO");
+  const contagemRegistro = new Map<string, number>();
+  for (let i = 1; i < registroRows.length; i++) {
+    const row = registroRows[i];
+    const jogador = normalizeComparison(row?.[1] || "");
+    const conteudo = normalizeComparison(row?.[2] || "");
+    const tipo = normalizeComparison(row?.[3] || "");
+    if (!jogador && !conteudo) continue;
+    const chave = `${jogador}|${conteudo}|${tipo}`;
+    contagemRegistro.set(chave, (contagemRegistro.get(chave) || 0) + 1);
+  }
+
+  const faltantes = [...contagemComentarios.entries()]
+    .map(([chave, dado]) => ({ ...dado, faltam: dado.count - (contagemRegistro.get(chave) || 0) }))
+    .filter((d) => d.faltam > 0)
+    .sort((a, b) => a.jogador.localeCompare(b.jogador));
+
+  const linhasFaltantes = faltantes.reduce((soma, d) => soma + d.faltam, 0);
+
+  if (!confirmar) {
+    return {
+      confirmar: false,
+      chavesFaltantes: faltantes.length,
+      linhasFaltantes,
+      linhasGravadas: 0,
+      detalhe: faltantes.map(({ jogador, conteudo, tipo, faltam }) => ({ jogador, conteudo, tipo, faltam })),
+    };
+  }
+
+  let linhasGravadas = 0;
+  for (const d of faltantes) {
+    for (let n = 0; n < d.faltam; n++) {
+      const ok = await gravarLinhaRegistro([d.jogador, d.conteudo, d.tipo]);
+      if (ok) linhasGravadas++;
+    }
+  }
+
+  return {
+    confirmar: true,
+    chavesFaltantes: faltantes.length,
+    linhasFaltantes,
+    linhasGravadas,
+    detalhe: faltantes.map(({ jogador, conteudo, tipo, faltam }) => ({ jogador, conteudo, tipo, faltam })),
+  };
+}
+
 interface FlagsKvLike {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
