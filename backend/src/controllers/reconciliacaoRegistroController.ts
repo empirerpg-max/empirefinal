@@ -251,8 +251,11 @@ export async function reconciliarTudoAditivo(
     const TAMANHO_LOTE = 100;
     for (let i = 0; i < entries.length; i += TAMANHO_LOTE) {
       const lote = entries.slice(i, i + TAMANHO_LOTE);
-      await googleSheetsService.registrosCharts.updateValuesBatch(lote);
-      linhasGravadas += lote.length;
+      const ok = await googleSheetsService.registrosCharts.updateValuesBatch(lote).catch((err) => {
+        console.warn("[reconciliarTudoAditivo] Falha no lote de updateValuesBatch:", err);
+        return false;
+      });
+      if (ok) linhasGravadas += lote.length;
     }
   }
 
