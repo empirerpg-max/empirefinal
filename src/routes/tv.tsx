@@ -2040,10 +2040,24 @@ function RedCarpetComposer({
             accept="image/*"
             multiple
             hidden
+            // BUG REAL (2026-10-28, achado via vídeo de reprodução em iOS E
+            // desktop — mesmo comportamento silencioso nos dois): `e.target.
+            // files` é uma FileList AO VIVO, presa ao estado interno do
+            // próprio <input>. Resetar `e.target.value = ""` ANTES de
+            // addFotos() ler esses arquivos limpa essa lista na hora em
+            // vários navegadores — o `Array.from(files)` lá dentro já
+            // enxergava 0 arquivos, então a função retornava de cara sem
+            // fazer nada: sem spinner, sem rede, sem erro, sem foto. Tira um
+            // SNAPSHOT de verdade (array) primeiro, só reseta o input
+            // depois — agora os arquivos escolhidos sobrevivem ao reset.
             onChange={(e) => {
-              const files = e.target.files;
+              const snapshot = e.target.files ? Array.from(e.target.files) : [];
               e.target.value = "";
-              addFotos(files);
+              if (snapshot.length > 0) {
+                const dt = new DataTransfer();
+                snapshot.forEach((f) => dt.items.add(f));
+                addFotos(dt.files);
+              }
             }}
           />
         </div>
