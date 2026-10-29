@@ -274,6 +274,7 @@ import { adminDiagFormulaPaisController } from "../controllers/adminDiagFormulaP
 import { adminFixFormulaPaisLocaleController } from "../controllers/adminFixFormulaPaisLocaleController";
 import { adminRestoreFormulaPaisController } from "../controllers/adminRestoreFormulaPaisController";
 import { adminDiagTamanhoAbasFonteController } from "../controllers/adminDiagTamanhoAbasFonteController";
+import { adminDiagCodigoAlbumController } from "../controllers/adminDiagCodigoAlbumController";
 import { adminFixCapaStampOnItController } from "../controllers/adminFixCapaStampOnItController";
 import { adminDiagVarreduraChartCapasController } from "../controllers/adminDiagVarreduraChartCapasController";
 import { adminFixVarreduraChartCapasController } from "../controllers/adminFixVarreduraChartCapasController";
@@ -2174,6 +2175,8 @@ export async function handleEmpireApiRoutes(
     response = await adminRestoreFormulaPaisController();
   } else if (url.pathname === "/api/empire-play/admin/diag-tamanho-abas-fonte") {
     response = await adminDiagTamanhoAbasFonteController();
+  } else if (url.pathname === "/api/empire-play/admin/diag-codigo-album") {
+    response = await adminDiagCodigoAlbumController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-capa-stamp-on-it") {
     response = await adminFixCapaStampOnItController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-varredura-chart-capas") {
