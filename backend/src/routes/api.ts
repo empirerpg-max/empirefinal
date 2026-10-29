@@ -278,6 +278,7 @@ import { adminDiagCodigoAlbumController } from "../controllers/adminDiagCodigoAl
 import { adminDiagPresaveDuplicadoController } from "../controllers/adminDiagPresaveDuplicadoController";
 import { adminPararPresaveDuplicadoController } from "../controllers/adminPararPresaveDuplicadoController";
 import { adminLimparDuplicadosDerbyController } from "../controllers/adminLimparDuplicadosDerbyController";
+import { adminLimparFaixasDuplicadasDerbyController } from "../controllers/adminLimparFaixasDuplicadasDerbyController";
 import { adminFixCapaStampOnItController } from "../controllers/adminFixCapaStampOnItController";
 import { adminDiagVarreduraChartCapasController } from "../controllers/adminDiagVarreduraChartCapasController";
 import { adminFixVarreduraChartCapasController } from "../controllers/adminFixVarreduraChartCapasController";
@@ -2186,6 +2187,8 @@ export async function handleEmpireApiRoutes(
     response = await adminPararPresaveDuplicadoController(request);
   } else if (url.pathname === "/api/empire-play/admin/limpar-duplicados-derby") {
     response = await adminLimparDuplicadosDerbyController(request);
+  } else if (url.pathname === "/api/empire-play/admin/limpar-faixas-duplicadas-derby") {
+    response = await adminLimparFaixasDuplicadasDerbyController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-capa-stamp-on-it") {
     response = await adminFixCapaStampOnItController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-varredura-chart-capas") {
