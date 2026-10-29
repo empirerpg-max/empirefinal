@@ -8,7 +8,11 @@ import { googleSheetsService, normalizeComparison } from "../services/googleShee
 // procura por "follia" ou "derby" em QUALQUER coluna (não só a primeira),
 // pra achar onde esse conteúdo realmente mora.
 export async function adminDumpExtraAlbunsController(): Promise<Response> {
-  const rows = await googleSheetsService.usuarios.readValues("Extra_Albuns").catch(() => []);
+  // CORRIGIDO: Extra_Albuns vive na planilha "principal" (ver
+  // extraMaterialController.ts, findRow usa googleSheetsService.principal),
+  // não em "usuarios" — a primeira versão desse dump lia a aba errada
+  // (coincidência de nome entre spreadsheets) e voltava vazia.
+  const rows = await googleSheetsService.principal.readValues("Extra_Albuns").catch(() => []);
   const relevantes = rows
     .map((row, i) => ({ linha: i + 1, row }))
     .filter(({ row }) => {

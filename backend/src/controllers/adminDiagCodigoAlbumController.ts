@@ -12,7 +12,11 @@ export async function adminDiagCodigoAlbumController(request: Request): Promise<
   const nomes = nomesParam.split(",").map((s) => normalizeComparison(s.trim())).filter(Boolean);
 
   const albunsRecords = await googleSheetsService.principal.readSheetObjects("Albuns").catch(() => []);
-  const extraAlbunsRows = await googleSheetsService.usuarios.readValues("Extra_Albuns").catch(() => []);
+  // CORRIGIDO: Extra_Albuns vive na planilha "principal" (ver
+  // extraMaterialController.ts, findRow usa googleSheetsService.principal),
+  // não em "usuarios" — essa era a razão do diagnóstico original não achar
+  // nada (lia uma aba homônima errada, vazia pra esse propósito).
+  const extraAlbunsRows = await googleSheetsService.principal.readValues("Extra_Albuns").catch(() => []);
 
   const getValue = (rec: Record<string, string>, keys: string[]): string => {
     for (const k of keys) if (rec[k]) return rec[k];
