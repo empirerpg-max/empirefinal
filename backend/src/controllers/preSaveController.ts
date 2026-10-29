@@ -66,7 +66,7 @@ import {
   type GoogleSheetRow,
 } from "../services/googleSheetsService";
 import { registrarLogSistema } from "../services/logSistemaService";
-import { withWriteLock } from "../services/writeLockService";
+import { withWriteLock, jaFoiLancadaDeVerdade, marcarLancadaDeVerdade } from "../services/writeLockService";
 import { publicarAlbum, type TrackItemPayload } from "./gestaoController";
 import { createAcervoEntrevistaController } from "./acervoController";
 import { createSocialPostController } from "./socialController";
@@ -429,11 +429,27 @@ async function writeCampanha(c: PreSaveCampanha): Promise<void> {
         `[writeCampanha] Bloqueado: tentativa de regravar campanha ${c.id} com status desatualizado ("ativa" em memória, já "${statusAtual}" na planilha) — status final preservado.`,
       );
     }
-    await googleSheetsService.principal.updateValues(
+    const gravado = await googleSheetsService.principal.updateValues(
       PRESAVE_SHEET,
       `A${c._rowIndex}:U${c._rowIndex}`,
       [linha],
     );
+    // BUG REAL confirmado em produção (DERBY/Cowboy Fresh, 2026-10-29, 64
+    // lançamentos duplicados em ~10h): updateValues já tenta 3x e só
+    // devolve `false` quando TODAS falharam — mas nunca lança exceção, e
+    // esse retorno nunca era checado aqui. Resultado: writeCampanha
+    // "terminava" normalmente mesmo sem o status="lancada" ter sido
+    // persistido de verdade, e o cron via "ativa" de novo no ciclo
+    // seguinte. Agora lança erro explícito pra quem chamou saber que a
+    // escrita não aconteceu (ver jaFoiLancadaDeVerdade/
+    // marcarLancadaDeVerdade em processarLancamentosPreSaveScheduled —
+    // essa é a proteção real contra republicar; isto aqui só garante que
+    // a falha não passe batido como sucesso).
+    if (!gravado) {
+      throw new Error(
+        `[writeCampanha] updateValues falhou (3 tentativas) pra campanha ${c.id}, linha ${c._rowIndex} — status NÃO foi persistido na planilha.`,
+      );
+    }
   });
 }
 
@@ -1823,8 +1839,32 @@ export async function processarLancamentosPreSaveScheduled(): Promise<{
             // rowToCampanha acima; confirmado lendo o mapeamento real, não
             // assumido.
             const statusJaMudou = normalizeComparison(statusAtual?.[0]?.[0] || "") !== "ativa";
+            // Proteção REAL contra republicar (ver writeLockService.ts,
+            // jaFoiLancadaDeVerdade): a planilha dizendo "ativa" não
+            // significa que o álbum não foi publicado — pode ser só a
+            // gravação do status que falhou depois de publicarAlbum já
+            // ter rodado com sucesso (causa raiz do bug do DERBY). Esse
+            // marcador no D1 é a fonte de verdade de "já publiquei",
+            // independente do Sheets.
+            const jaPublicouDeVerdade = await jaFoiLancadaDeVerdade(c.id);
             if (statusJaMudou) {
               return false; // outra execução concorrente já lançou essa campanha
+            }
+            if (jaPublicouDeVerdade) {
+              // Álbum já foi criado antes; só a gravação do status na
+              // planilha que ficou pendente. NUNCA chama publicarAlbum de
+              // novo aqui — só tenta corrigir o status pra não ficar
+              // reexecutando pra sempre.
+              try {
+                c.status = "lancada";
+                await writeCampanha(c);
+              } catch (err) {
+                console.warn(
+                  `[processarLancamentosPreSaveScheduled] Campanha ${c.id} já publicada (D1 confirma), mas ainda não consegui corrigir o status na planilha:`,
+                  err,
+                );
+              }
+              return false; // não conta como novo lançamento
             }
             await lancarCampanhaPreSave(c);
             return true;
@@ -1906,6 +1946,14 @@ async function lancarCampanhaPreSave(c: PreSaveCampanha): Promise<void> {
           jogadorId: c.jogadorId,
           faixas: faixasPayload,
         });
+
+        // Marca IMEDIATAMENTE no D1 que essa campanha já foi publicada de
+        // verdade — antes de qualquer outra escrita (material extra,
+        // coluna PRE-SAVE, status na planilha). É essa marca, não o
+        // status="lancada" na planilha, que impede o cron de chamar
+        // publicarAlbum outra vez pra essa campanha caso qualquer escrita
+        // abaixo falhe (ver processarLancamentosPreSaveScheduled).
+        await marcarLancadaDeVerdade(c.id);
 
         // Material extra (Shop/Info/Visual) coletado na criação da
         // campanha só pode ser salvo agora, com o Código único real em

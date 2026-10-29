@@ -214,6 +214,7 @@ export async function getSpreadsheetLocale(spreadsheetKeyOrId: SpreadsheetKey | 
   return response.properties?.locale || "";
 }
 
+
 // Cria uma aba nova numa planilha, se ainda não existir (idempotente —
 // usado pra abas auxiliares de importação em lote).
 export async function ensureSheetTab(
@@ -803,6 +804,8 @@ export const googleSheetsService = {
       updateValues("edicaoCharts", sheetName, range, values),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("edicaoCharts", sheetName, values, range),
+    deleteRows: (sheetName: string, rowIndexes1Based: number[]) =>
+      deleteRows("edicaoCharts", sheetName, rowIndexes1Based),
   },
   saidosCharts: {
     readValues: (sheetName: string, range?: string) => readValues("saidosCharts", sheetName, range),

@@ -36,6 +36,76 @@
 // comportamento (arriscado) de antes, nunca pior.
 import { getCatalogoDb, type D1DatabaseLike } from "./catalogoDbService";
 
+// Marcador durável "isso aqui já foi feito de verdade" — independente do
+// Google Sheets. Causa raiz real do DERBY/Cowboy Fresh (2026-10-29, 64
+// cópias duplicadas em ~10h): processarLancamentosPreSaveScheduled
+// publicava o álbum com sucesso (publicarAlbum) e SÓ DEPOIS gravava
+// status="lancada" na planilha via writeCampanha — mas updateValues
+// (googleSheetsService) faz 3 tentativas e, se todas falharem (visto nos
+// LOGS do dia: vários "API v4: Internal error encountered" / erro 524 na
+// mesma janela), retorna `false` SEM lançar exceção. writeCampanha nunca
+// checava esse retorno, então o bloco dentro do withWriteLock (por
+// campanha) terminava "com sucesso" mesmo com o status continuando
+// "ativa" na planilha — e o próximo ciclo do cron (10min depois) lia
+// "ativa" de novo e publicava o álbum outra vez. O withWriteLock por si
+// só não evita isso: ele só serializa execuções concorrentes, não
+// persiste nada entre uma execução e a próxima.
+// Fix: marcar no D1 (nunca depende do Sheets) que a campanha X já foi
+// publicada de fato, IMEDIATAMENTE depois do publicarAlbum ter sucesso —
+// antes de qualquer escrita no Sheets. Mesmo que a gravação do status na
+// planilha continue falhando, o cron nunca mais chama publicarAlbum de
+// novo pra essa campanha; só fica tentando corrigir o status na planilha
+// (operação idempotente, segura de repetir) até conseguir.
+async function ensureLancamentosTable(db: D1DatabaseLike): Promise<void> {
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS presave_lancamentos_confirmados (
+        campanha_id TEXT PRIMARY KEY,
+        lancado_at INTEGER NOT NULL
+      )`,
+    )
+    .run();
+}
+
+export async function jaFoiLancadaDeVerdade(campanhaId: string): Promise<boolean> {
+  const db = getCatalogoDb();
+  if (!db) return false; // sem D1: não tem como saber, deixa o fluxo normal decidir
+  try {
+    await ensureLancamentosTable(db);
+    const res = await db
+      .prepare(`SELECT campanha_id FROM presave_lancamentos_confirmados WHERE campanha_id = ?`)
+      .bind(campanhaId)
+      .all();
+    return (res.results?.length || 0) > 0;
+  } catch (err) {
+    console.warn("[writeLockService] Falha ao checar presave_lancamentos_confirmados:", err);
+    return false;
+  }
+}
+
+export async function marcarLancadaDeVerdade(campanhaId: string): Promise<void> {
+  const db = getCatalogoDb();
+  if (!db) return; // sem D1: nada a marcar (comportamento antigo, arriscado, mas nunca pior)
+  try {
+    await ensureLancamentosTable(db);
+    await db
+      .prepare(
+        `INSERT INTO presave_lancamentos_confirmados (campanha_id, lancado_at) VALUES (?, ?)
+         ON CONFLICT(campanha_id) DO NOTHING`,
+      )
+      .bind(campanhaId, Date.now())
+      .run();
+  } catch (err) {
+    // Não é best-effort como o resto do catalogoDbService: se isso falhar
+    // silenciosamente, a proteção contra republicação some. Loga alto.
+    console.error(
+      `[writeLockService] FALHA CRÍTICA ao marcar campanha ${campanhaId} como lançada no D1 — risco de republicar:`,
+      err,
+    );
+    throw err;
+  }
+}
+
 const DEFAULT_TTL_MS = 20_000; // generoso pra um round-trip de Sheets (várias chamadas sequenciais)
 const DEFAULT_MAX_TENTATIVAS = 40;
 const DEFAULT_ESPERA_MS = 200;
