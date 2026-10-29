@@ -196,6 +196,14 @@ export function GestaoPreSave() {
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [loading, setLoading] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
+  // Chave de remontagem forçada do formulário (ver <NovaCampanhaForm key=.../>
+  // abaixo) — garantia extra, mesmo sem causa raiz confirmada em código,
+  // contra QUALQUER jeito de um upload de Shop/Visual de uma campanha
+  // anterior sobreviver no estado do formulário ao abrir "Nova campanha"
+  // de novo (reportado em produção: Shop do DERBY com imagens do Follia).
+  // Trocar a key força o React a desmontar/criar uma instância 100% nova
+  // do componente — nenhum useState sobrevive, nem por engano.
+  const [formKey, setFormKey] = useState(0);
   const [selecionada, setSelecionada] = useState<Campanha | null>(null);
   const [perfisMidia, setPerfisMidia] = useState<PerfilMidia[]>([]);
 
@@ -262,6 +270,7 @@ export function GestaoPreSave() {
         <button
           onClick={() => {
             haptic.selection();
+            setFormKey((k) => k + 1);
             setMostrarForm(true);
             setSelecionada(null);
           }}
@@ -274,6 +283,7 @@ export function GestaoPreSave() {
 
       {mostrarForm && (
         <NovaCampanhaForm
+          key={formKey}
           telegramId={telegramId}
           jogadorNome={user?.name || "Jogador"}
           onCancelar={() => setMostrarForm(false)}
@@ -922,6 +932,7 @@ function NovaCampanhaForm({
           value={extraAlbum}
           onChange={setExtraAlbum}
           folderType="materiaisAlbum"
+          contexto={`${artista || "artista"} ${tituloAlbum || ""}`.trim()}
         />
       </div>
 

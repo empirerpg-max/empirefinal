@@ -1,4 +1,5 @@
 import { googleSheetsService, normalizeComparison, normalizeText } from "../services/googleSheetsService";
+import { registrarLogSistema } from "../services/logSistemaService";
 
 // Material extra dos tópicos de Música/Álbum — botões "Shop", "Info" e
 // "Visual" que o jogador pode ativar na criação (Gestão) ou depois, editando
@@ -124,6 +125,19 @@ export async function saveExtraMaterialController(request: Request): Promise<Res
       "A:D",
     );
   }
+
+  // Rastro de auditoria (reportado em produção: Shop do álbum DERBY/Cowboy
+  // Fresh com imagens do Follia/Max Gorghan — causa exata não confirmada,
+  // essa escrita nunca tinha NENHUM log). Nunca existia um jeito de saber
+  // DEPOIS quais URLs de Shop foram gravadas pra qual Código único e
+  // quando — só as URLs do Drive em si, que não te dizem nem o artista.
+  // Best-effort: nunca bloqueia a gravação real por causa do log.
+  registrarLogSistema({
+    categoria: "Ação concluída",
+    oQueAconteceu: `Material extra (Shop/Info/Visual) salvo pra ${body.tipo}=${codigoUnico}: ${shopFinal.length} item(ns) de Shop, Info ${infoFinal ? "preenchida" : "vazia"}, ${arteFinal.length} bloco(s) de Visual.`,
+    onde: "saveExtraMaterialController",
+    detalheTecnico: JSON.stringify({ codigoUnico, tipo: body.tipo, shopUrls: shopFinal.map((s) => s.foto) }),
+  }).catch(() => {});
 
   return jsonResponse({ ok: true });
 }

@@ -321,11 +321,21 @@ function ImageUploadSlot({
   url,
   onUpload,
   folderType,
+  // Contexto (artista/álbum ou música) pra nomear o arquivo no Drive de
+  // forma rastreável — antes ia só o nome original do arquivo do celular
+  // (ex: "IMG_2026.jpg"), sem nenhum jeito de auditar depois QUAL
+  // artista/campanha gerou aquele upload. Reportado em produção: Shop do
+  // álbum DERBY (Cowboy Fresh) mostrando imagens do Follia (Max Gorghan)
+  // — causa exata não confirmada (jogador afirma ter seguido o fluxo
+  // normal), mas sem nome rastreável no arquivo não dá nem pra auditar o
+  // histórico de uploads do Drive se acontecer de novo.
+  contexto,
   className,
 }: {
   url: string;
   onUpload: (url: string) => void;
   folderType: "materiaisMusica" | "materiaisAlbum";
+  contexto?: string;
   className?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -334,7 +344,10 @@ function ImageUploadSlot({
   async function handleFile(file: File) {
     setEnviando(true);
     try {
-      const uploadedUrl = await uploadToDrive(file, folderType);
+      const nomeRastreavel = contexto
+        ? `SHOP_${contexto.replace(/[^a-zA-Z0-9]+/g, "_")}_${Date.now()}_${file.name}`
+        : undefined;
+      const uploadedUrl = await uploadToDrive(file, folderType, nomeRastreavel);
       onUpload(uploadedUrl);
     } catch {
       // silencioso — o slot só fica sem imagem, dá pra tentar de novo
@@ -375,10 +388,14 @@ export function ExtraMaterialEditor({
   value,
   onChange,
   folderType,
+  contexto,
 }: {
   value: ExtraMaterialEditorValue;
   onChange: (value: ExtraMaterialEditorValue) => void;
   folderType: "materiaisMusica" | "materiaisAlbum";
+  // Artista/álbum (ou música) dono desse Shop/Visual — nomeia os arquivos
+  // no Drive de forma rastreável (ver ImageUploadSlot acima).
+  contexto?: string;
 }) {
   const set = (patch: Partial<ExtraMaterialEditorValue>) => onChange({ ...value, ...patch });
 
@@ -396,6 +413,7 @@ export function ExtraMaterialEditor({
                 <ImageUploadSlot
                   url={item.foto}
                   folderType={folderType}
+                  contexto={contexto}
                   className="size-16 shrink-0"
                   onUpload={(url) => {
                     const shop = [...value.shop];
@@ -496,6 +514,7 @@ export function ExtraMaterialEditor({
                   <ImageUploadSlot
                     url={bloco.url}
                     folderType={folderType}
+                    contexto={contexto}
                     className="w-full aspect-video"
                     onUpload={(url) => {
                       const arte = [...value.arte];

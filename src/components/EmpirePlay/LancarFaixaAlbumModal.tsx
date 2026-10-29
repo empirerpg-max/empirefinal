@@ -441,7 +441,12 @@ export function LancarFaixaAlbumModal({
                 <Sparkles className="size-3.5 text-emerald-400" />
                 Botões do Tópico (Opcional)
               </label>
-              <ExtraMaterialEditor value={extraEdit} onChange={setExtraEdit} folderType="materiaisMusica" />
+              <ExtraMaterialEditor
+                value={extraEdit}
+                onChange={setExtraEdit}
+                folderType="materiaisMusica"
+                contexto={`${artista} ${selecionada?.titulo || ""}`.trim()}
+              />
             </div>
 
             <button

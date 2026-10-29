@@ -2096,6 +2096,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                   value={extraMusica}
                   onChange={setExtraMusica}
                   folderType="materiaisMusica"
+                  contexto={`${artistaResponsavel} ${nomeMusica}`.trim()}
                 />
               </div>
 
@@ -2756,6 +2757,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                       value={extraAlbum}
                       onChange={setExtraAlbum}
                       folderType="materiaisAlbum"
+                      contexto={`${artistaResponsavel} ${tituloAlbum}`.trim()}
                     />
                   </div>
 

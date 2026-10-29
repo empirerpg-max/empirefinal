@@ -1467,6 +1467,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                       value={extraEdit}
                       onChange={setExtraEdit}
                       folderType={category === "albuns" ? "materiaisAlbum" : "materiaisMusica"}
+                      contexto={editTitulo || editingItem?.titulo || "edicao"}
                     />
                   ) : (
                     <p className="text-[11px] text-neutral-500 italic">
