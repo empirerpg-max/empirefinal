@@ -74,9 +74,24 @@ export function useExtraMaterial(
   const [data, setData] = useState<ExtraMaterialData | null>(null);
 
   useEffect(() => {
+    // BUG REAL confirmado em produção (Shop do álbum DERBY mostrando
+    // produtos do Follia): navegar rápido de um tópico pro outro dispara
+    // um novo fetch antes do anterior terminar — sem essa flag `ignore`,
+    // a resposta do tópico ANTERIOR podia chegar DEPOIS da resposta do
+    // tópico atual (ordem de rede não é garantida) e sobrescrever o
+    // estado com o Shop/Info/Arte errados, sem nenhum erro visível. Os
+    // dados no backend sempre estiveram corretos (Extra_Albuns tem uma
+    // linha própria por Código único) — o bug era só essa resposta
+    // desatualizada vencendo a corrida no cliente.
+    let ignore = false;
     setData(null);
     if (!codigoUnico) return;
-    fetchExtraMaterial(codigoUnico, tipo).then(setData);
+    fetchExtraMaterial(codigoUnico, tipo).then((result) => {
+      if (!ignore) setData(result);
+    });
+    return () => {
+      ignore = true;
+    };
   }, [codigoUnico, tipo]);
 
   return data;
