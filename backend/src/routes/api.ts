@@ -286,6 +286,7 @@ import { adminRecriarFaixasFaltandoDerbyController } from "../controllers/adminR
 import { adminLimparShopErradoDerbyController } from "../controllers/adminLimparShopErradoDerbyController";
 import { adminDiagComentarioSumidoController } from "../controllers/adminDiagComentarioSumidoController";
 import { adminFixFeatsDerbyController } from "../controllers/adminFixFeatsDerbyController";
+import { adminDiagLogsNosotrosController } from "../controllers/adminDiagLogsNosotrosController";
 import { adminFixCapaStampOnItController } from "../controllers/adminFixCapaStampOnItController";
 import { adminDiagVarreduraChartCapasController } from "../controllers/adminDiagVarreduraChartCapasController";
 import { adminFixVarreduraChartCapasController } from "../controllers/adminFixVarreduraChartCapasController";
@@ -2210,6 +2211,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagComentarioSumidoController();
   } else if (url.pathname === "/api/empire-play/admin/fix-feats-derby") {
     response = await adminFixFeatsDerbyController(request);
+  } else if (url.pathname === "/api/empire-play/admin/diag-logs-nosotros") {
+    response = await adminDiagLogsNosotrosController();
   } else if (url.pathname === "/api/empire-play/admin/fix-capa-stamp-on-it") {
     response = await adminFixCapaStampOnItController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-varredura-chart-capas") {
