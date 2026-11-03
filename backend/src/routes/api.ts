@@ -288,6 +288,8 @@ import { adminDiagComentarioSumidoController } from "../controllers/adminDiagCom
 import { adminFixFeatsDerbyController } from "../controllers/adminFixFeatsDerbyController";
 import { adminDiagLogsNosotrosController } from "../controllers/adminDiagLogsNosotrosController";
 import { adminDiagNobodysWifeController } from "../controllers/adminDiagNobodysWifeController";
+import { adminFixNobodysWifeController } from "../controllers/adminFixNobodysWifeController";
+import { adminDiagComentarioSumidoGenericoController } from "../controllers/adminDiagComentarioSumidoGenericoController";
 import { adminFixCapaStampOnItController } from "../controllers/adminFixCapaStampOnItController";
 import { adminDiagVarreduraChartCapasController } from "../controllers/adminDiagVarreduraChartCapasController";
 import { adminFixVarreduraChartCapasController } from "../controllers/adminFixVarreduraChartCapasController";
@@ -2216,6 +2218,10 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagLogsNosotrosController();
   } else if (url.pathname === "/api/empire-play/admin/diag-nobodys-wife") {
     response = await adminDiagNobodysWifeController();
+  } else if (url.pathname === "/api/empire-play/admin/fix-nobodys-wife") {
+    response = await adminFixNobodysWifeController(request);
+  } else if (url.pathname === "/api/empire-play/admin/diag-comentario-sumido-v2") {
+    response = await adminDiagComentarioSumidoGenericoController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-capa-stamp-on-it") {
     response = await adminFixCapaStampOnItController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-varredura-chart-capas") {
