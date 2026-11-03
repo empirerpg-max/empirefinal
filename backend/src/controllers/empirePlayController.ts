@@ -1807,16 +1807,28 @@ export async function getEmpirePlayForumTopicController(
         // derrubando o endpoint inteiro (não só os comentários) pra QUALQUER
         // tópico de música, não só os afetados pelo bug original. Confirmado
         // ao vivo: /api/empire-play/forum/musicas/<id> retornando "error code:
-        // 1102" em vez de JSON. A planilha real tem bem menos de 2000 linhas
-        // — 2000 dá folga de sobra sem reler 25x mais dado do que existe.
-        const musicasRowsLive = await cachedRead("forum:musicas-live-topicid", 15_000, () =>
-          googleSheetsService.principal.readValues("Musicas", "A1:AE2000"),
+        // 1102" em vez de JSON.
+        //
+        // Reduzir só o número de linhas (tentativa anterior: "A1:AE2000")
+        // NÃO foi suficiente — ainda estourava CPU em parte das chamadas
+        // (confirmado ao vivo logo após esse primeiro ajuste: 2 de 3 tópicos
+        // testados voltaram a dar 1102). O que pesa não é só a quantidade de
+        // linhas, é o total de CÉLULAS: 31 colunas por linha quando só 3
+        // (B=ID do tópico, H=Nome, Z=Código único) são realmente usadas
+        // aqui. Lendo cada coluna separada (3 chamadas estreitas, em
+        // paralelo) em vez de uma larga corta o payload em ~90% com o mesmo
+        // alcance de linhas.
+        const [colB, colH, colZ] = await cachedRead("forum:musicas-live-topicid", 15_000, () =>
+          Promise.all([
+            googleSheetsService.principal.readValues("Musicas", "B1:B2000"),
+            googleSheetsService.principal.readValues("Musicas", "H1:H2000"),
+            googleSheetsService.principal.readValues("Musicas", "Z1:Z2000"),
+          ]),
         );
-        for (let i = 1; i < musicasRowsLive.length; i++) {
-          const row = musicasRowsLive[i];
-          if (!row) continue;
-          const codigoLive = normalizeComparison(row[25] || ""); // Z - Código único
-          const topicIdLive = normalizeText(row[1] || ""); // B - ID do tópico
+        const totalLinhas = Math.max(colB.length, colH.length, colZ.length);
+        for (let i = 1; i < totalLinhas; i++) {
+          const codigoLive = normalizeComparison(colZ[i]?.[0] || "");
+          const topicIdLive = normalizeText(colB[i]?.[0] || "");
           const matchPorCodigo = codigoUnicoAlvo && codigoLive === codigoUnicoAlvo;
           const matchPorTopicId = !matchPorCodigo && topicIdD1 && normalizeComparison(topicIdLive) === topicIdD1;
           if (matchPorCodigo || matchPorTopicId) {
@@ -1826,7 +1838,7 @@ export async function getEmpirePlayForumTopicController(
               );
               realTopicId = topicIdLive;
             }
-            const tituloLive = normalizeText(row[7] || "");
+            const tituloLive = normalizeText(colH[i]?.[0] || "");
             if (tituloLive && mediaItem) mediaItem.title = tituloLive.includes(" - ") ? tituloLive.split(" - ").slice(1).join(" - ") : tituloLive;
             break;
           }
