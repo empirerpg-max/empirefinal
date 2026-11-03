@@ -636,7 +636,20 @@ export const Forum: React.FC<ForumProps> = ({
         : topicOrTitle;
 
     try {
-      const topicIdentifier = topic.id || topic.title;
+      // BUG REAL de produção (2026-11-03, "comentário some" relatado de novo
+      // em vários tópicos mesmo com os dados corretos na planilha): aqui
+      // sempre mandava topic.id — o ID SINTÉTICO do catálogo (ex:
+      // "musicas_musica_1793310298902_fhr476", com prefixo da aba), não o
+      // telegramTopicId REAL gravado contra os comentários (ex:
+      // "musica_1793310298902_fhr476"). O backend até aceita o id sintético
+      // em alguns casos (quando o prefixo bate com o que ele mesmo geraria
+      // pra mesma linha), mas não é garantido — qualquer divergência faz a
+      // busca do tópico falhar (404), o fetch cai no catch silencioso logo
+      // abaixo e a tela mostra "0 comentários" mesmo com comentário real
+      // salvo. Usa telegramTopicId (o mesmo valor que já vai pra URL, ver
+      // navigate() acima) como primeira opção — é o id que bate de verdade
+      // com Comentarios_Musicas/MV/Albuns.
+      const topicIdentifier = topic.telegramTopicId || topic.id || topic.title;
       const resForum = await fetchComTimeout(
         `/api/empire-play/forum/${activeSubmenu}/${encodeURIComponent(topicIdentifier)}`,
       )
@@ -706,7 +719,7 @@ export const Forum: React.FC<ForumProps> = ({
         };
         const tipoMedia = tipoMediaMap[activeSubmenu];
         const res = await fetchComTimeout(
-          `/api/forum/comments?titulo=${encodeURIComponent(topic.title)}&idTopico=${encodeURIComponent(topic.id || "")}&tipoMedia=${tipoMedia}`,
+          `/api/forum/comments?titulo=${encodeURIComponent(topic.title)}&idTopico=${encodeURIComponent(topicIdentifier)}&tipoMedia=${tipoMedia}`,
         );
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
