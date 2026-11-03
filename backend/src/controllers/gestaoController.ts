@@ -1666,24 +1666,31 @@ async function atualizarFaixaNosChartsAoPublicar(params: {
 // de uma linha mais antiga) tiver conteúdo, ele conclui que a linha
 // "já tem dado" e passa pra próxima, ou pior, começa a escrever a partir
 // da primeira coluna livre que encontrar NAQUELA linha, deslocando tudo
-// pra direita. Fix: acha a última linha com "Nome da música" de verdade
-// (coluna H, índice 7) e escreve direto na seguinte via updateValues
-// (range fixo, nunca deslocável) — dentro de uma trava pra evitar duas
-// chamadas calculando a mesma "próxima linha livre" em paralelo.
+// pra direita.
+//
+// BUG REAL corrigido de novo (DERBY/Cowboy Fresh, "Nosotros" sumiu,
+// 2026-10-29/30): o fix anterior (ler H2:H50000 pra achar a "última
+// linha com música" e escrever com updateValues num range calculado à
+// mão) tirou a proteção do :append nativo contra sobrescrita — updateValues
+// SEMPRE escreve por cima do que estiver naquele endereço, não importa o
+// que já exista lá. Se o cálculo de "última linha" errar por QUALQUER
+// motivo (leitura vendo um "buraco" como vazio, condição de corrida entre
+// duas chamadas fora da mesma trava, etc.), a escrita apaga dado real sem
+// nenhum aviso. Fix definitivo: volta a usar o :append nativo (que a
+// própria API do Sheets garante nunca escrever em cima de uma linha com
+// conteúdo), mas restrito ao range "A:Y" — exatamente as colunas que essa
+// escrita usa (A a Y, 25 colunas) — em vez do "A:ZZ" default, que alcançava
+// Z (Código único) e AA-AD (ALBUM 2-5), colunas preenchidas DEPOIS por
+// outras escritas e que confundiam a detecção de "linha livre" do próprio
+// Sheets. A trava (gestao:musicas-append) segue serializando chamadas
+// concorrentes, mas agora é só uma camada extra — não a única proteção
+// contra sobrescrita.
 async function appendRowMusicasSeguro(values: GoogleSheetRow): Promise<number> {
   return withWriteLock("gestao:musicas-append", async () => {
-    const rows = await googleSheetsService.principal.readValues("Musicas", "H2:H50000");
-    let ultimaLinhaComMusica = 1;
-    for (let i = 0; i < rows.length; i++) {
-      if ((rows[i]?.[0] || "").trim()) ultimaLinhaComMusica = i + 2;
+    const linhaAlvo = await googleSheetsService.principal.appendRow("Musicas", values, "A:Y");
+    if (!linhaAlvo) {
+      throw new Error("Falha ao anexar linha em Musicas (appendRow devolveu null após as tentativas).");
     }
-    const linhaAlvo = ultimaLinhaComMusica + 1;
-    const ultimaColuna = String.fromCharCode(65 + values.length - 1); // A=65
-    await googleSheetsService.principal.updateValues(
-      "Musicas",
-      `A${linhaAlvo}:${ultimaColuna}${linhaAlvo}`,
-      [values],
-    );
     return linhaAlvo;
   });
 }
@@ -1711,35 +1718,21 @@ export async function processarFaixasDoAlbum(
   let faixasIneditasGravadas = 0;
 
   // BUG REAL encontrado (álbum retroativo de 12 faixas publicando só 5):
-  // appendRowMusicasSeguro relia H2:H50000 (quase 50 mil células) TODA VEZ
-  // que era chamada, pra achar a próxima linha livre — um álbum de N
-  // faixas inéditas disparava N leituras gigantes seguidas, estourando o
-  // limite de requisições por minuto da API do Sheets (mesmo erro de quota
-  // já visto hoje em outros fluxos) depois de só algumas faixas, e cada
-  // uma que falhava a partir daí caía num console.warn silencioso (nunca
-  // logado, nunca reportado pro jogador). Lê a posição UMA VEZ só (cache
-  // local, por chamada de processarFaixasDoAlbum) e incrementa localmente
-  // a cada escrita bem-sucedida — nunca mais N leituras pra um álbum de N
-  // faixas.
-  let cursorLinhaMusicas: number | null = null;
+  // a versão antiga lia H2:H50000 (quase 50 mil células) TODA VEZ que era
+  // chamada, pra achar a próxima linha livre — um álbum de N faixas
+  // inéditas disparava N leituras gigantes seguidas, estourando o limite
+  // de requisições por minuto da API do Sheets. Trocado por appendRow
+  // nativo (:append, range restrito a "A:Y" — ver appendRowMusicasSeguro
+  // acima pro motivo do range restrito) — cada chamada é UMA requisição
+  // só (sem leitura prévia nenhuma), mais barata que o esquema de cursor
+  // antigo E sem o risco de sobrescrita que motivou a troca de volta pro
+  // :append (ver "Nosotros" sumiu, DERBY/Cowboy Fresh, 2026-10-29/30).
   async function appendRowMusicasComCursor(values: GoogleSheetRow): Promise<number> {
     return withWriteLock("gestao:musicas-append", async () => {
-      if (cursorLinhaMusicas === null) {
-        const rows = await googleSheetsService.principal.readValues("Musicas", "H2:H50000");
-        let ultimaLinhaComMusica = 1;
-        for (let i = 0; i < rows.length; i++) {
-          if ((rows[i]?.[0] || "").trim()) ultimaLinhaComMusica = i + 2;
-        }
-        cursorLinhaMusicas = ultimaLinhaComMusica;
+      const linhaAlvo = await googleSheetsService.principal.appendRow("Musicas", values, "A:Y");
+      if (!linhaAlvo) {
+        throw new Error("Falha ao anexar linha em Musicas (appendRow devolveu null após as tentativas).");
       }
-      const linhaAlvo = cursorLinhaMusicas + 1;
-      const ultimaColuna = String.fromCharCode(65 + values.length - 1); // A=65
-      await googleSheetsService.principal.updateValues(
-        "Musicas",
-        `A${linhaAlvo}:${ultimaColuna}${linhaAlvo}`,
-        [values],
-      );
-      cursorLinhaMusicas = linhaAlvo;
       return linhaAlvo;
     });
   }

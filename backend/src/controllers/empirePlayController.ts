@@ -1773,7 +1773,58 @@ export async function getEmpirePlayForumTopicController(
     // gravava/lia os comentários com OUTRO — exatamente o "comentário some"
     // que o PR #641 devia ter fechado de vez. Reaproveita o valor já
     // calculado (mesma fonte única de verdade) em vez de recalcular.
-    const realTopicId = mediaItem?.telegramTopicId || "";
+    let realTopicId = mediaItem?.telegramTopicId || "";
+
+    // CAUSA RAIZ REAL do "comentário some" recorrente (reportado de novo em
+    // 2026-11, Dani/Amanda Brokne — mesma queixa de semanas antes): pra
+    // "Musicas", mediaRecords vem do D1 (readMusicasFromD1, ver comentário
+    // acima) por performance — mas TODA escrita de comentário (ver
+    // createCommentController) usa o topicId da PLANILHA "Musicas", nunca
+    // o do D1. D1 é só um espelho — qualquer edição que grave na planilha
+    // sem espelhar pro D1 no mesmo golpe (edição manual via admin,
+    // migração, qualquer correção direta na planilha) deixa o topicId (ou
+    // o título, usado no fallback de match por texto) desatualizado NO
+    // D1 enquanto a planilha e os comentários já se moveram — o match
+    // falha silenciosamente e a tela mostra "0 comentários" num tópico que
+    // tem comentário de verdade. Não dá pra confiar no D1 pra essa chave
+    // específica: sempre confirma contra a planilha (fonte real de onde
+    // comentário é gravado) antes de montar normMediaTopicId/normMediaTitle.
+    if (sheetIdLabel === "Musicas" && rawMedia) {
+      const codigoUnicoAlvo = normalizeComparison(getValue(rawMedia, ["codigo_unico"]) || "");
+      const topicIdD1 = normalizeComparison(realTopicId);
+      try {
+        // Cache curto (15s) — é a aba inteira de Musicas, lida de novo a
+        // cada tópico aberto senão (mesmo risco de CPU/503 sob pico já
+        // documentado acima pra EDIÇÃO CHARTS); 15s é curto o bastante pra
+        // nunca mascarar uma correção recente por muito tempo, mas evita
+        // reler tudo a cada clique.
+        const musicasRowsLive = await cachedRead("forum:musicas-live-topicid", 15_000, () =>
+          googleSheetsService.principal.readValues("Musicas", "A1:AE50000"),
+        );
+        for (let i = 1; i < musicasRowsLive.length; i++) {
+          const row = musicasRowsLive[i];
+          if (!row) continue;
+          const codigoLive = normalizeComparison(row[25] || ""); // Z - Código único
+          const topicIdLive = normalizeText(row[1] || ""); // B - ID do tópico
+          const matchPorCodigo = codigoUnicoAlvo && codigoLive === codigoUnicoAlvo;
+          const matchPorTopicId = !matchPorCodigo && topicIdD1 && normalizeComparison(topicIdLive) === topicIdD1;
+          if (matchPorCodigo || matchPorTopicId) {
+            if (topicIdLive && topicIdLive !== realTopicId) {
+              console.warn(
+                `[getEmpirePlayForumTopicController] D1 desatualizado: topicId do D1 ("${realTopicId}") difere do real na planilha ("${topicIdLive}") pro código único "${codigoUnicoAlvo}" — usando o da planilha.`,
+              );
+              realTopicId = topicIdLive;
+            }
+            const tituloLive = normalizeText(row[7] || "");
+            if (tituloLive && mediaItem) mediaItem.title = tituloLive.includes(" - ") ? tituloLive.split(" - ").slice(1).join(" - ") : tituloLive;
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn("[getEmpirePlayForumTopicController] Falha ao confirmar topicId contra a planilha:", err);
+      }
+    }
+
     const mediaTopicId = realTopicId || (mediaItem ? mediaItem.id : "");
     if (mediaItem && realTopicId) {
       mediaItem.topicId = realTopicId;
