@@ -1798,8 +1798,19 @@ export async function getEmpirePlayForumTopicController(
         // documentado acima pra EDIÇÃO CHARTS); 15s é curto o bastante pra
         // nunca mascarar uma correção recente por muito tempo, mas evita
         // reler tudo a cada clique.
+        //
+        // BUG REAL de produção causado por essa própria correção (2026-11-03,
+        // minutos depois do deploy): "A1:AE50000" pedia 50 mil linhas × 31
+        // colunas (~1,5 milhão de células) pro Sheets a cada tópico de
+        // música aberto sem cache válido — o parse desse payload gigante
+        // sozinho estourava o limite de CPU do Worker (erro Cloudflare 1102),
+        // derrubando o endpoint inteiro (não só os comentários) pra QUALQUER
+        // tópico de música, não só os afetados pelo bug original. Confirmado
+        // ao vivo: /api/empire-play/forum/musicas/<id> retornando "error code:
+        // 1102" em vez de JSON. A planilha real tem bem menos de 2000 linhas
+        // — 2000 dá folga de sobra sem reler 25x mais dado do que existe.
         const musicasRowsLive = await cachedRead("forum:musicas-live-topicid", 15_000, () =>
-          googleSheetsService.principal.readValues("Musicas", "A1:AE50000"),
+          googleSheetsService.principal.readValues("Musicas", "A1:AE2000"),
         );
         for (let i = 1; i < musicasRowsLive.length; i++) {
           const row = musicasRowsLive[i];
