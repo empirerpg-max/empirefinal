@@ -578,32 +578,48 @@ export async function createCommentController(
     );
 
     // Espelha também na tabela D1 dedicada `comentarios_musicas` (ver
-    // comentariosMusicasDbService.ts) — só pra música, e só dentro do mesmo
-    // runInBackground (nunca bloqueia/falha o comentário). `musica_id` é o
+    // comentariosMusicasDbService.ts) — só pra música. `musica_id` é o
     // Código único, não o ID do tópico — precisa resolver pela tabela
     // `musicas` antes do insert; sem match (música ainda não espelhada lá),
     // pula em silêncio, igual insertComentarioD1 acima.
+    //
+    // AGORA SÍNCRONO (2026-11-04, parte do caminho rápido de leitura em
+    // getEmpirePlayForumTopicController): esse insert era "dispara e
+    // esquece" (runInBackground) — o comentário podia aparecer pro autor
+    // antes do D1 saber que ele existe, e se outro jogador abrisse o
+    // tópico nesse meio-tempo pelo caminho rápido (que só confia no D1
+    // quando ele já tem 1+ linha), via o comentário anterior mas não esse.
+    // Esperar aqui garante que, assim que a resposta sai, o D1 já reflete
+    // o comentário novo — nunca mais uma corrida entre "salvei" e "o
+    // caminho rápido já sabe disso". Nunca lança: falha aqui vira só um
+    // aviso (o comentário real já está salvo no Sheets, que é a fonte
+    // certa) e o caminho rápido simplesmente cai pro Sheets pra esse
+    // tópico até a próxima sincronização.
     if (tipoMedia === "musica") {
-      runInBackground(ctx, async () => {
+      try {
         const db = getCatalogoDb();
-        if (!db) return;
-        const result = await db
-          .prepare("SELECT codigo_unico FROM musicas WHERE id_topico = ?")
-          .bind(topicIdClean)
-          .all<{ codigo_unico: string }>()
-          .catch(() => null);
-        const musicaId = result?.results?.[0]?.codigo_unico;
-        if (!musicaId) return;
-        await buildComentarioMusicaInsertStatement(db, {
-          musicaId,
-          jogadorId: jogadorIdClean || null,
-          jogadorNome: playerClean || null,
-          comentario: comentario.trim(),
-          reacoesJson: null,
-          dataHora: nowStr,
-          replyTo: null,
-        }).run();
-      });
+        if (db) {
+          const result = await db
+            .prepare("SELECT codigo_unico FROM musicas WHERE id_topico = ?")
+            .bind(topicIdClean)
+            .all<{ codigo_unico: string }>()
+            .catch(() => null);
+          const musicaId = result?.results?.[0]?.codigo_unico;
+          if (musicaId) {
+            await buildComentarioMusicaInsertStatement(db, {
+              musicaId,
+              jogadorId: jogadorIdClean || null,
+              jogadorNome: playerClean || null,
+              comentario: comentario.trim(),
+              reacoesJson: null,
+              dataHora: nowStr,
+              replyTo: null,
+            }).run();
+          }
+        }
+      } catch (err) {
+        console.warn("[ForumController] Falha ao espelhar comentário em comentarios_musicas (D1):", err);
+      }
     }
 
     // Spotlight Banner (Market): se esse comentário veio de alguém que
