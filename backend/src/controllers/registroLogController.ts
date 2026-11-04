@@ -139,13 +139,20 @@ export async function gravarLinhaRegistro(valores: string[]): Promise<boolean> {
   return false;
 }
 
+// Retorna se a gravação em REGISTRO realmente aconteceu — ANTES, essa
+// função nunca informava o chamador (void), então createCommentController
+// não tinha como saber se o ponto do comentário tinha sido perdido pra
+// decidir o que fazer a respeito (ver EXIGÊNCIA do usuário, 2026-11-04:
+// "só confirma o comentário pro jogador se o registro de verdade
+// aconteceu"). Continua nunca lançando — chamador decide o que fazer com
+// `false` (hoje: desfaz o comentário e pede reenvio).
 export async function registrarAuditLog(params: {
   nomeJogador: string;
   titulo: string;
   tipo: string;
   isAlbum?: boolean;
   codigoUnico?: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const { nomeJogador, titulo, tipo, isAlbum, codigoUnico } = params;
   try {
     const nomeCanonico = await buscarNomeCanonico({ titulo, isAlbum: !!isAlbum, codigoUnico });
@@ -167,6 +174,7 @@ export async function registrarAuditLog(params: {
         comoResolver: "Rodar GET /api/registro/reconciliar-aditivo (dry-run) pra conferir e completar com ?confirmar=1.",
       }).catch(() => {});
     }
+    return ok;
   } catch (err) {
     console.warn("[registroLog] Erro ao gravar em REGISTRO:", err);
     registrarLogSistema({
@@ -175,5 +183,6 @@ export async function registrarAuditLog(params: {
       onde: "registroLogController.registrarAuditLog",
       detalheTecnico: err instanceof Error ? err.message : String(err),
     }).catch(() => {});
+    return false;
   }
 }

@@ -611,24 +611,69 @@ export async function createCommentController(
     // mínima. Nunca bloqueia nem falha o comentário.
     runInBackground(ctx, () => processarComentarioParaBanner(jogadorIdClean, topicIdClean));
 
-    // 3. Tudo que NÃO precisa terminar antes de responder: persistir o
-    // topicId novo (se gerado no passo 1), nota/média + notificação do
-    // dono do artista, título "real" por código único, Audit Log em
-    // REGISTRO e prestígio — nessa ordem, sequencial dentro da MESMA tarefa
-    // de fundo (cada uma depende da anterior). Via ctx.waitUntil: a isolate
-    // do Worker continua viva até terminar, mesmo com a Response já
-    // enviada — ao contrário de um `await` simplesmente removido (commit
-    // 67080f5, revertido em ed698b8), que derrubava o trabalho assim que a
-    // resposta saía porque o runtime não tinha garantia nenhuma de
-    // continuar executando. Pulado pra respostas (isReply).
+    // 3. EXIGÊNCIA DO USUÁRIO (2026-11-04, caso Weuller/"I Am Hollywood" +
+    // Cowboy Fresh: comentou e nunca foi gravado em REGISTRO, nenhum jeito
+    // de saber ou tentar de novo): o comentário só pode ser confirmado pro
+    // jogador se o Audit Log em REGISTRO realmente aconteceu. Antes, essa
+    // gravação inteira (topicId, nota/média, título oficial, REGISTRO,
+    // prestígio) rodava em background DEPOIS da resposta "sucesso" já ter
+    // saído (ctx.waitUntil) — pensado pra nunca travar a resposta do
+    // comentário sob pico (ver histórico abaixo), mas isso tem o preço de
+    // deixar o jogador achando que funcionou enquanto o ponto se perde em
+    // silêncio se REGISTRO falhar. Decisão explícita: aceitar esse risco de
+    // volta (resposta mais lenta, exposta ao mesmo limite de CPU já visto
+    // antes) em troca de nunca mais confirmar um comentário que não virou
+    // ponto de verdade. Se REGISTRO falhar, desfaz o comentário (apaga a
+    // linha recém-criada) e devolve erro pedindo reenvio — nunca um
+    // "sucesso" fingido. Pulado pra respostas (isReply), que nunca geram
+    // ponto/registro mesmo.
     if (!isReply && ((foundRowIndex > 0 && rowDataEncontrada) || usouApenasD1)) {
       const rowData = rowDataEncontrada;
+
+      // Título "real" por código único ANTES do Audit Log (precisa do nome
+      // certo pra achar a linha certa em EDIÇÃO CHARTS) — só existe linha de
+      // planilha pra resolver isso quando `rowData` existe; no fallback D1
+      // (usouApenasD1), tituloOficial já veio certo direto do D1 acima.
+      if (rowData && tipoMedia !== "album" && codigoUnico) {
+        const tituloReal = await resolverTituloPorCodigoUnico(codigoUnico);
+        if (tituloReal) tituloOficial = tituloReal;
+      }
+
+      const registrouComSucesso = await registrarAuditLog({
+        nomeJogador: playerClean,
+        titulo: tituloOficial,
+        tipo:
+          tipoMedia === "album"
+            ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
+            : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
+        isAlbum: tipoMedia === "album",
+        codigoUnico,
+      });
+
+      if (!registrouComSucesso) {
+        await googleSheetsService.principal.deleteRows(commentSheet, [newRowIndex]).catch((err) => {
+          console.warn("[ForumController] Falha ao desfazer comentário após erro de registro:", err);
+        });
+        invalidarCacheComentariosForum();
+        return new Response(
+          JSON.stringify({ success: false, error: "A fama atrapalhou o caminho, tente novamente." }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      // Prestígio é bônus, não é "o registro" que travou o caso original —
+      // continua best-effort em background, nunca bloqueia nem desfaz o
+      // comentário (ele já está confirmado: REGISTRO, a parte que importava
+      // de verdade, já aconteceu de verdade acima).
+      runInBackground(ctx, () =>
+        somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario"),
+      );
+
+      // Resto (topicId novo, sincronização D1, nota/média, notificação do
+      // dono do artista) continua em background — nunca foi a causa do
+      // problema relatado e manter síncrono aqui só multiplicaria o risco
+      // de CPU sem necessidade.
       runInBackground(ctx, async () => {
-        // Tudo nesse bloco depende de uma linha real no Sheets (rowData) —
-        // no fallback D1 (usouApenasD1, linha fantasma/ausente no Sheets),
-        // não tem onde persistir topicId/nota/média nem coluna N (artista)
-        // pra notificar o dono. Pula só essa parte; REGISTRO e prestígio
-        // (abaixo) não dependem de linha no Sheets.
         if (rowData) {
           if (!topicIdJaTinha) {
             const colTopicLetter = colIndexToA1Letter(colTopicIdIndex);
@@ -668,15 +713,6 @@ export async function createCommentController(
                   );
               }
             }
-          }
-
-          // Se essa linha carrega o Código único de OUTRA música (ex: um
-          // vídeo vinculado, ou uma faixa criada com "conta pra uma música já
-          // lançada"), o título de verdade pro REGISTRO é o da música dona
-          // desse código, não o título da própria linha (topic/vídeo).
-          if (tipoMedia !== "album" && codigoUnico) {
-            const tituloReal = await resolverTituloPorCodigoUnico(codigoUnico);
-            if (tituloReal) tituloOficial = tituloReal;
           }
 
           const currentRatings = rowData[colRatingsIndex] || "";
@@ -725,29 +761,6 @@ export async function createCommentController(
             }
           }
         }
-
-        // Registrar Audit Log na Planilha REGISTRO
-        // (1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg) e somar prestígio —
-        // cada um faz suas próprias idas ao Sheets (registrarAuditLog lê
-        // EDIÇÃO CHARTS + REGISTRO inteiros pra achar a próxima linha
-        // livre; somarPrestigio lê regras + usuário) — exatamente o tipo de
-        // trabalho pesado e sequencial que não pode mais travar a resposta
-        // do comentário.
-        await Promise.all([
-          registrarAuditLog({
-            nomeJogador: playerClean,
-            titulo: tituloOficial,
-            tipo:
-              tipoMedia === "album"
-                ? "COMENTÁRIOS (TODOS OS TIPOS DE ÁLBUM)"
-                : "COMENTÁRIOS (SINGLES, VÍDEOS, MÚSICAS)",
-            isAlbum: tipoMedia === "album",
-            codigoUnico,
-          }),
-          somarPrestigio({ telegramId: jogadorIdClean, usuario: playerClean }, "comentario").catch(
-            () => {},
-          ),
-        ]);
       });
     }
 
