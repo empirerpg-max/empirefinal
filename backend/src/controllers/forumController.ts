@@ -700,16 +700,31 @@ export async function createCommentController(
             // primeira vez que alguém comenta nela), não numa leitura cara
             // repetida em toda visita — nunca mais os dois ficam
             // dessincronizados, e o custo é zero no caminho quente de leitura.
-            if (tipoMedia !== "album" && codigoUnico) {
+            // BUG REAL descoberto ao vivo em produção (2026-11-04, "Nobody's
+            // Wife"/Jessica Johnson, mesmo depois do fix de ontem): esse
+            // UPDATE gravava na tabela `midia` — mas getEmpirePlayForumTopicController
+            // (readMusicasFromD1 acima) lê da tabela DEDICADA `musicas`
+            // (musicasDbService.ts), não de `midia`. São duas tabelas D1
+            // diferentes pra música (histórico: `midia` é a mais antiga,
+            // genérica pra música/vídeo/álbum; `musicas` é a dedicada, criada
+            // depois — ver comentário em gestaoController.ts linha ~19). O
+            // sync de ontem gravava na tabela errada: continuava sem efeito
+            // nenhum na leitura real do fórum, só que agora silenciosamente
+            // (sem erro, porque a tabela `midia` existe e o UPDATE "funciona",
+            // só que ninguém lê de lá pra música). Só "música" usa D1 nessa
+            // leitura (vídeo/álbum sempre leem direto do Sheets, ver
+            // readMusicasFromD1 x sheetMedia === "Musicas" em
+            // empirePlayController.ts) — por isso agora só grava na tabela
+            // `musicas`, não mais em `midia`.
+            if (tipoMedia === "musica" && codigoUnico) {
               const db = getCatalogoDb();
               if (db) {
-                const tipoD1 = tipoMedia === "video" || tipoMedia === "music-video" ? "video" : "musica";
                 await db
-                  .prepare(`UPDATE midia SET id_topico = ? WHERE codigo_unico = ? AND tipo = ?`)
-                  .bind(topicIdClean, codigoUnico, tipoD1)
+                  .prepare(`UPDATE musicas SET id_topico = ? WHERE codigo_unico = ?`)
+                  .bind(topicIdClean, codigoUnico)
                   .run()
                   .catch((err) =>
-                    console.warn("[ForumController] Falha ao sincronizar id_topico no D1:", err),
+                    console.warn("[ForumController] Falha ao sincronizar id_topico no D1 (musicas):", err),
                   );
               }
             }
