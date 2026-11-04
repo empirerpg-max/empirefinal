@@ -24,7 +24,7 @@ export async function adminDiagComentarioPorTopicoController(request: Request): 
     if (jogadorAlvo) {
       porJogador[sheet] = comIndice
         .filter(({ row }) => normalizeComparison((row || [])[2] || "") === jogadorAlvo)
-        .map(({ linha, row }) => ({ linha, topicId: row[0] || "", data: row[5] || row[3] || "" }));
+        .map(({ linha, row }) => ({ linha, topicId: row[0] || "", comentario: row[3] || "", data: row[5] || "" }));
     }
   }
 
