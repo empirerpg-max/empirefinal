@@ -609,8 +609,20 @@ export const Forum: React.FC<ForumProps> = ({
   // comentários..." preso pra sempre — nada no código revertia
   // loadingComments pra false se o fetch nunca resolvesse NEM rejeitasse.
   // AbortController com teto garante que SEMPRE cai no catch/finally em no
-  // máximo 20s, não importa a causa real do travamento.
-  const COMMENTS_FETCH_TIMEOUT_MS = 20_000;
+  // máximo o tempo definido abaixo, não importa a causa real do travamento.
+  //
+  // BUG REAL confirmado ao vivo em produção (2026-11-04, "Bastarda", via
+  // DevTools: requisição com status "(canceled)" aos 19.98s): 20s nem
+  // sempre é suficiente pra essa chamada terminar numa rede real mais lenta
+  // (o backend em si responde rápido quando testado direto, mas a soma de
+  // latência de rede + várias idas sequenciais ao Google Sheets pode passar
+  // disso) — o abort cortava a conexão bem na hora em que a resposta real
+  // (com os comentários) estava prestes a chegar, e a tela mostrava "0
+  // comentários" como se fosse dado real. Subir pra 35s dá mais margem;
+  // mais importante, ver o bloco abaixo que agora trata esse caso como erro
+  // de carregamento (com opção de tentar de novo) em vez de "sem
+  // comentários".
+  const COMMENTS_FETCH_TIMEOUT_MS = 35_000;
   const fetchComTimeout = (url: string) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), COMMENTS_FETCH_TIMEOUT_MS);
@@ -650,11 +662,23 @@ export const Forum: React.FC<ForumProps> = ({
       // navigate() acima) como primeira opção — é o id que bate de verdade
       // com Comentarios_Musicas/MV/Albuns.
       const topicIdentifier = topic.telegramTopicId || topic.id || topic.title;
+      // BUG REAL confirmado ao vivo (2026-11-04, "Bastarda" — ver DevTools:
+      // request "(canceled)" aos ~20s): esse .catch(() => null) tratava
+      // timeout/erro de rede exatamente igual a "o backend respondeu que
+      // não tem comentário" — os dois viravam resForum=null, e a tela
+      // mostrava "Nenhum comentário registrado ainda" pros dois casos. Pra
+      // quem está vendo a tela, timeout e "realmente vazio" são coisas
+      // MUITO diferentes (um esconde comentário real, o outro não) — por
+      // isso guarda o motivo da falha agora, em vez de descartá-lo.
+      let falhaDeRede = false;
       const resForum = await fetchComTimeout(
         `/api/empire-play/forum/${activeSubmenu}/${encodeURIComponent(topicIdentifier)}`,
       )
         .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null);
+        .catch(() => {
+          falhaDeRede = true;
+          return null;
+        });
 
       let commentsFromApi: CommentItem[] = [];
 
@@ -742,6 +766,16 @@ export const Forum: React.FC<ForumProps> = ({
       }
 
       if (myToken !== commentsFetchToken.current) return;
+      // A chamada principal falhou de verdade (timeout/rede) e o fallback
+      // não trouxe nada — não dá pra confiar que "0 comentários" é real
+      // (pode ser exatamente o caso do DevTools: a resposta real com
+      // comentário estava a caminho e foi cortada). Mostra erro com opção
+      // de tentar de novo em vez de fingir que o tópico está vazio.
+      if (falhaDeRede && commentsFromApi.length === 0) {
+        setTopicComments([]);
+        setCommentsLoadError(true);
+        return;
+      }
       setTopicComments(commentsFromApi);
     } catch (err) {
       console.error("Erro ao carregar comentários:", err);
