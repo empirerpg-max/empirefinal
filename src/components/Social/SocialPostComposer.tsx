@@ -444,6 +444,9 @@ export function SocialPostComposer({
     // Feed do Instagram e TikTok: a mídia é a obrigatória, legenda é
     // opcional — não o contrário (bug real: travava o post/a missão de
     // pre-save com imagem anexada e legenda vazia, sem nenhum aviso).
+    // "Mídia" aqui conta tanto uma imagem do dispositivo (imageUrl) quanto
+    // uma música/álbum anexado (attachedMaterial, que carrega capa própria)
+    // — mesmo bug se repetia anexando só a música, sem foto do dispositivo.
     const isFeedOuTikTok = (selectedType === "Instagram" && igMode === "Feed") || selectedType === "TikTok";
     const hasContent = isStoryMusicDraft
       ? !!attachedMaterial
@@ -452,7 +455,7 @@ export function SocialPostComposer({
         : isTwitterMaterial
           ? true
           : isFeedOuTikTok
-            ? !!imageUrl
+            ? !!imageUrl || !!attachedMaterial
             : !!postText.trim();
     if (!selectedType || !hasContent || !activeArtist || submitting) return;
     if (blackoutMode && !blackoutUsername.trim()) return;
@@ -484,11 +487,17 @@ export function SocialPostComposer({
         subtipo: selectedType === "Instagram" ? igMode : undefined,
         autor: autorFinal,
         texto: postText,
-        media_url: isStoryMusicDraft ? attachedMaterial?.capaUrl || "" : imageUrl,
+        media_url: isStoryMusicDraft
+          ? attachedMaterial?.capaUrl || ""
+          : imageUrl || (isFeedOuTikTok ? attachedMaterial?.capaUrl || "" : ""),
         media_tipo: mediaTipo,
         analytics: { likes: 0, comments: 0, shares: 0 },
-        ...(selectedType === "Twitter" && attachedMaterial ? { material: attachedMaterial } : {}),
-        ...(isStoryMusicDraft && attachedMaterial ? { material: attachedMaterial } : {}),
+        // Anexar música/álbum sem foto do dispositivo é um caminho válido
+        // de anúncio (ex.: missão "Post de anúncio" do pre-save) — o
+        // material (e a capa dele, usada acima como media_url) precisa ir
+        // no payload em QUALQUER rede/modo em que foi anexado, não só
+        // Twitter/Story-música, senão o post sai sem nada.
+        ...(attachedMaterial ? { material: attachedMaterial } : {}),
         ...(selectedType === "Instagram" && igMode === "Feed" && extraImageUrls.length
           ? { extra_media: extraImageUrls }
           : {}),
@@ -1011,7 +1020,7 @@ export function SocialPostComposer({
                         : selectedType === "Twitter" && attachedMaterial
                           ? true
                           : (selectedType === "Instagram" && igMode === "Feed") || selectedType === "TikTok"
-                            ? imageUrl
+                            ? imageUrl || attachedMaterial
                             : postText.trim()) ||
                     !activeArtist ||
                     (blackoutMode && !blackoutUsername.trim())
