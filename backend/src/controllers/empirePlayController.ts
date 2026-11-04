@@ -1466,6 +1466,39 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
   }
 }
 
+// BUG REAL de produção (2026-11-04, "Bastarda [FunkItaliaRemix]" e outros —
+// erro 1102/CPU excedida ao abrir tópico, confirmado ao vivo mesmo DEPOIS de
+// remover a verificação ao vivo de topicId adicionada/removida em 2026-11-03):
+// essa leitura de EDIÇÃO CHARTS pra achar "semanas no chart" sempre pediu
+// "A2:BD5000" — 56 colunas × 5000 linhas (~280 mil células) — quando só 2
+// colunas (F = WEEKS, BD = Código único) são usadas. Não era uma regressão
+// recente: já existia antes de qualquer fix desta semana, só que a planilha
+// cresceu o bastante (mais músicas/semanas registradas) pra esse custo virar
+// o fiel da balança do limite de CPU do Worker, derrubando tópicos aleatórios
+// sem relação nenhuma com os bugs já corrigidos. Lendo só as 2 colunas que
+// importam (em paralelo) corta o payload em ~96%. Resultado cacheado por
+// linha (Map), não só o array bruto — cálculo feito uma vez por janela de
+// cache, não a cada chamada.
+let edicaoChartsWeeksMapCache: { expiresAt: number; mapa: Map<string, number> } | null = null;
+async function getSemanasPorCodigoUnicoEdicaoCharts(codigoUnico: string): Promise<number | null> {
+  const agora = Date.now();
+  if (!edicaoChartsWeeksMapCache || edicaoChartsWeeksMapCache.expiresAt < agora) {
+    const [colF, colBD] = await Promise.all([
+      googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "F2:F5000").catch(() => []),
+      googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "BD2:BD5000").catch(() => []),
+    ]);
+    const mapa = new Map<string, number>();
+    const total = Math.max(colF.length, colBD.length);
+    for (let i = 0; i < total; i++) {
+      const codigo = normalizeComparison(colBD[i]?.[0] || "");
+      const semanas = Number(colF[i]?.[0]);
+      if (codigo && !Number.isNaN(semanas) && colF[i]?.[0]) mapa.set(codigo, semanas);
+    }
+    edicaoChartsWeeksMapCache = { expiresAt: agora + 60_000, mapa };
+  }
+  return edicaoChartsWeeksMapCache.mapa.get(codigoUnico) ?? null;
+}
+
 /**
  * GET /api/empire-play/forum/:tipo/:topicId
  */
@@ -1667,16 +1700,8 @@ export async function getEmpirePlayForumTopicController(
         // DevTools, aba Network: "nostalgic traveller" com comentários reais
         // existentes nunca carregava, 503 puro). Cache curto (60s) é mais
         // que suficiente — EDIÇÃO CHARTS não muda a cada segundo.
-        const edicaoChartsRows = await cachedRead("forum:edicao-charts", 60_000, () =>
-          googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD5000"),
-        ).catch(() => []);
-        for (const row of edicaoChartsRows) {
-          if (normalizeComparison(row[55] || "") === codigoUnico) {
-            const semanas = Number(row[5]);
-            if (!Number.isNaN(semanas) && row[5]) mediaItem.semanasNoChart = semanas;
-            break;
-          }
-        }
+        const semanas = await getSemanasPorCodigoUnicoEdicaoCharts(codigoUnico);
+        if (semanas !== null) mediaItem.semanasNoChart = semanas;
       }
     } else if (mediaItem && rawMedia && sheetIdLabel === "Videos") {
       // Vídeo não tem Código único nem WEEKS próprios — sempre usa o da
@@ -1687,12 +1712,19 @@ export async function getEmpirePlayForumTopicController(
       const nomeOriginalNosCharts = getValue(rawMedia, ["nome_original_nos_charts"]);
       if (nomeOriginalNosCharts) {
         const alvo = normalizeComparison(nomeOriginalNosCharts.split(";")[0] || "");
+        // Só H (nome), M (weeks video) e Z (código único) são usados aqui —
+        // "A2:Z5000" em vez de um readValues sem range (que lia a largura
+        // DEFAULT inteira da aba, não só essas 3 colunas) corta o payload
+        // igual ao mesmo ajuste feito pra EDIÇÃO CHARTS logo abaixo (ver
+        // getSemanasPorCodigoUnicoEdicaoCharts) — mesma causa de erro 1102
+        // (CPU excedida), só que pela aba Musicas inteira em vez da EDIÇÃO
+        // CHARTS.
         const musicasRows = await googleSheetsService.principal
-          .readValues("Musicas")
+          .readValues("Musicas", "A2:Z5000")
           .catch(() => []);
         let codigoUnicoMusica = "";
         let weeksVideoFallback: number | null = null;
-        for (const row of musicasRows.slice(1)) {
+        for (const row of musicasRows) {
           // H = Nome(fullTitle), M = WEEKS VIDEO, Z (índice 25) = Código único.
           if (alvo && normalizeComparison(row[7] || "") === alvo) {
             codigoUnicoMusica = normalizeComparison(row[25] || "");
@@ -1702,16 +1734,8 @@ export async function getEmpirePlayForumTopicController(
           }
         }
         if (codigoUnicoMusica) {
-          const edicaoChartsRows = await cachedRead("forum:edicao-charts", 60_000, () =>
-            googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD5000"),
-          ).catch(() => []);
-          for (const row of edicaoChartsRows) {
-            if (normalizeComparison(row[55] || "") === codigoUnicoMusica) {
-              const semanas = Number(row[5]);
-              if (!Number.isNaN(semanas) && row[5]) mediaItem.semanasNoChart = semanas;
-              break;
-            }
-          }
+          const semanas = await getSemanasPorCodigoUnicoEdicaoCharts(codigoUnicoMusica);
+          if (semanas !== null) mediaItem.semanasNoChart = semanas;
         }
         if (mediaItem.semanasNoChart == null && weeksVideoFallback !== null) {
           mediaItem.semanasNoChart = weeksVideoFallback;
@@ -1719,11 +1743,28 @@ export async function getEmpirePlayForumTopicController(
       }
     } else if (mediaItem && rawMedia && sheetIdLabel === "Album") {
       // EDIÇÃO CHARTS ÁLBUMS: R (índice 17) = Código único, C (índice 2) =
-      // Semanas, D (índice 3) = nome do álbum (usado só de fallback).
+      // Semanas, D (índice 3) = nome do álbum (usado só de fallback). Mesmo
+      // ajuste de custo que EDIÇÃO CHARTS acima (ver
+      // getSemanasPorCodigoUnicoEdicaoCharts): "A2:R5000" lia 18 colunas
+      // quando só 3 (C, D, R) importam — narrow pra "A2:D5000" + "R2:R5000"
+      // em paralelo, remontando as colunas que o resto do bloco já espera
+      // nos mesmos índices (row[2], row[3], row[17]).
       const codigoUnico = normalizeComparison(getValue(rawMedia, ["codigo_unico"]) || "");
-      const edicaoAlbunsRows = await cachedRead("forum:edicao-charts-albuns", 60_000, () =>
-        googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000"),
-      ).catch(() => []);
+      const [colAD, colR] = await cachedRead("forum:edicao-charts-albuns", 60_000, () =>
+        Promise.all([
+          googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:D5000"),
+          googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "R2:R5000"),
+        ]),
+      ).catch(() => [[], []]);
+      const edicaoAlbunsRows: string[][] = [];
+      const totalAlbuns = Math.max(colAD.length, colR.length);
+      for (let i = 0; i < totalAlbuns; i++) {
+        const row: string[] = [];
+        row[2] = colAD[i]?.[2] || "";
+        row[3] = colAD[i]?.[3] || "";
+        row[17] = colR[i]?.[0] || "";
+        edicaoAlbunsRows.push(row);
+      }
       if (codigoUnico) {
         for (const row of edicaoAlbunsRows) {
           if (normalizeComparison(row[17] || "") === codigoUnico) {
