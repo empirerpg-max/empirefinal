@@ -157,7 +157,22 @@ export function ImageCropModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+    // BUG REAL confirmado em produção (2026-11-04): esse modal pode ser
+    // renderizado dentro de OUTRO modal com fundo clicável (ex: o
+    // composer de post social dentro da missão de pre-save, que por sua
+    // vez fica dentro do modal "Dia N" do calendário) — sem parar a
+    // propagação aqui, um clique em "Salvar alterações"/"Cancelar"/"Usar
+    // original" sobe pela árvore do DOM até o fundo desses modais
+    // ancestrais, que interpretam como "clicou fora" e fecham TUDO.
+    // Reproduzido ao vivo: recortar/usar a foto da missão "Post de
+    // anúncio" fechava a missão inteira (e o composer junto) no instante
+    // do clique — a imagem chegava a subir certinho (toast "Imagem
+    // anexada!" aparecia), mas ninguém via isso porque o modal que devia
+    // mostrar o resultado já tinha sumido.
+    <div
+      className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="w-full max-w-md bg-neutral-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <h3 className="text-sm font-black text-white">{title}</h3>
