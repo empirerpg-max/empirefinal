@@ -441,13 +441,19 @@ export function SocialPostComposer({
     const isStoryDraft = selectedType === "Instagram" && igMode === "Story";
     const isStoryMusicDraft = isStoryDraft && storyMusicMode;
     const isTwitterMaterial = selectedType === "Twitter" && !!attachedMaterial;
+    // Feed do Instagram e TikTok: a mídia é a obrigatória, legenda é
+    // opcional — não o contrário (bug real: travava o post/a missão de
+    // pre-save com imagem anexada e legenda vazia, sem nenhum aviso).
+    const isFeedOuTikTok = (selectedType === "Instagram" && igMode === "Feed") || selectedType === "TikTok";
     const hasContent = isStoryMusicDraft
       ? !!attachedMaterial
       : isStoryDraft
         ? !!(postText.trim() || imageUrl)
         : isTwitterMaterial
           ? true
-          : !!postText.trim();
+          : isFeedOuTikTok
+            ? !!imageUrl
+            : !!postText.trim();
     if (!selectedType || !hasContent || !activeArtist || submitting) return;
     if (blackoutMode && !blackoutUsername.trim()) return;
 
@@ -1004,7 +1010,9 @@ export function SocialPostComposer({
                         ? postText.trim() || imageUrl
                         : selectedType === "Twitter" && attachedMaterial
                           ? true
-                          : postText.trim()) ||
+                          : (selectedType === "Instagram" && igMode === "Feed") || selectedType === "TikTok"
+                            ? imageUrl
+                            : postText.trim()) ||
                     !activeArtist ||
                     (blackoutMode && !blackoutUsername.trim())
                   }
