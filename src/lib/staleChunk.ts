@@ -64,7 +64,19 @@ export function reloadOnStaleChunk(
   if (typeof window === "undefined" || typeof sessionStorage === "undefined") return;
   const FLAG = "empire_stale_chunk_reload";
   const alreadyTried = sessionStorage.getItem(FLAG);
-  if (alreadyTried && Date.now() - Number(alreadyTried) < 10_000) return;
+  if (alreadyTried && Date.now() - Number(alreadyTried) < 10_000) {
+    // BUG REAL confirmado em produção (2026-11-04): essa supressão voltava
+    // em silêncio total — nenhum reload, nenhum aviso. Pra quem estava no
+    // meio de uma ação (ex: upload de foto na missão de pre-save, logo
+    // depois de uma leva de deploys seguidos), isso aparecia como "a tela
+    // simplesmente não faz mais nada", sem nenhuma pista do que aconteceu.
+    // Agora sempre avisa, mesmo quando não recarrega de novo.
+    toastFn?.("Essa tela ficou desatualizada", {
+      description: "Recarrega a página (puxe pra baixo ou F5) pra continuar de onde parou.",
+      duration: 8000,
+    });
+    return;
+  }
 
   const campoAtivo = estaDigitando();
   if (campoAtivo) {
