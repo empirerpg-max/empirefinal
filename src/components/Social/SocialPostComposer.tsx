@@ -871,33 +871,52 @@ export function SocialPostComposer({
                           const file = e.target.files?.[0];
                           e.target.value = "";
                           if (!file) return;
-                          const isVideo = file.type.startsWith("video/");
-                          if (isVideo) {
-                            const erro = await validarVideoAntesDeEnviar(file);
-                            if (erro) {
-                              toast.error(erro);
-                              return;
+                          // BUG REAL em investigação (reportado ao vivo, 2026-11-04):
+                          // depois de "Salvar alterações" no recorte, o modal fechava
+                          // e nada mais acontecia — sem toast, sem preview, sem erro
+                          // visível nenhum. Esse handler inteiro não tinha try/catch
+                          // nenhum: qualquer exceção aqui vira uma promise rejeitada
+                          // sem handler, visível só no console (nunca pro jogador) —
+                          // exatamente o sintoma. Agora qualquer falha aparece de
+                          // verdade, em vez de só desaparecer.
+                          try {
+                            const isVideo = file.type.startsWith("video/");
+                            if (isVideo) {
+                              const erro = await validarVideoAntesDeEnviar(file);
+                              if (erro) {
+                                toast.error(erro);
+                                return;
+                              }
                             }
-                          }
-                          const isStory = selectedType === "Instagram" && igMode === "Story";
-                          const folderType: SocialFolderType = isStory ? "socialStories" : "socialPosts";
-                          let fileToUpload: File = file;
-                          if (!isVideo) {
-                            if (isStory) {
-                              fileToUpload = await cropImageToStoryRatio(file).catch(() => file);
+                            const isStory = selectedType === "Instagram" && igMode === "Story";
+                            const folderType: SocialFolderType = isStory ? "socialStories" : "socialPosts";
+                            let fileToUpload: File = file;
+                            if (!isVideo) {
+                              if (isStory) {
+                                fileToUpload = await cropImageToStoryRatio(file).catch(() => file);
+                              } else {
+                                const cropped = await cropPostMedia(file);
+                                if (!cropped) return;
+                                fileToUpload = cropped;
+                              }
+                            }
+                            setUploadingImage(true);
+                            const url = await uploadToDrive(fileToUpload, folderType);
+                            if (url) {
+                              setImageUrl(url);
+                              setMediaTipo(isVideo ? "video" : "imagem");
+                              toast.success("Imagem anexada!");
                             } else {
-                              const cropped = await cropPostMedia(file);
-                              if (!cropped) return;
-                              fileToUpload = cropped;
+                              toast.error("Não deu pra anexar essa imagem — tenta de novo.");
                             }
+                          } catch (err) {
+                            console.error("[SocialPostComposer] Falha ao anexar mídia:", err);
+                            toast.error(
+                              `Deu erro ao anexar a mídia: ${err instanceof Error ? err.message : String(err)}`,
+                            );
+                          } finally {
+                            setUploadingImage(false);
                           }
-                          setUploadingImage(true);
-                          const url = await uploadToDrive(fileToUpload, folderType);
-                          if (url) {
-                            setImageUrl(url);
-                            setMediaTipo(isVideo ? "video" : "imagem");
-                          }
-                          setUploadingImage(false);
                         }}
                       />
                     </label>
