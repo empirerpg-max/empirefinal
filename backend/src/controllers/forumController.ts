@@ -637,6 +637,37 @@ export async function createCommentController(
               .catch((err) =>
                 console.warn("[ForumController] Falha ao gravar novo ID do tópico:", err),
               );
+            // CAUSA RAIZ REAL do "comentário some"/"0 comentários" recorrente
+            // (não a staleness em geral — ESTE é o momento exato em que ela
+            // nasce pra música): esse topicId novo só ia pro Sheets, nunca
+            // pro D1 (`midia.id_topico`), que é de onde
+            // getEmpirePlayForumTopicController lê pra abrir o tópico
+            // (ver empirePlayController.ts, readMusicasFromD1 — usado por
+            // performance). D1 ficava com id_topico vazio/antigo pra sempre
+            // nessa linha, enquanto TODO comentário (este e os próximos)
+            // salva contra o id novo — a busca de comentário pelo id do D1
+            // nunca batia. A tentativa anterior de corrigir isso relendo a
+            // aba Musicas inteira (ao vivo, a cada tópico aberto) causou um
+            // problema pior: estourava o limite de CPU do Worker (erro
+            // Cloudflare 1102), derrubando o tópico inteiro pra QUALQUER
+            // música, não só as afetadas. Correção definitiva de verdade:
+            // sincroniza o D1 só nesse evento raro (1x por música, na
+            // primeira vez que alguém comenta nela), não numa leitura cara
+            // repetida em toda visita — nunca mais os dois ficam
+            // dessincronizados, e o custo é zero no caminho quente de leitura.
+            if (tipoMedia !== "album" && codigoUnico) {
+              const db = getCatalogoDb();
+              if (db) {
+                const tipoD1 = tipoMedia === "video" || tipoMedia === "music-video" ? "video" : "musica";
+                await db
+                  .prepare(`UPDATE midia SET id_topico = ? WHERE codigo_unico = ? AND tipo = ?`)
+                  .bind(topicIdClean, codigoUnico, tipoD1)
+                  .run()
+                  .catch((err) =>
+                    console.warn("[ForumController] Falha ao sincronizar id_topico no D1:", err),
+                  );
+              }
+            }
           }
 
           // Se essa linha carrega o Código único de OUTRA música (ex: um

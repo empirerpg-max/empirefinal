@@ -1789,65 +1789,22 @@ export async function getEmpirePlayForumTopicController(
     // tem comentário de verdade. Não dá pra confiar no D1 pra essa chave
     // específica: sempre confirma contra a planilha (fonte real de onde
     // comentário é gravado) antes de montar normMediaTopicId/normMediaTitle.
-    if (sheetIdLabel === "Musicas" && rawMedia) {
-      const codigoUnicoAlvo = normalizeComparison(getValue(rawMedia, ["codigo_unico"]) || "");
-      const topicIdD1 = normalizeComparison(realTopicId);
-      try {
-        // Cache curto (15s) — é a aba inteira de Musicas, lida de novo a
-        // cada tópico aberto senão (mesmo risco de CPU/503 sob pico já
-        // documentado acima pra EDIÇÃO CHARTS); 15s é curto o bastante pra
-        // nunca mascarar uma correção recente por muito tempo, mas evita
-        // reler tudo a cada clique.
-        //
-        // BUG REAL de produção causado por essa própria correção (2026-11-03,
-        // minutos depois do deploy): "A1:AE50000" pedia 50 mil linhas × 31
-        // colunas (~1,5 milhão de células) pro Sheets a cada tópico de
-        // música aberto sem cache válido — o parse desse payload gigante
-        // sozinho estourava o limite de CPU do Worker (erro Cloudflare 1102),
-        // derrubando o endpoint inteiro (não só os comentários) pra QUALQUER
-        // tópico de música, não só os afetados pelo bug original. Confirmado
-        // ao vivo: /api/empire-play/forum/musicas/<id> retornando "error code:
-        // 1102" em vez de JSON.
-        //
-        // Reduzir só o número de linhas (tentativa anterior: "A1:AE2000")
-        // NÃO foi suficiente — ainda estourava CPU em parte das chamadas
-        // (confirmado ao vivo logo após esse primeiro ajuste: 2 de 3 tópicos
-        // testados voltaram a dar 1102). O que pesa não é só a quantidade de
-        // linhas, é o total de CÉLULAS: 31 colunas por linha quando só 3
-        // (B=ID do tópico, H=Nome, Z=Código único) são realmente usadas
-        // aqui. Lendo cada coluna separada (3 chamadas estreitas, em
-        // paralelo) em vez de uma larga corta o payload em ~90% com o mesmo
-        // alcance de linhas.
-        const [colB, colH, colZ] = await cachedRead("forum:musicas-live-topicid", 15_000, () =>
-          Promise.all([
-            googleSheetsService.principal.readValues("Musicas", "B1:B2000"),
-            googleSheetsService.principal.readValues("Musicas", "H1:H2000"),
-            googleSheetsService.principal.readValues("Musicas", "Z1:Z2000"),
-          ]),
-        );
-        const totalLinhas = Math.max(colB.length, colH.length, colZ.length);
-        for (let i = 1; i < totalLinhas; i++) {
-          const codigoLive = normalizeComparison(colZ[i]?.[0] || "");
-          const topicIdLive = normalizeText(colB[i]?.[0] || "");
-          const matchPorCodigo = codigoUnicoAlvo && codigoLive === codigoUnicoAlvo;
-          const matchPorTopicId = !matchPorCodigo && topicIdD1 && normalizeComparison(topicIdLive) === topicIdD1;
-          if (matchPorCodigo || matchPorTopicId) {
-            if (topicIdLive && topicIdLive !== realTopicId) {
-              console.warn(
-                `[getEmpirePlayForumTopicController] D1 desatualizado: topicId do D1 ("${realTopicId}") difere do real na planilha ("${topicIdLive}") pro código único "${codigoUnicoAlvo}" — usando o da planilha.`,
-              );
-              realTopicId = topicIdLive;
-            }
-            const tituloLive = normalizeText(colH[i]?.[0] || "");
-            if (tituloLive && mediaItem) mediaItem.title = tituloLive.includes(" - ") ? tituloLive.split(" - ").slice(1).join(" - ") : tituloLive;
-            break;
-          }
-        }
-      } catch (err) {
-        console.warn("[getEmpirePlayForumTopicController] Falha ao confirmar topicId contra a planilha:", err);
-      }
-    }
-
+    // REMOVIDO (2026-11-04): verificação "ao vivo" do topicId contra a
+    // planilha Musicas inteira, adicionada em 2026-11-03 pra resolver o D1
+    // desatualizado. Reduzida duas vezes (A:AE50000 -> A:AE2000 -> só 3
+    // colunas em paralelo) e AINDA ASSIM estourava o limite de CPU do
+    // Worker (erro Cloudflare 1102) em parte das chamadas — confirmado ao
+    // vivo de novo em 2026-11-04 ("Bad Advice", Dagny). Esse mecanismo
+    // tentava consertar a staleness do lado da LEITURA (relendo tudo a
+    // cada tópico aberto, caro e ainda assim instável sob pico), quando a
+    // causa raiz é do lado da ESCRITA: o topicId novo gerado em
+    // createCommentController (forumController.ts, bloco "if
+    // (!topicIdJaTinha)") só ia pro Sheets, nunca pro D1 (`midia.id_topico`)
+    // — a partir de agora esse mesmo bloco sincroniza o D1 no mesmo golpe,
+    // no único momento em que esse valor muda (1x por música, não em toda
+    // leitura). Backfill único rodado em 2026-11-04 (admin/migrar-musicas-d1)
+    // corrigiu o atraso já acumulado em produção até aqui. Sem leitura
+    // extra nenhuma no caminho quente — custo zero, sem risco de CPU.
     const mediaTopicId = realTopicId || (mediaItem ? mediaItem.id : "");
     if (mediaItem && realTopicId) {
       mediaItem.topicId = realTopicId;
