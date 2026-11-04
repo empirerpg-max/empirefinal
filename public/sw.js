@@ -1,4 +1,4 @@
-const CACHE = "empire-shell-v3";
+const CACHE = "empire-shell-v4";
 // "/" não entra mais aqui — navegação nunca serve HTML cacheado (ver
 // comentário no listener de "fetch"), então pré-cachear a home só ocuparia
 // espaço à toa.
@@ -89,12 +89,35 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // BUG REAL confirmado em produção (2026-11-04, DevTools ao vivo): o
+  // comentário acima já dizia que só script/style/imagem precisam desse
+  // caminho com cache+timeout, mas o código interceptava TODO request
+  // same-origin que não fosse /api/ nem navegação — incluindo os fetches
+  // de DADO que o próprio roteador da SPA (TanStack Start) faz direto pro
+  // path da rota (ex: "/empire-play/gestao-presave", destination "", não
+  // é asset nenhum). Esses fetches nunca batem no cache (só script/style/
+  // imagem são guardados ali), então só herdavam o timeout de 10s +
+  // reencaminhamento do SW à toa — e, ao vivo, um desses falhou com
+  // net::ERR_FAILED vindo do sw.js, quebrando a página inteira debaixo do
+  // modal que estava aberto (sumiu sem nenhum aviso). Agora só
+  // script/style/imagem/fonte passam por aqui — qualquer outro fetch
+  // (dado de rota, o que for) vai cru pro navegador, mesma lógica do
+  // bypass de /api/ acima.
+  if (
+    request.destination !== "style" &&
+    request.destination !== "script" &&
+    request.destination !== "image" &&
+    request.destination !== "font"
+  ) {
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then(
       (cached) =>
         cached ||
         fetchComTimeout(request).then((res) => {
-          if (res.ok && (request.destination === "style" || request.destination === "script" || request.destination === "image")) {
+          if (res.ok) {
             const clone = res.clone();
             caches.open(CACHE).then((cache) => cache.put(request, clone));
           }
