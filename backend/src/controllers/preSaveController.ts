@@ -492,9 +492,21 @@ async function appendCampanha(c: PreSaveCampanha): Promise<number> {
     }
     const linhaAlvo = ultimaLinha + 1;
     c._rowIndex = linhaAlvo;
-    await googleSheetsService.principal.updateValues(PRESAVE_SHEET, `A${linhaAlvo}:U${linhaAlvo}`, [
-      campanhaToRow(c),
-    ]);
+    // BUG REAL corrigido aqui: updateValues devolve `false` (nunca lança)
+    // quando as 3 tentativas de escrita falham — esse retorno era
+    // ignorado, então a campanha "criava com sucesso" pro jogador mesmo
+    // sem nada gravado na planilha (reportado ao vivo: Jessica Johnson,
+    // "deu sucesso o envio" mas a campanha nunca existiu). Mesma regra já
+    // aplicada pro registro de comentários: só confirma sucesso se a
+    // escrita realmente aconteceu.
+    const gravou = await googleSheetsService.principal.updateValues(
+      PRESAVE_SHEET,
+      `A${linhaAlvo}:U${linhaAlvo}`,
+      [campanhaToRow(c)],
+    );
+    if (!gravou) {
+      throw new Error("Falha ao gravar a campanha na planilha — tenta de novo.");
+    }
     return linhaAlvo;
   });
 }
