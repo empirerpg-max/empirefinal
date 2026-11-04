@@ -108,6 +108,19 @@ export const CommentModal: React.FC<CommentModalProps> = ({
     setLoading(true);
     setErrorMsg(null);
 
+    // BUG REAL de produção (relatado 2026-11-04, "comentei e sumiu" — Weuller,
+    // "I Am Hollywood"): esse fetch nunca teve timeout nenhum. Confirmado por
+    // investigação: o comentário em questão não existe em NENHUMA aba de
+    // comentários nem deixou rastro de falha em LOGS — ou seja, nem chegou a
+    // completar no servidor. Sem AbortController, se a rede engasgasse ou o
+    // Worker demorasse, a requisição ficava pendurada indefinidamente: sem
+    // erro, sem sucesso, até o jogador desistir/fechar o app achando que
+    // tinha enviado. Mesmo padrão já usado pro GET de comentários
+    // (fetchComTimeout, Forum.tsx) — nunca tinha sido aplicado aqui, no envio.
+    const COMMENT_SUBMIT_TIMEOUT_MS = 20_000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), COMMENT_SUBMIT_TIMEOUT_MS);
+
     try {
       const response = await fetch("/api/forum/comment", {
         method: "POST",
@@ -122,7 +135,8 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           intervalo,
           replyTo: replyTo || undefined,
         }),
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timer));
 
       const json = await response.json();
 
@@ -139,7 +153,15 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       localStorage.removeItem(draftKey);
       onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || "Erro de conexão ao enviar comentário.");
+      // Sem essa checagem, um timeout (AbortError) caía no fallback genérico
+      // "Erro de conexão" — vago demais pro jogador saber que pode tentar de
+      // novo com confiança (o texto digitado continua intacto no campo).
+      const timedOut = err?.name === "AbortError";
+      setErrorMsg(
+        timedOut
+          ? "A publicação demorou demais e foi cancelada. Seu texto não foi perdido — toque em enviar de novo."
+          : err.message || "Erro de conexão ao enviar comentário.",
+      );
     } finally {
       setLoading(false);
     }
