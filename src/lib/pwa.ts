@@ -60,8 +60,23 @@ export function useServiceWorkerUpdate() {
       if (document.visibilityState === "visible") registration?.update().catch(() => {});
     }, 3 * 60 * 1000);
 
+    // BUG REAL confirmado em produção (2026-11-04): "controllerchange"
+    // dispara não só numa atualização de verdade, mas também na PRIMEIRA
+    // vez que o Service Worker assume o controle da aba (sem nenhum
+    // controller antes) — e esse primeiro registro é assíncrono, podendo
+    // terminar bem no meio de uma ação do jogador (reproduzido ao vivo:
+    // upload de foto numa missão de pre-save — a tela recarregava sozinha
+    // "do nada" bem naquele instante, fechando o modal sem nenhum aviso,
+    // sem relação real com a foto). Só recarrega a partir da SEGUNDA troca
+    // de controller em diante — a primeira é só o SW assumindo pela
+    // primeira vez, não uma atualização que precise de reload.
+    let hadController = !!navigator.serviceWorker.controller;
     let reloading = false;
     const onControllerChange = () => {
+      if (!hadController) {
+        hadController = true;
+        return;
+      }
       if (reloading) return;
       reloading = true;
       window.location.reload();
