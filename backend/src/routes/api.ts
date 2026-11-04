@@ -293,6 +293,7 @@ import { adminDiagComentarioSumidoGenericoController } from "../controllers/admi
 import { adminDiagCodigoDuplicadoController } from "../controllers/adminDiagCodigoDuplicadoController";
 import { adminDiagTopicIdController } from "../controllers/adminDiagTopicIdController";
 import { adminDiagComentarioPorTopicoController } from "../controllers/adminDiagComentarioPorTopicoController";
+import { adminBuscarLogsController } from "../controllers/adminBuscarLogsController";
 import { adminFixCapaStampOnItController } from "../controllers/adminFixCapaStampOnItController";
 import { adminDiagVarreduraChartCapasController } from "../controllers/adminDiagVarreduraChartCapasController";
 import { adminFixVarreduraChartCapasController } from "../controllers/adminFixVarreduraChartCapasController";
@@ -2231,6 +2232,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagTopicIdController(request);
   } else if (url.pathname === "/api/empire-play/admin/diag-comentario-por-topico") {
     response = await adminDiagComentarioPorTopicoController(request);
+  } else if (url.pathname === "/api/empire-play/admin/buscar-logs") {
+    response = await adminBuscarLogsController(request);
   } else if (url.pathname === "/api/empire-play/admin/fix-capa-stamp-on-it") {
     response = await adminFixCapaStampOnItController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-varredura-chart-capas") {
