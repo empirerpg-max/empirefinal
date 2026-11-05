@@ -1,20 +1,23 @@
 import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
 
-// Corrige "IT'S OVER" (Samantha Cooper, EMP999): a música tem linha em
-// EDIÇÃO CHARTS (codigoUnico EMP999, pendente, aparece nos charts) e tem
-// dado completo acessível via D1/fórum (áudio, letra, comentários reais já
-// recebidos) — mas NÃO TEM linha em "Musicas", a aba que alimenta o
-// catálogo de verdade (Editar Lançamentos, Fórum via planilha). Causa
-// provável: appendRow em Musicas "disse que gravou" (devolveu um número de
-// linha, sem lançar erro) mas a linha não ficou lá de verdade — mesma
-// classe de bug já blindada em appendRowMusicasSeguro/
-// appendRowMusicasComCursor com uma releitura de confirmação (ver
-// gestaoController.ts). Esse admin tool repara o caso específico já
-// acontecido: recria a linha em Musicas com os dados reais (puxados do
-// próprio tópico do fórum, que lê D1) e copia o Código único EMP999 pra
-// Musicas!Z, igual createSongController faria numa criação normal.
+// Corrige "IT'S OVER" (Samantha Cooper, EMP999): a linha em "Musicas"
+// (linha 831, confirmado ao vivo) existe mas está corrompida — quase toda
+// coluna vazia, só "Código único" (Z) com "EMP999" e, por engano, a capa
+// (uma URL do Drive) parada na coluna X ("Pendente?") em vez da D. Data,
+// título, áudio, letra, ACT PRINCIPAL — tudo vazio. É por isso que a
+// música nunca aparecia em Editar Lançamentos (busca por título/artista
+// não acha nada em colunas vazias), mesmo já tendo tópico publicado,
+// comentários reais e aparecendo em EDIÇÃO CHARTS.
 //
-// GET /api/gestao/admin/fix-its-over-musicas (dry-run) / ?confirmar=1
+// Causa provável: o appendRow original devolveu um número de linha válido
+// (sem lançar erro) mas gravou a linha vazia — mesma classe de bug já
+// blindada em appendRowMusicasSeguro/appendRowMusicasComCursor com uma
+// releitura de confirmação depois do append (ver gestaoController.ts).
+// Esse admin tool repara o caso específico já acontecido: SOBRESCREVE a
+// linha 831 inteira (A:Y) com os dados reais (áudio/letra/capa já
+// confirmados via D1/fórum), sem criar linha nova (evita duplicar).
+//
+// GET /api/empire-play/admin/fix-its-over-musicas (dry-run) / ?confirmar=1
 export async function adminFixItsOverMusicasController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const confirmar = url.searchParams.get("confirmar") === "1";
@@ -22,41 +25,22 @@ export async function adminFixItsOverMusicasController(request: Request): Promis
   const TOPIC_ID = "musica_1793844310095_u4hhzr";
   const TITULO_COMPLETO = "Samantha Cooper - IT’S OVER";
 
-  // Confere que a linha realmente não existe em Musicas antes de criar
-  // qualquer coisa — nunca duplica se alguém já tiver corrigido isso.
   const musicasRows = await googleSheetsService.principal.readValues("Musicas").catch(() => []);
+  let linhaAlvo = -1;
   for (let i = 1; i < musicasRows.length; i++) {
     const row = musicasRows[i];
     if (normalizeComparison(row[25] || "") === CODIGO || (row[1] || "").trim() === TOPIC_ID) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: `Já existe linha em Musicas pra EMP999 (linha ${i + 1}) — nada a corrigir.`,
-          linhaExistente: i + 1,
-          conteudoLinhaExistente: {
-            data: row[0] || "",
-            topicId: row[1] || "",
-            audioUrl: row[2] || "",
-            capaUrl: row[3] || "",
-            letra: row[4] || "",
-            comentariosPara: row[5] || "",
-            idCriador: row[6] || "",
-            titulo: row[7] || "",
-            tipoSingle: row[8] || "",
-            tipoMusica: row[9] || "",
-            album: row[10] || "",
-            actPrincipal: row[13] || "",
-            pendente: row[23] || "",
-            codigoUnico: row[25] || "",
-          },
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
+      linhaAlvo = i + 1;
+      break;
     }
   }
+  if (linhaAlvo === -1) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Nenhuma linha com EMP999/topicId encontrada em Musicas." }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    );
+  }
 
-  // Confere a linha real em EDIÇÃO CHARTS pra reaproveitar os dados
-  // (data, tipo de single) em vez de inventar.
   const chartsRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS").catch(() => []);
   const chartsLinha = chartsRows.slice(1).find((r) => normalizeComparison(r[55] || "") === CODIGO);
   if (!chartsLinha) {
@@ -76,7 +60,7 @@ export async function adminFixItsOverMusicasController(request: Request): Promis
   const LETRA =
     "Se você quiser\nPodemos adiar mais uma vez essa conversa\nMas não posso\nContinuar procurando o que perdemos de verdade\n\nIsso me quebra\nAgir como se não faltassem cobranças\nContinuar apoiando tudo apenas em lembranças\nMesmo que no fim de tudo seja só mais uma mudança\n\nEu acho que chegou a hora de aceitar que acabou, que acabou\nUh uh, uh uh\nEu acho que chegou a hora de aceitar que acabou, que acabou\nUh uh, uh uh\n\nAcho que fugimos mais do que deveríamos\nE conversamos menos do que poderíamos\nMas agora… uh uh\nEu acho que chegou a hora de aceitar que acabou, que acabou\nUh uh, uh uh\n\nEu prometo\nEstar aqui sempre que precisar de um sorriso\nE eu sei\nQue estará aqui sempre que eu precisar limpar uma lágrima\n\nIsso me quebra\nAgir como se não faltassem cobranças\nContinuar apoiando tudo apenas em lembranças\nMesmo que no fim de tudo seja só mais uma mudança\n\nEu acho que chegou a hora de aceitar que acabou, que acabou\nUh uh, uh uh\nEu acho que chegou a hora de aceitar que acabou, que acabou\nUh uh, uh uh\n\nAcho que fugimos mais do que deveríamos\nE conversamos menos do que poderíamos\nMas agora… uh uh\nEu acho que chegou a hora de aceitar que acabou, que acabou\nUh uh, uh uh\n\nAcabou…\nAcabou…\nAcabou…\nAcabou.";
 
-  const novaLinha: string[] = [
+  const linhaCorrigida: string[] = [
     dataFormatada, // A
     TOPIC_ID, // B
     AUDIO_URL, // C
@@ -87,7 +71,7 @@ export async function adminFixItsOverMusicasController(request: Request): Promis
     TITULO_COMPLETO, // H
     tipoSingle, // I
     tipoMusica, // J
-    "", // K
+    "", // K - não é faixa de álbum
     "1", // L
     "", // M
     "Samantha Cooper", // N
@@ -102,18 +86,18 @@ export async function adminFixItsOverMusicasController(request: Request): Promis
 
   if (!confirmar) {
     return new Response(
-      JSON.stringify(
-        { success: true, confirmar, encontrouEmEdicaoCharts: true, linhaQueSeriaGravada: novaLinha },
-        null,
-        2,
-      ),
+      JSON.stringify({ success: true, confirmar, linhaAlvo, linhaQueSeriaGravada: linhaCorrigida }, null, 2),
       { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );
   }
 
-  const linhaAlvo = await googleSheetsService.principal.appendRow("Musicas", novaLinha, "A:Y");
-  if (!linhaAlvo) {
-    return new Response(JSON.stringify({ success: false, error: "Falha ao gravar em Musicas." }), {
+  const gravou = await googleSheetsService.principal.updateValues(
+    "Musicas",
+    `A${linhaAlvo}:Y${linhaAlvo}`,
+    [linhaCorrigida],
+  );
+  if (!gravou) {
+    return new Response(JSON.stringify({ success: false, error: "Falha ao sobrescrever a linha em Musicas." }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
@@ -121,7 +105,7 @@ export async function adminFixItsOverMusicasController(request: Request): Promis
   await googleSheetsService.principal.updateValues("Musicas", `Z${linhaAlvo}`, [["EMP999"]]);
 
   return new Response(
-    JSON.stringify({ success: true, confirmar, linhaGravada: linhaAlvo }, null, 2),
+    JSON.stringify({ success: true, confirmar, linhaCorrigida: linhaAlvo }, null, 2),
     { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
   );
 }
