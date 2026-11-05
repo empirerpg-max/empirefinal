@@ -32,6 +32,23 @@ export async function adminFixItsOverMusicasController(request: Request): Promis
         JSON.stringify({
           success: false,
           error: `Já existe linha em Musicas pra EMP999 (linha ${i + 1}) — nada a corrigir.`,
+          linhaExistente: i + 1,
+          conteudoLinhaExistente: {
+            data: row[0] || "",
+            topicId: row[1] || "",
+            audioUrl: row[2] || "",
+            capaUrl: row[3] || "",
+            letra: row[4] || "",
+            comentariosPara: row[5] || "",
+            idCriador: row[6] || "",
+            titulo: row[7] || "",
+            tipoSingle: row[8] || "",
+            tipoMusica: row[9] || "",
+            album: row[10] || "",
+            actPrincipal: row[13] || "",
+            pendente: row[23] || "",
+            codigoUnico: row[25] || "",
+          },
         }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
