@@ -32,6 +32,7 @@ import {
   Check,
   Mic2,
   FileVideo,
+  Search,
 } from "lucide-react";
 import { SyncStudioModal, type SyncStudioTrack } from "./SyncStudioModal";
 
@@ -121,6 +122,9 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [releases, setReleases] = useState<ReleaseItem[]>([]);
   const [loadingReleases, setLoadingReleases] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  // Lista já vem ordenada por data de lançamento (mais recente primeiro),
+  // mas pode ficar longa — busca por título filtra sem precisar rolar tudo.
+  const [releaseSearch, setReleaseSearch] = useState("");
 
   // Item selecionado para edição
   const [editingItem, setEditingItem] = useState<ReleaseItem | null>(null);
@@ -213,6 +217,7 @@ export const EditModal: React.FC<EditModalProps> = ({
     setLoadingReleases(true);
     setFetchError(null);
     setEditingItem(null);
+    setReleaseSearch("");
 
     const query = new URLSearchParams({
       artist: selectedArtist,
@@ -712,6 +717,11 @@ export const EditModal: React.FC<EditModalProps> = ({
       setSaving(false);
     }
   };
+
+  const releaseSearchNorm = releaseSearch.trim().toLowerCase();
+  const releasesFiltrados = releaseSearchNorm
+    ? releases.filter((r) => r.titulo.toLowerCase().includes(releaseSearchNorm))
+    : releases;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
@@ -1547,12 +1557,29 @@ export const EditModal: React.FC<EditModalProps> = ({
                 </div>
               ) : (
                 <div className="space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-neutral-500" />
+                    <input
+                      type="text"
+                      value={releaseSearch}
+                      onChange={(e) => setReleaseSearch(e.target.value)}
+                      placeholder="Buscar por título..."
+                      className="w-full pl-10 pr-4 py-2.5 bg-neutral-800 border border-white/10 rounded-xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
                   <p className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
-                    Lançamentos Encontrados ({releases.length}):
+                    Lançamentos Encontrados ({releasesFiltrados.length}
+                    {releaseSearchNorm ? ` de ${releases.length}` : ""}):
                   </p>
 
+                  {releasesFiltrados.length === 0 ? (
+                    <p className="text-xs text-neutral-500 italic py-4 text-center">
+                      Nenhum lançamento bate com "{releaseSearch}".
+                    </p>
+                  ) : (
                   <div className="grid grid-cols-1 gap-2.5">
-                    {releases.map((rel) => (
+                    {releasesFiltrados.map((rel) => (
                       <div
                         key={rel.id}
                         className="flex items-center justify-between p-4 bg-neutral-800/40 hover:bg-neutral-800 border border-white/5 hover:border-amber-500/30 rounded-2xl transition group"
@@ -1596,6 +1623,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                       </div>
                     ))}
                   </div>
+                  )}
                 </div>
               )}
             </div>
