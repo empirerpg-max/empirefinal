@@ -440,8 +440,18 @@ async function garantirLinhaInfosActs(nome: string, fotoInicial?: string): Promi
       const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
       const jaExiste = rows.slice(1).some((r) => normalizeComparison(r[0]) === normNome);
       if (jaExiste) return;
-      await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
-        nome, "", (fotoInicial || "").trim(),
+      // NUNCA appendRow (:append nativo) nesta aba: causa raiz real do bug
+      // "Ashley Spring/Paris Godwin" (2026-11-06) — "INFOS ACTS" é tão
+      // esparsa (cada artista só preenche algumas colunas: C/G foto, E
+      // bio, R/S capa) que a detecção de tabela do :append erra e escreve
+      // cada vez mais PRA DIREITA da coluna A, nunca nela — toda tentativa
+      // seguinte vira outra linha corrompida (nome fora da coluna A, logo
+      // invisível pra normalizeComparison(row[0])), em vez de atualizar a
+      // de antes. updateValues com range EXPLÍCITO nunca deixa o Sheets
+      // adivinhar coluna nenhuma.
+      const linhaAlvo = rows.length + 1;
+      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `A${linhaAlvo}:C${linhaAlvo}`, [
+        [nome, "", (fotoInicial || "").trim()],
       ]);
     });
   } catch (err) {
@@ -551,14 +561,16 @@ export async function setArtistFotoController(request: Request): Promise<Respons
           { sheetName: INFOS_ACTS_SHEET, range: `G${idx + 1}`, values: [[fotoUrl]] },
         ]);
       } else {
-        // Array completo até G (índice 6), nunca um array de 1 elemento só —
-        // appendRow("A:ZZ") deixa a API do Sheets adivinhar a coluna olhando
-        // o range inteiro, e quando a coluna A tem linhas vazias no meio
-        // (caso real desta aba) ela acerta errado e grava mais pra direita
-        // do que devia (bug real encontrado e corrigido em 2026-10-23, ver
-        // adminBackfillInfosActsController).
-        await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
-          nome, "", fotoUrl, "", "", "", fotoUrl,
+        // NUNCA appendRow nesta aba (ver comentário em garantirLinhaInfosActs
+        // acima — a "correção de 2026-10-23" de alongar o array até G NÃO
+        // resolvia de verdade: quem decide a coluna de início é a própria
+        // heurística de :append, não o tamanho do array, e ela continuou
+        // errando — bug real confirmado nas linhas corrompidas de Ashley
+        // Spring/Paris Godwin, 2026-11-06). updateValues com range
+        // explícito A:G é a única forma de garantir a coluna certa.
+        const linhaAlvo = rows.length + 1;
+        await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `A${linhaAlvo}:G${linhaAlvo}`, [
+          [nome, "", fotoUrl, "", "", "", fotoUrl],
         ]);
       }
       return idx;
@@ -629,7 +641,11 @@ export async function setArtistBiografiaController(request: Request): Promise<Re
       if (idx !== -1) {
         await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `E${idx + 1}`, [[biografia]]);
       } else {
-        await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [nome, "", "", "", biografia]);
+        // NUNCA appendRow nesta aba — ver comentário em garantirLinhaInfosActs.
+        const linhaAlvo = rows.length + 1;
+        await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `A${linhaAlvo}:E${linhaAlvo}`, [
+          [nome, "", "", "", biografia],
+        ]);
       }
       return idx;
     });
@@ -694,8 +710,10 @@ export async function setArtistCapaController(request: Request): Promise<Respons
           await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `S${idx + 1}`, [[capaMobileUrl]]);
         }
       } else {
-        await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
-          nome, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", capaUrl, capaMobileUrl,
+        // NUNCA appendRow nesta aba — ver comentário em garantirLinhaInfosActs.
+        const linhaAlvo = rows.length + 1;
+        await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `A${linhaAlvo}:S${linhaAlvo}`, [
+          [nome, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", capaUrl, capaMobileUrl],
         ]);
       }
       return idx;

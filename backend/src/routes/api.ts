@@ -255,6 +255,7 @@ import { adminDiagLancamentosGapController } from "../controllers/adminDiagLanca
 import { adminDiagMatchFalhandoController } from "../controllers/adminDiagMatchFalhandoController";
 import { adminDiagAlbumRecordFolliaController } from "../controllers/adminDiagAlbumRecordFolliaController";
 import { adminDiagInfosActsHayleyController } from "../controllers/adminDiagInfosActsHayleyController";
+import { adminFixInfosActsLinhaCorrompidaController } from "../controllers/adminFixInfosActsLinhaCorrompidaController";
 import { adminBackfillInfosActsController } from "../controllers/adminBackfillInfosActsController";
 import { adminDiagUltimosLogsController } from "../controllers/adminDiagUltimosLogsController";
 import { adminDiagUltimasLinhasInfosActsController } from "../controllers/adminDiagUltimasLinhasInfosActsController";
@@ -2159,6 +2160,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagAlbumRecordFolliaController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-infos-acts-hayley") {
     response = await adminDiagInfosActsHayleyController(request);
+  } else if (url.pathname === "/api/empire-play/admin/fix-infos-acts-linha-corrompida") {
+    response = await adminFixInfosActsLinhaCorrompidaController(request);
   } else if (url.pathname === "/api/empire-play/admin/backfill-infos-acts") {
     response = await adminBackfillInfosActsController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ultimos-logs") {
