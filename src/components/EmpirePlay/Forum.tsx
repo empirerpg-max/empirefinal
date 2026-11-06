@@ -1220,7 +1220,7 @@ export const Forum: React.FC<ForumProps> = ({
                   visualAberto
                     ? "lg:col-span-3 space-y-3 sm:space-y-4"
                     : activeSubmenu === "videos"
-                      ? "lg:col-span-4 space-y-3 sm:space-y-4"
+                      ? "lg:col-span-9 space-y-4 sm:space-y-6"
                       : "lg:col-span-5 space-y-3 sm:space-y-4"
                 }
               >
@@ -1324,6 +1324,46 @@ export const Forum: React.FC<ForumProps> = ({
                 </div>
               )}
 
+              {/* TÍTULO/ARTISTA — só pra Vídeos: fica ABAIXO do player (igual
+                  YouTube), não do lado. Música/Álbum mantêm o título ao lado
+                  da capa, no bloco de informações mais abaixo. */}
+              {activeSubmenu === "videos" && !visualAberto && (
+                <div>
+                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-emerald-400/80">
+                    {selectedTopic.tipoVideo || "Vídeo"}
+                  </span>
+                  <h1 className="text-xl sm:text-3xl md:text-4xl font-black text-white tracking-tight leading-[1.05] mt-1">
+                    {selectedTopic.title}
+                  </h1>
+                  <p className="text-sm sm:text-lg font-bold text-emerald-400 mt-2">
+                    {selectedTopic.displayArtists || selectedTopic.artist}
+                  </p>
+                  {(selectedTopic.releaseDate || !!selectedTopic.semanasNoChart) && (
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      {selectedTopic.releaseDate && (
+                        <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400">
+                          <Calendar className="size-3.5" />
+                          <span>Lançamento: {selectedTopic.releaseDate}</span>
+                        </div>
+                      )}
+                      {!!selectedTopic.semanasNoChart && (
+                        <span className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border backdrop-blur-md max-w-full bg-emerald-500/10 border-emerald-400/30 text-emerald-300">
+                          <TrendingUp className="size-3.5 shrink-0" />
+                          <span className="text-[10px] font-bold truncate">
+                            {selectedTopic.semanasNoChart} semana{selectedTopic.semanasNoChart === 1 ? "" : "s"} no chart
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {premioDoTopico(selectedTopic) && (
+                    <div className="mt-2.5">
+                      <AwardBadge {...premioDoTopico(selectedTopic)!} />
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* CARD DE AVALIAÇÃO OFICIAL — só likes de vídeo agora; a nota do
                   Metacritic saiu do Catálogo (vira ranking semanal em
                   Acervo > Metacritic, a pedido do usuário). */}
@@ -1342,21 +1382,22 @@ export const Forum: React.FC<ForumProps> = ({
               )}
             </div>
 
-            {/* INFORMAÇÕES DO TÓPICO / LETRA / FAIXAS — texto encolhe no modo
-                Visual, junto com a capa, pra sobrar mais espaço embaixo. */}
+            {/* INFORMAÇÕES DO TÓPICO / LETRA / FAIXAS — só Música/Álbum: pra
+                Vídeos o título já foi pro bloco acima (dentro da coluna do
+                player, como no YouTube), então não sobra conteúdo nenhum
+                aqui — renderizar essa coluna vazia só desperdiçaria espaço
+                do grid que devia ir pra lateral de sugestões. */}
+            {activeSubmenu !== "videos" && (
             <div
               className={
                 visualAberto
                   ? "lg:col-span-9 space-y-4 sm:space-y-6"
-                  : activeSubmenu === "videos"
-                    ? "lg:col-span-5 space-y-4 sm:space-y-6"
-                    : "lg:col-span-7 space-y-4 sm:space-y-6"
+                  : "lg:col-span-7 space-y-4 sm:space-y-6"
               }
             >
               <div>
                 <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-emerald-400/80">
                   {activeSubmenu === "musicas" && "Música"}
-                  {activeSubmenu === "videos" && (selectedTopic.tipoVideo || "Vídeo")}
                   {activeSubmenu === "albuns" && "Álbum"}
                 </span>
                 <h1
@@ -1644,6 +1685,7 @@ export const Forum: React.FC<ForumProps> = ({
                 </>
               )}
             </div>
+            )}
 
             {/* LATERAL "MAIS DE {ARTISTA}" — só na aba Vídeos, com o tópico
                 selecionado trocando no lugar (sem abrir o player de novo,
