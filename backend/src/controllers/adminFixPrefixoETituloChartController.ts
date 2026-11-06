@@ -41,9 +41,17 @@ export async function adminFixPrefixoETituloChartController(request: Request): P
     if (!titulo || !artista) continue;
     const prefixoEsperado = `${artista} - `;
     if (normalizeComparison(titulo).startsWith(normalizeComparison(prefixoEsperado))) continue;
-    // Já tem ALGUM prefixo "X - " mas de outro artista (caso raro/ambíguo)
-    // — não mexe, só casos claramente sem nenhum prefixo reconhecível.
-    if (/ - /.test(titulo) && !titulo.toLowerCase().startsWith(artista.toLowerCase())) continue;
+    // BUG REAL evitado aqui (achado no dry-run, 2026-11-06): a checagem
+    // original só pulava quando o título tinha " - " E não começava com
+    // o artista — títulos de colaboração como "Rayna feat. Alexxa Hills -
+    // Teenage Rage" ou "SA5M, Raven, Helenna & TED - Hard Core" começam
+    // com o artista mas SEM o " - " logo em seguida (vem "feat."/","/"&"/
+    // "x" antes do " - " de verdade), então caíam no "corrige" e
+    // duplicavam o prefixo ("Rayna - Rayna feat. ..."). A regra certa é
+    // simples: se o título JÁ começa com o nome do artista, de qualquer
+    // jeito que seja, está bom — só falta prefixo mesmo quando o título
+    // não menciona o artista no começo de jeito nenhum.
+    if (normalizeComparison(titulo).startsWith(normalizeComparison(artista))) continue;
 
     const linha = i + 1;
     const novoTitulo = `${prefixoEsperado}${titulo}`;
