@@ -1224,7 +1224,15 @@ export const Forum: React.FC<ForumProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10 items-start">
               {/* CAPA OU PLAYER — encolhe no modo Visual pra sobrar mais
                   espaço pro conteúdo customizado (ver mais abaixo). */}
-              <div className={visualAberto ? "lg:col-span-3 space-y-3 sm:space-y-4" : "lg:col-span-5 space-y-3 sm:space-y-4"}>
+              <div
+                className={
+                  visualAberto
+                    ? "lg:col-span-3 space-y-3 sm:space-y-4"
+                    : activeSubmenu === "videos"
+                      ? "lg:col-span-4 space-y-3 sm:space-y-4"
+                      : "lg:col-span-5 space-y-3 sm:space-y-4"
+                }
+              >
                 {activeSubmenu === "videos" ? (
                   /* CAPA DE VÍDEO — abre no mesmo player nativo do app usado
                      no catálogo (nunca um iframe cru do Drive/YouTube aqui;
@@ -1364,7 +1372,15 @@ export const Forum: React.FC<ForumProps> = ({
 
             {/* INFORMAÇÕES DO TÓPICO / LETRA / FAIXAS — texto encolhe no modo
                 Visual, junto com a capa, pra sobrar mais espaço embaixo. */}
-            <div className={visualAberto ? "lg:col-span-9 space-y-4 sm:space-y-6" : "lg:col-span-7 space-y-4 sm:space-y-6"}>
+            <div
+              className={
+                visualAberto
+                  ? "lg:col-span-9 space-y-4 sm:space-y-6"
+                  : activeSubmenu === "videos"
+                    ? "lg:col-span-5 space-y-4 sm:space-y-6"
+                    : "lg:col-span-7 space-y-4 sm:space-y-6"
+              }
+            >
               <div>
                 <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-emerald-400/80">
                   {activeSubmenu === "musicas" && "Música"}
@@ -1656,6 +1672,63 @@ export const Forum: React.FC<ForumProps> = ({
                 </>
               )}
             </div>
+
+            {/* LATERAL "MAIS DE {ARTISTA}" — só na aba Vídeos, com o tópico
+                selecionado trocando no lugar (sem abrir o player de novo,
+                sem perder o layout de página — mesmo clique que a lista
+                principal usa). Some no modo Visual, que já encolhe tudo. */}
+            {activeSubmenu === "videos" && !visualAberto && (
+              <div className="lg:col-span-3 space-y-3">
+                {(() => {
+                  const outrosDoArtista = items.filter(
+                    (t) => t.id !== selectedTopic.id && t.artist === selectedTopic.artist,
+                  );
+                  if (outrosDoArtista.length === 0) return null;
+                  return (
+                    <>
+                      <h3 className="px-0.5 text-[11px] font-black uppercase tracking-wider text-neutral-400">
+                        Mais de {selectedTopic.artist}
+                      </h3>
+                      <div className="space-y-1">
+                        {outrosDoArtista.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setSelectedTopic(t)}
+                            className="w-full flex gap-2.5 p-2 rounded-xl hover:bg-white/5 transition-colors text-left group"
+                          >
+                            <div className="w-[120px] aspect-video rounded-lg overflow-hidden bg-neutral-950 shrink-0 relative">
+                              <SmartImg
+                                src={t.cover}
+                                size={300}
+                                alt={t.title}
+                                className="size-full object-cover group-hover:scale-105 transition-transform"
+                                fallback={
+                                  <div className="size-full grid place-items-center text-neutral-600">
+                                    <Tv className="size-5" />
+                                  </div>
+                                }
+                              />
+                              <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors grid place-items-center">
+                                <span className="size-7 rounded-full bg-red-600/0 group-hover:bg-red-500/85 backdrop-blur-sm text-white grid place-items-center transition-colors">
+                                  <Play className="size-3 ml-0.5 fill-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </span>
+                              </span>
+                            </div>
+                            <div className="min-w-0 flex flex-col gap-0.5 pt-0.5">
+                              <span className="text-xs font-bold text-neutral-100 group-hover:text-red-400 leading-snug line-clamp-2 transition-colors">
+                                {t.title}
+                              </span>
+                              <span className="text-[11px] text-neutral-500">{t.artist}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           {/* MODO VISUAL ATIVO — ocupa toda a largura abaixo da capa/título
