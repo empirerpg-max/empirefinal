@@ -1661,17 +1661,36 @@ export const Forum: React.FC<ForumProps> = ({
             {activeSubmenu === "videos" && !visualAberto && (
               <div className="lg:col-span-3 space-y-3">
                 {(() => {
-                  const outrosDoArtista = items.filter(
-                    (t) => t.id !== selectedTopic.id && t.artist === selectedTopic.artist,
-                  );
-                  if (outrosDoArtista.length === 0) return null;
+                  // Mais recente primeiro; sem data (releaseDateIso vazio)
+                  // vai pro fim em vez de embaralhar a ordem.
+                  const porMaisRecente = (a: ForumTopicItem, b: ForumTopicItem) =>
+                    (b.releaseDateIso || "").localeCompare(a.releaseDateIso || "");
+
+                  const doArtista = items
+                    .filter((t) => t.id !== selectedTopic.id && t.artist === selectedTopic.artist)
+                    .sort(porMaisRecente)
+                    .slice(0, 5);
+
+                  // Artista sem outro vídeo cadastrado: em vez de lateral
+                  // vazia, sugere os 5 lançamentos mais recentes de
+                  // qualquer artista — nunca mistura os dois casos (lateral
+                  // ou é só desse artista ou é só a vitrine geral).
+                  const geral = items
+                    .filter((t) => t.id !== selectedTopic.id)
+                    .sort(porMaisRecente)
+                    .slice(0, 5);
+
+                  const lista = doArtista.length > 0 ? doArtista : geral;
+                  if (lista.length === 0) return null;
+                  const titulo = doArtista.length > 0 ? `Mais de ${selectedTopic.artist}` : "Explore mais vídeos";
+
                   return (
                     <>
                       <h3 className="px-0.5 text-[11px] font-black uppercase tracking-wider text-neutral-400">
-                        Mais de {selectedTopic.artist}
+                        {titulo}
                       </h3>
                       <div className="space-y-1">
-                        {outrosDoArtista.map((t) => (
+                        {lista.map((t) => (
                           <button
                             key={t.id}
                             type="button"
