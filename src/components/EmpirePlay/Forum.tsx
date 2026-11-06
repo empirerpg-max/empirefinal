@@ -211,7 +211,7 @@ export interface ForumProps {
   initialItemId?: string;
 }
 
-import { VideoPlayer, VideoMediaBox, PlayableVideo } from "./VideoPlayer";
+import { VideoMediaBox, PlayableVideo } from "./VideoPlayer";
 import { type PlayableTrack } from "./MusicPlayer";
 import { ExtraMaterialButtons, useExtraMaterial, VisualBlocosView } from "./ExtraMaterial";
 import { useEmpirePlayer } from "./PlayerContext";
@@ -360,9 +360,6 @@ export const Forum: React.FC<ForumProps> = ({
   // IDs de comentários-raiz cujas respostas estão expandidas ("N respostas").
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
-  // State para o Player de Vídeo Expandido
-  const [activeVideo, setActiveVideo] = useState<PlayableVideo | null>(null);
-
   // Audio preview no tópico de álbum/música
   const [playingTrackUrl, setPlayingTrackUrl] = useState<string | null>(null);
   // Letra expandida inline na lista de faixas do álbum (sem sair da tela).
@@ -420,12 +417,6 @@ export const Forum: React.FC<ForumProps> = ({
       poster_url: topic.cover || undefined,
       tipo_video: topic.tipoVideo || "Vídeo",
     };
-  };
-
-  const handleVideoPlay = (topic: ForumTopicItem) => {
-    const videoObj = topicToPlayableVideo(topic);
-    setActiveVideo(videoObj);
-    onPlayVideo?.(videoObj);
   };
 
   // 1. Carregar itens do catálogo conforme submenu ativo
@@ -2276,14 +2267,16 @@ export const Forum: React.FC<ForumProps> = ({
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
                       />
 
-                      {/* Botão de Play de Vídeo Acessível e Moderno */}
+                      {/* Botão de Play de Vídeo Acessível e Moderno — leva
+                          pra página do tópico (mesmo clique do card), nunca
+                          mais abre o player em popup separado. */}
                       {(activeSubmenu === "videos") && (
                         <button
                           type="button"
                           aria-label={`Reproduzir vídeo ${item.title}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleVideoPlay(item);
+                            setSelectedTopic(item);
                           }}
                           className="absolute inset-0 m-auto size-12 rounded-full bg-red-600/90 hover:bg-red-500 text-white flex items-center justify-center shadow-xl shadow-red-600/40 opacity-90 sm:opacity-0 group-hover:opacity-100 transition duration-300 scale-90 group-hover:scale-100 border border-white/20"
                         >
@@ -2343,19 +2336,6 @@ export const Forum: React.FC<ForumProps> = ({
             </div>
           )}
         </div>
-      )}
-
-      {/* MODAL DE PLAYER DE VÍDEO EXPANDIDO */}
-      {activeVideo && (
-        <VideoPlayer
-          video={activeVideo}
-          relatedVideos={activeSubmenu === "videos" ? items.map(topicToPlayableVideo) : []}
-          onSelectVideo={(v) => {
-            setActiveVideo(v);
-            onPlayVideo?.(v);
-          }}
-          onClose={() => setActiveVideo(null)}
-        />
       )}
 
       {/* CAPA DO ÁLBUM EM TELA CHEIA */}
