@@ -40,11 +40,16 @@ export async function adminFixVarreduraChartCapasController(request: Request): P
     }
   }
 
+  // Top_Videos_YT usa nomes de coluna diferentes das outras 2 abas de chart
+  // ("Nome do vídeo" em vez de "Nome da Música", "Thumb" em vez de "Capa da
+  // Música") — sem os fallbacks, a função sempre devolvia erro pra essa aba.
   const rows = await googleSheetsService.principal.readValues(sheet);
   const header = rows[0] || [];
-  const colNome = header.findIndex((h) => normalizeComparison(h) === normalizeComparison("Nome da Música"));
-  const colCapa = header.findIndex((h) => normalizeComparison(h) === normalizeComparison("Capa da Música"));
-  const colAudio = header.findIndex((h) => normalizeComparison(h) === normalizeComparison("Link do áudio"));
+  const acharCol = (...nomes: string[]) =>
+    header.findIndex((h) => nomes.some((n) => normalizeComparison(h) === normalizeComparison(n)));
+  const colNome = acharCol("Nome da Música", "Nome do vídeo");
+  const colCapa = acharCol("Capa da Música", "Thumb");
+  const colAudio = acharCol("Link do áudio");
   if (colNome === -1) {
     return new Response(JSON.stringify({ success: false, error: "Coluna 'Nome da Música' não encontrada.", header }), {
       status: 500,

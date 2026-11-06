@@ -53,13 +53,16 @@ export async function adminDiagVarreduraChartCapasController(request: Request): 
   }[] = [];
 
   for (const row of chartRows) {
-    const nome = String(row["nome_da_musica"] || "").trim();
+    // Top_Videos_YT usa "nome_do_video"/"thumb" em vez de
+    // "nome_da_musica"/"capa_da_musica" (readSheetObjects normaliza o
+    // cabeçalho da planilha pra chave, então o nome do campo segue a coluna).
+    const nome = String(row["nome_da_musica"] || row["nome_do_video"] || "").trim();
     if (!nome) continue;
     const chave = chaveSemFeat(nome);
     const real = porChave.get(chave);
     if (!real) continue; // não achou no catálogo — não dá pra comparar, pula.
 
-    const capaNaAba = String(row["capa_da_musica"] || "").trim();
+    const capaNaAba = String(row["capa_da_musica"] || row["thumb"] || "").trim();
     const audioNaAba = String(row["link_do_audio"] || "").trim();
     const capaDivergente = !!capaNaAba && !!real.capa && capaNaAba !== real.capa;
     const audioDivergente = !!audioNaAba && !!real.audio && audioNaAba !== real.audio;
