@@ -7,8 +7,13 @@ interface EmpirePlayerContextValue {
   currentTrack: PlayableTrack | null;
   activePlaylist: PlayableTrack[];
   currentVideo: PlayableVideo | null;
+  // Lista de onde esse vídeo veio (ex.: catálogo inteiro da tela de Vídeos) —
+  // usada pro VideoPlayer montar "Mais de {artista}" na lateral, sem cada
+  // tela precisar saber disso. Sem lista explícita, cai pra [video] (sem
+  // relacionados pra mostrar, mas sem quebrar os chamadores existentes).
+  activeVideoList: PlayableVideo[];
   playSong: (track: PlayableTrack, list: PlayableTrack[]) => void;
-  playVideo: (video: PlayableVideo) => void;
+  playVideo: (video: PlayableVideo, list?: PlayableVideo[]) => void;
   closeTrack: () => void;
   closeVideo: () => void;
   setCurrentTrack: (track: PlayableTrack) => void;
@@ -33,6 +38,7 @@ export function EmpirePlayerProvider({ children }: { children: ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<PlayableTrack | null>(null);
   const [activePlaylist, setActivePlaylist] = useState<PlayableTrack[]>([]);
   const [currentVideo, setCurrentVideo] = useState<PlayableVideo | null>(null);
+  const [activeVideoList, setActiveVideoList] = useState<PlayableVideo[]>([]);
   const [currentTime, setPlaybackTime] = useState(0);
   const [isPlaying, setPlaybackPlaying] = useState(false);
 
@@ -42,9 +48,10 @@ export function EmpirePlayerProvider({ children }: { children: ReactNode }) {
     setActivePlaylist(list);
   };
 
-  const playVideo = (video: PlayableVideo) => {
+  const playVideo = (video: PlayableVideo, list: PlayableVideo[] = [video]) => {
     haptic.selection();
     setCurrentVideo(video);
+    setActiveVideoList(list);
   };
 
   return (
@@ -53,6 +60,7 @@ export function EmpirePlayerProvider({ children }: { children: ReactNode }) {
         currentTrack,
         activePlaylist,
         currentVideo,
+        activeVideoList,
         playSong,
         playVideo,
         closeTrack: () => setCurrentTrack(null),

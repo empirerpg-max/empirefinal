@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   X,
@@ -9,11 +9,14 @@ import {
   Loader2,
   FileWarning,
   MessageSquare,
+  Play,
+  PictureInPicture2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { driveImg } from "@/lib/api";
 import { haptic } from "@/lib/telegram";
 import { ScoreBadge } from "./ScoreBadge";
+import { SmartImg } from "@/components/SmartImg";
 
 export interface PlayableVideo {
   id?: string;
@@ -40,10 +43,16 @@ export interface PlayableVideo {
 interface VideoPlayerProps {
   video: PlayableVideo | null;
   onClose: () => void;
+  // Vídeos do mesmo artista pra lateral "Mais de {artista}" — opcional:
+  // quem abre um vídeo avulso (Fórum, link direto) simplesmente não passa
+  // nada e a lateral some, em vez de quebrar.
+  relatedVideos?: PlayableVideo[];
+  onSelectVideo?: (video: PlayableVideo) => void;
 }
 
-export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
+export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo }: VideoPlayerProps) {
   const [streamError, setStreamError] = useState(false);
+  const nativeVideoRef = useRef<HTMLVideoElement | null>(null);
   const [reporting, setReporting] = useState(false);
   // Otimista: assim que o report é aceito, já reflete no botão sem esperar
   // o próximo carregamento da lista (que traria reportPending do servidor).
@@ -107,6 +116,27 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
       setReportingWrong(false);
     }
   }
+
+  // Mesmo "popup" que o usuário pediu: Picture-in-Picture nativo do
+  // navegador, só disponível pra <video> nativo (Drive/Telegram) — iframe do
+  // YouTube/Vimeo já declara allow="picture-in-picture" mais abaixo, mas
+  // quem controla isso aí é o player deles, não dá pra disparar daqui.
+  async function handlePictureInPicture() {
+    const el = nativeVideoRef.current;
+    if (!el) return;
+    haptic.selection();
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await el.requestPictureInPicture();
+      }
+    } catch {
+      toast.error("Não foi possível abrir o mini player.");
+    }
+  }
+
+  const outrosDoArtista = relatedVideos.filter((v) => v.id !== video.id && v.artista === video.artista);
 
   const rawLink =
     video.url_final_player || video.link || (video as any).videoUrl || video.youtube_url || "";
@@ -244,90 +274,157 @@ export function VideoPlayer({ video, onClose }: VideoPlayerProps) {
         </div>
       </div>
 
-      {/* Área Central do Player */}
-      <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 max-w-5xl mx-auto w-full">
-        <div className="w-full min-h-[300px] rounded-3xl overflow-hidden bg-neutral-900 border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.9)] relative group flex items-center justify-center">
-          {isYt ? (
-            <iframe
-              src={getYouTubeEmbedUrl(rawLink)}
-              title={video.titulo}
-              className="w-full aspect-video border-0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-            />
-          ) : isVimeo ? (
-            <iframe
-              src={getVimeoEmbedUrl(rawLink)}
-              title={video.titulo}
-              className="w-full aspect-video border-0"
-              allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media"
-              allowFullScreen
-            />
-          ) : (
-            <>
-              <video
-                src={rawLink}
-                controls
-                autoPlay
-                poster={poster}
-                onError={() => setStreamError(true)}
-                className="w-full aspect-video object-contain bg-black"
-              >
-                Seu navegador não suporta reprodução de vídeo nativa.
-              </video>
+      {/* Área Central do Player — player+detalhes à esquerda, "Mais de
+          {artista}" na lateral direita (só quando há relacionados; some em
+          telas estreitas e volta pra baixo da coluna principal). */}
+      <div className="flex-1 w-full max-w-[1500px] mx-auto p-4 sm:p-8">
+        <div className="flex flex-wrap items-start gap-6">
+          {/* Coluna principal: nunca menor que 640px, cresce pra preencher */}
+          <div className="flex-[999_1_640px] min-w-0 flex flex-col gap-6">
+            <div className="w-full min-h-[300px] rounded-3xl overflow-hidden bg-neutral-900 border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.9)] relative group flex items-center justify-center">
+              {isYt ? (
+                <iframe
+                  src={getYouTubeEmbedUrl(rawLink)}
+                  title={video.titulo}
+                  className="w-full aspect-video border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : isVimeo ? (
+                <iframe
+                  src={getVimeoEmbedUrl(rawLink)}
+                  title={video.titulo}
+                  className="w-full aspect-video border-0"
+                  allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media"
+                  allowFullScreen
+                />
+              ) : (
+                <>
+                  <video
+                    ref={nativeVideoRef}
+                    src={rawLink}
+                    controls
+                    autoPlay
+                    poster={poster}
+                    onError={() => setStreamError(true)}
+                    className="w-full aspect-video object-contain bg-black"
+                  >
+                    Seu navegador não suporta reprodução de vídeo nativa.
+                  </video>
 
-              {streamError && (
-                <div className="absolute inset-0 bg-neutral-950/90 flex flex-col items-center justify-center p-6 text-center">
-                  <AlertCircle className="size-12 text-red-500 mb-3 animate-bounce" />
-                  <h3 className="text-base font-black text-white uppercase tracking-tight mb-1">
-                    Não foi possível carregar o vídeo
-                  </h3>
-                  <p className="text-xs text-neutral-400 max-w-md mb-4">
-                    O vídeo pode estar indisponível no momento. Tente novamente em instantes.
-                  </p>
-                  {rawLink && (
-                    <a
-                      href={rawLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20"
-                    >
-                      Abrir link original
-                    </a>
+                  {streamError && (
+                    <div className="absolute inset-0 bg-neutral-950/90 flex flex-col items-center justify-center p-6 text-center">
+                      <AlertCircle className="size-12 text-red-500 mb-3 animate-bounce" />
+                      <h3 className="text-base font-black text-white uppercase tracking-tight mb-1">
+                        Não foi possível carregar o vídeo
+                      </h3>
+                      <p className="text-xs text-neutral-400 max-w-md mb-4">
+                        O vídeo pode estar indisponível no momento. Tente novamente em instantes.
+                      </p>
+                      {rawLink && (
+                        <a
+                          href={rawLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20"
+                        >
+                          Abrir link original
+                        </a>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
-            </>
-          )}
-        </div>
-
-        {/* Detalhes do Vídeo */}
-        <div className="w-full mt-6 bg-neutral-900/60 border border-white/10 rounded-3xl p-6 backdrop-blur-md">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-4 mb-4">
-            <div>
-              <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight">
-                {video.titulo}
-              </h1>
-              <div className="flex items-center gap-2 mt-1.5">
-                <p className="text-sm font-bold text-red-400">{video.artista}</p>
-                <ScoreBadge score={video.metacriticAvg} variant="likes" />
-              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {/* Sempre "Empire Play HD" — a fonte real (YouTube/Vimeo/Drive)
-                  é um detalhe interno, o layout deve parecer o mesmo pro
-                  jogador independente de onde o vídeo veio. */}
-              <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-neutral-300 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="size-3.5 text-red-500" />
-                Empire Play HD
-              </span>
+            {/* Detalhes do Vídeo */}
+            <div className="w-full bg-neutral-900/60 border border-white/10 rounded-3xl p-6 backdrop-blur-md">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-4 mb-4">
+                <div>
+                  <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight">
+                    {video.titulo}
+                  </h1>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <p className="text-sm font-bold text-red-400">{video.artista}</p>
+                    <ScoreBadge score={video.metacriticAvg} variant="likes" />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {!isYt && !isVimeo && (
+                    <button
+                      onClick={handlePictureInPicture}
+                      title="Abrir em mini player (popup)"
+                      className="size-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 grid place-items-center text-neutral-400 hover:text-white active:scale-90 transition-all"
+                    >
+                      <PictureInPicture2 className="size-4" />
+                    </button>
+                  )}
+                  {/* Sempre "Empire Play HD" — a fonte real (YouTube/Vimeo/Drive)
+                      é um detalhe interno, o layout deve parecer o mesmo pro
+                      jogador independente de onde o vídeo veio. */}
+                  <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-neutral-300 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="size-3.5 text-red-500" />
+                    Empire Play HD
+                  </span>
+                </div>
+              </div>
+
+              {video.descricao && (
+                <div className="text-neutral-300 text-xs sm:text-sm leading-relaxed whitespace-pre-line">
+                  {video.descricao}
+                </div>
+              )}
             </div>
           </div>
 
-          {video.descricao && (
-            <div className="text-neutral-300 text-xs sm:text-sm leading-relaxed whitespace-pre-line">
-              {video.descricao}
+          {/* Lateral: outros vídeos do mesmo artista */}
+          {outrosDoArtista.length > 0 && (
+            <div className="flex-[1_1_300px] min-w-[260px] max-w-[380px] flex flex-col gap-3">
+              <h3 className="px-0.5 text-[11px] font-black uppercase tracking-wider text-neutral-300">
+                Mais de {video.artista}
+              </h3>
+              {outrosDoArtista.map((v, idx) => (
+                <button
+                  key={v.id || idx}
+                  onClick={() => {
+                    haptic.selection();
+                    onSelectVideo?.(v);
+                  }}
+                  className="flex gap-2.5 p-2 rounded-xl hover:bg-white/5 transition-colors text-left group"
+                >
+                  <div className="w-[140px] aspect-video rounded-lg overflow-hidden bg-neutral-950 shrink-0 relative">
+                    {v.capa_url || v.poster_url ? (
+                      <SmartImg
+                        src={v.capa_url || v.poster_url}
+                        size={300}
+                        alt={v.titulo}
+                        className="size-full object-cover group-hover:scale-105 transition-transform"
+                        fallback={
+                          <div className="size-full grid place-items-center text-neutral-600">
+                            <Tv className="size-6" />
+                          </div>
+                        }
+                      />
+                    ) : (
+                      <div className="size-full grid place-items-center text-neutral-600">
+                        <Tv className="size-6" />
+                      </div>
+                    )}
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors grid place-items-center">
+                      <span className="size-8 rounded-full bg-red-600/0 group-hover:bg-red-500/85 backdrop-blur-sm text-white grid place-items-center transition-colors">
+                        <Play className="size-3.5 ml-0.5 fill-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </span>
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex flex-col gap-0.5 pt-0.5">
+                    <span className="text-xs font-bold text-neutral-100 group-hover:text-red-400 leading-snug line-clamp-2 transition-colors">
+                      {v.titulo}
+                    </span>
+                    <span className="text-[11px] text-neutral-500">{v.artista}</span>
+                  </div>
+                </button>
+              ))}
             </div>
           )}
         </div>

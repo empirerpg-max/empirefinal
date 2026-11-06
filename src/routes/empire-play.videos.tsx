@@ -213,7 +213,7 @@ function EmpirePlayVideos() {
         {filtered.map((v, idx) => (
           <div
             key={v.id || idx}
-            onClick={() => playVideo(v)}
+            onClick={() => playVideo(v, filtered)}
             className="rounded-2xl bg-neutral-900/50 border border-white/10 p-3 hover:border-red-500/40 cursor-pointer transition-all group"
           >
             <div className="aspect-video rounded-xl overflow-hidden bg-neutral-950 mb-2 relative">

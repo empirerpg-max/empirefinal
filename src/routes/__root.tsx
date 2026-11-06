@@ -672,8 +672,16 @@ function AuthGate() {
 // reprodução de áudio/vídeo continua em qualquer tela, não só dentro do
 // Catálogo.
 function GlobalPersistentPlayers() {
-  const { currentTrack, activePlaylist, currentVideo, closeTrack, closeVideo, setCurrentTrack } =
-    useEmpirePlayer();
+  const {
+    currentTrack,
+    activePlaylist,
+    currentVideo,
+    activeVideoList,
+    closeTrack,
+    closeVideo,
+    setCurrentTrack,
+    playVideo,
+  } = useEmpirePlayer();
 
   return (
     <>
@@ -683,7 +691,12 @@ function GlobalPersistentPlayers() {
         onClose={closeTrack}
         onTrackChange={setCurrentTrack}
       />
-      <VideoPlayer video={currentVideo} onClose={closeVideo} />
+      <VideoPlayer
+        video={currentVideo}
+        relatedVideos={activeVideoList}
+        onClose={closeVideo}
+        onSelectVideo={(v) => playVideo(v, activeVideoList)}
+      />
     </>
   );
 }

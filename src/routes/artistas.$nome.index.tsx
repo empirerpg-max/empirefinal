@@ -777,7 +777,7 @@ function VideosTab({ nome }: { nome: string }) {
             return (
               <button
                 key={i}
-                onClick={() => playVideo(toPlayableVideo(v))}
+                onClick={() => playVideo(toPlayableVideo(v), videosOrdenados.map(toPlayableVideo))}
                 className="text-left group"
               >
                 <div className="aspect-video rounded-xl overflow-hidden bg-secondary relative">
