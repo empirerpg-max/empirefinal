@@ -1754,15 +1754,35 @@ export async function processarFaixasDoAlbum(
   // só (sem leitura prévia nenhuma), mais barata que o esquema de cursor
   // antigo E sem o risco de sobrescrita que motivou a troca de volta pro
   // :append (ver "Nosotros" sumiu, DERBY/Cowboy Fresh, 2026-10-29/30).
+  //
+  // BUG REAL confirmado de novo em produção (migração retroativa do álbum
+  // "Marco - NeuroDance", 2026-11-06, 4 faixas pendentes seguidas): mesmo
+  // restrito a "A:Y", o :append nativo às vezes AINDA escreve fora de
+  // posição — as 4 linhas vieram com os dados espalhados bem além da
+  // coluna Y (nome da música em branco na H, texto da faixa aparecendo em
+  // colunas tipo AB/AC), igual ao bug já visto e corrigido em "INFOS
+  // ACTS" no mesmo dia: a heurística de "tabela" do Sheets erra em abas
+  // com dados esparsos mais à direita, mesmo com o range explícito. A
+  // releitura de confirmação pegou certo (abortou, não deixou passar
+  // batido), mas a causa raiz só se resolve nunca mais usando :append
+  // aqui — calcula a linha alvo UMA VEZ antes do loop (nextRow) e grava
+  // com updateValues num range A{linha}:Y{linha} explícito, que nunca
+  // deixa o Sheets adivinhar coluna nenhuma; o cursor avança só em
+  // memória entre as faixas do mesmo álbum, sem reler o "fim da planilha"
+  // de novo a cada chamada (evitaria também qualquer atraso de
+  // consistência entre uma escrita e a leitura seguinte).
+  let proximaLinhaMusicas: number | null = null;
   async function appendRowMusicasComCursor(values: GoogleSheetRow): Promise<number> {
     return withWriteLock("gestao:musicas-append", async () => {
-      const linhaAlvo = await googleSheetsService.principal.appendRow("Musicas", values, "A:Y");
-      if (!linhaAlvo) {
-        throw new Error("Falha ao anexar linha em Musicas (appendRow devolveu null após as tentativas).");
+      if (proximaLinhaMusicas === null) {
+        const rows = await googleSheetsService.principal.readValues("Musicas");
+        proximaLinhaMusicas = rows.length + 1;
       }
+      const linhaAlvo = proximaLinhaMusicas;
+      await googleSheetsService.principal.updateValues("Musicas", `A${linhaAlvo}:Y${linhaAlvo}`, [values]);
       // Mesma blindagem de appendRowMusicasSeguro (ver comentário lá) —
       // confirma lendo a linha de volta antes de seguir pros charts/D1,
-      // nunca confiando cegamente no número que appendRow devolveu.
+      // nunca confiando cegamente na escrita.
       const confirmacao = await googleSheetsService.principal.readValues(
         "Musicas",
         `H${linhaAlvo}:H${linhaAlvo}`,
@@ -1771,9 +1791,10 @@ export async function processarFaixasDoAlbum(
       const tituloEsperado = String(values[7] || "").trim();
       if (!tituloGravado || tituloGravado !== tituloEsperado) {
         throw new Error(
-          `appendRow disse que gravou na linha ${linhaAlvo}, mas a releitura não confirma (esperado "${tituloEsperado}", achado "${tituloGravado}").`,
+          `updateValues gravou na linha ${linhaAlvo}, mas a releitura não confirma (esperado "${tituloEsperado}", achado "${tituloGravado}").`,
         );
       }
+      proximaLinhaMusicas = linhaAlvo + 1;
       return linhaAlvo;
     });
   }

@@ -1,5 +1,4 @@
 import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
-import { completarAlbumExistente, type TrackItemPayload } from "./gestaoController";
 
 // Uso pontual (pedido do dono do produto, migração de dados): dado um
 // álbum já lançado e uma lista de Códigos únicos (coluna BD de "EDIÇÃO
@@ -50,17 +49,29 @@ export async function adminMigrarFaixasPendentesController(request: Request): Pr
     });
   }
 
-  // EDIÇÃO CHARTS (edicaoCharts) — B = título com prefixo, BD (índice 55)
-  // = Código único. Lido só até BD, igual outros pontos do código que já
-  // mexem nessa aba (ver registrarNaEdicaoChartsSemTrava).
+  // EDIÇÃO CHARTS (edicaoCharts) — B título com prefixo, C tipo single, D
+  // tipo música, E álbum, F weeks, BD (índice 55) Código único. Lido só até
+  // BD, igual outros pontos do código que já mexem nessa aba (ver
+  // registrarNaEdicaoChartsSemTrava).
   const edicaoChartsRows = await googleSheetsService.edicaoCharts
     .readValues("EDIÇÃO CHARTS", "A2:BD20000")
     .catch(() => []);
-  const tituloPorCodigo = new Map<string, string>();
+  const infoPorCodigo = new Map<
+    string,
+    { titulo: string; tipoSingle: string; tipoMusica: string; album: string; weeks: string }
+  >();
   for (const row of edicaoChartsRows) {
     const codigo = normalizeComparison(row[55] || ""); // BD = índice 55 (A=0,...,Z=25,AA=26,...,BD=55)
     const titulo = (row[1] || "").trim(); // B
-    if (codigo && titulo) tituloPorCodigo.set(codigo, titulo);
+    if (codigo && titulo) {
+      infoPorCodigo.set(codigo, {
+        titulo,
+        tipoSingle: (row[2] || "").trim(),
+        tipoMusica: (row[3] || "").trim(),
+        album: (row[4] || "").trim(),
+        weeks: (row[5] || "").trim(),
+      });
+    }
   }
 
   // Musicas (principal) — Z (índice 25) = Código único.
@@ -70,37 +81,69 @@ export async function adminMigrarFaixasPendentesController(request: Request): Pr
   );
 
   const jaExistem: { codigo: string; titulo: string }[] = [];
-  const faltando: { codigo: string; titulo: string }[] = [];
+  const faltando: { codigo: string; titulo: string; tipoSingle: string; tipoMusica: string; weeks: string }[] = [];
   const naoEncontradosEmEdicaoCharts: string[] = [];
 
   for (const codigo of codigosAlvo) {
     const normCodigo = normalizeComparison(codigo);
-    const titulo = tituloPorCodigo.get(normCodigo);
-    if (!titulo) {
+    const info = infoPorCodigo.get(normCodigo);
+    if (!info) {
       naoEncontradosEmEdicaoCharts.push(codigo);
       continue;
     }
     if (codigosExistentesEmMusicas.has(normCodigo)) {
-      jaExistem.push({ codigo, titulo });
+      jaExistem.push({ codigo, titulo: info.titulo });
     } else {
-      faltando.push({ codigo, titulo });
+      faltando.push({ codigo, titulo: info.titulo, tipoSingle: info.tipoSingle, tipoMusica: info.tipoMusica, weeks: info.weeks });
     }
   }
 
-  let resultadoCriacao: unknown = null;
+  const artistaAlbum = albumFullTitle.includes(" - ")
+    ? albumFullTitle.slice(0, albumFullTitle.indexOf(" - ")).trim()
+    : albumFullTitle;
+  const dataFormatada = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+  const criadas: { codigo: string; titulo: string; linha: number }[] = [];
   if (confirmar && faltando.length > 0) {
-    const novasFaixas: TrackItemPayload[] = faltando.map((f, i) => ({
-      num: i + 1,
-      inedita: true,
-      titulo: f.titulo,
-      abrirTopico: false, // Pendente = "Sim" — mesma lógica de lançar o single depois.
-    }));
-    resultadoCriacao = await completarAlbumExistente({
-      albumTopicId,
-      novasFaixas,
-      nomeJogador,
-      jogadorId,
-    });
+    // Escreve direto em Musicas com updateValues num range A{linha}:Y{linha}
+    // EXPLÍCITO — nunca appendRow/:append nativo aqui (causa raiz real
+    // confirmada nesta mesma migração: a heurística de "próxima linha
+    // livre" do Sheets erra em abas esparsas e escreve os dados fora de
+    // posição — ver comentário em appendRowMusicasComCursor, gestaoController.ts).
+    // EDIÇÃO CHARTS já tem a linha de cada código (por isso "faltando" só
+    // considera Musicas) — não mexe nela de novo, só copia o Código único
+    // já existente pra Z.
+    let proximaLinha = musicasRows.length + 1;
+    for (let i = 0; i < faltando.length; i++) {
+      const f = faltando[i];
+      const linha = proximaLinha;
+      const row = [
+        dataFormatada, // A
+        "", // B - ID do tópico (pendente, sem tópico ainda)
+        "", // C - ID do arquivo
+        "", // D - Capa
+        "", // E - Letra
+        "", // F - Comentários para
+        jogadorId, // G - ID do Criador
+        f.titulo, // H - Nome da música
+        f.tipoSingle || "TRACKLIST ALBUM", // I
+        f.tipoMusica || "SOLO", // J
+        albumFullTitle, // K - ALBUM
+        f.weeks || "", // L - WEEKS
+        "", // M - WEEKS VIDEO
+        artistaAlbum, // N - ACT PRINCIPAL
+        "", "", "", "", "", // O-S - ARTISTA 2-6
+        "", // T - GÊNERO
+        String(i + 1), // U - Ordem
+        "", // V - Metacritic por jogador
+        "", // W - Média Metacritic
+        "Sim", // X - Pendente?
+      ];
+      await googleSheetsService.principal.updateValues("Musicas", `A${linha}:Y${linha}`, [row]);
+      await googleSheetsService.principal.updateValues("Musicas", `Z${linha}`, [[f.codigo]]);
+      criadas.push({ codigo: f.codigo, titulo: f.titulo, linha });
+      proximaLinha += 1;
+    }
   }
 
   return new Response(
@@ -112,7 +155,7 @@ export async function adminMigrarFaixasPendentesController(request: Request): Pr
         jaExistem,
         faltando,
         naoEncontradosEmEdicaoCharts,
-        resultadoCriacao,
+        criadas,
       },
       null,
       2,
