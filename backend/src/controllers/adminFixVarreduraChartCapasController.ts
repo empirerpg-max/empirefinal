@@ -1,6 +1,14 @@
 import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
 import { readMusicasFromD1 } from "./empirePlayController";
 
+// Mesmo ajuste do diagnóstico: título da aba de chart pode ter "(feat. X)"
+// que não existe em Musicas/D1 — sem tirar isso da chave, o cruzamento nunca
+// bate e a linha nunca é considerada pra correção (caso real: "Angela -
+// Stamp On It (feat. Anne Gray)", 2026-11-06).
+function chaveSemFeat(nome: string): string {
+  return normalizeComparison(nome).replace(/\s*[([]\s*(feat|ft)\.?\s[^)\]]*[)\]]\s*$/i, "").trim();
+}
+
 // Correção em lote do mesmo bug achado na "Stamp On It": várias linhas de
 // Top_50_Spotify (e possivelmente Apple/YT) tinham capa/áudio ERRADOS,
 // muitas repetindo o MESMO arquivo (clássico sinal de célula arrastada por
@@ -23,7 +31,7 @@ export async function adminFixVarreduraChartCapasController(request: Request): P
     const titulo = String(rec.nome_da_musica || rec.titulo || "").trim();
     const artista = String(rec.act_principal || rec.artista || "").trim();
     if (!titulo) continue;
-    const chave = normalizeComparison(`${artista} - ${titulo}`);
+    const chave = chaveSemFeat(`${artista} - ${titulo}`);
     if (!porChave.has(chave)) {
       porChave.set(chave, {
         capa: String(rec.capa_da_musica || rec.capa_url || "").trim(),
@@ -51,7 +59,7 @@ export async function adminFixVarreduraChartCapasController(request: Request): P
     const row = rows[i];
     const nome = (row[colNome] || "").trim();
     if (!nome) continue;
-    const real = porChave.get(normalizeComparison(nome));
+    const real = porChave.get(chaveSemFeat(nome));
     if (!real) continue;
 
     const linha = i + 1;

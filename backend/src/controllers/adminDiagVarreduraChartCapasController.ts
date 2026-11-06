@@ -1,6 +1,15 @@
 import { googleSheetsService, normalizeComparison } from "../services/googleSheetsService";
 import { readMusicasFromD1 } from "./empirePlayController";
 
+// Bug achado no caso "Angela - Stamp On It (feat. Anne Gray)" (2026-11-06):
+// a aba de chart guarda "Artista - Título (feat. Convidado)" mas Musicas/D1
+// só tem "Artista - Título" (sem o "(feat. ...)") — o cruzamento por igualdade
+// exata nunca bate, então essa linha nunca é comparada/corrigida, mesmo com
+// capa/áudio errados há tempos. Tira esse sufixo antes de montar a chave.
+function chaveSemFeat(nome: string): string {
+  return normalizeComparison(nome).replace(/\s*[([]\s*(feat|ft)\.?\s[^)\]]*[)\]]\s*$/i, "").trim();
+}
+
 // Só leitura. Generaliza o diagnóstico que achou o bug da "Stamp On It":
 // as abas de chart do Início (Top_50_Spotify, Top_Songs_Apple_Music,
 // Top_Videos_YT) têm colunas de capa/áudio PRÓPRIAS, preenchidas na mão/por
@@ -22,7 +31,7 @@ export async function adminDiagVarreduraChartCapasController(request: Request): 
     const titulo = String(rec.nome_da_musica || rec.titulo || "").trim();
     const artista = String(rec.act_principal || rec.artista || "").trim();
     if (!titulo) continue;
-    const chave = normalizeComparison(`${artista} - ${titulo}`);
+    const chave = chaveSemFeat(`${artista} - ${titulo}`);
     if (!porChave.has(chave)) {
       porChave.set(chave, {
         capa: String(rec.capa_da_musica || rec.capa_url || "").trim(),
@@ -46,7 +55,7 @@ export async function adminDiagVarreduraChartCapasController(request: Request): 
   for (const row of chartRows) {
     const nome = String(row["nome_da_musica"] || "").trim();
     if (!nome) continue;
-    const chave = normalizeComparison(nome);
+    const chave = chaveSemFeat(nome);
     const real = porChave.get(chave);
     if (!real) continue; // não achou no catálogo — não dá pra comparar, pula.
 
