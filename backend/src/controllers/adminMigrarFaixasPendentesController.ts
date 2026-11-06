@@ -58,7 +58,7 @@ export async function adminMigrarFaixasPendentesController(request: Request): Pr
     .catch(() => []);
   const tituloPorCodigo = new Map<string, string>();
   for (const row of edicaoChartsRows) {
-    const codigo = normalizeComparison(row[54] || ""); // BD = índice 55 na planilha (1-based) = 54 no array (A=0)
+    const codigo = normalizeComparison(row[55] || ""); // BD = índice 55 (A=0,...,Z=25,AA=26,...,BD=55)
     const titulo = (row[1] || "").trim(); // B
     if (codigo && titulo) tituloPorCodigo.set(codigo, titulo);
   }
