@@ -2158,7 +2158,7 @@ export async function handleEmpireApiRoutes(
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-album-record-follia") {
     response = await adminDiagAlbumRecordFolliaController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-infos-acts-hayley") {
-    response = await adminDiagInfosActsHayleyController();
+    response = await adminDiagInfosActsHayleyController(request);
   } else if (url.pathname === "/api/empire-play/admin/backfill-infos-acts") {
     response = await adminBackfillInfosActsController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-ultimos-logs") {

@@ -7,6 +7,7 @@ import {
 } from "../services/googleSheetsService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { cachedRead } from "../services/shortCache";
+import { withWriteLock } from "../services/writeLockService";
 
 const ARTISTAS_SHEET = "ARTISTAS";
 const USUARIOS_SHEET = "Usuários";
@@ -424,14 +425,25 @@ const INFOS_ACTS_SHEET = "INFOS ACTS";
 // preencher depois. Nunca sobrescreve se a linha já existir (idempotente —
 // pode ser chamado em cima de artista já cadastrado sem perder nada).
 async function garantirLinhaInfosActs(nome: string, fotoInicial?: string): Promise<void> {
+  const normNome = normalizeComparison(nome);
   try {
-    const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
-    const normNome = normalizeComparison(nome);
-    const jaExiste = rows.slice(1).some((r) => normalizeComparison(r[0]) === normNome);
-    if (jaExiste) return;
-    await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
-      nome, "", (fotoInicial || "").trim(),
-    ]);
+    // Trava por artista (mesma chave usada em set*Controller abaixo) —
+    // sem isso, duas chamadas quase simultâneas (ex: criação do artista
+    // rodando junto com o dono já tentando salvar bio/foto logo em
+    // seguida) podiam cada uma ler "ainda não existe" e criar DUAS linhas
+    // novas pro mesmo artista — exatamente a classe de bug já visto na
+    // Hayley Wonderwall (e de novo em Ashley Spring/Paris Godwin,
+    // 2026-11-06: o problema ali era justamente a linha nunca ter sido
+    // criada OU ter sido duplicada, e getArtistInfoController só lê a
+    // primeira linha que bate, perdendo qualquer dado só na segunda).
+    await withWriteLock(`infos-acts:${normNome}`, async () => {
+      const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+      const jaExiste = rows.slice(1).some((r) => normalizeComparison(r[0]) === normNome);
+      if (jaExiste) return;
+      await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
+        nome, "", (fotoInicial || "").trim(),
+      ]);
+    });
   } catch (err) {
     console.warn("[garantirLinhaInfosActs] Erro ao criar linha em INFOS ACTS:", err);
   }
@@ -512,34 +524,45 @@ export async function setArtistFotoController(request: Request): Promise<Respons
       });
     }
 
-    const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
     const normNome = normalizeComparison(nome);
-    const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
+    // Trava por artista: sem isso, duas chamadas quase simultâneas pro
+    // MESMO artista (ex: dono mandando foto e bio quase junto, ou
+    // retentativas rápidas após um "nada acontece" aparente) cada uma lia
+    // "linha não existe" e criava a SUA PRÓPRIA linha nova — resultado:
+    // várias linhas pro mesmo artista, cada uma só com PARTE do que foi
+    // enviado, e getArtistInfoController só lê a primeira que bate,
+    // perdendo o resto (caso real: Hayley Wonderwall, depois repetido em
+    // Ashley Spring/Paris Godwin, 2026-11-06).
+    const rowIndex = await withWriteLock(`infos-acts:${normNome}`, async () => {
+      const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+      const idx = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
 
-    // Combinado com o dono do produto (2026-10-24): trocar a foto já vale
-    // NA HORA, sem fila de revisão — antes gravava só em G (upload
-    // "pendente"), e a exibição sempre prioriza C sobre G, então uma troca
-    // de foto nunca aparecia até alguém copiar manualmente G pra C na
-    // planilha (bug real visto ao vivo: Samantha Cooper trocou a foto,
-    // "Enviar" terminou sem erro, mas o perfil continuou mostrando a foto
-    // antiga). Agora grava direto em C (a coluna que o app realmente
-    // exibe) — e também em G, só como histórico do upload original.
-    if (rowIndex !== -1) {
-      await googleSheetsService.registrosCharts.updateValuesBatch([
-        { sheetName: INFOS_ACTS_SHEET, range: `C${rowIndex + 1}`, values: [[fotoUrl]] },
-        { sheetName: INFOS_ACTS_SHEET, range: `G${rowIndex + 1}`, values: [[fotoUrl]] },
-      ]);
-    } else {
-      // Array completo até G (índice 6), nunca um array de 1 elemento só —
-      // appendRow("A:ZZ") deixa a API do Sheets adivinhar a coluna olhando
-      // o range inteiro, e quando a coluna A tem linhas vazias no meio
-      // (caso real desta aba) ela acerta errado e grava mais pra direita
-      // do que devia (bug real encontrado e corrigido em 2026-10-23, ver
-      // adminBackfillInfosActsController).
-      await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
-        nome, "", fotoUrl, "", "", "", fotoUrl,
-      ]);
-    }
+      // Combinado com o dono do produto (2026-10-24): trocar a foto já vale
+      // NA HORA, sem fila de revisão — antes gravava só em G (upload
+      // "pendente"), e a exibição sempre prioriza C sobre G, então uma troca
+      // de foto nunca aparecia até alguém copiar manualmente G pra C na
+      // planilha (bug real visto ao vivo: Samantha Cooper trocou a foto,
+      // "Enviar" terminou sem erro, mas o perfil continuou mostrando a foto
+      // antiga). Agora grava direto em C (a coluna que o app realmente
+      // exibe) — e também em G, só como histórico do upload original.
+      if (idx !== -1) {
+        await googleSheetsService.registrosCharts.updateValuesBatch([
+          { sheetName: INFOS_ACTS_SHEET, range: `C${idx + 1}`, values: [[fotoUrl]] },
+          { sheetName: INFOS_ACTS_SHEET, range: `G${idx + 1}`, values: [[fotoUrl]] },
+        ]);
+      } else {
+        // Array completo até G (índice 6), nunca um array de 1 elemento só —
+        // appendRow("A:ZZ") deixa a API do Sheets adivinhar a coluna olhando
+        // o range inteiro, e quando a coluna A tem linhas vazias no meio
+        // (caso real desta aba) ela acerta errado e grava mais pra direita
+        // do que devia (bug real encontrado e corrigido em 2026-10-23, ver
+        // adminBackfillInfosActsController).
+        await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
+          nome, "", fotoUrl, "", "", "", fotoUrl,
+        ]);
+      }
+      return idx;
+    });
 
     // Combinado com o dono do produto: upload de foto sempre grava nas DUAS
     // planilhas — INFOS ACTS!G (acima) e ARTISTAS!Foto (coluna B) — nunca só
@@ -596,15 +619,20 @@ export async function setArtistBiografiaController(request: Request): Promise<Re
       });
     }
 
-    const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
     const normNome = normalizeComparison(nome);
-    const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
-
-    if (rowIndex !== -1) {
-      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `E${rowIndex + 1}`, [[biografia]]);
-    } else {
-      await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [nome, "", "", "", biografia]);
-    }
+    // Trava por artista — mesmo motivo do setArtistFotoController acima
+    // (caso real que gerou esta correção: Ashley Spring/Paris Godwin,
+    // 2026-11-06, "mandei a biografia 5 vezes e nada aparece").
+    const rowIndex = await withWriteLock(`infos-acts:${normNome}`, async () => {
+      const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+      const idx = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
+      if (idx !== -1) {
+        await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `E${idx + 1}`, [[biografia]]);
+      } else {
+        await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [nome, "", "", "", biografia]);
+      }
+      return idx;
+    });
     registrarLogSistema({
       categoria: "Ação concluída",
       oQueAconteceu: `Biografia do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "E" : "linha nova"}).`,
@@ -652,22 +680,26 @@ export async function setArtistCapaController(request: Request): Promise<Respons
       );
     }
 
-    const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
     const normNome = normalizeComparison(nome);
-    const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
-
-    if (rowIndex !== -1) {
-      if (capaUrl) {
-        await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `R${rowIndex + 1}`, [[capaUrl]]);
+    // Trava por artista — mesmo motivo de setArtistFotoController/
+    // setArtistBiografiaController acima.
+    const rowIndex = await withWriteLock(`infos-acts:${normNome}`, async () => {
+      const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
+      const idx = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[0]) === normNome);
+      if (idx !== -1) {
+        if (capaUrl) {
+          await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `R${idx + 1}`, [[capaUrl]]);
+        }
+        if (capaMobileUrl) {
+          await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `S${idx + 1}`, [[capaMobileUrl]]);
+        }
+      } else {
+        await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
+          nome, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", capaUrl, capaMobileUrl,
+        ]);
       }
-      if (capaMobileUrl) {
-        await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `S${rowIndex + 1}`, [[capaMobileUrl]]);
-      }
-    } else {
-      await googleSheetsService.registrosCharts.appendRow(INFOS_ACTS_SHEET, [
-        nome, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", capaUrl, capaMobileUrl,
-      ]);
-    }
+      return idx;
+    });
     registrarLogSistema({
       categoria: "Ação concluída",
       oQueAconteceu: `Capa do perfil do artista "${nome}" atualizada (INFOS ACTS!${rowIndex !== -1 ? "R/S" : "linha nova"}).`,
