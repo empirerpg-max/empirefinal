@@ -396,10 +396,10 @@ export const Forum: React.FC<ForumProps> = ({
     setEncarteAberto(null);
   }, [selectedTopic?.id]);
 
-  const handleVideoPlay = (topic: ForumTopicItem) => {
-    // Drive e Telegram nunca são tocáveis pelo link/id cru — precisam passar
-    // pelo proxy do próprio Worker (mesma conversão de mappers.ts/toPlayableVideo),
-    // senão o <video> tenta carregar um link do Drive/ID do Telegram direto e falha.
+  // Drive e Telegram nunca são tocáveis pelo link/id cru — precisam passar
+  // pelo proxy do próprio Worker (mesma conversão de mappers.ts/toPlayableVideo),
+  // senão o <video> tenta carregar um link do Drive/ID do Telegram direto e falha.
+  const topicToPlayableVideo = (topic: ForumTopicItem): PlayableVideo => {
     const raw = topic.link || topic.id;
     const source = topic.videoSource || undefined;
     let resolvedLink = raw || "";
@@ -411,7 +411,7 @@ export const Forum: React.FC<ForumProps> = ({
       resolvedLink = `/api/media/video?id=${fileId}`;
     }
 
-    const videoObj: PlayableVideo = {
+    return {
       id: topic.id,
       titulo: topic.title,
       artista: topic.artist,
@@ -420,6 +420,10 @@ export const Forum: React.FC<ForumProps> = ({
       poster_url: topic.cover || undefined,
       tipo_video: topic.tipoVideo || "Vídeo",
     };
+  };
+
+  const handleVideoPlay = (topic: ForumTopicItem) => {
+    const videoObj = topicToPlayableVideo(topic);
     setActiveVideo(videoObj);
     onPlayVideo?.(videoObj);
   };
@@ -2269,7 +2273,17 @@ export const Forum: React.FC<ForumProps> = ({
       )}
 
       {/* MODAL DE PLAYER DE VÍDEO EXPANDIDO */}
-      {activeVideo && <VideoPlayer video={activeVideo} onClose={() => setActiveVideo(null)} />}
+      {activeVideo && (
+        <VideoPlayer
+          video={activeVideo}
+          relatedVideos={activeSubmenu === "videos" ? items.map(topicToPlayableVideo) : []}
+          onSelectVideo={(v) => {
+            setActiveVideo(v);
+            onPlayVideo?.(v);
+          }}
+          onClose={() => setActiveVideo(null)}
+        />
+      )}
 
       {/* CAPA DO ÁLBUM EM TELA CHEIA */}
       {coverExpanded && selectedTopic && (
