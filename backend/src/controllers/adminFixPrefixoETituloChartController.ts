@@ -29,6 +29,17 @@ export async function adminFixPrefixoETituloChartController(request: Request): P
   const url = new URL(request.url);
   const confirmar = url.searchParams.get("confirmar") === "1";
 
+  // Checados manualmente no dry-run (2026-11-06) e descartados — o
+  // "startsWith" de artista não cobre apelido/variação de grafia nem
+  // artista citado em 2º numa dupla, e forçar a correção duplicaria
+  // errado. Ficam de fora da correção automática, resolvidos à mão se
+  // algum dia precisar:
+  // 24  "Alexxa feat. Sabine - legacy" (Alexxa Hills — apelido "Alexxa")
+  // 98  "Toonya - MAKE AMERICA LATINA AGAIN" (Toonya Parker — apelido)
+  // 107 "BREMM & Louise - Storm" (Louise citada em 2º, já tem o nome dela no título)
+  // 258 "Helena - weekend lover" (Helenna — grafia com "Helena" sem o 2º "n")
+  const LINHAS_EXCLUIDAS = new Set([24, 98, 107, 258]);
+
   // ---------- Passo 1: prefixo em Musicas!H ----------
   const musicasRows = await googleSheetsService.principal.readValues("Musicas");
   const prefixosCorrigidos: { linha: number; antes: string; depois: string }[] = [];
@@ -39,6 +50,7 @@ export async function adminFixPrefixoETituloChartController(request: Request): P
     const titulo = (row[7] || "").trim(); // H
     const artista = (row[13] || "").trim(); // N - ACT PRINCIPAL
     if (!titulo || !artista) continue;
+    if (LINHAS_EXCLUIDAS.has(i + 1)) continue;
     const prefixoEsperado = `${artista} - `;
     if (normalizeComparison(titulo).startsWith(normalizeComparison(prefixoEsperado))) continue;
     // BUG REAL evitado aqui (achado no dry-run, 2026-11-06): a checagem
