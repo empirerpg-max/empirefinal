@@ -1338,7 +1338,7 @@ export const Forum: React.FC<ForumProps> = ({
                   <p className="text-sm sm:text-lg font-bold text-emerald-400 mt-2">
                     {selectedTopic.displayArtists || selectedTopic.artist}
                   </p>
-                  {(selectedTopic.releaseDate || !!selectedTopic.semanasNoChart) && (
+                  {(selectedTopic.releaseDate || !!selectedTopic.semanasNoChart || getItemScore(selectedTopic)) && (
                     <div className="flex flex-wrap items-center gap-2 mt-3">
                       {selectedTopic.releaseDate && (
                         <div className="inline-flex items-center gap-1.5 text-xs text-neutral-400">
@@ -1354,6 +1354,9 @@ export const Forum: React.FC<ForumProps> = ({
                           </span>
                         </span>
                       )}
+                      {getItemScore(selectedTopic) && (
+                        <ScoreBadge score={getItemScore(selectedTopic)} variant="likes" />
+                      )}
                     </div>
                   )}
                   {premioDoTopico(selectedTopic) && (
@@ -1361,23 +1364,6 @@ export const Forum: React.FC<ForumProps> = ({
                       <AwardBadge {...premioDoTopico(selectedTopic)!} />
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* CARD DE AVALIAÇÃO OFICIAL — só likes de vídeo agora; a nota do
-                  Metacritic saiu do Catálogo (vira ranking semanal em
-                  Acervo > Metacritic, a pedido do usuário). */}
-              {!visualAberto && activeSubmenu === "videos" && getItemScore(selectedTopic) && (
-                <div className="bg-neutral-800/60 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">
-                      Total de Likes Accum
-                    </span>
-                    <span className="text-[11px] sm:text-xs text-neutral-300 font-medium">
-                      Média da comunidade do Empire Hub
-                    </span>
-                  </div>
-                  <ScoreBadge score={getItemScore(selectedTopic)} variant="likes" />
                 </div>
               )}
             </div>
