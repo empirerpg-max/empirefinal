@@ -211,7 +211,7 @@ export interface ForumProps {
   initialItemId?: string;
 }
 
-import { VideoPlayer, PlayableVideo } from "./VideoPlayer";
+import { VideoPlayer, VideoMediaBox, PlayableVideo } from "./VideoPlayer";
 import { type PlayableTrack } from "./MusicPlayer";
 import { ExtraMaterialButtons, useExtraMaterial, VisualBlocosView } from "./ExtraMaterial";
 import { useEmpirePlayer } from "./PlayerContext";
@@ -1234,37 +1234,18 @@ export const Forum: React.FC<ForumProps> = ({
                 }
               >
                 {activeSubmenu === "videos" ? (
-                  /* CAPA DE VÍDEO — abre no mesmo player nativo do app usado
-                     no catálogo (nunca um iframe cru do Drive/YouTube aqui;
-                     o VideoPlayer já resolve Drive/Telegram via proxy do
-                     Worker e YouTube/Vimeo via embed oficial). */
-                  <button
-                    type="button"
-                    onClick={() => handleVideoPlay(selectedTopic)}
-                    disabled={!selectedTopic.link}
-                    className="w-full max-w-md sm:max-w-none mx-auto aspect-video bg-black rounded-2xl sm:rounded-3xl overflow-hidden border border-white/15 relative shadow-[0_25px_70px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 group flex items-center justify-center disabled:cursor-not-allowed"
-                  >
-                    <SmartImg
-                      src={selectedTopic.cover}
-                      size={800}
-                      alt={selectedTopic.title}
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                      fallback={<div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-950" />}
-                    />
-                    <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors" />
-                    {selectedTopic.link ? (
-                      <span className="relative size-16 sm:size-20 rounded-full bg-red-600/70 group-hover:bg-red-500/85 backdrop-blur-sm text-white flex items-center justify-center shadow-2xl shadow-red-600/20 scale-95 group-hover:scale-100 transition-all">
-                        <Play className="size-7 sm:size-9 ml-0.5 sm:ml-1 fill-white" />
-                      </span>
-                    ) : (
-                      <div className="relative flex flex-col items-center text-center p-6">
-                        <Tv className="size-10 text-neutral-400 mb-2" />
-                        <p className="text-xs text-neutral-300 font-medium">
-                          Player indisponível no momento.
-                        </p>
-                      </div>
-                    )}
-                  </button>
+                  /* CAPA DE VÍDEO — toca direto na própria página do tópico
+                     (sem abrir o player em overlay): mesma caixa de mídia do
+                     VideoPlayer (resolve Drive/Telegram via proxy do Worker,
+                     YouTube/Vimeo via embed oficial), só que embutida aqui.
+                     Tela cheia fica a critério de quem assiste, pelos
+                     controles nativos do próprio player. Key por tópico pra
+                     reiniciar "parado, mostrando a capa" ao trocar de vídeo. */
+                  <VideoMediaBox
+                    key={selectedTopic.id}
+                    video={topicToPlayableVideo(selectedTopic)}
+                    wrapperClassName="rounded-2xl sm:rounded-3xl max-w-md sm:max-w-none mx-auto ring-1 ring-white/10"
+                  />
               ) : (
                 /* CAPA DE MÚSICA / ÁLBUM — em destaque, estilo capa de disco.
                    Menor no modo Visual (só pra situar, sem tomar espaço). */

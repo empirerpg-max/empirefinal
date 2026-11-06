@@ -51,8 +51,6 @@ interface VideoPlayerProps {
 }
 
 export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo }: VideoPlayerProps) {
-  const [streamError, setStreamError] = useState(false);
-  const nativeVideoRef = useRef<HTMLVideoElement | null>(null);
   const [reporting, setReporting] = useState(false);
   // Otimista: assim que o report é aceito, já reflete no botão sem esperar
   // o próximo carregamento da lista (que traria reportPending do servidor).
@@ -117,83 +115,7 @@ export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo 
     }
   }
 
-  // Mesmo "popup" que o usuário pediu: Picture-in-Picture nativo do
-  // navegador, só disponível pra <video> nativo (Drive/Telegram) — iframe do
-  // YouTube/Vimeo já declara allow="picture-in-picture" mais abaixo, mas
-  // quem controla isso aí é o player deles, não dá pra disparar daqui.
-  async function handlePictureInPicture() {
-    const el = nativeVideoRef.current;
-    if (!el) return;
-    haptic.selection();
-    try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-      } else {
-        await el.requestPictureInPicture();
-      }
-    } catch {
-      toast.error("Não foi possível abrir o mini player.");
-    }
-  }
-
   const outrosDoArtista = relatedVideos.filter((v) => v.id !== video.id && v.artista === video.artista);
-
-  const rawLink =
-    video.url_final_player || video.link || (video as any).videoUrl || video.youtube_url || "";
-
-  // 1. YouTube
-  const isYouTubeUrl = (url?: string) => {
-    if (!url) return false;
-    return /youtube\.com|youtu\.be/i.test(url);
-  };
-
-  const getYouTubeEmbedUrl = (url: string) => {
-    let videoId = "";
-    if (url.includes("youtu.be/")) {
-      videoId = url.split("youtu.be/")[1]?.split("?")[0] || "";
-    } else if (url.includes("v=")) {
-      videoId = url.split("v=")[1]?.split("&")[0] || "";
-    } else if (url.includes("embed/")) {
-      videoId = url.split("embed/")[1]?.split("?")[0] || "";
-    } else if (url.includes("shorts/")) {
-      videoId = url.split("shorts/")[1]?.split("?")[0] || "";
-    }
-    // modestbranding/iv_load_policy/rel reduzem ao máximo a marca do
-    // YouTube (logo grande, vídeos relacionados de outros canais) — o
-    // objetivo é a experiência parecer o mais uniforme possível com o
-    // player nativo (Drive/Telegram), já que tecnicamente um vídeo do
-    // YouTube só pode ser tocado via iframe deles, nunca via <video>.
-    return videoId
-      ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1`
-      : url;
-  };
-
-  // Vimeo, assim como YouTube, é a plataforma oficial embutida via iframe —
-  // não tem como evitar mostrar o player dela.
-  const isVimeoUrl = (url?: string) => {
-    if (!url) return false;
-    return /vimeo\.com/i.test(url);
-  };
-
-  const getVimeoEmbedUrl = (url: string) => {
-    const match = url.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
-    // title/byline/portrait=0 tiram a marca do Vimeo (nome do canal, avatar,
-    // título sobreposto) — mesmo motivo do modestbranding do YouTube acima.
-    return match
-      ? `https://player.vimeo.com/video/${match[1]}?autoplay=1&title=0&byline=0&portrait=0`
-      : url;
-  };
-
-  // Drive e Telegram tocam via <video> nativo apontando pro proxy do próprio
-  // Worker (/api/media/video, /api/telegram-video) — o jogador nunca vê a
-  // interface do Drive, só o player do app, como o resto da mídia.
-  const isYt = video.metodo_exibicao === "iframe_youtube" || isYouTubeUrl(rawLink);
-  const isVimeo = !isYt && (video.fonte === "vimeo" || isVimeoUrl(rawLink));
-
-  const poster =
-    video.poster_url || video.capa_url
-      ? driveImg(video.poster_url || video.capa_url, 800)
-      : undefined;
 
   return (
     <div className="fixed inset-0 z-[130] bg-black/95 backdrop-blur-2xl flex flex-col justify-between animate-in fade-in duration-300 overflow-y-auto">
@@ -281,61 +203,7 @@ export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo 
         <div className="flex flex-wrap items-start gap-6">
           {/* Coluna principal: nunca menor que 640px, cresce pra preencher */}
           <div className="flex-[999_1_640px] min-w-0 flex flex-col gap-6">
-            <div className="w-full min-h-[300px] rounded-3xl overflow-hidden bg-neutral-900 border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.9)] relative group flex items-center justify-center">
-              {isYt ? (
-                <iframe
-                  src={getYouTubeEmbedUrl(rawLink)}
-                  title={video.titulo}
-                  className="w-full aspect-video border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              ) : isVimeo ? (
-                <iframe
-                  src={getVimeoEmbedUrl(rawLink)}
-                  title={video.titulo}
-                  className="w-full aspect-video border-0"
-                  allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media"
-                  allowFullScreen
-                />
-              ) : (
-                <>
-                  <video
-                    ref={nativeVideoRef}
-                    src={rawLink}
-                    controls
-                    autoPlay
-                    poster={poster}
-                    onError={() => setStreamError(true)}
-                    className="w-full aspect-video object-contain bg-black"
-                  >
-                    Seu navegador não suporta reprodução de vídeo nativa.
-                  </video>
-
-                  {streamError && (
-                    <div className="absolute inset-0 bg-neutral-950/90 flex flex-col items-center justify-center p-6 text-center">
-                      <AlertCircle className="size-12 text-red-500 mb-3 animate-bounce" />
-                      <h3 className="text-base font-black text-white uppercase tracking-tight mb-1">
-                        Não foi possível carregar o vídeo
-                      </h3>
-                      <p className="text-xs text-neutral-400 max-w-md mb-4">
-                        O vídeo pode estar indisponível no momento. Tente novamente em instantes.
-                      </p>
-                      {rawLink && (
-                        <a
-                          href={rawLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20"
-                        >
-                          Abrir link original
-                        </a>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            <VideoMediaBox video={video} startPlaying wrapperClassName="rounded-3xl" />
 
             {/* Detalhes do Vídeo */}
             <div className="w-full bg-neutral-900/60 border border-white/10 rounded-3xl p-6 backdrop-blur-md">
@@ -351,15 +219,6 @@ export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo 
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {!isYt && !isVimeo && (
-                    <button
-                      onClick={handlePictureInPicture}
-                      title="Abrir em mini player (popup)"
-                      className="size-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 grid place-items-center text-neutral-400 hover:text-white active:scale-90 transition-all"
-                    >
-                      <PictureInPicture2 className="size-4" />
-                    </button>
-                  )}
                   {/* Sempre "Empire Play HD" — a fonte real (YouTube/Vimeo/Drive)
                       é um detalhe interno, o layout deve parecer o mesmo pro
                       jogador independente de onde o vídeo veio. */}
@@ -433,6 +292,188 @@ export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo 
       <div className="p-4 text-center text-[10px] font-black uppercase tracking-[0.2em] text-neutral-600">
         Empire Play • Media Streaming Engine
       </div>
+    </div>
+  );
+}
+
+const isYouTubeUrl = (url?: string) => !!url && /youtube\.com|youtu\.be/i.test(url);
+
+function getYouTubeEmbedUrl(url: string) {
+  let videoId = "";
+  if (url.includes("youtu.be/")) {
+    videoId = url.split("youtu.be/")[1]?.split("?")[0] || "";
+  } else if (url.includes("v=")) {
+    videoId = url.split("v=")[1]?.split("&")[0] || "";
+  } else if (url.includes("embed/")) {
+    videoId = url.split("embed/")[1]?.split("?")[0] || "";
+  } else if (url.includes("shorts/")) {
+    videoId = url.split("shorts/")[1]?.split("?")[0] || "";
+  }
+  // modestbranding/iv_load_policy/rel reduzem ao máximo a marca do YouTube
+  // (logo grande, vídeos relacionados de outros canais) — o objetivo é a
+  // experiência parecer o mais uniforme possível com o player nativo
+  // (Drive/Telegram), já que tecnicamente um vídeo do YouTube só pode ser
+  // tocado via iframe deles, nunca via <video>.
+  return videoId
+    ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1`
+    : url;
+}
+
+// Vimeo, assim como YouTube, é a plataforma oficial embutida via iframe — não
+// tem como evitar mostrar o player dela.
+const isVimeoUrl = (url?: string) => !!url && /vimeo\.com/i.test(url);
+
+function getVimeoEmbedUrl(url: string) {
+  const match = url.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+  // title/byline/portrait=0 tiram a marca do Vimeo (nome do canal, avatar,
+  // título sobreposto) — mesmo motivo do modestbranding do YouTube acima.
+  return match
+    ? `https://player.vimeo.com/video/${match[1]}?autoplay=1&title=0&byline=0&portrait=0`
+    : url;
+}
+
+interface VideoMediaBoxProps {
+  video: PlayableVideo;
+  // false (padrão): mostra a capa com botão de play, e só carrega/toca o
+  // vídeo de verdade quando a pessoa clica — é o que o Fórum usa, pra tocar
+  // na própria página do tópico em vez de abrir um player separado. true:
+  // já entra tocando (usado pelo VideoPlayer em overlay, onde o clique em
+  // "assistir" já aconteceu antes de abrir o player).
+  startPlaying?: boolean;
+  wrapperClassName?: string;
+}
+
+/**
+ * A caixa de vídeo em si (capa + botão de play → player de verdade), sem
+ * nenhum chrome de overlay em volta — usada tanto dentro do VideoPlayer em
+ * tela cheia quanto embutida direto na página do tópico no Fórum. Tela cheia
+ * fica sempre a critério de quem assiste (botão nativo do player, nunca
+ * disparada automaticamente); Picture-in-Picture (o "popup") fica disponível
+ * pra vídeo nativo (Drive/Telegram) assim que a reprodução começa.
+ */
+export function VideoMediaBox({ video, startPlaying = false, wrapperClassName = "" }: VideoMediaBoxProps) {
+  const [playing, setPlaying] = useState(startPlaying);
+  const [streamError, setStreamError] = useState(false);
+  const nativeVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const rawLink =
+    video.url_final_player || video.link || (video as any).videoUrl || video.youtube_url || "";
+  const isYt = video.metodo_exibicao === "iframe_youtube" || isYouTubeUrl(rawLink);
+  const isVimeo = !isYt && (video.fonte === "vimeo" || isVimeoUrl(rawLink));
+  const poster =
+    video.poster_url || video.capa_url ? driveImg(video.poster_url || video.capa_url, 800) : undefined;
+
+  async function handlePictureInPicture() {
+    const el = nativeVideoRef.current;
+    if (!el) return;
+    haptic.selection();
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await el.requestPictureInPicture();
+      }
+    } catch {
+      toast.error("Não foi possível abrir o mini player.");
+    }
+  }
+
+  return (
+    <div
+      className={`w-full aspect-video overflow-hidden bg-black border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.9)] relative group flex items-center justify-center ${wrapperClassName}`}
+    >
+      {!playing ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (!rawLink) return;
+            haptic.selection();
+            setPlaying(true);
+          }}
+          disabled={!rawLink}
+          className="absolute inset-0 size-full flex items-center justify-center disabled:cursor-not-allowed"
+        >
+          {poster && (
+            <img
+              src={poster}
+              alt={video.titulo}
+              className="absolute inset-0 size-full object-cover group-hover:scale-105 transition duration-500"
+            />
+          )}
+          <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors" />
+          {rawLink ? (
+            <span className="relative size-16 sm:size-20 rounded-full bg-red-600/70 group-hover:bg-red-500/85 backdrop-blur-sm text-white flex items-center justify-center shadow-2xl shadow-red-600/20 scale-95 group-hover:scale-100 transition-all">
+              <Play className="size-7 sm:size-9 ml-0.5 sm:ml-1 fill-white" />
+            </span>
+          ) : (
+            <div className="relative flex flex-col items-center text-center p-6">
+              <Tv className="size-10 text-neutral-400 mb-2" />
+              <p className="text-xs text-neutral-300 font-medium">Player indisponível no momento.</p>
+            </div>
+          )}
+        </button>
+      ) : isYt ? (
+        <iframe
+          src={getYouTubeEmbedUrl(rawLink)}
+          title={video.titulo}
+          className="size-full border-0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      ) : isVimeo ? (
+        <iframe
+          src={getVimeoEmbedUrl(rawLink)}
+          title={video.titulo}
+          className="size-full border-0"
+          allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media"
+          allowFullScreen
+        />
+      ) : (
+        <>
+          <video
+            ref={nativeVideoRef}
+            src={rawLink}
+            controls
+            autoPlay
+            poster={poster}
+            onError={() => setStreamError(true)}
+            className="size-full object-contain bg-black"
+          >
+            Seu navegador não suporta reprodução de vídeo nativa.
+          </video>
+
+          <button
+            type="button"
+            onClick={handlePictureInPicture}
+            title="Abrir em mini player (popup)"
+            className="absolute top-3 right-3 size-9 rounded-full bg-black/50 hover:bg-black/70 border border-white/15 backdrop-blur text-white grid place-items-center opacity-0 group-hover:opacity-100 transition-all"
+          >
+            <PictureInPicture2 className="size-4" />
+          </button>
+
+          {streamError && (
+            <div className="absolute inset-0 bg-neutral-950/90 flex flex-col items-center justify-center p-6 text-center">
+              <AlertCircle className="size-12 text-red-500 mb-3 animate-bounce" />
+              <h3 className="text-base font-black text-white uppercase tracking-tight mb-1">
+                Não foi possível carregar o vídeo
+              </h3>
+              <p className="text-xs text-neutral-400 max-w-md mb-4">
+                O vídeo pode estar indisponível no momento. Tente novamente em instantes.
+              </p>
+              {rawLink && (
+                <a
+                  href={rawLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  Abrir link original
+                </a>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
