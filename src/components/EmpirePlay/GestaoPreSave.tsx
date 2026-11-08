@@ -1107,9 +1107,6 @@ function CalendarioCampanha({
         <div className="text-2xl font-black text-white mt-0.5">
           {campanha.acumuladoAtual.toLocaleString("pt-BR")}
         </div>
-        <p className="text-[11px] text-neutral-400 mt-1">
-          Valor acumulado até agora — visível a todos no banner e na página do álbum.
-        </p>
         {campanha.acumuladoAtual === 0 && campanha.status === "ativa" && (
           <RecalcularTetoButton campanhaId={campanha.id} onCorrigido={recarregar} />
         )}
