@@ -405,52 +405,61 @@ export async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
 // achar a próxima linha livre na criação) porque aqui o rowIndex já é
 // conhecido — travar por campanha específica permite completar missões
 // de campanhas DIFERENTES em paralelo, sem fila desnecessária.
-async function writeCampanha(c: PreSaveCampanha): Promise<void> {
-  await withWriteLock(`presave:campanha:${c.id}`, async () => {
-    // TRAVA ESTRUTURAL (pós-incidente FOLLIA, ver writeMissoesCampanha
-    // acima) — nunca deixar uma escrita de linha inteira regredir o
-    // status pra "ativa" depois de já ter virado "lancada"/"cancelada" de
-    // verdade na planilha. Não depende de achar e corrigir CADA call site
-    // que possa carregar um `c` desatualizado em memória — relê o status
-    // atual direto da célula, DENTRO da trava, e se a planilha já avançou
-    // pra um estado final, mantém esse estado final (ignora o "ativa"
-    // desatualizado que está em `c`), em vez de sobrescrever. Único jeito
-    // de regredir de "lancada"/"cancelada" pra "ativa" é um bug novo
-    // tentando ativamente fazer isso — e mesmo esse caso passaria a
-    // precisar MUDAR este guard pra funcionar, não só esquecer de travar.
-    const statusAtualRaw = await googleSheetsService.principal
-      .readValues(PRESAVE_SHEET, `M${c._rowIndex}:M${c._rowIndex}`)
-      .catch(() => []);
-    const statusAtual = normalizeComparison(statusAtualRaw?.[0]?.[0] || "");
-    const linha = campanhaToRow(c);
-    if ((statusAtual === "lancada" || statusAtual === "cancelada") && normalizeComparison(c.status) === "ativa") {
-      linha[12] = statusAtualRaw?.[0]?.[0] || c.status;
-      console.warn(
-        `[writeCampanha] Bloqueado: tentativa de regravar campanha ${c.id} com status desatualizado ("ativa" em memória, já "${statusAtual}" na planilha) — status final preservado.`,
-      );
-    }
-    const gravado = await googleSheetsService.principal.updateValues(
-      PRESAVE_SHEET,
-      `A${c._rowIndex}:U${c._rowIndex}`,
-      [linha],
+// Núcleo sem trava própria — usado quando quem chama JÁ está dentro de
+// withWriteLock(`presave:campanha:${c.id}`) (ver completarMissaoPreSaveController)
+// e não pode travar a MESMA chave de novo (withWriteLock não é reentrante:
+// a segunda tentativa, de dentro da primeira, nunca conseguiria o INSERT e
+// ia estourar "não foi possível adquirir a trava" sozinha). writeCampanha
+// (abaixo) é a versão pública, que trava por conta própria pra quem chama
+// de fora sem já estar numa trava dessa campanha.
+async function writeCampanhaSemTrava(c: PreSaveCampanha): Promise<void> {
+  // TRAVA ESTRUTURAL (pós-incidente FOLLIA, ver writeMissoesCampanha
+  // acima) — nunca deixar uma escrita de linha inteira regredir o
+  // status pra "ativa" depois de já ter virado "lancada"/"cancelada" de
+  // verdade na planilha. Não depende de achar e corrigir CADA call site
+  // que possa carregar um `c` desatualizado em memória — relê o status
+  // atual direto da célula, DENTRO da trava, e se a planilha já avançou
+  // pra um estado final, mantém esse estado final (ignora o "ativa"
+  // desatualizado que está em `c`), em vez de sobrescrever. Único jeito
+  // de regredir de "lancada"/"cancelada" pra "ativa" é um bug novo
+  // tentando ativamente fazer isso — e mesmo esse caso passaria a
+  // precisar MUDAR este guard pra funcionar, não só esquecer de travar.
+  const statusAtualRaw = await googleSheetsService.principal
+    .readValues(PRESAVE_SHEET, `M${c._rowIndex}:M${c._rowIndex}`)
+    .catch(() => []);
+  const statusAtual = normalizeComparison(statusAtualRaw?.[0]?.[0] || "");
+  const linha = campanhaToRow(c);
+  if ((statusAtual === "lancada" || statusAtual === "cancelada") && normalizeComparison(c.status) === "ativa") {
+    linha[12] = statusAtualRaw?.[0]?.[0] || c.status;
+    console.warn(
+      `[writeCampanha] Bloqueado: tentativa de regravar campanha ${c.id} com status desatualizado ("ativa" em memória, já "${statusAtual}" na planilha) — status final preservado.`,
     );
-    // BUG REAL confirmado em produção (DERBY/Cowboy Fresh, 2026-10-29, 64
-    // lançamentos duplicados em ~10h): updateValues já tenta 3x e só
-    // devolve `false` quando TODAS falharam — mas nunca lança exceção, e
-    // esse retorno nunca era checado aqui. Resultado: writeCampanha
-    // "terminava" normalmente mesmo sem o status="lancada" ter sido
-    // persistido de verdade, e o cron via "ativa" de novo no ciclo
-    // seguinte. Agora lança erro explícito pra quem chamou saber que a
-    // escrita não aconteceu (ver jaFoiLancadaDeVerdade/
-    // marcarLancadaDeVerdade em processarLancamentosPreSaveScheduled —
-    // essa é a proteção real contra republicar; isto aqui só garante que
-    // a falha não passe batido como sucesso).
-    if (!gravado) {
-      throw new Error(
-        `[writeCampanha] updateValues falhou (3 tentativas) pra campanha ${c.id}, linha ${c._rowIndex} — status NÃO foi persistido na planilha.`,
-      );
-    }
-  });
+  }
+  const gravado = await googleSheetsService.principal.updateValues(
+    PRESAVE_SHEET,
+    `A${c._rowIndex}:U${c._rowIndex}`,
+    [linha],
+  );
+  // BUG REAL confirmado em produção (DERBY/Cowboy Fresh, 2026-10-29, 64
+  // lançamentos duplicados em ~10h): updateValues já tenta 3x e só
+  // devolve `false` quando TODAS falharam — mas nunca lança exceção, e
+  // esse retorno nunca era checado aqui. Resultado: writeCampanha
+  // "terminava" normalmente mesmo sem o status="lancada" ter sido
+  // persistido de verdade, e o cron via "ativa" de novo no ciclo
+  // seguinte. Agora lança erro explícito pra quem chamou saber que a
+  // escrita não aconteceu (ver jaFoiLancadaDeVerdade/
+  // marcarLancadaDeVerdade em processarLancamentosPreSaveScheduled —
+  // essa é a proteção real contra republicar; isto aqui só garante que
+  // a falha não passe batido como sucesso).
+  if (!gravado) {
+    throw new Error(
+      `[writeCampanha] updateValues falhou (3 tentativas) pra campanha ${c.id}, linha ${c._rowIndex} — status NÃO foi persistido na planilha.`,
+    );
+  }
+}
+
+async function writeCampanha(c: PreSaveCampanha): Promise<void> {
+  await withWriteLock(`presave:campanha:${c.id}`, () => writeCampanhaSemTrava(c));
 }
 
 // BUG REAL confirmado em produção (Max Gorghan, "FOLLIA" — 53 lançamentos
@@ -1665,63 +1674,90 @@ export async function completarMissaoPreSaveController(request: Request): Promis
     if (!campanhaId || !dia)
       return jsonResponse({ success: false, error: "Campanha e dia são obrigatórios." }, 400);
 
-    const campanhas = await readAllCampanhas();
-    const c = campanhas.find((x) => x.id === campanhaId);
-    if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
-    if (c.status !== "ativa")
-      return jsonResponse({ success: false, error: "Essa campanha não está mais ativa." }, 400);
-    if (c.modo !== "missao")
-      return jsonResponse(
-        { success: false, error: "Essa campanha não tem missões (modo contagem)." },
-        400,
-      );
+    // BUG REAL confirmado em produção (Samantha Cooper, "Well, It's Over" —
+    // o MESMO post de uma missão saiu publicado 3x): sem trava nenhuma
+    // cobrindo o trecho inteiro "ler estado → validar → executar o post
+    // social → gravar", dois toques rápidos (ou um retry de rede do
+    // próprio app) disparavam DUAS chamadas quase simultâneas; cada uma
+    // lia a MESMA missão ainda "pendente" (a primeira não tinha terminado
+    // de gravar "completa" ainda), cada uma publicava seu próprio post de
+    // verdade (postarSocial → createSocialPostController, sem nenhuma
+    // checagem de idempotência) e só DEPOIS tentava gravar — resultado:
+    // vários posts reais, só 1 missão marcada completa no final. A trava
+    // writeCampanha/withWriteLock já existia, mas só em volta da ESCRITA;
+    // o buraco de corrida ficava entre a leitura do status e essa escrita,
+    // exatamente onde o post é publicado. Agora o fluxo inteiro (exceto
+    // dryRun, que nunca publica nada de verdade) roda dentro da MESMA
+    // trava por campanha — a segunda chamada só entra depois que a
+    // primeira já gravou "completa", vê o status atualizado e é rejeitada
+    // ANTES de publicar qualquer post novo.
+    async function executarCompletarMissao(): Promise<Response> {
+      const campanhas = await readAllCampanhas();
+      const c = campanhas.find((x) => x.id === campanhaId);
+      if (!c) return jsonResponse({ success: false, error: "Campanha não encontrada." }, 404);
+      if (c.status !== "ativa")
+        return jsonResponse({ success: false, error: "Essa campanha não está mais ativa." }, 400);
+      if (c.modo !== "missao")
+        return jsonResponse(
+          { success: false, error: "Essa campanha não tem missões (modo contagem)." },
+          400,
+        );
 
-    aplicarDiasPerdidos(c);
+      aplicarDiasPerdidos(c);
 
-    const missao = c.missoes.find((m) => m.dia === dia);
-    if (!missao || !missao.tipo)
-      return jsonResponse({ success: false, error: "Esse dia não tem missão agendada." }, 400);
-    // Travado no dia exato — igual Tour, sem flexibilidade de antecipar ou
-    // remarcar. Só pode completar a missão do dia atual do calendário
-    // (dia-calendário em Brasília — ver diaCampanhaAtual).
-    const hojeIndex = diaCampanhaAtual(c);
-    if (dia !== hojeIndex) {
-      return jsonResponse(
-        {
-          success: false,
-          error: "Essa missão só pode ser completada no dia exato em que está agendada.",
-        },
-        400,
-      );
+      const missao = c.missoes.find((m) => m.dia === dia);
+      if (!missao || !missao.tipo)
+        return jsonResponse({ success: false, error: "Esse dia não tem missão agendada." }, 400);
+      // Travado no dia exato — igual Tour, sem flexibilidade de antecipar ou
+      // remarcar. Só pode completar a missão do dia atual do calendário
+      // (dia-calendário em Brasília — ver diaCampanhaAtual).
+      const hojeIndex = diaCampanhaAtual(c);
+      if (dia !== hojeIndex) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Essa missão só pode ser completada no dia exato em que está agendada.",
+          },
+          400,
+        );
+      }
+      if (missao.status === "completa")
+        return jsonResponse({ success: false, error: "Essa missão já foi completada." }, 400);
+      if (missao.status === "perdida")
+        return jsonResponse(
+          { success: false, error: "Esse dia já passou — a missão foi perdida (sem reposição)." },
+          400,
+        );
+
+      const resultado = await validarEExecutarMissao(c, missao, body);
+      if (!resultado.ok) return jsonResponse({ success: false, error: resultado.error, dryRun }, 400);
+
+      if (dryRun) {
+        return jsonResponse({ success: true, dryRun: true, passaria: true, dados: resultado.dados });
+      }
+
+      missao.status = "completa";
+      missao.completadoEm = new Date().toISOString();
+      missao.dados = resultado.dados;
+
+      // writeCampanhaSemTrava (não writeCampanha): já estamos dentro da
+      // trava desta campanha (ver withWriteLock mais abaixo) — chamar
+      // writeCampanha aqui tentaria travar a MESMA chave de novo e nunca
+      // conseguiria (withWriteLock não é reentrante).
+      await writeCampanhaSemTrava(c);
+
+      registrarLogSistema({
+        categoria: "Ação concluída",
+        oQueAconteceu: `Missão "${missao.tipo}" (dia ${dia}) completada na campanha de pre-save "${c.albumTituloFull}".`,
+        onde: "completarMissaoPreSaveController",
+      }).catch(() => {});
+
+      return jsonResponse({ success: true, data: campanhaDoDono(c) });
     }
-    if (missao.status === "completa")
-      return jsonResponse({ success: false, error: "Essa missão já foi completada." }, 400);
-    if (missao.status === "perdida")
-      return jsonResponse(
-        { success: false, error: "Esse dia já passou — a missão foi perdida (sem reposição)." },
-        400,
-      );
 
-    const resultado = await validarEExecutarMissao(c, missao, body);
-    if (!resultado.ok) return jsonResponse({ success: false, error: resultado.error, dryRun }, 400);
-
-    if (dryRun) {
-      return jsonResponse({ success: true, dryRun: true, passaria: true, dados: resultado.dados });
-    }
-
-    missao.status = "completa";
-    missao.completadoEm = new Date().toISOString();
-    missao.dados = resultado.dados;
-
-    await writeCampanha(c);
-
-    registrarLogSistema({
-      categoria: "Ação concluída",
-      oQueAconteceu: `Missão "${missao.tipo}" (dia ${dia}) completada na campanha de pre-save "${c.albumTituloFull}".`,
-      onde: "completarMissaoPreSaveController",
-    }).catch(() => {});
-
-    return jsonResponse({ success: true, data: campanhaDoDono(c) });
+    return dryRun
+      ? await executarCompletarMissao()
+      : await withWriteLock(`presave:campanha:${campanhaId}`, executarCompletarMissao);
   } catch (error: any) {
     console.error("[completarMissaoPreSaveController] Erro:", error);
     return jsonResponse(

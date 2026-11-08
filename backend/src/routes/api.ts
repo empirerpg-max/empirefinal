@@ -276,6 +276,7 @@ import { adminRestoreFormulaPaisController } from "../controllers/adminRestoreFo
 import { adminDiagTamanhoAbasFonteController } from "../controllers/adminDiagTamanhoAbasFonteController";
 import { adminDiagCodigoAlbumController } from "../controllers/adminDiagCodigoAlbumController";
 import { adminDiagPresaveDuplicadoController } from "../controllers/adminDiagPresaveDuplicadoController";
+import { adminDiagPresaveCampanhaArtistaController } from "../controllers/adminDiagPresaveCampanhaArtistaController";
 import { adminPararPresaveDuplicadoController } from "../controllers/adminPararPresaveDuplicadoController";
 import { adminLimparDuplicadosDerbyController } from "../controllers/adminLimparDuplicadosDerbyController";
 import { adminLimparFaixasDuplicadasDerbyController } from "../controllers/adminLimparFaixasDuplicadasDerbyController";
@@ -2197,6 +2198,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagTamanhoAbasFonteController();
   } else if (url.pathname === "/api/empire-play/admin/diag-codigo-album") {
     response = await adminDiagCodigoAlbumController(request);
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-presave-campanha-artista") {
+    response = await adminDiagPresaveCampanhaArtistaController(request);
   } else if (url.pathname === "/api/empire-play/admin/diag-presave-duplicado") {
     response = await adminDiagPresaveDuplicadoController();
   } else if (url.pathname === "/api/empire-play/admin/parar-presave-duplicado") {
