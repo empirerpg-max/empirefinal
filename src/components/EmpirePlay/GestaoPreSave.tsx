@@ -322,7 +322,7 @@ export function GestaoPreSave() {
               className="w-full flex items-center gap-3 p-3 sm:p-4 rounded-2xl bg-neutral-800/40 border border-white/10 hover:border-fuchsia-400/40 transition-colors text-left min-w-0"
             >
               {c.capaUrl ? (
-                <img src={c.capaUrl} alt="" className="size-14 rounded-xl object-cover shrink-0" />
+                <img src={driveImg(c.capaUrl, 100)} alt="" className="size-14 rounded-xl object-cover shrink-0" />
               ) : (
                 <div className="size-14 rounded-xl bg-neutral-700 shrink-0" />
               )}
@@ -1081,7 +1081,7 @@ function CalendarioCampanha({
             className="relative size-16 rounded-xl overflow-hidden shrink-0 group"
           >
             <img
-              src={campanha.capaUrl}
+              src={driveImg(campanha.capaUrl, 120)}
               alt=""
               className="w-full h-full object-cover group-hover:scale-105 transition"
             />
