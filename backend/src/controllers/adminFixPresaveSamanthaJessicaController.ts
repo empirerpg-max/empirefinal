@@ -43,10 +43,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-async function fixTetoSamantha(confirmar: boolean) {
+async function fixTetoFallback(artistaAlvo: string, confirmar: boolean) {
   const campanhas = await readAllCampanhas();
-  const c = campanhas.find((x) => normalizeComparison(x.artista).includes(normalizeComparison("Samantha Cooper")));
-  if (!c) return { ok: false, error: "Campanha da Samantha Cooper não encontrada." };
+  const c = campanhas.find((x) => normalizeComparison(x.artista).includes(normalizeComparison(artistaAlvo)));
+  if (!c) return { ok: false, error: `Campanha de "${artistaAlvo}" não encontrada.` };
 
   const recalculo = await calcularTetos(c.artista);
   const novoTeto = Math.round(c.modo === "missao" ? recalculo.tetoMissao : recalculo.tetoContagem);
@@ -60,7 +60,7 @@ async function fixTetoSamantha(confirmar: boolean) {
   await writeCampanhaSemTrava(c);
   registrarLogSistema({
     categoria: "Ação concluída",
-    oQueAconteceu: `[admin fix] Teto da campanha de pre-save "${c.albumTituloFull}" (Samantha Cooper) corrigido de ${tetoAnterior} pra ${novoTeto} (valTotal=${recalculo.valTotal}) — estava preso no fallback de artista-não-encontrado-no-chart.`,
+    oQueAconteceu: `[admin fix] Teto da campanha de pre-save "${c.albumTituloFull}" (${artistaAlvo}) corrigido de ${tetoAnterior} pra ${novoTeto} (valTotal=${recalculo.valTotal}) — estava preso no fallback de artista-não-encontrado-no-chart.`,
     onde: "adminFixPresaveSamanthaJessicaController",
   }).catch(() => {});
 
@@ -121,7 +121,22 @@ async function fixPostsDuplicadosSamantha(confirmar: boolean) {
     }).catch(() => {});
   }
 
-  return { ok: true, dryRun: !confirmar, grupos: resultado };
+  return {
+    ok: true,
+    dryRun: !confirmar,
+    grupos: resultado,
+    // Diagnóstico extra — útil quando `grupos` vem vazio pra entender por
+    // que o agrupamento por texto idêntico não achou nada (ex: cada post
+    // teve pequena variação de texto, ou tipo/subtipo diferente).
+    todosOsPostsDaAutora: candidatos.map(({ row, rowIndex }) => ({
+      rowIndex,
+      id: normalizeText(row[0]),
+      tipo: normalizeText(row[1]),
+      subtipo: normalizeText(row[2]),
+      texto: normalizeText(row[4]).slice(0, 120),
+      data: normalizeText(row[7]),
+    })),
+  };
 }
 
 const MIX_MISSOES: MissaoTipo[] = [
@@ -139,7 +154,7 @@ const MIX_MISSOES: MissaoTipo[] = [
 
 async function fixMissoesJessica(confirmar: boolean) {
   const campanhas = await readAllCampanhas();
-  const c = campanhas.find((x) => normalizeComparison(x.jogadorNome).includes(normalizeComparison("Jessica Johnson")));
+  const c = campanhas.find((x) => normalizeComparison(x.artista).includes(normalizeComparison("Jessica Johnson")));
   if (!c) return { ok: false, error: "Campanha da Jessica Johnson não encontrada." };
   if (c.modo !== "missao") return { ok: false, error: "Campanha da Jessica não é modo 'missao', nada a atribuir." };
 
@@ -181,13 +196,21 @@ export async function adminFixPresaveSamanthaJessicaController(request: Request)
     const url = new URL(request.url);
     const confirmar = url.searchParams.get("confirmar") === "1";
 
-    const [teto, posts, missoes] = await Promise.all([
-      fixTetoSamantha(confirmar),
+    const [tetoSamantha, tetoJessica, posts, missoes] = await Promise.all([
+      fixTetoFallback("Samantha Cooper", confirmar),
+      fixTetoFallback("Jessica Johnson", confirmar),
       fixPostsDuplicadosSamantha(confirmar),
       fixMissoesJessica(confirmar),
     ]);
 
-    return jsonResponse({ success: true, confirmar, tetoSamantha: teto, postsDuplicadosSamantha: posts, missoesJessica: missoes });
+    return jsonResponse({
+      success: true,
+      confirmar,
+      tetoSamantha,
+      tetoJessica,
+      postsDuplicadosSamantha: posts,
+      missoesJessica: missoes,
+    });
   } catch (error: any) {
     return jsonResponse({ success: false, error: error.message || "Erro no fix admin." }, 500);
   }
