@@ -35,6 +35,7 @@ import {
 } from "./preSaveController";
 
 const SOCIAL_POSTS_SHEET = "SOCIAL_POSTS";
+const ACERVO_ENTREVISTAS_SHEET = "ACERVO_ENTREVISTAS";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
@@ -43,28 +44,26 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-async function fixTetoFallback(artistaAlvo: string, confirmar: boolean) {
-  const campanhas = await readAllCampanhas();
-  const c = campanhas.find((x) => normalizeComparison(x.artista).includes(normalizeComparison(artistaAlvo)));
-  if (!c) return { ok: false, error: `Campanha de "${artistaAlvo}" não encontrada.` };
+// IMPORTANTE — lido e escrito UMA VEZ por campanha, nunca em paralelo com
+// outro fix que toque a MESMA campanha: bug real encontrado nesta sessão
+// (primeira versão deste arquivo rodava fixTetoFallback e fixMissoesJessica
+// num Promise.all) — cada função lia sua PRÓPRIA cópia de `c` via
+// readAllCampanhas() e escrevia a linha A:U inteira de volta; como as duas
+// leituras aconteciam antes de qualquer escrita, a que escrevia por último
+// (o teto) sobrescrevia TODA a linha com sua cópia antiga das missões,
+// apagando de volta a atribuição que a outra função acabara de gravar —
+// "lost update" clássico. O teto da Jessica saiu certo (4062230) mas as
+// 14 missões voltaram todas a tipo:null. Fix: o controller principal lê a
+// campanha de cada artista UMA vez, aplica todas as mutações daquele
+// artista no mesmo objeto em memória, e só então escreve uma vez.
 
-  const recalculo = await calcularTetos(c.artista);
-  const novoTeto = Math.round(c.modo === "missao" ? recalculo.tetoMissao : recalculo.tetoContagem);
+type CampanhaMap = Awaited<ReturnType<typeof readAllCampanhas>>;
+type Campanha = CampanhaMap[number];
+
+function calcularFixTeto(c: Campanha, novoTeto: number, valTotal: number) {
   const tetoAnterior = c.tetoFinal;
-
-  if (!confirmar) {
-    return { ok: true, dryRun: true, campanhaId: c.id, tetoAnterior, tetoNovo: novoTeto, valTotal: recalculo.valTotal };
-  }
-
   c.tetoFinal = novoTeto;
-  await writeCampanhaSemTrava(c);
-  registrarLogSistema({
-    categoria: "Ação concluída",
-    oQueAconteceu: `[admin fix] Teto da campanha de pre-save "${c.albumTituloFull}" (${artistaAlvo}) corrigido de ${tetoAnterior} pra ${novoTeto} (valTotal=${recalculo.valTotal}) — estava preso no fallback de artista-não-encontrado-no-chart.`,
-    onde: "adminFixPresaveSamanthaJessicaController",
-  }).catch(() => {});
-
-  return { ok: true, dryRun: false, campanhaId: c.id, tetoAnterior, tetoNovo: novoTeto, valTotal: recalculo.valTotal };
+  return { tetoAnterior, tetoNovo: novoTeto, valTotal };
 }
 
 async function fixPostsDuplicadosSamantha(confirmar: boolean) {
@@ -139,6 +138,79 @@ async function fixPostsDuplicadosSamantha(confirmar: boolean) {
   };
 }
 
+// A entrevista "Samantha Cooper - iHeartRadio" (missão do dia 3, completada
+// 2026-11-07T01:51:54.372Z) apareceu triplicada em ACERVO_ENTREVISTAS, não
+// em SOCIAL_POSTS — createAcervoEntrevistaController (acervoController.ts)
+// é o caminho de publicação real de uma missão tipo "entrevista", e essa
+// chamada aconteceu em 2026-11-07, ANTES da trava por campanha inteira
+// (completarMissaoPreSaveController) ter sido deployada hoje — por isso o
+// fix de posts sociais não achava nada: o conteúdo duplicado real estava
+// numa aba completamente diferente. ACERVO_ENTREVISTAS: A id | B artista |
+// C titulo | D capa | E perguntas(JSON) | F data | G telegram_id |
+// H musicas(JSON).
+async function fixEntrevistasDuplicadasSamantha(confirmar: boolean) {
+  const rows = await googleSheetsService.usuarios.readValues(ACERVO_ENTREVISTAS_SHEET);
+  const candidatos = rows
+    .map((row, i) => ({ row, rowIndex: i + 1 }))
+    .filter(({ row, rowIndex }) => {
+      if (rowIndex <= 1) return false;
+      return normalizeComparison(normalizeText(row[1])).includes(normalizeComparison("Samantha Cooper"));
+    });
+
+  const porTitulo = new Map<string, { row: string[]; rowIndex: number }[]>();
+  for (const cand of candidatos) {
+    const chave = normalizeComparison(normalizeText(cand.row[2]));
+    if (!chave) continue;
+    if (!porTitulo.has(chave)) porTitulo.set(chave, []);
+    porTitulo.get(chave)!.push(cand);
+  }
+
+  const grupos = Array.from(porTitulo.values()).filter((g) => g.length > 1);
+  const resultado: { titulo: string; mantido: string; removidos: string[] }[] = [];
+
+  for (const grupo of grupos) {
+    grupo.sort((a, b) => new Date(normalizeText(a.row[5])).getTime() - new Date(normalizeText(b.row[5])).getTime());
+    const [manter, ...remover] = grupo;
+    resultado.push({
+      titulo: normalizeText(manter.row[2]),
+      mantido: normalizeText(manter.row[0]),
+      removidos: remover.map((r) => normalizeText(r.row[0])),
+    });
+
+    if (confirmar) {
+      for (const r of remover) {
+        await googleSheetsService.usuarios.updateValues(
+          ACERVO_ENTREVISTAS_SHEET,
+          `A${r.rowIndex}:H${r.rowIndex}`,
+          [["", "", "", "", "", "", "", ""]],
+        );
+      }
+    }
+  }
+
+  if (confirmar && resultado.length > 0) {
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `[admin fix] Removidas entrevistas duplicadas de Samantha Cooper em ACERVO_ENTREVISTAS (triplicação real da missão de pre-save do dia 3, anterior à trava por campanha): ${resultado
+        .map((r) => `mantido ${r.mantido}, removidos ${r.removidos.join(",")}`)
+        .join(" | ")}`,
+      onde: "adminFixPresaveSamanthaJessicaController",
+    }).catch(() => {});
+  }
+
+  return {
+    ok: true,
+    dryRun: !confirmar,
+    grupos: resultado,
+    todasAsEntrevistasDaArtista: candidatos.map(({ row, rowIndex }) => ({
+      rowIndex,
+      id: normalizeText(row[0]),
+      titulo: normalizeText(row[2]),
+      data: normalizeText(row[5]),
+    })),
+  };
+}
+
 const MIX_MISSOES: MissaoTipo[] = [
   "bastidores",
   "trecho_letra",
@@ -152,17 +224,14 @@ const MIX_MISSOES: MissaoTipo[] = [
   "post_anuncio",
 ];
 
-async function fixMissoesJessica(confirmar: boolean) {
-  const campanhas = await readAllCampanhas();
-  const c = campanhas.find((x) => normalizeComparison(x.artista).includes(normalizeComparison("Jessica Johnson")));
-  if (!c) return { ok: false, error: "Campanha da Jessica Johnson não encontrada." };
-  if (c.modo !== "missao") return { ok: false, error: "Campanha da Jessica não é modo 'missao', nada a atribuir." };
+function calcularFixMissoesJessica(c: Campanha) {
+  if (c.modo !== "missao") return { ok: false as const, error: "Campanha da Jessica não é modo 'missao', nada a atribuir." };
 
   const diaAtual = diaCampanhaAtual(c);
   let cursor = 0;
   const atribuicoes: { dia: number; tipo: MissaoTipo }[] = [];
 
-  const novasMissoes = c.missoes.map((m) => {
+  c.missoes = c.missoes.map((m) => {
     if (m.tipo !== null) return m;
     // Dias já passados sem missão: ficam perdidos de propósito (igual
     // qualquer outro dia perdido no modo missão) — só atribui a partir de
@@ -174,21 +243,61 @@ async function fixMissoesJessica(confirmar: boolean) {
     return { ...m, tipo };
   });
 
-  if (!confirmar) {
-    return { ok: true, dryRun: true, campanhaId: c.id, diaAtual, atribuicoes };
+  return { ok: true as const, diaAtual, atribuicoes };
+}
+
+async function fixCampanhaSamanthaEJessica(confirmar: boolean) {
+  const campanhas = await readAllCampanhas();
+  const samantha = campanhas.find((x) => normalizeComparison(x.artista).includes(normalizeComparison("Samantha Cooper")));
+  const jessica = campanhas.find((x) => normalizeComparison(x.artista).includes(normalizeComparison("Jessica Johnson")));
+
+  const resultado: {
+    tetoSamantha: unknown;
+    tetoJessica: unknown;
+    missoesJessica: unknown;
+  } = { tetoSamantha: { ok: false, error: 'Campanha de "Samantha Cooper" não encontrada.' }, tetoJessica: { ok: false, error: 'Campanha de "Jessica Johnson" não encontrada.' }, missoesJessica: { ok: false, error: "Campanha da Jessica Johnson não encontrada." } };
+
+  if (samantha) {
+    const recalculo = await calcularTetos(samantha.artista);
+    const novoTeto = Math.round(samantha.modo === "missao" ? recalculo.tetoMissao : recalculo.tetoContagem);
+    const fixInfo = calcularFixTeto(samantha, novoTeto, recalculo.valTotal);
+    resultado.tetoSamantha = { ok: true, dryRun: !confirmar, campanhaId: samantha.id, ...fixInfo };
+    if (confirmar) {
+      await writeCampanhaSemTrava(samantha);
+      registrarLogSistema({
+        categoria: "Ação concluída",
+        oQueAconteceu: `[admin fix] Teto da campanha de pre-save "${samantha.albumTituloFull}" (Samantha Cooper) corrigido de ${fixInfo.tetoAnterior} pra ${fixInfo.tetoNovo} (valTotal=${fixInfo.valTotal}) — estava preso no fallback de artista-não-encontrado-no-chart.`,
+        onde: "adminFixPresaveSamanthaJessicaController",
+      }).catch(() => {});
+    }
   }
 
-  c.missoes = novasMissoes;
-  await writeCampanhaSemTrava(c);
-  registrarLogSistema({
-    categoria: "Ação concluída",
-    oQueAconteceu: `[admin fix] Campanha de pre-save "${c.albumTituloFull}" (Jessica Johnson) nunca teve missões atribuídas (todos os dias tipo:null) — atribuído mix de missões a partir do dia ${diaAtual}: ${atribuicoes
-      .map((a) => `dia ${a.dia}=${a.tipo}`)
-      .join(", ")}.`,
-    onde: "adminFixPresaveSamanthaJessicaController",
-  }).catch(() => {});
+  if (jessica) {
+    const recalculo = await calcularTetos(jessica.artista);
+    const novoTeto = Math.round(jessica.modo === "missao" ? recalculo.tetoMissao : recalculo.tetoContagem);
+    const fixTetoInfo = calcularFixTeto(jessica, novoTeto, recalculo.valTotal);
+    const fixMissoesInfo = calcularFixMissoesJessica(jessica);
+    resultado.tetoJessica = { ok: true, dryRun: !confirmar, campanhaId: jessica.id, ...fixTetoInfo };
+    resultado.missoesJessica = fixMissoesInfo.ok
+      ? { ok: true, dryRun: !confirmar, campanhaId: jessica.id, diaAtual: fixMissoesInfo.diaAtual, atribuicoes: fixMissoesInfo.atribuicoes }
+      : fixMissoesInfo;
 
-  return { ok: true, dryRun: false, campanhaId: c.id, diaAtual, atribuicoes };
+    if (confirmar) {
+      // UMA escrita só, com teto E missões já aplicados no mesmo objeto —
+      // nunca duas escritas concorrentes na mesma campanha (ver comentário
+      // acima sobre o "lost update" da primeira versão deste arquivo).
+      await writeCampanhaSemTrava(jessica);
+      registrarLogSistema({
+        categoria: "Ação concluída",
+        oQueAconteceu: `[admin fix] Campanha de pre-save "${jessica.albumTituloFull}" (Jessica Johnson): teto corrigido de ${fixTetoInfo.tetoAnterior} pra ${fixTetoInfo.tetoNovo} (valTotal=${fixTetoInfo.valTotal}); missões nunca atribuídas (todos os dias tipo:null) — atribuído mix a partir do dia ${fixMissoesInfo.ok ? fixMissoesInfo.diaAtual : "?"}: ${
+          fixMissoesInfo.ok ? fixMissoesInfo.atribuicoes.map((a) => `dia ${a.dia}=${a.tipo}`).join(", ") : "(falhou)"
+        }.`,
+        onde: "adminFixPresaveSamanthaJessicaController",
+      }).catch(() => {});
+    }
+  }
+
+  return resultado;
 }
 
 export async function adminFixPresaveSamanthaJessicaController(request: Request): Promise<Response> {
@@ -196,20 +305,20 @@ export async function adminFixPresaveSamanthaJessicaController(request: Request)
     const url = new URL(request.url);
     const confirmar = url.searchParams.get("confirmar") === "1";
 
-    const [tetoSamantha, tetoJessica, posts, missoes] = await Promise.all([
-      fixTetoFallback("Samantha Cooper", confirmar),
-      fixTetoFallback("Jessica Johnson", confirmar),
+    const [campanhaFixes, posts, entrevistas] = await Promise.all([
+      fixCampanhaSamanthaEJessica(confirmar),
       fixPostsDuplicadosSamantha(confirmar),
-      fixMissoesJessica(confirmar),
+      fixEntrevistasDuplicadasSamantha(confirmar),
     ]);
 
     return jsonResponse({
       success: true,
       confirmar,
-      tetoSamantha,
-      tetoJessica,
+      tetoSamantha: campanhaFixes.tetoSamantha,
+      tetoJessica: campanhaFixes.tetoJessica,
       postsDuplicadosSamantha: posts,
-      missoesJessica: missoes,
+      entrevistasDuplicadasSamantha: entrevistas,
+      missoesJessica: campanhaFixes.missoesJessica,
     });
   } catch (error: any) {
     return jsonResponse({ success: false, error: error.message || "Erro no fix admin." }, 500);
