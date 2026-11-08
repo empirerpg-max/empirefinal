@@ -636,7 +636,8 @@ export function calcularAcumulado(c: PreSaveCampanha): number {
 // arredondados podia divergir do total por alguns pontos).
 export function valoresPorDia(c: PreSaveCampanha): { dia: number; valor: number }[] {
   const porDia = c.tetoFinal / c.duracaoDias;
-  const diasPassados = Math.min(c.duracaoDias, Math.max(0, diaCampanhaAtual(c) - 1));
+  const diaAtual = diaCampanhaAtual(c);
+  const diasPassados = Math.min(c.duracaoDias, Math.max(0, diaAtual - 1));
   const out: { dia: number; valor: number }[] = [];
   for (let dia = 1; dia <= diasPassados; dia++) {
     if (c.modo === "contagem") {
@@ -649,6 +650,22 @@ export function valoresPorDia(c: PreSaveCampanha): { dia: number; valor: number 
         ? porDia * ((MISSOES_CATALOGO[missao.tipo as MissaoTipo]?.peso ?? 0) / 100)
         : 0;
     out.push({ dia, valor });
+  }
+  // BUG REAL reportado (Samantha Cooper, dia 5 "Making of" já completado
+  // e publicado no mesmo dia): o dia CORRENTE nunca entra no loop acima
+  // (ele "ainda está em andamento", regra certa pra modo contagem, que só
+  // libera a fatia no dia seguinte). Mas no modo "missao", se a missão de
+  // hoje já foi completada de verdade, o valor já foi ganho — a UI só não
+  // mostrava o número (+X) até o dia virar, mesmo com o check verde e o
+  // post já publicado. Dia corrente entra aqui, só quando já "completa".
+  if (c.modo === "missao" && diaAtual <= c.duracaoDias) {
+    const missaoHoje = c.missoes.find((m) => m.dia === diaAtual);
+    if (missaoHoje?.status === "completa") {
+      out.push({
+        dia: diaAtual,
+        valor: porDia * ((MISSOES_CATALOGO[missaoHoje.tipo as MissaoTipo]?.peso ?? 0) / 100),
+      });
+    }
   }
   return out;
 }
