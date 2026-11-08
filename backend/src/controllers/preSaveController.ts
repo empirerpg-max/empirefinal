@@ -412,7 +412,7 @@ export async function readAllCampanhas(): Promise<PreSaveCampanha[]> {
 // ia estourar "não foi possível adquirir a trava" sozinha). writeCampanha
 // (abaixo) é a versão pública, que trava por conta própria pra quem chama
 // de fora sem já estar numa trava dessa campanha.
-async function writeCampanhaSemTrava(c: PreSaveCampanha): Promise<void> {
+export async function writeCampanhaSemTrava(c: PreSaveCampanha): Promise<void> {
   // TRAVA ESTRUTURAL (pós-incidente FOLLIA, ver writeMissoesCampanha
   // acima) — nunca deixar uma escrita de linha inteira regredir o
   // status pra "ativa" depois de já ter virado "lancada"/"cancelada" de
@@ -544,7 +544,7 @@ async function getMelhorValTotalArtista(artista: string): Promise<number> {
   return melhor > 0 ? melhor : VALTOTAL_BASE_SEM_CHART;
 }
 
-async function calcularTetos(
+export async function calcularTetos(
   artista: string,
 ): Promise<{ tetoMissao: number; tetoContagem: number; valTotal: number }> {
   const valTotal = await getMelhorValTotalArtista(artista);
@@ -587,7 +587,7 @@ function diasEntreCalendario(aStr: string, bStr: string): number {
 // completa de verdade. Agora usa diferença de dia-calendário em Brasília
 // — dia 1 é o dia-calendário da criação, dia 2 é o dia-calendário
 // seguinte, etc., sem depender da hora exata em que a campanha nasceu.
-function diaCampanhaAtual(c: PreSaveCampanha): number {
+export function diaCampanhaAtual(c: PreSaveCampanha): number {
   const inicioStr = diaCalendarioBrasilia(new Date(c.dataInicioISO));
   const hojeStr = diaCalendarioBrasilia(new Date());
   return diasEntreCalendario(inicioStr, hojeStr) + 1;
