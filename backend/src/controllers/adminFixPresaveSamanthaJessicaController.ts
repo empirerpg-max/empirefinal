@@ -246,6 +246,39 @@ function calcularFixMissoesJessica(c: Campanha) {
   return { ok: true as const, diaAtual, atribuicoes };
 }
 
+// Compensação retroativa (pedido explícito do usuário): os dias 1-4 da
+// Jessica nunca tiveram missão nenhuma atribuída (o mesmo bug de criação
+// que deixou os 14 dias com tipo:null) — já passaram, então ela nunca
+// teve CHANCE de completá-los, diferente de um dia perdido normal (onde o
+// jogador tinha a missão disponível e não completou a tempo). Credita
+// esses dias como se tivessem sido completados: atribui um tipo (mesma
+// rotação de MIX_MISSOES, continuando de onde a atribuição dos dias
+// futuros parou) e marca status "completa" direto — calcularAcumulado só
+// olha status+tipo pra somar o valor (peso/100 * teto/duracaoDias), não
+// depende de completadoEm nem de nenhum post/entrevista real ter
+// acontecido, então isso credita o valor sem fabricar nenhum post/conteúdo
+// falso em Social ou Acervo.
+function calcularCompensacaoRetroativaJessica(c: Campanha, diaAtual: number, cursorInicial: number) {
+  let cursor = cursorInicial;
+  const compensados: { dia: number; tipo: MissaoTipo }[] = [];
+
+  c.missoes = c.missoes.map((m) => {
+    if (m.tipo !== null || m.status !== "pendente" || m.dia >= diaAtual) return m;
+    const tipo = MIX_MISSOES[cursor % MIX_MISSOES.length];
+    cursor++;
+    compensados.push({ dia: m.dia, tipo });
+    return {
+      ...m,
+      tipo,
+      status: "completa" as const,
+      completadoEm: new Date().toISOString(),
+      dados: { compensacaoRetroativa: true, motivo: "Dias sem missão atribuída por bug de criação da campanha, já passados quando o bug foi corrigido." },
+    };
+  });
+
+  return { compensados };
+}
+
 async function fixCampanhaSamanthaEJessica(confirmar: boolean) {
   const campanhas = await readAllCampanhas();
   const samantha = campanhas.find((x) => normalizeComparison(x.artista).includes(normalizeComparison("Samantha Cooper")));
@@ -255,7 +288,13 @@ async function fixCampanhaSamanthaEJessica(confirmar: boolean) {
     tetoSamantha: unknown;
     tetoJessica: unknown;
     missoesJessica: unknown;
-  } = { tetoSamantha: { ok: false, error: 'Campanha de "Samantha Cooper" não encontrada.' }, tetoJessica: { ok: false, error: 'Campanha de "Jessica Johnson" não encontrada.' }, missoesJessica: { ok: false, error: "Campanha da Jessica Johnson não encontrada." } };
+    compensacaoRetroativaJessica: unknown;
+  } = {
+    tetoSamantha: { ok: false, error: 'Campanha de "Samantha Cooper" não encontrada.' },
+    tetoJessica: { ok: false, error: 'Campanha de "Jessica Johnson" não encontrada.' },
+    missoesJessica: { ok: false, error: "Campanha da Jessica Johnson não encontrada." },
+    compensacaoRetroativaJessica: { ok: false, error: "Campanha da Jessica Johnson não encontrada." },
+  };
 
   if (samantha) {
     const recalculo = await calcularTetos(samantha.artista);
@@ -282,15 +321,28 @@ async function fixCampanhaSamanthaEJessica(confirmar: boolean) {
       ? { ok: true, dryRun: !confirmar, campanhaId: jessica.id, diaAtual: fixMissoesInfo.diaAtual, atribuicoes: fixMissoesInfo.atribuicoes }
       : fixMissoesInfo;
 
+    // Compensação dos dias já passados (1 até diaAtual-1) que também
+    // nunca tiveram missão — continua a rotação de tipos de onde a
+    // atribuição dos dias futuros parou, pra não repetir o mesmo tipo
+    // logo em seguida sem necessidade.
+    const cursorContinuacao = fixMissoesInfo.ok ? fixMissoesInfo.atribuicoes.length : 0;
+    const compensacao = fixMissoesInfo.ok
+      ? calcularCompensacaoRetroativaJessica(jessica, fixMissoesInfo.diaAtual, cursorContinuacao)
+      : { compensados: [] };
+    resultado.compensacaoRetroativaJessica = { ok: true, dryRun: !confirmar, campanhaId: jessica.id, compensados: compensacao.compensados };
+
     if (confirmar) {
-      // UMA escrita só, com teto E missões já aplicados no mesmo objeto —
-      // nunca duas escritas concorrentes na mesma campanha (ver comentário
-      // acima sobre o "lost update" da primeira versão deste arquivo).
+      // UMA escrita só, com teto, missões futuras E compensação retroativa
+      // já aplicados no mesmo objeto — nunca duas escritas concorrentes na
+      // mesma campanha (ver comentário acima sobre o "lost update" da
+      // primeira versão deste arquivo).
       await writeCampanhaSemTrava(jessica);
       registrarLogSistema({
         categoria: "Ação concluída",
         oQueAconteceu: `[admin fix] Campanha de pre-save "${jessica.albumTituloFull}" (Jessica Johnson): teto corrigido de ${fixTetoInfo.tetoAnterior} pra ${fixTetoInfo.tetoNovo} (valTotal=${fixTetoInfo.valTotal}); missões nunca atribuídas (todos os dias tipo:null) — atribuído mix a partir do dia ${fixMissoesInfo.ok ? fixMissoesInfo.diaAtual : "?"}: ${
           fixMissoesInfo.ok ? fixMissoesInfo.atribuicoes.map((a) => `dia ${a.dia}=${a.tipo}`).join(", ") : "(falhou)"
+        }; e compensação retroativa (dias já passados sem missão por causa do mesmo bug, creditados como completos): ${
+          compensacao.compensados.map((a) => `dia ${a.dia}=${a.tipo}`).join(", ") || "(nenhum)"
         }.`,
         onde: "adminFixPresaveSamanthaJessicaController",
       }).catch(() => {});
@@ -319,6 +371,7 @@ export async function adminFixPresaveSamanthaJessicaController(request: Request)
       postsDuplicadosSamantha: posts,
       entrevistasDuplicadasSamantha: entrevistas,
       missoesJessica: campanhaFixes.missoesJessica,
+      compensacaoRetroativaJessica: campanhaFixes.compensacaoRetroativaJessica,
     });
   } catch (error: any) {
     return jsonResponse({ success: false, error: error.message || "Erro no fix admin." }, 500);
