@@ -25,12 +25,13 @@ import {
   Clock,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { driveImg, api, normalizeNome } from "@/lib/api";
+import { driveImg, api, normalizeNome, formatarDataBR } from "@/lib/api";
 import { MeusSpotlightBanners } from "./MeusSpotlightBanners";
 import { EditModal } from "./EditModal";
 import { LancarFaixaAlbumModal } from "./LancarFaixaAlbumModal";
 import { PerformanceAwardModal } from "./PerformanceAwardModal";
 import { BannersManager } from "./BannersManager";
+import { GestaoEmpireTv } from "./GestaoEmpireTv";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import {
@@ -40,7 +41,7 @@ import {
   type ExtraMaterialEditorValue,
 } from "./ExtraMaterial";
 
-export type TabType = "musica" | "video" | "album" | "banners";
+export type TabType = "musica" | "video" | "album" | "banners" | "empiretv";
 
 export interface UserProfile {
   artistName: string;
@@ -148,6 +149,7 @@ const TIPOS_MUSICA = ["SOLO", "PARCERIA", "DUETO", "CONJUNTO"];
 // Music Videos vivem juntos ali, diferenciados só por essa tag).
 const CATEGORIAS_VIDEO = [
   "Music Video",
+  "Comercial",
   "Live",
   "Video",
   "Dance Video",
@@ -561,6 +563,14 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [musicasVinculadas, setMusicasVinculadas] = useState<ExistingTrack[]>([]);
   const maxMusicasVinculadas = categoriaVideo === "Music Video" ? 1 : 3;
   const [descricaoInput, setDescricaoInput] = useState<string>("");
+  // Empire TV — só pras categorias que fazem sentido entrar num programa
+  // (Music Video, Comercial, Performance). Marcando, o vídeo NÃO é
+  // publicado na hora: fica pendente até o Admin aprovar/publicar pela
+  // tela de gestão do Empire TV (mesma autoria do jogador, o Admin só
+  // aciona a publicação).
+  const CATEGORIAS_COM_PROGRAMA_EMPIRE_TV = ["Music Video", "Comercial", "Performance"];
+  const [lancarNoProgramaEmpireTv, setLancarNoProgramaEmpireTv] = useState<boolean>(false);
+  const [dataProgramaEmpireTv, setDataProgramaEmpireTv] = useState<string>("");
 
   // Form Álbum
   const [albumObjetivo, setAlbumObjetivo] = useState<"a" | "b">("a");
@@ -1055,6 +1065,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setErrorMsg("Informe a data real de lançamento do material antigo.");
       return;
     }
+    if (lancarNoProgramaEmpireTv && !dataProgramaEmpireTv) {
+      setErrorMsg("Informe a data do programa da Empire TV.");
+      return;
+    }
 
     // Duplo aviso antes de publicar — mesmo padrão da Nova Música, e aqui
     // reforça especificamente que só a categoria "Music Video" dá o
@@ -1073,9 +1087,13 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         ...(participantes.filter((p) => p.trim()).length > 0
           ? [{ label: "Participantes", valor: participantes.filter((p) => p.trim()).join(", ") }]
           : []),
+        ...(lancarNoProgramaEmpireTv
+          ? [{ label: "Programa Empire TV", valor: formatarDataBR(dataProgramaEmpireTv) || dataProgramaEmpireTv }]
+          : []),
       ],
-      aviso:
-        categoriaVideo !== "Music Video"
+      aviso: lancarNoProgramaEmpireTv
+        ? "Esse vídeo NÃO será publicado agora — fica pendente de aprovação até o Admin da Empire TV liberar o tópico, mantendo sua autoria."
+        : categoriaVideo !== "Music Video"
           ? `Categoria "${categoriaVideo}" NÃO conta pontos no chart do YouTube — só a categoria "Music Video" dá esse impulso. Se a intenção é pontuar no YouTube, volte e troque a categoria.`
           : undefined,
       onConfirm: () => publicarVideo(),
@@ -1120,21 +1138,26 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         mediaUrl,
         nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
         ...(materialAntigo ? { dataLancamento: dataLancamentoAntigo } : {}),
+        ...(lancarNoProgramaEmpireTv ? { dataPrograma: dataProgramaEmpireTv } : {}),
       };
 
-      const res = await fetch("/api/gestao/video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(
+        lancarNoProgramaEmpireTv ? "/api/gestao/video-empire-tv-pendente" : "/api/gestao/video",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
 
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Erro ao registrar vídeo.");
       }
 
-      const mensagemBase =
-        categoriaVideo === "Music Video"
+      const mensagemBase = lancarNoProgramaEmpireTv
+        ? "Vídeo enviado! Fica pendente até o Admin da Empire TV liberar o tópico."
+        : categoriaVideo === "Music Video"
           ? "Music Video publicado com sucesso!"
           : "Vídeo publicado com sucesso!";
       setSuccessMsg(data.data?.warning ? `${mensagemBase} ⚠️ ${data.data.warning}` : mensagemBase);
@@ -1147,6 +1170,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setMediaFile(null);
       setParticipantes([""]);
       setDataLancamentoAntigo("");
+      setLancarNoProgramaEmpireTv(false);
+      setDataProgramaEmpireTv("");
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro ao publicar vídeo.");
@@ -1596,6 +1621,23 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 </span>
               </button>
             )}
+            {isAdminUser && (
+              <button
+                onClick={() => {
+                  setActiveTab("empiretv");
+                  resetFormState();
+                  setShowLanding(false);
+                }}
+                className="flex flex-col items-center gap-2 text-center group"
+              >
+                <div className="w-full aspect-square rounded-2xl bg-neutral-900 border border-white/10 text-neutral-200 grid place-items-center group-hover:border-white/20 transition">
+                  <Tv className="size-5" />
+                </div>
+                <span className="text-[10px] font-bold text-neutral-400 group-hover:text-neutral-200 leading-tight">
+                  Empire TV
+                </span>
+              </button>
+            )}
           </div>
 
           <p className="text-[11px] text-neutral-500 leading-relaxed">
@@ -1618,14 +1660,16 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
             </button>
             <div className="min-w-0 flex-1">
               <h2 className="text-lg sm:text-xl font-black italic uppercase tracking-tight text-white truncate">
-                {materialAntigo && activeTab !== "banners" ? "Material Antigo — " : ""}
+                {materialAntigo && activeTab !== "banners" && activeTab !== "empiretv" ? "Material Antigo — " : ""}
                 {activeTab === "musica"
                   ? "Nova Música"
                   : activeTab === "video"
                     ? "Novo Vídeo"
                     : activeTab === "banners"
                       ? "Banners do Catálogo"
-                      : "Novo Álbum"}
+                      : activeTab === "empiretv"
+                        ? "Gestão Empire TV"
+                        : "Novo Álbum"}
               </h2>
             </div>
             <button
@@ -1638,7 +1682,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           </div>
 
           {/* TABS DE SELEÇÃO (banners tem tela própria, sem essas 3 abas) */}
-          {activeTab !== "banners" && (
+          {activeTab !== "banners" && activeTab !== "empiretv" && (
             <div className="grid grid-cols-3 gap-1.5 bg-neutral-950/60 p-1.5 rounded-2xl border border-white/5">
               <button
                 onClick={() => {
@@ -1691,16 +1735,17 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           Só admin (mesmo dono do "810141686" hardcoded em outros pontos do
           app) — o backend também recusa sem o token de sessão de admin. */}
           {activeTab === "banners" && isAdminUser && <BannersManager tgId={loginTgId} />}
+          {activeTab === "empiretv" && isAdminUser && <GestaoEmpireTv />}
 
           {/* MENSAGENS DE SUCESSO E ERRO (músicas/vídeos/álbuns) */}
-          {activeTab !== "banners" && successMsg && (
+          {activeTab !== "banners" && activeTab !== "empiretv" && successMsg && (
             <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-3">
               <CheckCircle2 className="size-5 shrink-0" />
               <span>{successMsg}</span>
             </div>
           )}
 
-          {activeTab !== "banners" && errorMsg && (
+          {activeTab !== "banners" && activeTab !== "empiretv" && errorMsg && (
             <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-3">
               <AlertCircle className="size-5 shrink-0" />
               <span>{errorMsg}</span>
@@ -2204,6 +2249,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                     if (novaCategoria === "Music Video") {
                       setMusicasVinculadas((prev) => prev.slice(0, 1));
                     }
+                    if (!CATEGORIAS_COM_PROGRAMA_EMPIRE_TV.includes(novaCategoria)) {
+                      setLancarNoProgramaEmpireTv(false);
+                      setDataProgramaEmpireTv("");
+                    }
                   }}
                   className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none"
                 >
@@ -2214,6 +2263,37 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                   ))}
                 </select>
               </div>
+
+              {CATEGORIAS_COM_PROGRAMA_EMPIRE_TV.includes(categoriaVideo) && (
+                <div className="space-y-2 bg-black/20 border border-white/10 rounded-xl p-4">
+                  <label className="flex items-center gap-2 text-xs font-bold text-white cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={lancarNoProgramaEmpireTv}
+                      onChange={(e) => setLancarNoProgramaEmpireTv(e.target.checked)}
+                      className="size-4 accent-emerald-500"
+                    />
+                    Lançar em um programa dessa semana?
+                  </label>
+                  {lancarNoProgramaEmpireTv && (
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-[11px] text-neutral-400">
+                        Data do programa
+                      </label>
+                      <input
+                        type="date"
+                        value={dataProgramaEmpireTv}
+                        onChange={(e) => setDataProgramaEmpireTv(e.target.value)}
+                        className="w-full bg-black/25 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                      />
+                      <p className="text-[11px] text-neutral-400">
+                        O vídeo não é publicado agora — fica pendente até o Admin da Empire TV
+                        aprovar e liberar o tópico, mantendo seus dados e sua autoria.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">

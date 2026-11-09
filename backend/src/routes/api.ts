@@ -48,6 +48,11 @@ import {
   marcarNotificacoesLidasController,
 } from "../controllers/notificacoesController";
 import {
+  criarVideoPendenteEmpireTvController,
+  getEmpireTvPendentesController,
+  publicarVideoEmpireTvController,
+} from "../controllers/gestaoEmpireTvController";
+import {
   createAlbumController,
   createSongController,
   createVideoController,
@@ -790,6 +795,24 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await createVideoController(request);
+  } else if (url.pathname === "/api/gestao/video-empire-tv-pendente") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/gestao/video-empire-tv-pendente." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await criarVideoPendenteEmpireTvController(request);
+  } else if (url.pathname === "/api/gestao/admin/empire-tv-pendentes") {
+    response = await getEmpireTvPendentesController(request);
+  } else if (url.pathname === "/api/gestao/admin/empire-tv-publicar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/gestao/admin/empire-tv-publicar." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await publicarVideoEmpireTvController(request);
   } else if (url.pathname === "/api/gestao/album") {
     if (request.method !== "POST") {
       return new Response(

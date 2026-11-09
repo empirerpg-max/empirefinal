@@ -871,9 +871,21 @@ async function marcarVideoclipeNaPontos(
   }
 }
 
-export async function createVideoController(request: Request): Promise<Response> {
+// Núcleo de "publicar um vídeo de verdade" (gravar em Music Videos, criar o
+// tópico, copiar Código único, somar prestígio, marcar videoclipe em
+// Pontos) — extraído de createVideoController pra ser reaproveitado pela
+// publicação vinda da fila de pendentes da Empire TV
+// (publicarVideoEmpireTvController, ver gestaoEmpireTvController.ts):
+// mesma lógica exata, só adiada no tempo, sempre em nome do jogador/artista
+// original guardado no payload — o Admin só aciona, nunca aparece como
+// autor.
+export async function criarVideoNoCatalogo(
+  body: CreateVideoPayload,
+): Promise<
+  | { success: true; data: { titulo: string; artistaResponsavel: string; mensagem: string; warning?: string } }
+  | { success: false; error: string }
+> {
   try {
-    const body = (await request.json()) as CreateVideoPayload;
     const {
       tituloVideo,
       artistaResponsavel,
@@ -888,20 +900,14 @@ export async function createVideoController(request: Request): Promise<Response>
     } = body;
 
     if (!tituloVideo || !artistaResponsavel || !nomeJogador) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Campos obrigatórios ausentes: tituloVideo, artistaResponsavel, nomeJogador.",
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
+      return {
+        success: false,
+        error: "Campos obrigatórios ausentes: tituloVideo, artistaResponsavel, nomeJogador.",
+      };
     }
     const erroLinkPasta = erroSeLinkDePastaDrive(mediaUrl, "Vídeo") || erroSeLinkDePastaDrive(capaUrl, "Capa");
     if (erroLinkPasta) {
-      return new Response(JSON.stringify({ success: false, error: erroLinkPasta }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return { success: false, error: erroLinkPasta };
     }
 
     const tipo = tipoVideo || categoriaVideo || "Video";
@@ -923,28 +929,15 @@ export async function createVideoController(request: Request): Promise<Response>
       .filter(Boolean);
 
     if (musicasVinculadas.length === 0) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Selecione pelo menos uma música vinculada ao vídeo.",
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
+      return { success: false, error: "Selecione pelo menos uma música vinculada ao vídeo." };
     }
     if (isMusicVideoTipo && musicasVinculadas.length > 1) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Music Video só pode vincular uma única música." }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
+      return { success: false, error: "Music Video só pode vincular uma única música." };
     }
     if (musicasVinculadas.length > 3) {
-      return new Response(
-        JSON.stringify({ success: false, error: "No máximo 3 músicas vinculadas por vídeo." }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
+      return { success: false, error: "No máximo 3 músicas vinculadas por vídeo." };
     }
 
-    const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
     // "Material Antigo": usa a data real escolhida (vídeo não tem conceito
     // de "semanas" próprio — ele só reaproveita o Código único da música já
     // lançada, ver resolverLinhaEdicaoCharts abaixo) em vez de hoje.
@@ -1082,28 +1075,28 @@ export async function createVideoController(request: Request): Promise<Response>
       onde: "createVideoController",
     }).catch(() => {});
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        data: {
-          titulo: fullTitle,
-          artistaResponsavel,
-          mensagem: "Vídeo cadastrado com sucesso!",
-          warning,
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
+    return {
+      success: true,
+      data: {
+        titulo: fullTitle,
+        artistaResponsavel,
+        mensagem: "Vídeo cadastrado com sucesso!",
+        warning,
+      },
+    };
   } catch (error: any) {
-    console.error("[createVideoController] Erro:", error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message || "Erro ao registrar vídeo.",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
+    console.error("[criarVideoNoCatalogo] Erro:", error);
+    return { success: false, error: error.message || "Erro ao registrar vídeo." };
   }
+}
+
+export async function createVideoController(request: Request): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as CreateVideoPayload;
+  const resultado = await criarVideoNoCatalogo(body);
+  return new Response(JSON.stringify(resultado), {
+    status: resultado.success ? 200 : 400,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 // Lista as músicas disponíveis nos charts pra busca por faixa no cadastro de
