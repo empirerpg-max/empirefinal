@@ -76,6 +76,13 @@ export async function criarVideoPendenteEmpireTvController(request: Request): Pr
     if (!dataPrograma?.trim()) {
       return jsonResponse({ success: false, error: "Informe a data do programa." }, 400);
     }
+    // Música vinculada vira OPCIONAL aqui — pedido explícito do usuário:
+    // se o jogador marcou "Lançar em um programa dessa semana?" e não
+    // selecionou (ou não tem a música pronta ainda), o Admin escolhe na
+    // tela da Empire TV antes de publicar. criarVideoNoCatalogo (chamado
+    // em publicarVideoEmpireTvController) continua exigindo pelo menos 1
+    // na hora de publicar de verdade — só adia QUEM preenche, nunca deixa
+    // passar sem música nenhuma.
     const musicasVinculadas = (
       body.musicasVinculadas && body.musicasVinculadas.length > 0
         ? body.musicasVinculadas
@@ -85,9 +92,6 @@ export async function criarVideoPendenteEmpireTvController(request: Request): Pr
     )
       .map((m) => m.trim())
       .filter(Boolean);
-    if (musicasVinculadas.length === 0) {
-      return jsonResponse({ success: false, error: "Selecione pelo menos uma música vinculada ao vídeo." }, 400);
-    }
 
     await ensureHeader();
     const rows = await googleSheetsService.principal.readValues(SHEET, "A2:A20000");
@@ -149,6 +153,7 @@ export async function getEmpireTvPendentesController(request: Request): Promise<
           criadoEmISO: normalizeText(row[7]),
           mediaUrl: payload.mediaUrl || "",
           capaUrl: payload.capaUrl || "",
+          musicasVinculadas: payload.musicasVinculadas && payload.musicasVinculadas.length > 0 ? payload.musicasVinculadas : payload.musicaVinculada ? [payload.musicaVinculada] : [],
           rowIndex,
         };
       })
@@ -166,7 +171,7 @@ export async function publicarVideoEmpireTvController(request: Request): Promise
     return jsonResponse({ success: false, error: "Acesso restrito ao admin." }, 403);
   }
   try {
-    const body = (await request.json().catch(() => ({}))) as { id?: string };
+    const body = (await request.json().catch(() => ({}))) as { id?: string; musicasVinculadas?: string[] };
     const id = normalizeText(body.id || "");
     if (!id) return jsonResponse({ success: false, error: "Informe o id do pendente." }, 400);
 
@@ -178,6 +183,17 @@ export async function publicarVideoEmpireTvController(request: Request): Promise
     const row = rows[idx];
     const rowIndex = idx + 2;
     const payload = JSON.parse(normalizeText(row[8]) || "{}") as CreateVideoPayload;
+
+    // O jogador pode ter deixado música vinculada em branco (marcou
+    // "Lançar em um programa dessa semana?" sem preencher) — o Admin
+    // escolhe aqui, na hora de publicar, só quando o payload ainda não
+    // tem nenhuma. Nunca sobrescreve uma escolha que o próprio jogador já
+    // tinha feito.
+    const musicasDoAdmin = (body.musicasVinculadas || []).map((m) => m.trim()).filter(Boolean);
+    const jaTinhaMusica = (payload.musicasVinculadas && payload.musicasVinculadas.length > 0) || !!payload.musicaVinculada;
+    if (!jaTinhaMusica && musicasDoAdmin.length > 0) {
+      payload.musicasVinculadas = musicasDoAdmin;
+    }
 
     // Sempre em nome de quem está salvo no payload (jogador/artista
     // original) — o Admin nunca aparece como autor, só aciona a
