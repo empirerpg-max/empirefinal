@@ -1018,7 +1018,18 @@ export const Forum: React.FC<ForumProps> = ({
   const idTopicoAdmin = resolvedTopicId;
 
   async function chamarAcaoAdmin(acao: "marcar-pendente" | "excluir-topico") {
-    if (!selectedTopic || !idTopicoAdmin) return;
+    if (!selectedTopic) return;
+    if (!idTopicoAdmin) {
+      // BUG REAL reportado (2026-11-09): o botão ficava mudo, sem nenhuma
+      // mensagem, quando o id real do tópico ainda não tinha resolvido
+      // (ex: /api/empire-play/forum/videos/:id respondeu 503 nessa
+      // tentativa) — parecia travado, sem dar pra saber que era só
+      // questão de tentar de novo. Agora avisa e sugere recarregar.
+      setAdminActionMsg(
+        "Não consegui confirmar o ID real desse tópico ainda (a busca pode ter falhado) — recarregue a página e tente de novo.",
+      );
+      return;
+    }
     const tipo = getMediaTypeForModal();
     setAdminActionLoading(acao === "marcar-pendente" ? "pendente" : "excluir");
     setAdminActionMsg(null);
