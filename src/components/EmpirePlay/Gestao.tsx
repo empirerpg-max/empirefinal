@@ -1053,13 +1053,21 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setErrorMsg("Informe o Título do Vídeo.");
       return;
     }
-    if (musicasVinculadas.length === 0) {
-      setErrorMsg("Selecione pelo menos uma Música Vinculada.");
-      return;
-    }
-    if (categoriaVideo === "Music Video" && musicasVinculadas.length > 1) {
-      setErrorMsg("Music Video só pode ter uma única Música Vinculada.");
-      return;
+    // Marcando "Lançar em um programa dessa semana?", a música vinculada
+    // vira opcional aqui — pedido explícito do usuário: se o jogador não
+    // souber/não tiver a música pronta ainda, o Admin preenche na tela da
+    // Empire TV antes de publicar (criarVideoNoCatalogo continua exigindo
+    // pelo menos 1 na hora de publicar de verdade, então nada passa sem
+    // música — só adia quem preenche).
+    if (!lancarNoProgramaEmpireTv) {
+      if (musicasVinculadas.length === 0) {
+        setErrorMsg("Selecione pelo menos uma Música Vinculada.");
+        return;
+      }
+      if (categoriaVideo === "Music Video" && musicasVinculadas.length > 1) {
+        setErrorMsg("Music Video só pode ter uma única Música Vinculada.");
+        return;
+      }
     }
     if (materialAntigo && !dataLancamentoAntigo) {
       setErrorMsg("Informe a data real de lançamento do material antigo.");
@@ -1082,7 +1090,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         { label: "Categoria", valor: categoriaVideo },
         {
           label: "Músicas Vinculadas",
-          valor: musicasVinculadas.map((s) => `${s.artist} - ${s.title}`).join(", "),
+          valor:
+            musicasVinculadas.length > 0
+              ? musicasVinculadas.map((s) => `${s.artist} - ${s.title}`).join(", ")
+              : "Nenhuma ainda — o Admin precisa escolher antes de publicar",
         },
         ...(participantes.filter((p) => p.trim()).length > 0
           ? [{ label: "Participantes", valor: participantes.filter((p) => p.trim()).join(", ") }]
@@ -2299,9 +2310,11 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
                   <Music className="size-4 text-emerald-400" />
                   Música(s) Vinculada(s){" "}
-                  {categoriaVideo === "Music Video"
-                    ? "(1 obrigatória)"
-                    : `(1 a ${maxMusicasVinculadas} obrigatórias)`}
+                  {lancarNoProgramaEmpireTv
+                    ? "(opcional — o Admin preenche antes de publicar, se faltar)"
+                    : categoriaVideo === "Music Video"
+                      ? "(1 obrigatória)"
+                      : `(1 a ${maxMusicasVinculadas} obrigatórias)`}
                 </label>
                 {musicasVinculadas.length > 0 && (
                   <div className="space-y-1.5">
