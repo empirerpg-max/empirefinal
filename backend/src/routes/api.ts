@@ -73,6 +73,7 @@ import {
   adminFixVernissageEdicaoChartsController,
 } from "../controllers/gestaoController";
 import { adminDumpLinhasMusicasController } from "../controllers/adminDumpLinhasMusicasController";
+import { adminReverterFaixasMarcoController } from "../controllers/adminReverterFaixasMarcoController";
 import {
   getReleasesForEditController,
   updateReleaseController,
@@ -640,6 +641,7 @@ export async function handleEmpireApiRoutes(
     "/api/musicas/admin/fix-boulangerie-audio",
     "/api/gestao/admin/diagnostico-musica",
     "/api/gestao/admin/dump-linhas-musicas",
+    "/api/gestao/admin/reverter-faixas-marco",
     "/api/gestao/admin/backfill-vinculo-video",
     "/api/gestao/admin/fix-vernissage-edicao-charts",
     "/api/ponto/playlists/admin/fix-duplicata-samantha-cooper",
@@ -2039,6 +2041,8 @@ export async function handleEmpireApiRoutes(
     response = await diagnosticoMusicaController(request);
   } else if (url.pathname === "/api/gestao/admin/dump-linhas-musicas") {
     response = await adminDumpLinhasMusicasController(request);
+  } else if (url.pathname === "/api/gestao/admin/reverter-faixas-marco") {
+    response = await adminReverterFaixasMarcoController(request);
   } else if (url.pathname === "/api/gestao/admin/backfill-vinculo-video") {
     response = await backfillVinculoVideoController(request);
   } else if (url.pathname === "/api/gestao/admin/fix-vernissage-edicao-charts") {
