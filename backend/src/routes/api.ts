@@ -218,6 +218,8 @@ import { adminCriarTabelaMusicasController } from "../controllers/adminCriarTabe
 import { adminMigrarMusicasD1Controller } from "../controllers/adminMigrarMusicasD1Controller";
 import { adminCriarTabelaComentariosMusicasController } from "../controllers/adminCriarTabelaComentariosMusicasController";
 import { adminMigrarComentariosMusicasD1Controller } from "../controllers/adminMigrarComentariosMusicasD1Controller";
+import { adminCriarTabelaComentariosAlbunsController } from "../controllers/adminCriarTabelaComentariosAlbunsController";
+import { adminMigrarComentariosAlbunsD1Controller } from "../controllers/adminMigrarComentariosAlbunsD1Controller";
 import { adminDiagOrfaosComentariosController } from "../controllers/adminDiagOrfaosComentariosController";
 import { adminBackfillCodigoUnicoMusicasController } from "../controllers/adminBackfillCodigoUnicoMusicasController";
 import { adminRecriarTabelasMusicasD1Controller } from "../controllers/adminRecriarTabelasMusicasD1Controller";
@@ -2106,6 +2108,10 @@ export async function handleEmpireApiRoutes(
     response = await adminCriarTabelaComentariosMusicasController();
   } else if (url.pathname === "/api/empire-play/admin/migrar-comentarios-musicas-d1") {
     response = await adminMigrarComentariosMusicasD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/criar-tabela-comentarios-albuns") {
+    response = await adminCriarTabelaComentariosAlbunsController();
+  } else if (url.pathname === "/api/empire-play/admin/migrar-comentarios-albuns-d1") {
+    response = await adminMigrarComentariosAlbunsD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-orfaos-comentarios") {
     response = await adminDiagOrfaosComentariosController();
   } else if (url.pathname === "/api/empire-play/admin/backfill-codigo-unico-musicas") {
