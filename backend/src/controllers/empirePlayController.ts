@@ -1978,8 +1978,23 @@ export async function getEmpirePlayForumTopicController(
         }
 
         // 3. Fallback: Verifica se qualquer valor no registro bate com o ID
+        //
+        // BUG REAL encontrado em 2026-11-10 (comentário do Daniel em FOLLIA
+        // "não aparecia"): esse fallback rodava normalizeComparison (NFD +
+        // regex) em CADA valor de CADA comentário de CADA álbum/música do
+        // jogo inteiro, pra CADA comentário sendo filtrado — incluindo o
+        // próprio texto do comentário, que pode ter vários KB (reviews
+        // longos de jogadores). Com comentários grandes o bastante (Daniel,
+        // Justino e Chris em FOLLIA passam de 3-5 mil caracteres cada), essa
+        // varredura estourava o limite de CPU do Worker (erro 1102) e a
+        // request inteira falhava sem resposta — não um 404 "normal", o
+        // tópico simplesmente nunca carregava. Como só interessa achar um ID
+        // curto (nunca o texto do comentário em si), ignora valores longos
+        // antes de normalizar.
         if (normMediaTopicId || normTopicSearch) {
-          const vals = Object.values(rec).map((v) => normalizeComparison(String(v)));
+          const vals = Object.values(rec)
+            .filter((v) => typeof v === "string" && v.length > 0 && v.length <= 100)
+            .map((v) => normalizeComparison(v));
           if (vals.includes(normMediaTopicId) || vals.includes(normTopicSearch)) {
             return true;
           }
