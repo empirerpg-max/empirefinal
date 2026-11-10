@@ -75,6 +75,7 @@ import {
 import { adminDumpLinhasMusicasController } from "../controllers/adminDumpLinhasMusicasController";
 import { adminReverterFaixasMarcoController } from "../controllers/adminReverterFaixasMarcoController";
 import { adminDiagFolliaComentarioController } from "../controllers/adminDiagFolliaComentarioController";
+import { adminTesteForumFolliaController } from "../controllers/adminTesteForumFolliaController";
 import {
   getReleasesForEditController,
   updateReleaseController,
@@ -2042,6 +2043,8 @@ export async function handleEmpireApiRoutes(
     response = await adminReverterFaixasMarcoController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-follia-comentario") {
     response = await adminDiagFolliaComentarioController();
+  } else if (url.pathname === "/api/empire-play/admin/teste-forum-follia") {
+    response = await adminTesteForumFolliaController();
   } else if (url.pathname === "/api/gestao/admin/backfill-vinculo-video") {
     response = await backfillVinculoVideoController(request);
   } else if (url.pathname === "/api/gestao/admin/fix-vernissage-edicao-charts") {
