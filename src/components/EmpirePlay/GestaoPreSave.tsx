@@ -540,6 +540,21 @@ function NovaCampanhaForm({
   const [dataLancamento, setDataLancamento] = useState("");
   const [missoesPorDia, setMissoesPorDia] = useState<Record<number, MissaoTipo | "">>({});
   const [duracaoDias] = useState(14);
+  // Dropdown custom (mesmo padrão já usado em outras buscas do app — ver
+  // "Busque pelo título ou artista..." em Gestao.tsx) em vez do <select>
+  // nativo do navegador, que destoava do resto do app (sempre branco,
+  // fonte do sistema, sem como estilizar de verdade). Só 1 aberto por vez.
+  const [missaoDropdownAberto, setMissaoDropdownAberto] = useState<number | null>(null);
+
+  function sortearMissoesAleatorias() {
+    const tipos = MISSOES.map((m) => m.tipo);
+    const embaralhados = [...tipos].sort(() => Math.random() - 0.5);
+    const novo: Record<number, MissaoTipo | ""> = {};
+    dias.forEach((dia, i) => {
+      novo[dia] = embaralhados[i % embaralhados.length];
+    });
+    setMissoesPorDia(novo);
+  }
 
   const [salvando, setSalvando] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
@@ -971,36 +986,67 @@ function NovaCampanhaForm({
 
       {modo === "missao" && (
         <div>
-          <label className="text-xs font-bold text-neutral-400">
-            Calendário de missões ({duracaoDias} dias) — escolha qual missão vai em qual dia (fixo
-            depois de salvo)
-          </label>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <label className="text-xs font-bold text-neutral-400">
+              Calendário de missões ({duracaoDias} dias) — escolha qual missão vai em qual dia (fixo
+              depois de salvo)
+            </label>
+            <button
+              type="button"
+              onClick={sortearMissoesAleatorias}
+              className="shrink-0 px-3 py-1.5 rounded-full bg-fuchsia-500/15 border border-fuchsia-400/30 text-fuchsia-300 text-[11px] font-black uppercase tracking-wider hover:bg-fuchsia-500/25 transition"
+            >
+              Aleatório
+            </button>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1.5">
-            {dias.map((dia) => (
-              <div
-                key={dia}
-                className="flex items-center gap-2 bg-neutral-900 border border-white/10 rounded-xl px-2.5 py-2 min-w-0"
-              >
-                <span className="text-[11px] font-black text-neutral-500 shrink-0">D{dia}</span>
-                <select
-                  value={missoesPorDia[dia] || ""}
-                  onChange={(e) =>
-                    setMissoesPorDia((prev) => ({
-                      ...prev,
-                      [dia]: e.target.value as MissaoTipo | "",
-                    }))
-                  }
-                  className="flex-1 min-w-0 bg-transparent text-[11px] text-white truncate"
-                >
-                  <option value="">Sem missão</option>
-                  {MISSOES.map((m) => (
-                    <option key={m.tipo} value={m.tipo}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
+            {dias.map((dia) => {
+              const atual = missoesPorDia[dia] || "";
+              const label = atual ? MISSOES.find((m) => m.tipo === atual)?.label : "Sem missão";
+              const aberto = missaoDropdownAberto === dia;
+              return (
+                <div key={dia} className="relative min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setMissaoDropdownAberto(aberto ? null : dia)}
+                    className="w-full flex items-center gap-2 bg-neutral-900 border border-white/10 rounded-xl px-2.5 py-2 min-w-0 hover:border-white/20 transition"
+                  >
+                    <span className="text-[11px] font-black text-neutral-500 shrink-0">D{dia}</span>
+                    <span className="flex-1 min-w-0 text-left text-[11px] text-white truncate">{label}</span>
+                  </button>
+                  {aberto && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setMissaoDropdownAberto(null)} />
+                      <div className="absolute z-20 mt-1 w-full min-w-[180px] max-h-56 overflow-y-auto bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMissoesPorDia((prev) => ({ ...prev, [dia]: "" }));
+                            setMissaoDropdownAberto(null);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-xs text-neutral-400 hover:bg-emerald-500/10 border-b border-white/5"
+                        >
+                          Sem missão
+                        </button>
+                        {MISSOES.map((m) => (
+                          <button
+                            key={m.tipo}
+                            type="button"
+                            onClick={() => {
+                              setMissoesPorDia((prev) => ({ ...prev, [dia]: m.tipo }));
+                              setMissaoDropdownAberto(null);
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-emerald-500/10 border-b border-white/5 last:border-b-0"
+                          >
+                            <span className="font-bold">{m.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
