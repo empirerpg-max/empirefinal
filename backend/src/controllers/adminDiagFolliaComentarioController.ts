@@ -12,12 +12,17 @@ import { googleSheetsService, normalizeComparison } from "../services/googleShee
 //
 // GET /api/empire-play/admin/diagnostico-follia-comentario
 export async function adminDiagFolliaComentarioController(): Promise<Response> {
+  const headerRow = await googleSheetsService.principal.readValues("Albuns", "A1:L1").catch(() => []);
   const albunsObjetos = await googleSheetsService.principal.readSheetObjects("Albuns").catch(() => []);
   const linhaFollia = albunsObjetos.find((rec) =>
-    normalizeComparison(String((rec as any)["novo_nome"] || (rec as any)["g_novo_nome"] || "")).includes(
-      normalizeComparison("Max Gorghan - FOLLIA"),
+    Object.values(rec as Record<string, unknown>).some((v) =>
+      normalizeComparison(String(v || "")).includes(normalizeComparison("FOLLIA")),
     ),
   );
+  // linha 101 crua = índice 99 na lista de objetos (se readSheetObjects
+  // começar em A2 igual readValues) — pega direto pelo índice também, caso
+  // o find acima não bata por nome de chave nenhum.
+  const porIndice = albunsObjetos[99];
 
   const comentariosRows = await googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []);
   const comentariosDaniel = comentariosRows
@@ -32,8 +37,10 @@ export async function adminDiagFolliaComentarioController(): Promise<Response> {
     JSON.stringify(
       {
         success: true,
+        headerRow: headerRow[0] || [],
+        totalAlbunsObjetos: albunsObjetos.length,
         linhaFolliaViaReadSheetObjects: linhaFollia || null,
-        chavesDisponiveis: linhaFollia ? Object.keys(linhaFollia) : [],
+        porIndice99: porIndice || null,
         comentariosDaniel,
         comentariosDoTopico,
       },
