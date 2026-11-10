@@ -1660,6 +1660,104 @@ export async function getEmpirePlayForumTopicController(
     }
   }
 
+  // CAMINHO RÁPIDO — ÁLBUM (2026-11-10): mesma ideia do caminho rápido de
+  // música acima, mas sem tabela "albuns" no D1 pra servir de chave (álbum
+  // nunca foi migrado) — usa o próprio topicId (já estável) como chave de
+  // `comentarios_albuns`. BUG REAL reportado em produção (jogador Daniel
+  // comentou no álbum FOLLIA e o comentário "não aparecia"; depois,
+  // "continua em zero" mesmo com o 1102 de CPU já corrigido): o tópico do
+  // álbum sempre acabava lendo Comentarios_Albuns inteiro (sem cache) + 3
+  // abas legadas a cada abertura — rápido isolado, mas lento/instável o
+  // bastante sob rede real (Telegram WebView) pra estourar o timeout de 35s
+  // do cliente e cancelar a request, deixando "Carregando comentários..."
+  // preso. Só usa esse atalho quando `comentarios_albuns` já tem 1+ linha
+  // pra esse topicId (0 linhas não prova "sem comentário" — pode ser um
+  // tópico ainda não sincronizado/migrado; cai pro caminho de Sheets normal
+  // nesse caso, nunca esconde comentário real).
+  if (sheetIdLabel === "Album" && topicIdParam) {
+    try {
+      const db = getCatalogoDb();
+      if (db) {
+        const comentariosResult = await db
+          .prepare("SELECT * FROM comentarios_albuns WHERE album_topic_id = ? ORDER BY id ASC")
+          .bind(topicIdParam)
+          .all<{
+            id: number;
+            jogador_id: string | null;
+            jogador_nome: string | null;
+            comentario: string;
+            reacoes_json: string | null;
+            data_hora: string | null;
+            reply_to: number | null;
+          }>();
+        const linhasD1 = comentariosResult.results || [];
+        if (linhasD1.length > 0) {
+          const albunsRecords = await sheetsService.readSheetObjects("Albuns").catch(() => []);
+          const targetIdx = albunsRecords.findIndex((rec, idx) => {
+            const item = buildCleanItem("Album", rec, idx);
+            const recTopicId =
+              getValue(rec, [
+                "id_do_topico",
+                "id_topico",
+                "id",
+                "topico_id",
+                "topico",
+                "message_thread_id",
+              ]) || "";
+            return (
+              item.id === topicIdParam ||
+              normalizeComparison(item.title) === normalizeComparison(topicIdParam) ||
+              normalizeComparison(item.id) === normalizeComparison(topicIdParam) ||
+              normalizeComparison(recTopicId) === normalizeComparison(topicIdParam)
+            );
+          });
+          if (targetIdx !== -1) {
+            const mediaItemRapido = buildCleanItem("Album", albunsRecords[targetIdx], targetIdx);
+            mediaItemRapido.topicId = topicIdParam;
+            const commentsRapido = linhasD1.map((row) => {
+              let reactions: Record<string, string[]> = {};
+              try {
+                if (row.reacoes_json) reactions = JSON.parse(row.reacoes_json);
+              } catch {
+                reactions = {};
+              }
+              return {
+                id: `d1_comment_${row.id}`,
+                data: row.data_hora || "",
+                titulo: mediaItemRapido.title,
+                jogador: row.jogador_nome || "Anônimo",
+                jogadorId: row.jogador_id || "",
+                comentario: row.comentario,
+                nota: "",
+                // Sem rowIndex/sheetComments de verdade (D1 não guarda a
+                // linha do Sheets) — reagir com emoji fica indisponível pra
+                // comentário servido por esse caminho, mesmo trade-off já
+                // aceito no caminho rápido de música.
+                rowIndex: null,
+                sheetComments: null,
+                reactions,
+                reactedBy: reactions,
+                replyTo: row.reply_to ? `d1_comment_${row.reply_to}` : "",
+              };
+            });
+            return new Response(
+              JSON.stringify({
+                success: true,
+                data: { media: mediaItemRapido, comments: commentsRapido },
+              }),
+              { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "[getEmpirePlayForumTopicController] Falha no caminho rápido de álbum (D1), caindo pro Sheets:",
+        err,
+      );
+    }
+  }
+
   try {
     // Músicas lê do D1 igual ao catálogo (getEmpirePlayMusicasController) —
     // ANTES só lia direto da planilha "Musicas", nunca migrado junto com o

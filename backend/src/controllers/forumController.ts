@@ -16,6 +16,7 @@ import {
   getCatalogoDb,
   buildComentarioMusicaInsertStatement,
 } from "../services/comentariosMusicasDbService";
+import { buildComentarioAlbumInsertStatement } from "../services/comentariosAlbunsDbService";
 
 const USUARIOS_SHEET = "Usuários";
 
@@ -619,6 +620,33 @@ export async function createCommentController(
         }
       } catch (err) {
         console.warn("[ForumController] Falha ao espelhar comentário em comentarios_musicas (D1):", err);
+      }
+    }
+
+    // Espelha também em `comentarios_albuns` (ver comentariosAlbunsDbService.ts)
+    // — mesmo motivo e mesmo caráter síncrono do bloco de música acima (parte
+    // do caminho rápido de leitura em getEmpirePlayForumTopicController, pra
+    // álbum). Diferente de música, não precisa resolver "código único"
+    // nenhum: a chave já é o próprio topicId (estável, resolvido acima no
+    // passo 1). Nunca lança: falha aqui é só aviso, o comentário real já
+    // está salvo no Sheets (fonte certa) e o caminho rápido cai pro Sheets
+    // pra esse tópico até a próxima migração/sincronização.
+    if (tipoMedia === "album") {
+      try {
+        const db = getCatalogoDb();
+        if (db) {
+          await buildComentarioAlbumInsertStatement(db, {
+            albumTopicId: topicIdClean,
+            jogadorId: jogadorIdClean || null,
+            jogadorNome: playerClean || null,
+            comentario: comentario.trim(),
+            reacoesJson: null,
+            dataHora: nowStr,
+            replyTo: null,
+          }).run();
+        }
+      } catch (err) {
+        console.warn("[ForumController] Falha ao espelhar comentário em comentarios_albuns (D1):", err);
       }
     }
 
