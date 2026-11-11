@@ -42,7 +42,7 @@ export function FestivalNominationPopup({
           exit={{ y: 20, opacity: 0, scale: 0.97 }}
           className="w-full max-w-sm max-h-[92vh] bg-card border border-white/10 rounded-[2rem] shadow-2xl flex flex-col overflow-hidden"
         >
-          <div className="relative w-full shrink-0 min-h-0 aspect-square bg-black">
+          <div className="relative w-full shrink-0 min-h-0 aspect-[2000/1704] bg-black">
             <img src={festival.capaUrl} alt={festival.premiacao} className="w-full h-full object-cover" />
           </div>
 
