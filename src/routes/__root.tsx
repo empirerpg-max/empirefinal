@@ -45,6 +45,7 @@ import { InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationBell } from "@/components/NotificationBell";
 import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
 import { VmaNominationPopup } from "@/components/VmaNominationPopup";
+import { FestivalNominationPopup } from "@/components/FestivalNominationPopup";
 import { VotacaoReminderPopup } from "@/components/VotacaoReminderPopup";
 import { EmpirePlayerProvider, useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { MusicPlayer } from "@/components/EmpirePlay/MusicPlayer";
@@ -741,6 +742,27 @@ function RootInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Mesmo mecanismo de popup diário, agora pro período de inscrição dos
+  // Festivais (Perfil > Festivais > Inscrição) — encadeado depois dos
+  // outros dois pra nunca empilhar 3 popups na tela de uma vez.
+  const [festivalPopup, setFestivalPopup] = useState<{
+    id: string;
+    premiacao: string;
+    capaUrl: string;
+    encerramento: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!user || user.id === "guest") return;
+    api
+      .checarPopupFestival(user.id)
+      .then((res) => {
+        if (res.shouldShow && res.festival) setFestivalPopup(res.festival);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const { updateAvailable, applyUpdate } = useServiceWorkerUpdate();
 
   useEffect(() => {
@@ -1019,6 +1041,24 @@ function RootInner() {
           onJaVotei={() => {
             setVotacaoPopup(null);
             if (user && user.id !== "guest") api.dispensarPopupVotacao(user.id).catch(() => {});
+          }}
+        />
+      )}
+
+      {festivalPopup && (
+        <FestivalNominationPopup
+          festival={festivalPopup}
+          onInscreverJa={() => {
+            setFestivalPopup(null);
+            // Quem já foi se inscrever não precisa ver o lembrete de novo —
+            // só "me lembrar mais tarde" deve voltar a aparecer no dia
+            // seguinte.
+            if (user && user.id !== "guest") api.dispensarPopupFestival(user.id).catch(() => {});
+          }}
+          onLembrarMaisTarde={() => setFestivalPopup(null)}
+          onJaInscrevi={() => {
+            setFestivalPopup(null);
+            if (user && user.id !== "guest") api.dispensarPopupFestival(user.id).catch(() => {});
           }}
         />
       )}

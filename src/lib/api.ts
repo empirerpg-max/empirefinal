@@ -1048,6 +1048,48 @@ export const api = {
     ).then((r) => r.json());
     return res?.data || [];
   },
+  // ---- Perfil > Festivais > Inscrição ----
+  async getFestivalInscricao(telegramId: string): Promise<{
+    status: "agendado" | "aberto" | "encerrado";
+    deadlineLabel: string;
+    artistas: string[];
+    generos: readonly string[];
+    inscricoes: { artista: string; genero: string; data: string }[];
+  } | null> {
+    const res = await fetch(
+      `/api/festivais/inscricao?telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
+    return res?.success ? res.data : null;
+  },
+  async enviarFestivalInscricao(payload: {
+    telegramId: string;
+    artista: string;
+    genero: string;
+  }): Promise<{ success: boolean; error?: string; data?: { editado: boolean } }> {
+    const res = await fetch("/api/festivais/inscricao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+  async checarPopupFestival(telegramId: string): Promise<{
+    shouldShow: boolean;
+    festival?: { id: string; premiacao: string; capaUrl: string; encerramento: string };
+  }> {
+    const res = await fetch(
+      `/api/festivais/popup-status?telegramId=${encodeURIComponent(telegramId)}`,
+    ).then((r) => r.json());
+    return res?.success ? res.data : { shouldShow: false };
+  },
+  async dispensarPopupFestival(telegramId: string): Promise<{ success: boolean }> {
+    const res = await fetch("/api/festivais/popup-dismiss", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramId }),
+    });
+    return res.json();
+  },
   async checarPopupVma(telegramId: string): Promise<{
     shouldShow: boolean;
     award?: { id: string; premiacao: string; capaUrl: string; encerramento: string };
