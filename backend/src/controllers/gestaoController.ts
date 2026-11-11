@@ -1086,7 +1086,14 @@ export async function criarVideoNoCatalogo(
     };
   } catch (error: any) {
     console.error("[criarVideoNoCatalogo] Erro:", error);
-    return { success: false, error: error.message || "Erro ao registrar vídeo." };
+    const mensagem = String(error?.message || "");
+    const ehLimiteDaApi = /quota|rate limit|429/i.test(mensagem);
+    return {
+      success: false,
+      error: ehLimiteDaApi
+        ? "O app está sobrecarregado agora (muita gente usando ao mesmo tempo). Espere um minuto e tente enviar o vídeo de novo."
+        : mensagem || "Erro ao registrar vídeo.",
+    };
   }
 }
 
