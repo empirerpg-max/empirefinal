@@ -20,6 +20,9 @@ export interface ReleaseToEdit {
   artista: string;
   descricao?: string;
   capaUrl?: string;
+  // "DD/MM/AAAA" cru da planilha — usado só pra ordenar a lista por data de
+  // lançamento (mais recente primeiro), nunca exibido diretamente.
+  dataLancamentoRaw?: string;
   fields: Record<string, string>;
   // Código único (Musicas!Z / Albuns!L) — chave dos botões Shop/Info/Visual
   // (ver extraMaterialController.ts). Ausente em lançamentos legados.
@@ -127,13 +130,16 @@ export async function getReleasesForEditController(request: Request): Promise<Re
       let artist = "";
       let description = "";
       let cover = "";
+      let dataLancamentoRaw = "";
 
       if (tipoParam === "musicas") {
         // Coluna H = index 7 (Nome da música), Coluna D = index 3 (Capa),
-        // Coluna N = index 13 (ACT PRINCIPAL), Coluna E = index 4 (Letra)
+        // Coluna N = index 13 (ACT PRINCIPAL), Coluna E = index 4 (Letra),
+        // Coluna A = index 0 (Data de lançamento)
         title = row[7] || row[1] || "";
         artist = row[13] || "";
         cover = row[3] || "";
+        dataLancamentoRaw = row[0] || "";
       } else if (tipoParam === "videos" || tipoParam === "music-videos") {
         // Aba real é "Music Videos" (vinte colunas: A=ID do usuário,
         // B=Título do tópico, C=ID da mensagem original, D=chat_id,
@@ -148,15 +154,18 @@ export async function getReleasesForEditController(request: Request): Promise<Re
         title = row[1] || row[0] || "";
         description = row[8] || "";
         cover = row[19] || "";
+        dataLancamentoRaw = row[9] || "";
         const dashMatch = title.match(/^(.+?)\s[-–—]\s(.+)$/);
         if (dashMatch) artist = dashMatch[1].trim();
       } else if (tipoParam === "albuns") {
         // Coluna G = index 6 (Nome), Coluna F = index 5 (Nome do criador),
         // Coluna C = index 2 (Capa), Coluna B = index 1 (ID do tópico —
-        // usado pra buscar/reordenar as faixas do álbum).
+        // usado pra buscar/reordenar as faixas do álbum), Coluna A = index
+        // 0 (Data de lançamento).
         title = row[6] || "";
         artist = row[5] || "";
         cover = row[2] || "";
+        dataLancamentoRaw = row[0] || "";
       }
 
       // fallback de busca por headers se disponível
@@ -169,12 +178,38 @@ export async function getReleasesForEditController(request: Request): Promise<Re
         if (titIdx >= 0) title = row[titIdx] || "";
       }
 
-      const rowText = row.join(" ");
-      const normRowText = normalizeComparison(rowText);
+      // BUG REAL corrigido aqui (reportado em produção, 2026-11-05):
+      // "Amanda Brokne - Photobooth" aparecia na busca por "Samantha
+      // Cooper" — o fallback `normRowText.includes(normArtist)` casava o
+      // texto em QUALQUER coluna da linha (letra, referência, capa...),
+      // não só no campo de artista de verdade. Pra músicas, agora também
+      // aceita um match nas colunas de participantes (ARTISTA 2-6, O-S) —
+      // cobre feat./parceria sem abrir mão pra qualquer texto da linha.
+      const participantesDaLinha =
+        tipoParam === "musicas" ? row.slice(14, 19).map((p) => normalizeComparison(p || "")) : [];
       const normArtistField = normalizeComparison(artist);
 
+      // BUG REAL corrigido aqui (produção, 2026-11-11: "Editar Lançamentos"
+      // da Samantha Cooper só mostrava "chronicles", nenhum dos outros
+      // álbuns dela) — em "Albuns", a coluna F ("Nome do criador") guarda
+      // quem PUBLICOU o álbum pelo app (o jogador/gerente, ex: "Justino"),
+      // não necessariamente o nome do artista gravado nele (ex: "Samantha
+      // Cooper", que Justino gerencia). O fix do bug da Amanda Brokne acima
+      // removeu o fallback de texto da linha inteira pra TODOS os tipos,
+      // não só música — sem nenhum fallback, álbum cujo criador (F) é
+      // diferente do artista gravado (G) nunca mais aparecia na busca por
+      // esse artista. Título de álbum é sempre "Artista - Título" (G) —
+      // checar só essa coluna (não a linha inteira) é tão seguro quanto o
+      // fallback de participantes de música acima, sem reabrir o bug da
+      // Amanda Brokne (letra/referência/capa nunca entram nessa checagem).
+      const normTituloAlbum = tipoParam === "albuns" ? normalizeComparison(title) : "";
+
       // Verificar se o artista bate
-      if (normArtistField.includes(normArtist) || normRowText.includes(normArtist)) {
+      if (
+        normArtistField.includes(normArtist) ||
+        participantesDaLinha.some((p) => p.includes(normArtist)) ||
+        normTituloAlbum.includes(normArtist)
+      ) {
         items.push({
           id: `${tipoParam}_${rowIndex}`,
           rowIndex,
@@ -183,6 +218,7 @@ export async function getReleasesForEditController(request: Request): Promise<Re
           artista: normalizeText(artist),
           descricao: normalizeText(description),
           capaUrl: normalizeText(cover),
+          dataLancamentoRaw,
           fields:
             tipoParam === "albuns"
               ? { topicId: normalizeText(row[1]), encarte: normalizeText(row[9]) }
@@ -203,6 +239,21 @@ export async function getReleasesForEditController(request: Request): Promise<Re
         });
       }
     }
+
+    // BUG REAL corrigido aqui (reportado em produção, 2026-11-05): a lista
+    // saía na ordem bruta da planilha (ordem de inserção/linha), não na
+    // ordem de lançamento — "IT'S OVER" (lançada recentemente, linha
+    // reparada no fim da aba) aparecia no fim da lista em vez de no topo,
+    // dando a impressão de que não tinha sido corrigida. Ordena por data
+    // de lançamento, mais recente primeiro; item sem data válida (raro,
+    // dado legado) vai pro fim, nunca pro topo por engano.
+    const parseDataBR = (raw: string | undefined): number => {
+      const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec((raw || "").trim());
+      if (!m) return -Infinity;
+      const [, d, mo, y] = m;
+      return new Date(Number(y), Number(mo) - 1, Number(d)).getTime();
+    };
+    items.sort((a, b) => parseDataBR(b.dataLancamentoRaw) - parseDataBR(a.dataLancamentoRaw));
 
     return new Response(JSON.stringify({ success: true, data: items }), {
       status: 200,
