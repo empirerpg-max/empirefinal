@@ -65,7 +65,16 @@ export async function adminRelancarFaixasFaltantesPreSaveController(request: Req
       { status: 404, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );
   }
-  const dataFormatada = linhasDoAlbum[0].row[0] || "";
+  // BUG encontrado no dry-run real (2026-11-11): usar simplesmente a
+  // primeira linha do álbum pegava a data de uma faixa PRÉ-EXISTENTE (ex:
+  // "CURSED BLESSED", single solto lançado meses antes do álbum, mesmo
+  // "Álbum" só por referência) em vez da data real do lançamento do álbum
+  // em si. As faixas de verdade lançadas junto com o álbum ficam com
+  // "Pendente?" = "Sim" (coluna X) — prioriza a data de uma dessas; só cai
+  // pra primeira linha encontrada se nenhuma faixa pendente existir.
+  const linhaDoLancamentoReal =
+    linhasDoAlbum.find(({ row }) => normalizeComparison(row[23] || "") === "sim") || linhasDoAlbum[0];
+  const dataFormatada = linhaDoLancamentoReal.row[0] || "";
 
   // Títulos já presentes em Musicas pra esse álbum (normalizados) — usado
   // pra achar quais faixas da campanha ainda NÃO foram lançadas. Compara
