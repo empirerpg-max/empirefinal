@@ -1074,6 +1074,8 @@ export async function getDiagnosticoTetoPreSaveController(request: Request): Pro
         tetoQueSeriaCalculadoAgora:
           c.modo === "missao" ? recalculo.tetoMissao : recalculo.tetoContagem,
         missoes: c.modo === "missao" ? c.missoes : undefined,
+        faixas: c.faixas,
+        totalFaixas: c.faixas.length,
         diaCampanhaAtual: diaCampanhaAtual(c),
         dataInicioISO: c.dataInicioISO,
       },
