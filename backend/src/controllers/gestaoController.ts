@@ -1088,6 +1088,16 @@ export async function criarVideoNoCatalogo(
     console.error("[criarVideoNoCatalogo] Erro:", error);
     const mensagem = String(error?.message || "");
     const ehLimiteDaApi = /quota|rate limit|429/i.test(mensagem);
+    // BUG REAL confirmado em produção (2026-11-11, Weuller): um vídeo que
+    // falha aqui não deixava NENHUM rastro em LOGS (só o catch de sucesso
+    // chamava registrarLogSistema) — impossível achar depois o que
+    // aconteceu com a tentativa de um jogador específico.
+    registrarLogSistema({
+      categoria: "Erro do app",
+      oQueAconteceu: `Falha ao registrar vídeo "${body?.tituloVideo || "?"}" de ${body?.nomeJogador || "?"}.`,
+      onde: "criarVideoNoCatalogo",
+      detalheTecnico: mensagem,
+    }).catch(() => {});
     return {
       success: false,
       error: ehLimiteDaApi

@@ -18,13 +18,6 @@ function jsonOk(data: unknown): Response {
   });
 }
 
-function jsonErr(message: string): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    status: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-  });
-}
-
 // Mesma lógica do fmt() original: "-"/vazio → "0", senão número formatado
 // pt-BR (separador de milhar).
 function fmt(v: unknown): string {
@@ -475,44 +468,84 @@ async function fetchReleases(): Promise<unknown[]> {
  * Mesmo contrato de query params que o Apps Script antigo servia — o
  * frontend (src/lib/charts.ts) só trocou a base da URL, nada mais.
  */
+// Cache de resposta deste endpoint (por isolate) — BUG REAL confirmado em
+// produção (2026-11-11, player Weuller sem conseguir enviar vídeo): o
+// cache de 15s do googleSheetsService (pensado pra picos passageiros) não
+// bastava porque esse endpoint é a Empire Charts pública (public/charts-app),
+// com cada visita de página chamando getBannerN1s/getTopArtistCover etc. e o
+// front só cacheando em memória por carregamento de página — sob tráfego
+// normal (não só pico), isso já mantinha o projeto do Sheets batendo na
+// cota "Read requests per minute" de forma praticamente contínua (LOGS
+// mostrou o mesmo erro por ~18h direto), starvando toda a aba principal
+// (inclusive escritas de Gestão, ex: Music Videos). Dado que ranking/
+// capa/lançamentos não precisam de frescor ao segundo, um TTL bem mais
+// longo aqui (5min) corta a maior parte dessas leituras repetidas sem
+// prejuízo real pro jogador.
+const CHARTS_RESPONSE_CACHE_TTL_MS = 5 * 60_000;
+const chartsResponseCache = new Map<string, { body: string; expiresAt: number }>();
+const chartsResponseInFlight = new Map<string, Promise<string>>();
+
 export async function chartsApiController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const p = url.searchParams;
   const action = p.get("action") || "";
+  const cacheKey = url.search;
 
+  const cached = chartsResponseCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return new Response(cached.body, { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } });
+  }
+  const emAndamento = chartsResponseInFlight.get(cacheKey);
+  if (emAndamento) {
+    return new Response(await emAndamento, { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } });
+  }
+
+  const promise = (async () => {
+    const body = await computeChartsResponseBody(action, p);
+    chartsResponseCache.set(cacheKey, { body, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS });
+    return body;
+  })().finally(() => {
+    chartsResponseInFlight.delete(cacheKey);
+  });
+  chartsResponseInFlight.set(cacheKey, promise);
+  return new Response(await promise, { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } });
+}
+
+async function computeChartsResponseBody(action: string, p: URLSearchParams): Promise<string> {
+  const toBody = (data: unknown) => JSON.stringify(data);
   try {
     switch (action) {
       case "getRealTime":
-        return jsonOk(await fetchRT());
+        return toBody(await fetchRT());
       case "getFilters":
-        return jsonOk(await fetchF(p.get("tab") || ""));
+        return toBody(await fetchF(p.get("tab") || ""));
       case "getChart":
-        return jsonOk(await fetchC(p.get("tab") || "", p.get("date") || "", p.get("style") || ""));
+        return toBody(await fetchC(p.get("tab") || "", p.get("date") || "", p.get("style") || ""));
       case "getMonthlyStats":
-        return jsonOk(
+        return toBody(
           await fetchM(p.get("platform") || "", p.get("month") || "", p.get("artist") || "", p.get("year") || ""),
         );
       case "getMonthlyYears":
-        return jsonOk(await fetchMY());
+        return toBody(await fetchMY());
       case "getMonthlyDates":
-        return jsonOk(await fetchMD(p.get("year") || ""));
+        return toBody(await fetchMD(p.get("year") || ""));
       case "getArtists":
-        return jsonOk(await fetchA(p.get("platform") || "", p.get("month") || "", p.get("year") || ""));
+        return toBody(await fetchA(p.get("platform") || "", p.get("month") || "", p.get("year") || ""));
       case "getHOFList":
-        return jsonOk(await fetchHOFList());
+        return toBody(await fetchHOFList());
       case "getHOFProfile":
-        return jsonOk(await fetchHOFProfile(p.get("artist") || ""));
+        return toBody(await fetchHOFProfile(p.get("artist") || ""));
       case "getBannerN1s":
-        return jsonOk(await fetchBannerN1s());
+        return toBody(await fetchBannerN1s());
       case "getTopArtistCover":
-        return jsonOk(await fetchTopArtistCover());
+        return toBody(await fetchTopArtistCover());
       case "getReleases":
-        return jsonOk(await fetchReleases());
+        return toBody(await fetchReleases());
       default:
-        return jsonErr(`Ação desconhecida: ${action}`);
+        return toBody({ error: `Ação desconhecida: ${action}` });
     }
   } catch (err: any) {
     console.error("[chartsApiController] Erro:", err);
-    return jsonErr(err.message || "Erro ao carregar Charts.");
+    return toBody({ error: err.message || "Erro ao carregar Charts." });
   }
 }
