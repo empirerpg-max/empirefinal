@@ -80,6 +80,7 @@ import { adminDiagEdicaoChartsItsOverController } from "../controllers/adminDiag
 import { adminFixCodigosFaltantesSamanthaController } from "../controllers/adminFixCodigosFaltantesSamanthaController";
 import { adminDiagJustinoAlbunsController } from "../controllers/adminDiagJustinoAlbunsController";
 import { adminTestarFestivalInscricaoController } from "../controllers/adminTestarFestivalInscricaoController";
+import { adminDumpLinhasAlbunsController } from "../controllers/adminDumpLinhasAlbunsController";
 import { adminReverterFaixasMarcoController } from "../controllers/adminReverterFaixasMarcoController";
 import { adminDiagFolliaComentarioController } from "../controllers/adminDiagFolliaComentarioController";
 import { adminTesteForumFolliaController } from "../controllers/adminTesteForumFolliaController";
@@ -664,6 +665,7 @@ export async function handleEmpireApiRoutes(
     "/api/gestao/admin/fix-codigos-faltantes-samantha",
     "/api/gestao/admin/diag-justino-albuns",
     "/api/gestao/admin/testar-festival-inscricao",
+    "/api/gestao/admin/dump-linhas-albuns",
     "/api/gestao/admin/reverter-faixas-marco",
     "/api/gestao/admin/backfill-vinculo-video",
     "/api/gestao/admin/fix-vernissage-edicao-charts",
@@ -2099,6 +2101,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagJustinoAlbunsController();
   } else if (url.pathname === "/api/gestao/admin/testar-festival-inscricao") {
     response = await adminTestarFestivalInscricaoController();
+  } else if (url.pathname === "/api/gestao/admin/dump-linhas-albuns") {
+    response = await adminDumpLinhasAlbunsController(request);
   } else if (url.pathname === "/api/gestao/admin/reverter-faixas-marco") {
     response = await adminReverterFaixasMarcoController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-follia-comentario") {
