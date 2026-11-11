@@ -6,18 +6,14 @@ import { googleSheetsService, normalizeComparison } from "../services/googleShee
 // com a célula vazia. Procura em EDIÇÃO CHARTS por essas 2 faixas pra achar
 // o código único real (se a entrada existir lá) antes de decidir o fix.
 //
-// GET /api/gestao/admin/diag-edicao-charts-its-over
-export async function adminDiagEdicaoChartsItsOverController(): Promise<Response> {
+// GET /api/gestao/admin/diag-edicao-charts-its-over[?q=termo]
+export async function adminDiagEdicaoChartsItsOverController(request?: Request): Promise<Response> {
+  const q = request ? new URL(request.url).searchParams.get("q") : null;
+  const termosBusca = q ? [normalizeComparison(q)] : ["lost frequency", "let me go"];
   const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "B2:BD20000").catch(() => []);
-  const alvo1 = normalizeComparison("Samantha Cooper - LOST FREQUENCY");
-  const alvo2 = normalizeComparison("Samantha Cooper - (DON’T) LET ME GO");
   const encontradas = rows
     .map((row, i) => ({ linha: i + 2, row }))
-    .filter(
-      ({ row }) =>
-        normalizeComparison(row?.[0] || "").includes("lost frequency") ||
-        normalizeComparison(row?.[0] || "").includes("let me go"),
-    )
+    .filter(({ row }) => termosBusca.some((termo) => normalizeComparison(row?.[0] || "").includes(termo)))
     .map(({ linha, row }) => ({
       linha,
       titulo: row[0],
@@ -25,7 +21,7 @@ export async function adminDiagEdicaoChartsItsOverController(): Promise<Response
       codigoUnico: row[54],
     }));
 
-  return new Response(JSON.stringify({ success: true, alvo1, alvo2, encontradas }, null, 2), {
+  return new Response(JSON.stringify({ success: true, termosBusca, encontradas }, null, 2), {
     status: 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
