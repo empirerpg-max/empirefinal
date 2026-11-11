@@ -1841,59 +1841,95 @@ export async function processarFaixasDoAlbum(
     // INFOS MÚSICAS (capa pro chart puxar) fica de fora até ela virar
     // lançamento de verdade (ver publicarFaixaPendenteController, que
     // atualiza tipo e data na MESMA linha em vez de criar uma nova).
-    const edicaoChartsRowIndex = await registrarFaixaNosCharts({
-      dataFormatada,
-      songTitle,
-      tipoSingle: faixa.tipoSingle || "TRACKLIST ALBUM",
-      tipoMusica: faixa.tipoMusica || "SOLO",
-      album: albumFullTitle,
-      artistaPrincipal: artistaAlbum,
-      participantes: participantesLimpos,
-      capaUrl,
-      pendente: pendente === "Sim",
-      weeksOverride,
-    });
-    // Mesma cópia de Código único feita em createSongController — sem
-    // isso, faixa inédita de álbum nunca tinha o código pra cruzar com
-    // comentários/REGISTRO/Shop-Info-Visual.
-    if (faixaRowIndex && edicaoChartsRowIndex) {
-      const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
-      if (codigoGerado) {
-        await googleSheetsService.principal
-          .updateValues("Musicas", `Z${faixaRowIndex}`, [[codigoGerado]])
-          .catch((err) =>
-            console.warn("[processarFaixasDoAlbum] Erro ao copiar Código único:", err),
-          );
+    //
+    // BUG REAL confirmado em produção (2026-11-11, álbum "Samantha Cooper -
+    // WELL, IT'S OVER" lançado via pre-save com só 3 das 11 faixas
+    // cadastradas, SEM nenhum log de falha): esse trecho inteiro (daqui até
+    // o fim do bloco, chamada a registrarFaixaNosCharts + cópia do Código
+    // único + espelho D1) ficava FORA do try/catch da faixa (que só cobria
+    // o appendRow em Musicas, acima). A mesma janela de horário tinha uma
+    // enxurrada de "Quota exceeded"/erro 524 nos LOGS (Google Sheets sob
+    // rate-limit) — exatamente o tipo de falha transiente que esse
+    // registrarFaixaNosCharts (uma escrita em EDIÇÃO CHARTS) também sofre.
+    // Uma exceção aqui saía do try/catch de cima, atravessava inteiro o
+    // `for` de processarFaixasDoAlbum sem ser pega em lugar nenhum — as
+    // faixas seguintes nunca chegavam nem a tentar, e nada disso virava
+    // log, porque não existe catch no caminho pra registrar. A faixa já
+    // escrita em Musicas (appendRow já tinha rodado com sucesso) ficava sem
+    // Código único/entrada em EDIÇÃO CHARTS, mas isso é MUITO melhor que a
+    // faixa (e todas as seguintes) sumirem inteiramente sem rastro. Agora
+    // cada faixa tem seu próprio try/catch completo — uma falha aqui loga
+    // e segue pra próxima faixa, nunca aborta o álbum inteiro.
+    try {
+      const edicaoChartsRowIndex = await registrarFaixaNosCharts({
+        dataFormatada,
+        songTitle,
+        tipoSingle: faixa.tipoSingle || "TRACKLIST ALBUM",
+        tipoMusica: faixa.tipoMusica || "SOLO",
+        album: albumFullTitle,
+        artistaPrincipal: artistaAlbum,
+        participantes: participantesLimpos,
+        capaUrl,
+        pendente: pendente === "Sim",
+        weeksOverride,
+      });
+      // Mesma cópia de Código único feita em createSongController — sem
+      // isso, faixa inédita de álbum nunca tinha o código pra cruzar com
+      // comentários/REGISTRO/Shop-Info-Visual.
+      if (faixaRowIndex && edicaoChartsRowIndex) {
+        const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+        if (codigoGerado) {
+          await googleSheetsService.principal
+            .updateValues("Musicas", `Z${faixaRowIndex}`, [[codigoGerado]])
+            .catch((err) =>
+              console.warn("[processarFaixasDoAlbum] Erro ao copiar Código único:", err),
+            );
 
-        // Espelho best-effort pra `musicas` D1 — igual createSongController,
-        // só depois do Código único (PK) existir. Cobre também a faixa
-        // PENDENTE (sem trackTopicId/tópico ainda): ela já tem código único
-        // de verdade aqui, então entra no D1 com idTopico null (preenchido
-        // depois por publicarFaixaPendenteController).
-        upsertMusicaD1({
-          codigoUnico: codigoGerado,
-          idTopico: trackTopicId || null,
-          titulo: songTitle,
-          artista: artistaAlbum,
-          artista2: participantesLimpos[0] || null,
-          artista3: participantesLimpos[1] || null,
-          artista4: participantesLimpos[2] || null,
-          artista5: participantesLimpos[3] || null,
-          artista6: participantesLimpos[4] || null,
-          album: albumFullTitle,
-          audioUrl: faixa.mediaUrl || null,
-          capaUrl: capaUrl || null,
-          letra: faixa.letra || null,
-          tipoSingle: faixa.tipoSingle || "TRACKLIST ALBUM",
-          tipoMusica: faixa.tipoMusica || "SOLO",
-          dataLancamento: dataFormatada,
-          weeks: weeksOverride ? Number(weeksOverride) || null : null,
-          ordem: faixa.num || null,
-          idCriador: jogadorId || null,
-          comentariosPara: trackTopicId || null,
-          pendente: pendente === "Sim",
-        });
+          // Espelho best-effort pra `musicas` D1 — igual createSongController,
+          // só depois do Código único (PK) existir. Cobre também a faixa
+          // PENDENTE (sem trackTopicId/tópico ainda): ela já tem código único
+          // de verdade aqui, então entra no D1 com idTopico null (preenchido
+          // depois por publicarFaixaPendenteController).
+          upsertMusicaD1({
+            codigoUnico: codigoGerado,
+            idTopico: trackTopicId || null,
+            titulo: songTitle,
+            artista: artistaAlbum,
+            artista2: participantesLimpos[0] || null,
+            artista3: participantesLimpos[1] || null,
+            artista4: participantesLimpos[2] || null,
+            artista5: participantesLimpos[3] || null,
+            artista6: participantesLimpos[4] || null,
+            album: albumFullTitle,
+            audioUrl: faixa.mediaUrl || null,
+            capaUrl: capaUrl || null,
+            letra: faixa.letra || null,
+            tipoSingle: faixa.tipoSingle || "TRACKLIST ALBUM",
+            tipoMusica: faixa.tipoMusica || "SOLO",
+            dataLancamento: dataFormatada,
+            weeks: weeksOverride ? Number(weeksOverride) || null : null,
+            ordem: faixa.num || null,
+            idCriador: jogadorId || null,
+            comentariosPara: trackTopicId || null,
+            pendente: pendente === "Sim",
+          });
+        }
       }
+    } catch (chartsErr) {
+      console.warn(
+        "[processarFaixasDoAlbum] Erro ao registrar faixa inédita em EDIÇÃO CHARTS:",
+        chartsErr,
+      );
+      registrarLogSistema({
+        categoria: "Falha de escrita",
+        oQueAconteceu: `Faixa #${faixa.num} ("${songTitle}") do álbum "${albumFullTitle}" foi gravada em Musicas, mas NÃO entrou em EDIÇÃO CHARTS (sem Código único) — provavelmente por um erro transiente do Google Sheets durante o lançamento.`,
+        onde: "processarFaixasDoAlbum",
+        causaProvavel:
+          "Provavelmente limite de requisições da API do Google Sheets (quota) ou timeout temporário, na mesma janela de outras faixas/leituras.",
+        comoResolver:
+          "Confira a faixa em Musicas e, se faltando mesmo, relance a entrada em EDIÇÃO CHARTS manualmente ou peça pro Claude investigar.",
+        detalheTecnico: chartsErr instanceof Error ? chartsErr.message : String(chartsErr),
+      }).catch(() => {});
     }
   }
 
