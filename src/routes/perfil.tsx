@@ -16,6 +16,7 @@ import {
   Trophy,
   Cake,
   UserCog,
+  Ticket,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import {
@@ -68,6 +69,7 @@ function Perfil() {
   const { user } = useTelegramUser();
   const [login, setLogin] = useState(getStoredLogin());
   const [premiacoesAberta, setPremiacoesAberta] = useState(false);
+  const [festivaisAberta, setFestivaisAberta] = useState(false);
   // "Entrar como usuário" (admin) — ver LoginScreen.tsx (startImpersonating/
   // stopImpersonating). loginTgId usa o MESMO critério já estabelecido em
   // Gestao.tsx (isAdminUser) pra decidir quem vê esse bloco.
@@ -620,6 +622,30 @@ function Perfil() {
               className="flex items-center gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-all"
             >
               <span className="flex-1 font-bold text-xs">Votação</span>
+              <ChevronRight className="size-3.5 text-muted-foreground" />
+            </Link>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            haptic.selection();
+            setFestivaisAberta((v) => !v);
+          }}
+          className="w-full flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-all"
+        >
+          <Ticket className="size-5 text-primary" />
+          <span className="flex-1 font-black uppercase text-xs tracking-widest text-left">Festivais</span>
+          <ChevronRight className={`size-4 text-muted-foreground transition-transform ${festivaisAberta ? "rotate-90" : ""}`} />
+        </button>
+        {festivaisAberta && (
+          <div className="pl-3 space-y-1.5">
+            <Link
+              to="/festivais/inscricao"
+              onClick={() => haptic.selection()}
+              className="flex items-center gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-all"
+            >
+              <span className="flex-1 font-bold text-xs">Inscrição</span>
               <ChevronRight className="size-3.5 text-muted-foreground" />
             </Link>
           </div>

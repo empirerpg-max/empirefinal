@@ -181,6 +181,12 @@ import {
   adminDumpPremiacaoController,
 } from "../controllers/indicacoesController";
 import {
+  getFestivalInscricaoController,
+  postFestivalInscricaoController,
+  popupFestivalStatusController,
+  popupFestivalDismissController,
+} from "../controllers/festivaisController";
+import {
   listarPremiacoesVotacaoController,
   listarCategoriasVotacaoController,
   listarIndicadosVotacaoController,
@@ -639,6 +645,9 @@ export async function handleEmpireApiRoutes(
     "/api/premiacoes/votacao/popup-status",
     "/api/premiacoes/votacao/popup-dismiss",
     "/api/premiacoes/votacao/admin/popup-reset",
+    "/api/festivais/inscricao",
+    "/api/festivais/popup-status",
+    "/api/festivais/popup-dismiss",
     "/api/premiacoes/performance/status",
     "/api/premiacoes/performance/responder",
     "/api/premiacoes/performance/pendentes",
@@ -1886,6 +1895,27 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await getFeedGlobalController(request);
+  } else if (url.pathname === "/api/festivais/inscricao") {
+    if (request.method === "GET") {
+      response = await getFestivalInscricaoController(request);
+    } else if (request.method === "POST") {
+      response = await postFestivalInscricaoController(request);
+    } else {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET ou POST para /api/festivais/inscricao." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+  } else if (url.pathname === "/api/festivais/popup-status") {
+    response = await popupFestivalStatusController(request);
+  } else if (url.pathname === "/api/festivais/popup-dismiss") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/festivais/popup-dismiss." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await popupFestivalDismissController(request);
   } else if (url.pathname === "/api/premiacoes/awards") {
     response = await getPremiacoesAwardsController();
   } else if (url.pathname === "/api/premiacoes/categorias") {

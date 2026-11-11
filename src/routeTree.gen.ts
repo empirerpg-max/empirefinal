@@ -36,6 +36,7 @@ import { Route as EmpirePlayGestaoRouteImport } from './routes/empire-play.gesta
 import { Route as EmpirePlayGestaoPresaveRouteImport } from './routes/empire-play.gestao-presave'
 import { Route as EmpirePlayMusicasRouteImport } from './routes/empire-play.musicas'
 import { Route as EmpirePlayVideosRouteImport } from './routes/empire-play.videos'
+import { Route as FestivaisInscricaoRouteImport } from './routes/festivais_.inscricao'
 import { Route as MarketIndexRouteImport } from './routes/market.index'
 import { Route as MarketLeilaoRouteImport } from './routes/market.leilao'
 import { Route as MarketRegrasRouteImport } from './routes/market.regras'
@@ -198,6 +199,11 @@ const EmpirePlayVideosRoute = EmpirePlayVideosRouteImport.update({
   path: '/videos',
   getParentRoute: () => EmpirePlayRoute,
 } as any)
+const FestivaisInscricaoRoute = FestivaisInscricaoRouteImport.update({
+  id: '/festivais_/inscricao',
+  path: '/festivais/inscricao',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MarketIndexRoute = MarketIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -359,6 +365,7 @@ export interface FileRoutesByFullPath {
   '/empire-play/gestao-presave': typeof EmpirePlayGestaoPresaveRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
+  '/festivais/inscricao': typeof FestivaisInscricaoRoute
   '/market/leilao': typeof MarketLeilaoRoute
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
@@ -410,6 +417,7 @@ export interface FileRoutesByTo {
   '/empire-play/gestao-presave': typeof EmpirePlayGestaoPresaveRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
+  '/festivais/inscricao': typeof FestivaisInscricaoRoute
   '/market/leilao': typeof MarketLeilaoRoute
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/valores': typeof PontoValoresRoute
@@ -464,6 +472,7 @@ export interface FileRoutesById {
   '/empire-play/gestao-presave': typeof EmpirePlayGestaoPresaveRoute
   '/empire-play/musicas': typeof EmpirePlayMusicasRoute
   '/empire-play/videos': typeof EmpirePlayVideosRoute
+  '/festivais_/inscricao': typeof FestivaisInscricaoRoute
   '/market/leilao': typeof MarketLeilaoRoute
   '/market/regras': typeof MarketRegrasRoute
   '/ponto/distribuir': typeof PontoDistribuirRouteWithChildren
@@ -521,6 +530,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao-presave'
     | '/empire-play/musicas'
     | '/empire-play/videos'
+    | '/festivais/inscricao'
     | '/market/leilao'
     | '/market/regras'
     | '/ponto/distribuir'
@@ -572,6 +582,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao-presave'
     | '/empire-play/musicas'
     | '/empire-play/videos'
+    | '/festivais/inscricao'
     | '/market/leilao'
     | '/market/regras'
     | '/ponto/valores'
@@ -625,6 +636,7 @@ export interface FileRouteTypes {
     | '/empire-play/gestao-presave'
     | '/empire-play/musicas'
     | '/empire-play/videos'
+    | '/festivais_/inscricao'
     | '/market/leilao'
     | '/market/regras'
     | '/ponto/distribuir'
@@ -674,6 +686,7 @@ export interface RootRouteChildren {
   AcoesTourRoute: typeof AcoesTourRoute
   AlbumIdRoute: typeof AlbumIdRouteWithChildren
   AwardsNomeRoute: typeof AwardsNomeRoute
+  FestivaisInscricaoRoute: typeof FestivaisInscricaoRoute
   PontoDistribuirRoute: typeof PontoDistribuirRouteWithChildren
   PontoPlaylistsRoute: typeof PontoPlaylistsRouteWithChildren
   PontoValoresRoute: typeof PontoValoresRoute
@@ -877,6 +890,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/empire-play/videos'
       preLoaderRoute: typeof EmpirePlayVideosRouteImport
       parentRoute: typeof EmpirePlayRoute
+    }
+    '/festivais_/inscricao': {
+      id: '/festivais_/inscricao'
+      path: '/festivais/inscricao'
+      fullPath: '/festivais/inscricao'
+      preLoaderRoute: typeof FestivaisInscricaoRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/market/': {
       id: '/market/'
@@ -1211,6 +1231,7 @@ const rootRouteChildren: RootRouteChildren = {
   AcoesTourRoute: AcoesTourRoute,
   AlbumIdRoute: AlbumIdRouteWithChildren,
   AwardsNomeRoute: AwardsNomeRoute,
+  FestivaisInscricaoRoute: FestivaisInscricaoRoute,
   PontoDistribuirRoute: PontoDistribuirRouteWithChildren,
   PontoPlaylistsRoute: PontoPlaylistsRouteWithChildren,
   PontoValoresRoute: PontoValoresRoute,
