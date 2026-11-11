@@ -29,7 +29,11 @@ export async function adminDiagJustinoAlbunsController(): Promise<Response> {
   const albunsRows = await googleSheetsService.principal.readValues("Albuns").catch(() => []);
   const linhasAlbuns = albunsRows
     .map((row, i) => ({ linha: i + 1, row }))
-    .filter(({ row }) => normalizeComparison(row.join(" ")).includes("justino"))
+    .filter(
+      ({ row }) =>
+        normalizeComparison(row.join(" ")).includes("justino") ||
+        normalizeComparison(row.join(" ")).includes("samantha cooper"),
+    )
     .map(({ linha, row }) => ({
       linha,
       data: row[0],
