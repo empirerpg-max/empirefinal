@@ -73,6 +73,7 @@ import {
   adminFixVernissageEdicaoChartsController,
 } from "../controllers/gestaoController";
 import { adminDumpLinhasMusicasController } from "../controllers/adminDumpLinhasMusicasController";
+import { adminDiagFaixasSamanthaController } from "../controllers/adminDiagFaixasSamanthaController";
 import { adminReverterFaixasMarcoController } from "../controllers/adminReverterFaixasMarcoController";
 import { adminDiagFolliaComentarioController } from "../controllers/adminDiagFolliaComentarioController";
 import { adminTesteForumFolliaController } from "../controllers/adminTesteForumFolliaController";
@@ -645,6 +646,7 @@ export async function handleEmpireApiRoutes(
     "/api/musicas/admin/fix-boulangerie-audio",
     "/api/gestao/admin/diagnostico-musica",
     "/api/gestao/admin/dump-linhas-musicas",
+    "/api/gestao/admin/diag-faixas-samantha",
     "/api/gestao/admin/reverter-faixas-marco",
     "/api/gestao/admin/backfill-vinculo-video",
     "/api/gestao/admin/fix-vernissage-edicao-charts",
@@ -2045,6 +2047,8 @@ export async function handleEmpireApiRoutes(
     response = await diagnosticoMusicaController(request);
   } else if (url.pathname === "/api/gestao/admin/dump-linhas-musicas") {
     response = await adminDumpLinhasMusicasController(request);
+  } else if (url.pathname === "/api/gestao/admin/diag-faixas-samantha") {
+    response = await adminDiagFaixasSamanthaController();
   } else if (url.pathname === "/api/gestao/admin/reverter-faixas-marco") {
     response = await adminReverterFaixasMarcoController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-follia-comentario") {
