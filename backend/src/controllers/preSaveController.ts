@@ -2014,6 +2014,29 @@ async function lancarCampanhaPreSave(c: PreSaveCampanha): Promise<void> {
           faixas: faixasPayload,
         });
 
+        // EXIGÊNCIA do usuário (2026-11-11, caso real: álbum da Samantha
+        // Cooper lançado com só 3 das 11 faixas cadastradas, sem nenhum
+        // aviso visível em lugar nenhum): publicarAlbum já sabe quando
+        // alguma faixa inédita falhou (faixasIneditasEsperadas vs
+        // faixasIneditasGravadas), mas esse detalhe só ia pra resposta
+        // HTTP de createAlbumController — o lançamento automático do
+        // pre-save (aqui) nunca lia nem logava essa divergência. Checagem
+        // explícita e bem visível em LOGS sempre que um álbum de pre-save
+        // lança com menos faixas do que devia, pra nunca mais passar
+        // despercebido.
+        const faixasFaltando = resultado.faixasIneditasEsperadas - resultado.faixasIneditasGravadas;
+        if (faixasFaltando > 0) {
+          registrarLogSistema({
+            categoria: "Erro do app",
+            oQueAconteceu: `ATENÇÃO: pre-save de "${c.albumTituloFull}" lançado automaticamente, mas ${faixasFaltando} de ${resultado.faixasIneditasEsperadas} faixa(s) inédita(s) esperada(s) NÃO foram gravadas (${resultado.faixasIneditasGravadas} gravadas). A campanha tinha ${c.faixas.length} faixa(s) cadastradas no total. Confira "Musicas"/EDIÇÃO CHARTS pra esse álbum e relance as faixas faltantes manualmente se precisar.`,
+            onde: "lancarCampanhaPreSave",
+            causaProvavel:
+              "Falha transiente do Google Sheets (quota/timeout) durante alguma das escritas de faixa — ver outros logs 'Falha de escrita' de processarFaixasDoAlbum na mesma janela de horário.",
+            comoResolver:
+              "Compare as faixas da campanha (FaixasJson) com as linhas reais em Musicas pra esse álbum; relance manualmente (Gestão > Lançar Faixa de Álbum) as que faltarem.",
+          }).catch(() => {});
+        }
+
         // Marca IMEDIATAMENTE no D1 que essa campanha já foi publicada de
         // verdade — antes de qualquer outra escrita (material extra,
         // coluna PRE-SAVE, status na planilha). É essa marca, não o
