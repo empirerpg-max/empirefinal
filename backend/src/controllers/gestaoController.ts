@@ -1311,7 +1311,7 @@ export async function getFaixasSemAlbumController(request: Request): Promise<Res
 // planilha. Devolve o que NÃO foi encontrado em cada aba, pra quem chamou
 // poder avisar o jogador em vez de deixar a faixa "meio vinculada" sem
 // ninguém perceber.
-async function vincularFaixaExistenteAoAlbum(
+export async function vincularFaixaExistenteAoAlbum(
   musicaSelecionada: string,
   albumFullTitle: string,
   ordem: number,
