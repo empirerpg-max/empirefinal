@@ -77,6 +77,21 @@ export async function getUserProfile(telegramId: string): Promise<UserProfile> {
     try {
       const rows = await googleSheetsService.principal.readValues("Jogadores", "A:M");
 
+      // BUG REAL confirmado em produção (2026-11-11, jogador Justino: "Editar
+      // Lançamentos" só mostrava o álbum "Chronicles" — na verdade um álbum
+      // de um dos OUTROS artistas dele que nunca aparecia na lista): um
+      // mesmo Telegram_ID pode ter VÁRIAS linhas em "Jogadores" (uma por
+      // artista que ele gerencia — Justino tinha 3: "Samantha Cooper",
+      // "Kendall" e "Luna", cada linha com sua própria Coluna M de artistas
+      // extras). A versão antiga daqui dava `return` assim que achava a
+      // PRIMEIRA linha com esse Telegram_ID, descartando todas as outras —
+      // associatedArtists saía só com o artista (+ extras) da primeira
+      // linha, escondendo os outros 2 artistas (e os álbuns deles) de toda
+      // tela que usa esse perfil (Editar Lançamentos, Lançar Faixa de
+      // Álbum, Pre-save etc). Agora acumula o artista + extras de TODAS as
+      // linhas que batem com esse Telegram_ID antes de montar o perfil.
+      let primeiraLinhaEncontrada: { artistName: string; playerName: string; rowIndex: number } | null = null;
+      const todosArtistas: string[] = [];
       for (let index = 1; index < rows.length; index += 1) {
         const row = rows[index] ?? [];
         const artistName = normalizeText(row[0]); // Coluna A: Nome (Artista)
@@ -85,30 +100,39 @@ export async function getUserProfile(telegramId: string): Promise<UserProfile> {
         const associatedArtistsCell = normalizeText(row[12]); // Coluna M: Lista de Artistas
 
         if (rowTelegramId && rowTelegramId === normalizedTelegramId) {
-          const extraArtists =
-            artistasNovos.length > 0 ? artistasNovos : parseArtistList(associatedArtistsCell);
-          const associatedArtists = Array.from(
-            new Set([artistName, ...extraArtists].filter(Boolean)),
-          );
-
-          // "Jogador" genérico só quando NADA foi achado — antes, uma linha
-          // de "Jogadores" com a Coluna C (Nome do OFF) vazia (comum pra
-          // quem só existe hoje via a aba ARTISTAS mais nova) fazia o
-          // Fórum mostrar "Jogador" pra sempre em vez do nome real, mesmo
-          // ele existindo na aba "Usuários" (mesma fonte que comentário/
-          // audit log já usam via resolveNomeOficial).
-          return {
-            artistName: artistName || "Artista Independente",
-            telegramId: rowTelegramId,
-            playerName: playerName || (await resolveNomeOficial(rowTelegramId, "Jogador")),
-            associatedArtists:
-              associatedArtists.length > 0
-                ? associatedArtists
-                : [artistName || "Artista Independente"],
-            sourceSheet: "Jogadores",
-            rowNumber: index + 1,
-          };
+          if (!primeiraLinhaEncontrada) {
+            primeiraLinhaEncontrada = { artistName, playerName, rowIndex: index + 1 };
+          }
+          const extraArtistsDaLinha = parseArtistList(associatedArtistsCell);
+          todosArtistas.push(artistName, ...extraArtistsDaLinha);
         }
+      }
+
+      if (primeiraLinhaEncontrada) {
+        const extraArtists = artistasNovos.length > 0 ? artistasNovos : todosArtistas;
+        const associatedArtists = Array.from(
+          new Set([primeiraLinhaEncontrada.artistName, ...extraArtists].filter(Boolean)),
+        );
+
+        // "Jogador" genérico só quando NADA foi achado — antes, uma linha
+        // de "Jogadores" com a Coluna C (Nome do OFF) vazia (comum pra
+        // quem só existe hoje via a aba ARTISTAS mais nova) fazia o
+        // Fórum mostrar "Jogador" pra sempre em vez do nome real, mesmo
+        // ele existindo na aba "Usuários" (mesma fonte que comentário/
+        // audit log já usam via resolveNomeOficial).
+        return {
+          artistName: primeiraLinhaEncontrada.artistName || "Artista Independente",
+          telegramId: normalizedTelegramId,
+          playerName:
+            primeiraLinhaEncontrada.playerName ||
+            (await resolveNomeOficial(normalizedTelegramId, "Jogador")),
+          associatedArtists:
+            associatedArtists.length > 0
+              ? associatedArtists
+              : [primeiraLinhaEncontrada.artistName || "Artista Independente"],
+          sourceSheet: "Jogadores",
+          rowNumber: primeiraLinhaEncontrada.rowIndex,
+        };
       }
     } catch (err) {
       console.warn("[getUserProfile] Erro ao ler Jogadores:", err);
