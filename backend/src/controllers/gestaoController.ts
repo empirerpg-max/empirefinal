@@ -1086,7 +1086,14 @@ export async function criarVideoNoCatalogo(
     };
   } catch (error: any) {
     console.error("[criarVideoNoCatalogo] Erro:", error);
-    return { success: false, error: error.message || "Erro ao registrar vídeo." };
+    const mensagem = String(error?.message || "");
+    const ehLimiteDaApi = /quota|rate limit|429/i.test(mensagem);
+    return {
+      success: false,
+      error: ehLimiteDaApi
+        ? "O app está sobrecarregado agora (muita gente usando ao mesmo tempo). Espere um minuto e tente enviar o vídeo de novo."
+        : mensagem || "Erro ao registrar vídeo.",
+    };
   }
 }
 
@@ -1684,6 +1691,33 @@ async function appendRowMusicasSeguro(values: GoogleSheetRow): Promise<number> {
     if (!linhaAlvo) {
       throw new Error("Falha ao anexar linha em Musicas (appendRow devolveu null após as tentativas).");
     }
+    // BUG REAL confirmado em produção (Samantha Cooper, "IT'S OVER",
+    // EMP999, 2026-11-04): appendRow devolveu um número de linha (sem
+    // lançar erro, passando pelo guard acima), mas a linha nunca ficou
+    // de fato lá pra ser lida depois — EDIÇÃO CHARTS/D1 foram gravados
+    // normalmente (dependem só do retorno aqui, não leem Musicas de
+    // volta), só Musicas (a aba que o catálogo/Fórum/Editar Lançamentos
+    // usam de verdade) ficou sem a linha. Causa exata não isolada
+    // (suspeita: inconsistência momentânea entre escrita e leitura da
+    // própria API do Sheets) — mas qualquer `appendRow` que "funciona"
+    // sem a linha existir de verdade precisa ser pego AQUI, no único
+    // lugar que sabe o número da linha, nunca deixado pra alguém notar
+    // dias depois. Confirma lendo a MESMA linha de volta antes de seguir
+    // pros charts/D1 — se não bater, aborta igual a appendRow falhando
+    // de verdade (ver guard de createSongController/processarFaixasDoAlbum
+    // que trata esse throw abortando a música inteira, sem deixar
+    // registro pela metade espalhado por outras abas).
+    const confirmacao = await googleSheetsService.principal.readValues(
+      "Musicas",
+      `H${linhaAlvo}:H${linhaAlvo}`,
+    );
+    const tituloGravado = (confirmacao?.[0]?.[0] || "").trim();
+    const tituloEsperado = String(values[7] || "").trim();
+    if (!tituloGravado || tituloGravado !== tituloEsperado) {
+      throw new Error(
+        `appendRow disse que gravou na linha ${linhaAlvo}, mas a releitura não confirma (esperado "${tituloEsperado}", achado "${tituloGravado}").`,
+      );
+    }
     return linhaAlvo;
   });
 }
@@ -1720,12 +1754,47 @@ export async function processarFaixasDoAlbum(
   // só (sem leitura prévia nenhuma), mais barata que o esquema de cursor
   // antigo E sem o risco de sobrescrita que motivou a troca de volta pro
   // :append (ver "Nosotros" sumiu, DERBY/Cowboy Fresh, 2026-10-29/30).
+  //
+  // BUG REAL confirmado de novo em produção (migração retroativa do álbum
+  // "Marco - NeuroDance", 2026-11-06, 4 faixas pendentes seguidas): mesmo
+  // restrito a "A:Y", o :append nativo às vezes AINDA escreve fora de
+  // posição — as 4 linhas vieram com os dados espalhados bem além da
+  // coluna Y (nome da música em branco na H, texto da faixa aparecendo em
+  // colunas tipo AB/AC), igual ao bug já visto e corrigido em "INFOS
+  // ACTS" no mesmo dia: a heurística de "tabela" do Sheets erra em abas
+  // com dados esparsos mais à direita, mesmo com o range explícito. A
+  // releitura de confirmação pegou certo (abortou, não deixou passar
+  // batido), mas a causa raiz só se resolve nunca mais usando :append
+  // aqui — calcula a linha alvo UMA VEZ antes do loop (nextRow) e grava
+  // com updateValues num range A{linha}:Y{linha} explícito, que nunca
+  // deixa o Sheets adivinhar coluna nenhuma; o cursor avança só em
+  // memória entre as faixas do mesmo álbum, sem reler o "fim da planilha"
+  // de novo a cada chamada (evitaria também qualquer atraso de
+  // consistência entre uma escrita e a leitura seguinte).
+  let proximaLinhaMusicas: number | null = null;
   async function appendRowMusicasComCursor(values: GoogleSheetRow): Promise<number> {
     return withWriteLock("gestao:musicas-append", async () => {
-      const linhaAlvo = await googleSheetsService.principal.appendRow("Musicas", values, "A:Y");
-      if (!linhaAlvo) {
-        throw new Error("Falha ao anexar linha em Musicas (appendRow devolveu null após as tentativas).");
+      if (proximaLinhaMusicas === null) {
+        const rows = await googleSheetsService.principal.readValues("Musicas");
+        proximaLinhaMusicas = rows.length + 1;
       }
+      const linhaAlvo = proximaLinhaMusicas;
+      await googleSheetsService.principal.updateValues("Musicas", `A${linhaAlvo}:Y${linhaAlvo}`, [values]);
+      // Mesma blindagem de appendRowMusicasSeguro (ver comentário lá) —
+      // confirma lendo a linha de volta antes de seguir pros charts/D1,
+      // nunca confiando cegamente na escrita.
+      const confirmacao = await googleSheetsService.principal.readValues(
+        "Musicas",
+        `H${linhaAlvo}:H${linhaAlvo}`,
+      );
+      const tituloGravado = (confirmacao?.[0]?.[0] || "").trim();
+      const tituloEsperado = String(values[7] || "").trim();
+      if (!tituloGravado || tituloGravado !== tituloEsperado) {
+        throw new Error(
+          `updateValues gravou na linha ${linhaAlvo}, mas a releitura não confirma (esperado "${tituloEsperado}", achado "${tituloGravado}").`,
+        );
+      }
+      proximaLinhaMusicas = linhaAlvo + 1;
       return linhaAlvo;
     });
   }

@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "motion/react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { haptic } from "@/lib/telegram";
 
 interface FestivalReminder {
@@ -25,14 +25,6 @@ export function FestivalNominationPopup({
   onLembrarMaisTarde,
   onJaInscrevi,
 }: FestivalNominationPopupProps) {
-  const navigate = useNavigate();
-
-  const inscreverJa = () => {
-    haptic.selection();
-    onInscreverJa();
-    navigate({ to: "/festivais/inscricao" });
-  };
-
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
@@ -54,12 +46,16 @@ export function FestivalNominationPopup({
             <p className="text-xs font-bold text-primary">Até {festival.encerramento}.</p>
 
             <div className="w-full flex flex-col gap-2 mt-4">
-              <button
-                onClick={inscreverJa}
-                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground text-sm font-black uppercase tracking-wide active:scale-95 transition-transform"
+              <Link
+                to="/festivais/inscricao"
+                onClick={() => {
+                  haptic.selection();
+                  onInscreverJa();
+                }}
+                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground text-sm font-black uppercase tracking-wide active:scale-95 transition-transform text-center"
               >
                 Inscrever já
-              </button>
+              </Link>
               <button
                 onClick={() => {
                   haptic.light();
