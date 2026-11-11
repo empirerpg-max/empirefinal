@@ -16,6 +16,8 @@ export async function adminDiagFaixasSamanthaController(): Promise<Response> {
       normalizeComparison(row.join(" ")).includes(normalizeComparison("well")) ||
       normalizeComparison(row.join(" ")).includes(normalizeComparison("samantha")),
     );
+  const totalLogs = logsRows.length;
+  const ultimosLogs = logsRows.slice(-40).map((row, i) => ({ linha: totalLogs - 40 + i + 1, row }));
 
   const musicasRows = await googleSheetsService.principal.readValues("Musicas", "A:Z").catch(() => []);
   const musicasDoAlbum = musicasRows
@@ -26,6 +28,8 @@ export async function adminDiagFaixasSamanthaController(): Promise<Response> {
     JSON.stringify(
       {
         success: true,
+        totalLogs,
+        ultimosLogs,
         logsRelevantes,
         totalMusicasDoAlbum: musicasDoAlbum.length,
         musicasDoAlbum: musicasDoAlbum.map(({ linha, row }) => ({
