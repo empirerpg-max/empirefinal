@@ -75,6 +75,7 @@ import {
 import { adminDumpLinhasMusicasController } from "../controllers/adminDumpLinhasMusicasController";
 import { adminDiagFaixasSamanthaController } from "../controllers/adminDiagFaixasSamanthaController";
 import { adminRelancarFaixasFaltantesPreSaveController } from "../controllers/adminRelancarFaixasFaltantesPreSaveController";
+import { adminFixDuplicataItsOverController } from "../controllers/adminFixDuplicataItsOverController";
 import { adminReverterFaixasMarcoController } from "../controllers/adminReverterFaixasMarcoController";
 import { adminDiagFolliaComentarioController } from "../controllers/adminDiagFolliaComentarioController";
 import { adminTesteForumFolliaController } from "../controllers/adminTesteForumFolliaController";
@@ -645,6 +646,7 @@ export async function handleEmpireApiRoutes(
     "/api/gestao/admin/dump-linhas-musicas",
     "/api/gestao/admin/diag-faixas-samantha",
     "/api/gestao/admin/relancar-faixas-faltantes-presave",
+    "/api/gestao/admin/fix-duplicata-its-over",
     "/api/gestao/admin/reverter-faixas-marco",
     "/api/gestao/admin/backfill-vinculo-video",
     "/api/gestao/admin/fix-vernissage-edicao-charts",
@@ -2049,6 +2051,8 @@ export async function handleEmpireApiRoutes(
     response = await adminDiagFaixasSamanthaController();
   } else if (url.pathname === "/api/gestao/admin/relancar-faixas-faltantes-presave") {
     response = await adminRelancarFaixasFaltantesPreSaveController(request);
+  } else if (url.pathname === "/api/gestao/admin/fix-duplicata-its-over") {
+    response = await adminFixDuplicataItsOverController(request);
   } else if (url.pathname === "/api/gestao/admin/reverter-faixas-marco") {
     response = await adminReverterFaixasMarcoController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-follia-comentario") {
