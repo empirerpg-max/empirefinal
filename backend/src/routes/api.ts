@@ -2062,7 +2062,7 @@ export async function handleEmpireApiRoutes(
   } else if (url.pathname === "/api/gestao/admin/fix-duplicata-its-over") {
     response = await adminFixDuplicataItsOverController(request);
   } else if (url.pathname === "/api/gestao/admin/diag-edicao-charts-its-over") {
-    response = await adminDiagEdicaoChartsItsOverController();
+    response = await adminDiagEdicaoChartsItsOverController(request);
   } else if (url.pathname === "/api/gestao/admin/fix-codigos-faltantes-samantha") {
     response = await adminFixCodigosFaltantesSamanthaController(request);
   } else if (url.pathname === "/api/gestao/admin/reverter-faixas-marco") {
