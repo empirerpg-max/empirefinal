@@ -189,10 +189,26 @@ export async function getReleasesForEditController(request: Request): Promise<Re
         tipoParam === "musicas" ? row.slice(14, 19).map((p) => normalizeComparison(p || "")) : [];
       const normArtistField = normalizeComparison(artist);
 
+      // BUG REAL corrigido aqui (produção, 2026-11-11: "Editar Lançamentos"
+      // da Samantha Cooper só mostrava "chronicles", nenhum dos outros
+      // álbuns dela) — em "Albuns", a coluna F ("Nome do criador") guarda
+      // quem PUBLICOU o álbum pelo app (o jogador/gerente, ex: "Justino"),
+      // não necessariamente o nome do artista gravado nele (ex: "Samantha
+      // Cooper", que Justino gerencia). O fix do bug da Amanda Brokne acima
+      // removeu o fallback de texto da linha inteira pra TODOS os tipos,
+      // não só música — sem nenhum fallback, álbum cujo criador (F) é
+      // diferente do artista gravado (G) nunca mais aparecia na busca por
+      // esse artista. Título de álbum é sempre "Artista - Título" (G) —
+      // checar só essa coluna (não a linha inteira) é tão seguro quanto o
+      // fallback de participantes de música acima, sem reabrir o bug da
+      // Amanda Brokne (letra/referência/capa nunca entram nessa checagem).
+      const normTituloAlbum = tipoParam === "albuns" ? normalizeComparison(title) : "";
+
       // Verificar se o artista bate
       if (
         normArtistField.includes(normArtist) ||
-        participantesDaLinha.some((p) => p.includes(normArtist))
+        participantesDaLinha.some((p) => p.includes(normArtist)) ||
+        normTituloAlbum.includes(normArtist)
       ) {
         items.push({
           id: `${tipoParam}_${rowIndex}`,
