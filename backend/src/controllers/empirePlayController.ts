@@ -1317,12 +1317,28 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
  */
 export async function getEmpirePlayAlbunsController(): Promise<Response> {
   try {
-    const [albumRecords, songRecords] = await Promise.all([
+    const [albumRecords, songRecords, albunsRawRows] = await Promise.all([
       sheetsService.readSheetObjects("Albuns"),
       sheetsService.readSheetObjects("Musicas"),
+      googleSheetsService.principal.readValues("Albuns"),
     ]);
 
     const songs = songRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
+
+    // BUG REAL confirmado em produção (2026-11-12, merge dos álbuns da
+    // Amanda Brokne): readSheetObjects só lê até a última coluna que o
+    // CABEÇALHO (linha 1) da aba tiver preenchida — como "Albuns" nunca
+    // teve cabeçalho até a coluna M (nova, só usada agora pra tracklist),
+    // a chave "coluna_13"/"tracklist" nunca existia no record, e a
+    // tracklist NUNCA era lida por esse fluxo (caía sempre no fallback
+    // antigo). Lê a coluna M direto, bruta, casando por título do álbum
+    // (coluna G, índice 6 — mesmo valor usado como "nome_do_album" abaixo).
+    const tracklistRawPorAlbumTitulo = new Map<string, string>();
+    for (const row of albunsRawRows.slice(1)) {
+      const tituloAlbum = normalizeComparison(row[6] || "");
+      const tracklistCell = (row[12] || "").trim();
+      if (tituloAlbum && tracklistCell) tracklistRawPorAlbumTitulo.set(tituloAlbum, tracklistCell);
+    }
 
     const albuns: EmpirePlayCleanAlbum[] = albumRecords.map((rec, idx) => {
       const albumTitle =
@@ -1374,16 +1390,16 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         "message_thread_id",
       ]);
 
-      // Tracklist própria do álbum (Albuns!M, coluna sem header de
-      // propósito = chave "coluna_13" em readSheetObjects). Quando existe,
-      // ELA decide sozinha quais faixas pertencem a este álbum (por
-      // título) — não mais só Musicas!K/"album" (que só aceita UM álbum
-      // por faixa, e por isso nunca deixaria a MESMA faixa pertencer a
-      // dois álbuns ao mesmo tempo — ex: faixa do TRAINWRECK original que
-      // também entra na Edição de Aniversário como Disco 1). Sem
-      // tracklist ainda gravada (álbum antigo), cai pro fallback de
+      // Tracklist própria do álbum (Albuns!M) — ver nota acima sobre por
+      // que é lida via leitura bruta, não via readSheetObjects. Quando
+      // existe, ELA decide sozinha quais faixas pertencem a este álbum
+      // (por título) — não mais só Musicas!K/"album" (que só aceita UM
+      // álbum por faixa, e por isso nunca deixaria a MESMA faixa
+      // pertencer a dois álbuns ao mesmo tempo — ex: faixa do TRAINWRECK
+      // original que também entra na Edição de Aniversário como Disco 1).
+      // Sem tracklist ainda gravada (álbum antigo), cai pro fallback de
       // sempre (K/"album" + Musicas!trackOrder).
-      const tracklistRaw = getValue(rec, ["coluna_13", "tracklist"]);
+      const tracklistRaw = tracklistRawPorAlbumTitulo.get(normAlbumTitle);
       const tracklistPorTitulo = new Map<string, { disco: number; ordem: number }>();
       if (tracklistRaw) {
         try {
