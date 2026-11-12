@@ -82,6 +82,33 @@ export async function adminBackfillTracklistAmandaBrokneController(request: Requ
     );
   }
 
+  // BUG REAL confirmado em produção (2026-11-12, verificado ao vivo via
+  // /api/empire-play/albuns): mesmo com a coluna K corrigida, a tela de
+  // Fórum (fluxo D1, ver empirePlayController.ts) ainda lê a ordem de
+  // Musicas!U (coluna "Ordem", global, pré-tracklist-por-álbum) — "Troublemaker"
+  // tinha um valor antigo (13) ali, jogando ela pro fim da lista em vez da
+  // posição 1. Corrige Musicas!U pras 6 faixas da edição de aniversário
+  // pra bater com a tracklist (Albuns!M) — nunca foi migrado quando essas
+  // faixas foram criadas, porque o código único delas falhou de gravar
+  // (mesmo bug de falha silenciosa do rate-limit, já corrigido antes).
+  const MUSICAS_ORDEM_ANIVERSARIO: { linha: number; ordem: number }[] = [
+    { linha: 828, ordem: 1 }, // Troublemaker
+    { linha: 849, ordem: 2 }, // Light It Up
+    { linha: 850, ordem: 3 }, // A Different Way to Deceive
+    { linha: 851, ordem: 4 }, // What Suits Me
+    { linha: 852, ordem: 5 }, // Lighthouse (French Remix)
+    { linha: 853, ordem: 6 }, // Your Eyes Don't Lie (Remix)
+  ];
+  for (const item of MUSICAS_ORDEM_ANIVERSARIO) {
+    const ordemAtual = (musicasRows[item.linha - 1]?.[20] || "").trim();
+    acoes.push(
+      `Musicas linha ${item.linha}: coluna U (Ordem) ${confirmar ? "corrigida" : "seria corrigida"} de "${ordemAtual || "(vazio)"}" pra "${item.ordem}".`,
+    );
+    if (confirmar) {
+      await googleSheetsService.principal.updateValues("Musicas", `U${item.linha}`, [[String(item.ordem)]]);
+    }
+  }
+
   for (const album of [TRAINWRECK_PADRAO, TRAINWRECK_ANIVERSARIO]) {
     const tracklist: TracklistEntry[] = album.titulos.map((titulo, i) => ({
       titulo,

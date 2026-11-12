@@ -76,6 +76,7 @@ interface ForumAlbumTrack {
   title: string;
   artist: string;
   trackOrder: number;
+  disco?: number;
   coverUrl?: string | null;
   audioUrl?: string | null;
   lyrics?: string | null;
@@ -494,6 +495,7 @@ export const Forum: React.FC<ForumProps> = ({
                 title: t.title,
                 artist: t.artist,
                 trackOrder: t.trackOrder,
+                disco: t.disco,
                 coverUrl: t.coverUrl,
                 audioUrl: t.audioUrl,
                 lyrics: t.lyrics,
@@ -1467,8 +1469,24 @@ export const Forum: React.FC<ForumProps> = ({
                         const trackKey = faixa.id || String(i);
                         const isExpanded = expandedTrackId === trackKey;
                         const letra = faixa.lyrics?.trim();
+                        const discoAtual = faixa.disco && faixa.disco > 0 ? faixa.disco : 1;
+                        const discoAnterior =
+                          i > 0
+                            ? (selectedTopic.tracks![i - 1].disco && selectedTopic.tracks![i - 1].disco! > 0
+                                ? selectedTopic.tracks![i - 1].disco!
+                                : 1)
+                            : null;
+                        const mostraCabecalhoDisco =
+                          selectedTopic.tracks!.some((t) => (t.disco || 1) !== discoAtual) &&
+                          (i === 0 || discoAtual !== discoAnterior);
                         return (
-                          <div key={trackKey} className="bg-neutral-900/60 rounded-xl border border-white/5 overflow-hidden">
+                          <React.Fragment key={trackKey}>
+                          {mostraCabecalhoDisco && (
+                            <p className="text-[11px] font-black uppercase tracking-wider text-emerald-400 mt-3 mb-1 first:mt-0 px-1">
+                              Disco {discoAtual}
+                            </p>
+                          )}
+                          <div className="bg-neutral-900/60 rounded-xl border border-white/5 overflow-hidden">
                             <div className="w-full flex items-center gap-1 p-2.5 sm:p-3 group">
                               <button
                                 type="button"
@@ -1573,6 +1591,7 @@ export const Forum: React.FC<ForumProps> = ({
                               );
                             })()}
                           </div>
+                          </React.Fragment>
                         );
                       })
                     ) : (
