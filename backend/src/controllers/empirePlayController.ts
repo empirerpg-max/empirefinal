@@ -1374,10 +1374,23 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
       ]);
 
       // Junção com a aba Musicas
+      // BUG REAL confirmado em produção (2026-11-12, álbuns da Amanda
+      // Brokne: "TRAINWRECK" padrão e "TRAINWRECK (The 13th Anniversary
+      // Edition)"): o fallback `normAlbumTitle.includes(normSongAlbum)`
+      // casava QUALQUER música cujo álbum fosse um PREFIXO de texto do
+      // álbum sendo montado — como o título da edição de aniversário
+      // literalmente começa com o título do álbum padrão ("TRAINWRECK..."),
+      // as 12 faixas antigas (álbum "...TRAINWRECK") entravam de brinde na
+      // tracklist da edição de aniversário também, intercaladas com as 6
+      // faixas novas e duplicando a numeração (1, 1, 2, 2, 3...). Removido
+      // — as duas comparações abaixo (igualdade exata, e igualdade exata
+      // SEM o prefixo do artista dos dois lados, que já cobre o caso real
+      // de "SANTISSIMA" citado abaixo) são suficientes e nunca casam por
+      // substring parcial.
       const matchingSongs = songs.filter((s) => {
         if (!s.album) return false;
         const normSongAlbum = normalizeComparison(s.album);
-        if (normSongAlbum === normAlbumTitle || normAlbumTitle.includes(normSongAlbum)) return true;
+        if (normSongAlbum === normAlbumTitle) return true;
         // Falha silenciosa confirmada em 2026-09-18 (álbum SANTISSIMA da
         // Emma some sem capa nem faixa nenhuma vinculada): a comparação
         // acima depende de o "Nome" do álbum na aba Albuns SEMPRE vir
