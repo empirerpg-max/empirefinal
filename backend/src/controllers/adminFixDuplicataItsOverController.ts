@@ -98,11 +98,15 @@ export async function adminFixDuplicataItsOverController(request: Request): Prom
   acoes.push(`Musicas linha ${plano.musicasLinhaDuplicada} (${CODIGO_DUPLICADO}) apagada.`);
 
   // 2. Apaga a entrada duplicada em EDIÇÃO CHARTS.
+  // BUG REAL confirmado em produção (2026-11-12, Amanda Brokne): BD é
+  // ARRAYFORMULA, nunca pode ser escrita (nem com "") — ver mesmo fix em
+  // adminForumActionsController.ts/limparLinhaEdicaoCharts. Limpa só até
+  // BC (54 colunas a partir de B), nunca toca em BD.
   if (plano.edicaoChartsLinhaDuplicada) {
     await googleSheetsService.edicaoCharts.updateValues(
       "EDIÇÃO CHARTS",
-      `B${plano.edicaoChartsLinhaDuplicada}:BD${plano.edicaoChartsLinhaDuplicada}`,
-      [new Array(55).fill("")],
+      `B${plano.edicaoChartsLinhaDuplicada}:BC${plano.edicaoChartsLinhaDuplicada}`,
+      [new Array(54).fill("")],
     );
     acoes.push(`EDIÇÃO CHARTS linha ${plano.edicaoChartsLinhaDuplicada} apagada.`);
   }

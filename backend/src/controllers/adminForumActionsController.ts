@@ -277,7 +277,25 @@ async function limparLinhaEdicaoCharts(tipo: TipoTopico, codigoUnico: string): P
   if (tipo === "video") return false; // vídeo não tem linha própria em EDIÇÃO CHARTS — usa a da música vinculada, que não deve ser tocada aqui.
   const sheet = tipo === "album" ? "EDIÇÃO CHARTS ÁLBUMS" : "EDIÇÃO CHARTS";
   const colCodigo = tipo === "album" ? "R" : "BD";
-  const lastCol = tipo === "album" ? "R" : "BD";
+  // BUG REAL confirmado em produção (2026-11-12, álbum da Amanda Brokne
+  // "todo bugado" — todas as 18 linhas dela em EDIÇÃO CHARTS (música),
+  // antigas E novas, com "Código único" (coluna BD) vazio): BD em
+  // "EDIÇÃO CHARTS" NUNCA é escrita pelo app — é um ARRAYFORMULA que
+  // spilla a partir do topo da planilha (confirmado pelo admin). O
+  // `lastCol` de limpeza aqui incluía BD, e `updateValues` grava "" numa
+  // célula literal mesmo quando o valor é vazio — escrever ("" ou
+  // qualquer coisa) em QUALQUER célula dentro do range de spill de um
+  // ARRAYFORMULA quebra a fórmula a partir dali, truncando o cálculo pra
+  // ela mesma e pra TODAS as linhas abaixo (o motivo de linhas de 2013,
+  // não só as novas, também estarem sem código). O fix: limpar só até a
+  // coluna ANTERIOR (BC) pra música, nunca tocar em BD, e deixar a
+  // fórmula recalcular o código normalmente depois da linha "limpa"
+  // voltar a ter título preenchido de novo. Álbum é DIFERENTE: "EDIÇÃO
+  // CHARTS ÁLBUMS"!R é gerado pelo PRÓPRIO APP, não por fórmula (ver
+  // registrarAlbumNaEdicaoChartsAlbuns em gestaoController.ts), então
+  // continua sendo limpo normalmente junto (precisa mesmo resetar pra
+  // permitir gerar um código novo depois).
+  const lastColWrite = tipo === "album" ? "R" : "BC";
   const rows = await googleSheetsService.edicaoCharts.readValues(sheet, `${colCodigo}:${colCodigo}`);
   const codigoNorm = normalizeComparison(codigoUnico);
   const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r?.[0] || "") === codigoNorm);
@@ -288,12 +306,13 @@ async function limparLinhaEdicaoCharts(tipo: TipoTopico, codigoUnico: string): P
   // assumem índice de linha estático aqui; apagar deslocaria tudo abaixo.
   // updateValues com array vazio não limpa célula nenhuma no Sheets (não
   // sobrescreve nada) — grava explicitamente uma linha de strings vazias
-  // do tamanho certo.
+  // do tamanho certo, mas SEM incluir a coluna do código único (ver
+  // comentário acima — nunca escrever em cima do ARRAYFORMULA).
   const colStart = "A";
-  const width = colLetterToIndex(lastCol) - colLetterToIndex(colStart) + 1;
+  const width = colLetterToIndex(lastColWrite) - colLetterToIndex(colStart) + 1;
   await googleSheetsService.edicaoCharts.updateValues(
     sheet,
-    `${colStart}${linha}:${lastCol}${linha}`,
+    `${colStart}${linha}:${lastColWrite}${linha}`,
     [new Array(width).fill("")],
   );
   return true;
