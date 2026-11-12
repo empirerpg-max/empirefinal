@@ -2102,12 +2102,38 @@ async function lancarCampanhaPreSave(c: PreSaveCampanha): Promise<void> {
                 `${colLetra}${linhaAlvo}:${colLetra}${linhaAlvo}`,
                 [[String(Math.round(acumuladoFinal))]],
               );
+            } else {
+              // BUG REAL confirmado em produção (2026-11-12, Samantha Cooper
+              // "WELL, IT'S OVER"): quando a linha não é achada (ex: leitura
+              // de 400 mil células demorando/rate-limit bem na hora em que a
+              // linha do álbum acabou de ser criada), o bônus de missão
+              // nunca é gravado em S E ninguém nunca fica sabendo — essa
+              // falha ficava só num console.warn que ninguém vê. Agora
+              // sempre loga em LOGS (visível pro admin) quando a linha não é
+              // encontrada, igual já é feito pra faixas inéditas faltando.
+              registrarLogSistema({
+                categoria: "Erro do app",
+                oQueAconteceu: `ATENÇÃO: bônus de missão (${Math.round(acumuladoFinal)}) do pre-save de "${c.albumTituloFull}" NÃO foi gravado na coluna PRE-SAVE de EDIÇÃO CHARTS ÁLBUMS — linha com Código único "${resultado.codigoUnico}" não encontrada.`,
+                onde: "lancarCampanhaPreSave",
+                causaProvavel:
+                  "A linha do álbum em EDIÇÃO CHARTS ÁLBUMS pode não ter sido criada ainda (timing) ou a leitura falhou por rate-limit do Sheets.",
+                comoResolver:
+                  `Confira a linha do álbum "${c.albumTituloFull}" em EDIÇÃO CHARTS ÁLBUMS e grave manualmente ${Math.round(acumuladoFinal)} na coluna PRE-SAVE (S) se estiver vazia.`,
+              }).catch(() => {});
             }
           } catch (err) {
             console.warn(
               "[processarLancamentosPreSaveScheduled] Falha ao gravar coluna PRE-SAVE:",
               err,
             );
+            registrarLogSistema({
+              categoria: "Erro do app",
+              oQueAconteceu: `ATENÇÃO: falha ao gravar o bônus de missão (${Math.round(acumuladoFinal)}) do pre-save de "${c.albumTituloFull}" na coluna PRE-SAVE de EDIÇÃO CHARTS ÁLBUMS.`,
+              onde: "lancarCampanhaPreSave",
+              detalheTecnico: err instanceof Error ? err.message : String(err),
+              comoResolver:
+                `Confira a linha do álbum "${c.albumTituloFull}" em EDIÇÃO CHARTS ÁLBUMS e grave manualmente ${Math.round(acumuladoFinal)} na coluna PRE-SAVE (S) se estiver vazia.`,
+            }).catch(() => {});
           }
         }
 
