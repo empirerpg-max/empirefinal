@@ -734,6 +734,40 @@ export async function appendRow(
   return null;
 }
 
+// Limpa células de VERDADE (API values:clear) — diferente de updateValues
+// com "" (que GRAVA uma string vazia, ocupando a célula). BUG REAL
+// confirmado em produção (2026-11-12, álbum da Amanda Brokne): escrever ""
+// numa célula dentro do range de spill de um ARRAYFORMULA (ex: EDIÇÃO
+// CHARTS!BD, onde o "Código único" das músicas é calculado por fórmula, não
+// pelo app) BLOQUEIA o spill ali pra sempre — mesmo limpando de novo depois
+// com updateValues([[""]]), a célula continua "ocupada" por uma string
+// vazia, nunca genuinamente vazia, então a fórmula nunca volta a cobrir
+// aquela linha (nem as de baixo). Só values:clear devolve a célula ao
+// estado realmente vazio que permite o ARRAYFORMULA voltar a se espalhar
+// até ali. Usado só pra REPARAR o estrago desse bug — nenhum fluxo normal
+// deve gravar em cima de uma coluna de fórmula; ver fix em
+// adminForumActionsController.ts/limparLinhaEdicaoCharts.
+export async function clearValues(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  range: string,
+): Promise<boolean> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const a1Range = encodeURIComponent(buildA1Range(sheetName, range));
+  try {
+    await sheetsRequest(
+      `/${spreadsheetId}/values/${a1Range}:clear`,
+      { method: "POST", body: JSON.stringify({}) },
+      [SHEETS_READWRITE_SCOPE],
+    );
+    invalidateReadCache(spreadsheetId, sheetName);
+    return true;
+  } catch (err) {
+    console.warn(`[googleSheetsService] Falha ao limpar células (${sheetName}!${range}):`, err);
+    return false;
+  }
+}
+
 export const googleSheetsService = {
   SPREADSHEETS,
   readValues,
@@ -793,6 +827,10 @@ export const googleSheetsService = {
   },
   edicaoCharts: {
     readValues: (sheetName: string, range?: string) => readValues("edicaoCharts", sheetName, range),
+    readValuesRaw: (sheetName: string, range?: string) =>
+      readValues("edicaoCharts", sheetName, range, "UNFORMATTED_VALUE"),
+    readValuesFormula: (sheetName: string, range?: string) =>
+      readValues("edicaoCharts", sheetName, range, "FORMULA"),
     readSheetObjects: (sheetName: string, range?: string) =>
       readSheetObjects("edicaoCharts", sheetName, range),
     findRows: (
@@ -802,6 +840,7 @@ export const googleSheetsService = {
     ) => findRows("edicaoCharts", sheetName, predicate, range),
     updateValues: (sheetName: string, range: string, values: GoogleSheetMatrix) =>
       updateValues("edicaoCharts", sheetName, range, values),
+    clearValues: (sheetName: string, range: string) => clearValues("edicaoCharts", sheetName, range),
     appendRow: (sheetName: string, values: GoogleSheetRow, range?: string) =>
       appendRow("edicaoCharts", sheetName, values, range),
     deleteRows: (sheetName: string, rowIndexes1Based: number[]) =>
