@@ -215,6 +215,7 @@ export interface EmpirePlayCleanAlbumTrack {
   artist: string;
   album: string;
   trackOrder: number;
+  disco?: number;
   coverUrl?: string | null;
   audioUrl?: string | null;
   releaseDate?: string | null;
@@ -1405,26 +1406,57 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         );
       });
 
-      // Ordenar faixas pela coluna Ordem
+      // Tracklist própria do álbum (Albuns!M, coluna sem header de
+      // propósito = chave "coluna_13" em readSheetObjects) — se existir,
+      // dá a ordem/disco de VERDADE por álbum (ver construirTracklistEntries/
+      // lerTracklistAlbum em gestaoController.ts); cai pro Musicas!trackOrder
+      // global em álbum antigo sem tracklist ainda gravada.
+      const tracklistRaw = getValue(rec, ["coluna_13", "tracklist"]);
+      const tracklistPorTitulo = new Map<string, { disco: number; ordem: number }>();
+      if (tracklistRaw) {
+        try {
+          const parsed = JSON.parse(tracklistRaw);
+          if (Array.isArray(parsed)) {
+            for (const entry of parsed) {
+              const titulo = normalizeComparison(String(entry?.titulo || ""));
+              if (!titulo) continue;
+              const disco = Number(entry?.disco) > 0 ? Number(entry.disco) : 1;
+              const ordem = Number(entry?.ordem) || 999;
+              tracklistPorTitulo.set(titulo, { disco, ordem });
+            }
+          }
+        } catch {
+          // JSON corrompido/vazio — ignora e cai no fallback abaixo.
+        }
+      }
+
+      // Ordenar faixas pela tracklist do álbum (se houver) ou, em último
+      // caso, pela coluna Ordem global de Musicas.
       matchingSongs.sort((a, b) => {
-        const orderA = a.trackOrder ?? 999;
-        const orderB = b.trackOrder ?? 999;
+        const daTracklistA = tracklistPorTitulo.get(normalizeComparison(`${a.artist} - ${a.title}`));
+        const daTracklistB = tracklistPorTitulo.get(normalizeComparison(`${b.artist} - ${b.title}`));
+        const orderA = daTracklistA ? daTracklistA.disco * 1000 + daTracklistA.ordem : (a.trackOrder ?? 999);
+        const orderB = daTracklistB ? daTracklistB.disco * 1000 + daTracklistB.ordem : (b.trackOrder ?? 999);
         return orderA - orderB;
       });
 
-      const tracks: EmpirePlayCleanAlbumTrack[] = matchingSongs.map((s, songIdx) => ({
+      const tracks: EmpirePlayCleanAlbumTrack[] = matchingSongs.map((s, songIdx) => {
+        const daTracklist = tracklistPorTitulo.get(normalizeComparison(`${s.artist} - ${s.title}`));
+        return {
         id: s.id,
         title: s.title,
         artist: s.artist || artist,
         album: displayTitle,
-        trackOrder: s.trackOrder || songIdx + 1,
+        trackOrder: daTracklist ? daTracklist.ordem : s.trackOrder || songIdx + 1,
+        disco: daTracklist ? daTracklist.disco : 1,
         coverUrl: s.coverUrl || coverUrl,
         audioUrl: s.audioUrl,
         releaseDate: s.releaseDate,
         lyrics: s.lyrics,
         syncedLyrics: s.syncedLyrics,
         telegramTopicId: s.telegramTopicId,
-      }));
+        };
+      });
 
       // Se a própria linha do álbum não tem capa cadastrada, usa a de
       // alguma faixa vinculada em vez de deixar o álbum sem nenhuma —
