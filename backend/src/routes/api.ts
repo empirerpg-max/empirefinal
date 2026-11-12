@@ -82,6 +82,7 @@ import { adminDiagJustinoAlbunsController } from "../controllers/adminDiagJustin
 import { adminDiagAlbumAmandaBrokneController } from "../controllers/adminDiagAlbumAmandaBrokneController";
 import { adminFixAlbumAmandaBrokneController } from "../controllers/adminFixAlbumAmandaBrokneController";
 import { adminFixPresaveBonusSamanthaController } from "../controllers/adminFixPresaveBonusSamanthaController";
+import { adminBackfillTracklistAmandaBrokneController } from "../controllers/adminBackfillTracklistAmandaBrokneController";
 import { adminTestarFestivalInscricaoController } from "../controllers/adminTestarFestivalInscricaoController";
 import { adminDumpLinhasAlbunsController } from "../controllers/adminDumpLinhasAlbunsController";
 import { adminDiagMatchAlbunsController } from "../controllers/adminDiagMatchAlbunsController";
@@ -674,6 +675,7 @@ export async function handleEmpireApiRoutes(
     "/api/gestao/admin/diag-album-amanda-brokne",
     "/api/gestao/admin/fix-album-amanda-brokne",
     "/api/gestao/admin/fix-presave-bonus-samantha",
+    "/api/gestao/admin/backfill-tracklist-amanda-brokne",
     "/api/gestao/admin/reverter-faixas-marco",
     "/api/gestao/admin/backfill-vinculo-video",
     "/api/gestao/admin/fix-vernissage-edicao-charts",
@@ -2119,6 +2121,8 @@ export async function handleEmpireApiRoutes(
     response = await adminFixAlbumAmandaBrokneController(request);
   } else if (url.pathname === "/api/gestao/admin/fix-presave-bonus-samantha") {
     response = await adminFixPresaveBonusSamanthaController(request);
+  } else if (url.pathname === "/api/gestao/admin/backfill-tracklist-amanda-brokne") {
+    response = await adminBackfillTracklistAmandaBrokneController(request);
   } else if (url.pathname === "/api/gestao/admin/reverter-faixas-marco") {
     response = await adminReverterFaixasMarcoController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-follia-comentario") {
