@@ -22,15 +22,27 @@ export async function adminFixPresaveBonusSamanthaController(request: Request): 
   const confirmar = url.searchParams.get("confirmar") === "1";
 
   const campanhas = await readAllCampanhas();
-  const candidatas = campanhas.filter(
-    (c) =>
-      normalizeComparison(c.artista || "").includes("samantha cooper") &&
-      normalizeComparison(c.albumTituloFull || "").includes("it's over"),
+  const porSamantha = campanhas.filter((c) => normalizeComparison(c.artista || "").includes("samantha cooper"));
+  // "it's over" com apóstrofo reto pode não bater se a planilha tiver um
+  // apóstrofo tipográfico (’) ou "its over" sem apóstrofo — compara sem
+  // apóstrofo nenhum dos dois lados pra não depender do caractere exato.
+  const semApostrofo = (s: string) => s.replace(/['’]/g, "");
+  const candidatas = porSamantha.filter((c) =>
+    semApostrofo(normalizeComparison(c.albumTituloFull || "")).includes(semApostrofo("it's over")),
   );
 
   if (candidatas.length === 0) {
     return new Response(
-      JSON.stringify({ success: false, error: "Nenhuma campanha de pre-save encontrada pra Samantha Cooper / WELL, IT'S OVER." }),
+      JSON.stringify({
+        success: false,
+        error: "Nenhuma campanha com título batendo 'it's over' encontrada pra Samantha Cooper.",
+        todasCampanhasSamanthaCooper: porSamantha.map((c) => ({
+          id: c.id,
+          albumTituloFull: c.albumTituloFull,
+          modo: c.modo,
+          status: c.status,
+        })),
+      }),
       { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );
   }
@@ -61,8 +73,9 @@ export async function adminFixPresaveBonusSamanthaController(request: Request): 
     const colLetra = String.fromCharCode(65 + colIndex);
 
     let linhaAlvo = -1;
+    const tituloAlvoNorm = semApostrofo(normalizeComparison(c.albumTituloFull || ""));
     for (let i = 1; i < rows.length; i++) {
-      if (normalizeComparison(rows[i]?.[3] || "") === normalizeComparison(c.albumTituloFull || "")) {
+      if (semApostrofo(normalizeComparison(rows[i]?.[3] || "")) === tituloAlvoNorm) {
         linhaAlvo = i + 1;
         break;
       }
