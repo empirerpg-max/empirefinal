@@ -85,9 +85,13 @@ export async function adminFixAlbumAmandaBrokneController(request: Request): Pro
   // --- 2) Copiar código recalculado de EDIÇÃO CHARTS!BD pra Musicas!Z ---
   const bate = (texto: string) => normalizeComparison(texto || "").includes("brokne");
   const musicasRows = await googleSheetsService.principal.readValues("Musicas");
-  const edicaoRows = confirmar
-    ? await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD20000")
-    : [];
+  // Lê sempre (mesmo em dry-run) — a causa real (confirmado ao vivo,
+  // 2026-11-12) não é o ARRAYFORMULA bloqueado (ele está funcionando
+  // normalmente), é só a cópia EDIÇÃO CHARTS!BD -> Musicas!Z que falhou
+  // silenciosamente pra essas faixas (mesma classe de falha parcial já
+  // vista no álbum da Samantha Cooper) — então dry-run já mostra o
+  // preview real da cópia, sem precisar confirmar antes.
+  const edicaoRows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:BD20000");
   // título em EDIÇÃO CHARTS já vem como "Artista - Título" — mesmo formato
   // usado em Musicas!H quando concatenado com ACT PRINCIPAL (ver
   // tituloMusicaComArtista em editController.ts/gestaoController.ts).
@@ -128,23 +132,28 @@ export async function adminFixAlbumAmandaBrokneController(request: Request): Pro
 
   // --- 3) Corrigir título + participante faltando de "Lighthouse" ---
   const TITULO_ERRADO = "Lighthouse (French Version)";
-  const TITULO_CORRETO = "Lighthouse (French Remix)";
   let linhaLighthouse = -1;
   for (let i = 1; i < musicasRows.length; i++) {
-    if (normalizeComparison(musicasRows[i][7] || "") === normalizeComparison(TITULO_ERRADO)) {
+    // Musicas!H já vem como "Artista - Título" completo (confirmado no dump
+    // real: "Amanda Brokne - Lighthouse (French Version)") — comparação
+    // exata contra só o título (sem artista) nunca batia, por isso o
+    // dry-run não reportava essa correção. Usa includes().
+    if (normalizeComparison(musicasRows[i][7] || "").includes(normalizeComparison(TITULO_ERRADO))) {
       linhaLighthouse = i + 1;
       break;
     }
   }
   if (linhaLighthouse > 0) {
     const row = musicasRows[linhaLighthouse - 1];
+    const tituloCompletoAtual = row[7] || "";
+    const tituloCompletoNovo = tituloCompletoAtual.replace(/French Version/i, "French Remix");
     const participantes = row.slice(14, 19);
     const temJoe = participantes.some((p) => normalizeComparison(p || "") === "joe");
     acoes.push(
-      `Musicas linha ${linhaLighthouse}: título "${TITULO_ERRADO}" ${confirmar ? "corrigido" : "seria corrigido"} para "${TITULO_CORRETO}"${temJoe ? "" : `, participante "JOE" ${confirmar ? "creditado" : "seria creditado"}`}.`,
+      `Musicas linha ${linhaLighthouse}: título "${tituloCompletoAtual}" ${confirmar ? "corrigido" : "seria corrigido"} para "${tituloCompletoNovo}"${temJoe ? "" : `, participante "JOE" ${confirmar ? "creditado" : "seria creditado"}`}.`,
     );
     if (confirmar) {
-      await googleSheetsService.principal.updateValues("Musicas", `H${linhaLighthouse}`, [[TITULO_CORRETO]]);
+      await googleSheetsService.principal.updateValues("Musicas", `H${linhaLighthouse}`, [[tituloCompletoNovo]]);
       if (!temJoe) {
         const idxVazio = participantes.findIndex((p) => !(p || "").trim());
         if (idxVazio >= 0) {
@@ -168,7 +177,7 @@ export async function adminFixAlbumAmandaBrokneController(request: Request): Pro
   let linhaCountingStars = -1;
   for (let i = 1; i < musicasRows.length; i++) {
     if (
-      normalizeComparison(musicasRows[i][7] || "") === "counting stars" &&
+      normalizeComparison(musicasRows[i][7] || "").includes("counting stars") &&
       bate(musicasRows[i][13] || "")
     ) {
       linhaCountingStars = i + 1;
@@ -203,9 +212,7 @@ export async function adminFixAlbumAmandaBrokneController(request: Request): Pro
       {
         success: true,
         confirmar,
-        nota: confirmar
-          ? undefined
-          : "Dry-run: só é possível achar a PRIMEIRA linha bloqueada sem limpar de verdade (o Sheets só recalcula o ARRAYFORMULA depois do clear real) — rode com ?confirmar=1 pra ver o efeito completo (desbloqueio em cadeia + cópia dos códigos pra Musicas + correções de título/participante).",
+        nota: confirmar ? undefined : "Dry-run — nada foi gravado. Rode com ?confirmar=1 pra aplicar as ações listadas.",
         rodadasDesbloqueio: desbloqueio.rodadas.length,
         linhasAindaBloqueadas: desbloqueio.linhasAindaBloqueadas,
         acoes,
