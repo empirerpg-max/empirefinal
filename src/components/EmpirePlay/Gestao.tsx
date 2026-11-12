@@ -76,6 +76,9 @@ export interface TrackConfig {
   abrirTopico?: boolean;
   // Estado só de UI — texto digitado na busca antes de selecionar a faixa.
   buscaQuery?: string;
+  // Disco dentro do álbum (1, 2, 3...) — só relevante pra "Deluxe"/"Edição
+  // Especial" (ver TIPOS_ALBUM_MULTIDISCO abaixo); ausente = disco 1.
+  disco?: number;
 }
 
 export interface MusicaEmChart {
@@ -93,7 +96,24 @@ export interface MeuAlbum {
   encarte?: string[];
 }
 
-export const TIPOS_ALBUM = ["EP", "Álbum", "Deluxe"];
+export const TIPOS_ALBUM = ["EP", "Álbum", "Deluxe", "Edição Especial"];
+// Tipos que habilitam o campo "Disco" por faixa (álbum com mais de um
+// disco, numeração reiniciando em 1 a cada disco — estilo Spotify).
+export const TIPOS_ALBUM_MULTIDISCO = ["Deluxe", "Edição Especial"];
+
+// Recalcula "num" (posição) de cada faixa pra reiniciar em 1 a cada disco
+// — mantém a ordem relativa em que o jogador digitou/organizou a lista,
+// só agrupando por disco na hora de montar o payload. Álbum normal (todo
+// mundo em disco 1) vira simplesmente 1..N, igual já era antes.
+export function recalcularOrdemPorDisco(faixas: TrackConfig[]): TrackConfig[] {
+  const contadores = new Map<number, number>();
+  return faixas.map((f) => {
+    const disco = f.disco && f.disco > 0 ? f.disco : 1;
+    const proximo = (contadores.get(disco) || 0) + 1;
+    contadores.set(disco, proximo);
+    return { ...f, disco, num: proximo };
+  });
+}
 
 // Reformulado a pedido do usuário: jogadores estavam clicando em "Registrar
 // em Chart" (a) pra música que JÁ EXISTIA — deveria ser "Substituir" (b).
@@ -1290,8 +1310,15 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         encartesUrls,
         nomeJogador: profile?.playerName || telegramUser?.name || "Jogador",
         jogadorId: telegramUser?.id ? String(telegramUser.id) : "",
-        faixas: faixasComAudio.map((f) => ({
+        // "num" vira a posição DENTRO do disco (reinicia em 1 a cada
+        // disco), não mais a posição na lista inteira — é isso que o
+        // backend grava como "ordem" na tracklist própria do álbum (ver
+        // construirTracklistEntries em gestaoController.ts). Álbum sem
+        // multi-disco (disco sempre 1 implícito) continua se comportando
+        // exatamente como antes.
+        faixas: recalcularOrdemPorDisco(faixasComAudio).map((f) => ({
           num: f.num,
+          disco: f.disco || 1,
           inedita: f.inedita,
           titulo: f.titulo,
           tipoSingle: f.tipoSingle,
@@ -2753,18 +2780,63 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                     <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
                       Lista de Faixas do Álbum
                     </label>
-                    {faixasConfig.map((faixa, idx) => (
-                      <FaixaEditor
-                        key={idx}
-                        faixa={faixa}
-                        myChartSongs={myChartSongs}
-                        onChange={(patch) => {
-                          const updated = [...faixasConfig];
-                          updated[idx] = { ...updated[idx], ...patch };
-                          setFaixasConfig(updated);
-                        }}
-                      />
-                    ))}
+                    {TIPOS_ALBUM_MULTIDISCO.includes(tipoAlbum) && (
+                      <p className="text-[11px] text-neutral-400 leading-relaxed -mt-1">
+                        Álbum com mais de um disco (Deluxe/Edição Especial): marque o número do
+                        disco de cada faixa abaixo — a posição reinicia em 1 a cada disco, igual
+                        no Spotify.
+                      </p>
+                    )}
+                    {faixasConfig.map((faixa, idx) => {
+                      const discoAtual = faixa.disco && faixa.disco > 0 ? faixa.disco : 1;
+                      const discoAnterior =
+                        idx > 0
+                          ? (faixasConfig[idx - 1].disco && faixasConfig[idx - 1].disco! > 0
+                              ? faixasConfig[idx - 1].disco!
+                              : 1)
+                          : null;
+                      const mostraMultidisco = TIPOS_ALBUM_MULTIDISCO.includes(tipoAlbum);
+                      const mostraCabecalhoDisco =
+                        mostraMultidisco && (idx === 0 || discoAtual !== discoAnterior);
+                      return (
+                        <div key={idx}>
+                          {mostraCabecalhoDisco && (
+                            <p className="text-xs font-black uppercase tracking-wider text-emerald-400 mt-3 mb-1">
+                              Disco {discoAtual}
+                            </p>
+                          )}
+                          {mostraMultidisco && (
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                                Disco desta faixa
+                              </span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={discoAtual}
+                                onChange={(e) => {
+                                  const novoDisco = Math.max(1, parseInt(e.target.value, 10) || 1);
+                                  const updated = [...faixasConfig];
+                                  updated[idx] = { ...updated[idx], disco: novoDisco };
+                                  setFaixasConfig(updated);
+                                }}
+                                className="w-14 text-center bg-neutral-950 border border-white/10 rounded-lg px-1 py-1 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                              />
+                            </div>
+                          )}
+                          <FaixaEditor
+                            faixa={faixa}
+                            myChartSongs={myChartSongs}
+                            onChange={(patch) => {
+                              const updated = [...faixasConfig];
+                              updated[idx] = { ...updated[idx], ...patch };
+                              setFaixasConfig(updated);
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* UPLOAD DA CAPA E ENCARTES */}

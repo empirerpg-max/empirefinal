@@ -56,6 +56,7 @@ interface AlbumFaixa {
   musicaRowIndex: number;
   titulo: string;
   ordem: number;
+  disco?: number;
   audioUrl: string;
   letra?: string;
   letraSincronizada?: string;
@@ -974,8 +975,20 @@ export const EditModal: React.FC<EditModalProps> = ({
                     </p>
                   ) : (
                     <div className="space-y-1.5">
-                      {albumFaixas.map((faixa, idx) => (
-                        <div key={faixa.musicaRowIndex}>
+                      {albumFaixas.map((faixa, idx) => {
+                        const discoAtual = faixa.disco && faixa.disco > 0 ? faixa.disco : 1;
+                        const discoAnterior =
+                          idx > 0 ? (albumFaixas[idx - 1].disco && albumFaixas[idx - 1].disco! > 0 ? albumFaixas[idx - 1].disco! : 1) : null;
+                        const mostraCabecalhoDisco =
+                          albumFaixas.some((f) => (f.disco || 1) !== discoAtual) &&
+                          (idx === 0 || discoAtual !== discoAnterior);
+                        return (
+                      <div key={faixa.musicaRowIndex}>
+                          {mostraCabecalhoDisco && (
+                            <p className="text-xs font-black uppercase tracking-wider text-amber-400 mt-3 mb-1 first:mt-0">
+                              Disco {discoAtual}
+                            </p>
+                          )}
                           <div className="flex items-center gap-2 p-2.5 bg-neutral-800/40 border border-white/10 rounded-xl">
                             <input
                               type="number"
@@ -1117,7 +1130,8 @@ export const EditModal: React.FC<EditModalProps> = ({
                             </div>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
