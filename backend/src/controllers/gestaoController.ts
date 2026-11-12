@@ -2153,15 +2153,12 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
     const albumFullTitle = (albumRow[6] || "").trim();
     const albumNorm = albumFullTitle.toLowerCase();
 
-    const musicasMatches = await googleSheetsService.principal.findRows(
-      "Musicas",
-      (row) => (row[10] || "").trim().toLowerCase() === albumNorm,
-    );
-
-    // Tracklist própria do álbum (Albuns!M) — se existir, é ela que manda
-    // na ordem/disco de cada faixa (resolve faixa duplicada entre álbuns
-    // diferentes, que quebrava a ordem global de Musicas!U). Álbum antigo
-    // sem tracklist ainda gravada cai pro fallback de sempre.
+    // Tracklist própria do álbum (Albuns!M) — se existir, ELA decide
+    // sozinha quais faixas pertencem a este álbum (por título), não mais
+    // só Musicas!K ("ALBUM", único por FAIXA — nunca permitiria a mesma
+    // faixa pertencer a dois álbuns ao mesmo tempo, ex: uma faixa do
+    // TRAINWRECK original que também entra na Edição de Aniversário como
+    // Disco 1). K ainda é o fallback pra álbum antigo sem tracklist.
     const tracklist = lerTracklistAlbum(albumRow);
     const tracklistPorTitulo = new Map<string, { disco: number; ordem: number }>();
     for (const entry of tracklist) {
@@ -2170,6 +2167,16 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
         ordem: entry.ordem,
       });
     }
+
+    const musicasMatches =
+      tracklist.length > 0
+        ? await googleSheetsService.principal.findRows("Musicas", (row) =>
+            tracklistPorTitulo.has((row[7] || "").trim().toLowerCase()),
+          )
+        : await googleSheetsService.principal.findRows(
+            "Musicas",
+            (row) => (row[10] || "").trim().toLowerCase() === albumNorm,
+          );
 
     const faixas = musicasMatches
       .map(({ rowIndex, row }) => {
