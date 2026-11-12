@@ -1374,43 +1374,15 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
         "message_thread_id",
       ]);
 
-      // Junção com a aba Musicas
-      // BUG REAL confirmado em produção (2026-11-12, álbuns da Amanda
-      // Brokne: "TRAINWRECK" padrão e "TRAINWRECK (The 13th Anniversary
-      // Edition)"): o fallback `normAlbumTitle.includes(normSongAlbum)`
-      // casava QUALQUER música cujo álbum fosse um PREFIXO de texto do
-      // álbum sendo montado — como o título da edição de aniversário
-      // literalmente começa com o título do álbum padrão ("TRAINWRECK..."),
-      // as 12 faixas antigas (álbum "...TRAINWRECK") entravam de brinde na
-      // tracklist da edição de aniversário também, intercaladas com as 6
-      // faixas novas e duplicando a numeração (1, 1, 2, 2, 3...). Removido
-      // — as duas comparações abaixo (igualdade exata, e igualdade exata
-      // SEM o prefixo do artista dos dois lados, que já cobre o caso real
-      // de "SANTISSIMA" citado abaixo) são suficientes e nunca casam por
-      // substring parcial.
-      const matchingSongs = songs.filter((s) => {
-        if (!s.album) return false;
-        const normSongAlbum = normalizeComparison(s.album);
-        if (normSongAlbum === normAlbumTitle) return true;
-        // Falha silenciosa confirmada em 2026-09-18 (álbum SANTISSIMA da
-        // Emma some sem capa nem faixa nenhuma vinculada): a comparação
-        // acima depende de o "Nome" do álbum na aba Albuns SEMPRE vir
-        // digitado como "Artista - Título", igual a coluna "Album" de cada
-        // faixa — nessa linha especificamente faltava o prefixo do
-        // artista (só "SANTISSIMA"), e nenhuma das faixas ("Emma -
-        // SANTISSIMA") batia mais. Compara também os dois lados SEM o
-        // prefixo do artista, pra nunca mais depender dessa convenção
-        // manual de digitação.
-        return (
-          stripArtistPrefixNormalized(normSongAlbum) === stripArtistPrefixNormalized(normAlbumTitle)
-        );
-      });
-
       // Tracklist própria do álbum (Albuns!M, coluna sem header de
-      // propósito = chave "coluna_13" em readSheetObjects) — se existir,
-      // dá a ordem/disco de VERDADE por álbum (ver construirTracklistEntries/
-      // lerTracklistAlbum em gestaoController.ts); cai pro Musicas!trackOrder
-      // global em álbum antigo sem tracklist ainda gravada.
+      // propósito = chave "coluna_13" em readSheetObjects). Quando existe,
+      // ELA decide sozinha quais faixas pertencem a este álbum (por
+      // título) — não mais só Musicas!K/"album" (que só aceita UM álbum
+      // por faixa, e por isso nunca deixaria a MESMA faixa pertencer a
+      // dois álbuns ao mesmo tempo — ex: faixa do TRAINWRECK original que
+      // também entra na Edição de Aniversário como Disco 1). Sem
+      // tracklist ainda gravada (álbum antigo), cai pro fallback de
+      // sempre (K/"album" + Musicas!trackOrder).
       const tracklistRaw = getValue(rec, ["coluna_13", "tracklist"]);
       const tracklistPorTitulo = new Map<string, { disco: number; ordem: number }>();
       if (tracklistRaw) {
@@ -1429,6 +1401,45 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
           // JSON corrompido/vazio — ignora e cai no fallback abaixo.
         }
       }
+
+      // Junção com a aba Musicas — por tracklist (título) quando o álbum
+      // já tem uma, senão pelo fallback antigo por K/"album".
+      // BUG REAL confirmado em produção (2026-11-12, álbuns da Amanda
+      // Brokne: "TRAINWRECK" padrão e "TRAINWRECK (The 13th Anniversary
+      // Edition)"): o fallback `normAlbumTitle.includes(normSongAlbum)`
+      // casava QUALQUER música cujo álbum fosse um PREFIXO de texto do
+      // álbum sendo montado — como o título da edição de aniversário
+      // literalmente começa com o título do álbum padrão ("TRAINWRECK..."),
+      // as 12 faixas antigas (álbum "...TRAINWRECK") entravam de brinde na
+      // tracklist da edição de aniversário também, intercaladas com as 6
+      // faixas novas e duplicando a numeração (1, 1, 2, 2, 3...). Removido
+      // — as duas comparações abaixo (igualdade exata, e igualdade exata
+      // SEM o prefixo do artista dos dois lados, que já cobre o caso real
+      // de "SANTISSIMA" citado abaixo) são suficientes e nunca casam por
+      // substring parcial.
+      const matchingSongs =
+        tracklistPorTitulo.size > 0
+          ? songs.filter((s) =>
+              tracklistPorTitulo.has(normalizeComparison(`${s.artist} - ${s.title}`)),
+            )
+          : songs.filter((s) => {
+              if (!s.album) return false;
+              const normSongAlbum = normalizeComparison(s.album);
+              if (normSongAlbum === normAlbumTitle) return true;
+              // Falha silenciosa confirmada em 2026-09-18 (álbum SANTISSIMA
+              // da Emma some sem capa nem faixa nenhuma vinculada): a
+              // comparação acima depende de o "Nome" do álbum na aba
+              // Albuns SEMPRE vir digitado como "Artista - Título", igual a
+              // coluna "Album" de cada faixa — nessa linha especificamente
+              // faltava o prefixo do artista (só "SANTISSIMA"), e nenhuma
+              // das faixas ("Emma - SANTISSIMA") batia mais. Compara
+              // também os dois lados SEM o prefixo do artista, pra nunca
+              // mais depender dessa convenção manual de digitação.
+              return (
+                stripArtistPrefixNormalized(normSongAlbum) ===
+                stripArtistPrefixNormalized(normAlbumTitle)
+              );
+            });
 
       // Ordenar faixas pela tracklist do álbum (se houver) ou, em último
       // caso, pela coluna Ordem global de Musicas.
