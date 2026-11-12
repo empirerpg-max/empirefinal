@@ -43,11 +43,45 @@ const TRAINWRECK_ANIVERSARIO: { linha: number; titulos: string[] } = {
   ],
 };
 
+// BUG REAL confirmado em produção (2026-11-12, verificado ao vivo via
+// getAlbumFaixasController pós tracklist): "Troublemaker" (Musicas linha
+// 828) tinha a coluna K ("ALBUM", usada pra achar as faixas de um álbum)
+// gravada como "Amanda Brokne - TRAINWRECK" (álbum PADRÃO) em vez de
+// "...TRAINWRECK (The 13th Anniversary Edition)" — por isso ela aparecia
+// (errado) na tracklist do álbum padrão também, igual ao sintoma original
+// reportado (faixa em dois álbuns ao mesmo tempo). Corrige a célula.
+const MUSICAS_ALBUM_ERRADO = {
+  linha: 828,
+  colunaAlbum: "K",
+  valorErrado: "Amanda Brokne - TRAINWRECK",
+  valorCorreto: "Amanda Brokne - TRAINWRECK (The 13th Anniversary Edition)",
+};
+
 export async function adminBackfillTracklistAmandaBrokneController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const confirmar = url.searchParams.get("confirmar") === "1";
 
   const acoes: string[] = [];
+
+  const musicasRows = await googleSheetsService.principal.readValues("Musicas");
+  const valorAtual = (musicasRows[MUSICAS_ALBUM_ERRADO.linha - 1]?.[10] || "").trim();
+  if (valorAtual === MUSICAS_ALBUM_ERRADO.valorErrado) {
+    acoes.push(
+      `Musicas linha ${MUSICAS_ALBUM_ERRADO.linha} ("Troublemaker"): coluna K ${confirmar ? "corrigida" : "seria corrigida"} de "${MUSICAS_ALBUM_ERRADO.valorErrado}" pra "${MUSICAS_ALBUM_ERRADO.valorCorreto}".`,
+    );
+    if (confirmar) {
+      await googleSheetsService.principal.updateValues(
+        "Musicas",
+        `${MUSICAS_ALBUM_ERRADO.colunaAlbum}${MUSICAS_ALBUM_ERRADO.linha}`,
+        [[MUSICAS_ALBUM_ERRADO.valorCorreto]],
+      );
+    }
+  } else {
+    acoes.push(
+      `Musicas linha ${MUSICAS_ALBUM_ERRADO.linha} ("Troublemaker"): coluna K já não é mais "${MUSICAS_ALBUM_ERRADO.valorErrado}" (valor atual: "${valorAtual}") — nada a fazer.`,
+    );
+  }
+
   for (const album of [TRAINWRECK_PADRAO, TRAINWRECK_ANIVERSARIO]) {
     const tracklist: TracklistEntry[] = album.titulos.map((titulo, i) => ({
       titulo,
