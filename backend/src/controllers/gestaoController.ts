@@ -391,12 +391,20 @@ export interface TrackItemPayload {
   // (Pendente? = "Não"); se false, fica invisível até o jogador decidir
   // abrir (Pendente? = "Sim").
   abrirTopico?: boolean;
+  // Número do disco dentro do álbum (1, 2, 3...) — só relevante pra álbum
+  // "Deluxe"/"Edição Especial" multi-disco; ausente/undefined/0 = disco 1.
+  // Resolve o bug da ordem global: a faixa pode pertencer a mais de um
+  // álbum, então a posição não pode mais viver só em Musicas!U (coluna
+  // "Ordem", única por MÚSICA) — cada álbum guarda sua própria
+  // disco+ordem por faixa em Albuns!M, ver construirTracklistEntries /
+  // lerTracklistAlbum abaixo.
+  disco?: number;
 }
 
 export interface CreateAlbumPayload {
   tituloAlbum: string;
   artistaAlbum: string;
-  tipoAlbum?: string; // "EP" | "Álbum" | "Deluxe"
+  tipoAlbum?: string; // "EP" | "Álbum" | "Deluxe" | "Edição Especial"
   capaUrl: string;
   encartesUrls?: string[];
   nomeJogador: string;
@@ -410,6 +418,58 @@ export interface CreateAlbumPayload {
   // calcularSemanasRetroativas. Toda faixa entra pendente (nunca abre
   // tópico próprio na hora), mesmo que o payload mande abrirTopico=true.
   dataLancamento?: string;
+}
+
+// Tracklist de um álbum (disco + ordem por faixa), guardada como JSON em
+// Albuns!M — campo ÚNICO por ÁLBUM (ao contrário de Musicas!U, que é único
+// por MÚSICA e quebra quando a mesma faixa pertence a mais de um álbum).
+export interface TracklistEntry {
+  titulo: string; // sempre "Artista - Título", mesmo formato de Musicas!H
+  disco: number; // 1, 2, 3... (multi-disco só em Deluxe/Edição Especial)
+  ordem: number; // posição dentro do disco, recomeça em 1 a cada disco
+}
+
+// Resolve o título final de cada faixa (mesma regra de songTitle em
+// processarFaixasDoAlbum) e monta as entradas de tracklist a partir do
+// payload recebido do front — reutilizado por publicarAlbum e
+// completarAlbumExistente, pra nunca duplicar essa lógica de título.
+export function construirTracklistEntries(
+  faixas: TrackItemPayload[],
+  artistaAlbum: string,
+): TracklistEntry[] {
+  return faixas.map((f) => {
+    const semPrefixoDuplicado = dedupeArtistPrefix(f.titulo, artistaAlbum);
+    const titulo = semPrefixoDuplicado.includes(" - ")
+      ? semPrefixoDuplicado
+      : `${artistaAlbum} - ${semPrefixoDuplicado}`;
+    return {
+      titulo,
+      disco: f.disco && f.disco > 0 ? f.disco : 1,
+      ordem: f.num,
+    };
+  });
+}
+
+// Lê a tracklist já gravada em Albuns!M (coluna M = índice 12 na linha
+// crua lida via readValues) — retorna [] se a coluna estiver vazia/corrupta
+// (álbum antigo lançado antes desta mudança), pra quem chamar cair de
+// volta no fallback (Musicas!U global, disco sempre 1).
+export function lerTracklistAlbum(albumRow: GoogleSheetRow | undefined | null): TracklistEntry[] {
+  const raw = String(albumRow?.[12] || "").trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((e: any) => ({
+        titulo: String(e?.titulo || "").trim(),
+        disco: Number(e?.disco) > 0 ? Number(e?.disco) : 1,
+        ordem: Number(e?.ordem) || 999,
+      }))
+      .filter((e) => e.titulo);
+  } catch {
+    return [];
+  }
 }
 
 // Semanas já "passadas" no chart pra um álbum lançado retroativamente —
@@ -2098,17 +2158,35 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
       (row) => (row[10] || "").trim().toLowerCase() === albumNorm,
     );
 
+    // Tracklist própria do álbum (Albuns!M) — se existir, é ela que manda
+    // na ordem/disco de cada faixa (resolve faixa duplicada entre álbuns
+    // diferentes, que quebrava a ordem global de Musicas!U). Álbum antigo
+    // sem tracklist ainda gravada cai pro fallback de sempre.
+    const tracklist = lerTracklistAlbum(albumRow);
+    const tracklistPorTitulo = new Map<string, { disco: number; ordem: number }>();
+    for (const entry of tracklist) {
+      tracklistPorTitulo.set(entry.titulo.trim().toLowerCase(), {
+        disco: entry.disco,
+        ordem: entry.ordem,
+      });
+    }
+
     const faixas = musicasMatches
-      .map(({ rowIndex, row }) => ({
-        musicaRowIndex: rowIndex,
-        titulo: row[7] || "",
-        ordem: parseInt(row[20] || "999", 10) || 999,
-        audioUrl: row[2] || "",
-        letra: row[4] || "",
-        letraSincronizada: row[30] || "",
-        pendente: !(row[1] || "").trim(), // sem tópico (coluna B vazia) = pendente
-      }))
-      .sort((a, b) => a.ordem - b.ordem);
+      .map(({ rowIndex, row }) => {
+        const tituloFaixa = row[7] || "";
+        const daTracklist = tracklistPorTitulo.get(tituloFaixa.trim().toLowerCase());
+        return {
+          musicaRowIndex: rowIndex,
+          titulo: tituloFaixa,
+          ordem: daTracklist ? daTracklist.ordem : parseInt(row[20] || "999", 10) || 999,
+          disco: daTracklist ? daTracklist.disco : 1,
+          audioUrl: row[2] || "",
+          letra: row[4] || "",
+          letraSincronizada: row[30] || "",
+          pendente: !(row[1] || "").trim(), // sem tópico (coluna B vazia) = pendente
+        };
+      })
+      .sort((a, b) => (a.disco - b.disco) || (a.ordem - b.ordem));
 
     return new Response(JSON.stringify({ success: true, data: { albumFullTitle, faixas } }), {
       status: 200,
@@ -2766,6 +2844,20 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
     } catch (err) {
       console.warn("[substituirAlbumController] Erro ao atualizar EDIÇÃO CHARTS ÁLBUMS:", err);
     }
+
+    // Mescla as faixas novas na tracklist JSON já existente em Albuns!M
+    // (em vez de sobrescrever) — álbum antigo sem tracklist ainda (lido
+    // como []) começa uma nova só com as faixas recém-adicionadas.
+    try {
+      const tracklistAtual = lerTracklistAlbum(rows[rowIndex - 1]);
+      const novasEntries = construirTracklistEntries(novasFaixas, artistaAlbum);
+      const tracklistFinal = [...tracklistAtual, ...novasEntries];
+      await googleSheetsService.principal.updateValues("Albuns", `M${rowIndex}`, [
+        [JSON.stringify(tracklistFinal)],
+      ]);
+    } catch (err) {
+      console.warn("[substituirAlbumController] Erro ao mesclar tracklist (Albuns!M):", err);
+    }
   }
 
   // REGISTRO é só pra comentários de OUTROS jogadores (ver
@@ -3066,6 +3158,19 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
     retroativo ? String(numeroSemanas) : undefined,
     albumTopicId,
   );
+
+  // Grava a tracklist (disco+ordem por faixa, dentro DESTE álbum) em
+  // Albuns!M — ver TracklistEntry. Não bloqueia o lançamento se falhar
+  // (o álbum já existe de verdade nesse ponto); getAlbumFaixasController
+  // cai de volta pro fallback (Musicas!U) se a coluna ficar vazia.
+  try {
+    const tracklist = construirTracklistEntries(faixasFinal, artistaAlbum);
+    await googleSheetsService.principal.updateValues("Albuns", `M${albumRowIndexNovo}`, [
+      [JSON.stringify(tracklist)],
+    ]);
+  } catch (err) {
+    console.warn("[publicarAlbum] Erro ao gravar tracklist (Albuns!M):", err);
+  }
 
   // REGISTRO é só pra comentários de OUTROS jogadores (ver
   // forumController.ts) — lançar o próprio álbum não é comentário.
