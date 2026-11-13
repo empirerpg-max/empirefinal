@@ -1,14 +1,23 @@
-import { googleSheetsService, linhasParaObjetos, readValuesFresh } from "../services/googleSheetsService";
 import {
+  googleSheetsService,
+  linhasParaObjetos,
+  normalizeComparison,
+  readValuesFresh,
+  type SheetRecord,
+} from "../services/googleSheetsService";
+import {
+  comentariosPorTopicoD1Ativo,
+  definirComentariosPorTopicoD1,
   definirLeituraVideosD1,
   leituraVideosD1Ativa,
   linhasComentariosVideosD1,
+  linhasComentariosVideosDoTopicoD1,
   linhasVideosD1,
 } from "../services/videosD1Leitura";
-import { objetosComRowIndex } from "./empirePlayController";
+import { comentarioPertenceAoTopico, objetosComRowIndex } from "./empirePlayController";
 import { type D1DatabaseLike } from "../services/catalogoDbService";
 import { getCatalogoDb, VIDEOS_CREATE_STATEMENTS } from "../services/videosDbService";
-import { COMENTARIOS_VIDEOS_CREATE_STATEMENTS } from "../services/comentariosVideosDbService";
+import { COMENTARIOS_VIDEOS_ALTER_STATEMENTS, COMENTARIOS_VIDEOS_CREATE_STATEMENTS } from "../services/comentariosVideosDbService";
 import { sincronizarVideosCompleto, sincronizarComentariosCompleto } from "../services/videosD1Sync";
 import {
   validarVideos,
@@ -75,7 +84,19 @@ export async function adminCriarTabelasVideosD1Controller(): Promise<Response> {
       falhas.push({ statement: statement.split("\n")[0].trim(), erro: (err as Error).message });
     }
   }
-  return json({ success: falhas.length === 0, executadas, falhas }, falhas.length ? 500 : 200);
+  // Colunas adicionadas depois da criação (idempotente: "já existe" não é erro).
+  const jaExistiam: string[] = [];
+  for (const statement of COMENTARIOS_VIDEOS_ALTER_STATEMENTS) {
+    try {
+      await db.prepare(statement).run();
+      executadas.push(statement);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (/duplicate column/i.test(msg)) jaExistiam.push(statement);
+      else falhas.push({ statement, erro: msg });
+    }
+  }
+  return json({ success: falhas.length === 0, executadas, jaExistiam, falhas }, falhas.length ? 500 : 200);
 }
 
 export async function adminMigrarVideosD1Controller(): Promise<Response> {
@@ -205,4 +226,100 @@ export async function adminLeituraVideosD1Controller(request: Request): Promise<
     return json({ success: ok, leituraD1Ativa: ok, comparacao });
   }
   return json({ success: true, leituraD1Ativa: await leituraVideosD1Ativa() });
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3b — comentários do Fórum buscados só pro tópico aberto
+// ---------------------------------------------------------------------------
+
+/**
+ * Pra CADA vídeo de "Music Videos", compara os comentários que o Fórum
+ * mostraria lendo a aba inteira com os que mostra buscando no D1 só os
+ * candidatos do tópico — mesmo filtro (comentarioPertenceAoTopico), mesmas
+ * chaves. Testa o ID real do vídeo e também o ID provisório por posição
+ * ("videos_idxN", que links antigos ainda usam). Só leitura.
+ * Também lista os casos em que o comentário só entra no tópico porque o
+ * NÚMERO DA LINHA dele na planilha é igual ao ID do tópico (comportamento
+ * herdado do filtro original, reproduzido de propósito pra troca ser
+ * idêntica — ver resposta da sessão de 2026-11-13).
+ *
+ * GET /api/empire-play/admin/comparar-comentarios-por-topico-d1
+ */
+export async function adminCompararComentariosPorTopicoD1Controller(): Promise<Response> {
+  try {
+    const [planVideos, d1Comentarios] = await Promise.all([
+      readValuesFresh("principal", SHEET_VIDEOS, "A:ZZ"),
+      linhasComentariosVideosD1(),
+    ]);
+    if (!d1Comentarios) return json({ success: false, error: "D1 vazio ou indisponível." }, 500);
+    const comRow = (lista: { rec: SheetRecord; rowIndex: number }[]) =>
+      lista.map(({ rec, rowIndex }) => ({ ...rec, __rowIndex: String(rowIndex) }) as SheetRecord);
+    const todos = comRow(objetosComRowIndex(SHEET_COMENTARIOS, d1Comentarios));
+    const videos = linhasParaObjetos(SHEET_VIDEOS, planVideos);
+
+    let topicosTestados = 0;
+    let comentariosConferidos = 0;
+    const diferencas: unknown[] = [];
+    const casosPorNumeroDaLinha: { topico: string; linhaDoComentario: string; topicoDoComentario: string }[] = [];
+
+    for (let idx = 0; idx < videos.length; idx++) {
+      const v = videos[idx];
+      const id = v["message_thread_id"] || "";
+      const titulo = v["titulo_do_topico"] || "";
+      const normId = normalizeComparison(id);
+      const normTitulo = normalizeComparison(titulo);
+      // ID real, "videos_<ID>" (id do item no catálogo) e o provisório por posição
+      for (const busca of [normId, normalizeComparison(`videos_${id}`), normalizeComparison(`videos_idx${idx + 1}`)]) {
+        if (!busca) continue;
+        topicosTestados++;
+        const esperado = todos.filter((r) => comentarioPertenceAoTopico(r, normId, busca, normTitulo));
+        const linhas = await linhasComentariosVideosDoTopicoD1([...new Set([busca, normId].filter(Boolean))]);
+        if (!linhas) return json({ success: false, error: "Busca por tópico indisponível (chaves_busca incompleta?)." }, 409);
+        const obtido = comRow(objetosComRowIndex(SHEET_COMENTARIOS, linhas)).filter((r) =>
+          comentarioPertenceAoTopico(r, normId, busca, normTitulo),
+        );
+        comentariosConferidos += esperado.length;
+        if (JSON.stringify(esperado) !== JSON.stringify(obtido) && diferencas.length < 10) {
+          diferencas.push({ topico: id, busca, esperado: esperado.length, obtido: obtido.length });
+        }
+        if (busca === normId) {
+          for (const r of esperado) {
+            const top = normalizeComparison(r["id_do_topico"] || "");
+            if (top !== normId && r.__rowIndex === normId) {
+              casosPorNumeroDaLinha.push({ topico: id, linhaDoComentario: r.__rowIndex, topicoDoComentario: r["id_do_topico"] || "" });
+            }
+          }
+        }
+      }
+    }
+    return json({
+      success: diferencas.length === 0,
+      buscaPorTopicoAtiva: await comentariosPorTopicoD1Ativo(),
+      topicosTestados,
+      comentariosConferidos,
+      diferencas,
+      casosPorNumeroDaLinha,
+    });
+  } catch (err) {
+    return json({ success: false, error: (err as Error).message }, 500);
+  }
+}
+
+/**
+ * GET /api/empire-play/admin/comentarios-por-topico-d1            -> estado
+ * GET /api/empire-play/admin/comentarios-por-topico-d1?ativar=1   -> liga (só se a comparação der idêntica)
+ * GET /api/empire-play/admin/comentarios-por-topico-d1?ativar=0   -> desliga (volta a ler a aba inteira)
+ */
+export async function adminComentariosPorTopicoD1Controller(request: Request): Promise<Response> {
+  const ativar = new URL(request.url).searchParams.get("ativar");
+  if (ativar === "0") return json({ success: await definirComentariosPorTopicoD1(false), buscaPorTopicoAtiva: false });
+  if (ativar === "1") {
+    const comparacao = (await (await adminCompararComentariosPorTopicoD1Controller()).json()) as { success?: boolean };
+    if (!comparacao.success) {
+      return json({ success: false, mensagem: "Resultados diferentes — NÃO liguei.", comparacao }, 409);
+    }
+    const ok = await definirComentariosPorTopicoD1(true);
+    return json({ success: ok, buscaPorTopicoAtiva: ok, comparacao });
+  }
+  return json({ success: true, buscaPorTopicoAtiva: await comentariosPorTopicoD1Ativo() });
 }

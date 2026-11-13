@@ -247,6 +247,8 @@ import {
   adminValidarVideosD1Controller,
   adminCompararLeituraVideosD1Controller,
   adminLeituraVideosD1Controller,
+  adminCompararComentariosPorTopicoD1Controller,
+  adminComentariosPorTopicoD1Controller,
 } from "../controllers/adminMigracaoVideosD1Controller";
 import { adminDiagComentariosVideosOrfaosController } from "../controllers/adminDiagComentariosVideosOrfaosController";
 import { adminFixComentariosVideosOrfaosController } from "../controllers/adminFixComentariosVideosOrfaosController";
@@ -2234,6 +2236,10 @@ export async function handleEmpireApiRoutes(
     response = await adminCompararLeituraVideosD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/leitura-videos-d1") {
     response = await adminLeituraVideosD1Controller(request);
+  } else if (url.pathname === "/api/empire-play/admin/comparar-comentarios-por-topico-d1") {
+    response = await adminCompararComentariosPorTopicoD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/comentarios-por-topico-d1") {
+    response = await adminComentariosPorTopicoD1Controller(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-comentarios-videos-orfaos") {
     response = await adminDiagComentariosVideosOrfaosController();
   } else if (url.pathname === "/api/empire-play/admin/fix-comentarios-videos-orfaos") {

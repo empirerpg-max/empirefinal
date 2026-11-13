@@ -36,6 +36,11 @@ mock.module(R + "googleSheetsService.ts", () => ({
   readValuesFresh: async (_k: string, aba: string, range = "A:ZZ") => lerRange(aba, range),
   googleSheetsService: { principal: { readValues: async (aba: string, range = "A:ZZ") => lerRange(aba, range) } },
   linhasParaObjetos: () => [],
+  normalizeText: (v: unknown) => String(v ?? "").trim(),
+  // cópia fiel de googleSheetsService.normalizeComparison
+  normalizeComparison: (v: unknown) =>
+    String(v ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+      .replace(/[\u200b-\u200d\ufeff]/g, "").replace(/\s+/g, " "),
 }));
 mock.module(R + "logSistemaService.ts", () => ({ registrarLogSistema: async () => {} }));
 
@@ -172,4 +177,37 @@ test("chave desligada lê da planilha; ligada lê do D1; D1 falhando volta pra p
   leituras = 0; const f = await L.linhasDaAbaDeVideo("Music Videos"); expect(leituras).toBe(1); expect(f.length).toBeGreaterThan(200);
   (globalThis as any).__CATALOGO_DB__ = real;
   await L.definirLeituraVideosD1(false);
+});
+
+// ---------------------------------------------------------------------------
+// Fase 3b — busca de comentários por tópico: superconjunto exato do filtro
+// ---------------------------------------------------------------------------
+test("busca por tópico traz TODO comentário que o filtro do Fórum poderia aceitar, pra todo vídeo", async () => {
+  await S.sincronizarComentariosCompleto();
+  const norm = (v: unknown) => String(v ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[\u200b-\u200d\ufeff]/g, "").replace(/\s+/g, " ");
+  const plan = sheets["Comentarios_MV"];
+  const largura = plan[0].length; // o registro só tem as colunas do cabeçalho
+  let verificados = 0;
+  const videos = sheets["Music Videos"].slice(1).filter((r) => r.some((c) => c));
+  for (let i = 0; i < videos.length; i++) {
+    const id = videos[i][5] || "";
+    for (const busca of [norm(id), norm(`videos_${id}`), norm(`videos_idx${i + 1}`)].filter(Boolean)) {
+      const linhas = await L.linhasComentariosVideosDoTopicoD1([busca]);
+      expect(linhas).not.toBeNull();
+      const encontradas = new Set(linhas!.map((r, idx) => (r.length ? idx + 1 : 0)).filter(Boolean));
+      for (let n = 2; n <= plan.length; n++) {
+        const row = plan[n - 1] || [];
+        if (!row.some((c) => String(c ?? "").trim())) continue;
+        const valores = [...row.slice(0, largura).map((c) => String(c ?? "").trim()), String(n)];
+        const filtroAceitaria = valores.some((v) => v.length > 0 && v.length <= 100 && norm(v) === busca);
+        if (filtroAceitaria) { expect(encontradas.has(n)).toBe(true); verificados++; }
+      }
+    }
+  }
+  expect(verificados).toBeGreaterThan(800);
+});
+
+test("busca por tópico recusa (null) ID vazio, e linhas sem chaves_busca", async () => {
+  expect(await L.linhasComentariosVideosDoTopicoD1([""])).toBeNull();
 });
