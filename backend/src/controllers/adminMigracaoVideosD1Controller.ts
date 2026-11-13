@@ -248,9 +248,9 @@ const TAMANHO_PAGINA_PADRAO = 25;
  * Testa o ID real, "videos_<ID>" e o ID provisório por posição
  * ("videos_idxN"). Só leitura (grava no KV só o resultado da página, pra
  * trava de "ligar").
- * Também lista os casos em que o comentário só entra no tópico porque o
- * NÚMERO DA LINHA dele na planilha é igual ao ID do tópico (comportamento
- * herdado do filtro original, reproduzido de propósito).
+ * Também lista os casos em que o comentário entraria no tópico só porque o
+ * NÚMERO DA LINHA dele na planilha é igual ao ID do tópico — bug corrigido
+ * em 2026-11-13 (comentarioPertenceAoTopico); a lista tem que vir VAZIA.
  *
  * GET /api/empire-play/admin/comparar-comentarios-por-topico-d1?rodada=R&inicio=0&quantidade=25
  */
