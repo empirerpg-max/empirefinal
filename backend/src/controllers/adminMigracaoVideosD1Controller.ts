@@ -8,13 +8,20 @@ import {
 import {
   comentariosPorTopicoD1Ativo,
   definirComentariosPorTopicoD1,
+  definirForumRapidoVideos,
+  forumRapidoVideosAtivo,
   definirLeituraVideosD1,
   leituraVideosD1Ativa,
   linhasComentariosVideosD1,
   linhasComentariosVideosDoTopicoD1,
   linhasVideosD1,
 } from "../services/videosD1Leitura";
-import { comentarioPertenceAoTopico, objetosComRowIndex } from "./empirePlayController";
+import {
+  comentarioPertenceAoTopico,
+  getSemanasPorCodigoUnicoEdicaoCharts,
+  objetosComRowIndex,
+  semanasDoVideo,
+} from "./empirePlayController";
 import { type D1DatabaseLike } from "../services/catalogoDbService";
 import { getCatalogoDb, VIDEOS_CREATE_STATEMENTS } from "../services/videosDbService";
 import { COMENTARIOS_VIDEOS_ALTER_STATEMENTS, COMENTARIOS_VIDEOS_CREATE_STATEMENTS } from "../services/comentariosVideosDbService";
@@ -364,4 +371,128 @@ export async function adminComentariosPorTopicoD1Controller(request: Request): P
     return json({ success: ok, buscaPorTopicoAtiva: ok, paginasConferidas: paginas.length, totalVideos });
   }
   return json({ success: true, buscaPorTopicoAtiva: await comentariosPorTopicoD1Ativo() });
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3c — caminho rápido do tópico de vídeo (topicoVideoRapido)
+// ---------------------------------------------------------------------------
+
+/**
+ * Antes de ligar o caminho rápido: pra cada vídeo da página,
+ *  1. as 3 abas LEGADAS (Comentarios, Comentarios_EmpirePlay,
+ *     Topicos_EmpirePlay) têm algum registro que o Fórum mostraria nesse
+ *     vídeo? (o caminho rápido não lê essas abas — tem que dar ZERO, senão
+ *     comentário sumiria);
+ *  2. as semanas no chart do caminho rápido (música vinculada via D1) batem
+ *     com as do caminho normal (via aba "Musicas" do Sheets)?
+ * Grava o resultado da página no KV (rodada), igual à comparação por tópico.
+ *
+ * GET /api/empire-play/admin/diagnostico-forum-rapido-videos?rodada=R&inicio=0&quantidade=25
+ */
+export async function adminDiagForumRapidoVideosController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const rodada = url.searchParams.get("rodada") || "";
+  const inicio = Math.max(0, parseInt(url.searchParams.get("inicio") || "0", 10) || 0);
+  const quantidade = Math.max(1, parseInt(url.searchParams.get("quantidade") || "25", 10) || 25);
+  try {
+    const [planVideos, legado1, legado2, legado3, musicasRows] = await Promise.all([
+      readValuesFresh("principal", SHEET_VIDEOS, "A:ZZ"),
+      googleSheetsService.principal.readSheetObjects("Comentarios"),
+      googleSheetsService.principal.readSheetObjects("Comentarios_EmpirePlay"),
+      googleSheetsService.principal.readSheetObjects("Topicos_EmpirePlay"),
+      googleSheetsService.principal.readValues("Musicas", "A2:Z5000"),
+    ]);
+    const legados = [...legado1, ...legado2, ...legado3];
+    const videos = linhasParaObjetos(SHEET_VIDEOS, planVideos);
+    const fim = Math.min(videos.length, inicio + quantidade);
+    const legadoQueApareceria: { video: string; titulo: string; amostra: SheetRecord }[] = [];
+    const semanasDiferentes: { video: string; normal: number | null; rapido: number | null }[] = [];
+
+    for (let idx = inicio; idx < fim; idx++) {
+      const v = videos[idx];
+      const id = v["message_thread_id"] || "";
+      const normId = normalizeComparison(id);
+      const normTitulo = normalizeComparison(v["titulo_do_topico"] || "");
+      for (const busca of [normId, normalizeComparison(`videos_${id}`)]) {
+        if (!busca) continue;
+        for (const r of legados) {
+          if (comentarioPertenceAoTopico(r, normId, busca, normTitulo)) {
+            if (legadoQueApareceria.length < 30) legadoQueApareceria.push({ video: id, titulo: v["titulo_do_topico"] || "", amostra: r });
+            break;
+          }
+        }
+      }
+      // Semanas: caminho normal (cópia fiel da lógica de getEmpirePlayForumTopicController)
+      let normal: number | null = null;
+      const nomeOriginal = v["nome_original_nos_charts"] || "";
+      if (nomeOriginal) {
+        const alvo = normalizeComparison(nomeOriginal.split(";")[0] || "");
+        let codigoUnicoMusica = "";
+        let weeksVideoFallback: number | null = null;
+        for (const row of musicasRows) {
+          if (alvo && normalizeComparison(row[7] || "") === alvo) {
+            codigoUnicoMusica = normalizeComparison(row[25] || "");
+            const weeksVideo = Number(row[12]);
+            if (!Number.isNaN(weeksVideo) && row[12]) weeksVideoFallback = weeksVideo;
+            break;
+          }
+        }
+        if (codigoUnicoMusica) normal = await getSemanasPorCodigoUnicoEdicaoCharts(codigoUnicoMusica);
+        if (normal == null && weeksVideoFallback !== null) normal = weeksVideoFallback;
+      }
+      const rapido = await semanasDoVideo(v);
+      if ((normal ?? null) !== (rapido ?? null)) semanasDiferentes.push({ video: id, normal, rapido });
+    }
+    const ok = legadoQueApareceria.length === 0 && semanasDiferentes.length === 0;
+    const kv = kvFlags();
+    if (rodada && kv) {
+      await kv.put(
+        `videos:diag-rapido:${rodada}:${inicio}`,
+        JSON.stringify({ ok, fim, totalVideos: videos.length, em: Date.now() }),
+        { expirationTtl: 3600 },
+      );
+    }
+    return json({
+      success: ok,
+      forumRapidoAtivo: await forumRapidoVideosAtivo(),
+      rodada,
+      pagina: { inicio, fim, totalVideos: videos.length, proximoInicio: fim < videos.length ? fim : null },
+      registrosLegados: legados.length,
+      legadoQueApareceria,
+      semanasDiferentes,
+    });
+  } catch (err) {
+    return json({ success: false, error: (err as Error).message }, 500);
+  }
+}
+
+/**
+ * GET /api/empire-play/admin/forum-rapido-videos                     -> estado
+ * GET /api/empire-play/admin/forum-rapido-videos?ativar=1&rodada=R   -> liga, SÓ se todas as páginas
+ *     do diagnóstico da rodada R cobriram todos os vídeos sem nenhum problema
+ * GET /api/empire-play/admin/forum-rapido-videos?ativar=0            -> desliga (volta ao caminho normal)
+ */
+export async function adminForumRapidoVideosController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const ativar = url.searchParams.get("ativar");
+  if (ativar === "0") return json({ success: await definirForumRapidoVideos(false), forumRapidoAtivo: false });
+  if (ativar === "1") {
+    const rodada = url.searchParams.get("rodada") || "";
+    const kv = kvFlags();
+    if (!rodada || !kv) return json({ success: false, error: "Informe a rodada do diagnóstico." }, 400);
+    let inicio = 0;
+    const paginas: unknown[] = [];
+    for (let guarda = 0; guarda < 1000; guarda++) {
+      const bruto = await kv.get(`videos:diag-rapido:${rodada}:${inicio}`);
+      if (!bruto) return json({ success: false, mensagem: `Página a partir de ${inicio} não foi diagnosticada nessa rodada — NÃO liguei.`, paginas }, 409);
+      const p = JSON.parse(bruto) as { ok: boolean; fim: number; totalVideos: number };
+      paginas.push({ inicio, ...p });
+      if (!p.ok) return json({ success: false, mensagem: `Página a partir de ${inicio} teve problema — NÃO liguei.`, paginas }, 409);
+      if (p.fim >= p.totalVideos) break;
+      inicio = p.fim;
+    }
+    const ok = await definirForumRapidoVideos(true);
+    return json({ success: ok, forumRapidoAtivo: ok, paginasConferidas: paginas.length });
+  }
+  return json({ success: true, forumRapidoAtivo: await forumRapidoVideosAtivo() });
 }

@@ -249,6 +249,8 @@ import {
   adminLeituraVideosD1Controller,
   adminCompararComentariosPorTopicoD1Controller,
   adminComentariosPorTopicoD1Controller,
+  adminDiagForumRapidoVideosController,
+  adminForumRapidoVideosController,
 } from "../controllers/adminMigracaoVideosD1Controller";
 import { adminDiagComentariosVideosOrfaosController } from "../controllers/adminDiagComentariosVideosOrfaosController";
 import { adminFixComentariosVideosOrfaosController } from "../controllers/adminFixComentariosVideosOrfaosController";
@@ -2240,6 +2242,10 @@ export async function handleEmpireApiRoutes(
     response = await adminCompararComentariosPorTopicoD1Controller(request);
   } else if (url.pathname === "/api/empire-play/admin/comentarios-por-topico-d1") {
     response = await adminComentariosPorTopicoD1Controller(request);
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-forum-rapido-videos") {
+    response = await adminDiagForumRapidoVideosController(request);
+  } else if (url.pathname === "/api/empire-play/admin/forum-rapido-videos") {
+    response = await adminForumRapidoVideosController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-comentarios-videos-orfaos") {
     response = await adminDiagComentariosVideosOrfaosController();
   } else if (url.pathname === "/api/empire-play/admin/fix-comentarios-videos-orfaos") {

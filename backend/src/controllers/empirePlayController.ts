@@ -14,8 +14,10 @@ import { getUserProfile } from "./userController";
 import { getCatalogoDb } from "../services/musicasDbService";
 import {
   comentariosPorTopicoD1Ativo,
+  forumRapidoVideosAtivo,
   linhasComentariosVideosDoTopicoD1,
   linhasDaAbaDeVideo,
+  videoD1PorId,
 } from "../services/videosD1Leitura";
 
 // Leitura do Catálogo/Fórum de MÚSICA agora vem do D1 (tabela `musicas`),
@@ -253,6 +255,248 @@ export function comentarioPertenceAoTopico(
   }
 
   return false;
+}
+
+/**
+ * Registro de comentário -> objeto que o Fórum devolve — extraído SEM
+ * MUDANÇA de getEmpirePlayForumTopicController (era o .map inline), pra o
+ * caminho rápido de vídeo (topicoVideoRapido) montar exatamente o mesmo
+ * formato.
+ */
+function montarComentarioDoForum(
+  rec: SheetRecord,
+  idx: number,
+  ctx: {
+    mediaItem: EmpirePlayCleanItem | null;
+    fotoPorJogadorId: Map<string, string>;
+    sheetComments: string;
+    replyToColumnKey: string;
+  },
+) {
+  const { mediaItem, fotoPorJogadorId, sheetComments, replyToColumnKey } = ctx;
+  // "coluna_6" cobre Comentarios_Musicas!F — tem dado (Data/Hora) mas
+  // nunca teve cabeçalho próprio na planilha, então readSheetObjects
+  // nunca expõe como "data" pra essa aba especificamente; sem esse
+  // fallback a data do comentário de música sempre vinha vazia aqui.
+  const dataVal = getValue(rec, ["timestamp", "data_hora", "data", "date", "coluna_6"]) || "";
+  const titleVal =
+    getValue(rec, ["titulo", "title", "info"]) || (mediaItem ? mediaItem.title : "");
+  let playerVal =
+    getValue(rec, [
+      "nome_do_jogador",
+      "nome_jogador",
+      "nome",
+      "jogador",
+      "player",
+      "off",
+      "autor",
+    ]) || "";
+  if (!playerVal) playerVal = "Anônimo";
+
+  // ID do jogador que comentou (coluna B nas abas Comentarios_*) — usado
+  // pra saber se o usuário logado pode editar esse comentário.
+  const jogadorIdVal =
+    getValue(rec, [
+      "id_do_jogador",
+      "id_jogador",
+      "jogador_id",
+      "jogadorid",
+      "telegram_id",
+    ]) || "";
+
+  // "comentarios_para" NUNCA deve virar texto do comentário — é a
+  // coluna de referência ao ID do tópico (usada só pra achar o
+  // registro certo, no topicoVal acima). Um bug antigo aqui a
+  // reaproveitava como fallback de texto quando o registro vinha de
+  // uma aba legada sem coluna de comentário de verdade, fazendo o
+  // próprio ID do tópico (ex: "46", "815") aparecer como se fosse o
+  // comentário de um jogador "Anônimo".
+  const commentVal =
+    getValue(rec, ["comentario", "comment", "texto", "mensagem", "conteudo"]) || "";
+  const ratingVal = getValue(rec, ["nota_likes", "nota", "rating", "likes"]) || "";
+
+  // Reações (emoji → lista de jogadorIds que reagiram), gravadas como
+  // JSON numa coluna própria da aba de comentários. Só existe pra
+  // comentários vindos da aba principal (que carregam __rowIndex).
+  const rowIndexVal = (rec as SheetRecord).__rowIndex
+    ? parseInt((rec as SheetRecord).__rowIndex, 10)
+    : null;
+  const reactionsRaw = getValue(rec, ["reacoes", "reactions"]) || "";
+  let reactionsMap: Record<string, string[]> = {};
+  if (reactionsRaw) {
+    try {
+      const parsed = JSON.parse(reactionsRaw);
+      if (parsed && typeof parsed === "object") reactionsMap = parsed;
+    } catch {
+      // ignora JSON inválido/legado
+    }
+  }
+  const reactions: Record<string, number> = {};
+  Object.entries(reactionsMap).forEach(([emoji, jogadorIds]) => {
+    if (Array.isArray(jogadorIds) && jogadorIds.length > 0)
+      reactions[emoji] = jogadorIds.length;
+  });
+
+  // Só os registros da aba principal (com __rowIndex) têm essa coluna
+  // de verdade — abas de fallback legadas nunca tiveram resposta
+  // aninhada, então ficam sempre como comentário raiz (replyTo vazio).
+  const replyToVal = rowIndexVal ? getValue(rec, [replyToColumnKey]) || "" : "";
+  const fotoVal = jogadorIdVal ? fotoPorJogadorId.get(jogadorIdVal) || "" : "";
+
+  return {
+    // Antes era só `comment_${idx+1}` (posição na lista filtrada
+    // daquela resposta específica) — usado tanto como id do próprio
+    // comentário quanto como valor de "replyTo" gravado quando
+    // alguém responde. Se a posição mudar entre o clique em
+    // "Responder" e a releitura seguinte (outro comentário chegando
+    // no meio, por exemplo), o replyTo salvo aponta pra um id que já
+    // não existe mais ali — a resposta vira órfã e aparece solta,
+    // "lá embaixo", em vez de aninhada dentro do comentário-pai.
+    // Agora usa o número real da linha na planilha (rowIndexVal, já
+    // estável) sempre que existe — só cai pra posição nos registros
+    // de fallback legados, que nunca suportaram resposta aninhada
+    // mesmo (replyTo sempre vazio pra eles, ver replyToVal acima).
+    id: rowIndexVal ? `comment_row${rowIndexVal}` : `comment_${idx + 1}`,
+    data: dataVal,
+    timestamp: dataVal,
+    titulo: titleVal,
+    title: titleVal,
+    jogador: playerVal,
+    player: playerVal,
+    jogadorId: jogadorIdVal,
+    foto: fotoVal,
+    comentario: commentVal,
+    comment: commentVal,
+    nota: ratingVal,
+    rating: ratingVal,
+    rowIndex: rowIndexVal,
+    sheetComments: rowIndexVal ? sheetComments : null,
+    reactions,
+    reactedBy: rowIndexVal ? reactionsMap : {},
+    replyTo: replyToVal,
+  };
+}
+
+/** Resolve `p`, ou devolve `fallback` se demorar mais que `ms` (nunca rejeita). */
+function comTempoLimite<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(fallback), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(t);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
+/** Fotos de perfil por ID do jogador (aba Usuários) — mesma leitura/cache do caminho normal. */
+async function fotosPorJogadorId(): Promise<Map<string, string>> {
+  const usuarios = await cachedRead("forum:usuarios_fotos", 20_000, () =>
+    googleSheetsService.usuarios.readSheetObjects("Usuários"),
+  ).catch(() => [] as SheetRecord[]);
+  const mapa = new Map<string, string>();
+  for (const u of usuarios as SheetRecord[]) {
+    const id = getValue(u, ["id"]);
+    const foto = getValue(u, ["foto_do_perfil"]);
+    if (id && foto) mapa.set(id, foto);
+  }
+  return mapa;
+}
+
+/**
+ * Semanas no chart de um VÍDEO — mesma regra do caminho normal (música
+ * vinculada achada pelo nome em "Nome original nos charts" -> Código único
+ * -> EDIÇÃO CHARTS!F; fallback WEEKS VIDEO), só que lendo a música do D1
+ * (`musicas`, espelho de "Musicas") em vez de reler a aba inteira do Sheets
+ * a cada tópico aberto — essa releitura era uma das causas do erro 1102.
+ */
+let musicasPorNomeCache: { ate: number; lista: { nome: string; codigo: string; weeksVideo: number | null }[] } | null =
+  null;
+export async function semanasDoVideo(rec: SheetRecord): Promise<number | null> {
+  const nomeOriginal = getValue(rec, ["nome_original_nos_charts"]);
+  if (!nomeOriginal) return null;
+  const alvo = normalizeComparison(nomeOriginal.split(";")[0] || "");
+  if (!alvo) return null;
+  if (!musicasPorNomeCache || musicasPorNomeCache.ate < Date.now()) {
+    const db = getCatalogoDb();
+    if (!db) return null;
+    const r = await db
+      .prepare("SELECT titulo, codigo_unico, weeks_video FROM musicas")
+      .all<{ titulo: string; codigo_unico: string; weeks_video: number | null }>();
+    musicasPorNomeCache = {
+      ate: Date.now() + 60_000,
+      lista: (r.results || []).map((m) => ({
+        nome: normalizeComparison(m.titulo || ""),
+        codigo: normalizeComparison(m.codigo_unico || ""),
+        weeksVideo: m.weeks_video ?? null,
+      })),
+    };
+  }
+  const musica = musicasPorNomeCache.lista.find((m) => m.nome === alvo);
+  if (!musica) return null;
+  if (musica.codigo) {
+    const semanas = await getSemanasPorCodigoUnicoEdicaoCharts(musica.codigo);
+    if (semanas !== null) return semanas;
+  }
+  return musica.weeksVideo;
+}
+
+/**
+ * CAMINHO RÁPIDO — VÍDEO (2026-11-13), mesma ideia do de música: vídeo e
+ * comentários direto do D1 (busca indexada só do tópico), mesmo filtro
+ * (comentarioPertenceAoTopico) e mesma montagem (montarComentarioDoForum)
+ * do caminho normal. Fica de fora só o que deixava o tópico lento e às
+ * vezes vazio (erro 1102): as 3 abas LEGADAS do Sheets (Comentarios,
+ * Comentarios_EmpirePlay, Topicos_EmpirePlay — verificado antes de ligar
+ * que não têm comentário de vídeo) e a releitura de "Musicas". Foto e
+ * semanas têm tempo-limite: se o Sheets demorar, o tópico abre sem elas
+ * nessa vez, em vez de travar. null = não deu (vídeo não está no D1, busca
+ * por tópico indisponível) -> caminho normal.
+ */
+export async function topicoVideoRapido(
+  topicIdParam: string,
+  replyToColumnKey: string,
+): Promise<{ media: EmpirePlayCleanItem; comments: ReturnType<typeof montarComentarioDoForum>[] } | null> {
+  const candidatos = [topicIdParam];
+  if (topicIdParam.startsWith("videos_")) candidatos.push(topicIdParam.slice("videos_".length));
+  const achado = await videoD1PorId(candidatos);
+  if (!achado) return null;
+  const rec = linhasParaObjetos("Music Videos", achado.linhas)[0];
+  if (!rec) return null;
+  const mediaItem = buildCleanItem("Videos", rec, Math.max(0, achado.linhaPlanilha - 2));
+
+  const realTopicId = mediaItem.telegramTopicId || "";
+  if (realTopicId) mediaItem.topicId = realTopicId;
+  const normMediaTopicId = normalizeComparison(realTopicId || mediaItem.id);
+  const normTopicSearch = normalizeComparison(topicIdParam);
+  const normMediaTitle = normalizeComparison(mediaItem.title);
+
+  const [linhasComentarios, fotos, semanas] = await Promise.all([
+    linhasComentariosVideosDoTopicoD1([normTopicSearch, normMediaTopicId]),
+    comTempoLimite(fotosPorJogadorId(), 1500, new Map<string, string>()),
+    comTempoLimite(semanasDoVideo(rec), 1500, null),
+  ]);
+  if (!linhasComentarios) return null;
+  if (semanas !== null) mediaItem.semanasNoChart = semanas;
+
+  const comments = objetosComRowIndex("Comentarios_MV", linhasComentarios)
+    .map(({ rec: r, rowIndex }) => ({ ...r, __rowIndex: String(rowIndex) }) as SheetRecord)
+    .filter((r) => comentarioPertenceAoTopico(r, normMediaTopicId, normTopicSearch, normMediaTitle))
+    .map((r, idx) =>
+      montarComentarioDoForum(r, idx, {
+        mediaItem,
+        fotoPorJogadorId: fotos,
+        sheetComments: "Comentarios_MV",
+        replyToColumnKey,
+      }),
+    )
+    .filter((c) => c.comentario && c.comentario.trim());
+  return { media: mediaItem, comments };
 }
 
 /**
@@ -1686,7 +1930,7 @@ export async function getEmpirePlayAlbunsController(): Promise<Response> {
 // linha (Map), não só o array bruto — cálculo feito uma vez por janela de
 // cache, não a cada chamada.
 let edicaoChartsWeeksMapCache: { expiresAt: number; mapa: Map<string, number> } | null = null;
-async function getSemanasPorCodigoUnicoEdicaoCharts(codigoUnico: string): Promise<number | null> {
+export async function getSemanasPorCodigoUnicoEdicaoCharts(codigoUnico: string): Promise<number | null> {
   const agora = Date.now();
   if (!edicaoChartsWeeksMapCache || edicaoChartsWeeksMapCache.expiresAt < agora) {
     const [colF, colBD] = await Promise.all([
@@ -1863,6 +2107,22 @@ export async function getEmpirePlayForumTopicController(
       }
     } catch (err) {
       console.warn("[getEmpirePlayForumTopicController] Falha no caminho rápido (D1), caindo pro Sheets:", err);
+    }
+  }
+
+  // CAMINHO RÁPIDO — VÍDEO (2026-11-13): ver topicoVideoRapido. Chave
+  // "videos:forum-rapido" (KV); qualquer falha cai no caminho normal abaixo.
+  if (sheetIdLabel === "Videos" && topicIdParam && (await forumRapidoVideosAtivo())) {
+    try {
+      const rapido = await topicoVideoRapido(topicIdParam, replyToColumnKey);
+      if (rapido) {
+        return new Response(JSON.stringify({ success: true, data: rapido }), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+    } catch (err) {
+      console.warn("[getEmpirePlayForumTopicController] Falha no caminho rápido de vídeo (D1), caindo pro normal:", err);
     }
   }
 
@@ -2263,109 +2523,9 @@ export async function getEmpirePlayForumTopicController(
 
     const comments = allCommentRecords
       .filter((rec) => comentarioPertenceAoTopico(rec, normMediaTopicId, normTopicSearch, normMediaTitle))
-      .map((rec, idx) => {
-        // "coluna_6" cobre Comentarios_Musicas!F — tem dado (Data/Hora) mas
-        // nunca teve cabeçalho próprio na planilha, então readSheetObjects
-        // nunca expõe como "data" pra essa aba especificamente; sem esse
-        // fallback a data do comentário de música sempre vinha vazia aqui.
-        const dataVal = getValue(rec, ["timestamp", "data_hora", "data", "date", "coluna_6"]) || "";
-        const titleVal =
-          getValue(rec, ["titulo", "title", "info"]) || (mediaItem ? mediaItem.title : "");
-        let playerVal =
-          getValue(rec, [
-            "nome_do_jogador",
-            "nome_jogador",
-            "nome",
-            "jogador",
-            "player",
-            "off",
-            "autor",
-          ]) || "";
-        if (!playerVal) playerVal = "Anônimo";
-
-        // ID do jogador que comentou (coluna B nas abas Comentarios_*) — usado
-        // pra saber se o usuário logado pode editar esse comentário.
-        const jogadorIdVal =
-          getValue(rec, [
-            "id_do_jogador",
-            "id_jogador",
-            "jogador_id",
-            "jogadorid",
-            "telegram_id",
-          ]) || "";
-
-        // "comentarios_para" NUNCA deve virar texto do comentário — é a
-        // coluna de referência ao ID do tópico (usada só pra achar o
-        // registro certo, no topicoVal acima). Um bug antigo aqui a
-        // reaproveitava como fallback de texto quando o registro vinha de
-        // uma aba legada sem coluna de comentário de verdade, fazendo o
-        // próprio ID do tópico (ex: "46", "815") aparecer como se fosse o
-        // comentário de um jogador "Anônimo".
-        const commentVal =
-          getValue(rec, ["comentario", "comment", "texto", "mensagem", "conteudo"]) || "";
-        const ratingVal = getValue(rec, ["nota_likes", "nota", "rating", "likes"]) || "";
-
-        // Reações (emoji → lista de jogadorIds que reagiram), gravadas como
-        // JSON numa coluna própria da aba de comentários. Só existe pra
-        // comentários vindos da aba principal (que carregam __rowIndex).
-        const rowIndexVal = (rec as SheetRecord).__rowIndex
-          ? parseInt((rec as SheetRecord).__rowIndex, 10)
-          : null;
-        const reactionsRaw = getValue(rec, ["reacoes", "reactions"]) || "";
-        let reactionsMap: Record<string, string[]> = {};
-        if (reactionsRaw) {
-          try {
-            const parsed = JSON.parse(reactionsRaw);
-            if (parsed && typeof parsed === "object") reactionsMap = parsed;
-          } catch {
-            // ignora JSON inválido/legado
-          }
-        }
-        const reactions: Record<string, number> = {};
-        Object.entries(reactionsMap).forEach(([emoji, jogadorIds]) => {
-          if (Array.isArray(jogadorIds) && jogadorIds.length > 0)
-            reactions[emoji] = jogadorIds.length;
-        });
-
-        // Só os registros da aba principal (com __rowIndex) têm essa coluna
-        // de verdade — abas de fallback legadas nunca tiveram resposta
-        // aninhada, então ficam sempre como comentário raiz (replyTo vazio).
-        const replyToVal = rowIndexVal ? getValue(rec, [replyToColumnKey]) || "" : "";
-        const fotoVal = jogadorIdVal ? fotoPorJogadorId.get(jogadorIdVal) || "" : "";
-
-        return {
-          // Antes era só `comment_${idx+1}` (posição na lista filtrada
-          // daquela resposta específica) — usado tanto como id do próprio
-          // comentário quanto como valor de "replyTo" gravado quando
-          // alguém responde. Se a posição mudar entre o clique em
-          // "Responder" e a releitura seguinte (outro comentário chegando
-          // no meio, por exemplo), o replyTo salvo aponta pra um id que já
-          // não existe mais ali — a resposta vira órfã e aparece solta,
-          // "lá embaixo", em vez de aninhada dentro do comentário-pai.
-          // Agora usa o número real da linha na planilha (rowIndexVal, já
-          // estável) sempre que existe — só cai pra posição nos registros
-          // de fallback legados, que nunca suportaram resposta aninhada
-          // mesmo (replyTo sempre vazio pra eles, ver replyToVal acima).
-          id: rowIndexVal ? `comment_row${rowIndexVal}` : `comment_${idx + 1}`,
-          data: dataVal,
-          timestamp: dataVal,
-          titulo: titleVal,
-          title: titleVal,
-          jogador: playerVal,
-          player: playerVal,
-          jogadorId: jogadorIdVal,
-          foto: fotoVal,
-          comentario: commentVal,
-          comment: commentVal,
-          nota: ratingVal,
-          rating: ratingVal,
-          rowIndex: rowIndexVal,
-          sheetComments: rowIndexVal ? sheetComments : null,
-          reactions,
-          reactedBy: rowIndexVal ? reactionsMap : {},
-          replyTo: replyToVal,
-        };
-      });
+      .map((rec, idx) =>
+        montarComentarioDoForum(rec, idx, { mediaItem, fotoPorJogadorId, sheetComments, replyToColumnKey }),
+      );
 
     // Se o registro da mídia contiver notas registradas por jogadores (ex: Hugo: 95)
     if (rawMedia) {
