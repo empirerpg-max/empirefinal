@@ -58,6 +58,43 @@ export const comentariosPorTopicoD1Ativo = async () =>
   (await flagAtiva(FLAG_LEITURA_VIDEOS_D1)) && (await flagAtiva(FLAG_COMENTARIOS_POR_TOPICO_D1));
 export const definirComentariosPorTopicoD1 = (ativa: boolean) => definirFlag(FLAG_COMENTARIOS_POR_TOPICO_D1, ativa);
 
+/**
+ * 3ª chave (2026-11-13): tópico de vídeo do Fórum pelo CAMINHO RÁPIDO
+ * (igual ao de música): vídeo + comentários direto do D1, sem as abas
+ * legadas do Sheets nem a releitura de "Musicas" pra semanas. Só vale com a
+ * leitura pelo D1 ligada.
+ */
+export const FLAG_FORUM_RAPIDO_VIDEOS = "videos:forum-rapido";
+export const forumRapidoVideosAtivo = async () =>
+  (await flagAtiva(FLAG_LEITURA_VIDEOS_D1)) && (await flagAtiva(FLAG_FORUM_RAPIDO_VIDEOS));
+export const definirForumRapidoVideos = (ativa: boolean) => definirFlag(FLAG_FORUM_RAPIDO_VIDEOS, ativa);
+
+/**
+ * UM vídeo pelo ID do tópico (tenta cada candidato em ordem), já como "aba"
+ * de 2 linhas (cabeçalho + a linha dele) — pronta pro mesmo
+ * linhasParaObjetos da planilha. null = não está no D1.
+ */
+export async function videoD1PorId(
+  candidatos: string[],
+): Promise<{ linhas: string[][]; linhaPlanilha: number; codigoUnico: string } | null> {
+  const db = getCatalogoDb();
+  const ids = [...new Set(candidatos.filter(Boolean))];
+  if (!db || ids.length === 0) return null;
+  for (const id of ids) {
+    const r = await db.prepare("SELECT * FROM videos WHERE id_topico = ? LIMIT 1").bind(id).all<Record<string, unknown>>();
+    const row = r.results?.[0];
+    if (!row) continue;
+    const { celulas, extras } = videoD1ParaCelulas(row);
+    const linhas = montarAba(VIDEOS_COLUNAS.map((c) => c.header), [{ linha: 2, celulas, extras }]);
+    return {
+      linhas,
+      linhaPlanilha: Number(row.linha_planilha),
+      codigoUnico: String(row.codigo_unico ?? ""),
+    };
+  }
+  return null;
+}
+
 /** Coloca as colunas extras (guardadas como [[índice, cabeçalho, valor]]) de volta no lugar. */
 function aplicarExtras(celulas: string[], extrasJson: string | null, header: string[]): string[] {
   if (!extrasJson) return celulas;
