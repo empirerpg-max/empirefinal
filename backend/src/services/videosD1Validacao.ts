@@ -9,7 +9,7 @@
 // Só aprova (`ok: true`) quando: mesma quantidade de linhas com dado dos
 // dois lados, nenhuma linha faltando no D1, nenhuma sobrando no D1 e
 // nenhuma célula diferente (comparação exata de string, sem trim).
-import { VIDEOS_COLUNAS, colunasExtra, linhaEmBranco, videoD1ParaCelulas } from "./videosDbService";
+import { VIDEOS_COLUNAS, chaveDoVideo, colunasExtra, linhaEmBranco, videoD1ParaCelulas } from "./videosDbService";
 import { COMENTARIOS_VIDEOS_COLUNAS, comentarioVideoD1ParaCelulas } from "./comentariosVideosDbService";
 
 const MAX_DETALHES = 200;
@@ -116,14 +116,13 @@ export function validarVideos(
     const celulas = VIDEOS_COLUNAS.map((_, c) => String(row[c] ?? ""));
     // F repetida na planilha: a 2ª ocorrência entra com chave própria pra
     // aparecer como "faltando no D1" (nunca é escondida pela 1ª).
-    let chave = `F=${celulas[5]}`;
+    let chave = `F=${chaveDoVideo(celulas[5], i + 1)}`;
     if (planilha.has(chave)) chave = `${chave} (linha ${i + 1}, repetida)`;
     planilha.set(chave, { celulas, extras: colunasExtra(header, row, VIDEOS_COLUNAS.length) });
   }
   const d1 = new Map<string, { celulas: string[]; extras: string | null }>();
   for (const r of linhasD1) {
-    const c = videoD1ParaCelulas(r);
-    d1.set(`F=${c.celulas[5]}`, c);
+    d1.set(`F=${String(r.id_topico ?? "")}`, videoD1ParaCelulas(r));
   }
   return compararGenerico({
     planilha,

@@ -17,9 +17,10 @@
 // 2026-11-13: 282 vídeos, F preenchida em 100% e sem nenhuma repetição.
 // "Código único" (U) NÃO serve de PK: vídeo copia o código da música
 // vinculada, e a mesma música tem vários vídeos (EMP424 aparece 5x).
-// A migração aborta SEM gravar nada se encontrar F vazia/repetida (ver
+// A migração aborta SEM gravar nada se encontrar F repetida (ver
 // validarLinhasVideosPlanilha) — um upsert por PK repetida colapsaria duas
-// linhas em uma, ou seja, perderia dado em silêncio.
+// linhas em uma, ou seja, perderia dado em silêncio. F vazia entra com
+// chave provisória pela linha (PREFIXO_SEM_ID), nunca fica de fora.
 import { getCatalogoDb, type D1DatabaseLike, type D1PreparedStatement } from "./catalogoDbService";
 
 export { getCatalogoDb };
@@ -56,6 +57,19 @@ export const VIDEOS_COLUNAS: readonly { header: string; coluna: string }[] = [
 ];
 
 export const VIDEOS_IDX_ID_TOPICO = 5; // F
+
+/**
+ * Vídeo SEM "message_thread_id" (F vazia) — acontece com vídeo recém-criado
+ * por alguns caminhos até o 1º comentário gerar o ID. Pra não ficar fora do
+ * D1 (perda de dado), entra com uma chave provisória pela linha; a coluna F
+ * continua vazia na leitura (videoD1ParaCelulas). Quando a linha ganhar ID,
+ * o espelho (videosD1Sync.ts) troca a chave provisória pela real.
+ */
+export const PREFIXO_SEM_ID = "__sem_id__linha_";
+
+export function chaveDoVideo(idTopicoCru: string | null, linhaPlanilha: number): string {
+  return idTopicoCru === null || idTopicoCru === "" ? `${PREFIXO_SEM_ID}${linhaPlanilha}` : idTopicoCru;
+}
 
 export const VIDEOS_CREATE_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS videos (
@@ -156,21 +170,25 @@ export function linhaPlanilhaParaVideo(
   VIDEOS_COLUNAS.forEach((c, i) => {
     valores[c.coluna] = celulaParaD1(row[i]);
   });
+  valores.id_topico = chaveDoVideo(valores.id_topico, linhaPlanilha);
   return { linhaPlanilha, valores, colunasExtraJson: colunasExtra(header, row, VIDEOS_COLUNAS.length) };
 }
 
 /** Reconstrói a linha como a planilha mostraria (A..U + extras), pra validação. */
 export function videoD1ParaCelulas(dbRow: Record<string, unknown>): { celulas: string[]; extras: string | null } {
   return {
-    celulas: VIDEOS_COLUNAS.map((c) => celulaDeD1(dbRow[c.coluna])),
+    celulas: VIDEOS_COLUNAS.map((c) => {
+      const v = celulaDeD1(dbRow[c.coluna]);
+      return c.coluna === "id_topico" && v.startsWith(PREFIXO_SEM_ID) ? "" : v;
+    }),
     extras: (dbRow.colunas_extra_json as string | null) ?? null,
   };
 }
 
 /**
  * Checagens que BLOQUEIAM a migração (nada é gravado se houver qualquer
- * erro): cabeçalho diferente do esperado, linha com dado mas sem ID do
- * tópico (F), ID do tópico repetido.
+ * erro): cabeçalho diferente do esperado, ID do tópico repetido. Linha com
+ * F vazia NÃO bloqueia: entra com chave provisória (PREFIXO_SEM_ID).
  */
 export function validarLinhasVideosPlanilha(rows: string[][]): {
   erros: string[];
@@ -198,11 +216,7 @@ export function validarLinhasVideosPlanilha(rows: string[][]): {
     }
     const linha = i + 1;
     const reg = linhaPlanilhaParaVideo(header, row, linha);
-    const id = reg.valores.id_topico;
-    if (id === null || id.trim() === "") {
-      erros.push(`Linha ${linha}: tem dado mas "message_thread_id" (F) está vazio — sem chave pra gravar.`);
-      continue;
-    }
+    const id = reg.valores.id_topico as string; // F, ou chave provisória se F vazia
     const anterior = vistos.get(id);
     if (anterior !== undefined) {
       erros.push(`Linha ${linha}: "message_thread_id" ${id} repetido (já usado na linha ${anterior}).`);
