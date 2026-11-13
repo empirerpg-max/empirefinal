@@ -408,6 +408,42 @@ export async function adminDiagForumRapidoVideosController(request: Request): Pr
     const legadoQueApareceria: { video: string; titulo: string; amostra: SheetRecord }[] = [];
     const semanasDiferentes: { video: string; normal: number | null; rapido: number | null }[] = [];
 
+    // Índice dos registros legados, montado UMA vez (rodar o filtro inteiro
+    // registro x vídeo estourou a CPU do Worker, erro 1102). Reproduz as 3
+    // regras de comentarioPertenceAoTopico: (1) ID do tópico e (3) qualquer
+    // valor curto (<=100) normalizado igual ao ID -> conjunto de valores;
+    // (2) título contém/está contido no título do vídeo -> lista de títulos.
+    // Cada candidato achado pelo índice é confirmado com o filtro de verdade.
+    const ALIAS_TOPICO = ["id_do_topico", "id_topico", "topico_id", "id_media", "id_do_item", "id", "topico", "comentarios_para", "message_thread_id"];
+    const ALIAS_TITULO = ["titulo", "title", "titulo_media", "nome", "info"];
+    const porValor = new Map<string, number[]>();
+    const titulos: { t: string; i: number }[] = [];
+    legados.forEach((r, i) => {
+      const vals = new Set<string>();
+      for (const [, v] of Object.entries(r)) {
+        if (typeof v === "string" && v.length > 0 && v.length <= 100) vals.add(normalizeComparison(v));
+      }
+      for (const a of ALIAS_TOPICO) {
+        const v = (r[a] || "").trim();
+        if (v) {
+          vals.add(normalizeComparison(v));
+          break;
+        }
+      }
+      for (const v of vals) {
+        const l = porValor.get(v);
+        if (l) l.push(i);
+        else porValor.set(v, [i]);
+      }
+      for (const a of ALIAS_TITULO) {
+        const v = (r[a] || "").trim();
+        if (v) {
+          titulos.push({ t: normalizeComparison(v), i });
+          break;
+        }
+      }
+    });
+
     for (let idx = inicio; idx < fim; idx++) {
       const v = videos[idx];
       const id = v["message_thread_id"] || "";
@@ -415,9 +451,13 @@ export async function adminDiagForumRapidoVideosController(request: Request): Pr
       const normTitulo = normalizeComparison(v["titulo_do_topico"] || "");
       for (const busca of [normId, normalizeComparison(`videos_${id}`)]) {
         if (!busca) continue;
-        for (const r of legados) {
-          if (comentarioPertenceAoTopico(r, normId, busca, normTitulo)) {
-            if (legadoQueApareceria.length < 30) legadoQueApareceria.push({ video: id, titulo: v["titulo_do_topico"] || "", amostra: r });
+        const candidatos = new Set<number>([...(porValor.get(normId) || []), ...(porValor.get(busca) || [])]);
+        if (normTitulo) {
+          for (const { t, i } of titulos) if (t.includes(normTitulo) || normTitulo.includes(t)) candidatos.add(i);
+        }
+        for (const i of candidatos) {
+          if (comentarioPertenceAoTopico(legados[i], normId, busca, normTitulo)) {
+            if (legadoQueApareceria.length < 30) legadoQueApareceria.push({ video: id, titulo: v["titulo_do_topico"] || "", amostra: legados[i] });
             break;
           }
         }
