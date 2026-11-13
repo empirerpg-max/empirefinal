@@ -78,6 +78,45 @@ export async function adminDiagComentariosVideosOrfaosController(): Promise<Resp
     out.exclusoesErro = (err as Error).message;
   }
 
+  // 4. Notificacoes — guarda, por comentário, {autor, TÍTULO da mídia,
+  // trecho, ID do tópico usado} no momento do post (ver
+  // adminFixOrphanCommentsController.ts). Fonte de verdade pra saber a QUE
+  // vídeo cada comentário órfão se referia.
+  try {
+    const notif = await googleSheetsService.principal.readValues("Notificacoes", "A:Z");
+    const header = notif[0] || [];
+    out.notificacoesHeader = header;
+    out.notificacoesTotal = notif.length - 1;
+    const comentarios = await googleSheetsService.principal.readValues("Comentarios_MV", "A:G");
+    const orfaos = comentarios
+      .map((row, i) => ({ linha: i + 1, row }))
+      .slice(1)
+      .filter(({ row }) => row?.[0] !== undefined && !idsAtuais.has((row[0] || "").trim()) && (row[0] || "").trim() !== "");
+    const norm = (v: string) => (v || "").toLowerCase().replace(/\s+/g, " ").trim();
+    out.notificacoesPorOrfao = orfaos.map(({ linha, row }) => {
+      const id = (row[0] || "").trim();
+      const trecho = norm(row[3] || "").slice(0, 40);
+      const achadas = notif
+        .map((r, i) => ({ linha: i + 1, r }))
+        .slice(1)
+        .filter(({ r }) => {
+          const t = norm((r || []).join(" | "));
+          return r.some((c) => (c || "").trim() === id) || (trecho.length >= 12 && t.includes(trecho));
+        })
+        .map(({ linha: l, r }) => ({ linha: l, row: r.map((c) => (c.length > 300 ? `${c.slice(0, 300)}…` : c)) }));
+      return { linhaComentario: linha, idTopico: id, autor: row[2], inicio: (row[3] || "").slice(0, 60), notificacoes: achadas };
+    });
+  } catch (err) {
+    out.notificacoesErro = (err as Error).message;
+  }
+
+  try {
+    const logsAll = await googleSheetsService.logsSistema.readValues("LOGS", "A:A");
+    out.logsTotalLinhas = logsAll.length;
+  } catch (err) {
+    out.logsTotalErro = (err as Error).message;
+  }
+
   return new Response(JSON.stringify({ success: true, ...out }, null, 2), {
     status: 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
