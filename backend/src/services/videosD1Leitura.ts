@@ -73,6 +73,15 @@ function montarAba(
     while (out.length < r.linha) out.push([]);
     out[r.linha - 1] = aplicarExtras([...r.celulas], r.extras, header);
   }
+  // A API do Sheets corta as células vazias no FIM de cada linha — inclusive
+  // do cabeçalho. Isso importa: o código de leitura cria uma chave por
+  // célula do cabeçalho (ex.: a coluna G de Comentarios_MV não tem título,
+  // então NÃO existe chave "coluna_7"). Sem cortar aqui, cada objeto vindo
+  // do D1 ganhava um campo a mais que o da planilha (pego pela comparação
+  // em produção, 2026-11-13).
+  for (const linha of out) {
+    while (linha.length && linha[linha.length - 1] === "") linha.pop();
+  }
   return out;
 }
 
