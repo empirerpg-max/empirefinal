@@ -333,11 +333,72 @@ export async function readValues(
   return promise;
 }
 
+// Leitura SEM cache e SEM fallback GViz — só a API v4 (com o mesmo retry
+// de cota). Usada onde o resultado decide ONDE gravar (ex: próxima linha
+// livre de "Musicas") ou confirma uma escrita: o cache de 15s pode estar
+// desatualizado por uma escrita feita em OUTRA instância do Worker, e o
+// fallback GViz ignora o range pedido (devolve a aba inteira), o que faria
+// uma releitura de "H123:H123" comparar com a célula A1 e acusar falha
+// numa escrita que na verdade deu certo.
+export async function readValuesFresh(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  range = "A:ZZ",
+): Promise<string[][]> {
+  return readValuesUncached(spreadsheetKeyOrId, sheetName, range, "FORMATTED_VALUE", false);
+}
+
+// Garante que a aba tenha pelo menos `minRows` linhas no grid — updateValues
+// num range explícito além do fim do grid falha ("exceeds grid limits"),
+// diferente do :append, que inseria linhas sozinho.
+export async function ensureRowCapacity(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  minRows: number,
+): Promise<void> {
+  const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const response = await sheetsRequest<{
+    sheets?: Array<{
+      properties?: { title?: string; sheetId?: number; gridProperties?: { rowCount?: number } };
+    }>;
+  }>(
+    `/${spreadsheetId}?fields=sheets.properties(title,sheetId,gridProperties.rowCount)`,
+    { method: "GET" },
+    [SHEETS_READONLY_SCOPE],
+  );
+  const tab = (response.sheets || []).find((s) => s.properties?.title === sheetName)?.properties;
+  if (!tab || tab.sheetId === undefined) {
+    throw new Error(`Aba "${sheetName}" não encontrada em ${spreadsheetId}.`);
+  }
+  const rowCount = tab.gridProperties?.rowCount ?? 0;
+  if (rowCount >= minRows) return;
+  await sheetsRequest(
+    `/${spreadsheetId}:batchUpdate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [
+          {
+            appendDimension: {
+              sheetId: tab.sheetId,
+              dimension: "ROWS",
+              // Folga extra pra não precisar disso a cada lançamento.
+              length: minRows - rowCount + 200,
+            },
+          },
+        ],
+      }),
+    },
+    [SHEETS_READWRITE_SCOPE],
+  );
+}
+
 async function readValuesUncached(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   range = "A:ZZ",
   valueRenderOption: ValueRenderOption = "FORMATTED_VALUE",
+  allowGvizFallback = true,
 ): Promise<string[][]> {
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
 
@@ -380,6 +441,7 @@ async function readValuesUncached(
       await sleep(ehCotaPorMinuto ? attempt * 1500 : attempt * 400);
     }
   }
+  if (ultimoErroV4 && !allowGvizFallback) throw ultimoErroV4;
   if (ultimoErroV4) {
     console.warn(
       `[googleSheetsService] Falha na API v4 (${ultimoErroV4.message}). Usando fallback GViz CSV para "${sheetName}"...`,
@@ -786,6 +848,10 @@ export const googleSheetsService = {
     // verdade guardado nela.
     readValuesRaw: (sheetName: string, range?: string) =>
       readValues("principal", sheetName, range, "UNFORMATTED_VALUE"),
+    readValuesFresh: (sheetName: string, range?: string) =>
+      readValuesFresh("principal", sheetName, range),
+    ensureRowCapacity: (sheetName: string, minRows: number) =>
+      ensureRowCapacity("principal", sheetName, minRows),
     readSheetObjects: (sheetName: string, range?: string) =>
       readSheetObjects("principal", sheetName, range),
     findRows: (
