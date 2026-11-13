@@ -405,7 +405,8 @@ export async function adminDiagForumRapidoVideosController(request: Request): Pr
     const legados = [...legado1, ...legado2, ...legado3];
     const videos = linhasParaObjetos(SHEET_VIDEOS, planVideos);
     const fim = Math.min(videos.length, inicio + quantidade);
-    const legadoQueApareceria: { video: string; titulo: string; amostra: SheetRecord }[] = [];
+    const legadoQueApareceria: { video: string; titulo: string; amostra: Record<string, string> }[] = [];
+    let intrusosDeMusica = 0;
     const semanasDiferentes: { video: string; normal: number | null; rapido: number | null }[] = [];
 
     // Índice dos registros legados, montado UMA vez (rodar o filtro inteiro
@@ -456,8 +457,22 @@ export async function adminDiagForumRapidoVideosController(request: Request): Pr
           for (const { t, i } of titulos) if (t.includes(normTitulo) || normTitulo.includes(t)) candidatos.add(i);
         }
         for (const i of candidatos) {
+          // Registro de TÓPICO DE MÚSICA (tem nome_da_musica) não é comentário de
+          // vídeo: só "casava" porque o número do tópico coincide com o ID
+          // antigo do vídeo — o caminho rápido não mostrar isso é correção.
+          if ((legados[i]["nome_da_musica"] || "").trim()) {
+            intrusosDeMusica++;
+            continue;
+          }
           if (comentarioPertenceAoTopico(legados[i], normId, busca, normTitulo)) {
-            if (legadoQueApareceria.length < 30) legadoQueApareceria.push({ video: id, titulo: v["titulo_do_topico"] || "", amostra: legados[i] });
+            if (legadoQueApareceria.length < 30) {
+              const r = legados[i];
+              legadoQueApareceria.push({
+                video: id,
+                titulo: v["titulo_do_topico"] || "",
+                amostra: { comentario: (r["comentario"] || r["texto"] || r["mensagem"] || "").slice(0, 120), jogador: r["nome_do_jogador"] || r["jogador"] || "" },
+              });
+            }
             break;
           }
         }
@@ -498,6 +513,7 @@ export async function adminDiagForumRapidoVideosController(request: Request): Pr
       rodada,
       pagina: { inicio, fim, totalVideos: videos.length, proximoInicio: fim < videos.length ? fim : null },
       registrosLegados: legados.length,
+      intrusosDeMusicaIgnorados: intrusosDeMusica,
       legadoQueApareceria,
       semanasDiferentes,
     });

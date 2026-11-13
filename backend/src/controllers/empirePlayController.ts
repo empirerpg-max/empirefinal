@@ -422,6 +422,14 @@ export async function semanasDoVideo(rec: SheetRecord): Promise<number | null> {
   if (!nomeOriginal) return null;
   const alvo = normalizeComparison(nomeOriginal.split(";")[0] || "");
   if (!alvo) return null;
+  // O próprio vídeo já traz o Código único da música que divulga (coluna U)
+  // — é ele que liga às semanas no chart, valendo pra qualquer versão da
+  // música (o nome em "Musicas" no D1 pode ser o de outra versão).
+  const codigoDoVideo = normalizeComparison(getValue(rec, ["codigo_unico"]) || "");
+  if (codigoDoVideo) {
+    const semanas = await getSemanasPorCodigoUnicoEdicaoCharts(codigoDoVideo);
+    if (semanas !== null) return semanas;
+  }
   if (!musicasPorNomeCache || musicasPorNomeCache.ate < Date.now()) {
     const db = getCatalogoDb();
     if (!db) return null;
