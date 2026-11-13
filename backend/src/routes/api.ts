@@ -240,6 +240,12 @@ import { adminCriarTabelaComentariosMusicasController } from "../controllers/adm
 import { adminMigrarComentariosMusicasD1Controller } from "../controllers/adminMigrarComentariosMusicasD1Controller";
 import { adminCriarTabelaComentariosAlbunsController } from "../controllers/adminCriarTabelaComentariosAlbunsController";
 import { adminMigrarComentariosAlbunsD1Controller } from "../controllers/adminMigrarComentariosAlbunsD1Controller";
+import {
+  adminCriarTabelasVideosD1Controller,
+  adminMigrarVideosD1Controller,
+  adminMigrarComentariosVideosD1Controller,
+  adminValidarVideosD1Controller,
+} from "../controllers/adminMigracaoVideosD1Controller";
 import { adminDiagOrfaosComentariosController } from "../controllers/adminDiagOrfaosComentariosController";
 import { adminBackfillCodigoUnicoMusicasController } from "../controllers/adminBackfillCodigoUnicoMusicasController";
 import { adminRecriarTabelasMusicasD1Controller } from "../controllers/adminRecriarTabelasMusicasD1Controller";
@@ -2211,6 +2217,15 @@ export async function handleEmpireApiRoutes(
     // PK (pivot 2026-10-14) — destrutivo só nessas 2 tabelas, chamado
     // manualmente via admin-call.yml antes de remigrar.
     response = await adminRecriarTabelasMusicasD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/criar-tabelas-videos-d1") {
+    // Migração de vídeos pro D1 (2026-11-13) — ver adminMigracaoVideosD1Controller.ts.
+    response = await adminCriarTabelasVideosD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/migrar-videos-d1") {
+    response = await adminMigrarVideosD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/migrar-comentarios-videos-d1") {
+    response = await adminMigrarComentariosVideosD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/validar-videos-d1") {
+    response = await adminValidarVideosD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-contagem-musicas-d1") {
     response = await adminDiagContagemMusicasD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-faixa-pendente") {
