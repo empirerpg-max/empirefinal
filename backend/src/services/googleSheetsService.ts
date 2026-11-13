@@ -492,6 +492,15 @@ export async function readSheetObjects(
   range = "A:ZZ",
 ): Promise<SheetRecord[]> {
   const rows = await readValues(spreadsheetKeyOrId, sheetName, range);
+  return linhasParaObjetos(sheetName, rows);
+}
+
+/**
+ * Parte pura de readSheetObjects (linhas cruas -> objetos por cabeçalho) —
+ * separada pra que a leitura vinda do D1 (videosD1Leitura.ts) passe pelo
+ * MESMO código e produza exatamente os mesmos objetos.
+ */
+export function linhasParaObjetos(sheetName: string, rows: string[][]): SheetRecord[] {
   if (rows.length < 2) return [];
 
   const rawHeaders = rows[0].map((header, index) => {

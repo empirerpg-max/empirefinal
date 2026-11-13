@@ -7,10 +7,12 @@ import {
   normalizeHeader,
   normalizeText,
   dedupeHeaders,
+  linhasParaObjetos,
   SheetRecord,
 } from "../services/googleSheetsService";
 import { getUserProfile } from "./userController";
 import { getCatalogoDb } from "../services/musicasDbService";
+import { linhasDaAbaDeVideo } from "../services/videosD1Leitura";
 
 // Leitura do Catálogo/Fórum de MÚSICA agora vem do D1 (tabela `musicas`),
 // não mais do Sheets (pivot autorizado pelo usuário, 2026-10-15) — vídeo e
@@ -137,7 +139,20 @@ function stripArtistPrefixNormalized(normalizedValue: string): string {
 async function readSheetObjectsWithRowIndex(
   sheetName: string,
 ): Promise<{ rec: SheetRecord; rowIndex: number }[]> {
-  const rawRows = await sheetsService.readValues(sheetName).catch(() => []);
+  // Comentarios_MV pode vir do D1 (chave "videos:leitura-d1", ver
+  // videosD1Leitura.ts) — mesmas linhas, nas mesmas posições.
+  const rawRows =
+    sheetName === "Comentarios_MV"
+      ? await linhasDaAbaDeVideo(sheetName).catch(() => [])
+      : await sheetsService.readValues(sheetName).catch(() => []);
+  return objetosComRowIndex(sheetName, rawRows);
+}
+
+/** Parte pura de readSheetObjectsWithRowIndex (exportada pra comparação planilha x D1). */
+export function objetosComRowIndex(
+  sheetName: string,
+  rawRows: string[][],
+): { rec: SheetRecord; rowIndex: number }[] {
   if (!rawRows || rawRows.length < 2) return [];
   const headers = dedupeHeaders(
     sheetName,
@@ -153,6 +168,15 @@ async function readSheetObjectsWithRowIndex(
     out.push({ rec, rowIndex: i + 2 });
   });
   return out;
+}
+
+/**
+ * "Music Videos" como objetos — do D1 quando a chave "videos:leitura-d1"
+ * está ligada (ver videosD1Leitura.ts), senão da planilha. Passa pelo MESMO
+ * linhasParaObjetos da planilha, então o resultado é idêntico.
+ */
+async function lerMusicVideosComoObjetos(): Promise<SheetRecord[]> {
+  return linhasParaObjetos("Music Videos", await linhasDaAbaDeVideo("Music Videos"));
 }
 
 export interface EmpirePlayCleanItem {
@@ -795,7 +819,7 @@ export async function getEmpirePlayHomeController(): Promise<Response> {
         sheetsService.readSheetObjects("Top_Videos_YT"),
       ).catch(() => []),
       sheetsService.readSheetObjects("Musicas").catch(() => []),
-      sheetsService.readSheetObjects("Music Videos").catch(() => []),
+      lerMusicVideosComoObjetos().catch(() => []),
       // ARTISTAS vive na planilha "usuarios" (diferente da "principal" usada
       // acima) — é de lá que vem a foto de perfil de verdade do artista,
       // pra distinguir da capa da música/vídeo. Era a leitura que mais
@@ -1076,7 +1100,7 @@ export async function getEmpirePlayVideosController(request: Request): Promise<R
   );
 
   try {
-    const records = await sheetsService.readSheetObjects("Music Videos");
+    const records = await lerMusicVideosComoObjetos();
     let items = records.map((rec, idx) => buildCleanItem("Videos", rec, idx));
 
     if (filterArtist) {
@@ -1844,7 +1868,9 @@ export async function getEmpirePlayForumTopicController(
     const mediaRecordsPromise =
       sheetMedia === "Musicas"
         ? readMusicasFromD1().then((d1) => d1 ?? sheetsService.readSheetObjects(sheetMedia).catch(() => []))
-        : sheetsService.readSheetObjects(sheetMedia).catch(() => []);
+        : sheetMedia === "Music Videos"
+          ? lerMusicVideosComoObjetos().catch(() => [])
+          : sheetsService.readSheetObjects(sheetMedia).catch(() => []);
 
     const [
       mediaRecords,
