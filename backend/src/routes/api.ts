@@ -270,6 +270,7 @@ import { adminLimparFolliaDuplicadosController } from "../controllers/adminLimpa
 import { adminFixFolliaFaixasController } from "../controllers/adminFixFolliaFaixasController";
 import { adminFixFolliaColunaLController } from "../controllers/adminFixFolliaColunaLController";
 import { adminDiagMusicasCorruptasController } from "../controllers/adminDiagMusicasCorruptasController";
+import { adminLimparMusicasDeslocadasController } from "../controllers/adminLimparMusicasDeslocadasController";
 import { adminRecuperarFolliaFaixasController } from "../controllers/adminRecuperarFolliaFaixasController";
 import { adminFinalizarFolliaFaixasController } from "../controllers/adminFinalizarFolliaFaixasController";
 import { adminVincularFaixasExistentesFolliaController } from "../controllers/adminVincularFaixasExistentesFolliaController";
@@ -2270,6 +2271,8 @@ export async function handleEmpireApiRoutes(
     response = await adminFixFolliaColunaLController(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-musicas-corruptas") {
     response = await adminDiagMusicasCorruptasController(request);
+  } else if (url.pathname === "/api/empire-play/admin/limpar-musicas-deslocadas") {
+    response = await adminLimparMusicasDeslocadasController(request);
   } else if (url.pathname === "/api/empire-play/admin/recuperar-follia-faixas") {
     response = await adminRecuperarFolliaFaixasController(request);
   } else if (url.pathname === "/api/empire-play/admin/finalizar-follia-faixas") {
