@@ -20,20 +20,7 @@ jobs:
       - name: Build and deploy to Cloudflare Workers
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          WRANGLER_LOG: debug
         run: bun run deploy
-
-      # TEMPORÁRIO (só na branch de diagnóstico): mostra o motivo real do
-      # erro 10013 que o wrangler grava no arquivo de log.
-      - name: Diagnóstico do erro do wrangler
-        if: failure()
-        run: |
-          bunx wrangler --version || true
-          bun --version
-          for f in ~/.config/.wrangler/logs/*.log; do
-            echo "=== $f"
-            grep -n -i -E "10013|error|errors|messages|status|versions|code\"" "$f" | grep -v -i "authorization" | tail -80
-          done
 
       - name: Set Telegram media proxy secret
         env:
