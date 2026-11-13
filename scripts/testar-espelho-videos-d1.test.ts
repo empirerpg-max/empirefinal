@@ -149,6 +149,16 @@ test("leitura D1: linhas de vídeos e comentários idênticas às da planilha (p
   const v = await L.linhasVideosD1(); const c = await L.linhasComentariosVideosD1();
   expect(JSON.stringify(semVaziasNoFim(v!))).toBe(JSON.stringify(semVaziasNoFim(sheets["Music Videos"])));
   expect(JSON.stringify(semVaziasNoFim(c!))).toBe(JSON.stringify(semVaziasNoFim(sheets["Comentarios_MV"])));
+  // Sem normalizar o lado do D1: cada linha remontada tem que vir EXATAMENTE
+  // como a API do Sheets devolve (sem células vazias no fim) — o cabeçalho
+  // de Comentarios_MV tem 6 colunas, não 7 (pego em produção).
+  expect(c![0]).toEqual(sheets["Comentarios_MV"][0]);
+  expect(v![0]).toEqual(sheets["Music Videos"][0]);
+  for (const [d1, plan] of [[v!, sheets["Music Videos"]], [c!, sheets["Comentarios_MV"]]] as const) {
+    // a API do Sheets nunca devolve células vazias no fim da linha
+    const comoApi = (r: string[] | undefined) => { const x = [...(r ?? [])]; while (x.length && x[x.length - 1] === "") x.pop(); return x; };
+    for (let i = 0; i < d1.length; i++) expect(d1[i]).toEqual(comoApi(plan[i]));
+  }
 });
 
 test("chave desligada lê da planilha; ligada lê do D1; D1 falhando volta pra planilha", async () => {
