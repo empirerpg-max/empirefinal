@@ -19,45 +19,11 @@ import { registrarLogSistema } from "../services/logSistemaService";
 //
 // GET /api/empire-play/admin/fix-comentarios-videos-orfaos             -> simulação
 // GET /api/empire-play/admin/fix-comentarios-videos-orfaos?confirmar=1 -> aplica
-// (&lote=2 pro segundo lote, ver abaixo)
-//
-// Lote 2 (?lote=2, confirmado pelo usuário em 2026-11-13):
-//   - videos_idx215 (ID sintético; a notificação do mesmo minuto guarda
-//     "Anníbal Páris - Bad Friend") -> video_1789042741749_eip913 (o clipe oficial)
-//   - 1638 (ID da MENSAGEM do vídeo "Dagny - JULY", gravado no lugar do
-//     tópico) -> 1637 (tópico real do Dagny - JULY)
-//   - 1 mensagem automática do bot "Empire Registros" no tópico 1628
-//     ("Abigail - video 34", vídeo que não existe) -> apagada com backup.
-interface Lote {
-  relinks: { de: string; para: string; esperado: number }[];
-  apagar: (row: string[] | undefined) => boolean;
-  apagarEsperado: number;
-  descricaoApagar: string;
-}
-const LOTES: Record<string, Lote> = {
-  "1": {
-    relinks: [
-      { de: "1685", para: "video_1789829384327_dmoybe", esperado: 3 },
-      { de: "video_1792668710470_e8nwqc", para: "video_1793150491662_k8usr6", esperado: 3 },
-    ],
-    apagar: (row) => ehTeste(row),
-    apagarEsperado: 4,
-    descricaoApagar: 'comentário(s) de teste "TesteDebug"',
-  },
-  "2": {
-    relinks: [
-      { de: "videos_idx215", para: "video_1789042741749_eip913", esperado: 1 },
-      { de: "1638", para: "1637", esperado: 1 },
-    ],
-    apagar: (row) =>
-      !!row &&
-      (row[0] || "") === "1628" &&
-      (row[2] || "") === "Empire Registros" &&
-      (row[3] || "").includes("Abigail - video 34"),
-    apagarEsperado: 1,
-    descricaoApagar: 'mensagem automática do bot "Empire Registros" (tópico 1628, "Abigail - video 34")',
-  },
-};
+const RELINKS: { de: string; para: string; esperado: number }[] = [
+  { de: "1685", para: "video_1789829384327_dmoybe", esperado: 3 },
+  { de: "video_1792668710470_e8nwqc", para: "video_1793150491662_k8usr6", esperado: 3 },
+];
+const TESTES_ESPERADOS = 4;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
@@ -77,13 +43,7 @@ function ehTeste(row: string[] | undefined): boolean {
 }
 
 export async function adminFixComentariosVideosOrfaosController(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const confirmar = url.searchParams.get("confirmar") === "1";
-  const lote = LOTES[url.searchParams.get("lote") || "1"];
-  if (!lote) return json({ success: false, error: "Lote inválido (use lote=1 ou lote=2)." }, 400);
-  const RELINKS = lote.relinks;
-  const TESTES_ESPERADOS = lote.apagarEsperado;
-  const ehAlvoApagar = lote.apagar;
+  const confirmar = new URL(request.url).searchParams.get("confirmar") === "1";
   try {
     const [videos, comentarios, notif] = await Promise.all([
       googleSheetsService.principal.readValues("Music Videos", "A:U"),
@@ -109,9 +69,9 @@ export async function adminFixComentariosVideosOrfaosController(request: Request
         erros.push(`Comentários com tópico ${r.de}: ${r.linhas.length} (esperado ${r.esperado}).`);
       }
     }
-    const testes = comentarios.map((row, i) => ({ linha: i + 1, row })).filter(({ linha, row }) => linha > 1 && ehAlvoApagar(row));
+    const testes = comentarios.map((row, i) => ({ linha: i + 1, row })).filter(({ linha, row }) => linha > 1 && ehTeste(row));
     if (testes.length !== TESTES_ESPERADOS) {
-      erros.push(`Linhas a apagar (${lote.descricaoApagar}): ${testes.length} (esperado ${TESTES_ESPERADOS}).`);
+      erros.push(`Comentários de teste: ${testes.length} (esperado ${TESTES_ESPERADOS}).`);
     }
 
     const header = notif[0] || [];
@@ -142,7 +102,7 @@ export async function adminFixComentariosVideosOrfaosController(request: Request
     // 1. Backup das linhas de teste no LOGS ANTES de qualquer escrita.
     await registrarLogSistema({
       categoria: "Ação concluída",
-      oQueAconteceu: `Fix comentários órfãos de vídeo: ${testes.length} ${lote.descricaoApagar} será(ão) apagado(s) de Comentarios_MV (autorizado pelo usuário em 2026-11-13). Backup completo no detalhe técnico.`,
+      oQueAconteceu: `Fix comentários órfãos de vídeo: ${testes.length} comentário(s) de teste "TesteDebug" serão apagados de Comentarios_MV (autorizado pelo usuário em 2026-11-13). Backup completo no detalhe técnico.`,
       onde: "adminFixComentariosVideosOrfaosController",
       detalheTecnico: JSON.stringify({ backupComentariosTeste: testes, relinks: plano }),
     });
@@ -172,7 +132,7 @@ export async function adminFixComentariosVideosOrfaosController(request: Request
     }
 
     // 4. Apaga os testes (confere de novo, na releitura, que ainda são eles).
-    const linhasTeste = testes.map((t) => t.linha).filter((l) => ehAlvoApagar(comentariosDepois[l - 1]));
+    const linhasTeste = testes.map((t) => t.linha).filter((l) => ehTeste(comentariosDepois[l - 1]));
     if (linhasTeste.length !== TESTES_ESPERADOS) {
       return json({ success: false, error: "Linhas de teste mudaram de lugar — não apaguei. Rode de novo.", religados: true }, 409);
     }
@@ -180,7 +140,7 @@ export async function adminFixComentariosVideosOrfaosController(request: Request
 
     const final = await googleSheetsService.principal.readValues("Comentarios_MV", "A:G");
     const restamOrfaosDosIds = final.filter((row, i) => i > 0 && RELINKS.some((r) => (row?.[0] || "") === r.de)).length;
-    const restamTestes = final.filter((row, i) => i > 0 && ehAlvoApagar(row)).length;
+    const restamTestes = final.filter((row, i) => i > 0 && ehTeste(row)).length;
     return json({
       success: restamOrfaosDosIds === 0 && restamTestes === 0,
       comentariosReligados: relinkComentarios.reduce((a, r) => a + r.linhas.length, 0),
