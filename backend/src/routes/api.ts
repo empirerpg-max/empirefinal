@@ -2237,7 +2237,7 @@ export async function handleEmpireApiRoutes(
   } else if (url.pathname === "/api/empire-play/admin/leitura-videos-d1") {
     response = await adminLeituraVideosD1Controller(request);
   } else if (url.pathname === "/api/empire-play/admin/comparar-comentarios-por-topico-d1") {
-    response = await adminCompararComentariosPorTopicoD1Controller();
+    response = await adminCompararComentariosPorTopicoD1Controller(request);
   } else if (url.pathname === "/api/empire-play/admin/comentarios-por-topico-d1") {
     response = await adminComentariosPorTopicoD1Controller(request);
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-comentarios-videos-orfaos") {

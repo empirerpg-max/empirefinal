@@ -232,20 +232,33 @@ export async function adminLeituraVideosD1Controller(request: Request): Promise<
 // Fase 3b — comentários do Fórum buscados só pro tópico aberto
 // ---------------------------------------------------------------------------
 
+interface KvLike {
+  get(k: string): Promise<string | null>;
+  put(k: string, v: string, opts?: { expirationTtl?: number }): Promise<void>;
+}
+const kvFlags = () => (globalThis as Record<string, unknown>).__FLAGS_KV__ as KvLike | undefined;
+const chaveRodada = (rodada: string, inicio: number) => `videos:cmp-topico:${rodada}:${inicio}`;
+const TAMANHO_PAGINA_PADRAO = 25;
+
 /**
- * Pra CADA vídeo de "Music Videos", compara os comentários que o Fórum
- * mostraria lendo a aba inteira com os que mostra buscando no D1 só os
- * candidatos do tópico — mesmo filtro (comentarioPertenceAoTopico), mesmas
- * chaves. Testa o ID real do vídeo e também o ID provisório por posição
- * ("videos_idxN", que links antigos ainda usam). Só leitura.
+ * Pra cada vídeo de "Music Videos" (em PÁGINAS — testar os 282 de uma vez
+ * estourou o limite de CPU do Worker, erro 1102), compara os comentários
+ * que o Fórum mostraria lendo a aba inteira com os que mostra buscando no
+ * D1 só os candidatos do tópico — mesmo filtro (comentarioPertenceAoTopico).
+ * Testa o ID real, "videos_<ID>" e o ID provisório por posição
+ * ("videos_idxN"). Só leitura (grava no KV só o resultado da página, pra
+ * trava de "ligar").
  * Também lista os casos em que o comentário só entra no tópico porque o
  * NÚMERO DA LINHA dele na planilha é igual ao ID do tópico (comportamento
- * herdado do filtro original, reproduzido de propósito pra troca ser
- * idêntica — ver resposta da sessão de 2026-11-13).
+ * herdado do filtro original, reproduzido de propósito).
  *
- * GET /api/empire-play/admin/comparar-comentarios-por-topico-d1
+ * GET /api/empire-play/admin/comparar-comentarios-por-topico-d1?rodada=R&inicio=0&quantidade=25
  */
-export async function adminCompararComentariosPorTopicoD1Controller(): Promise<Response> {
+export async function adminCompararComentariosPorTopicoD1Controller(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const rodada = url.searchParams.get("rodada") || "";
+  const inicio = Math.max(0, parseInt(url.searchParams.get("inicio") || "0", 10) || 0);
+  const quantidade = Math.max(1, parseInt(url.searchParams.get("quantidade") || String(TAMANHO_PAGINA_PADRAO), 10) || TAMANHO_PAGINA_PADRAO);
   try {
     const [planVideos, d1Comentarios] = await Promise.all([
       readValuesFresh("principal", SHEET_VIDEOS, "A:ZZ"),
@@ -256,18 +269,18 @@ export async function adminCompararComentariosPorTopicoD1Controller(): Promise<R
       lista.map(({ rec, rowIndex }) => ({ ...rec, __rowIndex: String(rowIndex) }) as SheetRecord);
     const todos = comRow(objetosComRowIndex(SHEET_COMENTARIOS, d1Comentarios));
     const videos = linhasParaObjetos(SHEET_VIDEOS, planVideos);
+    const fim = Math.min(videos.length, inicio + quantidade);
 
     let topicosTestados = 0;
     let comentariosConferidos = 0;
     const diferencas: unknown[] = [];
     const casosPorNumeroDaLinha: { topico: string; linhaDoComentario: string; topicoDoComentario: string }[] = [];
 
-    for (let idx = 0; idx < videos.length; idx++) {
+    for (let idx = inicio; idx < fim; idx++) {
       const v = videos[idx];
       const id = v["message_thread_id"] || "";
-      const titulo = v["titulo_do_topico"] || "";
       const normId = normalizeComparison(id);
-      const normTitulo = normalizeComparison(titulo);
+      const normTitulo = normalizeComparison(v["titulo_do_topico"] || "");
       // ID real, "videos_<ID>" (id do item no catálogo) e o provisório por posição
       for (const busca of [normId, normalizeComparison(`videos_${id}`), normalizeComparison(`videos_idx${idx + 1}`)]) {
         if (!busca) continue;
@@ -284,17 +297,27 @@ export async function adminCompararComentariosPorTopicoD1Controller(): Promise<R
         }
         if (busca === normId) {
           for (const r of esperado) {
-            const top = normalizeComparison(r["id_do_topico"] || "");
-            if (top !== normId && r.__rowIndex === normId) {
+            if (normalizeComparison(r["id_do_topico"] || "") !== normId && r.__rowIndex === normId) {
               casosPorNumeroDaLinha.push({ topico: id, linhaDoComentario: r.__rowIndex, topicoDoComentario: r["id_do_topico"] || "" });
             }
           }
         }
       }
     }
+    const ok = diferencas.length === 0;
+    const kv = kvFlags();
+    if (rodada && kv) {
+      await kv.put(
+        chaveRodada(rodada, inicio),
+        JSON.stringify({ ok, fim, totalVideos: videos.length, quantidade, em: Date.now() }),
+        { expirationTtl: 3600 },
+      );
+    }
     return json({
-      success: diferencas.length === 0,
+      success: ok,
       buscaPorTopicoAtiva: await comentariosPorTopicoD1Ativo(),
+      rodada,
+      pagina: { inicio, fim, totalVideos: videos.length, proximoInicio: fim < videos.length ? fim : null },
       topicosTestados,
       comentariosConferidos,
       diferencas,
@@ -306,20 +329,39 @@ export async function adminCompararComentariosPorTopicoD1Controller(): Promise<R
 }
 
 /**
- * GET /api/empire-play/admin/comentarios-por-topico-d1            -> estado
- * GET /api/empire-play/admin/comentarios-por-topico-d1?ativar=1   -> liga (só se a comparação der idêntica)
- * GET /api/empire-play/admin/comentarios-por-topico-d1?ativar=0   -> desliga (volta a ler a aba inteira)
+ * GET /api/empire-play/admin/comentarios-por-topico-d1                         -> estado
+ * GET /api/empire-play/admin/comentarios-por-topico-d1?ativar=1&rodada=R       -> liga, SÓ se todas as
+ *     páginas da rodada R (comparar-comentarios-por-topico-d1, última hora) cobriram todos os vídeos sem diferença
+ * GET /api/empire-play/admin/comentarios-por-topico-d1?ativar=0                -> desliga (volta a ler a aba inteira)
  */
 export async function adminComentariosPorTopicoD1Controller(request: Request): Promise<Response> {
-  const ativar = new URL(request.url).searchParams.get("ativar");
+  const url = new URL(request.url);
+  const ativar = url.searchParams.get("ativar");
   if (ativar === "0") return json({ success: await definirComentariosPorTopicoD1(false), buscaPorTopicoAtiva: false });
   if (ativar === "1") {
-    const comparacao = (await (await adminCompararComentariosPorTopicoD1Controller()).json()) as { success?: boolean };
-    if (!comparacao.success) {
-      return json({ success: false, mensagem: "Resultados diferentes — NÃO liguei.", comparacao }, 409);
+    const rodada = url.searchParams.get("rodada") || "";
+    const kv = kvFlags();
+    if (!rodada || !kv) return json({ success: false, error: "Informe a rodada da comparação (e o KV precisa existir)." }, 400);
+    // Percorre as páginas da rodada em sequência: cada uma tem que existir,
+    // estar ok, e a última tem que chegar no total de vídeos.
+    const paginas: unknown[] = [];
+    let inicio = 0;
+    let totalVideos = -1;
+    for (let guarda = 0; guarda < 1000; guarda++) {
+      const bruto = await kv.get(chaveRodada(rodada, inicio));
+      if (!bruto) return json({ success: false, mensagem: `Página a partir de ${inicio} não foi comparada nessa rodada — NÃO liguei.`, paginas }, 409);
+      const p = JSON.parse(bruto) as { ok: boolean; fim: number; totalVideos: number };
+      paginas.push({ inicio, ...p });
+      if (!p.ok) return json({ success: false, mensagem: `Página a partir de ${inicio} teve diferença — NÃO liguei.`, paginas }, 409);
+      if (totalVideos >= 0 && p.totalVideos !== totalVideos) {
+        return json({ success: false, mensagem: "O total de vídeos mudou no meio da rodada — rode de novo.", paginas }, 409);
+      }
+      totalVideos = p.totalVideos;
+      if (p.fim >= p.totalVideos) break;
+      inicio = p.fim;
     }
     const ok = await definirComentariosPorTopicoD1(true);
-    return json({ success: ok, buscaPorTopicoAtiva: ok, comparacao });
+    return json({ success: ok, buscaPorTopicoAtiva: ok, paginasConferidas: paginas.length, totalVideos });
   }
   return json({ success: true, buscaPorTopicoAtiva: await comentariosPorTopicoD1Ativo() });
 }
