@@ -1,4 +1,11 @@
-import { googleSheetsService, readValuesFresh } from "../services/googleSheetsService";
+import { googleSheetsService, linhasParaObjetos, readValuesFresh } from "../services/googleSheetsService";
+import {
+  definirLeituraVideosD1,
+  leituraVideosD1Ativa,
+  linhasComentariosVideosD1,
+  linhasVideosD1,
+} from "../services/videosD1Leitura";
+import { objetosComRowIndex } from "./empirePlayController";
 import { type D1DatabaseLike } from "../services/catalogoDbService";
 import { getCatalogoDb, VIDEOS_CREATE_STATEMENTS } from "../services/videosDbService";
 import { COMENTARIOS_VIDEOS_CREATE_STATEMENTS } from "../services/comentariosVideosDbService";
@@ -125,4 +132,77 @@ export async function adminValidarVideosD1Controller(): Promise<Response> {
   } catch (err) {
     return json({ success: false, error: (err as Error).message }, 500);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3 — leitura pelo D1 (ver videosD1Leitura.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compara, em produção, os objetos que o app monta lendo da PLANILHA com os
+ * que monta lendo do D1 — com o mesmo código de conversão
+ * (linhasParaObjetos / objetosComRowIndex). Só leitura. É o "pode ligar?".
+ *
+ * GET /api/empire-play/admin/comparar-leitura-videos-d1
+ */
+export async function adminCompararLeituraVideosD1Controller(): Promise<Response> {
+  try {
+    const [planVideos, planComentarios, d1Videos, d1Comentarios] = await Promise.all([
+      readValuesFresh("principal", SHEET_VIDEOS, "A:ZZ"),
+      readValuesFresh("principal", SHEET_COMENTARIOS, "A:ZZ"),
+      linhasVideosD1(),
+      linhasComentariosVideosD1(),
+    ]);
+    if (!d1Videos || !d1Comentarios) return json({ success: false, error: "D1 vazio ou indisponível." }, 500);
+
+    const comparar = (a: unknown[], b: unknown[]) => {
+      const diferencas: { indice: number; planilha: unknown; d1: unknown }[] = [];
+      const n = Math.max(a.length, b.length);
+      for (let i = 0; i < n; i++) {
+        if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) {
+          if (diferencas.length < 10) diferencas.push({ indice: i, planilha: a[i] ?? null, d1: b[i] ?? null });
+          else break;
+        }
+      }
+      return { iguais: diferencas.length === 0, planilha: a.length, d1: b.length, diferencas };
+    };
+    const videos = comparar(linhasParaObjetos(SHEET_VIDEOS, planVideos), linhasParaObjetos(SHEET_VIDEOS, d1Videos));
+    const comentarios = comparar(
+      objetosComRowIndex(SHEET_COMENTARIOS, planComentarios),
+      objetosComRowIndex(SHEET_COMENTARIOS, d1Comentarios),
+    );
+    return json({
+      success: videos.iguais && comentarios.iguais,
+      leituraD1Ativa: await leituraVideosD1Ativa(),
+      videos,
+      comentarios,
+    });
+  } catch (err) {
+    return json({ success: false, error: (err as Error).message }, 500);
+  }
+}
+
+/**
+ * Liga/desliga a leitura do catálogo/Fórum de vídeos pelo D1 (sem deploy).
+ * Ligar exige a comparação acima dar idêntica NA HORA — senão recusa.
+ *
+ * GET /api/empire-play/admin/leitura-videos-d1            -> estado atual
+ * GET /api/empire-play/admin/leitura-videos-d1?ativar=1   -> liga (se idêntico)
+ * GET /api/empire-play/admin/leitura-videos-d1?ativar=0   -> desliga (volta pra planilha)
+ */
+export async function adminLeituraVideosD1Controller(request: Request): Promise<Response> {
+  const ativar = new URL(request.url).searchParams.get("ativar");
+  if (ativar === "0") {
+    const ok = await definirLeituraVideosD1(false);
+    return json({ success: ok, leituraD1Ativa: false });
+  }
+  if (ativar === "1") {
+    const comparacao = await (await adminCompararLeituraVideosD1Controller()).json();
+    if (!(comparacao as { success?: boolean }).success) {
+      return json({ success: false, mensagem: "Planilha e D1 não estão idênticos — NÃO liguei.", comparacao }, 409);
+    }
+    const ok = await definirLeituraVideosD1(true);
+    return json({ success: ok, leituraD1Ativa: ok, comparacao });
+  }
+  return json({ success: true, leituraD1Ativa: await leituraVideosD1Ativa() });
 }

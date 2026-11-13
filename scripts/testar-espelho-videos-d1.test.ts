@@ -35,6 +35,7 @@ function lerRange(aba: string, range: string): string[][] {
 mock.module(R + "googleSheetsService.ts", () => ({
   readValuesFresh: async (_k: string, aba: string, range = "A:ZZ") => lerRange(aba, range),
   googleSheetsService: { principal: { readValues: async (aba: string, range = "A:ZZ") => lerRange(aba, range) } },
+  linhasParaObjetos: () => [],
 }));
 mock.module(R + "logSistemaService.ts", () => ({ registrarLogSistema: async () => {} }));
 
@@ -132,4 +133,33 @@ test("falha no meio da carga de comentários NÃO troca a tabela real", async ()
   const r = await S.sincronizarComentariosCompleto(ruim);
   expect(r.ok).toBe(false);
   expect(sqlite.query("SELECT count(*) n FROM comentarios_videos").get()).toEqual(antes);
+});
+
+// ---------------------------------------------------------------------------
+// Fase 3 — leitura pelo D1: as linhas remontadas têm que ser as da planilha
+// ---------------------------------------------------------------------------
+const L = await import(R + "videosD1Leitura.ts");
+const kv = new Map<string, string>();
+(globalThis as any).__FLAGS_KV__ = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) };
+
+function semVaziasNoFim(rows: string[][]) { const c = rows.map(r => { const x = [...r]; while (x.length && x[x.length-1] === "") x.pop(); return x; }); while (c.length && c[c.length-1].length === 0) c.pop(); return c; }
+
+test("leitura D1: linhas de vídeos e comentários idênticas às da planilha (posição + conteúdo)", async () => {
+  await S.sincronizarVideosCompleto(); await S.sincronizarComentariosCompleto();
+  const v = await L.linhasVideosD1(); const c = await L.linhasComentariosVideosD1();
+  expect(JSON.stringify(semVaziasNoFim(v!))).toBe(JSON.stringify(semVaziasNoFim(sheets["Music Videos"])));
+  expect(JSON.stringify(semVaziasNoFim(c!))).toBe(JSON.stringify(semVaziasNoFim(sheets["Comentarios_MV"])));
+});
+
+test("chave desligada lê da planilha; ligada lê do D1; D1 falhando volta pra planilha", async () => {
+  leituras = 0;
+  await L.definirLeituraVideosD1(false);
+  await L.linhasDaAbaDeVideo("Music Videos"); expect(leituras).toBe(1);
+  await L.definirLeituraVideosD1(true);
+  leituras = 0; const d = await L.linhasDaAbaDeVideo("Comentarios_MV"); expect(leituras).toBe(0); expect(d.length).toBeGreaterThan(800);
+  const real = (globalThis as any).__CATALOGO_DB__;
+  (globalThis as any).__CATALOGO_DB__ = { prepare: () => ({ all: async () => { throw new Error("D1 fora"); } }) };
+  leituras = 0; const f = await L.linhasDaAbaDeVideo("Music Videos"); expect(leituras).toBe(1); expect(f.length).toBeGreaterThan(200);
+  (globalThis as any).__CATALOGO_DB__ = real;
+  await L.definirLeituraVideosD1(false);
 });
