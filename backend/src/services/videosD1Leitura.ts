@@ -132,8 +132,9 @@ let chavesCompletasConfirmado = false;
  * Só os comentários CANDIDATOS de um tópico (ids já normalizados com
  * normalizeComparison), nas mesmas posições da planilha — um superconjunto
  * exato do que o filtro do Fórum aceita (ver chavesBuscaDaLinha): contém
- * o ID entre os valores curtos, OU a própria linha tem esse número (o
- * filtro original também compara o ID com o __rowIndex do registro).
+ * o ID entre os valores curtos. (Até 2026-11-13 também trazia a linha com
+ * esse número, porque o filtro comparava o ID com o __rowIndex — bug
+ * corrigido em comentarioPertenceAoTopico.)
  * null = não dá pra usar (sem D1, ID vazio, linhas sem chaves) -> o
  * chamador lê a aba inteira, como antes.
  */
@@ -149,8 +150,8 @@ export async function linhasComentariosVideosDoTopicoD1(idsNormalizados: string[
     if (!linha || !linha.n || (linha.sem ?? 0) > 0) return null;
     chavesCompletasConfirmado = true;
   }
-  const cond = ids.map(() => "(instr(chaves_busca, ?) > 0 OR CAST(linha_planilha AS TEXT) = ?)").join(" OR ");
-  const params = ids.flatMap((id) => [`|${id}|`, id]);
+  const cond = ids.map(() => "instr(chaves_busca, ?) > 0").join(" OR ");
+  const params = ids.map((id) => `|${id}|`);
   const rows =
     (
       await db

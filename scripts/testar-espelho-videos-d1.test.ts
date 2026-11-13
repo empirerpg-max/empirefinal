@@ -199,7 +199,7 @@ test("busca por tópico traz TODO comentário que o filtro do Fórum poderia ace
       for (let n = 2; n <= plan.length; n++) {
         const row = plan[n - 1] || [];
         if (!row.some((c) => String(c ?? "").trim())) continue;
-        const valores = [...row.slice(0, largura).map((c) => String(c ?? "").trim()), String(n)];
+        const valores = row.slice(0, largura).map((c) => String(c ?? "").trim());
         const filtroAceitaria = valores.some((v) => v.length > 0 && v.length <= 100 && norm(v) === busca);
         if (filtroAceitaria) { expect(encontradas.has(n)).toBe(true); verificados++; }
       }

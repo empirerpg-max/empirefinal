@@ -234,8 +234,17 @@ export function comentarioPertenceAoTopico(
   // tópico simplesmente nunca carregava. Como só interessa achar um ID
   // curto (nunca o texto do comentário em si), ignora valores longos
   // antes de normalizar.
+  //
+  // BUG corrigido em 2026-11-13: __rowIndex (número da LINHA do comentário
+  // na planilha, adicionado pelo próprio controller pra permitir reação)
+  // entrava nessa comparação — em todo tópico com ID numérico (os antigos,
+  // da era Telegram) aparecia de brinde o comentário que estava naquela
+  // linha, mesmo sendo de outro vídeo/música (medido: 141 dos 282 vídeos).
+  // O número da linha não é dado do comentário; fica de fora.
   if (normMediaTopicId || normTopicSearch) {
-    const vals = Object.values(rec)
+    const vals = Object.entries(rec)
+      .filter(([chave]) => chave !== "__rowIndex")
+      .map(([, v]) => v)
       .filter((v) => typeof v === "string" && v.length > 0 && v.length <= 100)
       .map((v) => normalizeComparison(v));
     if (vals.includes(normMediaTopicId) || vals.includes(normTopicSearch)) {
