@@ -393,6 +393,10 @@ export async function createCommentController(
     let rowDataEncontrada: string[] | null = null;
     let foundRowIndex = -1;
     let topicIdJaTinha = "";
+    // Só vídeo (ver bloco "1a" abaixo): a leitura de "Music Videos" deu
+    // certo? E o ID novo (linha sem F) já foi gravado e confirmado?
+    let leituraVideoOk = false;
+    let idVideoNovoGravado = false;
 
     // 1. Achar a linha e resolver o topicId estável — único trecho que
     // PRECISA terminar antes de salvar o comentário (passo 2), porque o
@@ -410,6 +414,7 @@ export async function createCommentController(
         const rows = await googleSheetsService.principal.readValues(targetSheet, "A:AA");
 
         if (rows && rows.length > 0) {
+          leituraVideoOk = true;
           // Busca pela coluna de ID do tópico certa pra essa aba (ver acima —
           // Music Videos usa uma posição diferente de Musicas/Albuns). Só cai
           // pra busca por título (substring, menos confiável) se o topicId não
@@ -480,6 +485,69 @@ export async function createCommentController(
       } catch (err) {
         console.warn("[ForumController] Erro ao achar linha/resolver topicId:", err);
       }
+
+    // 1a. Vídeo: NUNCA gravar comentário com um ID de tópico que nenhuma
+    // linha de "Music Videos" tem (pedido explícito do usuário em
+    // 2026-11-13, "não podemos perder registros"). Investigação dos 13
+    // comentários órfãos de Comentarios_MV achou 3 caminhos, todos aqui:
+    //   (a) vídeo não achado (ID sintético "videos_idx215", ID da mensagem
+    //       no lugar do tópico, "1638") -> comentário salvo com um ID que
+    //       não pertence a nada;
+    //   (b) linha sem ID (F vazia) -> o ID novo era gerado aqui mas só
+    //       GRAVADO em background, sem checar se deu certo. Falhou (cota do
+    //       Sheets) = comentário salvo com ID que a linha não tem, e o
+    //       PRÓXIMO comentário gerava OUTRO ID — "tá comendo meus
+    //       comentários" (Alchimia, 26-27/10: o ID k8usr6 nasceu no
+    //       segundo exato do comentário do Daniel);
+    //   (c) dois comentários simultâneos numa linha sem ID gerando IDs
+    //       diferentes (o 2º sobrescrevia o 1º).
+    // Agora: (a) recusa com erro claro (nada é salvo, o jogador reenvia);
+    // (b)/(c) grava o ID na hora, relê a célula pra confirmar e, se outro
+    // comentário chegou primeiro, usa o ID que ficou lá.
+    if ((tipoMedia === "video" || tipoMedia === "music-video") && !isReply) {
+      const idSintetico = !topicIdClean || /_idx\d+$/i.test(topicIdClean);
+      if (foundRowIndex === -1 && (leituraVideoOk || idSintetico)) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error:
+              "Não encontrei esse vídeo no catálogo (a página pode estar desatualizada). Recarregue a página e envie o comentário de novo — ele NÃO foi salvo.",
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (foundRowIndex > 0 && !topicIdJaTinha) {
+        const celula = `${colIndexToA1Letter(colTopicIdIndex)}${foundRowIndex}`;
+        const atual = normalizeText(
+          (await googleSheetsService.principal.readValues(targetSheet, celula).catch(() => []))?.[0]?.[0],
+        );
+        if (atual) {
+          topicIdClean = atual; // outro comentário gravou o ID primeiro — usa o dele
+          idVideoNovoGravado = true;
+        } else {
+          const gravou = await googleSheetsService.principal
+            .updateValues(targetSheet, celula, [[topicIdClean]])
+            .catch(() => false);
+          const confirmado = gravou
+            ? normalizeText(
+                (await googleSheetsService.principal.readValues(targetSheet, celula).catch(() => []))?.[0]?.[0],
+              )
+            : "";
+          if (!confirmado) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error:
+                  "Não consegui registrar o tópico desse vídeo agora (falha na planilha). Tente enviar de novo em alguns segundos — o comentário NÃO foi salvo.",
+              }),
+              { status: 503, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          topicIdClean = confirmado;
+          idVideoNovoGravado = true;
+        }
+      }
+    }
 
     // 1b. Fallback pro D1 — SÓ pra música (Fórum > Músicas é a única parte
     // já migrada; vídeo/álbum continuam 100% Sheets, sem fallback aqui).
@@ -719,7 +787,7 @@ export async function createCommentController(
       // de CPU sem necessidade.
       runInBackground(ctx, async () => {
         if (rowData) {
-          if (!topicIdJaTinha) {
+          if (!topicIdJaTinha && !idVideoNovoGravado) {
             const colTopicLetter = colIndexToA1Letter(colTopicIdIndex);
             await googleSheetsService.principal
               .updateValues(targetSheet, `${colTopicLetter}${foundRowIndex}`, [[topicIdClean]])
