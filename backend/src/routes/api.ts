@@ -246,6 +246,7 @@ import {
   adminMigrarComentariosVideosD1Controller,
   adminValidarVideosD1Controller,
 } from "../controllers/adminMigracaoVideosD1Controller";
+import { adminDiagComentariosVideosOrfaosController } from "../controllers/adminDiagComentariosVideosOrfaosController";
 import { adminDiagOrfaosComentariosController } from "../controllers/adminDiagOrfaosComentariosController";
 import { adminBackfillCodigoUnicoMusicasController } from "../controllers/adminBackfillCodigoUnicoMusicasController";
 import { adminRecriarTabelasMusicasD1Controller } from "../controllers/adminRecriarTabelasMusicasD1Controller";
@@ -2226,6 +2227,8 @@ export async function handleEmpireApiRoutes(
     response = await adminMigrarComentariosVideosD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/validar-videos-d1") {
     response = await adminValidarVideosD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/diagnostico-comentarios-videos-orfaos") {
+    response = await adminDiagComentariosVideosOrfaosController();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-contagem-musicas-d1") {
     response = await adminDiagContagemMusicasD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/diagnostico-faixa-pendente") {
