@@ -422,14 +422,6 @@ export async function semanasDoVideo(rec: SheetRecord): Promise<number | null> {
   if (!nomeOriginal) return null;
   const alvo = normalizeComparison(nomeOriginal.split(";")[0] || "");
   if (!alvo) return null;
-  // O próprio vídeo já traz o Código único da música que divulga (coluna U)
-  // — é ele que liga às semanas no chart, valendo pra qualquer versão da
-  // música (o nome em "Musicas" no D1 pode ser o de outra versão).
-  const codigoDoVideo = normalizeComparison(getValue(rec, ["codigo_unico"]) || "");
-  if (codigoDoVideo) {
-    const semanas = await getSemanasPorCodigoUnicoEdicaoCharts(codigoDoVideo);
-    if (semanas !== null) return semanas;
-  }
   if (!musicasPorNomeCache || musicasPorNomeCache.ate < Date.now()) {
     const db = getCatalogoDb();
     if (!db) return null;
@@ -446,7 +438,14 @@ export async function semanasDoVideo(rec: SheetRecord): Promise<number | null> {
     };
   }
   const musica = musicasPorNomeCache.lista.find((m) => m.nome === alvo);
-  if (!musica) return null;
+  if (!musica) {
+    // Música não achada pelo nome (ex.: versão com outro nome no D1): usa o
+    // Código único do próprio vídeo (coluna U), que referencia a música que
+    // ele divulga. Pelo nome vem primeiro porque é o que o caminho normal
+    // faz (e um código digitado errado no vídeo não muda as semanas).
+    const codigoDoVideo = normalizeComparison(getValue(rec, ["codigo_unico"]) || "");
+    return codigoDoVideo ? getSemanasPorCodigoUnicoEdicaoCharts(codigoDoVideo) : null;
+  }
   if (musica.codigo) {
     const semanas = await getSemanasPorCodigoUnicoEdicaoCharts(musica.codigo);
     if (semanas !== null) return semanas;
