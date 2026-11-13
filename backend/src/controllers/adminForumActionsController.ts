@@ -225,6 +225,35 @@ export async function marcarPendenteController(request: Request): Promise<Respon
         );
       }
     } else if (tipo === "video") {
+      // BLOQUEIO (2026-11-13, pedido explícito do usuário: "não podemos
+      // perder registros"): esse caminho limpava F e APAGAVA os
+      // comentários do tópico sem backup nenhum — e, se a leitura de
+      // Comentarios_MV falhasse, deixava os comentários órfãos (F vazia,
+      // próximo comentário gera ID novo). Com comentários no tópico, a
+      // ação é recusada; o admin decide caso a caso (ex: "Excluir tópico",
+      // que guarda backup restaurável). Leitura falhou = também recusa.
+      const comentariosRows = await googleSheetsService.principal
+        .readValues(COMENTARIOS_SHEET_POR_TIPO.video)
+        .catch(() => null);
+      if (!comentariosRows) {
+        return jsonResponse(
+          { success: false, error: "Não consegui conferir os comentários desse vídeo agora — nada foi alterado. Tente de novo." },
+          503,
+        );
+      }
+      const idNormVideo = normalizeComparison(idTopico);
+      const qtdComentarios = comentariosRows
+        .slice(1)
+        .filter((r) => normalizeComparison(r?.[0] || "") === idNormVideo).length;
+      if (qtdComentarios > 0) {
+        return jsonResponse(
+          {
+            success: false,
+            error: `Esse vídeo tem ${qtdComentarios} comentário(s). "Marcar como pendente" apagaria esses comentários — ação bloqueada pra não perder registros. Nada foi alterado.`,
+          },
+          409,
+        );
+      }
       // Music Videos não tem coluna "pendente"/"comentariosPara" própria —
       // só dá pra desvincular o tópico mesmo (limpa F, o message_thread_id).
       // O espelho D1 (`midia`, legado) usa o próprio ID do tópico como PK —
