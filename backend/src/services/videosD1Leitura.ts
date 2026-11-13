@@ -27,23 +27,36 @@ function flagsKv(): FlagsKvLike | undefined {
   return (globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined;
 }
 
-let cacheFlag: { ativa: boolean; ate: number } | null = null;
+/**
+ * 2ª chave (2026-11-13): buscar no D1 só os comentários do tópico aberto,
+ * em vez da aba inteira. Só vale com a leitura pelo D1 também ligada.
+ */
+export const FLAG_COMENTARIOS_POR_TOPICO_D1 = "videos:comentarios-por-topico-d1";
 
-export async function leituraVideosD1Ativa(): Promise<boolean> {
-  if (cacheFlag && cacheFlag.ate > Date.now()) return cacheFlag.ativa;
+const cacheFlags = new Map<string, { ativa: boolean; ate: number }>();
+
+async function flagAtiva(chave: string): Promise<boolean> {
+  const c = cacheFlags.get(chave);
+  if (c && c.ate > Date.now()) return c.ativa;
   const kv = flagsKv();
-  const ativa = kv ? (await kv.get(FLAG_LEITURA_VIDEOS_D1).catch(() => null)) === "on" : false;
-  cacheFlag = { ativa, ate: Date.now() + 30_000 };
+  const ativa = kv ? (await kv.get(chave).catch(() => null)) === "on" : false;
+  cacheFlags.set(chave, { ativa, ate: Date.now() + 30_000 });
   return ativa;
 }
 
-export async function definirLeituraVideosD1(ativa: boolean): Promise<boolean> {
+async function definirFlag(chave: string, ativa: boolean): Promise<boolean> {
   const kv = flagsKv();
   if (!kv) return false;
-  await kv.put(FLAG_LEITURA_VIDEOS_D1, ativa ? "on" : "off");
-  cacheFlag = { ativa, ate: Date.now() + 30_000 };
+  await kv.put(chave, ativa ? "on" : "off");
+  cacheFlags.set(chave, { ativa, ate: Date.now() + 30_000 });
   return true;
 }
+
+export const leituraVideosD1Ativa = () => flagAtiva(FLAG_LEITURA_VIDEOS_D1);
+export const definirLeituraVideosD1 = (ativa: boolean) => definirFlag(FLAG_LEITURA_VIDEOS_D1, ativa);
+export const comentariosPorTopicoD1Ativo = async () =>
+  (await flagAtiva(FLAG_LEITURA_VIDEOS_D1)) && (await flagAtiva(FLAG_COMENTARIOS_POR_TOPICO_D1));
+export const definirComentariosPorTopicoD1 = (ativa: boolean) => definirFlag(FLAG_COMENTARIOS_POR_TOPICO_D1, ativa);
 
 /** Coloca as colunas extras (guardadas como [[índice, cabeçalho, valor]]) de volta no lugar. */
 function aplicarExtras(celulas: string[], extrasJson: string | null, header: string[]): string[] {
@@ -106,6 +119,47 @@ export async function linhasComentariosVideosD1(): Promise<string[][] | null> {
   // de leitura depende disso (chave "coluna_7").
   return montarAba(
     COMENTARIOS_VIDEOS_COLUNAS.map((c) => c.header ?? ""),
+    rows.map((r) => ({ linha: Number(r.linha_planilha), ...comentarioVideoD1ParaCelulas(r) })),
+  );
+}
+
+const CABECALHO_COMENTARIOS = () => COMENTARIOS_VIDEOS_COLUNAS.map((c) => c.header ?? "");
+
+/** Só confia na busca por tópico depois de confirmar que toda linha já tem chaves_busca. */
+let chavesCompletasConfirmado = false;
+
+/**
+ * Só os comentários CANDIDATOS de um tópico (ids já normalizados com
+ * normalizeComparison), nas mesmas posições da planilha — um superconjunto
+ * exato do que o filtro do Fórum aceita (ver chavesBuscaDaLinha): contém
+ * o ID entre os valores curtos, OU a própria linha tem esse número (o
+ * filtro original também compara o ID com o __rowIndex do registro).
+ * null = não dá pra usar (sem D1, ID vazio, linhas sem chaves) -> o
+ * chamador lê a aba inteira, como antes.
+ */
+export async function linhasComentariosVideosDoTopicoD1(idsNormalizados: string[]): Promise<string[][] | null> {
+  const db = getCatalogoDb();
+  const ids = [...new Set(idsNormalizados)];
+  if (!db || ids.length === 0 || ids.some((id) => !id)) return null;
+  if (!chavesCompletasConfirmado) {
+    const r = await db
+      .prepare("SELECT count(*) AS n, sum(CASE WHEN chaves_busca IS NULL THEN 1 ELSE 0 END) AS sem FROM comentarios_videos")
+      .all<{ n: number; sem: number | null }>();
+    const linha = r.results?.[0];
+    if (!linha || !linha.n || (linha.sem ?? 0) > 0) return null;
+    chavesCompletasConfirmado = true;
+  }
+  const cond = ids.map(() => "(instr(chaves_busca, ?) > 0 OR CAST(linha_planilha AS TEXT) = ?)").join(" OR ");
+  const params = ids.flatMap((id) => [`|${id}|`, id]);
+  const rows =
+    (
+      await db
+        .prepare(`SELECT * FROM comentarios_videos WHERE ${cond} ORDER BY linha_planilha`)
+        .bind(...params)
+        .all<Record<string, unknown>>()
+    ).results || [];
+  return montarAba(
+    CABECALHO_COMENTARIOS(),
     rows.map((r) => ({ linha: Number(r.linha_planilha), ...comentarioVideoD1ParaCelulas(r) })),
   );
 }

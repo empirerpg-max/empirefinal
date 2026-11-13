@@ -36,6 +36,7 @@ import {
 } from "./videosDbService";
 import {
   COMENTARIOS_VIDEOS_COLUNAS,
+  chavesBuscaDaLinha,
   linhaPlanilhaParaComentarioVideo,
   validarLinhasComentariosVideosPlanilha,
   type ComentarioVideoRegistro,
@@ -59,15 +60,20 @@ export function abaEspelhadaNoD1(sheetName: string): boolean {
 // ---------------------------------------------------------------------------
 const COLS_COMENTARIO = COMENTARIOS_VIDEOS_COLUNAS.map((c) => c.coluna);
 const UPSERT_COMENTARIO_SQL = `INSERT INTO comentarios_videos
-  (linha_planilha, ${COLS_COMENTARIO.join(", ")}, colunas_extra_json)
-  VALUES (?, ${COLS_COMENTARIO.map(() => "?").join(", ")}, ?)
+  (linha_planilha, ${COLS_COMENTARIO.join(", ")}, colunas_extra_json, chaves_busca)
+  VALUES (?, ${COLS_COMENTARIO.map(() => "?").join(", ")}, ?, ?)
   ON CONFLICT(linha_planilha) DO UPDATE SET
-    ${[...COLS_COMENTARIO, "colunas_extra_json"].map((c) => `${c} = excluded.${c}`).join(", ")}`;
+    ${[...COLS_COMENTARIO, "colunas_extra_json", "chaves_busca"].map((c) => `${c} = excluded.${c}`).join(", ")}`;
 
 function upsertComentario(db: D1DatabaseLike, reg: ComentarioVideoRegistro) {
   return db
     .prepare(UPSERT_COMENTARIO_SQL)
-    .bind(reg.linhaPlanilha, ...COLS_COMENTARIO.map((c) => reg.valores[c] ?? null), reg.colunasExtraJson);
+    .bind(
+      reg.linhaPlanilha,
+      ...COLS_COMENTARIO.map((c) => reg.valores[c] ?? null),
+      reg.colunasExtraJson,
+      chavesBuscaDaLinha(reg.valores, reg.colunasExtraJson),
+    );
 }
 
 /** "O12" | "A265:T265" | "B2:B5000" | "A:G" -> [primeira, última] linha (ou null se não der pra saber). */
@@ -192,21 +198,26 @@ export async function sincronizarComentariosCompleto(rowsPlanilha?: string[][]):
     await db.prepare("DROP TABLE IF EXISTS comentarios_videos_rascunho").run();
     await db.prepare("CREATE TABLE comentarios_videos_rascunho AS SELECT * FROM comentarios_videos WHERE 0").run();
     const insertRascunho = `INSERT INTO comentarios_videos_rascunho
-      (linha_planilha, ${COLS_COMENTARIO.join(", ")}, colunas_extra_json)
-      VALUES (?, ${COLS_COMENTARIO.map(() => "?").join(", ")}, ?)`;
+      (linha_planilha, ${COLS_COMENTARIO.join(", ")}, colunas_extra_json, chaves_busca)
+      VALUES (?, ${COLS_COMENTARIO.map(() => "?").join(", ")}, ?, ?)`;
     const { executados, falhas } = await executarEmLotes(
       db,
       registros.map((r) => ({
         statement: db
           .prepare(insertRascunho)
-          .bind(r.linhaPlanilha, ...COLS_COMENTARIO.map((c) => r.valores[c] ?? null), r.colunasExtraJson),
+          .bind(
+            r.linhaPlanilha,
+            ...COLS_COMENTARIO.map((c) => r.valores[c] ?? null),
+            r.colunasExtraJson,
+            chavesBuscaDaLinha(r.valores, r.colunasExtraJson),
+          ),
         rotulo: `linha ${r.linhaPlanilha}`,
       })),
     );
     if (falhas.length || executados !== registros.length) {
       return { ok: false, erro: "Rascunho incompleto — tabela real NÃO foi trocada.", falhas, lidas: registros.length, gravadas: executados };
     }
-    const cols = ["linha_planilha", ...COLS_COMENTARIO, "colunas_extra_json"].join(", ");
+    const cols = ["linha_planilha", ...COLS_COMENTARIO, "colunas_extra_json", "chaves_busca"].join(", ");
     await db.batch([
       db.prepare("DELETE FROM comentarios_videos"),
       db.prepare(`INSERT INTO comentarios_videos (${cols}) SELECT ${cols} FROM comentarios_videos_rascunho`),

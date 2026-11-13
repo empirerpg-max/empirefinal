@@ -12,7 +12,11 @@ import {
 } from "../services/googleSheetsService";
 import { getUserProfile } from "./userController";
 import { getCatalogoDb } from "../services/musicasDbService";
-import { linhasDaAbaDeVideo } from "../services/videosD1Leitura";
+import {
+  comentariosPorTopicoD1Ativo,
+  linhasComentariosVideosDoTopicoD1,
+  linhasDaAbaDeVideo,
+} from "../services/videosD1Leitura";
 
 // Leitura do Catálogo/Fórum de MÚSICA agora vem do D1 (tabela `musicas`),
 // não mais do Sheets (pivot autorizado pelo usuário, 2026-10-15) — vídeo e
@@ -168,6 +172,103 @@ export function objetosComRowIndex(
     out.push({ rec, rowIndex: i + 2 });
   });
   return out;
+}
+
+/**
+ * Um registro de comentário pertence ao tópico aberto? — extraído SEM
+ * MUDANÇA de getEmpirePlayForumTopicController (era o .filter inline), pra
+ * poder ser reaproveitado na comparação "aba inteira x só o tópico" da
+ * leitura pelo D1 (ver adminCompararComentariosPorTopicoD1Controller).
+ */
+export function comentarioPertenceAoTopico(
+  rec: SheetRecord,
+  normMediaTopicId: string,
+  normTopicSearch: string,
+  normMediaTitle: string,
+): boolean {
+  const topicoVal =
+    getValue(rec, [
+      "id_do_topico",
+      "id_topico",
+      "topico_id",
+      "id_media",
+      "id_do_item",
+      "id",
+      "topico",
+      "comentarios_para",
+      "message_thread_id",
+    ]) || "";
+  const titleVal = getValue(rec, ["titulo", "title", "titulo_media", "nome", "info"]) || "";
+
+  const normTopicoVal = topicoVal ? normalizeComparison(topicoVal) : "";
+  const normTitle = titleVal ? normalizeComparison(titleVal) : "";
+
+  // 1. Match por ID do Tópico (Coluna A)
+  if (
+    normTopicoVal &&
+    (normTopicoVal === normMediaTopicId || normTopicoVal === normTopicSearch)
+  ) {
+    return true;
+  }
+
+  // 2. Match por Título da Mídia
+  if (
+    normMediaTitle &&
+    normTitle &&
+    (normTitle.includes(normMediaTitle) || normMediaTitle.includes(normTitle))
+  ) {
+    return true;
+  }
+
+  // 3. Fallback: Verifica se qualquer valor no registro bate com o ID
+  //
+  // BUG REAL encontrado em 2026-11-10 (comentário do Daniel em FOLLIA
+  // "não aparecia"): esse fallback rodava normalizeComparison (NFD +
+  // regex) em CADA valor de CADA comentário de CADA álbum/música do
+  // jogo inteiro, pra CADA comentário sendo filtrado — incluindo o
+  // próprio texto do comentário, que pode ter vários KB (reviews
+  // longos de jogadores). Com comentários grandes o bastante (Daniel,
+  // Justino e Chris em FOLLIA passam de 3-5 mil caracteres cada), essa
+  // varredura estourava o limite de CPU do Worker (erro 1102) e a
+  // request inteira falhava sem resposta — não um 404 "normal", o
+  // tópico simplesmente nunca carregava. Como só interessa achar um ID
+  // curto (nunca o texto do comentário em si), ignora valores longos
+  // antes de normalizar.
+  if (normMediaTopicId || normTopicSearch) {
+    const vals = Object.values(rec)
+      .filter((v) => typeof v === "string" && v.length > 0 && v.length <= 100)
+      .map((v) => normalizeComparison(v));
+    if (vals.includes(normMediaTopicId) || vals.includes(normTopicSearch)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Comentários de vídeo pra UM tópico: com a chave
+ * "videos:comentarios-por-topico-d1" ligada, só os candidatos daquele
+ * tópico, direto do D1 (ver linhasComentariosVideosDoTopicoD1 —
+ * superconjunto exato do que comentarioPertenceAoTopico aceita, então o
+ * resultado final é o mesmo); senão, a aba inteira como sempre.
+ */
+async function comentariosDeVideoParaTopico(
+  idsNormalizados: string[],
+  estado: { porTopico: boolean },
+): Promise<{ rec: SheetRecord; rowIndex: number }[]> {
+  if (await comentariosPorTopicoD1Ativo()) {
+    try {
+      const linhas = await linhasComentariosVideosDoTopicoD1(idsNormalizados);
+      if (linhas) {
+        estado.porTopico = true;
+        return objetosComRowIndex("Comentarios_MV", linhas);
+      }
+    } catch (err) {
+      console.warn("[empirePlayController] Busca de comentários por tópico no D1 falhou, lendo a aba inteira:", err);
+    }
+  }
+  return readSheetObjectsWithRowIndex("Comentarios_MV");
 }
 
 /**
@@ -1872,16 +1973,23 @@ export async function getEmpirePlayForumTopicController(
           ? lerMusicVideosComoObjetos().catch(() => [])
           : sheetsService.readSheetObjects(sheetMedia).catch(() => []);
 
+    // Comentarios_MV pode vir só com os candidatos do tópico (ver
+    // comentariosDeVideoParaTopico) — se vier, e o ID real do vídeo
+    // (achado abaixo) for diferente do pedido na URL, busca de novo pelos
+    // dois antes de filtrar (o filtro aceita qualquer um dos dois).
+    const estadoComentariosPorTopico = { porTopico: false };
     const [
       mediaRecords,
-      commentRecordsWithRow,
+      commentRecordsWithRowInicial,
       genericComments,
       empireComments,
       topicCommentsSheet,
       usuariosRecords,
     ] = await Promise.all([
       mediaRecordsPromise,
-      readSheetObjectsWithRowIndex(sheetComments),
+      sheetComments === "Comentarios_MV"
+        ? comentariosDeVideoParaTopico([normalizeComparison(topicIdParam)], estadoComentariosPorTopico)
+        : readSheetObjectsWithRowIndex(sheetComments),
       // Abas de fallback LEGADAS (não é onde comentário novo de verdade
       // entra — isso é sempre em sheetComments, lido ao vivo acima, sem
       // cache) — cache curto só reduz o custo de CPU/tempo por request sem
@@ -1918,17 +2026,17 @@ export async function getEmpirePlayForumTopicController(
     // na célula certa depois. Comentários vindos das abas de fallback
     // (Comentarios/Comentarios_EmpirePlay/Topicos_EmpirePlay) não suportam
     // reação, já que praticamente não têm uso real.
-    const commentRecords = commentRecordsWithRow.map(({ rec, rowIndex }) => ({
-      ...rec,
-      __rowIndex: String(rowIndex),
-    }));
-
-    const allCommentRecords = [
-      ...commentRecords,
+    let commentRecordsWithRow = commentRecordsWithRowInicial;
+    const montarTodosComentarios = () => [
+      ...commentRecordsWithRow.map(({ rec, rowIndex }) => ({
+        ...rec,
+        __rowIndex: String(rowIndex),
+      })),
       ...genericComments,
       ...empireComments,
       ...topicCommentsSheet,
     ];
+    let allCommentRecords = montarTodosComentarios();
 
     const normTopicSearch = normalizeComparison(topicIdParam);
 
@@ -2137,67 +2245,15 @@ export async function getEmpirePlayForumTopicController(
     const normMediaTopicId = mediaTopicId ? normalizeComparison(mediaTopicId) : "";
     const normMediaTitle = mediaItem ? normalizeComparison(mediaItem.title) : normTopicSearch;
 
+    if (estadoComentariosPorTopico.porTopico && normMediaTopicId && normMediaTopicId !== normTopicSearch) {
+      commentRecordsWithRow = await comentariosDeVideoParaTopico([normTopicSearch, normMediaTopicId], {
+        porTopico: false,
+      });
+      allCommentRecords = montarTodosComentarios();
+    }
+
     const comments = allCommentRecords
-      .filter((rec) => {
-        const topicoVal =
-          getValue(rec, [
-            "id_do_topico",
-            "id_topico",
-            "topico_id",
-            "id_media",
-            "id_do_item",
-            "id",
-            "topico",
-            "comentarios_para",
-            "message_thread_id",
-          ]) || "";
-        const titleVal = getValue(rec, ["titulo", "title", "titulo_media", "nome", "info"]) || "";
-
-        const normTopicoVal = topicoVal ? normalizeComparison(topicoVal) : "";
-        const normTitle = titleVal ? normalizeComparison(titleVal) : "";
-
-        // 1. Match por ID do Tópico (Coluna A)
-        if (
-          normTopicoVal &&
-          (normTopicoVal === normMediaTopicId || normTopicoVal === normTopicSearch)
-        ) {
-          return true;
-        }
-
-        // 2. Match por Título da Mídia
-        if (
-          normMediaTitle &&
-          normTitle &&
-          (normTitle.includes(normMediaTitle) || normMediaTitle.includes(normTitle))
-        ) {
-          return true;
-        }
-
-        // 3. Fallback: Verifica se qualquer valor no registro bate com o ID
-        //
-        // BUG REAL encontrado em 2026-11-10 (comentário do Daniel em FOLLIA
-        // "não aparecia"): esse fallback rodava normalizeComparison (NFD +
-        // regex) em CADA valor de CADA comentário de CADA álbum/música do
-        // jogo inteiro, pra CADA comentário sendo filtrado — incluindo o
-        // próprio texto do comentário, que pode ter vários KB (reviews
-        // longos de jogadores). Com comentários grandes o bastante (Daniel,
-        // Justino e Chris em FOLLIA passam de 3-5 mil caracteres cada), essa
-        // varredura estourava o limite de CPU do Worker (erro 1102) e a
-        // request inteira falhava sem resposta — não um 404 "normal", o
-        // tópico simplesmente nunca carregava. Como só interessa achar um ID
-        // curto (nunca o texto do comentário em si), ignora valores longos
-        // antes de normalizar.
-        if (normMediaTopicId || normTopicSearch) {
-          const vals = Object.values(rec)
-            .filter((v) => typeof v === "string" && v.length > 0 && v.length <= 100)
-            .map((v) => normalizeComparison(v));
-          if (vals.includes(normMediaTopicId) || vals.includes(normTopicSearch)) {
-            return true;
-          }
-        }
-
-        return false;
-      })
+      .filter((rec) => comentarioPertenceAoTopico(rec, normMediaTopicId, normTopicSearch, normMediaTitle))
       .map((rec, idx) => {
         // "coluna_6" cobre Comentarios_Musicas!F — tem dado (Data/Hora) mas
         // nunca teve cabeçalho próprio na planilha, então readSheetObjects
