@@ -558,6 +558,26 @@ export async function findRows(
 // escritas sequenciais sem espaçamento, confirmado ao vivo em 2026-10-06: só
 // uma fração das linhas "atualizadas" reportadas realmente persistiu). 2
 // tentativas extras com backoff curto, mesmo padrão já usado em appendRow.
+// Espelho em tempo real pro D1 das abas de vídeo ("Music Videos" e
+// "Comentarios_MV", planilha principal) — ver videosD1Sync.ts. Chamado
+// DEPOIS de toda escrita bem-sucedida aqui embaixo, então nenhum controller
+// precisa lembrar de espelhar. Import dinâmico (videosD1Sync importa este
+// arquivo) e nunca lança: falha de espelho não derruba a escrita real.
+async function espelharNoD1SeAplicavel(
+  spreadsheetId: string,
+  sheetName: string,
+  params: { tipo: "update" | "append" | "delete"; range?: string; linhas?: number[] },
+): Promise<void> {
+  if (spreadsheetId !== SPREADSHEETS.principal) return;
+  if (sheetName !== "Music Videos" && sheetName !== "Comentarios_MV") return;
+  try {
+    const { aposEscritaNaPlanilha } = await import("./videosD1Sync");
+    await aposEscritaNaPlanilha({ sheetName, ...params });
+  } catch (err) {
+    console.warn(`[googleSheetsService] Espelho D1 de "${sheetName}" falhou (ignorado):`, err);
+  }
+}
+
 export async function updateValues(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
@@ -582,6 +602,7 @@ export async function updateValues(
         [SHEETS_READWRITE_SCOPE],
       );
       invalidateReadCache(spreadsheetId, sheetName);
+      await espelharNoD1SeAplicavel(spreadsheetId, sheetName, { tipo: "update", range });
       return true;
     } catch (err) {
       const isLastAttempt = attempt === attempts;
@@ -634,6 +655,9 @@ export async function updateValuesBatch(
       for (const sheetName of new Set(entries.map((e) => e.sheetName))) {
         invalidateReadCache(spreadsheetId, sheetName);
       }
+      for (const e of entries) {
+        await espelharNoD1SeAplicavel(spreadsheetId, e.sheetName, { tipo: "update", range: e.range });
+      }
       return true;
     } catch (err) {
       const isLastAttempt = attempt === attempts;
@@ -673,6 +697,8 @@ export async function appendRows(
     [SHEETS_READWRITE_SCOPE],
   );
   invalidateReadCache(spreadsheetId, sheetName);
+  // Sem número de linha na resposta usada aqui: ressincroniza a aba inteira.
+  await espelharNoD1SeAplicavel(spreadsheetId, sheetName, { tipo: "update" });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -720,6 +746,7 @@ export async function deleteRows(
     [SHEETS_READWRITE_SCOPE],
   );
   invalidateReadCache(spreadsheetId, sheetName);
+  await espelharNoD1SeAplicavel(spreadsheetId, sheetName, { tipo: "delete", linhas: ordenadoDesc });
 }
 
 /**
@@ -762,7 +789,13 @@ export async function appendRow(
       const updatedRange = result.updates?.updatedRange || "";
       // updatedRange vem tipo "'Comentarios_Musicas'!A123:D123" — extrai o 123.
       const match = updatedRange.match(/![A-Z]+(\d+)/);
-      return match ? parseInt(match[1], 10) : null;
+      const linhaGravada = match ? parseInt(match[1], 10) : null;
+      await espelharNoD1SeAplicavel(
+        spreadsheetId,
+        sheetName,
+        linhaGravada ? { tipo: "append", linhas: [linhaGravada] } : { tipo: "update" },
+      );
+      return linhaGravada;
     } catch (err) {
       const isLastAttempt = attempt === attempts;
       const mensagem = (err as Error).message;

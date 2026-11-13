@@ -1,0 +1,135 @@
+import { test, expect, mock } from "bun:test";
+import { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
+// Teste do espelho em tempo real + reconciliação (videosD1Sync.ts) num
+// SQLite de verdade, com a planilha simulada em memória a partir dos CSVs
+// exportados de "Music Videos" e "Comentarios_MV".
+//
+// Uso:
+//   CSV_VIDEOS=Music_Videos.csv CSV_COMENTARIOS=Comentarios_MV.csv bun test scripts/testar-espelho-videos-d1.test.ts
+import { fileURLToPath } from "node:url";
+const R = fileURLToPath(new URL("../backend/src/services/", import.meta.url));
+const CSV_VIDEOS = process.env.CSV_VIDEOS || "";
+const CSV_COMENTARIOS = process.env.CSV_COMENTARIOS || "";
+
+// --- planilha falsa em memória ---
+function parseCsv(t: string): string[][] { const out: string[][] = []; let row: string[] = [], f = "", q = false;
+  for (let i = 0; i < t.length; i++) { const c = t[i];
+    if (q) { if (c === '"') { if (t[i+1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true; else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && t[i+1] === "\n") i++; row.push(f); out.push(row); row = []; f = ""; } else f += c; }
+  if (f !== "" || row.length) { row.push(f); out.push(row); } return out; }
+const trim = (rows: string[][]) => rows.map(r => { const c = [...r]; while (c.length && c[c.length-1] === "") c.pop(); return c; });
+const sheets: Record<string, string[][]> = {
+  "Music Videos": trim(parseCsv(readFileSync(CSV_VIDEOS, "utf-8"))),
+  "Comentarios_MV": trim(parseCsv(readFileSync(CSV_COMENTARIOS, "utf-8"))),
+};
+let leituras = 0;
+function lerRange(aba: string, range: string): string[][] {
+  leituras++;
+  const rows = sheets[aba]; const m = range.match(/^[A-Z]+(\d+)?:[A-Z]+(\d+)?$/);
+  if (!m || !m[1]) return rows.map(r => [...r]);
+  const a = +m[1], b = m[2] ? +m[2] : rows.length;
+  return rows.slice(a - 1, b).map(r => [...r]);
+}
+mock.module(R + "googleSheetsService.ts", () => ({
+  readValuesFresh: async (_k: string, aba: string, range = "A:ZZ") => lerRange(aba, range),
+  googleSheetsService: { principal: { readValues: async (aba: string, range = "A:ZZ") => lerRange(aba, range) } },
+}));
+mock.module(R + "logSistemaService.ts", () => ({ registrarLogSistema: async () => {} }));
+
+// --- D1 falso sobre sqlite ---
+const sqlite = new Database(":memory:");
+const prep = (sql: string, b: unknown[] = []): any => ({ bind: (...v: unknown[]) => prep(sql, v),
+  run: async () => { sqlite.query(sql).run(...(b as never[])); return { results: [], success: true }; },
+  all: async () => ({ results: sqlite.query(sql).all(...(b as never[])), success: true }) });
+const db: any = { prepare: (s: string) => prep(s),
+  batch: async (st: any[]) => { const out = []; sqlite.exec("BEGIN"); try { for (const s of st) out.push(await s.run()); sqlite.exec("COMMIT"); } catch (e) { sqlite.exec("ROLLBACK"); throw e; } return out; } };
+(globalThis as any).__CATALOGO_DB__ = db;
+
+const { VIDEOS_CREATE_STATEMENTS } = await import(R + "videosDbService.ts");
+const { COMENTARIOS_VIDEOS_CREATE_STATEMENTS } = await import(R + "comentariosVideosDbService.ts");
+for (const s of [...VIDEOS_CREATE_STATEMENTS, ...COMENTARIOS_VIDEOS_CREATE_STATEMENTS]) sqlite.exec(s);
+const S = await import(R + "videosD1Sync.ts");
+const V = await import(R + "videosD1Validacao.ts");
+const validar = async () => ({
+  v: V.validarVideos(sheets["Music Videos"], sqlite.query("SELECT * FROM videos").all() as any),
+  c: V.validarComentariosVideos(sheets["Comentarios_MV"], sqlite.query("SELECT * FROM comentarios_videos").all() as any),
+});
+
+test("carga inicial completa (troca atômica) fica idêntica", async () => {
+  expect((await S.sincronizarVideosCompleto()).ok).toBe(true);
+  expect((await S.sincronizarComentariosCompleto()).ok).toBe(true);
+  const r = await validar(); expect(r.v.ok).toBe(true); expect(r.c.ok).toBe(true);
+  expect(r.c.linhasD1).toBe(864);
+  expect(sqlite.query("SELECT name FROM sqlite_master WHERE name='comentarios_videos_rascunho'").all().length).toBe(0);
+});
+
+test("linhasDoIntervalo", () => {
+  expect(S.linhasDoIntervalo("O12")).toEqual([12, 12]);
+  expect(S.linhasDoIntervalo("A265:T265")).toEqual([265, 265]);
+  expect(S.linhasDoIntervalo("B2:B5000")).toEqual([2, 5000]);
+  expect(S.linhasDoIntervalo("A:G")).toBe(null);
+  expect(S.linhasDoIntervalo("'Music Videos'!U264")).toEqual([264, 264]);
+});
+
+test("comentário novo (append) aparece no D1 na hora, com 1 leitura só da linha", async () => {
+  sheets["Comentarios_MV"].push(["video_1793150491662_k8usr6", "123", "Fulano", "Que clipe!", "13/11/2026, 16:00:00", "", ""]);
+  const linha = sheets["Comentarios_MV"].length;
+  leituras = 0;
+  await S.aposEscritaNaPlanilha({ sheetName: "Comentarios_MV", tipo: "append", linhas: [linha] });
+  expect(leituras).toBeLessThanOrEqual(2); // linha + cabeçalho
+  expect((await validar()).c.ok).toBe(true);
+});
+
+test("reação (update F) e troca de tópico (update A) espelham", async () => {
+  sheets["Comentarios_MV"][5][5] = '{"🔥":["1"]}';
+  await S.aposEscritaNaPlanilha({ sheetName: "Comentarios_MV", tipo: "update", range: "F6" });
+  sheets["Comentarios_MV"][9][0] = "video_1789829384327_dmoybe";
+  await S.aposEscritaNaPlanilha({ sheetName: "Comentarios_MV", tipo: "update", range: "A10" });
+  expect((await validar()).c.ok).toBe(true);
+});
+
+test("vídeo novo (A:T + U), likes (O), ID novo em F e F limpa", async () => {
+  const novo = Array(21).fill(""); novo[1] = "Teste - Clipe"; novo[5] = "video_999_teste"; novo[7] = "Music Video"; novo[9] = "13/11/2026"; novo[10] = "drive";
+  sheets["Music Videos"].push(novo); const n = sheets["Music Videos"].length;
+  await S.aposEscritaNaPlanilha({ sheetName: "Music Videos", tipo: "update", range: `A${n}:T${n}` });
+  sheets["Music Videos"][n-1][20] = "EMP1"; await S.aposEscritaNaPlanilha({ sheetName: "Music Videos", tipo: "update", range: `U${n}` });
+  sheets["Music Videos"][10][14] = "77"; await S.aposEscritaNaPlanilha({ sheetName: "Music Videos", tipo: "update", range: "O11" });
+  sheets["Music Videos"][20][5] = "video_novo_id"; await S.aposEscritaNaPlanilha({ sheetName: "Music Videos", tipo: "update", range: "F21" });
+  expect((await validar()).v.ok).toBe(true);
+  sheets["Music Videos"][20][5] = ""; await S.aposEscritaNaPlanilha({ sheetName: "Music Videos", tipo: "update", range: "F21" });
+  // F vazia: continua no D1 com chave provisória e a validação segue idêntica
+  expect(sqlite.query("SELECT id_topico FROM videos WHERE linha_planilha = 21").get()).toEqual({ id_topico: "__sem_id__linha_21" });
+  expect((await validar()).v.ok).toBe(true);
+  expect((await S.reconciliarVideosD1()).videosOk).toBe(true);
+  sheets["Music Videos"][20][5] = "video_novo_id"; await S.aposEscritaNaPlanilha({ sheetName: "Music Videos", tipo: "update", range: "F21" });
+  expect((await validar()).v.ok).toBe(true);
+});
+
+test("apagar linhas (deleteRows) desloca tudo -> ressincroniza e fica idêntico", async () => {
+  sheets["Comentarios_MV"].splice(99, 3);
+  await S.aposEscritaNaPlanilha({ sheetName: "Comentarios_MV", tipo: "delete", linhas: [102, 101, 100] });
+  sheets["Music Videos"].splice(49, 1);
+  await S.aposEscritaNaPlanilha({ sheetName: "Music Videos", tipo: "delete", linhas: [50] });
+  const r = await validar(); expect(r.c.ok).toBe(true); expect(r.v.ok).toBe(true);
+});
+
+test("reconciliação do cron conserta escrita feita direto na planilha (sem gancho)", async () => {
+  sheets["Comentarios_MV"][200][3] = "editado à mão na planilha";
+  sheets["Music Videos"][30][8] = "descrição editada à mão";
+  sheets["Comentarios_MV"].push(["1637", "9", "X", "comentário manual", "13/11/2026", "", ""]);
+  const antes = await validar(); expect(antes.c.ok).toBe(false); expect(antes.v.ok).toBe(false);
+  const r = await S.reconciliarVideosD1();
+  expect(r.corrigiuVideos?.ok).toBe(true); expect(r.corrigiuComentarios?.ok).toBe(true);
+  const depois = await validar(); expect(depois.v.ok).toBe(true); expect(depois.c.ok).toBe(true);
+  const r2 = await S.reconciliarVideosD1(); expect(r2.videosOk && r2.comentariosOk).toBe(true);
+});
+
+test("falha no meio da carga de comentários NÃO troca a tabela real", async () => {
+  const antes = sqlite.query("SELECT count(*) n FROM comentarios_videos").get();
+  const ruim = sheets["Comentarios_MV"].map(r => [...r]); ruim[0][0] = "Cabeçalho errado";
+  const r = await S.sincronizarComentariosCompleto(ruim);
+  expect(r.ok).toBe(false);
+  expect(sqlite.query("SELECT count(*) n FROM comentarios_videos").get()).toEqual(antes);
+});

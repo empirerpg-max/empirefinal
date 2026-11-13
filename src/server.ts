@@ -428,10 +428,25 @@ export default {
         })
         .catch((err) => console.error("[scheduled] Erro ao realinhar SOCIAL_POSTS:", err)),
     );
+    const likesVideos = preencherLikesVideosSemMediaScheduled((env as { FLAGS?: FlagsKv }).FLAGS)
+      .then((r) => console.log(`[scheduled] Média Likes de vídeo recalculada: ${r.atualizados} vídeos.`))
+      .catch((err) => console.error("[scheduled] Erro ao recalcular likes de vídeo:", err));
+    ctx.waitUntil(likesVideos);
+    // Rede de segurança do espelho D1 de vídeos (ver videosD1Sync.ts):
+    // compara "Music Videos"/"Comentarios_MV" com o D1 célula a célula e
+    // ressincroniza se algo escapou do espelho em tempo real. Roda DEPOIS do
+    // recálculo de likes acima (que escreve em Music Videos), pra não
+    // comparar no meio dessas escritas.
     ctx.waitUntil(
-      preencherLikesVideosSemMediaScheduled((env as { FLAGS?: FlagsKv }).FLAGS)
-        .then((r) => console.log(`[scheduled] Média Likes de vídeo recalculada: ${r.atualizados} vídeos.`))
-        .catch((err) => console.error("[scheduled] Erro ao recalcular likes de vídeo:", err)),
+      likesVideos
+        .then(async () => {
+          const { reconciliarVideosD1 } = await import("../backend/src/services/videosD1Sync");
+          const r = await reconciliarVideosD1();
+          if (!r.videosOk || !r.comentariosOk) {
+            console.log("[scheduled] Reconciliação D1 de vídeos corrigiu divergência:", JSON.stringify(r).slice(0, 2000));
+          }
+        })
+        .catch((err) => console.error("[scheduled] Erro na reconciliação D1 de vídeos:", err)),
     );
     // A reconciliação de backlog de comentários (reconciliarPontosComentariosScheduled)
     // foi REMOVIDA daqui — era uma correção pontual de um bug antigo, não

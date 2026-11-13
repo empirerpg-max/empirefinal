@@ -1,16 +1,8 @@
-import { googleSheetsService } from "../services/googleSheetsService";
-import { executarEmLotes, type D1DatabaseLike } from "../services/catalogoDbService";
-import {
-  getCatalogoDb,
-  VIDEOS_CREATE_STATEMENTS,
-  validarLinhasVideosPlanilha,
-  buildVideoUpsertStatement,
-} from "../services/videosDbService";
-import {
-  COMENTARIOS_VIDEOS_CREATE_STATEMENTS,
-  validarLinhasComentariosVideosPlanilha,
-  buildComentarioVideoInsertStatement,
-} from "../services/comentariosVideosDbService";
+import { googleSheetsService, readValuesFresh } from "../services/googleSheetsService";
+import { type D1DatabaseLike } from "../services/catalogoDbService";
+import { getCatalogoDb, VIDEOS_CREATE_STATEMENTS } from "../services/videosDbService";
+import { COMENTARIOS_VIDEOS_CREATE_STATEMENTS } from "../services/comentariosVideosDbService";
+import { sincronizarVideosCompleto, sincronizarComentariosCompleto } from "../services/videosD1Sync";
 import {
   validarVideos,
   validarComentariosVideos,
@@ -51,7 +43,7 @@ function semBinding(): Response {
  * migração de comentários apagar o D1 e não reinserir nada.
  */
 async function lerAba(nome: string): Promise<string[][]> {
-  const rows = await googleSheetsService.principal.readValues(nome, "A:ZZ");
+  const rows = await readValuesFresh("principal", nome, "A:ZZ");
   if (!rows || rows.length < 2) {
     throw new Error(`Aba "${nome}" veio sem nenhuma linha de dados — abortado por segurança.`);
   }
@@ -84,29 +76,9 @@ export async function adminMigrarVideosD1Controller(): Promise<Response> {
   if (!db) return semBinding();
   try {
     const rows = await lerAba(SHEET_VIDEOS);
-    const { erros, registros, linhasEmBranco } = validarLinhasVideosPlanilha(rows);
-    if (erros.length) {
-      return json(
-        { success: false, mensagem: "Pré-checagem falhou — NADA foi gravado no D1.", erros },
-        409,
-      );
-    }
-    const { executados, falhas } = await executarEmLotes(
-      db,
-      registros.map((r) => ({
-        statement: buildVideoUpsertStatement(db, r),
-        rotulo: `linha ${r.linhaPlanilha} — F=${r.valores.id_topico}`,
-      })),
-    );
+    const r = await sincronizarVideosCompleto(rows);
     const validacao = validarVideos(rows, await lerD1(db, "videos"));
-    return json({
-      success: falhas.length === 0 && validacao.ok,
-      lidasComDado: registros.length,
-      linhasEmBranco,
-      gravadas: executados,
-      falhas,
-      validacao,
-    });
+    return json({ success: r.ok && validacao.ok, ...r, validacao }, r.erro ? 409 : 200);
   } catch (err) {
     return json({ success: false, error: (err as Error).message }, 500);
   }
@@ -117,35 +89,20 @@ export async function adminMigrarComentariosVideosD1Controller(): Promise<Respon
   if (!db) return semBinding();
   try {
     const rows = await lerAba(SHEET_COMENTARIOS);
-    const { erros, registros, linhasEmBranco } = validarLinhasComentariosVideosPlanilha(rows);
-    if (erros.length) {
-      return json(
-        { success: false, mensagem: "Pré-checagem falhou — NADA foi apagado nem gravado no D1.", erros },
-        409,
-      );
-    }
-    // Substituição total (sem ID estável por linha no Sheets). Seguro
-    // nesta fase: a planilha é a fonte de verdade e nada lê esta tabela.
-    await db.prepare("DELETE FROM comentarios_videos").run();
-    const { executados, falhas } = await executarEmLotes(
-      db,
-      registros.map((r) => ({
-        statement: buildComentarioVideoInsertStatement(db, r),
-        rotulo: `linha ${r.linhaPlanilha} — tópico ${r.valores.video_id_topico ?? "(vazio)"}`,
-      })),
-    );
+    // Troca atômica via tabela de rascunho (ver videosD1Sync.ts) — a tabela
+    // real nunca fica vazia nem pela metade, nem se algo falhar no meio.
+    const r = await sincronizarComentariosCompleto(rows);
     const validacao = validarComentariosVideos(rows, await lerD1(db, "comentarios_videos"));
     const rowsVideos = await googleSheetsService.principal.readValues(SHEET_VIDEOS, "A:ZZ").catch(() => null);
-    return json({
-      success: falhas.length === 0 && validacao.ok,
-      lidasComDado: registros.length,
-      linhasEmBranco,
-      gravadas: executados,
-      falhas,
-      validacao,
-      // Informativo: migrados normalmente, só listados pra decisão manual.
-      orfaos: rowsVideos ? listarComentariosOrfaos(rowsVideos, rows) : "não foi possível ler Music Videos",
-    });
+    return json(
+      {
+        success: r.ok && validacao.ok,
+        ...r,
+        validacao,
+        orfaos: rowsVideos ? listarComentariosOrfaos(rowsVideos, rows) : "não foi possível ler Music Videos",
+      },
+      r.erro ? 409 : 200,
+    );
   } catch (err) {
     return json({ success: false, error: (err as Error).message }, 500);
   }
