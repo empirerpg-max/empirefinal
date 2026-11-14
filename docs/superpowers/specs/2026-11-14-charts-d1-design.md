@@ -60,6 +60,19 @@ Uma linha por posição de um chart numa semana:
 
 A posição global **já vem pronta**; o app não reordena o chart global.
 
+**O que o export real mostrou (121 mil linhas, 25/05/2020 → 11/11/2026):**
+- 6 valores em CHART: os 5 atuais + **iTUNES** (encerrado em 31/03/2025).
+  iTUNES é importado só como histórico (não aparece na tela, não é exigido no
+  envio semanal).
+- Inícios diferentes: Apple Music desde 20/01/2022, Digital Sales desde
+  11/04/2025.
+- 11 semanas com anomalia histórica (200 linhas = semana duplicada; 99 e 101
+  linhas). A carga inicial **deduplica** (mantém a primeira ocorrência de cada
+  (chart, data, posição)) e aceita semanas incompletas, registrando-as no log
+  `chart_ingestao`. A validação estrita vale só para o envio semanal.
+- Colunas ARTISTA 1..5 vazias nas 2 últimas semanas (04/11 e 11/11/2026) e
+  VENDAS GERAIS vazia no Hot 100 da última semana. Ver "Artistas" abaixo.
+
 ## Abordagens consideradas (entrada semanal)
 
 1. **Google empurra os dados (escolhida).** Um arquivo novo e separado no
@@ -131,7 +144,10 @@ Para cada música *s* numa plataforma *p* (Spotify, Apple Music, YouTube):
 - `N(s)` = países de nacionalidade dos artistas 1..5 de *s* (via `artista_info`).
 - Peso bruto: `w[c] = pb[c] + bônus` se `c ∈ N(s)`, senão `pb[c]`.
 - Se `Σ pb < 1`, existe um "resto do mundo" implícito `1 − Σ pb` que entra na
-  normalização (não vira ranking).
+  normalização (não vira ranking). Se `Σ pb > 1` (YouTube hoje soma 119,96%),
+  não há resto: a divisão por `Σ w` encolhe todos proporcionalmente.
+- Pesos atuais (81 países): Spotify 99,15%, Apple Music 95,49%, YouTube
+  119,96% — importados como estão do CSV de PAÍSES E PESOS.
 - Fatia: `share[c] = w[c] / (Σ w + resto)` → a soma de todos os países + resto
   é **exatamente** o total global.
 - Valor no país = `round(total_global × share[c])`.
@@ -142,6 +158,14 @@ Sem nacionalidade cadastrada → música recebe só os pesos base. Bônus `0` em
 `chart_config` desliga a regra (todos os países ficam com o ranking global).
 O selo "Vem aí" foi substituído pela regra B ativa; regras futuras entram
 como novos campos em `chart_config`.
+
+### Artistas
+
+Fonte: colunas H–L. Quando vierem vazias, o app extrai do próprio texto da col.
+D: artista principal = antes de " - "; convidados = depois de "feat."/"ft."/
+"x"/"&" (lista separada por vírgula/"&"). Os nomes extraídos só valem se
+existirem em `artista_info` (evita lixo). Isso alimenta nacionalidade, foto e
+gênero.
 
 ### Capa / foto
 
