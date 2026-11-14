@@ -62,8 +62,12 @@ export function montarIndiceDeFontes(fontes: FontesBusca): ItemBusca[] {
 }
 
 const ehPendente = (rec: SheetRecord) => String(rec["pendente"] ?? "").trim().toLowerCase() === "sim";
-const comoFonte = (rotulo: string, recs: SheetRecord[]): FonteItem[] =>
-  recs.map((rec, idx) => ({ item: buildCleanItem(rotulo, rec, idx), pendente: ehPendente(rec) }));
+// Rótulo que buildCleanItem espera por grupo — "Albuns" (não "Album"): só
+// com ele o artista vem do "Artista - Título" do álbum e não do jogador que
+// cadastrou (nome_do_criador). Pego na revisão final, 2026-11-14.
+const ROTULO_CATALOGO: Record<Exclude<GrupoBusca, "artistas">, string> = { musicas: "Musicas", videos: "Videos", albuns: "Albuns" };
+export const comoFonte = (grupo: Exclude<GrupoBusca, "artistas">, recs: SheetRecord[]): FonteItem[] =>
+  recs.map((rec, idx) => ({ item: buildCleanItem(ROTULO_CATALOGO[grupo], rec, idx), pendente: ehPendente(rec) }));
 
 let cache: { indice: ItemBusca[]; ate: number } | null = null;
 
@@ -78,9 +82,9 @@ export async function obterIndiceBusca(): Promise<ItemBusca[]> {
   const val = <T>(r: PromiseSettledResult<T>) => (r.status === "fulfilled" ? r.value : null);
   const musicas = val(m);
   const indice = montarIndiceDeFontes({
-    musicas: musicas ? comoFonte("Musicas", musicas) : null,
-    videos: val(v) ? comoFonte("Videos", val(v)!) : null,
-    albuns: val(a) ? comoFonte("Album", val(a)!) : null,
+    musicas: musicas ? comoFonte("musicas", musicas) : null,
+    videos: val(v) ? comoFonte("videos", val(v)!) : null,
+    albuns: val(a) ? comoFonte("albuns", val(a)!) : null,
     artistas: val(ar)?.data || null,
   });
   cache = { indice, ate: Date.now() + 60_000 };

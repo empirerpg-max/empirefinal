@@ -95,7 +95,7 @@ export function BuscaRapida() {
           if (!v) setTermo("");
         }}
       >
-        <DialogContent className="overflow-hidden p-0 top-[12%] translate-y-0 w-[calc(100%-2rem)] max-w-lg rounded-2xl">
+        <DialogContent className="z-[70] overflow-hidden p-0 top-[calc(4rem+env(safe-area-inset-top)+0.5rem)] translate-y-0 w-[calc(100%-2rem)] max-w-lg rounded-2xl">
           <DialogTitle className="sr-only">Pesquisar</DialogTitle>
           <Command shouldFilter={false} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-input]]:h-12">
             <CommandInput

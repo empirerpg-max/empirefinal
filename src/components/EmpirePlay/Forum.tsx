@@ -321,6 +321,23 @@ export const Forum: React.FC<ForumProps> = ({
   const [encarteAberto, setEncarteAberto] = useState<number | null>(null);
   // Evita reabrir o deep link se o jogador voltar pra lista manualmente.
   const [pendingDeepLinkId, setPendingDeepLinkId] = useState<string | undefined>(initialItemId);
+  // Link vindo de FORA com o Fórum já aberto (ex.: busca rápida do
+  // cabeçalho): initialTab/initialItemId mudam, mas o useState acima só lê
+  // o valor inicial. Só reage quando a URL difere do que está na tela — o
+  // próprio Fórum escreve a URL a partir do estado (efeito acima), então
+  // nesse caso os valores batem e nada muda.
+  useEffect(() => {
+    if (initialTab && (FORUM_SUBMENUS as string[]).includes(initialTab) && initialTab !== activeSubmenu) {
+      setSelectedTopic(null);
+      setItems([]); // evita casar o link com itens da aba anterior
+      setActiveSubmenu(initialTab as ForumSubmenu);
+    }
+    const abertoAgora = selectedTopic ? selectedTopic.telegramTopicId || selectedTopic.id : undefined;
+    if (initialItemId && initialItemId !== abertoAgora && initialItemId !== selectedTopic?.id) {
+      setPendingDeepLinkId(initialItemId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTab, initialItemId]);
   // Filtro de tag do submenu Vídeos (Music Video, Live, Video, etc).
   const [activeVideoTag, setActiveVideoTag] = useState<string>("Todos");
   // IDs de tópico (telegramTopicId) em que EU já comentei — pra marcar um

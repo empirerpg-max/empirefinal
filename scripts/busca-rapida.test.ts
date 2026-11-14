@@ -84,3 +84,13 @@ test("índice: fonte que falhou (null) não derruba as outras", () => {
   const ix = montarIndiceDeFontes({ musicas: null, videos: [fi("v1", "Clipe")], albuns: null, artistas: null });
   expect(ix.map((i) => i.grupo)).toEqual(["videos"]);
 });
+
+// --- Revisão final: álbum indexado com o artista do álbum (não o jogador criador) ---
+import { comoFonte } from "../backend/src/controllers/buscaController";
+test("álbum: artista vem do nome do álbum, não do jogador que cadastrou", () => {
+  const [f] = comoFonte("albuns", [{ id_do_topico: "album_1792551638543_utb9mi", nome: "Max Gorghan - FOLLIA", nome_do_criador: "wes", tipo: "Álbum" } as any]);
+  expect(f.item.artist).toBe("Max Gorghan");
+  const ix = montarIndiceDeFontes({ musicas: null, videos: null, albuns: [f], artistas: null });
+  expect(ix[0].termos).toContain("max gorghan");
+  expect(ix[0].termos).not.toContain("wes");
+});
