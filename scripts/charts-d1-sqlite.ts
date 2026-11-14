@@ -9,7 +9,10 @@ type Valor = string | number | bigint | boolean | null | Uint8Array;
 /** Chamado a cada statement executado (SQL, parâmetros e nº de linhas devolvidas) — usado pra medir leituras. */
 export type AoExecutar = (sql: string, params: unknown[], linhas: number) => void;
 
-export function criarD1Sqlite(arquivo = ":memory:", aoExecutar?: AoExecutar): D1DatabaseLike {
+/** D1 + `exec` (script SQL cru com vários statements, como `wrangler d1 execute --file`). */
+export type D1Sqlite = D1DatabaseLike & { exec(sql: string): void };
+
+export function criarD1Sqlite(arquivo = ":memory:", aoExecutar?: AoExecutar): D1Sqlite {
   const sqlite = new Database(arquivo);
 
   const executar = (sql: string, params: unknown[]) => {
@@ -29,6 +32,9 @@ export function criarD1Sqlite(arquivo = ":memory:", aoExecutar?: AoExecutar): D1
   });
 
   return {
+    exec: (sql: string) => {
+      sqlite.exec(sql);
+    },
     prepare: (sql: string) => criarStatement(sql),
     batch: async (statements: D1PreparedStatement[]) =>
       sqlite.transaction(() =>

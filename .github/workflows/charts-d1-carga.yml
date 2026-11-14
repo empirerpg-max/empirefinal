@@ -1,0 +1,79 @@
+name: charts-d1-carga
+
+# Carga inicial do histórico dos charts no D1 (empire-hub-catalogo), uma parte
+# por dia: o gerador calcula o histórico inteiro a partir do CSV da aba DADOS
+# (scripts/fixtures/charts-d1-dados.csv.gz), compara com as datas já gravadas no
+# D1 remoto e grava as próximas semanas (até 25.000 linhas, dentro das 100 mil
+# escritas/dia do plano grátis). Sem semanas pendentes, grava o Hall of Fame e
+# liga a leitura do D1 (charts_d1_ativo = '1'). Depois disso cada execução
+# termina em "nada a fazer". Guia: docs/charts-d1-envio-semanal.md.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "17 3 * * *"
+
+# Duas execuções nunca se sobrepõem (gravariam a mesma parte duas vezes).
+concurrency:
+  group: charts-d1-carga
+  cancel-in-progress: false
+
+jobs:
+  carga:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Ler estado do D1 remoto (datas gravadas, leitura ativa, catálogo)
+        run: |
+          # Tabela ainda inexistente ou erro de leitura = nada carregado (a parte é idempotente).
+          bunx wrangler d1 execute empire-hub-catalogo -c wrangler.jsonc --remote --json \
+            --command "SELECT data FROM chart_datas" > carregadas.json || echo '[]' > carregadas.json
+          bunx wrangler d1 execute empire-hub-catalogo -c wrangler.jsonc --remote --json \
+            --command "SELECT valor FROM chart_config WHERE chave='charts_d1_ativo'" > ativo.json || echo '[]' > ativo.json
+          # Catálogo de músicas (artistas e gênero de cada faixa); sem ele a carga não segue.
+          bunx wrangler d1 export empire-hub-catalogo -c wrangler.jsonc --remote --table musicas --no-schema --output musicas.sql
+
+      - name: Gerar a parte do dia
+        run: |
+          set -o pipefail
+          bun scripts/charts-d1-gerar-parte.ts \
+            --dados scripts/fixtures/charts-d1-dados.csv.gz \
+            --pesos scripts/fixtures/charts-d1-pesos.csv \
+            --catalogo musicas.sql \
+            --carregadas carregadas.json \
+            --ativo ativo.json \
+            --limite 25000 \
+            --saida out.sql 2>&1 | tee resumo.txt
+
+      - name: Gravar no D1 remoto
+        run: |
+          if [ -s out.sql ]; then
+            bunx wrangler d1 execute empire-hub-catalogo -c wrangler.jsonc --remote --file out.sql --yes
+            echo "Parte gravada no D1." | tee -a resumo.txt
+          else
+            echo "out.sql vazio: nada gravado." | tee -a resumo.txt
+          fi
+
+      - name: Resumo
+        if: always()
+        run: |
+          if [ -f resumo.txt ]; then
+            { echo '```'; cat resumo.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: charts-d1-carga-resumo
+          path: resumo.txt
+          if-no-files-found: ignore

@@ -700,3 +700,117 @@ test("ativação: semana com ativar grava e liga; seed fica '0'", async () => {
   expect(await flag()).toBe("1");
   expect(await chartsD1Ativo(criarD1Sqlite())).toBe(false);
 });
+
+// ---- Carga inicial pelo GitHub Action: partes de SQL puro (charts-d1-gerar-parte.ts) ----
+import {
+  literalSql, insertsMultiLinha, montarArquivoSql, lerDatasCarregadas, lerAtivo, montarBancoLocal, gerarParte, importarCatalogo,
+} from "./charts-d1-gerar-parte";
+
+/** Banco local com as semanas dadas (500 linhas cada) e os pesos reais. */
+const bancoLocalFake = (datasBr: string[]) =>
+  montarBancoLocal(datasBr.flatMap((d) => linhasFake(d)), pesosDoCsv().slice(1).filter((p) => (p[0] ?? "").trim()));
+const estadoRemoto = async (remoto: ReturnType<typeof criarD1Sqlite>) => {
+  try {
+    const datas = (await remoto.prepare("SELECT data FROM chart_datas").all<{ data: string }>()).results.map((r) => r.data);
+    const [a] = (await remoto.prepare("SELECT valor FROM chart_config WHERE chave = 'charts_d1_ativo'").all<{ valor: string }>()).results;
+    return { carregadas: new Set(datas), ativoRemoto: a?.valor ?? null };
+  } catch {
+    return { carregadas: new Set<string>(), ativoRemoto: null }; // banco remoto ainda sem tabelas
+  }
+};
+const dump = async (db: ReturnType<typeof criarD1Sqlite>, sql: string) => JSON.stringify((await db.prepare(sql).all()).results);
+
+test("gerar-parte: literais SQL escapam aspas, NULL, números e voltam iguais do SQLite", async () => {
+  expect(literalSql("D'Angelo")).toBe("'D''Angelo'");
+  expect(literalSql(null)).toBe("NULL");
+  expect(literalSql(undefined)).toBe("NULL");
+  expect(literalSql(42)).toBe("42");
+  expect(literalSql(0.0725)).toBe("0.0725");
+  expect(literalSql(NaN)).toBe("NULL");
+  expect(literalSql(true)).toBe("1");
+  const db = criarD1Sqlite();
+  db.exec("CREATE TABLE t (a, b, c)");
+  const linhas = [["It's \"x\"; DROP TABLE t; --", null, 1.5], ["l1\nl2 ''", 0, -3]];
+  db.exec(montarArquivoSql(insertsMultiLinha("INSERT INTO t (a, b, c)", linhas)));
+  expect((await db.prepare("SELECT a, b, c FROM t").all<any>()).results.map((r) => [r.a, r.b, r.c])).toEqual(linhas);
+  // statements nunca passam do limite de bytes
+  const grandes = Array.from({ length: 50 }, (_, i) => [`${i}`.padEnd(1000, "x")]);
+  const sts = insertsMultiLinha("INSERT INTO t (a)", grandes, 5000);
+  expect(sts.length).toBeGreaterThan(10);
+  expect(sts.every((s) => Buffer.byteLength(s) <= 5000)).toBe(true);
+});
+test("gerar-parte: lê a saída JSON do wrangler e tolera vazio/erro", () => {
+  const ok = JSON.stringify([{ results: [{ data: "2020-05-25" }, { data: "2020-05-25" }, { data: "2020-06-01" }], success: true, meta: {} }]);
+  expect([...lerDatasCarregadas(ok)]).toEqual(["2020-05-25", "2020-06-01"]);
+  expect(lerDatasCarregadas(undefined).size).toBe(0);
+  expect(lerDatasCarregadas("").size).toBe(0);
+  expect(lerDatasCarregadas("[]").size).toBe(0);
+  expect(lerDatasCarregadas('{"error":{"text":"no such table: chart_datas"}}').size).toBe(0);
+  expect(lerDatasCarregadas("✘ [ERROR] no such table").size).toBe(0);
+  expect(lerAtivo(JSON.stringify([{ results: [{ valor: "1" }], success: true }]))).toBe("1");
+  expect(lerAtivo(JSON.stringify([{ results: [], success: true }]))).toBeNull();
+  expect(lerAtivo(undefined)).toBeNull();
+});
+test("gerar-parte: escolhe semanas pendentes mais antigas inteiras até o limite", async () => {
+  const { db, erros } = await bancoLocalFake(["11/11/2026", "28/10/2026", "04/11/2026"]);
+  expect(erros).toEqual([]);
+  const p = await gerarParte(db, { carregadas: new Set(), ativoRemoto: null, limite: 1200 });
+  expect(p.datas).toEqual(["2026-10-28", "2026-11-04"]); // a 3ª estouraria 1200
+  expect(p.linhas).toBe(1000);
+  expect(p.restantes).toBe(1);
+  expect(p.ativacao).toBe(false);
+  const sql = p.statements.join("\n");
+  expect(sql).toContain("INSERT OR REPLACE INTO pais_peso");
+  expect(sql).toContain("INSERT OR IGNORE INTO chart_config");
+  expect(sql).toContain("DELETE FROM chart_semana WHERE data = '2026-10-28'");
+  expect(sql).not.toContain("2026-11-11");
+  expect(sql).not.toMatch(/\b(BEGIN|COMMIT)\b/);
+  // carregadas são puladas
+  expect((await gerarParte(db, { carregadas: new Set(["2026-10-28"]), ativoRemoto: "0", limite: 1200 })).datas).toEqual(["2026-11-04", "2026-11-11"]);
+  // semana maior que o limite: nada, com motivo
+  const nada = await gerarParte(db, { carregadas: new Set(), ativoRemoto: null, limite: 499 });
+  expect(nada.statements).toEqual([]);
+  expect(nada.nada).toContain("2026-10-28");
+});
+test("gerar-parte: sem semanas pendentes grava o Hall of Fame e ativa; ativado não faz nada", async () => {
+  const { db } = await bancoLocalFake(["04/11/2026", "11/11/2026"]);
+  const todas = new Set(["2026-11-04", "2026-11-11"]);
+  const p = await gerarParte(db, { carregadas: todas, ativoRemoto: "0", limite: 25000 });
+  expect(p.ativacao).toBe(true);
+  expect(p.datas).toEqual([]);
+  expect(p.statements).toContain("DELETE FROM chart_artista_musica");
+  expect(p.statements.at(-1)).toBe("UPDATE chart_config SET valor = '1' WHERE chave = 'charts_d1_ativo'");
+  expect(p.statements.some((s) => s.startsWith("INSERT INTO chart_artista_musica"))).toBe(true);
+  expect(p.statements.join("\n")).not.toContain("INSERT INTO chart_semana");
+  expect(p.linhasArtista).toBe((await db.prepare("SELECT COUNT(*) n FROM chart_artista_musica").all<{ n: number }>()).results[0].n);
+  const fim = await gerarParte(db, { carregadas: todas, ativoRemoto: "1", limite: 25000 });
+  expect(fim.statements).toEqual([]);
+  expect(montarArquivoSql(fim.statements)).toBe("");
+});
+test("gerar-parte: aplicar as partes em sequência reproduz a carga local inteira (e reaplicar não muda nada)", async () => {
+  const { db } = await bancoLocalFake(["25/05/2020", "01/06/2020", "08/06/2020", "15/06/2020", "22/06/2020"]);
+  const remoto = criarD1Sqlite();
+  const partes: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const p = await gerarParte(db, { ...(await estadoRemoto(remoto)), limite: 1000 });
+    const sql = montarArquivoSql(p.statements);
+    if (!sql) break;
+    partes.push(sql);
+    remoto.exec(sql);
+    if (i === 0) remoto.exec(sql); // reexecução da mesma parte (retry) é idempotente
+  }
+  expect(partes.length).toBe(4); // 2 + 2 + 1 semanas, depois a ativação
+  const tabelas = [
+    "SELECT * FROM chart_semana ORDER BY chart, data, pos",
+    "SELECT * FROM chart_datas ORDER BY chart, data",
+    "SELECT * FROM chart_artista_musica ORDER BY artista_key, chart, titulo_norm",
+    "SELECT * FROM pais_peso ORDER BY plataforma, pais",
+  ];
+  for (const t of tabelas) expect(await dump(remoto, t)).toBe(await dump(db, t));
+  expect((await estadoRemoto(remoto)).ativoRemoto).toBe("1");
+});
+test("gerar-parte: catálogo do wrangler export entra no banco local (coluna a mais é criada)", async () => {
+  const { db } = await montarBancoLocal([], []);
+  importarCatalogo(db, `PRAGMA defer_foreign_keys=TRUE;\nINSERT INTO "musicas" ("codigo_unico","titulo","artista","genero","coluna_nova") VALUES('1','Faixa; ''1''','Artista','Pop','x');`);
+  expect((await db.prepare("SELECT titulo, genero, coluna_nova FROM musicas").all<any>()).results).toEqual([{ titulo: "Faixa; '1'", genero: "Pop", coluna_nova: "x" }]);
+});
