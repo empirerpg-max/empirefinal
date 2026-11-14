@@ -2,9 +2,14 @@
 // ingestão de uma semana da aba DADOS (enviada pelo Google, nunca lida daqui).
 import type { D1DatabaseLike, D1PreparedStatement } from "../catalogoDbService";
 import { CHARTS, type ChartId, type LinhaDados } from "./tipos";
-import { parseLinhaDados, parseNumeroBR, validarSemana } from "./dados";
+import { dataBrParaIso, dataIsoParaBr, parseLinhaDados, parseNumeroBR, validarSemana } from "./dados";
 import { calcularMovimento, type HistoricoMusica, type Movimento } from "./movimento";
-import { chaveMusica, indexarCatalogo, resolverArtistas, type LinhaCatalogo, type MusicaCatalogo } from "./artistas";
+import {
+  buscarNoCatalogo, chaveMusica, extrairArtistasDoTitulo, indexarCatalogo, resolverArtistas,
+  type LinhaCatalogo, type MusicaCatalogo,
+} from "./artistas";
+import { rankingPais, type MusicaParaPais, type Pesos } from "./paises";
+import { fixImg, fmt } from "./formato";
 
 // Idempotente — roda no começo de cada ingestão (padrão do projeto).
 export const CHARTS_D1_SCHEMA: string[] = [
@@ -202,7 +207,7 @@ async function gravarArtistasEPesos(db: D1DatabaseLike, artistas: string[][], pe
 const CATALOGO_SQL =
   "SELECT titulo, artista, artista_2, artista_3, artista_4, artista_5, artista_6, capa_url, genero, tipo_single FROM musicas";
 
-async function carregarCatalogo(db: D1DatabaseLike): Promise<Map<string, MusicaCatalogo>> {
+export async function carregarCatalogo(db: D1DatabaseLike): Promise<Map<string, MusicaCatalogo>> {
   try {
     return indexarCatalogo((await db.prepare(CATALOGO_SQL).all<LinhaCatalogo>()).results);
   } catch (e) {
@@ -390,4 +395,307 @@ export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao
   await recalcularSemanaSeguinte(db, charts, prep.dataIso);
   await registrarIngestao(db, prep.dataIso, modo, calculadas.length, true, prep.anomalias.join("; ") || "ok");
   return { ok: true, data: prep.dataIso, linhas: calculadas.length };
+}
+
+// ---- Leitura (/api/charts) ----
+
+/** Banco sem as tabelas dos charts (nenhuma ingestão ainda) → leitura vazia, não erro. */
+async function consultar<T>(db: D1DatabaseLike, sql: string, ...params: unknown[]): Promise<T[]> {
+  try {
+    return (await db.prepare(sql).bind(...params).all<T>()).results;
+  } catch (e) {
+    if (/no such table/i.test(e instanceof Error ? e.message : String(e))) return [];
+    throw e;
+  }
+}
+
+/** Fotos de artista_info por nome em CAIXA ALTA (fallback de capa). */
+export async function carregarFotos(db: D1DatabaseLike): Promise<Map<string, string>> {
+  const rows = await consultar<{ nome_upper: string; foto: string }>(
+    db,
+    "SELECT nome_upper, foto FROM artista_info WHERE foto IS NOT NULL AND foto != ''",
+  );
+  return new Map(rows.map((r) => [r.nome_upper, r.foto]));
+}
+
+const lerArtistas = (json: string | null): string[] => {
+  try {
+    const v = JSON.parse(json || "[]");
+    return Array.isArray(v) ? v.map((a) => String(a ?? "").trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Primeiro artista gravado; sem nenhum, o principal do "Artista - Título". */
+const artistaPrincipal = (artistas: string[], titulo: string): string =>
+  artistas[0] || extrairArtistasDoTitulo(titulo)[0] || "";
+
+/** Capa: catálogo (single vence álbum) → foto do artista principal → "". */
+const capaDe = (titulo: string, art: string, cat: Map<string, MusicaCatalogo>, fotos: Map<string, string>): string =>
+  fixImg(buscarNoCatalogo(titulo, cat)?.capa) || fixImg(fotos.get(art.trim().toUpperCase())) || "";
+
+/** Datas com dados no chart, `dd/mm/aaaa`, mais recente primeiro. Vazio → fallback pra planilha. */
+export async function datasDoChart(db: D1DatabaseLike, chart: ChartId): Promise<string[]> {
+  const rows = await consultar<{ data: string }>(
+    db,
+    "SELECT DISTINCT data FROM chart_semana WHERE chart = ? ORDER BY data DESC",
+    chart,
+  );
+  return rows.map((r) => dataIsoParaBr(r.data));
+}
+
+/** Gêneros (catálogo) das músicas que já passaram pelo chart, ordenados. */
+export async function generosDoChart(db: D1DatabaseLike, chart: ChartId, cat: Map<string, MusicaCatalogo>): Promise<string[]> {
+  const rows = await consultar<{ titulo: string }>(db, "SELECT DISTINCT titulo FROM chart_semana WHERE chart = ?", chart);
+  const generos = new Set<string>();
+  for (const r of rows) {
+    const g = buscarNoCatalogo(r.titulo || "", cat)?.genero;
+    if (g) generos.add(g);
+  }
+  return [...generos].sort();
+}
+
+export interface LinhaChartApi {
+  pos: number;
+  tit: string;
+  val: string;
+  valTotal: string;
+  art: string;
+  st: string;
+  capa: string;
+  style: string;
+}
+
+/** Linhas de um chart numa semana, no contrato de `getChart`. `estilo` vazio = todos. */
+export async function linhasDoChart(
+  db: D1DatabaseLike,
+  chart: ChartId,
+  dataBr: string,
+  estilo: string,
+  cat: Map<string, MusicaCatalogo>,
+  fotos: Map<string, string>,
+): Promise<LinhaChartApi[]> {
+  const dataIso = dataBrParaIso(dataBr);
+  const [rows, somas] = await Promise.all([
+    consultar<{ pos: number; titulo: string; titulo_norm: string; valor: number; valor_total: number | null; artistas: string; status: string }>(
+      db,
+      `SELECT pos, titulo, titulo_norm, valor, valor_total, artistas, status
+       FROM chart_semana WHERE chart = ? AND data = ? ORDER BY pos`,
+      chart,
+      dataIso,
+    ),
+    // Acumulado de cada música da semana no chart, até a data (inclusive).
+    consultar<{ titulo_norm: string; total: number }>(
+      db,
+      `SELECT titulo_norm, SUM(valor) AS total FROM chart_semana
+       WHERE chart = ? AND data <= ?
+         AND titulo_norm IN (SELECT titulo_norm FROM chart_semana WHERE chart = ? AND data = ?)
+       GROUP BY titulo_norm`,
+      chart,
+      dataIso,
+      chart,
+      dataIso,
+    ),
+  ]);
+  const acumulado = new Map(somas.map((s) => [s.titulo_norm, s.total]));
+  const linhas = rows.map((r) => {
+    const titulo = r.titulo || "";
+    const art = artistaPrincipal(lerArtistas(r.artistas), titulo);
+    return {
+      pos: r.pos,
+      tit: titulo,
+      val: fmt(r.valor),
+      valTotal: fmt(r.valor_total ?? acumulado.get(r.titulo_norm) ?? r.valor),
+      art,
+      st: r.status || "NEW",
+      capa: capaDe(titulo, art, cat, fotos),
+      style: buscarNoCatalogo(titulo, cat)?.genero ?? "",
+    };
+  });
+  return estilo ? linhas.filter((l) => l.style === estilo) : linhas;
+}
+
+export interface LinhaPaisApi {
+  pais: string;
+  pos: number;
+  tit: string;
+  val: string;
+  mes: string;
+  art: string;
+  capa: string;
+  st: string;
+}
+
+const numeroConfig = (v: string | undefined, padrao: number): number => {
+  const n = v === undefined ? NaN : Number(v);
+  return Number.isFinite(n) ? n : padrao;
+};
+
+/**
+ * Ranking de cada país de `pais_peso` (regra B + bônus de nacionalidade) na
+ * semana; `st` compara com o ranking do mesmo país na semana anterior do chart.
+ * `mes` leva a data da semana (`dd/mm/aaaa`), que o front exibe como vier.
+ */
+export async function linhasPaises(
+  db: D1DatabaseLike,
+  plataforma: ChartId,
+  dataBr: string,
+  cat: Map<string, MusicaCatalogo>,
+  fotos: Map<string, string>,
+): Promise<LinhaPaisApi[]> {
+  const dataIso = dataBrParaIso(dataBr);
+  const [pesosRows, cfgRows, nacRows, anteriorRows] = await Promise.all([
+    consultar<{ pais: string; peso: number }>(
+      db,
+      "SELECT pais, peso FROM pais_peso WHERE plataforma = ? ORDER BY peso DESC, pais",
+      plataforma,
+    ),
+    consultar<{ chave: string; valor: string }>(db, "SELECT chave, valor FROM chart_config"),
+    consultar<{ nome_upper: string; nacionalidade: string }>(
+      db,
+      "SELECT nome_upper, nacionalidade FROM artista_info WHERE nacionalidade IS NOT NULL AND nacionalidade != ''",
+    ),
+    consultar<{ data: string | null }>(db, "SELECT MAX(data) AS data FROM chart_semana WHERE chart = ? AND data < ?", plataforma, dataIso),
+  ]);
+  const pesos: Pesos = new Map(pesosRows.map((p) => [p.pais.trim().toUpperCase(), p.peso]));
+  if (!pesos.size) return [];
+  const cfg = new Map(cfgRows.map((c) => [c.chave, c.valor]));
+  const bonus = numeroConfig(cfg.get("bonus_nacionalidade"), 0.2);
+  const top = numeroConfig(cfg.get("top_pais"), 50);
+  const nacionalidade = new Map(nacRows.map((n) => [n.nome_upper.trim().toUpperCase(), n.nacionalidade.trim().toUpperCase()]));
+
+  const musicasDaSemana = async (iso: string): Promise<MusicaParaPais[]> => {
+    const rows = await consultar<{ titulo: string; titulo_norm: string; valor: number; artistas: string }>(
+      db,
+      "SELECT titulo, titulo_norm, valor, artistas FROM chart_semana WHERE chart = ? AND data = ? ORDER BY pos",
+      plataforma,
+      iso,
+    );
+    return rows.map((r) => {
+      const artistas = lerArtistas(r.artistas);
+      const nacs = new Set<string>();
+      for (const a of artistas) {
+        const n = nacionalidade.get(a.toUpperCase());
+        if (n) nacs.add(n);
+      }
+      return {
+        tituloNorm: r.titulo_norm,
+        titulo: r.titulo || "",
+        artistaPrincipal: artistaPrincipal(artistas, r.titulo || ""),
+        valor: r.valor ?? 0,
+        nacionalidades: nacs,
+      };
+    });
+  };
+  const anteriorIso = anteriorRows[0]?.data ?? null;
+  const [atual, anterior] = await Promise.all([
+    musicasDaSemana(dataIso),
+    anteriorIso ? musicasDaSemana(anteriorIso) : Promise.resolve([] as MusicaParaPais[]),
+  ]);
+  if (!atual.length) return [];
+
+  const linhas: LinhaPaisApi[] = [];
+  for (const pais of pesos.keys()) {
+    const posAnterior = new Map(rankingPais(anterior, pesos, pais, bonus, top).map((m) => [m.tituloNorm, m.pos]));
+    for (const m of rankingPais(atual, pesos, pais, bonus, top)) {
+      const antes = posAnterior.get(m.tituloNorm);
+      linhas.push({
+        pais,
+        pos: m.pos,
+        tit: m.titulo,
+        val: fmt(m.val),
+        mes: dataBr,
+        art: m.art,
+        capa: capaDe(m.titulo, m.art, cat, fotos),
+        st: antes === undefined ? "NEW" : m.pos < antes ? "↑" : m.pos > antes ? "↓" : "=",
+      });
+    }
+  }
+  return linhas;
+}
+
+/** #1 da semana mais recente do chart (banners da Início); null sem dados. */
+export async function numero1DaUltimaSemana(
+  db: D1DatabaseLike,
+  chart: ChartId,
+  cat: Map<string, MusicaCatalogo>,
+  fotos: Map<string, string>,
+): Promise<{ tit: string; art: string; capa: string } | null> {
+  const [r] = await consultar<{ titulo: string; artistas: string }>(
+    db,
+    `SELECT titulo, artistas FROM chart_semana
+     WHERE chart = ? AND data = (SELECT MAX(data) FROM chart_semana WHERE chart = ?)
+     ORDER BY pos LIMIT 1`,
+    chart,
+    chart,
+  );
+  if (!r) return null;
+  const tit = r.titulo || "";
+  const art = artistaPrincipal(lerArtistas(r.artistas), tit);
+  return { tit, art, capa: capaDe(tit, art, cat, fotos) };
+}
+
+export interface ItemHOF {
+  t: string;
+  v: string;
+}
+
+export interface PerfilHOFD1 {
+  n1_hot100: string;
+  n1_spotify: string;
+  n1_youtube: string;
+  sp: ItemHOF[];
+  am: ItemHOF[];
+  yt: ItemHOF[];
+  runs: ItemHOF[];
+}
+
+const CHARTS_HOF: ChartId[] = ["BILLBOARD HOT 100", "SPOTIFY", "APPLE MUSIC", "YOUTUBE"];
+
+/**
+ * Parte dos charts semanais no Hall of Fame: por chart, cada música (chaveMusica)
+ * em que o artista está entre os `artistas` gravados vira `{t, v}` com as
+ * posições em ordem cronológica ("32 - 50 - 1"); n1_* = músicas distintas que
+ * chegaram ao #1. `runs` = Hot 100 (mesmo papel das colunas de runs da planilha).
+ */
+export async function perfilHOF(db: D1DatabaseLike, artista: string): Promise<PerfilHOFD1> {
+  const alvo = artista.trim().toUpperCase();
+  const porChart = new Map<string, Map<string, { t: string; posicoes: number[] }>>(CHARTS_HOF.map((c) => [c, new Map()]));
+  if (alvo) {
+    // LIKE só pré-filtra (ignora caixa só em ASCII); o filtro exato é no JSON abaixo.
+    const padrao = `%${artista.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const rows = await consultar<{ chart: string; pos: number; titulo: string; titulo_norm: string; artistas: string }>(
+      db,
+      `SELECT chart, pos, titulo, titulo_norm, artistas FROM chart_semana
+       WHERE chart IN (${CHARTS_HOF.map(() => "?").join(", ")}) AND artistas LIKE ? ESCAPE '\\'
+       ORDER BY data, pos`,
+      ...CHARTS_HOF,
+      padrao,
+    );
+    for (const r of rows) {
+      if (!lerArtistas(r.artistas).some((a) => a.toUpperCase() === alvo)) continue;
+      const musicas = porChart.get(r.chart)!;
+      const m = musicas.get(r.titulo_norm) ?? { t: r.titulo || "", posicoes: [] };
+      m.t = r.titulo || m.t; // grafia mais recente
+      m.posicoes.push(r.pos);
+      musicas.set(r.titulo_norm, m);
+    }
+  }
+  // Melhor pico primeiro, depois mais semanas (mesma ordem que a tela usa nos runs).
+  const itens = (chart: ChartId) =>
+    [...porChart.get(chart)!.values()]
+      .map((m) => ({ ...m, peak: Math.min(...m.posicoes) }))
+      .sort((a, b) => a.peak - b.peak || b.posicoes.length - a.posicoes.length || a.t.localeCompare(b.t));
+  const lista = (chart: ChartId): ItemHOF[] => itens(chart).map((m) => ({ t: m.t, v: m.posicoes.join(" - ") }));
+  const n1 = (chart: ChartId) => String(itens(chart).filter((m) => m.peak === 1).length);
+  return {
+    n1_hot100: n1("BILLBOARD HOT 100"),
+    n1_spotify: n1("SPOTIFY"),
+    n1_youtube: n1("YOUTUBE"),
+    sp: lista("SPOTIFY"),
+    am: lista("APPLE MUSIC"),
+    yt: lista("YOUTUBE"),
+    runs: lista("BILLBOARD HOT 100"),
+  };
 }

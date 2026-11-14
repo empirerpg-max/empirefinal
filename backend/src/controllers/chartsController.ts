@@ -1,5 +1,12 @@
 import { googleSheetsService } from "../services/googleSheetsService";
-import { normalizarTitulo } from "../services/chartsD1/artistas";
+import { normalizarTitulo, type MusicaCatalogo } from "../services/chartsD1/artistas";
+import { fixImg, fmt } from "../services/chartsD1/formato";
+import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
+import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
+import {
+  carregarCatalogo, carregarFotos, datasDoChart, generosDoChart, linhasDoChart, linhasPaises,
+  numero1DaUltimaSemana, perfilHOF,
+} from "../services/chartsD1/repo";
 
 // Empire Charts — migrado do Apps Script (script.google.com/macros/.../exec)
 // que servia isso antes. Mesma lógica, linha por linha, só trocando
@@ -19,38 +26,83 @@ function jsonOk(data: unknown): Response {
   });
 }
 
-// Mesma lógica do fmt() original: "-"/vazio → "0", senão número formatado
-// pt-BR (separador de milhar).
-function fmt(v: unknown): string {
-  const s = String(v ?? "");
-  if (!s || s === "-") return "0";
-  const n = Number(s.replace(/[^\d]/g, ""));
-  return n.toLocaleString("pt-BR");
-}
-
-// Mesma lógica do fixImg() original: extrai o ID do Drive de dentro de
-// qualquer formato de link (uc?id=, /file/d/.../view, thumbnail?id=, etc)
-// e devolve um link de thumbnail padronizado. O frontend já sabe rotear
-// qualquer link drive.google.com pelo proxy autenticado (resolveImg).
-function fixImg(u: unknown): string {
-  const s = String(u ?? "");
-  // "" vazio faz o frontend usar o próprio fallback visual (ícone/estrela)
-  // — devolver uma URL fixa aqui (como era antes, "via.placeholder.com",
-  // serviço desativado há tempos) faz o <img> tentar carregar um link morto
-  // e sempre falhar, mesmo quando a capa é legitimamente vazia.
-  if (!s || s === "-") return "";
-  const m = s.match(/[-\w]{25,}/);
-  return m ? `https://drive.google.com/thumbnail?id=${m[0]}&sz=s1000` : s;
-}
-
 async function readSheet(spreadsheetKey: keyof typeof googleSheetsService, sheetName: string): Promise<Row[]> {
   const svc = googleSheetsService[spreadsheetKey] as { readValues: (s: string) => Promise<Row[]> };
   const rows = await svc.readValues(sheetName).catch(() => []);
   return rows || [];
 }
 
+// ---- D1 (5 charts semanais + COUNTRIES) ----
+// Se o chart já tem semanas no D1, a leitura vem de lá; senão (corte ainda
+// não carregado, banco ausente ou erro) segue o caminho da planilha abaixo.
+// Datas por chart e catálogo/fotos ficam em cache por isolate com o mesmo
+// TTL das respostas (limparCacheCharts zera tudo após uma ingestão).
+interface ReferenciasD1 {
+  cat: Map<string, MusicaCatalogo>;
+  fotos: Map<string, string>;
+}
+const datasD1Cache = new Map<ChartId, { valor: Promise<string[]>; expiresAt: number }>();
+let referenciasD1Cache: { valor: Promise<ReferenciasD1>; expiresAt: number } | null = null;
+
+function datasD1(db: D1DatabaseLike, chart: ChartId): Promise<string[]> {
+  const c = datasD1Cache.get(chart);
+  if (c && c.expiresAt > Date.now()) return c.valor;
+  const valor = datasDoChart(db, chart);
+  const entrada = { valor, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS };
+  valor.catch(() => {
+    if (datasD1Cache.get(chart) === entrada) datasD1Cache.delete(chart);
+  });
+  datasD1Cache.set(chart, entrada);
+  return valor;
+}
+
+function referenciasD1(db: D1DatabaseLike): Promise<ReferenciasD1> {
+  if (referenciasD1Cache && referenciasD1Cache.expiresAt > Date.now()) return referenciasD1Cache.valor;
+  const valor = Promise.all([carregarCatalogo(db), carregarFotos(db)]).then(([cat, fotos]) => ({ cat, fotos }));
+  const entrada = { valor, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS };
+  valor.catch(() => {
+    if (referenciasD1Cache === entrada) referenciasD1Cache = null;
+  });
+  referenciasD1Cache = entrada;
+  return valor;
+}
+
+/** Aba de /api/charts → chart do D1 ("SPOTIFY COUNTRIES" → SPOTIFY + países); null se não migrada. */
+function chartD1DaAba(tab: string): { chart: ChartId; paises: boolean } | null {
+  if ((CHARTS as string[]).includes(tab)) return { chart: tab as ChartId, paises: false };
+  const base = tab.endsWith(" COUNTRIES") ? tab.slice(0, -" COUNTRIES".length) : "";
+  if ((CHARTS_COM_PAIS as string[]).includes(base)) return { chart: base as ChartId, paises: true };
+  return null;
+}
+
+/** Roda `ler` no D1 se o chart tem dados lá; `undefined` = usar a planilha. */
+async function viaD1<T>(
+  chart: ChartId,
+  ler: (db: D1DatabaseLike, datas: string[]) => Promise<T>,
+): Promise<T | undefined> {
+  const db = getCatalogoDb();
+  if (!db) return undefined;
+  try {
+    const datas = await datasD1(db, chart);
+    if (!datas.length) return undefined;
+    return await ler(db, datas);
+  } catch (e) {
+    console.warn(`[charts-d1] leitura de ${chart} no D1 falhou; usando a planilha:`, e);
+    return undefined;
+  }
+}
+
 // ---- FILTROS ----
 async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] }> {
+  const alvo = chartD1DaAba(tab);
+  if (alvo) {
+    const d1 = await viaD1(alvo.chart, async (db, datas) => ({
+      dates: datas,
+      styles: alvo.paises ? [] : await generosDoChart(db, alvo.chart, (await referenciasD1(db)).cat),
+    }));
+    if (d1) return d1;
+  }
+
   const isA = tab === "DADOS ÁLBUNS";
   const isC = tab.includes("COUNTRIES");
   const key = isA ? "chartsAlbums" : isC ? "chartsCountries" : "chartsBase";
@@ -74,6 +126,17 @@ async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] 
 
 // ---- CHART ----
 async function fetchC(tab: string, date: string, style: string): Promise<unknown[]> {
+  const alvo = chartD1DaAba(tab);
+  if (alvo) {
+    const d1 = await viaD1<unknown[]>(alvo.chart, async (db) => {
+      const { cat, fotos } = await referenciasD1(db);
+      return alvo.paises
+        ? linhasPaises(db, alvo.chart, date, cat, fotos)
+        : linhasDoChart(db, alvo.chart, date, style, cat, fotos);
+    });
+    if (d1) return d1;
+  }
+
   const isA = tab === "DADOS ÁLBUNS";
   const isC = tab.includes("COUNTRIES");
   const key = isA ? "chartsAlbums" : isC ? "chartsCountries" : "chartsBase";
@@ -256,8 +319,31 @@ function contarNumero1(items: { t: string; v: string }[]): number {
   }).length;
 }
 
+// Parte dos charts semanais no HOF vinda do D1, só dos charts que já têm
+// semanas lá (os outros campos seguem da HALL_OF_FAME_DB).
+async function perfilHOFDoD1(artist: string): Promise<Record<string, unknown>> {
+  const db = getCatalogoDb();
+  if (!db) return {};
+  try {
+    const [hot100, spotify, apple, youtube] = await Promise.all(
+      (["BILLBOARD HOT 100", "SPOTIFY", "APPLE MUSIC", "YOUTUBE"] as ChartId[]).map(async (c) => (await datasD1(db, c)).length > 0),
+    );
+    if (!hot100 && !spotify && !apple && !youtube) return {};
+    const p = await perfilHOF(db, artist);
+    return {
+      ...(hot100 ? { n1_hot100: p.n1_hot100, runs: p.runs } : {}),
+      ...(spotify ? { n1_spotify: p.n1_spotify, sp: p.sp } : {}),
+      ...(apple ? { am: p.am } : {}),
+      ...(youtube ? { n1_youtube: p.n1_youtube, yt: p.yt } : {}),
+    };
+  } catch (e) {
+    console.warn("[charts-d1] HOF do D1 falhou; usando a planilha:", e);
+    return {};
+  }
+}
+
 async function fetchHOFProfile(artist: string): Promise<unknown> {
-  const data = await readSheet("chartsBase", "HALL_OF_FAME_DB");
+  const [data, doD1] = await Promise.all([readSheet("chartsBase", "HALL_OF_FAME_DB"), perfilHOFDoD1(artist)]);
   const r = data.find((row) => (row[0] || "").trim().toUpperCase() === artist.trim().toUpperCase());
   if (!r) return {};
   const runsBase = parseHOFList(r[12]);
@@ -281,6 +367,7 @@ async function fetchHOFProfile(artist: string): Promise<unknown> {
     am: parseHOFList(r[10]),
     alb: parseHOFList(r[11]),
     runs: runsCombinados,
+    ...doD1,
   };
 }
 
@@ -374,6 +461,14 @@ async function fetchBannerN1s(): Promise<Record<string, unknown>> {
 
   await Promise.all(
     platforms.map(async ({ key, tab }) => {
+      const doD1 = await viaD1(tab as ChartId, async (db) => {
+        const { cat, fotos } = await referenciasD1(db);
+        return numero1DaUltimaSemana(db, tab as ChartId, cat, fotos);
+      });
+      if (doD1) {
+        result[key] = doD1;
+        return;
+      }
       const data = await readSheet("chartsBase", tab);
       if (data.length === 0) return;
       const row = latestRow(data.slice(1));
@@ -472,6 +567,8 @@ const chartsResponseInFlight = new Map<string, Promise<string>>();
 /** Descarta as respostas em cache deste isolate (chamado após ingerir uma semana no D1). */
 export function limparCacheCharts(): void {
   chartsResponseCache.clear();
+  datasD1Cache.clear();
+  referenciasD1Cache = null;
 }
 
 export async function chartsApiController(request: Request): Promise<Response> {

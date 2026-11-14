@@ -39,14 +39,16 @@ export function rankingPais(
   bonus: number,
   top: number,
 ): { pos: number; tituloNorm: string; titulo: string; art: string; val: number }[] {
+  // Ordena pelo valor sem arredondar: em país de peso pequeno quase tudo
+  // arredonda pro mesmo inteiro e o ranking viraria ordem alfabética.
   return musicas
     .map((m) => ({
       tituloNorm: m.tituloNorm,
       titulo: m.titulo,
       art: m.artistaPrincipal,
-      val: Math.round(m.valor * (fatiasPorPais(pesos, m.nacionalidades, bonus).get(pais) ?? 0)),
+      bruto: m.valor * (fatiasPorPais(pesos, m.nacionalidades, bonus).get(pais) ?? 0),
     }))
-    .sort((a, b) => b.val - a.val || (a.tituloNorm < b.tituloNorm ? -1 : a.tituloNorm > b.tituloNorm ? 1 : 0))
+    .sort((a, b) => b.bruto - a.bruto || (a.tituloNorm < b.tituloNorm ? -1 : a.tituloNorm > b.tituloNorm ? 1 : 0))
     .slice(0, top)
-    .map((m, i) => ({ pos: i + 1, ...m }));
+    .map(({ bruto, ...m }, i) => ({ pos: i + 1, ...m, val: Math.round(bruto) }));
 }

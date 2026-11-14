@@ -249,3 +249,171 @@ test("controller: 405, 400 e 200 com token", async () => {
     g.__CATALOGO_DB__ = antes.db;
   }
 });
+
+// ---- Leitura (/api/charts) a partir do D1 ----
+import { existsSync, readFileSync } from "node:fs";
+import {
+  datasDoChart, generosDoChart, linhasDoChart, linhasPaises, numero1DaUltimaSemana, perfilHOF,
+} from "../backend/src/services/chartsD1/repo";
+
+// Catálogo fake: "Artista i - Faixa i" com capa própria; ímpar = Pop, par = Rock.
+const catFake = indexarCatalogo(
+  Array.from({ length: 100 }, (_, i) => ({
+    titulo: `Faixa ${i + 1}`, artista: `Artista ${i + 1}`, capa_url: `capa-${i + 1}.jpg`,
+    genero: (i + 1) % 2 ? "Pop" : "Rock", tipo_single: "SINGLE",
+  })) as any,
+);
+
+// Semana fake pra leitura: título E artista trocam juntos entre #1 e #2 na
+// segunda semana; valores bem espaçados (não empatam ao dividir por país).
+const linhasLeitura = (dataBr: string, trocar: boolean): string[][] =>
+  linhasFake(dataBr).map((l) => {
+    const pos = Number(l[2]);
+    const n = trocar && pos <= 2 ? 3 - pos : pos;
+    return [l[0], l[1], l[2], `Artista ${n} - Faixa ${n}`, String((101 - pos) * 1000), "", "", `Artista ${n}`, "", "", "", ""];
+  });
+
+async function dbComDuasSemanas(artistas: string[][] = [], pesos: string[][] = []) {
+  const db = criarD1Sqlite();
+  expect((await ingerirSemana(db, { linhas: linhasLeitura("04/11/2026", false), artistas, pesos })).ok).toBe(true);
+  expect((await ingerirSemana(db, { linhas: linhasLeitura("11/11/2026", true) })).ok).toBe(true);
+  return db;
+}
+
+// CSV "PAÍSES E PESOS" real (81 países) quando disponível; senão um recorte mínimo.
+const CSV_PESOS = "/root/.claude/uploads/2a149bbf-d1c1-542e-8fba-44e303dfd808/28fa6e80-Empire_Base_de_Dados_-_PA_SES_E_PESOS.csv";
+function pesosDoCsv(): string[][] {
+  if (!existsSync(CSV_PESOS)) {
+    return [["PAÍS", "SPOTIFY (B)", "APPLE MUSIC (C)", "YOUTUBE (D)"], ["AUSTRÁLIA", "2,50%", "2,00%", "1,00%"], ["BRASIL", "7,20%", "2,50%", "15,50%"]];
+  }
+  return readFileSync(CSV_PESOS, "utf8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((l) => [...l.matchAll(/"([^"]*)"|([^,]+)|(?<=,)(?=,|$)/g)].map((m) => m[1] ?? m[2] ?? ""));
+}
+
+test("getChart do D1 mantém contrato", async () => {
+  const db = await dbComDuasSemanas();
+  const rows = await linhasDoChart(db, "BILLBOARD HOT 100", "11/11/2026", "", catFake, new Map());
+  expect(Object.keys(rows[0]).sort()).toEqual(["art", "capa", "pos", "st", "style", "tit", "val", "valTotal"]);
+  expect(rows).toHaveLength(100);
+  expect(rows[0]).toEqual({ pos: 1, tit: "Artista 2 - Faixa 2", val: "100.000", valTotal: "199.000", art: "Artista 2", st: "↑", capa: "capa-2.jpg", style: "Rock" });
+  const pop = await linhasDoChart(db, "BILLBOARD HOT 100", "11/11/2026", "Pop", catFake, new Map());
+  expect(pop.length).toBe(50);
+  expect(pop.every((r) => r.style === "Pop")).toBe(true);
+});
+test("getChart do D1: capa cai pra foto do artista e depois pra vazio", async () => {
+  const db = await dbComDuasSemanas();
+  const rows = await linhasDoChart(db, "SPOTIFY", "04/11/2026", "", new Map(), new Map([["ARTISTA 1", "foto-1.jpg"]]));
+  expect(rows[0].capa).toBe("foto-1.jpg");
+  expect(rows[1].capa).toBe("");
+  expect(rows[0].st).toBe("NEW");
+});
+test("filtros do D1: datas mais recentes primeiro e gêneros do catálogo", async () => {
+  const db = await dbComDuasSemanas();
+  expect(await datasDoChart(db, "SPOTIFY")).toEqual(["11/11/2026", "04/11/2026"]);
+  expect(await generosDoChart(db, "SPOTIFY", catFake)).toEqual(["Pop", "Rock"]);
+});
+test("países: 81 × top 50, artista local acima no próprio país", async () => {
+  const pesos = pesosDoCsv();
+  const nPaises = pesos.slice(1).filter((p) => p[0].trim() && p[1].trim()).length;
+  const db = await dbComDuasSemanas([["Artista 60", "Austrália", "f60.jpg"]], pesos);
+  const rows = await linhasPaises(db, "SPOTIFY", "11/11/2026", catFake, new Map());
+  expect(Object.keys(rows[0]).sort()).toEqual(["art", "capa", "mes", "pais", "pos", "st", "tit", "val"]);
+  expect(new Set(rows.map((r) => r.pais)).size).toBe(nPaises);
+  expect(rows).toHaveLength(nPaises * 50);
+  const brasil = rows.filter((r) => r.pais === "BRASIL");
+  expect(brasil).toHaveLength(50);
+  expect(brasil[0]).toMatchObject({ pos: 1, tit: "Artista 2 - Faixa 2", mes: "11/11/2026", art: "Artista 2", st: "↑", capa: "capa-2.jpg" });
+  expect(brasil[1].st).toBe("↓");
+  expect(brasil.some((r) => r.tit === "Artista 60 - Faixa 60")).toBe(false);
+  const australia = rows.filter((r) => r.pais === "AUSTRÁLIA");
+  expect(australia[0]).toMatchObject({ pos: 1, tit: "Artista 60 - Faixa 60", st: "=" });
+});
+test("datas vazias → fallback", async () => {
+  expect(await datasDoChart(criarD1Sqlite(), "DIGITAL SALES")).toEqual([]);
+  const db = await dbComDuasSemanas();
+  await db.prepare("DELETE FROM chart_semana WHERE chart = 'DIGITAL SALES'").run();
+  expect(await datasDoChart(db, "DIGITAL SALES")).toEqual([]);
+});
+test("banner: #1 da semana mais recente", async () => {
+  const db = await dbComDuasSemanas();
+  expect(await numero1DaUltimaSemana(db, "YOUTUBE", catFake, new Map())).toEqual({ tit: "Artista 2 - Faixa 2", art: "Artista 2", capa: "capa-2.jpg" });
+  expect(await numero1DaUltimaSemana(criarD1Sqlite(), "YOUTUBE", catFake, new Map())).toBeNull();
+});
+test("HOF: #1s e runs cronológicos pelos artistas da música", async () => {
+  const db = await dbComDuasSemanas();
+  const p = await perfilHOF(db, "artista 2");
+  expect(p.n1_hot100).toBe("1");
+  expect(p.n1_spotify).toBe("1");
+  expect(p.n1_youtube).toBe("1");
+  expect(p.runs).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
+  expect(p.sp).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
+  expect(p.am).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
+  expect(p.yt).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
+  const p20 = await perfilHOF(db, "Artista 20"); // não confunde com "Artista 2"
+  expect(p20.runs).toEqual([{ t: "Artista 20 - Faixa 20", v: "20 - 20" }]);
+  expect(p20.n1_hot100).toBe("0");
+});
+test("rankingPais: país de peso pequeno ordena pelo valor real, não pelo arredondado", () => {
+  const pesos: Pesos = new Map([["ANGOLA", 0.0005]]);
+  const ms = [
+    { tituloNorm: "a", titulo: "A", artistaPrincipal: "A", valor: 1000, nacionalidades: new Set<string>() },
+    { tituloNorm: "z", titulo: "Z", artistaPrincipal: "Z", valor: 1200, nacionalidades: new Set<string>() },
+  ];
+  const r = rankingPais(ms, pesos, "ANGOLA", 0.2, 50);
+  expect(r.map((m) => [m.tituloNorm, m.val])).toEqual([["z", 1], ["a", 1]]);
+});
+
+import { googleSheetsService } from "../backend/src/services/googleSheetsService";
+import { chartsApiController, limparCacheCharts } from "../backend/src/controllers/chartsController";
+
+/** Roda `fn` com o D1 fake e as planilhas trocadas por stubs (registra o que foi lido). */
+async function comApiCharts(db: unknown, abas: Record<string, string[][]>, fn: (lidas: string[]) => Promise<void>) {
+  const g = globalThis as Record<string, unknown>;
+  const svc = googleSheetsService as unknown as Record<string, { readValues: (s: string) => Promise<string[][]> }>;
+  const chaves = ["chartsBase", "chartsCountries", "chartsAlbums", "principal"];
+  const antes = { db: g.__CATALOGO_DB__, ...Object.fromEntries(chaves.map((k) => [k, svc[k].readValues])) } as Record<string, any>;
+  const lidas: string[] = [];
+  g.__CATALOGO_DB__ = db;
+  for (const k of chaves) svc[k].readValues = async (s: string) => { lidas.push(`${k}:${s}`); return abas[s] ?? []; };
+  limparCacheCharts();
+  try {
+    await fn(lidas);
+  } finally {
+    g.__CATALOGO_DB__ = antes.db;
+    for (const k of chaves) svc[k].readValues = antes[k];
+    limparCacheCharts();
+  }
+}
+const api = async (q: string) => (await chartsApiController(new Request(`http://x/api/charts?${q}`))).json();
+
+test("/api/charts: chart com semanas no D1 lê do D1; chart vazio cai na planilha", async () => {
+  const db = await dbComDuasSemanas();
+  await db.prepare("DELETE FROM chart_semana WHERE chart = 'DIGITAL SALES'").run();
+  const planilhaSales = [["h"], ["DIGITAL SALES", "01/01/2025", "1", "Velha - Planilha", "10", "", "", "Velha"]];
+  await comApiCharts(db, { "DIGITAL SALES": planilhaSales }, async (lidas) => {
+    expect(await api("action=getFilters&tab=SPOTIFY")).toEqual({ dates: ["11/11/2026", "04/11/2026"], styles: [] });
+    const rows = await api("action=getChart&tab=SPOTIFY&date=11/11/2026");
+    expect(rows).toHaveLength(100);
+    expect(rows[0]).toMatchObject({ pos: 1, tit: "Artista 2 - Faixa 2", st: "↑" });
+    expect((await api("action=getFilters&tab=SPOTIFY COUNTRIES")).dates).toEqual(["11/11/2026", "04/11/2026"]);
+    expect(lidas.filter((l) => l.startsWith("chartsBase") || l.startsWith("chartsCountries"))).toEqual([]);
+    expect((await api("action=getFilters&tab=DIGITAL SALES")).dates).toEqual(["01/01/2025"]);
+    expect(lidas).toContain("chartsBase:DIGITAL SALES");
+    const banners = await api("action=getBannerN1s");
+    expect(banners.spotify).toEqual({ tit: "Artista 2 - Faixa 2", art: "Artista 2", capa: "" });
+    expect(banners.sales).toMatchObject({ tit: "Velha - Planilha", art: "Velha" });
+  });
+});
+test("/api/charts HOF: números/runs dos charts do D1 sobre img/country/style e álbuns da planilha", async () => {
+  const db = await dbComDuasSemanas();
+  const hof = [["h"], ["Artista 2", "img", "BRASIL", "Pop", "9", "9", "9", "4", "Velha|1", "Velha|1", "Velha|1", "Album|1 - 2", "Velha|1", ""]];
+  await comApiCharts(db, { HALL_OF_FAME_DB: hof }, async () => {
+    const p = await api("action=getHOFProfile&artist=Artista 2");
+    expect(p).toMatchObject({ name: "Artista 2", img: "img", country: "BRASIL", style: "Pop", n1_hot100: "1", n1_spotify: "1", n1_youtube: "1", n1_bb200: "4" });
+    expect(p.runs).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
+    expect(p.am).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
+    expect(p.alb).toEqual([{ t: "Album", v: "1 - 2" }]);
+  });
+});
