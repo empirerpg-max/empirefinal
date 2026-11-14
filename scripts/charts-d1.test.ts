@@ -98,7 +98,7 @@ test("extrairArtistasDoTitulo", () => {
   expect(extrairArtistasDoTitulo("A & B, C - Song")).toEqual(["A", "B", "C"]);
 });
 
-import { criarD1Sqlite } from "./charts-d1-sqlite";
+import { criarD1Sqlite, type AoExecutar } from "./charts-d1-sqlite";
 import { ingerirSemana, historicoAntesDe } from "../backend/src/services/chartsD1/repo";
 import { chartsIngestController } from "../backend/src/controllers/chartsIngestController";
 
@@ -216,7 +216,7 @@ test("artistas resolvidos do catálogo/título, artista_info e pais_peso com ups
   const pesos = await db.prepare("SELECT plataforma, peso FROM pais_peso WHERE pais='BRASIL' ORDER BY plataforma").all<any>();
   expect(pesos.results.map((p: any) => [p.plataforma, p.peso])).toEqual([["APPLE MUSIC", 0.05], ["SPOTIFY", 0.072], ["YOUTUBE", 0.101]]);
   const cfg = await db.prepare("SELECT chave, valor FROM chart_config ORDER BY chave").all<any>();
-  expect(cfg.results).toEqual([{ chave: "bonus_nacionalidade", valor: "0.20" }, { chave: "top_pais", valor: "50" }]);
+  expect(cfg.results).toEqual([{ chave: "bonus_nacionalidade", valor: "0.20" }, { chave: "charts_d1_ativo", valor: "0" }, { chave: "top_pais", valor: "50" }]);
 });
 test("reenvio de semana antiga recalcula a semana seguinte", async () => {
   const db = criarD1Sqlite();
@@ -226,7 +226,7 @@ test("reenvio de semana antiga recalcula a semana seguinte", async () => {
   await ingerirSemana(db, { linhas: linhasFake("04/11/2026") });
   top = await db.prepare("SELECT status, semanas, peak, pos_anterior FROM chart_semana WHERE chart='YOUTUBE' AND data='2026-11-11' AND pos=1").all<any>();
   expect(top.results[0]).toEqual({ status: "↑", semanas: 2, peak: 1, pos_anterior: 2 });
-  const h = await historicoAntesDe(db, "YOUTUBE", "2026-11-12");
+  const h = await historicoAntesDe(db, "YOUTUBE", "2026-11-12", ["artista 1 - faixa 1"]);
   expect(h.get("artista 1 - faixa 1")).toEqual({ tituloNorm: "artista 1 - faixa 1", posAnterior: 2, peak: 1, semanas: 2, semanasN1: 1 });
 });
 test("controller: 405 (PUT), 400 e 200 com token", async () => {
@@ -257,12 +257,19 @@ import {
 } from "../backend/src/services/chartsD1/repo";
 
 // Catálogo fake: "Artista i - Faixa i" com capa própria; ímpar = Pop, par = Rock.
-const catFake = indexarCatalogo(
-  Array.from({ length: 100 }, (_, i) => ({
-    titulo: `Faixa ${i + 1}`, artista: `Artista ${i + 1}`, capa_url: `capa-${i + 1}.jpg`,
-    genero: (i + 1) % 2 ? "Pop" : "Rock", tipo_single: "SINGLE",
-  })) as any,
-);
+const musicasFake = Array.from({ length: 100 }, (_, i) => ({
+  titulo: `Faixa ${i + 1}`, artista: `Artista ${i + 1}`, capa_url: `capa-${i + 1}.jpg`,
+  genero: (i + 1) % 2 ? "Pop" : "Rock", tipo_single: "SINGLE",
+}));
+const catFake = indexarCatalogo(musicasFake as any);
+
+/** Tabela musicas do D1 com o catálogo fake (o gênero é gravado na ingestão). */
+async function criarMusicasFake(db: ReturnType<typeof criarD1Sqlite>) {
+  await db.prepare("CREATE TABLE musicas (titulo TEXT, artista TEXT, artista_2 TEXT, artista_3 TEXT, artista_4 TEXT, artista_5 TEXT, artista_6 TEXT, capa_url TEXT, genero TEXT, tipo_single TEXT)").run();
+  for (const m of musicasFake) {
+    await db.prepare("INSERT INTO musicas (titulo, artista, capa_url, genero, tipo_single) VALUES (?, ?, ?, ?, ?)").bind(m.titulo, m.artista, m.capa_url, m.genero, m.tipo_single).run();
+  }
+}
 
 // Semana fake pra leitura: título E artista trocam juntos entre #1 e #2 na
 // segunda semana; valores bem espaçados (não empatam ao dividir por país).
@@ -273,8 +280,9 @@ const linhasLeitura = (dataBr: string, trocar: boolean): string[][] =>
     return [l[0], l[1], l[2], `Artista ${n} - Faixa ${n}`, String((101 - pos) * 1000), "", "", `Artista ${n}`, "", "", "", ""];
   });
 
-async function dbComDuasSemanas(artistas: string[][] = [], pesos: string[][] = []) {
-  const db = criarD1Sqlite();
+async function dbComDuasSemanas(artistas: string[][] = [], pesos: string[][] = [], aoExecutar?: AoExecutar) {
+  const db = criarD1Sqlite(":memory:", aoExecutar);
+  await criarMusicasFake(db);
   expect((await ingerirSemana(db, { linhas: linhasLeitura("04/11/2026", false), artistas, pesos })).ok).toBe(true);
   expect((await ingerirSemana(db, { linhas: linhasLeitura("11/11/2026", true) })).ok).toBe(true);
   return db;
@@ -309,13 +317,14 @@ test("getChart do D1: capa cai pra foto do artista e depois pra vazio", async ()
 test("filtros do D1: datas mais recentes primeiro e gêneros do catálogo", async () => {
   const db = await dbComDuasSemanas();
   expect(await datasDoChart(db, "SPOTIFY")).toEqual(["11/11/2026", "04/11/2026"]);
-  expect(await generosDoChart(db, "SPOTIFY", catFake)).toEqual(["Pop", "Rock"]);
+  expect(await generosDoChart(db, "SPOTIFY")).toEqual(["Pop", "Rock"]);
 });
 test("países: 81 × top 50, artista local acima no próprio país", async () => {
   const pesos = pesosDoCsv();
   const nPaises = pesos.slice(1).filter((p) => p[0].trim() && p[1].trim()).length;
   expect(nPaises).toBe(81);
-  const db = await dbComDuasSemanas([["Artista 60", "Austrália", "f60.jpg"]], pesos);
+  // "Australia" sem acento casa com "AUSTRÁLIA" de pais_peso.
+  const db = await dbComDuasSemanas([["Artista 60", "Austrália", "f60.jpg"], ["Artista 61", "Australia", ""]], pesos);
   const rows = await linhasPaises(db, "SPOTIFY", "11/11/2026", catFake, new Map());
   expect(Object.keys(rows[0]).sort()).toEqual(["art", "capa", "mes", "pais", "pos", "st", "tit", "val"]);
   expect(new Set(rows.map((r) => r.pais)).size).toBe(nPaises);
@@ -327,11 +336,12 @@ test("países: 81 × top 50, artista local acima no próprio país", async () =>
   expect(brasil.some((r) => r.tit === "Artista 60 - Faixa 60")).toBe(false);
   const australia = rows.filter((r) => r.pais === "AUSTRÁLIA");
   expect(australia[0]).toMatchObject({ pos: 1, tit: "Artista 60 - Faixa 60", st: "=" });
+  expect(australia[1]).toMatchObject({ pos: 2, tit: "Artista 61 - Faixa 61", st: "=" });
 });
 test("datas vazias → fallback", async () => {
   expect(await datasDoChart(criarD1Sqlite(), "DIGITAL SALES")).toEqual([]);
   const db = await dbComDuasSemanas();
-  await db.prepare("DELETE FROM chart_semana WHERE chart = 'DIGITAL SALES'").run();
+  await db.prepare("DELETE FROM chart_datas WHERE chart = 'DIGITAL SALES'").run();
   expect(await datasDoChart(db, "DIGITAL SALES")).toEqual([]);
 });
 test("banner: #1 da semana mais recente", async () => {
@@ -346,9 +356,10 @@ test("HOF: #1s e runs cronológicos pelos artistas da música", async () => {
   expect(p.n1_spotify).toBe("1");
   expect(p.n1_youtube).toBe("1");
   expect(p.runs).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
-  expect(p.sp).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
-  expect(p.am).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
-  expect(p.yt).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
+  // sp/am/yt: só o pico (cabe no layout do HOF); runs mantém as posições.
+  expect(p.sp).toEqual([{ t: "Artista 2 - Faixa 2", v: "1" }]);
+  expect(p.am).toEqual([{ t: "Artista 2 - Faixa 2", v: "1" }]);
+  expect(p.yt).toEqual([{ t: "Artista 2 - Faixa 2", v: "1" }]);
   const p20 = await perfilHOF(db, "Artista 20"); // não confunde com "Artista 2"
   expect(p20.runs).toEqual([{ t: "Artista 20 - Faixa 20", v: "20 - 20" }]);
   expect(p20.n1_hot100).toBe("0");
@@ -385,13 +396,16 @@ async function comApiCharts(db: unknown, abas: Record<string, string[][]>, fn: (
   }
 }
 const api = async (q: string) => (await chartsApiController(new Request(`http://x/api/charts?${q}`))).json();
+/** Libera a leitura do D1 (carga inicial concluída). */
+const ativarD1 = async (db: ReturnType<typeof criarD1Sqlite>) => expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
 
 test("/api/charts: chart com semanas no D1 lê do D1; chart vazio cai na planilha", async () => {
   const db = await dbComDuasSemanas([], pesosDoCsv());
-  await db.prepare("DELETE FROM chart_semana WHERE chart = 'DIGITAL SALES'").run();
+  await ativarD1(db);
+  await db.prepare("DELETE FROM chart_datas WHERE chart = 'DIGITAL SALES'").run();
   const planilhaSales = [["h"], ["DIGITAL SALES", "01/01/2025", "1", "Velha - Planilha", "10", "", "", "Velha"]];
   await comApiCharts(db, { "DIGITAL SALES": planilhaSales }, async (lidas) => {
-    expect(await api("action=getFilters&tab=SPOTIFY")).toEqual({ dates: ["11/11/2026", "04/11/2026"], styles: [] });
+    expect(await api("action=getFilters&tab=SPOTIFY")).toEqual({ dates: ["11/11/2026", "04/11/2026"], styles: ["Pop", "Rock"] });
     const rows = await api("action=getChart&tab=SPOTIFY&date=11/11/2026");
     expect(rows).toHaveLength(100);
     expect(rows[0]).toMatchObject({ pos: 1, tit: "Artista 2 - Faixa 2", st: "↑" });
@@ -400,18 +414,19 @@ test("/api/charts: chart com semanas no D1 lê do D1; chart vazio cai na planilh
     expect((await api("action=getFilters&tab=DIGITAL SALES")).dates).toEqual(["01/01/2025"]);
     expect(lidas).toContain("chartsBase:DIGITAL SALES");
     const banners = await api("action=getBannerN1s");
-    expect(banners.spotify).toEqual({ tit: "Artista 2 - Faixa 2", art: "Artista 2", capa: "" });
+    expect(banners.spotify).toEqual({ tit: "Artista 2 - Faixa 2", art: "Artista 2", capa: "capa-2.jpg" });
     expect(banners.sales).toMatchObject({ tit: "Velha - Planilha", art: "Velha" });
   });
 });
 test("/api/charts HOF: números/runs dos charts do D1 sobre img/country/style e álbuns da planilha", async () => {
   const db = await dbComDuasSemanas();
+  await ativarD1(db);
   const hof = [["h"], ["Artista 2", "img", "BRASIL", "Pop", "9", "9", "9", "4", "Velha|1", "Velha|1", "Velha|1", "Album|1 - 2", "Velha|1", ""]];
   await comApiCharts(db, { HALL_OF_FAME_DB: hof }, async () => {
     const p = await api("action=getHOFProfile&artist=Artista 2");
     expect(p).toMatchObject({ name: "Artista 2", img: "img", country: "BRASIL", style: "Pop", n1_hot100: "1", n1_spotify: "1", n1_youtube: "1", n1_bb200: "4" });
     expect(p.runs).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
-    expect(p.am).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
+    expect(p.am).toEqual([{ t: "Artista 2 - Faixa 2", v: "1" }]);
     expect(p.alb).toEqual([{ t: "Album", v: "1 - 2" }]);
   });
 });
@@ -451,6 +466,7 @@ test("rankingsDaSemana bate com rankingPais país a país", () => {
 });
 test("/api/charts COUNTRIES sem pesos no D1 cai na planilha", async () => {
   const db = await dbComDuasSemanas(); // sem pesos
+  await ativarD1(db);
   const planilha = [["h"], ["BRASIL", "1", "SPOTIFY", "Velha - Planilha", "10", "Outubro", "Velha", ""]];
   await comApiCharts(db, { "SPOTIFY COUNTRIES": planilha }, async (lidas) => {
     expect((await api("action=getFilters&tab=SPOTIFY COUNTRIES")).dates).toEqual(["Outubro"]);
@@ -460,6 +476,7 @@ test("/api/charts COUNTRIES sem pesos no D1 cai na planilha", async () => {
 });
 test("/api/charts HOF: runs legados (col. N) somam por cima do D1; sem linha na planilha não consulta o D1", async () => {
   const db = await dbComDuasSemanas();
+  await ativarD1(db);
   const hof = [["h"], ["Artista 2", "img", "BRASIL", "Pop", "9", "9", "9", "4", "", "", "", "", "Velha|1", "Legado|3 - 1,Outro|5"]];
   await comApiCharts(db, { HALL_OF_FAME_DB: hof }, async () => {
     const p = await api("action=getHOFProfile&artist=Artista 2");
@@ -467,7 +484,7 @@ test("/api/charts HOF: runs legados (col. N) somam por cima do D1; sem linha na 
     expect(p.n1_hot100).toBe("2");
   });
   let consultas = 0;
-  const contando = { ...db, prepare: (sql: string) => { if (/artistas LIKE/.test(sql)) consultas++; return db.prepare(sql); } };
+  const contando = { ...db, prepare: (sql: string) => { if (/FROM chart_artista_musica/.test(sql)) consultas++; return db.prepare(sql); } };
   await comApiCharts(contando, { HALL_OF_FAME_DB: hof }, async () => {
     expect(await api("action=getHOFProfile&artist=Ninguem")).toEqual({});
     await api("action=getHOFProfile&artist=Artista 2");
@@ -476,6 +493,7 @@ test("/api/charts HOF: runs legados (col. N) somam por cima do D1; sem linha na 
 });
 test("/api/charts banners: com os 5 charts no D1 não lê Musicas pra capa", async () => {
   const db = await dbComDuasSemanas();
+  await ativarD1(db);
   await comApiCharts(db, {}, async (lidas) => {
     const b = await api("action=getBannerN1s");
     expect(Object.keys(b).sort()).toEqual(["apple", "hot100", "sales", "spotify", "youtube"]);
@@ -484,7 +502,7 @@ test("/api/charts banners: com os 5 charts no D1 não lê Musicas pra capa", asy
 });
 
 // ---- Task 6: datas já carregadas e planejamento da carga inicial ----
-import { datasCarregadas } from "../backend/src/services/chartsD1/repo";
+import { datasCarregadas, chartsD1Ativo } from "../backend/src/services/chartsD1/repo";
 import { planejarLotes, lerCsv } from "./charts-d1-carga-inicial";
 
 test("datasCarregadas: datas ISO distintas gravadas, vazio sem tabelas", async () => {
@@ -525,4 +543,160 @@ test("planejarLotes: cronológico, pula carregadas, corta no limite sem partir s
   expect(planejarLotes(linhas, new Set(), 5).map((x) => x.data)).toEqual(["2020-05-25"]);
   expect(planejarLotes(linhas, new Set(), 6).map((x) => x.data)).toEqual(["2020-05-25", "2026-11-04"]);
   expect(planejarLotes(linhas, new Set(), 100)[0].linhas.length).toBe(3);
+});
+
+// ---- Revisão final: leituras por índice, tabelas derivadas, ativação ----
+
+/** Plano de cada SELECT/DELETE/UPDATE executado que toca as tabelas dos charts. */
+function planosDe(db: ReturnType<typeof criarD1Sqlite>, execs: { sql: string; params: unknown[] }[]) {
+  const vistos = new Set<string>();
+  const out: { sql: string; plano: string[] }[] = [];
+  for (const e of execs) {
+    if (!/^\s*(SELECT|DELETE|UPDATE)/i.test(e.sql) || !/chart_(semana|datas|artista_musica)/.test(e.sql) || vistos.has(e.sql)) continue;
+    vistos.add(e.sql);
+    out.push({ sql: e.sql, plano: [] });
+  }
+  return Promise.all(
+    out.map(async (o) => {
+      const params = execs.find((e) => e.sql === o.sql)!.params;
+      const r = await db.prepare(`EXPLAIN QUERY PLAN ${o.sql}`).bind(...params).all<{ detail: string }>();
+      return { sql: o.sql, plano: r.results.map((x) => x.detail) };
+    }),
+  );
+}
+
+test("ingestão e leitura não varrem chart_semana: histórico por ix_chart_norm, semanas pela PK", async () => {
+  const execs: { sql: string; params: unknown[] }[] = [];
+  const db = await dbComDuasSemanas([["Artista 1", "Brasil", ""]], pesosDoCsv(), (sql, params) => execs.push({ sql, params }));
+  // reenvio da semana antiga: recalcula a seguinte e as runs
+  expect((await ingerirSemana(db, { linhas: linhasLeitura("04/11/2026", false) })).ok).toBe(true);
+  await datasDoChart(db, "SPOTIFY");
+  await datasCarregadas(db);
+  await generosDoChart(db, "SPOTIFY");
+  await linhasDoChart(db, "SPOTIFY", "11/11/2026", "Pop", catFake, new Map());
+  await linhasPaises(db, "SPOTIFY", "11/11/2026", catFake, new Map());
+  await numero1DaUltimaSemana(db, "SPOTIFY", catFake, new Map());
+  await perfilHOF(db, "Artista 2");
+  const planos = await planosDe(db, execs);
+  const varreduras = planos.filter((p) => p.plano.some((d) => /^SCAN chart_(semana|artista_musica)\b/.test(d)));
+  expect(varreduras).toEqual([]);
+  const historico = planos.filter((p) => /titulo_norm IN/.test(p.sql));
+  expect(historico.length).toBeGreaterThan(0);
+  for (const h of historico) expect(h.plano.join(" | ")).toContain("ix_chart_norm");
+  // nenhuma query lê o histórico inteiro do chart por data
+  expect(execs.some((e) => /data\s*>\s*\?\s*GROUP BY chart/i.test(e.sql))).toBe(false);
+});
+test("ingestão: leituras por semana não crescem com o histórico", async () => {
+  let lidas = 0;
+  const db = criarD1Sqlite(":memory:", (sql, _p, n) => { if (/^\s*SELECT/i.test(sql)) lidas += n; });
+  const porSemana: number[] = [];
+  for (let s = 0; s < 12; s++) {
+    const d = new Date(Date.UTC(2026, 0, 5 + 7 * s));
+    const br = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+    // 10 faixas ficam no chart; as outras 90 são novas toda semana (o histórico do chart cresce 450/semana).
+    const linhas = linhasFake(br).map((l) => (Number(l[2]) > 10 ? [...l.slice(0, 3), `Nova ${s} - Faixa ${l[2]}`, ...l.slice(4)] : l));
+    lidas = 0;
+    expect((await ingerirSemana(db, { linhas, modo: "historico" })).ok).toBe(true);
+    porSemana.push(lidas);
+  }
+  // Só o histórico das faixas da semana (50 que ficam × semanas), não o chart inteiro (~5.000 linhas na 12ª).
+  expect(porSemana[11]).toBeLessThan(50 * 11 + 600);
+  expect(porSemana[11] - porSemana[10]).toBeLessThanOrEqual(60);
+});
+test("schema: chart_semana sem rowid, genero e valor_acumulado gravados na ingestão", async () => {
+  const db = criarD1Sqlite();
+  await criarMusicasFake(db);
+  const l1 = linhasLeitura("04/11/2026", false).map((l) => (l[2] === "1" ? [...l.slice(0, 5), "5.000.000", ...l.slice(6)] : l));
+  await ingerirSemana(db, { linhas: l1 });
+  await ingerirSemana(db, { linhas: linhasLeitura("11/11/2026", false) });
+  const [ddl] = (await db.prepare("SELECT sql FROM sqlite_master WHERE name = 'chart_semana'").all<{ sql: string }>()).results;
+  expect(ddl.sql).toContain("WITHOUT ROWID");
+  const rows = await db.prepare("SELECT data, genero, valor_acumulado FROM chart_semana WHERE chart = 'SPOTIFY' AND pos IN (1, 2) ORDER BY data, pos").all<any>();
+  expect(rows.results).toEqual([
+    { data: "2026-11-04", genero: "Pop", valor_acumulado: 5000000 }, // valor_total da planilha vence
+    { data: "2026-11-04", genero: "Rock", valor_acumulado: 99000 },
+    { data: "2026-11-11", genero: "Pop", valor_acumulado: 5100000 }, // acumulado anterior + valor
+    { data: "2026-11-11", genero: "Rock", valor_acumulado: 198000 },
+  ]);
+  const datas = await db.prepare("SELECT chart, data FROM chart_datas WHERE chart = 'YOUTUBE' ORDER BY data").all<any>();
+  expect(datas.results).toEqual([{ chart: "YOUTUBE", data: "2026-11-04" }, { chart: "YOUTUBE", data: "2026-11-11" }]);
+});
+test("generosDoChart: gêneros da semana pedida (padrão: a mais recente)", async () => {
+  const db = criarD1Sqlite();
+  await criarMusicasFake(db);
+  await ingerirSemana(db, { linhas: linhasLeitura("04/11/2026", false) });
+  // semana nova só com faixas ímpares (Pop)
+  await ingerirSemana(db, { linhas: linhasLeitura("11/11/2026", false).map((l) => [...l.slice(0, 3), "Artista 1 - Faixa 1", ...l.slice(4)]) });
+  expect(await generosDoChart(db, "SPOTIFY")).toEqual(["Pop"]);
+  expect(await generosDoChart(db, "SPOTIFY", "04/11/2026")).toEqual(["Pop", "Rock"]);
+  expect(await generosDoChart(criarD1Sqlite(), "SPOTIFY")).toEqual([]);
+});
+test("HOF: chart_artista_musica fica certa com semana fora de ordem e reenvio", async () => {
+  const db = criarD1Sqlite();
+  // 11/11 chega antes de 04/11: a run continua cronológica.
+  await ingerirSemana(db, { linhas: linhasLeitura("11/11/2026", true) });
+  await ingerirSemana(db, { linhas: linhasLeitura("04/11/2026", false) });
+  let p = await perfilHOF(db, "Artista 2");
+  expect(p.runs).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
+  expect(p.n1_hot100).toBe("1");
+  // Reenvio de 04/11 sem a faixa do Artista 2: a posição some da run.
+  await ingerirSemana(db, { linhas: linhasLeitura("04/11/2026", false).map((l) => (l[2] === "2" ? [...l.slice(0, 3), "Outro - Faixa", ...l.slice(4, 7), "Outro", ...l.slice(8)] : l)) });
+  p = await perfilHOF(db, "Artista 2");
+  expect(p.runs).toEqual([{ t: "Artista 2 - Faixa 2", v: "1" }]);
+  // Reenvio de 11/11 sem o Artista 2: a música sai do perfil.
+  await ingerirSemana(db, { linhas: linhasLeitura("11/11/2026", false) });
+  p = await perfilHOF(db, "Artista 2");
+  expect(p.runs).toEqual([{ t: "Artista 2 - Faixa 2", v: "2" }]);
+  const outro = await perfilHOF(db, "outro");
+  expect(outro.runs).toEqual([{ t: "Outro - Faixa", v: "2" }]);
+});
+test("HOF: artista com acento casa sem acento (e vice-versa)", async () => {
+  const db = criarD1Sqlite();
+  await ingerirSemana(db, { linhas: linhasFake("11/11/2026").map((l) => (l[2] === "1" ? [...l.slice(0, 3), "Ánne - Canção", ...l.slice(4, 7), "Ánne", ...l.slice(8)] : l)) });
+  expect((await perfilHOF(db, "anne")).runs).toEqual([{ t: "Ánne - Canção", v: "1" }]);
+  expect((await perfilHOF(db, " ÁNNE ")).n1_spotify).toBe("1");
+  expect((await perfilHOF(db, "Ann")).runs).toEqual([]);
+});
+test("ativação: D1 inativo cai na planilha; POST só com ativar liga a leitura", async () => {
+  const db = await dbComDuasSemanas();
+  const planilha = [["h"], ["SPOTIFY", "01/01/2025", "1", "Velha - Planilha", "10", "", "", "Velha"]];
+  await comApiCharts(db, { SPOTIFY: planilha }, async (lidas) => {
+    expect((await api("action=getFilters&tab=SPOTIFY")).dates).toEqual(["01/01/2025"]);
+    expect(lidas).toContain("chartsBase:SPOTIFY");
+  });
+  const g = globalThis as Record<string, unknown>;
+  const antes = { token: g.__CHARTS_INGEST_TOKEN__, db: g.__CATALOGO_DB__ };
+  g.__CHARTS_INGEST_TOKEN__ = "segredo";
+  g.__CATALOGO_DB__ = db;
+  try {
+    const res = await chartsIngestController(new Request("http://x/api/charts/ingest", {
+      method: "POST", headers: { Authorization: "Bearer segredo" }, body: JSON.stringify({ ativar: true }),
+    }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, ativo: true });
+    const sem = await chartsIngestController(new Request("http://x/api/charts/ingest", {
+      method: "POST", headers: { Authorization: "Bearer segredo" }, body: JSON.stringify({}),
+    }));
+    expect(sem.status).toBe(400);
+  } finally {
+    g.__CHARTS_INGEST_TOKEN__ = antes.token;
+    g.__CATALOGO_DB__ = antes.db;
+  }
+  await comApiCharts(db, { SPOTIFY: planilha }, async (lidas) => {
+    expect((await api("action=getFilters&tab=SPOTIFY")).dates).toEqual(["11/11/2026", "04/11/2026"]);
+    expect(lidas).not.toContain("chartsBase:SPOTIFY");
+  });
+});
+test("ativação: semana com ativar grava e liga; seed fica '0'", async () => {
+  const db = criarD1Sqlite();
+  await ingerirSemana(db, { linhas: linhasFake("04/11/2026") });
+  const flag = async () => (await db.prepare("SELECT valor FROM chart_config WHERE chave = 'charts_d1_ativo'").all<{ valor: string }>()).results[0]?.valor;
+  expect(await flag()).toBe("0");
+  expect(await chartsD1Ativo(db)).toBe(false);
+  expect(await ingerirSemana(db, { linhas: linhasFake("11/11/2026"), ativar: true })).toEqual({ ok: true, data: "2026-11-11", linhas: 500 });
+  expect(await flag()).toBe("1");
+  expect(await chartsD1Ativo(db)).toBe(true);
+  await ingerirSemana(db, { linhas: linhasFake("18/11/2026") }); // seed não desliga
+  expect(await flag()).toBe("1");
+  expect(await chartsD1Ativo(criarD1Sqlite())).toBe(false);
 });

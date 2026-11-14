@@ -33,6 +33,20 @@ export function chaveMusica(titulo: string): string {
     .trim();
 }
 
+/**
+ * Nome sem acentos, em CAIXA ALTA e com espaços normalizados: chave de
+ * artista no HOF (chart_artista_musica.artista_key) e comparação de
+ * nacionalidade com os países de pais_peso ("Australia" = "AUSTRÁLIA").
+ */
+export function semAcentoMaiusculo(s: string): string {
+  return (s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export interface MusicaCatalogo {
   chave: string;
   artistas: string[];

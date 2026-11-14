@@ -4,7 +4,7 @@ import { fixImg, fmt } from "../services/chartsD1/formato";
 import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
 import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
 import {
-  CHARTS_HOF, carregarCatalogo, carregarFotos, datasDoChart, generosDoChart, linhasDoChart, linhasPaises,
+  CHARTS_HOF, carregarCatalogo, carregarFotos, chartsD1Ativo, datasDoChart, generosDoChart, linhasDoChart, linhasPaises,
   numero1DaUltimaSemana, perfilHOF, temPesosPais,
 } from "../services/chartsD1/repo";
 
@@ -33,15 +33,29 @@ async function readSheet(spreadsheetKey: keyof typeof googleSheetsService, sheet
 }
 
 // ---- D1 (5 charts semanais + COUNTRIES) ----
-// Se o chart já tem semanas no D1, a leitura vem de lá; senão (corte ainda
-// não carregado, banco ausente ou erro) segue o caminho da planilha abaixo.
-// Datas por chart e catálogo/fotos ficam em cache por isolate com o mesmo
-// TTL das respostas (limparCacheCharts zera tudo após uma ingestão).
+// Se a leitura do D1 foi ativada (chart_config.charts_d1_ativo = '1', ao fim
+// da carga inicial — antes disso o D1 está pela metade) e o chart tem semanas
+// lá, a leitura vem do D1; senão (banco ausente, não ativado, chart vazio ou
+// erro) segue o caminho da planilha abaixo. Flag, datas por chart e
+// catálogo/fotos ficam em cache por isolate com o mesmo TTL das respostas
+// (limparCacheCharts zera tudo após uma ingestão).
 interface ReferenciasD1 {
   cat: Map<string, MusicaCatalogo>;
   fotos: Map<string, string>;
 }
 const datasD1Cache = new Map<ChartId, { valor: Promise<string[]>; expiresAt: number }>();
+let ativoD1Cache: { valor: Promise<boolean>; expiresAt: number } | null = null;
+
+function ativoD1(db: D1DatabaseLike): Promise<boolean> {
+  if (ativoD1Cache && ativoD1Cache.expiresAt > Date.now()) return ativoD1Cache.valor;
+  const valor = chartsD1Ativo(db);
+  const entrada = { valor, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS };
+  valor.catch(() => {
+    if (ativoD1Cache === entrada) ativoD1Cache = null;
+  });
+  ativoD1Cache = entrada;
+  return valor;
+}
 let referenciasD1Cache: { valor: Promise<ReferenciasD1>; expiresAt: number } | null = null;
 
 function datasD1(db: D1DatabaseLike, chart: ChartId): Promise<string[]> {
@@ -75,7 +89,7 @@ function chartD1DaAba(tab: string): { chart: ChartId; paises: boolean } | null {
   return null;
 }
 
-/** Roda `ler` no D1 se o chart tem dados lá; `undefined` (inclusive vindo de `ler`) = usar a planilha. */
+/** Roda `ler` no D1 se a leitura está ativada e o chart tem dados lá; `undefined` (inclusive vindo de `ler`) = usar a planilha. */
 async function viaD1<T>(
   chart: ChartId,
   ler: (db: D1DatabaseLike, datas: string[]) => Promise<T | undefined>,
@@ -83,6 +97,7 @@ async function viaD1<T>(
   const db = getCatalogoDb();
   if (!db) return undefined;
   try {
+    if (!(await ativoD1(db))) return undefined;
     const datas = await datasD1(db, chart);
     if (!datas.length) return undefined;
     return await ler(db, datas);
@@ -98,7 +113,8 @@ async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] 
   if (alvo) {
     const d1 = await viaD1(alvo.chart, async (db, datas) => {
       if (alvo.paises) return (await temPesosPais(db, alvo.chart)) ? { dates: datas, styles: [] } : undefined;
-      return { dates: datas, styles: await generosDoChart(db, alvo.chart, (await referenciasD1(db)).cat) };
+      // Gêneros da semana mais recente (a lista do filtro acompanha o chart atual).
+      return { dates: datas, styles: await generosDoChart(db, alvo.chart, datas[0]) };
     });
     if (d1) return d1;
   }
@@ -327,6 +343,7 @@ async function perfilHOFDoD1(artist: string): Promise<Record<string, unknown>> {
   const db = getCatalogoDb();
   if (!db) return {};
   try {
+    if (!(await ativoD1(db))) return {};
     const [hot100, spotify, apple, youtube] = await Promise.all(
       CHARTS_HOF.map(async (c) => (await datasD1(db, c)).length > 0),
     );
@@ -582,6 +599,7 @@ export function limparCacheCharts(): void {
   chartsResponseCache.clear();
   datasD1Cache.clear();
   referenciasD1Cache = null;
+  ativoD1Cache = null;
 }
 
 export async function chartsApiController(request: Request): Promise<Response> {

@@ -46,7 +46,10 @@ export async function chartsIngestController(request: Request): Promise<Response
   } catch {
     return json(400, { ok: false, erros: ["corpo JSON inválido"] });
   }
-  if (!payload || !Array.isArray(payload.linhas)) return json(400, { ok: false, erros: ["campo `linhas` ausente"] });
+  // Só `{ ativar: true }` (fim da carga inicial) também vale, sem linhas.
+  if (!payload || (!Array.isArray(payload.linhas) && payload.ativar !== true)) {
+    return json(400, { ok: false, erros: ["campo `linhas` ausente"] });
+  }
 
   try {
     const r = await ingerirSemana(db, payload);

@@ -5,13 +5,19 @@ import { CHARTS, type ChartId, type LinhaDados } from "./tipos";
 import { dataBrParaIso, dataIsoParaBr, parseLinhaDados, parseNumeroBR, validarSemana } from "./dados";
 import { calcularMovimento, type HistoricoMusica, type Movimento } from "./movimento";
 import {
-  buscarNoCatalogo, chaveMusica, extrairArtistasDoTitulo, indexarCatalogo, resolverArtistas,
+  buscarNoCatalogo, chaveMusica, extrairArtistasDoTitulo, indexarCatalogo, resolverArtistas, semAcentoMaiusculo,
   type LinhaCatalogo, type MusicaCatalogo,
 } from "./artistas";
 import { rankingsDaSemana, type MusicaParaPais, type Pesos } from "./paises";
 import { fixImg, fmt } from "./formato";
 
 // Idempotente — roda no começo de cada ingestão (padrão do projeto).
+// Plano grátis do D1: cada linha e cada entrada de índice gravada conta no
+// limite diário de escritas, e cada linha percorrida conta nas leituras —
+// por isso as tabelas são WITHOUT ROWID (sem a cópia extra do rowid) e as
+// leituras da tela vêm de tabelas derivadas pequenas (chart_datas,
+// chart_artista_musica) e de colunas gravadas na ingestão (genero,
+// valor_acumulado), nunca de varrer o histórico.
 export const CHARTS_D1_SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS chart_semana (
     chart TEXT NOT NULL,
@@ -21,17 +27,37 @@ export const CHARTS_D1_SCHEMA: string[] = [
     titulo_norm TEXT, -- chaveMusica(titulo): identidade da música no chart
     valor INTEGER,
     valor_total INTEGER,
+    valor_acumulado INTEGER, -- valor_total da planilha ou acumulado anterior da música + valor
     artistas TEXT,
     fonte_artistas TEXT,
+    genero TEXT, -- do catálogo musicas, resolvido na ingestão
     status TEXT,
     pos_anterior INTEGER,
     peak INTEGER,
     semanas INTEGER,
     semanas_n1 INTEGER,
     PRIMARY KEY (chart, data, pos)
-  )`,
+  ) WITHOUT ROWID`,
   // Único índice extra (cada índice encarece as ~500 escritas semanais).
+  // Sem rowid, o índice já carrega (data, pos) da PK.
   "CREATE INDEX IF NOT EXISTS ix_chart_norm ON chart_semana(chart, titulo_norm)",
+  // Datas de cada chart (filtro de datas da tela e carga inicial) sem varrer chart_semana.
+  `CREATE TABLE IF NOT EXISTS chart_datas (
+    chart TEXT NOT NULL,
+    data TEXT NOT NULL,
+    PRIMARY KEY (chart, data)
+  ) WITHOUT ROWID`,
+  // Hall of Fame: uma linha por artista × chart × música, lida só pela PK.
+  `CREATE TABLE IF NOT EXISTS chart_artista_musica (
+    artista_key TEXT NOT NULL, -- semAcentoMaiusculo(nome)
+    chart TEXT NOT NULL,
+    titulo_norm TEXT NOT NULL,
+    titulo TEXT,
+    peak INTEGER,
+    semanas_n1 INTEGER,
+    run TEXT, -- posições em ordem cronológica, "32 - 50 - 1"
+    PRIMARY KEY (artista_key, chart, titulo_norm)
+  ) WITHOUT ROWID`,
   `CREATE TABLE IF NOT EXISTS pais_peso (
     plataforma TEXT NOT NULL,
     pais TEXT NOT NULL,
@@ -39,7 +65,9 @@ export const CHARTS_D1_SCHEMA: string[] = [
     PRIMARY KEY (plataforma, pais)
   )`,
   "CREATE TABLE IF NOT EXISTS chart_config (chave TEXT PRIMARY KEY, valor TEXT)",
-  "INSERT OR IGNORE INTO chart_config (chave, valor) VALUES ('bonus_nacionalidade', '0.20'), ('top_pais', '50')",
+  // charts_d1_ativo: a tela só lê do D1 depois da carga inicial completa ('1').
+  `INSERT OR IGNORE INTO chart_config (chave, valor) VALUES
+    ('bonus_nacionalidade', '0.20'), ('top_pais', '50'), ('charts_d1_ativo', '0')`,
   `CREATE TABLE IF NOT EXISTS artista_info (
     nome_upper TEXT PRIMARY KEY,
     nome TEXT,
@@ -57,6 +85,9 @@ export const CHARTS_D1_SCHEMA: string[] = [
   )`,
 ];
 
+/** Charts que alimentam o Hall of Fame (chart_artista_musica). */
+export const CHARTS_HOF: ChartId[] = ["BILLBOARD HOT 100", "SPOTIFY", "APPLE MUSIC", "YOUTUBE"];
+
 export interface LinhaCalculada {
   chart: ChartId;
   dataIso: string;
@@ -65,21 +96,30 @@ export interface LinhaCalculada {
   tituloNorm: string;
   valor: number;
   valorTotal: number | null;
+  valorAcumulado: number;
   artistas: string[];
   fonteArtistas: string;
+  genero: string;
   movimento: Movimento;
 }
 
+type LinhaBase = Omit<LinhaCalculada, "movimento" | "valorAcumulado">;
+
 export interface PayloadIngestao {
-  linhas: string[][];
+  linhas?: string[][];
   /** [nome, nacionalidade, foto] (INFOS ACTS). */
   artistas?: string[][];
   /** Linhas do CSV PAÍSES E PESOS: [país, spotify, apple music, youtube] em "7,20%". */
   pesos?: string[][];
   modo?: "semanal" | "historico";
+  /** Libera a leitura do D1 na tela (fim da carga inicial). Sozinho, sem linhas, é válido. */
+  ativar?: boolean;
 }
 
-export type ResultadoIngestao = { ok: true; data: string; linhas: number } | { ok: false; erros: string[] };
+export type ResultadoIngestao =
+  | { ok: true; data: string; linhas: number }
+  | { ok: true; ativo: true }
+  | { ok: false; erros: string[] };
 
 // D1 aceita no máximo 100 parâmetros por query: INSERTs de várias linhas
 // são fatiados pra caber nesse limite (menos statements no batch).
@@ -105,7 +145,7 @@ function insertsEmLotes(
 }
 
 const INSERT_CHART_SEMANA = `INSERT INTO chart_semana
-  (chart, data, pos, titulo, titulo_norm, valor, valor_total, artistas, fonte_artistas,
+  (chart, data, pos, titulo, titulo_norm, valor, valor_total, valor_acumulado, artistas, fonte_artistas, genero,
    status, pos_anterior, peak, semanas, semanas_n1)`;
 
 function insertsChartSemana(db: D1DatabaseLike, dataIso: string, linhas: LinhaCalculada[]): D1PreparedStatement[] {
@@ -113,53 +153,170 @@ function insertsChartSemana(db: D1DatabaseLike, dataIso: string, linhas: LinhaCa
     db,
     INSERT_CHART_SEMANA,
     linhas.map((l) => [
-      l.chart, dataIso, l.pos, l.titulo, l.tituloNorm, l.valor, l.valorTotal,
-      JSON.stringify(l.artistas), l.fonteArtistas,
+      l.chart, dataIso, l.pos, l.titulo, l.tituloNorm, l.valor, l.valorTotal, l.valorAcumulado,
+      JSON.stringify(l.artistas), l.fonteArtistas, l.genero || null,
       l.movimento.status, l.movimento.posAnterior, l.movimento.peak, l.movimento.semanas, l.movimento.semanasN1,
     ]),
   );
 }
 
-/**
- * Histórico de cada música do chart ANTES de `dataIso` (2 queries): agregado
- * de todas as semanas anteriores + posição na semana imediatamente anterior.
- */
-export async function historicoAntesDe(db: D1DatabaseLike, chart: ChartId, dataIso: string): Promise<Map<string, HistoricoMusica>> {
-  const agregado = await db
-    .prepare(
-      `SELECT titulo_norm, MIN(pos) AS peak, COUNT(DISTINCT data) AS semanas, SUM(pos = 1) AS n1
-       FROM chart_semana WHERE chart = ? AND data < ? GROUP BY titulo_norm`,
-    )
-    .bind(chart, dataIso)
-    .all<{ titulo_norm: string; peak: number; semanas: number; n1: number }>();
-  const anterior = await db
-    .prepare(
-      `SELECT titulo_norm, MIN(pos) AS pos FROM chart_semana
-       WHERE chart = ? AND data = (SELECT MAX(data) FROM chart_semana WHERE chart = ? AND data < ?)
-       GROUP BY titulo_norm`,
-    )
-    .bind(chart, chart, dataIso)
-    .all<{ titulo_norm: string; pos: number }>();
-  const posAnterior = new Map(anterior.results.map((r) => [r.titulo_norm, r.pos]));
-  const hist = new Map<string, HistoricoMusica>();
-  for (const r of agregado.results) {
-    hist.set(r.titulo_norm, {
-      tituloNorm: r.titulo_norm,
-      posAnterior: posAnterior.get(r.titulo_norm) ?? null,
-      peak: r.peak,
-      semanas: r.semanas,
-      semanasN1: r.n1,
-    });
-  }
-  return hist;
+/** Linha de chart_semana de uma música, lida pelo índice ix_chart_norm. */
+interface LinhaHistorico {
+  data: string;
+  pos: number;
+  titulo: string;
+  titulo_norm: string;
+  artistas: string;
+  valor_acumulado: number | null;
 }
 
-/** Substitui a semana inteira (todos os charts da data) num único batch — tudo ou nada. */
-export async function gravarSemana(db: D1DatabaseLike, dataIso: string, linhas: LinhaCalculada[]): Promise<void> {
-  await db.batch([
-    db.prepare("DELETE FROM chart_semana WHERE data = ?").bind(dataIso),
-    ...insertsChartSemana(db, dataIso, linhas),
-  ]);
+// Cabe no limite de parâmetros junto com `chart` e `data`.
+const TITULOS_POR_CONSULTA = MAX_PARAMS_D1 - 2;
+
+/**
+ * Linhas das músicas `titulos` no chart antes (`<`) ou depois (`>`) de
+ * `dataIso`. Lê só o histórico dessas músicas (índice ix_chart_norm), nunca o
+ * chart inteiro: o custo não cresce com o número de semanas gravadas.
+ */
+async function linhasDasMusicas(
+  db: D1DatabaseLike,
+  chart: ChartId,
+  titulos: Iterable<string>,
+  comparacao: "<" | ">",
+  dataIso: string,
+): Promise<LinhaHistorico[]> {
+  const unicos = [...new Set(titulos)];
+  const out: LinhaHistorico[] = [];
+  for (let i = 0; i < unicos.length; i += TITULOS_POR_CONSULTA) {
+    const lote = unicos.slice(i, i + TITULOS_POR_CONSULTA);
+    const r = await db
+      .prepare(
+        `SELECT data, pos, titulo, titulo_norm, artistas, valor_acumulado
+         FROM chart_semana INDEXED BY ix_chart_norm
+         WHERE chart = ? AND titulo_norm IN (${lote.map(() => "?").join(", ")}) AND data ${comparacao} ?`,
+      )
+      .bind(chart, ...lote, dataIso)
+      .all<LinhaHistorico>();
+    out.push(...r.results);
+  }
+  return out;
+}
+
+/** Semana do chart imediatamente antes/depois de `dataIso` (pela PK); null se não houver. */
+async function semanaVizinha(db: D1DatabaseLike, chart: ChartId, dataIso: string, lado: "anterior" | "seguinte"): Promise<string | null> {
+  const sql = lado === "anterior"
+    ? "SELECT MAX(data) AS data FROM chart_semana WHERE chart = ? AND data < ?"
+    : "SELECT MIN(data) AS data FROM chart_semana WHERE chart = ? AND data > ?";
+  const r = await db.prepare(sql).bind(chart, dataIso).all<{ data: string | null }>();
+  return r.results[0]?.data ?? null;
+}
+
+/** Agrega as linhas anteriores de cada música: movimento + último acumulado. */
+function resumirHistorico(
+  antes: LinhaHistorico[],
+  semanaAnterior: string | null,
+): { hist: Map<string, HistoricoMusica>; acumulado: Map<string, number | null> } {
+  const agg = new Map<string, { peak: number; datas: Set<string>; n1: number; posAnterior: number | null; ultima: string; acumulado: number | null }>();
+  for (const r of antes) {
+    let a = agg.get(r.titulo_norm);
+    if (!a) {
+      a = { peak: r.pos, datas: new Set(), n1: 0, posAnterior: null, ultima: "", acumulado: null };
+      agg.set(r.titulo_norm, a);
+    }
+    a.peak = Math.min(a.peak, r.pos);
+    a.datas.add(r.data);
+    if (r.pos === 1) a.n1++;
+    if (r.data === semanaAnterior) a.posAnterior = a.posAnterior === null ? r.pos : Math.min(a.posAnterior, r.pos);
+    if (r.data > a.ultima) {
+      a.ultima = r.data;
+      a.acumulado = r.valor_acumulado;
+    }
+  }
+  const hist = new Map<string, HistoricoMusica>();
+  const acumulado = new Map<string, number | null>();
+  for (const [tituloNorm, a] of agg) {
+    hist.set(tituloNorm, { tituloNorm, posAnterior: a.posAnterior, peak: a.peak, semanas: a.datas.size, semanasN1: a.n1 });
+    acumulado.set(tituloNorm, a.acumulado);
+  }
+  return { hist, acumulado };
+}
+
+/** Histórico de cada música de `titulos` no chart ANTES de `dataIso`. */
+export async function historicoAntesDe(
+  db: D1DatabaseLike,
+  chart: ChartId,
+  dataIso: string,
+  titulos: string[],
+): Promise<Map<string, HistoricoMusica>> {
+  const anterior = await semanaVizinha(db, chart, dataIso, "anterior");
+  return resumirHistorico(await linhasDasMusicas(db, chart, titulos, "<", dataIso), anterior).hist;
+}
+
+/**
+ * Movimento e acumulado de cada linha da semana contra o histórico das
+ * músicas dela (mais `outrosTitulos`, cujo histórico também é devolvido).
+ */
+async function calcularChart(
+  db: D1DatabaseLike,
+  chart: ChartId,
+  dataIso: string,
+  linhas: LinhaBase[],
+  outrosTitulos: string[] = [],
+): Promise<{ calculadas: LinhaCalculada[]; antes: LinhaHistorico[] }> {
+  const anterior = await semanaVizinha(db, chart, dataIso, "anterior");
+  const antes = await linhasDasMusicas(db, chart, [...linhas.map((l) => l.tituloNorm), ...outrosTitulos], "<", dataIso);
+  const { hist, acumulado } = resumirHistorico(antes, anterior);
+  const calculadas = linhas.map((l) => ({
+    ...l,
+    valorAcumulado: l.valorTotal ?? (acumulado.get(l.tituloNorm) ?? 0) + l.valor,
+    movimento: calcularMovimento(l.pos, hist.get(l.tituloNorm)),
+  }));
+  return { calculadas, antes };
+}
+
+/** Upsert/remoção em chart_artista_musica das músicas tocadas pela semana gravada. */
+function statementsArtistaMusica(
+  db: D1DatabaseLike,
+  chart: ChartId,
+  /** Todas as linhas atuais (antes + semana nova + depois) das músicas afetadas. */
+  linhas: { data: string; pos: number; titulo: string; titulo_norm: string; artistas: string[] }[],
+  /** Linhas da semana substituída (artistas que podem ter saído). */
+  substituidas: { titulo_norm: string; artistas: string[] }[],
+): D1PreparedStatement[] {
+  const ordenadas = [...linhas].sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : a.pos - b.pos));
+  const porChave = new Map<string, { key: string; tituloNorm: string; titulo: string; posicoes: number[] }>();
+  for (const l of ordenadas) {
+    for (const key of new Set(l.artistas.map(semAcentoMaiusculo).filter(Boolean))) {
+      const k = `${key}\u0000${l.titulo_norm}`;
+      const m = porChave.get(k) ?? { key, tituloNorm: l.titulo_norm, titulo: "", posicoes: [] };
+      m.titulo = l.titulo || m.titulo; // grafia mais recente
+      m.posicoes.push(l.pos);
+      porChave.set(k, m);
+    }
+  }
+  const remover: unknown[][] = [];
+  const vistos = new Set<string>();
+  for (const s of substituidas) {
+    for (const key of s.artistas.map(semAcentoMaiusculo).filter(Boolean)) {
+      const k = `${key}\u0000${s.titulo_norm}`;
+      if (porChave.has(k) || vistos.has(k)) continue;
+      vistos.add(k);
+      remover.push([key, chart, s.titulo_norm]);
+    }
+  }
+  return [
+    ...remover.map((r) =>
+      db.prepare("DELETE FROM chart_artista_musica WHERE artista_key = ? AND chart = ? AND titulo_norm = ?").bind(...r),
+    ),
+    ...insertsEmLotes(
+      db,
+      "INSERT INTO chart_artista_musica (artista_key, chart, titulo_norm, titulo, peak, semanas_n1, run)",
+      [...porChave.values()].map((m) => [
+        m.key, chart, m.tituloNorm, m.titulo, Math.min(...m.posicoes), m.posicoes.filter((p) => p === 1).length, m.posicoes.join(" - "),
+      ]),
+      "ON CONFLICT(artista_key, chart, titulo_norm) DO UPDATE SET titulo = excluded.titulo, peak = excluded.peak, semanas_n1 = excluded.semanas_n1, run = excluded.run",
+    ),
+  ];
 }
 
 /** "7,20%" → 0.072; vazio/ilegível → null. */
@@ -226,34 +383,24 @@ async function carregarConhecidos(db: D1DatabaseLike): Promise<Set<string>> {
   return new Set(r.results.map((x) => x.nome_upper));
 }
 
-/** Movimento de cada linha de um chart contra o histórico antes da data. */
-async function calcularChart(
-  db: D1DatabaseLike,
-  chart: ChartId,
-  dataIso: string,
-  linhas: Omit<LinhaCalculada, "movimento">[],
-): Promise<LinhaCalculada[]> {
-  const hist = await historicoAntesDe(db, chart, dataIso);
-  return linhas.map((l) => ({ ...l, movimento: calcularMovimento(l.pos, hist.get(l.tituloNorm)) }));
-}
-
-/** Recalcula status/peak/semanas da semana seguinte de cada chart (reenvio de semana antiga). */
+/**
+ * Recalcula status/peak/semanas/acumulado da semana seguinte de cada chart
+ * (reenvio de semana antiga). Só a seguinte: as posições não mudam, então
+ * chart_artista_musica não é tocada aqui.
+ */
 async function recalcularSemanaSeguinte(db: D1DatabaseLike, charts: ChartId[], dataIso: string): Promise<void> {
-  const seguintes = await db
-    .prepare("SELECT chart, MIN(data) AS data FROM chart_semana WHERE data > ? GROUP BY chart")
-    .bind(dataIso)
-    .all<{ chart: ChartId; data: string }>();
   const stmts: D1PreparedStatement[] = [];
-  for (const { chart, data } of seguintes.results) {
-    if (!charts.includes(chart)) continue;
+  for (const chart of charts) {
+    const data = await semanaVizinha(db, chart, dataIso, "seguinte");
+    if (!data) continue;
     const rows = await db
       .prepare(
-        `SELECT pos, titulo, titulo_norm, valor, valor_total, artistas, fonte_artistas
+        `SELECT pos, titulo, valor, valor_total, artistas, fonte_artistas, genero
          FROM chart_semana WHERE chart = ? AND data = ? ORDER BY pos`,
       )
       .bind(chart, data)
-      .all<{ pos: number; titulo: string; titulo_norm: string; valor: number; valor_total: number | null; artistas: string; fonte_artistas: string }>();
-    const linhas = await calcularChart(
+      .all<{ pos: number; titulo: string; valor: number; valor_total: number | null; artistas: string; fonte_artistas: string; genero: string | null }>();
+    const { calculadas } = await calcularChart(
       db,
       chart,
       data,
@@ -265,11 +412,12 @@ async function recalcularSemanaSeguinte(db: D1DatabaseLike, charts: ChartId[], d
         tituloNorm: chaveMusica(r.titulo),
         valor: r.valor,
         valorTotal: r.valor_total,
-        artistas: JSON.parse(r.artistas || "[]"),
+        artistas: lerArtistas(r.artistas),
         fonteArtistas: r.fonte_artistas,
+        genero: r.genero ?? "",
       })),
     );
-    stmts.push(db.prepare("DELETE FROM chart_semana WHERE chart = ? AND data = ?").bind(chart, data), ...insertsChartSemana(db, data, linhas));
+    stmts.push(db.prepare("DELETE FROM chart_semana WHERE chart = ? AND data = ?").bind(chart, data), ...insertsChartSemana(db, data, calculadas));
   }
   if (stmts.length) await db.batch(stmts);
 }
@@ -353,32 +501,65 @@ function prepararLinhas(
   return { ok: true, dataIso: datas[0], linhas, anomalias };
 }
 
-/** Ingere uma semana: valida, atualiza artistas/pesos, calcula movimento, grava e recalcula a seguinte. */
+/** Libera a leitura do D1 na tela (chart_config.charts_d1_ativo = '1'). */
+async function ativarLeitura(db: D1DatabaseLike): Promise<void> {
+  await db.prepare("UPDATE chart_config SET valor = '1' WHERE chave = 'charts_d1_ativo'").run();
+}
+
+/** A tela pode ler os charts do D1? Só depois da carga inicial completa (ou sem tabelas: não). */
+export async function chartsD1Ativo(db: D1DatabaseLike): Promise<boolean> {
+  const [r] = await consultar<{ valor: string }>(db, "SELECT valor FROM chart_config WHERE chave = 'charts_d1_ativo'");
+  return String(r?.valor ?? "").trim() === "1";
+}
+
+/**
+ * Ingere uma semana: valida, atualiza artistas/pesos, calcula movimento,
+ * grava (semana + datas + HOF num batch só) e recalcula a seguinte.
+ * `{ ativar: true }` sem linhas só libera a leitura do D1.
+ */
 export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao): Promise<ResultadoIngestao> {
   const modo = payload.modo === "historico" ? "historico" : "semanal";
   await db.batch(CHARTS_D1_SCHEMA.map((sql) => db.prepare(sql)));
 
   const cruas = Array.isArray(payload.linhas) ? payload.linhas : [];
+  if (payload.ativar === true && !cruas.length) {
+    await ativarLeitura(db);
+    await registrarIngestao(db, null, "ativacao", 0, true, "leitura do D1 ativada");
+    return { ok: true, ativo: true };
+  }
   const prep = prepararLinhas(cruas, modo);
   if (!prep.ok) {
     await registrarIngestao(db, null, modo, cruas.length, false, prep.erros.join("; "));
     return prep;
   }
+  const dataIso = prep.dataIso;
 
   // Antes de resolver: o filtro de artistas do título usa artista_info.
   await gravarArtistasEPesos(db, payload.artistas ?? [], payload.pesos ?? []);
   const [cat, conhecidos] = await Promise.all([carregarCatalogo(db), carregarConhecidos(db)]);
 
-  const charts = CHARTS.filter((c) => prep.linhas.some((l) => l.chart === c));
+  // Semana já gravada nessa data (reenvio): será substituída inteira (todos os charts).
+  const substituidas = await db
+    .prepare(
+      `SELECT chart, titulo_norm, artistas FROM chart_semana
+       WHERE chart IN (${CHARTS.map(() => "?").join(", ")}) AND data = ?`,
+    )
+    .bind(...CHARTS, dataIso)
+    .all<{ chart: ChartId; titulo_norm: string; artistas: string }>();
+
+  const charts = CHARTS.filter(
+    (c) => prep.linhas.some((l) => l.chart === c) || substituidas.results.some((r) => r.chart === c),
+  );
   const calculadas: LinhaCalculada[] = [];
+  const hof: D1PreparedStatement[] = [];
   for (const chart of charts) {
-    const base = prep.linhas
+    const base: LinhaBase[] = prep.linhas
       .filter((l) => l.chart === chart)
       .map((l) => {
         const r = resolverArtistas(l, cat, conhecidos);
         return {
           chart,
-          dataIso: prep.dataIso,
+          dataIso,
           pos: l.pos,
           titulo: l.titulo,
           tituloNorm: chaveMusica(l.titulo),
@@ -386,15 +567,48 @@ export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao
           valorTotal: l.valorTotal,
           artistas: r.artistas,
           fonteArtistas: r.fonte,
+          genero: buscarNoCatalogo(l.titulo, cat)?.genero ?? "",
         };
       });
-    calculadas.push(...(await calcularChart(db, chart, prep.dataIso, base)));
+    const antigas = substituidas.results
+      .filter((r) => r.chart === chart)
+      .map((r) => ({ titulo_norm: r.titulo_norm, artistas: lerArtistas(r.artistas) }));
+    const { calculadas: doChart, antes } = await calcularChart(db, chart, dataIso, base, antigas.map((a) => a.titulo_norm));
+    calculadas.push(...doChart);
+
+    if (!CHARTS_HOF.includes(chart)) continue;
+    // Run completa de cada música tocada: antes + semana nova + depois (só
+    // existe "depois" quando chega uma semana antiga fora de ordem).
+    const titulos = new Set([...doChart.map((l) => l.tituloNorm), ...antigas.map((a) => a.titulo_norm)]);
+    const depois = (await semanaVizinha(db, chart, dataIso, "seguinte"))
+      ? await linhasDasMusicas(db, chart, titulos, ">", dataIso)
+      : [];
+    hof.push(
+      ...statementsArtistaMusica(
+        db,
+        chart,
+        [
+          ...[...antes, ...depois].map((r) => ({ ...r, artistas: lerArtistas(r.artistas) })),
+          ...doChart.map((l) => ({ data: dataIso, pos: l.pos, titulo: l.titulo, titulo_norm: l.tituloNorm, artistas: l.artistas })),
+        ],
+        antigas,
+      ),
+    );
   }
 
-  await gravarSemana(db, prep.dataIso, calculadas);
-  await recalcularSemanaSeguinte(db, charts, prep.dataIso);
-  await registrarIngestao(db, prep.dataIso, modo, calculadas.length, true, prep.anomalias.join("; ") || "ok");
-  return { ok: true, data: prep.dataIso, linhas: calculadas.length };
+  const chartsGravados = CHARTS.filter((c) => calculadas.some((l) => l.chart === c));
+  // Tudo ou nada: a semana, as datas e o HOF entram juntos.
+  await db.batch([
+    db.prepare(`DELETE FROM chart_semana WHERE chart IN (${CHARTS.map(() => "?").join(", ")}) AND data = ?`).bind(...CHARTS, dataIso),
+    db.prepare(`DELETE FROM chart_datas WHERE chart IN (${CHARTS.map(() => "?").join(", ")}) AND data = ?`).bind(...CHARTS, dataIso),
+    ...insertsChartSemana(db, dataIso, calculadas),
+    ...insertsEmLotes(db, "INSERT INTO chart_datas (chart, data)", chartsGravados.map((c) => [c, dataIso])),
+    ...hof,
+  ]);
+  await recalcularSemanaSeguinte(db, charts, dataIso);
+  if (payload.ativar === true) await ativarLeitura(db);
+  await registrarIngestao(db, dataIso, modo, calculadas.length, true, prep.anomalias.join("; ") || "ok");
+  return { ok: true, data: dataIso, linhas: calculadas.length };
 }
 
 // ---- Leitura (/api/charts) ----
@@ -444,7 +658,7 @@ export async function temPesosPais(db: D1DatabaseLike, plataforma: ChartId): Pro
 export async function datasDoChart(db: D1DatabaseLike, chart: ChartId): Promise<string[]> {
   const rows = await consultar<{ data: string }>(
     db,
-    "SELECT DISTINCT data FROM chart_semana WHERE chart = ? ORDER BY data DESC",
+    "SELECT data FROM chart_datas WHERE chart = ? ORDER BY data DESC",
     chart,
   );
   return rows.map((r) => dataIsoParaBr(r.data));
@@ -452,19 +666,27 @@ export async function datasDoChart(db: D1DatabaseLike, chart: ChartId): Promise<
 
 /** Datas ISO distintas já gravadas (qualquer chart), mais antiga primeiro. Usado pela carga inicial pra pular semanas prontas. */
 export async function datasCarregadas(db: D1DatabaseLike): Promise<string[]> {
-  const rows = await consultar<{ data: string }>(db, "SELECT DISTINCT data FROM chart_semana ORDER BY data");
+  const rows = await consultar<{ data: string }>(db, "SELECT DISTINCT data FROM chart_datas ORDER BY data");
   return rows.map((r) => r.data);
 }
 
-/** Gêneros (catálogo) das músicas que já passaram pelo chart, ordenados. */
-export async function generosDoChart(db: D1DatabaseLike, chart: ChartId, cat: Map<string, MusicaCatalogo>): Promise<string[]> {
-  const rows = await consultar<{ titulo: string }>(db, "SELECT DISTINCT titulo FROM chart_semana WHERE chart = ?", chart);
-  const generos = new Set<string>();
-  for (const r of rows) {
-    const g = buscarNoCatalogo(r.titulo || "", cat)?.genero;
-    if (g) generos.add(g);
-  }
-  return [...generos].sort();
+/**
+ * Gêneros (gravados na ingestão) das músicas da semana `dataBr` do chart —
+ * sem data, a mais recente. Lista só o que a semana tem (100 linhas pela PK),
+ * não o histórico inteiro.
+ */
+export async function generosDoChart(db: D1DatabaseLike, chart: ChartId, dataBr?: string): Promise<string[]> {
+  const rows = await consultar<{ genero: string }>(
+    db,
+    `SELECT DISTINCT genero FROM chart_semana
+     WHERE chart = ? AND data = COALESCE(?, (SELECT MAX(data) FROM chart_datas WHERE chart = ?))
+       AND genero IS NOT NULL AND genero <> ''
+     ORDER BY genero`,
+    chart,
+    dataBr ? dataBrParaIso(dataBr) : null,
+    chart,
+  );
+  return rows.map((r) => r.genero);
 }
 
 export interface LinhaChartApi {
@@ -487,29 +709,17 @@ export async function linhasDoChart(
   cat: Map<string, MusicaCatalogo>,
   fotos: Map<string, string>,
 ): Promise<LinhaChartApi[]> {
-  const dataIso = dataBrParaIso(dataBr);
-  const [rows, somas] = await Promise.all([
-    consultar<{ pos: number; titulo: string; titulo_norm: string; valor: number; valor_total: number | null; artistas: string; status: string }>(
-      db,
-      `SELECT pos, titulo, titulo_norm, valor, valor_total, artistas, status
-       FROM chart_semana WHERE chart = ? AND data = ? ORDER BY pos`,
-      chart,
-      dataIso,
-    ),
-    // Acumulado de cada música da semana no chart, até a data (inclusive).
-    consultar<{ titulo_norm: string; total: number }>(
-      db,
-      `SELECT titulo_norm, SUM(valor) AS total FROM chart_semana
-       WHERE chart = ? AND data <= ?
-         AND titulo_norm IN (SELECT titulo_norm FROM chart_semana WHERE chart = ? AND data = ?)
-       GROUP BY titulo_norm`,
-      chart,
-      dataIso,
-      chart,
-      dataIso,
-    ),
-  ]);
-  const acumulado = new Map(somas.map((s) => [s.titulo_norm, s.total]));
+  // Acumulado e gênero já vêm gravados: só as 100 linhas da semana (PK).
+  const rows = await consultar<{
+    pos: number; titulo: string; valor: number; valor_total: number | null; valor_acumulado: number | null;
+    artistas: string; status: string; genero: string | null;
+  }>(
+    db,
+    `SELECT pos, titulo, valor, valor_total, valor_acumulado, artistas, status, genero
+     FROM chart_semana WHERE chart = ? AND data = ? ORDER BY pos`,
+    chart,
+    dataBrParaIso(dataBr),
+  );
   const linhas = rows.map((r) => {
     const titulo = r.titulo || "";
     const art = artistaPrincipal(lerArtistas(r.artistas), titulo);
@@ -517,11 +727,11 @@ export async function linhasDoChart(
       pos: r.pos,
       tit: titulo,
       val: fmt(r.valor),
-      valTotal: fmt(r.valor_total ?? acumulado.get(r.titulo_norm) ?? r.valor),
+      valTotal: fmt(r.valor_acumulado ?? r.valor_total ?? r.valor),
       art,
       st: r.status || "NEW",
       capa: capaDe(titulo, art, cat, fotos),
-      style: buscarNoCatalogo(titulo, cat)?.genero ?? "",
+      style: r.genero ?? "",
     };
   });
   return estilo ? linhas.filter((l) => l.style === estilo) : linhas;
@@ -571,10 +781,17 @@ export async function linhasPaises(
   ]);
   const pesos: Pesos = new Map(pesosRows.map((p) => [p.pais.trim().toUpperCase(), p.peso]));
   if (!pesos.size) return [];
+  // Nacionalidade casa com o país de pais_peso sem diferenciar acento ("Australia" = "AUSTRÁLIA").
+  const paisDePesos = new Map([...pesos.keys()].map((p) => [semAcentoMaiusculo(p), p]));
   const cfg = new Map(cfgRows.map((c) => [c.chave, c.valor]));
   const bonus = numeroConfig(cfg.get("bonus_nacionalidade"), 0.2);
   const top = numeroConfig(cfg.get("top_pais"), 50);
-  const nacionalidade = new Map(nacRows.map((n) => [n.nome_upper.trim().toUpperCase(), n.nacionalidade.trim().toUpperCase()]));
+  const nacionalidade = new Map(
+    nacRows.map((n) => {
+      const pais = semAcentoMaiusculo(n.nacionalidade);
+      return [semAcentoMaiusculo(n.nome_upper), paisDePesos.get(pais) ?? pais];
+    }),
+  );
 
   const musicasDaSemana = async (iso: string): Promise<MusicaParaPais[]> => {
     const rows = await consultar<{ titulo: string; titulo_norm: string; valor: number; artistas: string }>(
@@ -587,7 +804,7 @@ export async function linhasPaises(
       const artistas = lerArtistas(r.artistas);
       const nacs = new Set<string>();
       for (const a of artistas) {
-        const n = nacionalidade.get(a.toUpperCase());
+        const n = nacionalidade.get(semAcentoMaiusculo(a));
         if (n) nacs.add(n);
       }
       return {
@@ -658,51 +875,37 @@ export interface PerfilHOFD1 {
   runs: ItemHOF[];
 }
 
-export const CHARTS_HOF: ChartId[] = ["BILLBOARD HOT 100", "SPOTIFY", "APPLE MUSIC", "YOUTUBE"];
-
 /**
- * Parte dos charts semanais no Hall of Fame: por chart, cada música (chaveMusica)
- * em que o artista está entre os `artistas` gravados vira `{t, v}` com as
- * posições em ordem cronológica ("32 - 50 - 1"); n1_* = músicas distintas que
- * chegaram ao #1. `runs` = Hot 100 (mesmo papel das colunas de runs da planilha).
+ * Parte dos charts semanais no Hall of Fame, lida de chart_artista_musica
+ * pela PK (artista sem acento, CAIXA ALTA). sp/am/yt: `{t, v}` com o pico
+ * ("1"), que é o que cabe no layout; `runs` (Hot 100) leva as posições em
+ * ordem cronológica ("32 - 50 - 1"), como as colunas de runs da planilha.
+ * n1_* = músicas distintas que chegaram ao #1.
  */
 export async function perfilHOF(db: D1DatabaseLike, artista: string): Promise<PerfilHOFD1> {
-  const alvo = artista.trim().toUpperCase();
-  const porChart = new Map<string, Map<string, { t: string; posicoes: number[] }>>(CHARTS_HOF.map((c) => [c, new Map()]));
-  if (alvo) {
-    // LIKE só pré-filtra (ignora caixa só em ASCII); o filtro exato é no JSON abaixo.
-    const padrao = `%${artista.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    const rows = await consultar<{ chart: string; pos: number; titulo: string; titulo_norm: string; artistas: string }>(
-      db,
-      `SELECT chart, pos, titulo, titulo_norm, artistas FROM chart_semana
-       WHERE chart IN (${CHARTS_HOF.map(() => "?").join(", ")}) AND artistas LIKE ? ESCAPE '\\'
-       ORDER BY data, pos`,
-      ...CHARTS_HOF,
-      padrao,
-    );
-    for (const r of rows) {
-      if (!lerArtistas(r.artistas).some((a) => a.toUpperCase() === alvo)) continue;
-      const musicas = porChart.get(r.chart)!;
-      const m = musicas.get(r.titulo_norm) ?? { t: r.titulo || "", posicoes: [] };
-      m.t = r.titulo || m.t; // grafia mais recente
-      m.posicoes.push(r.pos);
-      musicas.set(r.titulo_norm, m);
-    }
-  }
+  const key = semAcentoMaiusculo(artista);
+  const rows = key
+    ? await consultar<{ chart: string; titulo: string; peak: number; run: string }>(
+        db,
+        "SELECT chart, titulo, peak, run FROM chart_artista_musica WHERE artista_key = ?",
+        key,
+      )
+    : [];
   // Melhor pico primeiro, depois mais semanas (mesma ordem que a tela usa nos runs).
   const itens = (chart: ChartId) =>
-    [...porChart.get(chart)!.values()]
-      .map((m) => ({ ...m, peak: Math.min(...m.posicoes) }))
-      .sort((a, b) => a.peak - b.peak || b.posicoes.length - a.posicoes.length || a.t.localeCompare(b.t));
-  const lista = (chart: ChartId): ItemHOF[] => itens(chart).map((m) => ({ t: m.t, v: m.posicoes.join(" - ") }));
+    rows
+      .filter((r) => r.chart === chart)
+      .map((r) => ({ t: r.titulo || "", peak: r.peak, run: r.run || "", semanas: (r.run || "").split(" - ").length }))
+      .sort((a, b) => a.peak - b.peak || b.semanas - a.semanas || a.t.localeCompare(b.t));
+  const picos = (chart: ChartId): ItemHOF[] => itens(chart).map((m) => ({ t: m.t, v: String(m.peak) }));
   const n1 = (chart: ChartId) => String(itens(chart).filter((m) => m.peak === 1).length);
   return {
     n1_hot100: n1("BILLBOARD HOT 100"),
     n1_spotify: n1("SPOTIFY"),
     n1_youtube: n1("YOUTUBE"),
-    sp: lista("SPOTIFY"),
-    am: lista("APPLE MUSIC"),
-    yt: lista("YOUTUBE"),
-    runs: lista("BILLBOARD HOT 100"),
+    sp: picos("SPOTIFY"),
+    am: picos("APPLE MUSIC"),
+    yt: picos("YOUTUBE"),
+    runs: itens("BILLBOARD HOT 100").map((m) => ({ t: m.t, v: m.run })),
   };
 }

@@ -6,11 +6,17 @@ import type { D1DatabaseLike, D1PreparedStatement } from "../backend/src/service
 
 type Valor = string | number | bigint | boolean | null | Uint8Array;
 
-export function criarD1Sqlite(arquivo = ":memory:"): D1DatabaseLike {
+/** Chamado a cada statement executado (SQL, parâmetros e nº de linhas devolvidas) — usado pra medir leituras. */
+export type AoExecutar = (sql: string, params: unknown[], linhas: number) => void;
+
+export function criarD1Sqlite(arquivo = ":memory:", aoExecutar?: AoExecutar): D1DatabaseLike {
   const sqlite = new Database(arquivo);
 
-  const executar = (sql: string, params: unknown[]) =>
-    sqlite.prepare(sql).all(...(params.map((v) => (v === undefined ? null : v)) as Valor[]));
+  const executar = (sql: string, params: unknown[]) => {
+    const linhas = sqlite.prepare(sql).all(...(params.map((v) => (v === undefined ? null : v)) as Valor[]));
+    aoExecutar?.(sql, params, linhas.length);
+    return linhas;
+  };
 
   const criarStatement = (sql: string, params: unknown[] = []): D1PreparedStatement & { executar(): unknown[] } => ({
     bind: (...values: unknown[]) => criarStatement(sql, values),
