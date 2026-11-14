@@ -251,7 +251,7 @@ test("controller: 405, 400 e 200 com token", async () => {
 });
 
 // ---- Leitura (/api/charts) a partir do D1 ----
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import {
   datasDoChart, generosDoChart, linhasDoChart, linhasPaises, numero1DaUltimaSemana, perfilHOF,
 } from "../backend/src/services/chartsD1/repo";
@@ -280,12 +280,9 @@ async function dbComDuasSemanas(artistas: string[][] = [], pesos: string[][] = [
   return db;
 }
 
-// CSV "PAÍSES E PESOS" real (81 países) quando disponível; senão um recorte mínimo.
-const CSV_PESOS = "/root/.claude/uploads/2a149bbf-d1c1-542e-8fba-44e303dfd808/28fa6e80-Empire_Base_de_Dados_-_PA_SES_E_PESOS.csv";
+// Cópia do CSV real "PAÍSES E PESOS" (81 países).
+const CSV_PESOS = new URL("./fixtures/charts-d1-pesos.csv", import.meta.url);
 function pesosDoCsv(): string[][] {
-  if (!existsSync(CSV_PESOS)) {
-    return [["PAÍS", "SPOTIFY (B)", "APPLE MUSIC (C)", "YOUTUBE (D)"], ["AUSTRÁLIA", "2,50%", "2,00%", "1,00%"], ["BRASIL", "7,20%", "2,50%", "15,50%"]];
-  }
   return readFileSync(CSV_PESOS, "utf8")
     .split(/\r?\n/)
     .filter(Boolean)
@@ -317,6 +314,7 @@ test("filtros do D1: datas mais recentes primeiro e gêneros do catálogo", asyn
 test("países: 81 × top 50, artista local acima no próprio país", async () => {
   const pesos = pesosDoCsv();
   const nPaises = pesos.slice(1).filter((p) => p[0].trim() && p[1].trim()).length;
+  expect(nPaises).toBe(81);
   const db = await dbComDuasSemanas([["Artista 60", "Austrália", "f60.jpg"]], pesos);
   const rows = await linhasPaises(db, "SPOTIFY", "11/11/2026", catFake, new Map());
   expect(Object.keys(rows[0]).sort()).toEqual(["art", "capa", "mes", "pais", "pos", "st", "tit", "val"]);
@@ -389,7 +387,7 @@ async function comApiCharts(db: unknown, abas: Record<string, string[][]>, fn: (
 const api = async (q: string) => (await chartsApiController(new Request(`http://x/api/charts?${q}`))).json();
 
 test("/api/charts: chart com semanas no D1 lê do D1; chart vazio cai na planilha", async () => {
-  const db = await dbComDuasSemanas();
+  const db = await dbComDuasSemanas([], pesosDoCsv());
   await db.prepare("DELETE FROM chart_semana WHERE chart = 'DIGITAL SALES'").run();
   const planilhaSales = [["h"], ["DIGITAL SALES", "01/01/2025", "1", "Velha - Planilha", "10", "", "", "Velha"]];
   await comApiCharts(db, { "DIGITAL SALES": planilhaSales }, async (lidas) => {
@@ -415,5 +413,72 @@ test("/api/charts HOF: números/runs dos charts do D1 sobre img/country/style e 
     expect(p.runs).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
     expect(p.am).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }]);
     expect(p.alb).toEqual([{ t: "Album", v: "1 - 2" }]);
+  });
+});
+
+import { rankingsDaSemana, type MusicaParaPais } from "../backend/src/services/chartsD1/paises";
+
+test("países: 81 × 100 músicas × 2 semanas cabe no orçamento de CPU", () => {
+  const pesos: Pesos = new Map(
+    pesosDoCsv().slice(1).filter((p) => p[1]?.trim()).map((p) => [p[0].trim().toUpperCase(), parseNumeroBR(p[1].replace("%", ""))! / 100]),
+  );
+  expect(pesos.size).toBe(81);
+  const paises = [...pesos.keys()];
+  const semana = (desloc: number): MusicaParaPais[] =>
+    Array.from({ length: 100 }, (_, i) => ({
+      tituloNorm: `m${(i + desloc) % 100}`, titulo: `M ${i}`, artistaPrincipal: `A ${i}`, valor: (100 - i) * 1000,
+      nacionalidades: new Set(i % 3 ? [paises[i % paises.length]] : []),
+    }));
+  rankingsDaSemana(semana(1), semana(0), pesos, 0.2, 50); // aquece o JIT
+  const t0 = performance.now();
+  const r = rankingsDaSemana(semana(1), semana(0), pesos, 0.2, 50);
+  const ms = performance.now() - t0;
+  expect(r.size).toBe(81);
+  expect([...r.values()].every((l) => l.length === 50)).toBe(true);
+  expect(ms).toBeLessThan(50);
+});
+test("rankingsDaSemana bate com rankingPais país a país", () => {
+  const pesos: Pesos = new Map([["AUSTRÁLIA", 0.025], ["BRASIL", 0.072]]);
+  const ms = [
+    { tituloNorm: "a", titulo: "X - A", artistaPrincipal: "X", valor: 1000, nacionalidades: new Set<string>() },
+    { tituloNorm: "b", titulo: "Y - B", artistaPrincipal: "Y", valor: 800, nacionalidades: new Set(["AUSTRÁLIA"]) },
+  ];
+  const r = rankingsDaSemana(ms, [ms[1], ms[0]].map((m, i) => ({ ...m, valor: 1000 - i * 200 })), pesos, 0.2, 50);
+  for (const pais of pesos.keys()) {
+    expect(r.get(pais)!.map(({ st, ...m }) => m)).toEqual(rankingPais(ms, pesos, pais, 0.2, 50));
+  }
+  expect(r.get("BRASIL")!.map((m) => m.st)).toEqual(["↑", "↓"]);
+});
+test("/api/charts COUNTRIES sem pesos no D1 cai na planilha", async () => {
+  const db = await dbComDuasSemanas(); // sem pesos
+  const planilha = [["h"], ["BRASIL", "1", "SPOTIFY", "Velha - Planilha", "10", "Outubro", "Velha", ""]];
+  await comApiCharts(db, { "SPOTIFY COUNTRIES": planilha }, async (lidas) => {
+    expect((await api("action=getFilters&tab=SPOTIFY COUNTRIES")).dates).toEqual(["Outubro"]);
+    expect(await api("action=getChart&tab=SPOTIFY COUNTRIES&date=Outubro")).toMatchObject([{ pais: "BRASIL", tit: "Velha - Planilha" }]);
+    expect(lidas).toContain("chartsCountries:SPOTIFY COUNTRIES");
+  });
+});
+test("/api/charts HOF: runs legados (col. N) somam por cima do D1; sem linha na planilha não consulta o D1", async () => {
+  const db = await dbComDuasSemanas();
+  const hof = [["h"], ["Artista 2", "img", "BRASIL", "Pop", "9", "9", "9", "4", "", "", "", "", "Velha|1", "Legado|3 - 1,Outro|5"]];
+  await comApiCharts(db, { HALL_OF_FAME_DB: hof }, async () => {
+    const p = await api("action=getHOFProfile&artist=Artista 2");
+    expect(p.runs).toEqual([{ t: "Artista 2 - Faixa 2", v: "2 - 1" }, { t: "Legado", v: "3 - 1" }, { t: "Outro", v: "5" }]);
+    expect(p.n1_hot100).toBe("2");
+  });
+  let consultas = 0;
+  const contando = { ...db, prepare: (sql: string) => { if (/artistas LIKE/.test(sql)) consultas++; return db.prepare(sql); } };
+  await comApiCharts(contando, { HALL_OF_FAME_DB: hof }, async () => {
+    expect(await api("action=getHOFProfile&artist=Ninguem")).toEqual({});
+    await api("action=getHOFProfile&artist=Artista 2");
+  });
+  expect(consultas).toBe(1);
+});
+test("/api/charts banners: com os 5 charts no D1 não lê Musicas pra capa", async () => {
+  const db = await dbComDuasSemanas();
+  await comApiCharts(db, {}, async (lidas) => {
+    const b = await api("action=getBannerN1s");
+    expect(Object.keys(b).sort()).toEqual(["apple", "hot100", "sales", "spotify", "youtube"]);
+    expect(lidas.filter((l) => l.startsWith("principal"))).toEqual([]);
   });
 });

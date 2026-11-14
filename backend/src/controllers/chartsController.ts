@@ -4,8 +4,8 @@ import { fixImg, fmt } from "../services/chartsD1/formato";
 import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
 import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
 import {
-  carregarCatalogo, carregarFotos, datasDoChart, generosDoChart, linhasDoChart, linhasPaises,
-  numero1DaUltimaSemana, perfilHOF,
+  CHARTS_HOF, carregarCatalogo, carregarFotos, datasDoChart, generosDoChart, linhasDoChart, linhasPaises,
+  numero1DaUltimaSemana, perfilHOF, temPesosPais,
 } from "../services/chartsD1/repo";
 
 // Empire Charts — migrado do Apps Script (script.google.com/macros/.../exec)
@@ -75,10 +75,10 @@ function chartD1DaAba(tab: string): { chart: ChartId; paises: boolean } | null {
   return null;
 }
 
-/** Roda `ler` no D1 se o chart tem dados lá; `undefined` = usar a planilha. */
+/** Roda `ler` no D1 se o chart tem dados lá; `undefined` (inclusive vindo de `ler`) = usar a planilha. */
 async function viaD1<T>(
   chart: ChartId,
-  ler: (db: D1DatabaseLike, datas: string[]) => Promise<T>,
+  ler: (db: D1DatabaseLike, datas: string[]) => Promise<T | undefined>,
 ): Promise<T | undefined> {
   const db = getCatalogoDb();
   if (!db) return undefined;
@@ -96,10 +96,10 @@ async function viaD1<T>(
 async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] }> {
   const alvo = chartD1DaAba(tab);
   if (alvo) {
-    const d1 = await viaD1(alvo.chart, async (db, datas) => ({
-      dates: datas,
-      styles: alvo.paises ? [] : await generosDoChart(db, alvo.chart, (await referenciasD1(db)).cat),
-    }));
+    const d1 = await viaD1(alvo.chart, async (db, datas) => {
+      if (alvo.paises) return (await temPesosPais(db, alvo.chart)) ? { dates: datas, styles: [] } : undefined;
+      return { dates: datas, styles: await generosDoChart(db, alvo.chart, (await referenciasD1(db)).cat) };
+    });
     if (d1) return d1;
   }
 
@@ -129,6 +129,8 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
   const alvo = chartD1DaAba(tab);
   if (alvo) {
     const d1 = await viaD1<unknown[]>(alvo.chart, async (db) => {
+      // Sem pesos de país no D1, COUNTRIES ainda é da planilha.
+      if (alvo.paises && !(await temPesosPais(db, alvo.chart))) return undefined;
       const { cat, fotos } = await referenciasD1(db);
       return alvo.paises
         ? linhasPaises(db, alvo.chart, date, cat, fotos)
@@ -326,7 +328,7 @@ async function perfilHOFDoD1(artist: string): Promise<Record<string, unknown>> {
   if (!db) return {};
   try {
     const [hot100, spotify, apple, youtube] = await Promise.all(
-      (["BILLBOARD HOT 100", "SPOTIFY", "APPLE MUSIC", "YOUTUBE"] as ChartId[]).map(async (c) => (await datasD1(db, c)).length > 0),
+      CHARTS_HOF.map(async (c) => (await datasD1(db, c)).length > 0),
     );
     if (!hot100 && !spotify && !apple && !youtube) return {};
     const p = await perfilHOF(db, artist);
@@ -343,9 +345,10 @@ async function perfilHOFDoD1(artist: string): Promise<Record<string, unknown>> {
 }
 
 async function fetchHOFProfile(artist: string): Promise<unknown> {
-  const [data, doD1] = await Promise.all([readSheet("chartsBase", "HALL_OF_FAME_DB"), perfilHOFDoD1(artist)]);
+  const data = await readSheet("chartsBase", "HALL_OF_FAME_DB");
   const r = data.find((row) => (row[0] || "").trim().toUpperCase() === artist.trim().toUpperCase());
   if (!r) return {};
+  const doD1 = await perfilHOFDoD1(artist);
   const runsBase = parseHOFList(r[12]);
   const runsLegado = parseHOFList(r[13]);
   const runsCombinados = [...runsBase, ...runsLegado];
@@ -368,6 +371,14 @@ async function fetchHOFProfile(artist: string): Promise<unknown> {
     alb: parseHOFList(r[11]),
     runs: runsCombinados,
     ...doD1,
+    // Runs legados (col. N) seguem somando por cima do Hot 100 do D1, como
+    // somavam por cima da col. M.
+    ...(doD1.runs
+      ? {
+          runs: [...(doD1.runs as { t: string; v: string }[]), ...runsLegado],
+          n1_hot100: String(Number(doD1.n1_hot100) + contarNumero1(runsLegado)),
+        }
+      : {}),
   };
 }
 
@@ -457,7 +468,9 @@ async function fetchBannerN1s(): Promise<Record<string, unknown>> {
   // de origem (BILLBOARD HOT 100, SPOTIFY etc.) raramente têm as colunas de
   // capa (P/Q) preenchidas, então os cards "Top por plataforma" da Início
   // ficavam sem nenhuma imagem.
-  const capaPorTitulo = await buildCapaPorTituloCatalogo();
+  // Só lido quando algum chart realmente cai na planilha.
+  let capaPorTituloP: Promise<Map<string, string>> | null = null;
+  const capaPorTitulo = () => (capaPorTituloP ??= buildCapaPorTituloCatalogo());
 
   await Promise.all(
     platforms.map(async ({ key, tab }) => {
@@ -474,8 +487,8 @@ async function fetchBannerN1s(): Promise<Record<string, unknown>> {
       const row = latestRow(data.slice(1));
       if (row) {
         const capaPropria = fixImg(row[15] || row[16] || "");
-        const capaCatalogo = fixImg(capaPorTitulo.get(normalizarTitulo(row[3] || "")));
-        result[key] = { tit: row[3] || "", art: row[7] || "", capa: capaPropria || capaCatalogo };
+        const capa = capaPropria || fixImg((await capaPorTitulo()).get(normalizarTitulo(row[3] || "")));
+        result[key] = { tit: row[3] || "", art: row[7] || "", capa };
       }
     }),
   );
@@ -486,8 +499,8 @@ async function fetchBannerN1s(): Promise<Record<string, unknown>> {
       const row = latestRow(data.slice(1));
       if (row) {
         const capaPropria = fixImg(row[10] || "");
-        const capaCatalogo = fixImg(capaPorTitulo.get(normalizarTitulo(row[3] || "")));
-        result["bb200"] = { tit: row[3] || "", art: row[11] || "", capa: capaPropria || capaCatalogo };
+        const capa = capaPropria || fixImg((await capaPorTitulo()).get(normalizarTitulo(row[3] || "")));
+        result["bb200"] = { tit: row[3] || "", art: row[11] || "", capa };
       }
     }
   } catch {

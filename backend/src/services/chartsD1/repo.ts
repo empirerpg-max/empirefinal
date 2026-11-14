@@ -8,7 +8,7 @@ import {
   buscarNoCatalogo, chaveMusica, extrairArtistasDoTitulo, indexarCatalogo, resolverArtistas,
   type LinhaCatalogo, type MusicaCatalogo,
 } from "./artistas";
-import { rankingPais, type MusicaParaPais, type Pesos } from "./paises";
+import { rankingsDaSemana, type MusicaParaPais, type Pesos } from "./paises";
 import { fixImg, fmt } from "./formato";
 
 // Idempotente — roda no começo de cada ingestão (padrão do projeto).
@@ -435,6 +435,11 @@ const artistaPrincipal = (artistas: string[], titulo: string): string =>
 const capaDe = (titulo: string, art: string, cat: Map<string, MusicaCatalogo>, fotos: Map<string, string>): string =>
   fixImg(buscarNoCatalogo(titulo, cat)?.capa) || fixImg(fotos.get(art.trim().toUpperCase())) || "";
 
+/** Há pesos de país pra plataforma? Sem eles, COUNTRIES segue da planilha. */
+export async function temPesosPais(db: D1DatabaseLike, plataforma: ChartId): Promise<boolean> {
+  return (await consultar(db, "SELECT 1 FROM pais_peso WHERE plataforma = ? LIMIT 1", plataforma)).length > 0;
+}
+
 /** Datas com dados no chart, `dd/mm/aaaa`, mais recente primeiro. Vazio → fallback pra planilha. */
 export async function datasDoChart(db: D1DatabaseLike, chart: ChartId): Promise<string[]> {
   const rows = await consultar<{ data: string }>(
@@ -595,21 +600,17 @@ export async function linhasPaises(
   ]);
   if (!atual.length) return [];
 
+  // Capa por título resolvida uma vez (o mesmo título aparece em vários países).
+  const capas = new Map<string, string>();
+  const capa = (titulo: string, art: string) => {
+    const k = `${titulo}\u0000${art}`;
+    if (!capas.has(k)) capas.set(k, capaDe(titulo, art, cat, fotos));
+    return capas.get(k)!;
+  };
   const linhas: LinhaPaisApi[] = [];
-  for (const pais of pesos.keys()) {
-    const posAnterior = new Map(rankingPais(anterior, pesos, pais, bonus, top).map((m) => [m.tituloNorm, m.pos]));
-    for (const m of rankingPais(atual, pesos, pais, bonus, top)) {
-      const antes = posAnterior.get(m.tituloNorm);
-      linhas.push({
-        pais,
-        pos: m.pos,
-        tit: m.titulo,
-        val: fmt(m.val),
-        mes: dataBr,
-        art: m.art,
-        capa: capaDe(m.titulo, m.art, cat, fotos),
-        st: antes === undefined ? "NEW" : m.pos < antes ? "↑" : m.pos > antes ? "↓" : "=",
-      });
+  for (const [pais, ranking] of rankingsDaSemana(atual, anterior, pesos, bonus, top)) {
+    for (const m of ranking) {
+      linhas.push({ pais, pos: m.pos, tit: m.titulo, val: fmt(m.val), mes: dataBr, art: m.art, capa: capa(m.titulo, m.art), st: m.st });
     }
   }
   return linhas;
@@ -651,7 +652,7 @@ export interface PerfilHOFD1 {
   runs: ItemHOF[];
 }
 
-const CHARTS_HOF: ChartId[] = ["BILLBOARD HOT 100", "SPOTIFY", "APPLE MUSIC", "YOUTUBE"];
+export const CHARTS_HOF: ChartId[] = ["BILLBOARD HOT 100", "SPOTIFY", "APPLE MUSIC", "YOUTUBE"];
 
 /**
  * Parte dos charts semanais no Hall of Fame: por chart, cada música (chaveMusica)
