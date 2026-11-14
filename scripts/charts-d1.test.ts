@@ -65,7 +65,7 @@ test("rankingPais: artista local sobe no próprio país", () => {
   expect(rankingPais(ms, pesos, "BRASIL", 0.2, 50)[0].tituloNorm).toBe("a");
 });
 
-import { indexarCatalogo, buscarNoCatalogo, resolverArtistas, extrairArtistasDoTitulo } from "../backend/src/services/chartsD1/artistas";
+import { indexarCatalogo, buscarNoCatalogo, resolverArtistas, extrairArtistasDoTitulo, chaveMusica } from "../backend/src/services/chartsD1/artistas";
 
 test("catálogo casa grafia diferente e single vence álbum", () => {
   const cat = indexarCatalogo([
@@ -141,6 +141,46 @@ test("controller: 401 sem token", async () => {
   const res = await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "POST", body: "{}" }));
   expect(res.status).toBe(401);
 });
+test("controller: 401 com secret configurado e header ausente", async () => {
+  const g = globalThis as Record<string, unknown>;
+  const antes = g.__CHARTS_INGEST_TOKEN__;
+  g.__CHARTS_INGEST_TOKEN__ = "segredo";
+  try {
+    const res = await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "POST", body: "{}" }));
+    expect(res.status).toBe(401);
+  } finally {
+    g.__CHARTS_INGEST_TOKEN__ = antes;
+  }
+});
+test("chaveMusica: só caixa, acento e espaços", () => {
+  expect(chaveMusica("  Brida -  Bastarda [FunkItaliaRemix] ")).toBe("brida - bastarda [funkitaliaremix]");
+  expect(chaveMusica("Rayna - Aphrodite (live at Anti Tour)")).not.toBe(chaveMusica("Rayna - Aphrodite"));
+  expect(chaveMusica("Ánne - Canção")).toBe("anne - cancao");
+});
+test("versões diferentes da mesma faixa na mesma semana têm histórico próprio", async () => {
+  const db = criarD1Sqlite();
+  const comVersoes = (dataBr: string, trocar: boolean) =>
+    linhasFake(dataBr).map((l) => {
+      // Pares que normalizarTitulo junta (colchetes / parênteses) e são músicas diferentes.
+      const pares: Record<string, [string, string]> = {
+        "1": ["Brida - Bastarda", "Brida - Bastarda [FunkItaliaRemix]"],
+        "2": ["Brida - Bastarda [FunkItaliaRemix]", "Brida - Bastarda"],
+        "3": ["Rayna - Aphrodite", "Rayna - Aphrodite (live at Anti Tour)"],
+        "4": ["Rayna - Aphrodite (live at Anti Tour)", "Rayna - Aphrodite"],
+      };
+      const par = pares[l[2]];
+      return par ? [...l.slice(0, 3), par[trocar ? 1 : 0], ...l.slice(4)] : l;
+    });
+  expect((await ingerirSemana(db, { linhas: comVersoes("04/11/2026", false) })).ok).toBe(true);
+  expect((await ingerirSemana(db, { linhas: comVersoes("11/11/2026", true) })).ok).toBe(true);
+  const rows = await db.prepare("SELECT pos, titulo, status, semanas FROM chart_semana WHERE chart='SPOTIFY' AND data='2026-11-11' AND pos<=4 ORDER BY pos").all<any>();
+  expect(rows.results).toEqual([
+    { pos: 1, titulo: "Brida - Bastarda [FunkItaliaRemix]", status: "↑", semanas: 2 },
+    { pos: 2, titulo: "Brida - Bastarda", status: "↓", semanas: 2 },
+    { pos: 3, titulo: "Rayna - Aphrodite (live at Anti Tour)", status: "↑", semanas: 2 },
+    { pos: 4, titulo: "Rayna - Aphrodite", status: "↓", semanas: 2 },
+  ]);
+});
 
 test("semanal: PONTOS/VENDAS vazio ou ilegível recusa a semana", async () => {
   const db = criarD1Sqlite();
@@ -187,7 +227,7 @@ test("reenvio de semana antiga recalcula a semana seguinte", async () => {
   top = await db.prepare("SELECT status, semanas, peak, pos_anterior FROM chart_semana WHERE chart='YOUTUBE' AND data='2026-11-11' AND pos=1").all<any>();
   expect(top.results[0]).toEqual({ status: "↑", semanas: 2, peak: 1, pos_anterior: 2 });
   const h = await historicoAntesDe(db, "YOUTUBE", "2026-11-12");
-  expect(h.get("artista 1 faixa 1")).toEqual({ tituloNorm: "artista 1 faixa 1", posAnterior: 2, peak: 1, semanas: 2, semanasN1: 1 });
+  expect(h.get("artista 1 - faixa 1")).toEqual({ tituloNorm: "artista 1 - faixa 1", posAnterior: 2, peak: 1, semanas: 2, semanasN1: 1 });
 });
 test("controller: 405, 400 e 200 com token", async () => {
   const g = globalThis as Record<string, unknown>;

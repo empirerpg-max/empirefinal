@@ -18,6 +18,21 @@ export function normalizarTitulo(s: string): string {
     .trim();
 }
 
+/**
+ * Identidade da música no chart (movimento/histórico): só caixa, acentos e
+ * espaços. Diferente de normalizarTitulo, mantém parênteses/colchetes/feat. —
+ * versões distintas ("Bastarda" e "Bastarda [FunkItaliaRemix]") entram no
+ * chart na mesma semana e precisam de histórico próprio.
+ */
+export function chaveMusica(titulo: string): string {
+  return (titulo ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export interface MusicaCatalogo {
   chave: string;
   artistas: string[];

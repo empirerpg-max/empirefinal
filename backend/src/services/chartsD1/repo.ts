@@ -4,7 +4,7 @@ import type { D1DatabaseLike, D1PreparedStatement } from "../catalogoDbService";
 import { CHARTS, type ChartId, type LinhaDados } from "./tipos";
 import { parseLinhaDados, parseNumeroBR, validarSemana } from "./dados";
 import { calcularMovimento, type HistoricoMusica, type Movimento } from "./movimento";
-import { indexarCatalogo, normalizarTitulo, resolverArtistas, type LinhaCatalogo, type MusicaCatalogo } from "./artistas";
+import { chaveMusica, indexarCatalogo, resolverArtistas, type LinhaCatalogo, type MusicaCatalogo } from "./artistas";
 
 // Idempotente — roda no começo de cada ingestão (padrão do projeto).
 export const CHARTS_D1_SCHEMA: string[] = [
@@ -13,7 +13,7 @@ export const CHARTS_D1_SCHEMA: string[] = [
     data TEXT NOT NULL,
     pos INTEGER NOT NULL,
     titulo TEXT,
-    titulo_norm TEXT,
+    titulo_norm TEXT, -- chaveMusica(titulo): identidade da música no chart
     valor INTEGER,
     valor_total INTEGER,
     artistas TEXT,
@@ -205,8 +205,13 @@ const CATALOGO_SQL =
 async function carregarCatalogo(db: D1DatabaseLike): Promise<Map<string, MusicaCatalogo>> {
   try {
     return indexarCatalogo((await db.prepare(CATALOGO_SQL).all<LinhaCatalogo>()).results);
-  } catch {
-    // Tabela musicas ainda não existe nesse banco → catálogo vazio.
+  } catch (e) {
+    // Tabela musicas ainda não existe nesse banco → catálogo vazio (esperado).
+    // Qualquer outra falha também segue com catálogo vazio (a semana ainda é
+    // gravada, só sem artistas do catálogo), mas fica no log.
+    if (!/no such table/i.test(e instanceof Error ? e.message : String(e))) {
+      console.warn("[charts-d1] falha ao ler catálogo musicas; seguindo sem catálogo:", e);
+    }
     return new Map();
   }
 }
@@ -252,7 +257,7 @@ async function recalcularSemanaSeguinte(db: D1DatabaseLike, charts: ChartId[], d
         dataIso: data,
         pos: r.pos,
         titulo: r.titulo,
-        tituloNorm: r.titulo_norm,
+        tituloNorm: chaveMusica(r.titulo),
         valor: r.valor,
         valorTotal: r.valor_total,
         artistas: JSON.parse(r.artistas || "[]"),
@@ -371,7 +376,7 @@ export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao
           dataIso: prep.dataIso,
           pos: l.pos,
           titulo: l.titulo,
-          tituloNorm: normalizarTitulo(l.titulo),
+          tituloNorm: chaveMusica(l.titulo),
           valor: l.valor,
           valorTotal: l.valorTotal,
           artistas: r.artistas,
