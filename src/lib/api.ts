@@ -377,7 +377,41 @@ export interface CommonResponse {
   id?: string;
 }
 
+// Busca rápida do cabeçalho (GET /api/busca — ver backend/src/controllers/buscaController.ts).
+export type GrupoBusca = "musicas" | "videos" | "albuns" | "artistas";
+export interface ItemResultadoBusca {
+  grupo: GrupoBusca;
+  id: string;
+  titulo: string;
+  subtitulo: string;
+  capa?: string;
+  link: string;
+  dataIso?: string;
+}
+export interface GrupoResultadoBusca {
+  grupo: GrupoBusca;
+  total: number;
+  itens: ItemResultadoBusca[];
+}
+
 export const api = {
+  async buscar(
+    q: string,
+    opcoes: { grupo?: GrupoBusca; limite?: number; signal?: AbortSignal } = {},
+  ): Promise<{ grupos: GrupoResultadoBusca[] }> {
+    const params = new URLSearchParams({ q });
+    if (opcoes.grupo) params.set("grupo", opcoes.grupo);
+    if (opcoes.limite) params.set("limite", String(opcoes.limite));
+    try {
+      const res = await fetch(`/api/busca?${params}`, { cache: "no-store", signal: opcoes.signal });
+      if (!res.ok) return { grupos: [] };
+      const json = await res.json();
+      return { grupos: Array.isArray(json?.grupos) ? json.grupos : [] };
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") throw err;
+      return { grupos: [] };
+    }
+  },
   // chamada genérica de baixo nível (mantida para compatibilidade com chamadas diretas)
   call: <T = unknown>(params: Record<string, unknown>, opts: { cache?: boolean } = {}) =>
     call<T>(params, opts),
