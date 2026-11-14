@@ -541,7 +541,7 @@ async function comentariosDeVideoParaTopico(
  * está ligada (ver videosD1Leitura.ts), senão da planilha. Passa pelo MESMO
  * linhasParaObjetos da planilha, então o resultado é idêntico.
  */
-async function lerAlbunsComoObjetos(): Promise<SheetRecord[]> {
+export async function lerAlbunsComoObjetos(): Promise<SheetRecord[]> {
   // "Albuns" do D1 com a chave "albuns:leitura-d1" ligada (ver
   // albunsD1Leitura.ts), senão da planilha — mesmo linhasParaObjetos.
   return linhasParaObjetos("Albuns", await linhasDaAbaDeAlbum("Albuns"));
@@ -560,7 +560,7 @@ async function comentariosDeAlbumParaTopico(
   return readSheetObjectsWithRowIndex("Comentarios_Albuns");
 }
 
-async function lerMusicVideosComoObjetos(): Promise<SheetRecord[]> {
+export async function lerMusicVideosComoObjetos(): Promise<SheetRecord[]> {
   return linhasParaObjetos("Music Videos", await linhasDaAbaDeVideo("Music Videos"));
 }
 

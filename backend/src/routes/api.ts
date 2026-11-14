@@ -252,6 +252,7 @@ import {
   adminDiagForumRapidoVideosController,
   adminForumRapidoVideosController,
 } from "../controllers/adminMigracaoVideosD1Controller";
+import { buscaController } from "../controllers/buscaController";
 import { adminEspelhoAlbunsD1Controller } from "../controllers/adminEspelhoAlbunsD1Controller";
 import {
   adminApagarTesteBotAlbumController,
@@ -537,6 +538,7 @@ export async function handleEmpireApiRoutes(
     "/api/artistas/meus-nomes",
     "/api/artistas/disponiveis",
     "/api/artistas/listar-todos",
+    "/api/busca",
     "/api/artistas/calcular-fortuna-charts",
     "/api/prestigio/corrigir-assistir-tv-duplicado",
     "/api/prestigio/restaurar",
@@ -2548,6 +2550,10 @@ export async function handleEmpireApiRoutes(
         break;
       case "/api/artistas/infos":
         response = await getArtistInfoController(request);
+        break;
+      case "/api/busca":
+        // Busca rápida do cabeçalho (2026-11-14) — ver buscaController.ts.
+        response = await buscaController(request);
         break;
       case "/api/artistas/listar-todos":
         response = await getAllArtistasController();

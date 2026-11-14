@@ -43,6 +43,7 @@ import { useServiceWorkerUpdate } from "@/lib/pwa";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationBell } from "@/components/NotificationBell";
+import { BuscaRapida } from "@/components/BuscaRapida";
 import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
 import { VmaNominationPopup } from "@/components/VmaNominationPopup";
 import { FestivalNominationPopup } from "@/components/FestivalNominationPopup";
@@ -494,7 +495,7 @@ function RefreshButton() {
       }}
       aria-label="Recarregar tela"
       title="Recarregar tela"
-      className="relative size-11 grid place-items-center rounded-full border border-white/10 bg-white/[0.04] text-foreground active:scale-95 transition-all hover:bg-white/[0.08] hover:border-primary/30 disabled:opacity-60"
+      className="relative size-9 sm:size-11 grid place-items-center rounded-full border border-white/10 bg-white/[0.04] text-foreground active:scale-95 transition-all hover:bg-white/[0.08] hover:border-primary/30 disabled:opacity-60"
       disabled={refreshing}
     >
       <RefreshCw className={`size-[18px] ${refreshing ? "animate-spin" : ""}`} />
@@ -850,14 +851,15 @@ function RootInner() {
             />
             <span className="absolute inset-0 rounded-xl bg-primary/40 blur-lg opacity-60" />
           </div>
-          <span className="font-black italic uppercase tracking-tighter text-base leading-none">
+          <span className="font-black italic uppercase tracking-tighter text-base leading-none max-[359px]:hidden">
             <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
               Empire
             </span>
             <span className="text-primary"> Hub</span>
           </span>
         </Link>
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+          <BuscaRapida />
           <NotificationBell />
           <RefreshButton />
           <button
@@ -867,7 +869,7 @@ function RootInner() {
             }}
             aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
             aria-expanded={isOpen}
-            className="relative size-11 grid place-items-center rounded-full border border-white/10 bg-white/[0.04] text-foreground active:scale-95 transition-all hover:bg-white/[0.08] hover:border-primary/30"
+            className="relative size-9 sm:size-11 grid place-items-center rounded-full border border-white/10 bg-white/[0.04] text-foreground active:scale-95 transition-all hover:bg-white/[0.08] hover:border-primary/30"
           >
             {isOpen ? <X className="size-5 text-primary" /> : <Menu className="size-5" />}
           </button>

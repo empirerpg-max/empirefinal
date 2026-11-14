@@ -94,7 +94,7 @@ export function NotificationBell() {
       <button
         onClick={handleToggle}
         aria-label={unreadCount > 0 ? `${unreadCount} notificações não lidas` : "Notificações"}
-        className="relative size-11 shrink-0 grid place-items-center rounded-full border border-white/10 bg-white/[0.04] text-foreground active:scale-95 transition-all hover:bg-white/[0.08] hover:border-primary/30"
+        className="relative size-9 sm:size-11 shrink-0 grid place-items-center rounded-full border border-white/10 bg-white/[0.04] text-foreground active:scale-95 transition-all hover:bg-white/[0.08] hover:border-primary/30"
       >
         <Bell className="size-[18px]" aria-hidden="true" />
         {unreadCount > 0 && (
