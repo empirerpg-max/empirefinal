@@ -51,3 +51,36 @@ test("ordem dos grupos; grupo vazio some; sem 'termos' na resposta", () => {
   expect(r.grupos.map((g) => g.grupo)).toEqual(["musicas", "videos", "albuns"]);
   expect("termos" in r.grupos[0].itens[0]).toBe(false);
 });
+
+// --- Task 2: índice a partir das fontes ---
+import { montarIndiceDeFontes } from "../backend/src/controllers/buscaController";
+const fi = (id: string, title: string, extra: Record<string, unknown> = {}, pendente = false) =>
+  ({ item: { id, title, artist: "Max Gorghan", featArtists: [], coverUrl: null, telegramTopicId: null, releaseDateIso: null, ...extra }, pendente });
+
+test("índice: pendente fica fora", () => {
+  const ix = montarIndiceDeFontes({ musicas: [fi("m1", "Follia"), fi("m2", "Oculta", {}, true)], videos: [], albuns: [], artistas: [] });
+  expect(ix.map((i) => i.id)).toEqual(["m1"]);
+});
+test("índice: links por tipo (ID do tópico, codificado)", () => {
+  const ix = montarIndiceDeFontes({
+    musicas: [fi("musicas_3", "Follia", { telegramTopicId: "1234" })],
+    videos: [fi("video_1_abc", "Clipe")],
+    albuns: [fi("album_7", "FOLLIA", { telegramTopicId: "album_1792551638543_utb9mi" })],
+    artistas: [{ nome: "Anníbal Páris", foto: "" }],
+  });
+  expect(ix.map((i) => i.link)).toEqual([
+    "/empire-play/forum?tab=musicas&id=1234",
+    "/empire-play/forum?tab=videos&id=video_1_abc",
+    "/empire-play/forum?tab=albuns&id=album_1792551638543_utb9mi",
+    `/artistas/${encodeURIComponent("Anníbal Páris")}`,
+  ]);
+});
+test("índice: participações entram nos termos", () => {
+  const ix = montarIndiceDeFontes({ musicas: [fi("m4", "Alchimia", { featArtists: ["Samantha Cooper"] })], videos: null, albuns: null, artistas: null });
+  expect(ix[0].termos).toContain("samantha cooper");
+  expect(ix[0].subtitulo).toBe("Max Gorghan, Samantha Cooper");
+});
+test("índice: fonte que falhou (null) não derruba as outras", () => {
+  const ix = montarIndiceDeFontes({ musicas: null, videos: [fi("v1", "Clipe")], albuns: null, artistas: null });
+  expect(ix.map((i) => i.grupo)).toEqual(["videos"]);
+});
