@@ -252,6 +252,7 @@ import {
   adminDiagForumRapidoVideosController,
   adminForumRapidoVideosController,
 } from "../controllers/adminMigracaoVideosD1Controller";
+import { adminEspelhoAlbunsD1Controller } from "../controllers/adminEspelhoAlbunsD1Controller";
 import { adminDiagComentariosVideosOrfaosController } from "../controllers/adminDiagComentariosVideosOrfaosController";
 import { adminFixComentariosVideosOrfaosController } from "../controllers/adminFixComentariosVideosOrfaosController";
 import { adminDiagOrfaosComentariosController } from "../controllers/adminDiagOrfaosComentariosController";
@@ -2225,6 +2226,9 @@ export async function handleEmpireApiRoutes(
     // PK (pivot 2026-10-14) — destrutivo só nessas 2 tabelas, chamado
     // manualmente via admin-call.yml antes de remigrar.
     response = await adminRecriarTabelasMusicasD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/espelho-albuns-d1") {
+    // Migração dos álbuns pro D1 (2026-11-14) — ver espelhoAbasD1.ts.
+    response = await adminEspelhoAlbunsD1Controller(request);
   } else if (url.pathname === "/api/empire-play/admin/criar-tabelas-videos-d1") {
     // Migração de vídeos pro D1 (2026-11-13) — ver adminMigracaoVideosD1Controller.ts.
     response = await adminCriarTabelasVideosD1Controller();
