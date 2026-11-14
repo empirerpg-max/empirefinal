@@ -469,6 +469,11 @@ const CHARTS_RESPONSE_CACHE_TTL_MS = 5 * 60_000;
 const chartsResponseCache = new Map<string, { body: string; expiresAt: number }>();
 const chartsResponseInFlight = new Map<string, Promise<string>>();
 
+/** Descarta as respostas em cache deste isolate (chamado após ingerir uma semana no D1). */
+export function limparCacheCharts(): void {
+  chartsResponseCache.clear();
+}
+
 export async function chartsApiController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const p = url.searchParams;

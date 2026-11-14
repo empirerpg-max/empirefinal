@@ -8,6 +8,7 @@ import {
   chartsApiController,
   debugRealtimeCoversController,
 } from "../controllers/chartsController";
+import { chartsIngestController } from "../controllers/chartsIngestController";
 import {
   getAcervoRevistasController,
   createAcervoRevistaController,
@@ -520,6 +521,7 @@ export async function handleEmpireApiRoutes(
 
   const supportedPaths = new Set([
     "/api/charts",
+    "/api/charts/ingest",
     "/api/charts/admin/debug-realtime-covers",
     "/api/acervo/revistas",
     "/api/acervo/entrevistas",
@@ -1717,6 +1719,9 @@ export async function handleEmpireApiRoutes(
     response = await adminImpersonarController(request);
   } else if (url.pathname === "/api/charts") {
     response = await chartsApiController(request);
+  } else if (url.pathname === "/api/charts/ingest") {
+    // Envio semanal da aba DADOS pelo Google (POST + Bearer CHARTS_INGEST_TOKEN).
+    response = await chartsIngestController(request);
   } else if (url.pathname === "/api/charts/admin/debug-realtime-covers") {
     response = await debugRealtimeCoversController();
   } else if (url.pathname === "/api/auth/heartbeat") {

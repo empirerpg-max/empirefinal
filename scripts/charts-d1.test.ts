@@ -97,3 +97,115 @@ test("extrairArtistasDoTitulo", () => {
   expect(extrairArtistasDoTitulo("A x B - Song ft. C")).toEqual(["A", "B", "C"]);
   expect(extrairArtistasDoTitulo("A & B, C - Song")).toEqual(["A", "B", "C"]);
 });
+
+import { criarD1Sqlite } from "./charts-d1-sqlite";
+import { ingerirSemana, historicoAntesDe } from "../backend/src/services/chartsD1/repo";
+import { chartsIngestController } from "../backend/src/controllers/chartsIngestController";
+
+// 5 charts × 100 linhas cruas da aba DADOS (A..L), uma faixa diferente por posição.
+const linhasFake = (dataBr: string): string[][] =>
+  CHARTS.flatMap((chart) =>
+    Array.from({ length: 100 }, (_, i) => [chart, dataBr, String(i + 1), `Artista ${i + 1} - Faixa ${i + 1}`, String(1000 - i), "", "", `Artista ${i + 1}`, "", "", "", ""]),
+  );
+const linhasFakeTrocandoPos1e2 = (dataBr: string): string[][] =>
+  linhasFake(dataBr).map((l) => (l[2] === "1" ? [...l.slice(0, 3), "Artista 2 - Faixa 2", ...l.slice(4)] : l[2] === "2" ? [...l.slice(0, 3), "Artista 1 - Faixa 1", ...l.slice(4)] : l));
+
+test("ingestão semanal: grava, calcula status e reenvio substitui", async () => {
+  const db = criarD1Sqlite();
+  expect((await ingerirSemana(db, { linhas: linhasFake("04/11/2026") })).ok).toBe(true);
+  const r = await ingerirSemana(db, { linhas: linhasFakeTrocandoPos1e2("11/11/2026") });
+  expect(r).toEqual({ ok: true, data: "2026-11-11", linhas: 500 });
+  await ingerirSemana(db, { linhas: linhasFakeTrocandoPos1e2("11/11/2026") });
+  const n = await db.prepare("SELECT COUNT(*) c FROM chart_semana WHERE data='2026-11-11'").all<{ c: number }>();
+  expect(n.results[0].c).toBe(500);
+  const top = await db.prepare("SELECT status, semanas_n1 FROM chart_semana WHERE chart='SPOTIFY' AND data='2026-11-11' AND pos=1").all<any>();
+  expect(top.results[0]).toEqual({ status: "↑", semanas_n1: 1 });
+});
+test("ingestão semanal incompleta não grava nada", async () => {
+  const db = criarD1Sqlite();
+  const r = await ingerirSemana(db, { linhas: linhasFake("11/11/2026").filter((l) => l[0] !== "YOUTUBE") });
+  expect(r.ok).toBe(false);
+  const n = await db.prepare("SELECT COUNT(*) c FROM chart_semana").all<{ c: number }>();
+  expect(n.results[0].c).toBe(0);
+});
+test("histórico: deduplica 200 linhas e ignora iTUNES", async () => {
+  const db = criarD1Sqlite();
+  const dup = linhasFake("19/10/2020");
+  const r = await ingerirSemana(db, { linhas: [...dup, ...dup, ["iTUNES", "19/10/2020", "1", "A - B", "1", "", "", "", "", "", "", ""]], modo: "historico" });
+  expect(r).toEqual({ ok: true, data: "2020-10-19", linhas: 500 });
+  const log = await db.prepare("SELECT modo, ok, mensagem FROM chart_ingestao").all<any>();
+  expect(log.results[0].modo).toBe("historico");
+  expect(log.results[0].mensagem).toContain("duplicad");
+});
+test("controller: 401 sem token", async () => {
+  const res = await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "POST", body: "{}" }));
+  expect(res.status).toBe(401);
+});
+
+test("semanal: PONTOS/VENDAS vazio ou ilegível recusa a semana", async () => {
+  const db = criarD1Sqlite();
+  const linhas = linhasFake("11/11/2026");
+  linhas[3] = [...linhas[3].slice(0, 4), "", ...linhas[3].slice(5)];
+  linhas[7] = [...linhas[7].slice(0, 4), "abc", ...linhas[7].slice(5)];
+  const r = await ingerirSemana(db, { linhas });
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.erros.length).toBe(2);
+  const n = await db.prepare("SELECT COUNT(*) c FROM chart_semana").all<{ c: number }>();
+  expect(n.results[0].c).toBe(0);
+});
+test("artistas resolvidos do catálogo/título, artista_info e pais_peso com upsert", async () => {
+  const db = criarD1Sqlite();
+  await db.prepare("CREATE TABLE musicas (titulo TEXT, artista TEXT, artista_2 TEXT, artista_3 TEXT, artista_4 TEXT, artista_5 TEXT, artista_6 TEXT, capa_url TEXT, genero TEXT, tipo_single TEXT)").run();
+  await db.prepare("INSERT INTO musicas VALUES ('Faixa 1', 'Artista 1', 'Convidada', NULL, NULL, NULL, NULL, 'c.jpg', 'Pop', 'SINGLE')").run();
+  const linhas = linhasFake("11/11/2026").map((l) => [...l.slice(0, 7), "", "", "", "", ""]);
+  linhas[1] = [linhas[1][0], linhas[1][1], linhas[1][2], "Amanda Brokne - Faixa X (feat. Zed)", ...linhas[1].slice(4)];
+  const r = await ingerirSemana(db, {
+    linhas,
+    artistas: [[" Amanda Brokne ", " austrália ", "f.jpg"], ["", "BRASIL", ""]],
+    pesos: [["PAÍS", "SPOTIFY (B)", "APPLE MUSIC (C)", "YOUTUBE (D)"], ["BRASIL", "7,20%", "5,00%", "10,10%"]],
+  });
+  expect(r.ok).toBe(true);
+  const rows = await db.prepare("SELECT pos, artistas, fonte_artistas FROM chart_semana WHERE chart='BILLBOARD HOT 100' AND pos<=3 ORDER BY pos").all<any>();
+  expect(rows.results.map((x: any) => [JSON.parse(x.artistas), x.fonte_artistas])).toEqual([
+    [["Artista 1", "Convidada"], "catalogo"],
+    [["Amanda Brokne"], "titulo"],
+    [[], "nenhuma"],
+  ]);
+  const info = await db.prepare("SELECT nome_upper, nome, nacionalidade, foto FROM artista_info").all<any>();
+  expect(info.results).toEqual([{ nome_upper: "AMANDA BROKNE", nome: "Amanda Brokne", nacionalidade: "AUSTRÁLIA", foto: "f.jpg" }]);
+  const pesos = await db.prepare("SELECT plataforma, peso FROM pais_peso WHERE pais='BRASIL' ORDER BY plataforma").all<any>();
+  expect(pesos.results.map((p: any) => [p.plataforma, p.peso])).toEqual([["APPLE MUSIC", 0.05], ["SPOTIFY", 0.072], ["YOUTUBE", 0.101]]);
+  const cfg = await db.prepare("SELECT chave, valor FROM chart_config ORDER BY chave").all<any>();
+  expect(cfg.results).toEqual([{ chave: "bonus_nacionalidade", valor: "0.20" }, { chave: "top_pais", valor: "50" }]);
+});
+test("reenvio de semana antiga recalcula a semana seguinte", async () => {
+  const db = criarD1Sqlite();
+  await ingerirSemana(db, { linhas: linhasFakeTrocandoPos1e2("11/11/2026") });
+  let top = await db.prepare("SELECT status, semanas FROM chart_semana WHERE chart='YOUTUBE' AND data='2026-11-11' AND pos=1").all<any>();
+  expect(top.results[0]).toEqual({ status: "NEW", semanas: 1 });
+  await ingerirSemana(db, { linhas: linhasFake("04/11/2026") });
+  top = await db.prepare("SELECT status, semanas, peak, pos_anterior FROM chart_semana WHERE chart='YOUTUBE' AND data='2026-11-11' AND pos=1").all<any>();
+  expect(top.results[0]).toEqual({ status: "↑", semanas: 2, peak: 1, pos_anterior: 2 });
+  const h = await historicoAntesDe(db, "YOUTUBE", "2026-11-12");
+  expect(h.get("artista 1 faixa 1")).toEqual({ tituloNorm: "artista 1 faixa 1", posAnterior: 2, peak: 1, semanas: 2, semanasN1: 1 });
+});
+test("controller: 405, 400 e 200 com token", async () => {
+  const g = globalThis as Record<string, unknown>;
+  const antes = { token: g.__CHARTS_INGEST_TOKEN__, db: g.__CATALOGO_DB__ };
+  g.__CHARTS_INGEST_TOKEN__ = "segredo";
+  g.__CATALOGO_DB__ = criarD1Sqlite();
+  try {
+    const auth = { Authorization: "Bearer segredo" };
+    expect((await chartsIngestController(new Request("http://x/api/charts/ingest", { headers: auth }))).status).toBe(405);
+    expect((await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "POST", headers: { Authorization: "Bearer errado" }, body: "{}" }))).status).toBe(401);
+    const ruim = await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "POST", headers: auth, body: JSON.stringify({ linhas: [] }) }));
+    expect(ruim.status).toBe(400);
+    expect((await ruim.json()).ok).toBe(false);
+    const bom = await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "POST", headers: auth, body: JSON.stringify({ linhas: linhasFake("11/11/2026") }) }));
+    expect(bom.status).toBe(200);
+    expect(await bom.json()).toEqual({ ok: true, data: "2026-11-11", linhas: 500 });
+  } finally {
+    g.__CHARTS_INGEST_TOKEN__ = antes.token;
+    g.__CATALOGO_DB__ = antes.db;
+  }
+});
