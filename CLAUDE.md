@@ -1,5 +1,15 @@
 # Empire Hub — instruções do projeto
 
+## Onde o app roda (regra permanente)
+
+**O aplicativo roda no Cloudflare (Workers), NÃO no Telegram.** O Telegram
+não é mais usado. Nomes e comentários no código com "telegram" (ex.:
+`src/lib/telegram.ts`, `useTelegramUser`, `haptic`, `telegramTopicId`,
+`message_thread_id`, menções a "Telegram WebView") são resquícios da época
+em que o app rodava lá — hoje são só identificadores/utilitários internos.
+Nunca assumir ambiente, limitações ou comportamento do Telegram (WebView,
+safe-area do Telegram, mini app etc.) ao projetar, explicar ou testar algo.
+
 ## Botões/pills/tabs com texto (regra permanente, não precisa repetir)
 
 Todo botão, pill ou tab que tem texto (label, nome, título) precisa:
