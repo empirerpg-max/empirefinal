@@ -1,6 +1,8 @@
 import { test, expect } from "bun:test";
 // Charts semanais no D1. Uso: bun test scripts/charts-d1.test.ts
 import { CHARTS, type LinhaDados } from "../backend/src/services/chartsD1/tipos";
+import { calcularMovimento } from "../backend/src/services/chartsD1/movimento";
+import { fatiasPorPais, rankingPais, type Pesos } from "../backend/src/services/chartsD1/paises";
 import { parseNumeroBR, dataBrParaIso, dataIsoParaBr, parseLinhaDados, validarSemana } from "../backend/src/services/chartsD1/dados";
 
 const semanaFake = (dataIso: string, n: number): LinhaDados[] =>
@@ -31,4 +33,34 @@ test("validarSemana: completa ok, faltando chart / posição repetida / duas dat
   expect(validarSemana([...semana, { ...semana[0] }]).ok).toBe(false);
   expect(validarSemana([...semana.slice(1), { ...semana[0], dataIso: "2026-11-04" }]).ok).toBe(false);
   expect(validarSemana([...semana, { ...semana[0], chart: "iTUNES" }]).ok).toBe(false);
+});
+
+test("movimento", () => {
+  expect(calcularMovimento(5, undefined)).toEqual({ status: "NEW", posAnterior: null, peak: 5, semanas: 1, semanasN1: 0 });
+  const h = { tituloNorm: "x", posAnterior: 3, peak: 2, semanas: 4, semanasN1: 0 };
+  expect(calcularMovimento(1, h)).toEqual({ status: "↑", posAnterior: 3, peak: 1, semanas: 5, semanasN1: 1 });
+  expect(calcularMovimento(7, h).status).toBe("↓");
+  expect(calcularMovimento(3, h).status).toBe("=");
+  expect(calcularMovimento(3, { ...h, posAnterior: null }).status).toBe("NEW"); // reentrada
+});
+test("fatias: soma fecha em 1 com resto, com Σ>1 e com dupla nacionalidade", () => {
+  const soma = (m: Map<string, number>, resto: number) => [...m.values()].reduce((a, b) => a + b, 0) + resto;
+  const p1: Pesos = new Map([["BRASIL", 0.072], ["ESTADOS UNIDOS", 0.1845]]); // Σ<1
+  const f1 = fatiasPorPais(p1, new Set(), 0.2);
+  expect(f1.get("BRASIL")).toBeCloseTo(0.072);
+  const f2 = fatiasPorPais(p1, new Set(["BRASIL", "ESTADOS UNIDOS"]), 0.2);
+  expect(f2.get("BRASIL")!).toBeGreaterThan(0.072);
+  expect(soma(f2, (1 - 0.2565) / (0.2565 + 0.4 + (1 - 0.2565)))).toBeCloseTo(1);
+  const p3: Pesos = new Map([["A", 0.7], ["B", 0.5]]); // Σ>1 (como YouTube 119,96%)
+  const f3 = fatiasPorPais(p3, new Set(), 0.2);
+  expect(f3.get("A")! + f3.get("B")!).toBeCloseTo(1);
+});
+test("rankingPais: artista local sobe no próprio país", () => {
+  const pesos: Pesos = new Map([["AUSTRÁLIA", 0.025], ["BRASIL", 0.072]]);
+  const ms = [
+    { tituloNorm: "a", titulo: "X - A", artistaPrincipal: "X", valor: 1000, nacionalidades: new Set<string>() },
+    { tituloNorm: "b", titulo: "Amanda Brokne - B", artistaPrincipal: "Amanda Brokne", valor: 800, nacionalidades: new Set(["AUSTRÁLIA"]) },
+  ];
+  expect(rankingPais(ms, pesos, "AUSTRÁLIA", 0.2, 50)[0].tituloNorm).toBe("b");
+  expect(rankingPais(ms, pesos, "BRASIL", 0.2, 50)[0].tituloNorm).toBe("a");
 });
