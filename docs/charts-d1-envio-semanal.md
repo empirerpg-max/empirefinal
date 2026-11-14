@@ -91,12 +91,14 @@ bun scripts/charts-d1-carga-inicial.ts \
   (imprime nº de datas, anomalias e o #1 do Hot 100 mais recente).
 - O script pergunta ao app quais datas já estão gravadas e **pula** essas; envia
   em ordem cronológica, semana inteira por vez.
-- **Limite de 30.000 linhas por execução** (`--limite`). O plano grátis do D1
-  aceita 100 mil escritas por dia, e cada linha do chart vira mais de uma
-  escrita (a linha, o índice e o resumo do Hall of Fame), além do que o resto
-  do app grava no mesmo banco. Ao chegar no limite ele para e avisa
-  **"retome amanhã"**. No dia seguinte rode o **mesmo comando**: ele continua de
-  onde parou. Com ~121 mil linhas, são uns 4 a 5 dias.
+- **Limite de 25.000 linhas por execução** (`--limite`). O plano grátis do D1
+  aceita 100 mil escritas por dia, e cada linha do chart vira cerca de 3
+  escritas (a linha, o índice e o resumo do Hall of Fame); o limite deixa folga
+  pro que o resto do app grava no mesmo banco. Ao chegar no limite ele para e
+  avisa **"retome amanhã"**. No dia seguinte rode o **mesmo comando**: ele
+  continua de onde parou. Com ~121 mil linhas, são uns 5 dias.
+- Cada envio (cada semana) lê uma vez o catálogo `musicas` inteiro do D1 (para
+  artistas, capa e gênero); isso conta nas leituras diárias do plano grátis.
 - **Durante a carga o app continua lendo a planilha** (o D1 está pela metade).
   Com `--ativar`, na execução em que não sobrar nenhuma semana pendente (nem
   com erro), o script libera a leitura do D1 e o app passa a ler os charts de

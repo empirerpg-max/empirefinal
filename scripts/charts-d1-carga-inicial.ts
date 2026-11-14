@@ -2,13 +2,13 @@
 // ordena cronologicamente e envia semana a semana ao /api/charts/ingest
 // (modo "historico"). Pula datas já gravadas e para no limite de linhas por
 // execução (D1 grátis: 100k escritas/dia, contando índice e tabelas
-// derivadas — 30k linhas da aba ficam folgadas); no dia seguinte é só rodar
+// derivadas — 25k linhas da aba deixam folga pro resto do app); no dia seguinte é só rodar
 // de novo. Com --ativar, quando não sobra nenhuma semana pendente, libera a
 // leitura do D1 na tela (antes disso o app segue lendo a planilha).
 //
 //   CHARTS_INGEST_TOKEN=... bun scripts/charts-d1-carga-inicial.ts \
 //     --dados DADOS.csv --pesos PESOS.csv --url https://SEU-APP/api/charts/ingest \
-//     [--infos INFOS_ACTS.csv] [--limite 30000] [--ativar]
+//     [--infos INFOS_ACTS.csv] [--limite 25000] [--ativar]
 //   bun scripts/charts-d1-carga-inicial.ts --dados DADOS.csv --pesos PESOS.csv --local [--ativar]   (teste em SQLite local)
 import { readFileSync } from "node:fs";
 import { dataBrParaIso } from "../backend/src/services/chartsD1/dados";
@@ -78,7 +78,7 @@ function arg(nome: string): string | undefined {
 }
 
 /** Linhas de chart_semana gravadas por execução (padrão). */
-const LIMITE_PADRAO = 30000;
+const LIMITE_PADRAO = 25000;
 
 /** Resumo da carga `--local`: datas, anomalias registradas e #1 do Hot 100 da última semana. */
 async function resumoLocal(db: D1DatabaseLike) {
