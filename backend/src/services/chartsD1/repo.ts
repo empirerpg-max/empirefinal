@@ -450,6 +450,12 @@ export async function datasDoChart(db: D1DatabaseLike, chart: ChartId): Promise<
   return rows.map((r) => dataIsoParaBr(r.data));
 }
 
+/** Datas ISO distintas já gravadas (qualquer chart), mais antiga primeiro. Usado pela carga inicial pra pular semanas prontas. */
+export async function datasCarregadas(db: D1DatabaseLike): Promise<string[]> {
+  const rows = await consultar<{ data: string }>(db, "SELECT DISTINCT data FROM chart_semana ORDER BY data");
+  return rows.map((r) => r.data);
+}
+
 /** Gêneros (catálogo) das músicas que já passaram pelo chart, ordenados. */
 export async function generosDoChart(db: D1DatabaseLike, chart: ChartId, cat: Map<string, MusicaCatalogo>): Promise<string[]> {
   const rows = await consultar<{ titulo: string }>(db, "SELECT DISTINCT titulo FROM chart_semana WHERE chart = ?", chart);

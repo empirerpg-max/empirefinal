@@ -229,14 +229,14 @@ test("reenvio de semana antiga recalcula a semana seguinte", async () => {
   const h = await historicoAntesDe(db, "YOUTUBE", "2026-11-12");
   expect(h.get("artista 1 - faixa 1")).toEqual({ tituloNorm: "artista 1 - faixa 1", posAnterior: 2, peak: 1, semanas: 2, semanasN1: 1 });
 });
-test("controller: 405, 400 e 200 com token", async () => {
+test("controller: 405 (PUT), 400 e 200 com token", async () => {
   const g = globalThis as Record<string, unknown>;
   const antes = { token: g.__CHARTS_INGEST_TOKEN__, db: g.__CATALOGO_DB__ };
   g.__CHARTS_INGEST_TOKEN__ = "segredo";
   g.__CATALOGO_DB__ = criarD1Sqlite();
   try {
     const auth = { Authorization: "Bearer segredo" };
-    expect((await chartsIngestController(new Request("http://x/api/charts/ingest", { headers: auth }))).status).toBe(405);
+    expect((await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "PUT", headers: auth }))).status).toBe(405);
     expect((await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "POST", headers: { Authorization: "Bearer errado" }, body: "{}" }))).status).toBe(401);
     const ruim = await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "POST", headers: auth, body: JSON.stringify({ linhas: [] }) }));
     expect(ruim.status).toBe(400);
@@ -481,4 +481,48 @@ test("/api/charts banners: com os 5 charts no D1 não lê Musicas pra capa", asy
     expect(Object.keys(b).sort()).toEqual(["apple", "hot100", "sales", "spotify", "youtube"]);
     expect(lidas.filter((l) => l.startsWith("principal"))).toEqual([]);
   });
+});
+
+// ---- Task 6: datas já carregadas e planejamento da carga inicial ----
+import { datasCarregadas } from "../backend/src/services/chartsD1/repo";
+import { planejarLotes, lerCsv } from "./charts-d1-carga-inicial";
+
+test("datasCarregadas: datas ISO distintas gravadas, vazio sem tabelas", async () => {
+  const db = criarD1Sqlite();
+  expect(await datasCarregadas(db)).toEqual([]);
+  await ingerirSemana(db, { linhas: linhasFake("04/11/2026") });
+  await ingerirSemana(db, { linhas: linhasFake("11/11/2026") });
+  expect(await datasCarregadas(db)).toEqual(["2026-11-04", "2026-11-11"]);
+});
+test("controller GET: lista datas gravadas com Bearer; sem token 401; PUT 405", async () => {
+  const g = globalThis as Record<string, unknown>;
+  const antes = { token: g.__CHARTS_INGEST_TOKEN__, db: g.__CATALOGO_DB__ };
+  g.__CHARTS_INGEST_TOKEN__ = "segredo";
+  const db = criarD1Sqlite();
+  g.__CATALOGO_DB__ = db;
+  try {
+    const auth = { Authorization: "Bearer segredo" };
+    await ingerirSemana(db, { linhas: linhasFake("11/11/2026") });
+    const r = await chartsIngestController(new Request("http://x/api/charts/ingest", { headers: auth }));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ ok: true, datas: ["2026-11-11"] });
+    expect((await chartsIngestController(new Request("http://x/api/charts/ingest"))).status).toBe(401);
+    expect((await chartsIngestController(new Request("http://x/api/charts/ingest", { method: "PUT", headers: auth }))).status).toBe(405);
+  } finally {
+    g.__CHARTS_INGEST_TOKEN__ = antes.token;
+    g.__CATALOGO_DB__ = antes.db;
+  }
+});
+test("lerCsv: aspas, vírgulas e quebras de linha dentro de campo", () => {
+  expect(lerCsv('a,"b,c",d\r\n"x ""y""","l1\nl2",\n')).toEqual([["a", "b,c", "d"], ['x "y"', "l1\nl2", ""]]);
+});
+test("planejarLotes: cronológico, pula carregadas, corta no limite sem partir semana", () => {
+  const l = (data: string, n: number) => Array.from({ length: n }, (_, i) => ["SPOTIFY", data, String(i + 1)]);
+  const linhas = [...l("11/11/2026", 3), ...l("25/05/2020", 3), ...l("04/11/2026", 3), ["", "", ""], ["SPOTIFY", "", "1"]];
+  expect(planejarLotes(linhas, new Set(), 100).map((x) => x.data)).toEqual(["2020-05-25", "2026-11-04", "2026-11-11"]);
+  expect(planejarLotes(linhas, new Set(["2026-11-04"]), 100).map((x) => x.data)).toEqual(["2020-05-25", "2026-11-11"]);
+  // limite 5: cabe só a 1ª semana (3); a 2ª estouraria (6) e não é partida
+  expect(planejarLotes(linhas, new Set(), 5).map((x) => x.data)).toEqual(["2020-05-25"]);
+  expect(planejarLotes(linhas, new Set(), 6).map((x) => x.data)).toEqual(["2020-05-25", "2026-11-04"]);
+  expect(planejarLotes(linhas, new Set(), 100)[0].linhas.length).toBe(3);
 });
