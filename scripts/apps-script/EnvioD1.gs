@@ -7,19 +7,23 @@
  * Propriedades do script (Configurações do projeto > Propriedades do script):
  *   CHARTS_INGEST_URL    obrigatória  ex.: https://SEU-APP/api/charts/ingest
  *   CHARTS_INGEST_TOKEN  obrigatória  o mesmo valor do secret CHARTS_INGEST_TOKEN do Worker
+ *   CHARTS_SPREADSHEET_ID opcional    ID da planilha EMPIRE - CHARTS (padrão: o embutido em PLANILHA_CHARTS_ID)
  *   STATUS_CELL          opcional     ex.: DADOS!N1 — célula onde gravar "OK - data - hora" ou o erro
  */
 
 var ENVIO_D1 = {
   ABA_DADOS: 'DADOS',
   ABA_INFOS: 'INFOS ACTS',
+  PLANILHA_CHARTS_ID: '1Px2y5F25rlK-rKHk4Hnfr9QGsiiElczYffn4PXGYobM', // EMPIRE - CHARTS (troca via propriedade CHARTS_SPREADSHEET_ID)
   PLANILHA_INFOS_ID: '1wNbtP78MrtrOc2Jb1ejXcHVjqndR2Vm4-3EIVqa8aOg',
   LINHAS_FINAIS: 600 // quantas linhas do fim da aba DADOS são lidas
 };
 
 /** Menu "Empire" na planilha. */
 function onOpen() {
-  SpreadsheetApp.getUi()
+  var ui;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) { return; }
+  ui
     .createMenu('Empire')
     .addItem('Enviar ao app', 'enviarSemanaAoAppPeloMenu')
     .addToUi();
@@ -28,8 +32,11 @@ function onOpen() {
 /** Chamada pelo menu: roda o envio e mostra o resultado na tela. */
 function enviarSemanaAoAppPeloMenu() {
   var r = enviarSemanaAoApp();
-  SpreadsheetApp.getActiveSpreadsheet().toast(r.mensagem, 'Empire → app', 10);
-  if (!r.ok) SpreadsheetApp.getUi().alert('Falha no envio ao app', r.mensagem, SpreadsheetApp.getUi().ButtonSet.OK);
+  try {
+    var ativa = SpreadsheetApp.getActiveSpreadsheet();
+    if (ativa) ativa.toast(r.mensagem, 'Empire → app', 10);
+    if (!r.ok) SpreadsheetApp.getUi().alert('Falha no envio ao app', r.mensagem, SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) { /* sem interface (ex.: gatilho): o resultado já está no Logger */ }
 }
 
 /** Envio semanal (gatilho de quinta-feira e menu). Nunca lança: devolve { ok, mensagem }. */
@@ -55,8 +62,8 @@ function enviarSemana_() {
 
   // getDisplayValues: devolve o texto como aparece na planilha ("1.175", "11/11/2026"),
   // que é o que o app espera (formato pt-BR).
-  var aba = SpreadsheetApp.getActive().getSheetByName(ENVIO_D1.ABA_DADOS);
-  if (!aba) throw new Error('Aba "' + ENVIO_D1.ABA_DADOS + '" não encontrada nesta planilha.');
+  var aba = abrirChartsOuErro_().getSheetByName(ENVIO_D1.ABA_DADOS);
+  if (!aba) throw new Error('Aba "' + ENVIO_D1.ABA_DADOS + '" não encontrada na planilha EMPIRE - CHARTS.');
   var ultima = aba.getLastRow();
   var inicio = Math.max(2, ultima - ENVIO_D1.LINHAS_FINAIS);
   if (ultima < inicio) throw new Error('A aba DADOS está vazia.');
@@ -75,7 +82,14 @@ function enviarSemana_() {
   if (!maisRecente) throw new Error('Nenhuma data válida (dd/mm/aaaa) encontrada nas últimas linhas da aba DADOS.');
   var linhas = todas.filter(function (l) { return String(l[1]).trim() === maisRecente && String(l[0]).trim() !== ''; });
 
-  var payload = { linhas: linhas, artistas: lerArtistas_(), modo: 'semanal' };
+  // INFOS ACTS é complemento: se falhar, o chart é enviado mesmo assim.
+  var artistas = [];
+  try {
+    artistas = lerArtistas_();
+  } catch (e) {
+    Logger.log('AVISO - não li INFOS ACTS, enviando só os charts: ' + (e && e.message ? e.message : e));
+  }
+  var payload = { linhas: linhas, artistas: artistas, modo: 'semanal' };
   var resp = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
@@ -94,6 +108,16 @@ function enviarSemana_() {
   var detalhe = json && json.erros ? json.erros.join('; ') : corpo.slice(0, 300);
   if (codigo === 401) detalhe = 'token recusado (confira CHARTS_INGEST_TOKEN). ' + detalhe;
   return { ok: false, mensagem: 'ERRO - ' + maisRecente + ' - HTTP ' + codigo + ' - ' + detalhe };
+}
+
+/** Abre a planilha EMPIRE - CHARTS pelo ID (não depende de planilha ativa/script vinculado). */
+function abrirChartsOuErro_() {
+  var id = PropertiesService.getScriptProperties().getProperty('CHARTS_SPREADSHEET_ID') || ENVIO_D1.PLANILHA_CHARTS_ID;
+  try {
+    return SpreadsheetApp.openById(id);
+  } catch (e) {
+    throw new Error('Não consegui abrir a planilha EMPIRE - CHARTS (ID ' + id + '): ' + (e && e.message ? e.message : e));
+  }
 }
 
 /** INFOS ACTS: col A nome, G foto, N nacionalidade → [nome, nacionalidade, foto]. */
@@ -117,8 +141,8 @@ function gravarStatus_(mensagem) {
     var ref = PropertiesService.getScriptProperties().getProperty('STATUS_CELL');
     if (!ref) return;
     var partes = ref.split('!');
-    var planilha = SpreadsheetApp.getActive();
-    var aba = partes.length > 1 ? planilha.getSheetByName(partes[0].replace(/^'|'$/g, '')) : planilha.getActiveSheet();
+    var planilha = abrirChartsOuErro_();
+    var aba = partes.length > 1 ? planilha.getSheetByName(partes[0].replace(/^'|'$/g, '')) : planilha.getSheets()[0];
     if (aba) aba.getRange(partes[partes.length - 1]).setValue(mensagem);
   } catch (e) {
     Logger.log('Não consegui gravar STATUS_CELL: ' + e);

@@ -87,9 +87,9 @@ async function resumoLocal(db: D1DatabaseLike) {
   console.log(`[local] ${n} datas gravadas, ${anomalias.length} semana(s) com anomalia (fora iTUNES ignorado), ${falhas[0].n} ingestão(ões) recusada(s).`);
   for (const a of anomalias) console.log(`[local] anomalia ${a.data}: ${a.mensagem}`);
   const top = await all<{ data: string; titulo: string }>(
-    "SELECT data, titulo FROM chart_semana WHERE chart = 'BILLBOARD HOT 100' AND pos = 1 AND data = '2026-11-11'",
+    "SELECT data, titulo FROM chart_semana WHERE chart = 'BILLBOARD HOT 100' AND pos = 1 AND data = (SELECT MAX(data) FROM chart_semana)",
   );
-  console.log(`[local] Hot 100 #1 de 11/11/2026: ${top[0]?.titulo ?? "(sem dados)"}`);
+  console.log(`[local] Hot 100 #1 de ${top[0] ? top[0].data.split("-").reverse().join("/") : "(última semana)"}: ${top[0]?.titulo ?? "(sem dados)"}`);
 }
 
 async function principal() {
@@ -135,8 +135,12 @@ async function principal() {
     }
     jaCarregadas = new Set(j.datas);
     enviar = async (p) => {
-      const resp = await fetch(url!, { method: "POST", headers: { ...cab, "Content-Type": "application/json" }, body: JSON.stringify(p) });
-      return (await resp.json().catch(() => ({ ok: false, erros: [`HTTP ${resp.status} sem JSON`] }))) as { ok: boolean; erros?: string[] };
+      try {
+        const resp = await fetch(url!, { method: "POST", headers: { ...cab, "Content-Type": "application/json" }, body: JSON.stringify(p) });
+        return (await resp.json().catch(() => ({ ok: false, erros: [`HTTP ${resp.status} sem JSON`] }))) as { ok: boolean; erros?: string[] };
+      } catch (e) {
+        return { ok: false, erros: [`falha de rede: ${e instanceof Error ? e.message : String(e)}`] };
+      }
     };
   }
 
@@ -144,6 +148,10 @@ async function principal() {
   const totalDatas = new Set(dados.filter((l) => DATA_BR.test((l[1] ?? "").trim())).map((l) => dataBrParaIso(l[1]))).size;
   console.log(`${totalDatas} datas no CSV, ${jaCarregadas.size} já gravadas, ${lotes.length} a enviar (limite ${limite} linhas).`);
 
+  if (!lotes.length) {
+    const primeira = planejarLotes(dados, jaCarregadas, Infinity)[0];
+    if (primeira) console.warn(`AVISO: a primeira semana pendente (${primeira.data}) tem ${primeira.linhas.length} linhas, mais que o --limite ${limite}. Aumente o limite.`);
+  }
   let enviadas = 0;
   let erros = 0;
   let primeiro = true; // pesos e artistas vão no primeiro POST que der certo

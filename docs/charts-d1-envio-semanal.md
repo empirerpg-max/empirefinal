@@ -7,8 +7,9 @@ a planilha.
 
 ## 1. Instalar o script (uma vez)
 
-1. Abra a planilha **EMPIRE - CHARTS** e vá em **Extensões > Apps Script**
-   (abre o projeto **atualizacaocharts**).
+1. Abra o projeto **atualizacaocharts** em [script.google.com](https://script.google.com)
+   (não precisa abrir pela planilha: o script abre a EMPIRE - CHARTS sozinho
+   pelo ID).
 2. Na barra da esquerda, clique em **+** ao lado de "Arquivos" > **Script**.
    Dê o nome `EnvioD1` e apague o conteúdo que vier.
 3. Abra o arquivo `scripts/apps-script/EnvioD1.gs` do repositório, copie tudo e
@@ -26,6 +27,7 @@ a planilha.
    |---|---|
    | `CHARTS_INGEST_URL` | `https://SEU-APP/api/charts/ingest` (o endereço do app + `/api/charts/ingest`) |
    | `CHARTS_INGEST_TOKEN` | a senha do envio, a mesma guardada como secret `CHARTS_INGEST_TOKEN` no Cloudflare |
+   | `CHARTS_SPREADSHEET_ID` (opcional) | ID da planilha EMPIRE - CHARTS, só se ela mudar (o ID atual já vem no script) |
    | `STATUS_CELL` (opcional) | uma célula livre, ex.: `DADOS!N1`, onde o script escreve o resultado |
 4. **Salvar propriedades do script.**
 
@@ -47,7 +49,7 @@ Rodar `criarGatilhoQuinta` de novo não duplica o gatilho.
 
 ## 4. Reenviar à mão
 
-Recarregue a planilha. Aparece o menu **Empire**. Clique em
+Abra a planilha EMPIRE - CHARTS (se o projeto estiver vinculado a ela, o menu **Empire** aparece ao recarregar; se não, rode `enviarSemanaAoApp` no editor). Clique em
 **Empire > Enviar ao app**. Uma mensagem no canto da tela mostra o resultado; se
 der erro, abre um aviso. Reenviar a mesma semana é seguro: o app regrava a semana
 sem duplicar.
