@@ -448,6 +448,14 @@ export default {
         })
         .catch((err) => console.error("[scheduled] Erro na reconciliação D1 de vídeos:", err)),
     );
+    // Mesma rede de segurança pro espelho D1 dos álbuns (espelhoAbasD1.ts).
+    ctx.waitUntil(
+      (async () => {
+        const { reconciliarAbasEspelho } = await import("../backend/src/services/espelhoAbasD1");
+        const r = await reconciliarAbasEspelho();
+        if (r.some((x) => !x.ok)) console.log("[scheduled] Reconciliação D1 de álbuns corrigiu divergência:", JSON.stringify(r));
+      })().catch((err) => console.error("[scheduled] Erro na reconciliação D1 de álbuns:", err)),
+    );
     // A reconciliação de backlog de comentários (reconciliarPontosComentariosScheduled)
     // foi REMOVIDA daqui — era uma correção pontual de um bug antigo, não
     // deveria ter ficado rodando pra sempre. Ela reinseria automaticamente

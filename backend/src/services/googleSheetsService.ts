@@ -578,6 +578,15 @@ async function espelharNoD1SeAplicavel(
   params: { tipo: "update" | "append" | "delete"; range?: string; linhas?: number[] },
 ): Promise<void> {
   if (spreadsheetId !== SPREADSHEETS.principal) return;
+  if (sheetName === "Albuns" || sheetName === "Extra_Albuns" || sheetName === "Comentarios_Albuns") {
+    try {
+      const { aposEscritaEmAbaEspelhada } = await import("./espelhoAbasD1");
+      await aposEscritaEmAbaEspelhada(sheetName);
+    } catch (err) {
+      console.warn(`[googleSheetsService] Espelho D1 de "${sheetName}" falhou (ignorado):`, err);
+    }
+    return;
+  }
   if (sheetName !== "Music Videos" && sheetName !== "Comentarios_MV") return;
   try {
     const { aposEscritaNaPlanilha } = await import("./videosD1Sync");
