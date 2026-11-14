@@ -1,6 +1,6 @@
 # Charts semanais no D1 — design
 
-Data: 2026-11-14 · Status: aguardando aprovação
+Data: 2026-11-14 · Status: aguardando aprovação (rev. 3)
 
 ## Intenção e porquê
 
@@ -22,7 +22,7 @@ calculado pelo app (Worker) e guardado no D1, de graça e sem reler planilha.
   semanas no #1, chart run; capa da música ou foto do artista principal.
 - Ranking por país **semanal** (Spotify, Apple Music, YouTube), Top 50 por
   país, pela regra de pesos + bônus de nacionalidade (abaixo).
-- Filtro de gênero do Hot 100 vindo da **INFOS ACTS**.
+- Filtro de gênero do Hot 100 vindo do catálogo de músicas (D1).
 - Entrada semanal **empurrada pelo Google** (Apps Script), sem o app ler
   planilha.
 - Carga inicial do histórico (desde 2020) a partir do export da aba DADOS.
@@ -159,26 +159,33 @@ Sem nacionalidade cadastrada → música recebe só os pesos base. Bônus `0` em
 O selo "Vem aí" foi substituído pela regra B ativa; regras futuras entram
 como novos campos em `chart_config`.
 
-### Artistas
+### Artistas, capa e gênero — do catálogo (tabela `musicas` do D1)
 
-Fonte: colunas H–L. Quando vierem vazias, o app extrai do próprio texto da col.
-D: artista principal = antes de " - "; convidados = depois de "feat."/"ft."/
-"x"/"&" (lista separada por vírgula/"&"). Os nomes extraídos só valem se
-existirem em `artista_info` (evita lixo). Isso alimenta nacionalidade, foto e
-gênero.
+Decisão do usuário: as colunas ARTISTA 1–5 da DADOS **pararam de ser
+preenchidas**; a fonte passa a ser **sempre o catálogo**. O catálogo já está no
+mesmo D1 (`musicas`, ver `backend/src/services/musicasDbService.ts`), com
+`artista`, `artista_2..6`, `capa_url`, `genero`, `tipo_single`.
 
-### Capa / foto
-
-Ordem: capa do catálogo de músicas (mesmo cruzamento atual
-`buildCapaPorTituloCatalogo`, por título normalizado) → foto do artista 1
-(`artista_info.foto`) → vazio. Resolvido **na leitura** (não gravado), para
-capas novas no catálogo aparecerem sem reprocessar. O mapa de capas já tem
-cache; manter.
-
-### Gênero (filtro do Hot 100)
-
-Gênero do **artista 1** em `artista_info`. `getFilters` do Hot 100 devolve a
-lista de gêneros presentes nas semanas.
+- **Cruzamento:** col. D da DADOS ("Artista - Título") ↔ catálogo por chave
+  normalizada (`normalizarTitulo` de "artista - titulo" e, como 2ª tentativa,
+  só do título + artista principal). Se houver single e faixa de álbum com o
+  mesmo título, vence o single (mesma regra de `buildCapaPorTituloCatalogo`).
+- **Artistas** da música = `artista..artista_6` do catálogo → alimentam a
+  nacionalidade (bônus por país) e a foto.
+- **Gênero** (filtro do Hot 100) = `musicas.genero` da própria música.
+- **Capa** = `musicas.capa_url` → senão foto do artista principal
+  (`artista_info.foto`) → senão vazio. Resolvida **na leitura**, para capas
+  novas aparecerem sem reprocessar.
+- **Música fora do catálogo:** reserva = extrair artistas do texto da col. D
+  (antes de " - " = principal; "feat./ft./&/x" = convidados), só aceitando
+  nomes que existam em `artista_info`. Sem gênero. Registrada no log de
+  ingestão para alguém cadastrar.
+- Os artistas usados no cálculo de países são **gravados** junto da linha da
+  semana (o ranking de países daquela semana não muda se o catálogo mudar
+  depois).
+- `artista_info` (nacionalidade col. N, foto col. G da INFOS ACTS) continua
+  chegando pelo envio semanal do Apps Script — não há tabela de artistas no D1
+  hoje.
 
 ### Leitura (`/api/charts`)
 
@@ -249,7 +256,7 @@ vêm da aba PAÍSES E PESOS (ou, se faltar, dos `pb` da fórmula salva em
 
 - Escopo: só os 5 charts + países + parte deles no HOF/banners; resto depois.
 - Status só `↑ ↓ = NEW` (RE-ENTRY conta como NEW), para não mexer no front.
-- Gênero e nacionalidade pelo artista 1 (gênero) / qualquer artista (nacionalidade, como na fórmula antiga).
+- Gênero pela própria música no catálogo; nacionalidade por qualquer artista da música (como na fórmula antiga).
 - Capa resolvida na leitura, não gravada.
 - `valTotal`: usa VENDAS GERAIS (col. F) quando vier preenchida; se vazia,
   o app soma os valores semanais acumulados da música naquele chart.
