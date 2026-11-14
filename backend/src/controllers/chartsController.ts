@@ -1,4 +1,5 @@
 import { googleSheetsService } from "../services/googleSheetsService";
+import { normalizarTitulo } from "../services/chartsD1/artistas";
 
 // Empire Charts — migrado do Apps Script (script.google.com/macros/.../exec)
 // que servia isso antes. Mesma lógica, linha por linha, só trocando
@@ -121,23 +122,6 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
             style: r[17],
           },
     );
-}
-
-// Normaliza título pra cruzamento robusto: remove acentos, qualquer trecho
-// entre parênteses (feat., remix, edit etc. — abas de origem e Musicas às
-// vezes discordam se incluem isso no título) e "feat./ft. ..." mesmo quando
-// vem SEM parênteses (achado no diagnóstico: "TED - Mind Maze (feat. Rayna)"
-// em "EM Alta" vs "TED - Mind Maze feat. Rayna" em Musicas — sem parênteses
-// dos dois lados, ou só de um, o corte tem que valer em ambos os casos).
-function normalizarTitulo(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/\([^)]*\)/g, "")
-    .replace(/\b(feat|ft)\.?\s+.*/i, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
 }
 
 // Musicas!H guarda "Artista - Título" (não só o título) — o cruzamento por

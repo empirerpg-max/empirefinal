@@ -64,3 +64,36 @@ test("rankingPais: artista local sobe no próprio país", () => {
   expect(rankingPais(ms, pesos, "AUSTRÁLIA", 0.2, 50)[0].tituloNorm).toBe("b");
   expect(rankingPais(ms, pesos, "BRASIL", 0.2, 50)[0].tituloNorm).toBe("a");
 });
+
+import { indexarCatalogo, buscarNoCatalogo, resolverArtistas, extrairArtistasDoTitulo } from "../backend/src/services/chartsD1/artistas";
+
+test("catálogo casa grafia diferente e single vence álbum", () => {
+  const cat = indexarCatalogo([
+    { titulo: "Mind Maze feat. Rayna", artista: "TED", artista_2: "Rayna", capa_url: "single.jpg", genero: "Pop", tipo_single: "SINGLE" },
+    { titulo: "Mind Maze (feat. Rayna)", artista: "TED", artista_2: "Rayna", capa_url: "album.jpg", genero: "Pop", tipo_single: "TRACKLIST ALBUM" },
+  ] as any);
+  const m = buscarNoCatalogo("TED - Mind Maze (feat. Rayna)", cat)!;
+  expect(m.capa).toBe("single.jpg");
+  expect(m.genero).toBe("Pop");
+});
+test("single vence álbum também quando o álbum vem primeiro", () => {
+  const cat = indexarCatalogo([
+    { titulo: "Boulangerie", artista: "Rose", capa_url: "album.jpg", genero: "", tipo_single: "TRACKLIST ALBUM" },
+    { titulo: "Boulangerie", artista: "Rose", capa_url: "single.jpg", genero: "", tipo_single: "" },
+  ] as any);
+  expect(buscarNoCatalogo("Boulangerie", cat)!.capa).toBe("single.jpg");
+  expect(buscarNoCatalogo("Rose - Boulangerie", cat)!.ehFaixaDeAlbum).toBe(false);
+});
+test("resolverArtistas: planilha > catálogo > título", () => {
+  const cat = indexarCatalogo([{ titulo: "Sober", artista: "Louise", capa_url: "", genero: "", tipo_single: "" }] as any);
+  const base = { chart: "SPOTIFY", dataIso: "2026-11-11", pos: 1, valor: 1, valorTotal: null };
+  expect(resolverArtistas({ ...base, titulo: "Louise - Sober", artistasPlanilha: ["Louise", "Kendall"] }, cat, new Set())).toEqual({ artistas: ["Louise", "Kendall"], fonte: "planilha" });
+  expect(resolverArtistas({ ...base, titulo: "Louise - Sober", artistasPlanilha: [] }, cat, new Set()).fonte).toBe("catalogo");
+  expect(resolverArtistas({ ...base, titulo: "Brandy - Black Empire (feat. Sabine, Kendall & Louise)", artistasPlanilha: [] }, cat, new Set(["BRANDY", "SABINE", "KENDALL", "LOUISE"])))
+    .toEqual({ artistas: ["Brandy", "Sabine", "Kendall", "Louise"], fonte: "titulo" });
+  expect(resolverArtistas({ ...base, titulo: "Zed - X", artistasPlanilha: [] }, cat, new Set()).fonte).toBe("nenhuma");
+});
+test("extrairArtistasDoTitulo", () => {
+  expect(extrairArtistasDoTitulo("A x B - Song ft. C")).toEqual(["A", "B", "C"]);
+  expect(extrairArtistasDoTitulo("A & B, C - Song")).toEqual(["A", "B", "C"]);
+});
