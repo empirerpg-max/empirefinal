@@ -268,3 +268,11 @@ vêm da aba PAÍSES E PESOS (ou, se faltar, dos `pb` da fórmula salva em
 - INFOS ACTS chega ao D1 junto com o envio semanal (o Worker não lê planilha
   nesse fluxo).
 - Bônus padrão 0,20 (o mesmo da fórmula antiga), Top 50 por país.
+
+## Revisão aprovada (2026-11-14) — limite gratuito do D1
+
+Aprovado pelo usuário no plano (`docs/superpowers/plans/2026-11-14-charts-d1.md`):
+ranking por país **calculado na leitura** (sem tabela `chart_pais_semana`;
+mudanças de peso/bônus/nacionalidade afetam semanas antigas), iTUNES **não**
+importado, carga inicial em lotes diários (~45 mil linhas/execução). Isso
+substitui os trechos acima que falam em gravar países e importar iTUNES.
