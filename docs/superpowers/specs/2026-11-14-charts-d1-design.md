@@ -1,6 +1,6 @@
 # Charts semanais no D1 — design
 
-Data: 2026-11-14 · Status: aguardando aprovação (rev. 3)
+Data: 2026-11-14 · Status: aguardando aprovação (rev. 4)
 
 ## Intenção e porquê
 
@@ -162,7 +162,8 @@ como novos campos em `chart_config`.
 ### Artistas, capa e gênero — do catálogo (tabela `musicas` do D1)
 
 Decisão do usuário: as colunas ARTISTA 1–5 da DADOS **pararam de ser
-preenchidas**; a fonte passa a ser **sempre o catálogo**. O catálogo já está no
+preenchidas**; quando vazias, o catálogo cobre os artistas. Capa e gênero vêm
+sempre do catálogo (a DADOS não tem essas colunas). O catálogo já está no
 mesmo D1 (`musicas`, ver `backend/src/services/musicasDbService.ts`), com
 `artista`, `artista_2..6`, `capa_url`, `genero`, `tipo_single`.
 
@@ -170,13 +171,17 @@ mesmo D1 (`musicas`, ver `backend/src/services/musicasDbService.ts`), com
   normalizada (`normalizarTitulo` de "artista - titulo" e, como 2ª tentativa,
   só do título + artista principal). Se houver single e faixa de álbum com o
   mesmo título, vence o single (mesma regra de `buildCapaPorTituloCatalogo`).
-- **Artistas** da música = `artista..artista_6` do catálogo → alimentam a
-  nacionalidade (bônus por país) e a foto.
+- **Artistas** da música, nesta ordem de prioridade:
+  1. colunas **H–L da DADOS**, quando preenchidas (todo o histórico até
+     28/10/2026 e qualquer linha futura que vier preenchida);
+  2. `artista..artista_6` do **catálogo**, quando H–L vierem vazias;
+  3. extração do texto da col. D (reserva, ver abaixo).
+  Os artistas alimentam a nacionalidade (bônus por país) e a foto.
 - **Gênero** (filtro do Hot 100) = `musicas.genero` da própria música.
 - **Capa** = `musicas.capa_url` → senão foto do artista principal
   (`artista_info.foto`) → senão vazio. Resolvida **na leitura**, para capas
   novas aparecerem sem reprocessar.
-- **Música fora do catálogo:** reserva = extrair artistas do texto da col. D
+- **Sem H–L e fora do catálogo:** reserva = extrair artistas do texto da col. D
   (antes de " - " = principal; "feat./ft./&/x" = convidados), só aceitando
   nomes que existam em `artista_info`. Sem gênero. Registrada no log de
   ingestão para alguém cadastrar.
