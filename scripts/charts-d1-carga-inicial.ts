@@ -1,12 +1,15 @@
 // Carga inicial dos charts no D1: lê o CSV da aba DADOS, agrupa por data,
 // ordena cronologicamente e envia semana a semana ao /api/charts/ingest
-// (modo "historico"). Pula datas já gravadas e para no limite diário de
-// linhas (D1 grátis: ~45k/dia); no dia seguinte é só rodar de novo.
+// (modo "historico"). Pula datas já gravadas e para no limite de linhas por
+// execução (D1 grátis: 100k escritas/dia, contando índice e tabelas
+// derivadas — 30k linhas da aba ficam folgadas); no dia seguinte é só rodar
+// de novo. Com --ativar, quando não sobra nenhuma semana pendente, libera a
+// leitura do D1 na tela (antes disso o app segue lendo a planilha).
 //
 //   CHARTS_INGEST_TOKEN=... bun scripts/charts-d1-carga-inicial.ts \
 //     --dados DADOS.csv --pesos PESOS.csv --url https://SEU-APP/api/charts/ingest \
-//     [--infos INFOS_ACTS.csv] [--limite 45000]
-//   bun scripts/charts-d1-carga-inicial.ts --dados DADOS.csv --pesos PESOS.csv --local   (teste em SQLite local)
+//     [--infos INFOS_ACTS.csv] [--limite 30000] [--ativar]
+//   bun scripts/charts-d1-carga-inicial.ts --dados DADOS.csv --pesos PESOS.csv --local [--ativar]   (teste em SQLite local)
 import { readFileSync } from "node:fs";
 import { dataBrParaIso } from "../backend/src/services/chartsD1/dados";
 import type { D1DatabaseLike } from "../backend/src/services/catalogoDbService";
@@ -74,11 +77,14 @@ function arg(nome: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
+/** Linhas de chart_semana gravadas por execução (padrão). */
+const LIMITE_PADRAO = 30000;
+
 /** Resumo da carga `--local`: datas, anomalias registradas e #1 do Hot 100 da última semana. */
 async function resumoLocal(db: D1DatabaseLike) {
   const all = async <T>(sql: string) => (await db.prepare(sql).all<T>()).results;
   const [{ n }] = await all<{ n: number }>("SELECT COUNT(DISTINCT data) AS n FROM chart_semana");
-  const msgs = await all<{ data: string; mensagem: string }>("SELECT data, mensagem FROM chart_ingestao WHERE ok = 1 AND mensagem <> 'ok' ORDER BY data");
+  const msgs = await all<{ data: string; mensagem: string }>("SELECT data, mensagem FROM chart_ingestao WHERE ok = 1 AND mensagem <> 'ok' AND modo <> 'ativacao' ORDER BY data");
   // iTUNES ignorado é esperado (o app não usa); o resto é anomalia de verdade.
   const anomalias = msgs
     .map((m) => ({ data: m.data, mensagem: m.mensagem.split("; ").filter((p) => !/de iTUNES ignorada/.test(p)).join("; ") }))
@@ -90,6 +96,24 @@ async function resumoLocal(db: D1DatabaseLike) {
     "SELECT data, titulo FROM chart_semana WHERE chart = 'BILLBOARD HOT 100' AND pos = 1 AND data = (SELECT MAX(data) FROM chart_semana)",
   );
   console.log(`[local] Hot 100 #1 de ${top[0] ? top[0].data.split("-").reverse().join("/") : "(última semana)"}: ${top[0]?.titulo ?? "(sem dados)"}`);
+  const ativo = await all<{ valor: string }>("SELECT valor FROM chart_config WHERE chave = 'charts_d1_ativo'");
+  console.log(`[local] leitura do D1 ativada: ${ativo[0]?.valor === "1" ? "sim" : "não"}`);
+}
+
+/**
+ * Medidor da carga `--local`: soma as linhas devolvidas pelos SELECTs (nas
+ * consultas da ingestão, que não agregam, é o mesmo que as linhas lidas) e
+ * guarda o plano de cada consulta distinta pra apontar varredura de tabela.
+ */
+function criarMedidor() {
+  const m = { linhasLidas: 0, consultas: 0, sqls: new Map<string, unknown[]>() };
+  const aoExecutar = (sql: string, params: unknown[], linhas: number) => {
+    if (!/^\s*SELECT/i.test(sql)) return;
+    m.consultas++;
+    m.linhasLidas += linhas;
+    if (!m.sqls.has(sql)) m.sqls.set(sql, params);
+  };
+  return { m, aoExecutar };
 }
 
 async function principal() {
@@ -97,9 +121,10 @@ async function principal() {
   const pesosPath = arg("pesos");
   const local = process.argv.includes("--local");
   const url = arg("url");
-  const limite = Number(arg("limite") ?? (local ? Infinity : 45000)); // --local: sem limite diário
+  const ativar = process.argv.includes("--ativar");
+  const limite = Number(arg("limite") ?? (local ? Infinity : LIMITE_PADRAO)); // --local: sem limite diário
   if (!dadosPath || !pesosPath || (!local && !url)) {
-    console.error("Uso: bun scripts/charts-d1-carga-inicial.ts --dados <DADOS.csv> --pesos <PESOS.csv> (--url <.../api/charts/ingest> | --local) [--infos <INFOS.csv>] [--limite 45000]");
+    console.error(`Uso: bun scripts/charts-d1-carga-inicial.ts --dados <DADOS.csv> --pesos <PESOS.csv> (--url <.../api/charts/ingest> | --local) [--infos <INFOS.csv>] [--limite ${LIMITE_PADRAO}] [--ativar]`);
     process.exit(1);
   }
   const token = process.env.CHARTS_INGEST_TOKEN ?? "";
@@ -119,9 +144,10 @@ async function principal() {
   let enviar: (p: PayloadIngestao) => Promise<{ ok: boolean; erros?: string[] }>;
   let jaCarregadas: Set<string>;
   let localDb: D1DatabaseLike | undefined;
+  const medidor = criarMedidor();
   if (local) {
     const { criarD1Sqlite } = await import("./charts-d1-sqlite");
-    const db = criarD1Sqlite();
+    const db = criarD1Sqlite(":memory:", medidor.aoExecutar);
     localDb = db;
     jaCarregadas = new Set(await datasCarregadas(db).catch(() => []));
     enviar = (p) => ingerirSemana(db, p);
@@ -154,19 +180,37 @@ async function principal() {
   }
   let enviadas = 0;
   let erros = 0;
+  const gravadas = new Set<string>();
   let primeiro = true; // pesos e artistas vão no primeiro POST que der certo
   for (const lote of lotes) {
     const payload: PayloadIngestao = { linhas: lote.linhas, modo: "historico" };
     if (primeiro) { payload.pesos = pesos; if (artistas) payload.artistas = artistas; }
     const r = await enviar(payload);
-    if (r.ok) { primeiro = false; enviadas += lote.linhas.length; console.log(`ok ${lote.data} (${lote.linhas.length} linhas)`); }
+    if (r.ok) { primeiro = false; gravadas.add(lote.data); enviadas += lote.linhas.length; console.log(`ok ${lote.data} (${lote.linhas.length} linhas)`); }
     else { erros++; console.error(`ERRO ${lote.data}: ${(r.erros ?? []).join("; ")}`); }
   }
 
-  const restantes = planejarLotes(dados, new Set([...jaCarregadas, ...lotes.map((l) => l.data)]), Infinity).length;
-  console.log(`Concluído: ${lotes.length - erros} semana(s) gravada(s), ${enviadas} linhas, ${erros} erro(s).`);
-  if (restantes > 0) console.log(`Faltam ${restantes} semana(s): atingiu o limite diário, retome amanhã rodando o mesmo comando.`);
-  if (localDb) await resumoLocal(localDb);
+  // Semanas que falharam continuam pendentes (são tentadas de novo na próxima execução).
+  const restantes = planejarLotes(dados, new Set([...jaCarregadas, ...gravadas]), Infinity).length;
+  console.log(`Concluído: ${gravadas.size} semana(s) gravada(s), ${enviadas} linhas, ${erros} erro(s).`);
+  if (restantes > 0) console.log(`Faltam ${restantes} semana(s): retome amanhã rodando o mesmo comando (as que deram erro entram de novo).`);
+  if (ativar) {
+    if (restantes > 0) console.log("--ativar: ainda há semanas pendentes; a leitura do D1 continua desligada (o app lê a planilha).");
+    else {
+      const r = await enviar({ ativar: true });
+      if (r.ok) console.log("Leitura do D1 ativada: o app passa a ler os charts do D1.");
+      else { erros++; console.error(`ERRO ao ativar a leitura do D1: ${(r.erros ?? []).join("; ")}`); }
+    }
+  }
+  if (localDb) {
+    const m = medidor.m;
+    console.log(`[local] ${m.consultas} consultas SELECT, ${m.linhasLidas} linhas lidas na carga (${m.sqls.size} consultas distintas).`);
+    for (const [sql, params] of m.sqls) {
+      const plano = (await localDb.prepare(`EXPLAIN QUERY PLAN ${sql}`).bind(...params).all<{ detail: string }>()).results.map((p) => p.detail);
+      if (plano.some((d) => /^SCAN chart_/.test(d))) console.warn(`[local] VARREDURA: ${sql.replace(/\s+/g, " ").slice(0, 120)} => ${plano.join(" | ")}`);
+    }
+    await resumoLocal(localDb);
+  }
   if (erros) process.exitCode = 1;
 }
 

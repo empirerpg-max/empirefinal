@@ -82,6 +82,7 @@ bun scripts/charts-d1-carga-inicial.ts \
   --dados "EMPIRE - CHARTS - DADOS.csv" \
   --pesos "Empire Base de Dados - PAÍSES E PESOS.csv" \
   --url https://SEU-APP/api/charts/ingest \
+  --ativar \
   [--infos "INFOS ACTS.csv"]   # opcional: nacionalidade e foto dos artistas
 ```
 
@@ -90,9 +91,16 @@ bun scripts/charts-d1-carga-inicial.ts \
   (imprime nº de datas, anomalias e o #1 do Hot 100 mais recente).
 - O script pergunta ao app quais datas já estão gravadas e **pula** essas; envia
   em ordem cronológica, semana inteira por vez.
-- **Limite de 45.000 linhas por execução** (`--limite`, o plano grátis do D1
-  aceita cerca de 45 mil escritas por dia). Ao chegar lá ele para e avisa
+- **Limite de 30.000 linhas por execução** (`--limite`). O plano grátis do D1
+  aceita 100 mil escritas por dia, e cada linha do chart vira mais de uma
+  escrita (a linha, o índice e o resumo do Hall of Fame), além do que o resto
+  do app grava no mesmo banco. Ao chegar no limite ele para e avisa
   **"retome amanhã"**. No dia seguinte rode o **mesmo comando**: ele continua de
-  onde parou. Com ~121 mil linhas, são uns 3 dias.
+  onde parou. Com ~121 mil linhas, são uns 4 a 5 dias.
+- **Durante a carga o app continua lendo a planilha** (o D1 está pela metade).
+  Com `--ativar`, na execução em que não sobrar nenhuma semana pendente (nem
+  com erro), o script libera a leitura do D1 e o app passa a ler os charts de
+  lá. Sem `--ativar`, nada muda na tela; dá pra ativar depois rodando o mesmo
+  comando com `--ativar` (ele não reenvia nada que já foi gravado).
 - Erro numa semana não interrompe as outras; as que falharam aparecem no fim e
   são tentadas de novo na próxima execução.
