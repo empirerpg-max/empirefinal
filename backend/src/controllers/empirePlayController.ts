@@ -19,6 +19,11 @@ import {
   linhasDaAbaDeVideo,
   videoD1PorId,
 } from "../services/videosD1Leitura";
+import {
+  leituraAlbunsD1Ativa,
+  linhasComentariosAlbumDoTopico,
+  linhasDaAbaDeAlbum,
+} from "../services/albunsD1Leitura";
 
 // Leitura do Catálogo/Fórum de MÚSICA agora vem do D1 (tabela `musicas`),
 // não mais do Sheets (pivot autorizado pelo usuário, 2026-10-15) — vídeo e
@@ -536,6 +541,25 @@ async function comentariosDeVideoParaTopico(
  * está ligada (ver videosD1Leitura.ts), senão da planilha. Passa pelo MESMO
  * linhasParaObjetos da planilha, então o resultado é idêntico.
  */
+async function lerAlbunsComoObjetos(): Promise<SheetRecord[]> {
+  // "Albuns" do D1 com a chave "albuns:leitura-d1" ligada (ver
+  // albunsD1Leitura.ts), senão da planilha — mesmo linhasParaObjetos.
+  return linhasParaObjetos("Albuns", await linhasDaAbaDeAlbum("Albuns"));
+}
+
+/** Comentários de álbum pra UM tópico: só os candidatos, do D1, com a chave ligada; senão a aba inteira. */
+async function comentariosDeAlbumParaTopico(
+  idsNormalizados: string[],
+  estado: { porTopico: boolean },
+): Promise<{ rec: SheetRecord; rowIndex: number }[]> {
+  const linhas = await linhasComentariosAlbumDoTopico(idsNormalizados);
+  if (linhas) {
+    estado.porTopico = true;
+    return objetosComRowIndex("Comentarios_Albuns", linhas);
+  }
+  return readSheetObjectsWithRowIndex("Comentarios_Albuns");
+}
+
 async function lerMusicVideosComoObjetos(): Promise<SheetRecord[]> {
   return linhasParaObjetos("Music Videos", await linhasDaAbaDeVideo("Music Videos"));
 }
@@ -1523,7 +1547,7 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
       // R = coluna 18 (índice 17) — "Código único".
       googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS ÁLBUMS", "A2:R5000"),
       readMusicasFromD1(),
-      sheetsService.readSheetObjects("Albuns"),
+      lerAlbunsComoObjetos(),
     ]);
     // BUG REAL encontrado (reportado: "Follia" single aparecendo em
     // Lançamentos Recentes sem existir no Fórum > Músicas): este endpoint
@@ -1702,10 +1726,11 @@ export async function getEmpirePlayLancamentosRecentesController(): Promise<Resp
  */
 export async function getEmpirePlayAlbunsController(): Promise<Response> {
   try {
+    const albunsRawRowsPromise = linhasDaAbaDeAlbum("Albuns");
     const [albumRecords, songRecords, albunsRawRows] = await Promise.all([
-      sheetsService.readSheetObjects("Albuns"),
+      albunsRawRowsPromise.then((rows) => linhasParaObjetos("Albuns", rows)),
       sheetsService.readSheetObjects("Musicas"),
-      googleSheetsService.principal.readValues("Albuns"),
+      albunsRawRowsPromise,
     ]);
 
     const songs = songRecords.map((rec, idx) => buildCleanItem("Musicas", rec, idx));
@@ -2147,7 +2172,11 @@ export async function getEmpirePlayForumTopicController(
   // pra esse topicId (0 linhas não prova "sem comentário" — pode ser um
   // tópico ainda não sincronizado/migrado; cai pro caminho de Sheets normal
   // nesse caso, nunca esconde comentário real).
-  if (sheetIdLabel === "Album" && topicIdParam) {
+  // Com a leitura de álbuns pelo D1 ligada ("albuns:leitura-d1"), este
+  // atalho (tabela antiga, só recebia comentário NOVO — edição, reação e
+  // exclusão nunca chegavam) fica de fora: o caminho normal abaixo já lê
+  // álbum e comentários do espelho completo no D1.
+  if (sheetIdLabel === "Album" && topicIdParam && !(await leituraAlbunsD1Ativa())) {
     try {
       const db = getCatalogoDb();
       if (db) {
@@ -2247,13 +2276,19 @@ export async function getEmpirePlayForumTopicController(
         ? readMusicasFromD1().then((d1) => d1 ?? sheetsService.readSheetObjects(sheetMedia).catch(() => []))
         : sheetMedia === "Music Videos"
           ? lerMusicVideosComoObjetos().catch(() => [])
-          : sheetsService.readSheetObjects(sheetMedia).catch(() => []);
+          : sheetMedia === "Albuns"
+            ? lerAlbunsComoObjetos().catch(() => [])
+            : sheetsService.readSheetObjects(sheetMedia).catch(() => []);
 
     // Comentarios_MV pode vir só com os candidatos do tópico (ver
     // comentariosDeVideoParaTopico) — se vier, e o ID real do vídeo
     // (achado abaixo) for diferente do pedido na URL, busca de novo pelos
     // dois antes de filtrar (o filtro aceita qualquer um dos dois).
     const estadoComentariosPorTopico = { porTopico: false };
+    // Álbum com a leitura pelo D1 ligada: as 3 abas LEGADAS ficam de fora
+    // (era o que deixava o tópico lento) — antes de ligar,
+    // /admin/comparar-albuns-d1 prova que elas não têm comentário de álbum.
+    const pularLegado = sheetComments === "Comentarios_Albuns" && (await leituraAlbunsD1Ativa());
     const [
       mediaRecords,
       commentRecordsWithRowInicial,
@@ -2265,20 +2300,22 @@ export async function getEmpirePlayForumTopicController(
       mediaRecordsPromise,
       sheetComments === "Comentarios_MV"
         ? comentariosDeVideoParaTopico([normalizeComparison(topicIdParam)], estadoComentariosPorTopico)
-        : readSheetObjectsWithRowIndex(sheetComments),
+        : sheetComments === "Comentarios_Albuns"
+          ? comentariosDeAlbumParaTopico([normalizeComparison(topicIdParam)], estadoComentariosPorTopico)
+          : readSheetObjectsWithRowIndex(sheetComments),
       // Abas de fallback LEGADAS (não é onde comentário novo de verdade
       // entra — isso é sempre em sheetComments, lido ao vivo acima, sem
       // cache) — cache curto só reduz o custo de CPU/tempo por request sem
       // atrasar comentário real nenhum.
-      cachedRead("forum:comentarios-legado", 60_000, () =>
+      (pularLegado ? Promise.resolve([] as SheetRecord[]) : cachedRead("forum:comentarios-legado", 60_000, () =>
         sheetsService.readSheetObjects("Comentarios"),
-      ).catch(() => []),
-      cachedRead("forum:comentarios-empireplay-legado", 60_000, () =>
+      ).catch(() => [])),
+      (pularLegado ? Promise.resolve([] as SheetRecord[]) : cachedRead("forum:comentarios-empireplay-legado", 60_000, () =>
         sheetsService.readSheetObjects("Comentarios_EmpirePlay"),
-      ).catch(() => []),
-      cachedRead("forum:topicos-empireplay-legado", 60_000, () =>
+      ).catch(() => [])),
+      (pularLegado ? Promise.resolve([] as SheetRecord[]) : cachedRead("forum:topicos-empireplay-legado", 60_000, () =>
         sheetsService.readSheetObjects("Topicos_EmpirePlay"),
-      ).catch(() => []),
+      ).catch(() => [])),
       // Foto de perfil de quem comentou (config padrão de imagem da conta,
       // não a foto do artista) — cacheada porque é a aba inteira de
       // usuários, lida de novo a cada tópico de fórum aberto senão. TTL
@@ -2522,9 +2559,10 @@ export async function getEmpirePlayForumTopicController(
     const normMediaTitle = mediaItem ? normalizeComparison(mediaItem.title) : normTopicSearch;
 
     if (estadoComentariosPorTopico.porTopico && normMediaTopicId && normMediaTopicId !== normTopicSearch) {
-      commentRecordsWithRow = await comentariosDeVideoParaTopico([normTopicSearch, normMediaTopicId], {
-        porTopico: false,
-      });
+      commentRecordsWithRow =
+        sheetComments === "Comentarios_Albuns"
+          ? await comentariosDeAlbumParaTopico([normTopicSearch, normMediaTopicId], { porTopico: false })
+          : await comentariosDeVideoParaTopico([normTopicSearch, normMediaTopicId], { porTopico: false });
       allCommentRecords = montarTodosComentarios();
     }
 

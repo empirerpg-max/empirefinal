@@ -35,7 +35,7 @@ export const FLAG_COMENTARIOS_POR_TOPICO_D1 = "videos:comentarios-por-topico-d1"
 
 const cacheFlags = new Map<string, { ativa: boolean; ate: number }>();
 
-async function flagAtiva(chave: string): Promise<boolean> {
+export async function flagAtiva(chave: string): Promise<boolean> {
   const c = cacheFlags.get(chave);
   if (c && c.ate > Date.now()) return c.ativa;
   const kv = flagsKv();
@@ -44,7 +44,7 @@ async function flagAtiva(chave: string): Promise<boolean> {
   return ativa;
 }
 
-async function definirFlag(chave: string, ativa: boolean): Promise<boolean> {
+export async function definirFlag(chave: string, ativa: boolean): Promise<boolean> {
   const kv = flagsKv();
   if (!kv) return false;
   await kv.put(chave, ativa ? "on" : "off");
