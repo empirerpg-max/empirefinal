@@ -74,44 +74,34 @@ Se o envio falhar na quinta, nada é gravado pela metade: corrija e reenvie.
 
 As semanas antigas (CSV da aba DADOS, guardado no repositório em
 `scripts/fixtures/charts-d1-dados.csv.gz`) vão para o D1 **sozinhas**, pelo
-workflow **charts-d1-carga** do GitHub Actions. Não precisa de senha nem de
-computador ligado: ele usa o secret `CLOUDFLARE_API_TOKEN` que o deploy já usa.
+workflow **charts-d1-carga** do GitHub Actions. Ele envia as semanas para o
+próprio app (`POST /api/charts/ingest`, a mesma entrada do envio semanal) usando
+o secret `CHARTS_INGEST_TOKEN` do GitHub — o app calcula e grava no D1.
 
-- **Roda todo dia** às 03:17 (UTC) e grava **uma parte por dia**: as próximas
-  semanas que faltam no D1, da mais antiga para a mais nova, semana inteira por
-  vez, até **25.000 linhas**. O plano grátis do D1 aceita 100 mil escritas por
-  dia e cada linha vira cerca de 2 escritas (a linha e o índice); o limite deixa
-  folga pro que o resto do app grava no mesmo banco.
-- Com ~102 mil linhas são **5 dias de semanas + 1 dia de ativação**: quando não
-  falta nenhuma semana, a execução seguinte grava o Hall of Fame
-  (`chart_artista_musica`) e **liga a leitura do D1** (`charts_d1_ativo = '1'`).
-  Até lá o app continua lendo a planilha.
-- Depois de ativado, cada execução só imprime **"nada a fazer"** (nunca
-  sobrescreve o que o envio semanal gravou). Pode desligar o agendamento em
-  **Actions > charts-d1-carga > ... > Disable workflow**.
-- Cada parte é segura de repetir: apaga e regrava as mesmas semanas. Se uma
-  execução falhar no meio, a próxima regrava as semanas que ficaram sem
-  `chart_datas`.
-- Como funciona: o script `scripts/charts-d1-gerar-parte.ts` calcula o histórico
-  inteiro num SQLite em memória (mesma conta do app: posição anterior, peak,
-  semanas, artistas pelo catálogo `musicas` exportado do D1) e gera um arquivo
-  SQL só com as semanas que faltam, aplicado com `wrangler d1 execute --remote`.
+- **Roda todo dia** às 03:17 (UTC) e envia as próximas semanas que faltam, da
+  mais antiga para a mais nova, semana inteira por vez, até **25.000 linhas**
+  (~3 escritas por linha ≈ 78 mil das 100 mil escritas/dia do plano grátis).
+- São ~102 mil linhas: **5 dias**. Na execução em que não sobra semana
+  pendente, ele **liga a leitura do D1** (`charts_d1_ativo = '1'`). Até lá o app
+  continua lendo a planilha.
+- Depois de ativado, cada execução não envia nada. Pode desligar o agendamento
+  em **Actions > charts-d1-carga > ... > Disable workflow**.
+- Semana que der erro continua pendente e é reenviada no dia seguinte; reenviar
+  uma semana substitui, não duplica.
 
 ### Rodar na hora (sem esperar o horário)
 
 GitHub do repositório > **Actions** > **charts-d1-carga** (lista da esquerda) >
 **Run workflow** > **Run workflow**. Não rode duas vezes no mesmo dia: cada
-parte gasta ~50 mil das 100 mil escritas diárias (duas execuções ao mesmo tempo
+parte gasta ~78 mil das 100 mil escritas diárias (duas execuções ao mesmo tempo
 nunca acontecem; a segunda espera a primeira).
 
 ### Acompanhar o progresso
 
 - Abra a execução em **Actions > charts-d1-carga**: o **Summary** mostra o
-  resumo do dia (semanas gravadas, de qual a qual data, linhas, quantas
-  semanas faltam, tamanho do arquivo). O mesmo texto fica no artefato
-  `charts-d1-carga-resumo`.
-- "Faltam N semana(s)" = ainda em andamento; "Parte de ATIVAÇÃO" = último dia;
-  "nada a fazer: leitura do D1 já ativada" = terminou.
+  resumo do dia (semanas enviadas, linhas, erros, quantas semanas faltam). O
+  mesmo texto fica no artefato `charts-d1-carga-resumo`.
+- "Faltam N semana(s)" = ainda em andamento; "leitura do D1 ativada" = terminou.
 - Direto no banco (painel da Cloudflare > D1 > `empire-hub-catalogo` > Console):
   `SELECT COUNT(DISTINCT data) FROM chart_datas` (semanas gravadas, ~256 no fim)
   e `SELECT valor FROM chart_config WHERE chave = 'charts_d1_ativo'` (`1` =
@@ -124,15 +114,4 @@ bun scripts/charts-d1-carga-inicial.ts --dados DADOS.csv --pesos PESOS.csv --loc
 ```
 
 Calcula tudo num banco em memória, sem tocar na produção (imprime nº de datas,
-anomalias e o #1 do Hot 100 mais recente). Para ver a parte que seria gerada
-hoje com o D1 vazio:
-
-```bash
-echo '[]' > carregadas.json
-bun scripts/charts-d1-gerar-parte.ts --dados scripts/fixtures/charts-d1-dados.csv.gz \
-  --pesos scripts/fixtures/charts-d1-pesos.csv --carregadas carregadas.json --saida parte.sql
-```
-
-O envio pelo endereço do app (`charts-d1-carga-inicial.ts --url ...`) continua
-existindo, mas só funciona de onde o app for alcançável; a carga automática
-acima é o caminho padrão.
+anomalias e o #1 do Hot 100 mais recente).

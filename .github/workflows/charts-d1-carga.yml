@@ -1,12 +1,12 @@
 name: charts-d1-carga
 
-# Carga inicial do histórico dos charts no D1 (empire-hub-catalogo), uma parte
-# por dia: o gerador calcula o histórico inteiro a partir do CSV da aba DADOS
-# (scripts/fixtures/charts-d1-dados.csv.gz), compara com as datas já gravadas no
-# D1 remoto e grava as próximas semanas (até 25.000 linhas, dentro das 100 mil
-# escritas/dia do plano grátis). Sem semanas pendentes, grava o Hall of Fame e
-# liga a leitura do D1 (charts_d1_ativo = '1'). Depois disso cada execução
-# termina em "nada a fazer". Guia: docs/charts-d1-envio-semanal.md.
+# Carga inicial do histórico dos charts no D1, uma parte por dia: envia as
+# semanas ainda não gravadas do CSV da aba DADOS
+# (scripts/fixtures/charts-d1-dados.csv.gz) para POST /api/charts/ingest, em
+# ordem cronológica, até 25.000 linhas (dentro das 100 mil escritas/dia do plano
+# grátis). Quando não sobra semana pendente, liga a leitura do D1
+# (charts_d1_ativo = '1'). Depois disso cada execução não faz nada.
+# Guia: docs/charts-d1-envio-semanal.md.
 
 on:
   workflow_dispatch: {}
@@ -21,9 +21,12 @@ concurrency:
 jobs:
   carga:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # Envia pelo próprio app (POST /api/charts/ingest): o Worker grava no D1
+      # com o binding dele — não depende de permissão de D1 no token da Cloudflare.
+      CHARTS_INGEST_TOKEN: ${{ secrets.CHARTS_INGEST_TOKEN }}
+      INGEST_URL: https://tanstack-start-app.empirerpg-forum.workers.dev/api/charts/ingest
     steps:
       - uses: actions/checkout@v4
 
@@ -33,42 +36,23 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Ler estado do D1 remoto (datas gravadas, leitura ativa, catálogo)
-        run: |
-          # Tabela ainda inexistente ou erro de leitura = nada carregado (a parte é idempotente).
-          bunx wrangler d1 execute empire-hub-catalogo -c wrangler.jsonc --remote --json \
-            --command "SELECT data FROM chart_datas" > carregadas.json || echo '[]' > carregadas.json
-          bunx wrangler d1 execute empire-hub-catalogo -c wrangler.jsonc --remote --json \
-            --command "SELECT valor FROM chart_config WHERE chave='charts_d1_ativo'" > ativo.json || echo '[]' > ativo.json
-          # Catálogo de músicas (artistas e gênero de cada faixa); sem ele a carga não segue.
-          bunx wrangler d1 export empire-hub-catalogo -c wrangler.jsonc --remote --table musicas --no-schema --output musicas.sql
-
-      - name: Gerar a parte do dia
+      - name: Enviar a parte do dia (e ativar quando terminar)
         run: |
           set -o pipefail
-          bun scripts/charts-d1-gerar-parte.ts \
-            --dados scripts/fixtures/charts-d1-dados.csv.gz \
+          if [ -z "$CHARTS_INGEST_TOKEN" ]; then echo "Secret CHARTS_INGEST_TOKEN não configurado."; exit 1; fi
+          gunzip -c scripts/fixtures/charts-d1-dados.csv.gz > dados.csv
+          bun scripts/charts-d1-carga-inicial.ts \
+            --dados dados.csv \
             --pesos scripts/fixtures/charts-d1-pesos.csv \
-            --catalogo musicas.sql \
-            --carregadas carregadas.json \
-            --ativo ativo.json \
+            --url "$INGEST_URL" \
             --limite 25000 \
-            --saida out.sql 2>&1 | tee resumo.txt
-
-      - name: Gravar no D1 remoto
-        run: |
-          if [ -s out.sql ]; then
-            bunx wrangler d1 execute empire-hub-catalogo -c wrangler.jsonc --remote --file out.sql --yes
-            echo "Parte gravada no D1." | tee -a resumo.txt
-          else
-            echo "out.sql vazio: nada gravado." | tee -a resumo.txt
-          fi
+            --ativar 2>&1 | tee resumo.txt
 
       - name: Resumo
         if: always()
         run: |
           if [ -f resumo.txt ]; then
-            { echo '```'; cat resumo.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            { echo '```'; tail -n 40 resumo.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - uses: actions/upload-artifact@v4
