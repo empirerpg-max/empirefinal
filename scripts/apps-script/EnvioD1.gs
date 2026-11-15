@@ -1,6 +1,6 @@
 /**
  * EnvioD1.gs — empurra a semana mais recente da aba DADOS (e os dados de
- * artistas da aba INFOS ACTS) para o app (Cloudflare), que grava no D1.
+ * artistas da aba INFOS ACTS, com o gênero de cada artista) para o app (Cloudflare), que grava no D1.
  *
  * Instalação: veja docs/charts-d1-envio-semanal.md.
  *
@@ -120,14 +120,50 @@ function abrirChartsOuErro_() {
   }
 }
 
-/** INFOS ACTS: col A nome, G foto, N nacionalidade → [nome, nacionalidade, foto]. */
+/** Cabeçalho normalizado: minúsculo, sem acentos, pontuação/espaços viram um espaço só ("Gênero_Musical" → "genero musical"). */
+function normalizarCabecalho_(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/** Índice (0-based) da coluna cujo cabeçalho normalizado é um de `nomes` (na ordem de preferência); -1 se nenhuma. */
+function colunaPorCabecalho_(cabecalho, nomes) {
+  var normalizados = cabecalho.map(normalizarCabecalho_);
+  for (var n = 0; n < nomes.length; n++) {
+    var i = normalizados.indexOf(nomes[n]);
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * INFOS ACTS → [nome, nacionalidade, foto, genero]. Colunas pelo cabeçalho
+ * (linha 1); nome/foto/nacionalidade caem em A/G/N se o cabeçalho não for
+ * reconhecido. Sem coluna de gênero: aviso no log e linhas de 3 elementos.
+ */
 function lerArtistas_() {
   var aba = SpreadsheetApp.openById(ENVIO_D1.PLANILHA_INFOS_ID).getSheetByName(ENVIO_D1.ABA_INFOS);
   if (!aba) throw new Error('Aba "' + ENVIO_D1.ABA_INFOS + '" não encontrada na planilha de INFOS.');
   var ultima = aba.getLastRow();
+  var ultimaCol = Math.max(aba.getLastColumn(), 14);
   if (ultima < 2) return [];
-  return aba.getRange(2, 1, ultima - 1, 14).getDisplayValues()
-    .map(function (r) { return [r[0], r[13], r[6]]; })
+  var cabecalho = aba.getRange(1, 1, 1, ultimaCol).getDisplayValues()[0];
+  var col = function (nomes, padrao) {
+    var i = colunaPorCabecalho_(cabecalho, nomes);
+    return i >= 0 ? i : padrao;
+  };
+  var cNome = col(['nome', 'artista'], 0);
+  var cFoto = col(['foto'], 6);
+  var cNac = col(['nacionalidade'], 13);
+  var cGenero = colunaPorCabecalho_(cabecalho, ['genero', 'estilo', 'genero musical']);
+  if (cGenero < 0) Logger.log('AVISO - INFOS ACTS sem coluna de gênero (cabeçalho "Gênero"/"Estilo"); enviando artistas sem gênero.');
+  return aba.getRange(2, 1, ultima - 1, ultimaCol).getDisplayValues()
+    .map(function (r) {
+      var linha = [r[cNome], r[cNac], r[cFoto]];
+      if (cGenero >= 0) linha.push(r[cGenero]);
+      return linha;
+    })
     .filter(function (r) { return String(r[0]).trim() !== ''; });
 }
 

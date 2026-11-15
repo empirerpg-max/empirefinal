@@ -72,7 +72,8 @@ export const CHARTS_D1_SCHEMA: string[] = [
     nome_upper TEXT PRIMARY KEY,
     nome TEXT,
     nacionalidade TEXT,
-    foto TEXT
+    foto TEXT,
+    genero TEXT -- gênero do artista (INFOS ACTS): fallback quando a música não tem gênero no catálogo
   )`,
   `CREATE TABLE IF NOT EXISTS chart_ingestao (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,6 +85,28 @@ export const CHARTS_D1_SCHEMA: string[] = [
     criado_em TEXT DEFAULT (datetime('now'))
   )`,
 ];
+
+/**
+ * Migrações de bancos já criados (CREATE TABLE IF NOT EXISTS não adiciona
+ * coluna nova em tabela existente). Cada uma roda sozinha, fora de batch,
+ * e "duplicate column" (já aplicada) é ignorado.
+ */
+export const CHARTS_D1_MIGRACOES: string[] = ["ALTER TABLE artista_info ADD COLUMN genero TEXT"];
+
+/** Cria as tabelas (se faltarem) e aplica as migrações idempotentes. */
+export async function garantirSchemaCharts(db: D1DatabaseLike): Promise<void> {
+  await db.batch(CHARTS_D1_SCHEMA.map((sql) => db.prepare(sql)));
+  for (const sql of CHARTS_D1_MIGRACOES) {
+    try {
+      await db.prepare(sql).run();
+    } catch (e) {
+      if (!/duplicate column/i.test(e instanceof Error ? e.message : String(e))) throw e;
+    }
+  }
+}
+
+/** Chave de artista_info.nome_upper: nome sem espaços nas pontas, em CAIXA ALTA. */
+export const chaveArtistaInfo = (nome: string): string => String(nome ?? "").trim().toUpperCase();
 
 /** Charts que alimentam o Hall of Fame (chart_artista_musica). */
 export const CHARTS_HOF: ChartId[] = ["BILLBOARD HOT 100", "SPOTIFY", "APPLE MUSIC", "YOUTUBE"];
@@ -107,7 +130,7 @@ type LinhaBase = Omit<LinhaCalculada, "movimento" | "valorAcumulado">;
 
 export interface PayloadIngestao {
   linhas?: string[][];
-  /** [nome, nacionalidade, foto] (INFOS ACTS). */
+  /** [nome, nacionalidade, foto, genero?] (INFOS ACTS). */
   artistas?: string[][];
   /** Linhas do CSV PAÍSES E PESOS: [país, spotify, apple music, youtube] em "7,20%". */
   pesos?: string[][];
@@ -330,10 +353,12 @@ const PLATAFORMAS_PESO = ["SPOTIFY", "APPLE MUSIC", "YOUTUBE"] as const;
 async function gravarArtistasEPesos(db: D1DatabaseLike, artistas: string[][], pesos: string[][]): Promise<void> {
   const linhasArtistas: unknown[][] = [];
   const texto = (v: unknown) => String(v ?? "").trim();
-  for (const [nome, nacionalidade, foto] of artistas) {
+  for (const [nome, nacionalidade, foto, genero] of artistas) {
     const n = texto(nome);
     // Nacionalidade em CAIXA ALTA pra casar com os nomes de pais_peso ("AUSTRÁLIA").
-    if (n) linhasArtistas.push([n.toUpperCase(), n, texto(nacionalidade).toUpperCase(), texto(foto)]);
+    // Gênero vazio (ou placeholder "-") vira NULL e não apaga um gênero já gravado (ver o upsert).
+    const g = texto(genero).replace(/^[-—]+$/, "");
+    if (n) linhasArtistas.push([chaveArtistaInfo(n), n, texto(nacionalidade).toUpperCase(), texto(foto), g || null]);
   }
   const linhasPesos: unknown[][] = [];
   for (const p of pesos) {
@@ -347,9 +372,10 @@ async function gravarArtistasEPesos(db: D1DatabaseLike, artistas: string[][], pe
   const stmts = [
     ...insertsEmLotes(
       db,
-      "INSERT INTO artista_info (nome_upper, nome, nacionalidade, foto)",
+      "INSERT INTO artista_info (nome_upper, nome, nacionalidade, foto, genero)",
       linhasArtistas,
-      "ON CONFLICT(nome_upper) DO UPDATE SET nome = excluded.nome, nacionalidade = excluded.nacionalidade, foto = excluded.foto",
+      "ON CONFLICT(nome_upper) DO UPDATE SET nome = excluded.nome, nacionalidade = excluded.nacionalidade, foto = excluded.foto, " +
+        "genero = COALESCE(NULLIF(excluded.genero, ''), artista_info.genero)",
     ),
     ...insertsEmLotes(
       db,
@@ -519,7 +545,7 @@ export async function chartsD1Ativo(db: D1DatabaseLike): Promise<boolean> {
  */
 export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao): Promise<ResultadoIngestao> {
   const modo = payload.modo === "historico" ? "historico" : "semanal";
-  await db.batch(CHARTS_D1_SCHEMA.map((sql) => db.prepare(sql)));
+  await garantirSchemaCharts(db);
 
   const cruas = Array.isArray(payload.linhas) ? payload.linhas : [];
   if (payload.ativar === true && !cruas.length) {
@@ -632,6 +658,31 @@ export async function carregarFotos(db: D1DatabaseLike): Promise<Map<string, str
   return new Map(rows.map((r) => [r.nome_upper, r.foto]));
 }
 
+/**
+ * Gênero de cada artista (artista_info.genero, da INFOS ACTS) por nome_upper.
+ * Banco anterior à coluna genero (migração ainda não rodou) → mapa vazio.
+ */
+export async function carregarGenerosArtistas(db: D1DatabaseLike): Promise<Map<string, string>> {
+  try {
+    const rows = await consultar<{ nome_upper: string; genero: string }>(
+      db,
+      "SELECT nome_upper, genero FROM artista_info WHERE genero IS NOT NULL AND genero != ''",
+    );
+    return new Map(rows.map((r) => [r.nome_upper, String(r.genero).trim()]));
+  } catch (e) {
+    if (/no such column/i.test(e instanceof Error ? e.message : String(e))) return new Map();
+    throw e;
+  }
+}
+
+/**
+ * Gênero efetivo da linha, resolvido na LEITURA (gênero de artista preenchido
+ * depois vale também pras semanas antigas): o da música (catálogo, gravado na
+ * ingestão) vence; sem ele, o do artista principal em artista_info.
+ */
+const generoEfetivo = (generoMusica: string | null, art: string, generosArtistas: Map<string, string>): string =>
+  (generoMusica ?? "").trim() || generosArtistas.get(chaveArtistaInfo(art)) || "";
+
 const lerArtistas = (json: string | null): string[] => {
   try {
     const v = JSON.parse(json || "[]");
@@ -671,22 +722,33 @@ export async function datasCarregadas(db: D1DatabaseLike): Promise<string[]> {
 }
 
 /**
- * Gêneros (gravados na ingestão) das músicas da semana `dataBr` do chart —
- * sem data, a mais recente. Lista só o que a semana tem (100 linhas pela PK),
- * não o histórico inteiro.
+ * Gêneros efetivos (música → artista principal, ver generoEfetivo) da semana
+ * `dataBr` do chart — sem data, a mais recente. Lista só o que a semana tem
+ * (100 linhas pela PK), não o histórico inteiro. `generosArtistas` vem do
+ * cache do controller; sem ele, é lido aqui.
  */
-export async function generosDoChart(db: D1DatabaseLike, chart: ChartId, dataBr?: string): Promise<string[]> {
-  const rows = await consultar<{ genero: string }>(
+export async function generosDoChart(
+  db: D1DatabaseLike,
+  chart: ChartId,
+  dataBr?: string,
+  generosArtistas?: Map<string, string>,
+): Promise<string[]> {
+  const rows = await consultar<{ titulo: string; artistas: string; genero: string | null }>(
     db,
-    `SELECT DISTINCT genero FROM chart_semana
-     WHERE chart = ? AND data = COALESCE(?, (SELECT MAX(data) FROM chart_datas WHERE chart = ?))
-       AND genero IS NOT NULL AND genero <> ''
-     ORDER BY genero`,
+    `SELECT titulo, artistas, genero FROM chart_semana
+     WHERE chart = ? AND data = COALESCE(?, (SELECT MAX(data) FROM chart_datas WHERE chart = ?))`,
     chart,
     dataBr ? dataBrParaIso(dataBr) : null,
     chart,
   );
-  return rows.map((r) => r.genero);
+  if (!rows.length) return [];
+  const porArtista = generosArtistas ?? (await carregarGenerosArtistas(db));
+  const generos = new Set<string>();
+  for (const r of rows) {
+    const g = generoEfetivo(r.genero, artistaPrincipal(lerArtistas(r.artistas), r.titulo || ""), porArtista);
+    if (g) generos.add(g);
+  }
+  return [...generos].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 export interface LinhaChartApi {
@@ -708,8 +770,10 @@ export async function linhasDoChart(
   estilo: string,
   cat: Map<string, MusicaCatalogo>,
   fotos: Map<string, string>,
+  generosArtistas?: Map<string, string>,
 ): Promise<LinhaChartApi[]> {
-  // Acumulado e gênero já vêm gravados: só as 100 linhas da semana (PK).
+  // Acumulado e gênero da música já vêm gravados: só as 100 linhas da semana
+  // (PK). O gênero do artista (fallback) vem do mapa de artista_info.
   const rows = await consultar<{
     pos: number; titulo: string; valor: number; valor_total: number | null; valor_acumulado: number | null;
     artistas: string; status: string; genero: string | null;
@@ -720,6 +784,7 @@ export async function linhasDoChart(
     chart,
     dataBrParaIso(dataBr),
   );
+  const porArtista = rows.length ? (generosArtistas ?? (await carregarGenerosArtistas(db))) : new Map<string, string>();
   const linhas = rows.map((r) => {
     const titulo = r.titulo || "";
     const art = artistaPrincipal(lerArtistas(r.artistas), titulo);
@@ -731,7 +796,7 @@ export async function linhasDoChart(
       art,
       st: r.status || "NEW",
       capa: capaDe(titulo, art, cat, fotos),
-      style: r.genero ?? "",
+      style: generoEfetivo(r.genero, art, porArtista),
     };
   });
   return estilo ? linhas.filter((l) => l.style === estilo) : linhas;

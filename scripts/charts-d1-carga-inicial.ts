@@ -15,6 +15,46 @@ import { dataBrParaIso } from "../backend/src/services/chartsD1/dados";
 import type { D1DatabaseLike } from "../backend/src/services/catalogoDbService";
 import { ingerirSemana, datasCarregadas, type PayloadIngestao } from "../backend/src/services/chartsD1/repo";
 
+/** Cabeçalho normalizado: minúsculo, sem acentos, pontuação/espaços viram um espaço só. */
+const normalizarCabecalho = (s: string): string =>
+  (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** Índice da coluna cujo cabeçalho é um de `nomes` (na ordem de preferência); -1 se nenhuma. */
+function colunaPorCabecalho(cabecalho: string[], nomes: string[]): number {
+  const normalizados = cabecalho.map(normalizarCabecalho);
+  for (const n of nomes) {
+    const i = normalizados.indexOf(n);
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * CSV da INFOS ACTS (linha 1 = cabeçalho) → payload [nome, nacionalidade, foto, genero?].
+ * Mesma regra do EnvioD1.gs: colunas pelo cabeçalho, nome/foto/nacionalidade
+ * caem em A/G/N; sem coluna de gênero, linhas de 3 elementos (com aviso).
+ */
+export function artistasDoCsvInfos(linhas: string[][]): string[][] {
+  const cabecalho = linhas[0] ?? [];
+  const col = (nomes: string[], padrao: number) => {
+    const i = colunaPorCabecalho(cabecalho, nomes);
+    return i >= 0 ? i : padrao;
+  };
+  const cNome = col(["nome", "artista"], 0);
+  const cFoto = col(["foto"], 6);
+  const cNac = col(["nacionalidade"], 13);
+  const cGenero = colunaPorCabecalho(cabecalho, ["genero", "estilo", "genero musical"]);
+  if (cGenero < 0) console.warn("AVISO: INFOS ACTS sem coluna de gênero (cabeçalho \"Gênero\"/\"Estilo\"); artistas sem gênero.");
+  return linhas
+    .slice(1)
+    .map((r) => {
+      const linha = [r[cNome] ?? "", r[cNac] ?? "", r[cFoto] ?? ""];
+      if (cGenero >= 0) linha.push(r[cGenero] ?? "");
+      return linha;
+    })
+    .filter((r) => r[0].trim());
+}
+
 /** Parser CSV (RFC 4180): aspas, vírgula e quebra de linha dentro de campo, CRLF ou LF. */
 export function lerCsv(texto: string): string[][] {
   const linhas: string[][] = [];
@@ -135,11 +175,8 @@ async function principal() {
 
   const dados = lerCsv(readFileSync(dadosPath, "utf8"));
   const pesos = lerCsv(readFileSync(pesosPath, "utf8")).slice(1).filter((p) => (p[0] ?? "").trim());
-  // INFOS ACTS: col A nome, G foto, N nacionalidade → payload [nome, nacionalidade, foto]
   const infosPath = arg("infos");
-  const artistas = infosPath
-    ? lerCsv(readFileSync(infosPath, "utf8")).slice(1).map((r) => [r[0] ?? "", r[13] ?? "", r[6] ?? ""]).filter((r) => r[0].trim())
-    : undefined;
+  const artistas = infosPath ? artistasDoCsvInfos(lerCsv(readFileSync(infosPath, "utf8"))) : undefined;
 
   let enviar: (p: PayloadIngestao) => Promise<{ ok: boolean; erros?: string[] }>;
   let jaCarregadas: Set<string>;

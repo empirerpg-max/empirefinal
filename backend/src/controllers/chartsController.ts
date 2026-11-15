@@ -4,7 +4,7 @@ import { fixImg, fmt } from "../services/chartsD1/formato";
 import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
 import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
 import {
-  CHARTS_HOF, carregarCatalogo, carregarFotos, chartsD1Ativo, datasDoChart, generosDoChart, linhasDoChart, linhasPaises,
+  CHARTS_HOF, carregarCatalogo, carregarFotos, carregarGenerosArtistas, chartsD1Ativo, datasDoChart, generosDoChart, linhasDoChart, linhasPaises,
   numero1DaUltimaSemana, perfilHOF, temPesosPais,
 } from "../services/chartsD1/repo";
 
@@ -37,11 +37,13 @@ async function readSheet(spreadsheetKey: keyof typeof googleSheetsService, sheet
 // da carga inicial — antes disso o D1 está pela metade) e o chart tem semanas
 // lá, a leitura vem do D1; senão (banco ausente, não ativado, chart vazio ou
 // erro) segue o caminho da planilha abaixo. Flag, datas por chart e
-// catálogo/fotos ficam em cache por isolate com o mesmo TTL das respostas
+// catálogo/fotos/gêneros de artista ficam em cache por isolate com o mesmo TTL das respostas
 // (limparCacheCharts zera tudo após uma ingestão).
 interface ReferenciasD1 {
   cat: Map<string, MusicaCatalogo>;
   fotos: Map<string, string>;
+  /** artista_info.genero por nome_upper: gênero quando a música não tem um no catálogo. */
+  generosArtistas: Map<string, string>;
 }
 const datasD1Cache = new Map<ChartId, { valor: Promise<string[]>; expiresAt: number }>();
 let ativoD1Cache: { valor: Promise<boolean>; expiresAt: number } | null = null;
@@ -72,7 +74,9 @@ function datasD1(db: D1DatabaseLike, chart: ChartId): Promise<string[]> {
 
 function referenciasD1(db: D1DatabaseLike): Promise<ReferenciasD1> {
   if (referenciasD1Cache && referenciasD1Cache.expiresAt > Date.now()) return referenciasD1Cache.valor;
-  const valor = Promise.all([carregarCatalogo(db), carregarFotos(db)]).then(([cat, fotos]) => ({ cat, fotos }));
+  const valor = Promise.all([carregarCatalogo(db), carregarFotos(db), carregarGenerosArtistas(db)]).then(
+    ([cat, fotos, generosArtistas]) => ({ cat, fotos, generosArtistas }),
+  );
   const entrada = { valor, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS };
   valor.catch(() => {
     if (referenciasD1Cache === entrada) referenciasD1Cache = null;
@@ -114,7 +118,8 @@ async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] 
     const d1 = await viaD1(alvo.chart, async (db, datas) => {
       if (alvo.paises) return (await temPesosPais(db, alvo.chart)) ? { dates: datas, styles: [] } : undefined;
       // Gêneros da semana mais recente (a lista do filtro acompanha o chart atual).
-      return { dates: datas, styles: await generosDoChart(db, alvo.chart, datas[0]) };
+      const { generosArtistas } = await referenciasD1(db);
+      return { dates: datas, styles: await generosDoChart(db, alvo.chart, datas[0], generosArtistas) };
     });
     if (d1) return d1;
   }
@@ -147,10 +152,10 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
     const d1 = await viaD1<unknown[]>(alvo.chart, async (db) => {
       // Sem pesos de país no D1, COUNTRIES ainda é da planilha.
       if (alvo.paises && !(await temPesosPais(db, alvo.chart))) return undefined;
-      const { cat, fotos } = await referenciasD1(db);
+      const { cat, fotos, generosArtistas } = await referenciasD1(db);
       return alvo.paises
         ? linhasPaises(db, alvo.chart, date, cat, fotos)
-        : linhasDoChart(db, alvo.chart, date, style, cat, fotos);
+        : linhasDoChart(db, alvo.chart, date, style, cat, fotos, generosArtistas);
     });
     if (d1) return d1;
   }

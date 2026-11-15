@@ -814,3 +814,102 @@ test("gerar-parte: catálogo do wrangler export entra no banco local (coluna a m
   importarCatalogo(db, `PRAGMA defer_foreign_keys=TRUE;\nINSERT INTO "musicas" ("codigo_unico","titulo","artista","genero","coluna_nova") VALUES('1','Faixa; ''1''','Artista','Pop','x');`);
   expect((await db.prepare("SELECT titulo, genero, coluna_nova FROM musicas").all<any>()).results).toEqual([{ titulo: "Faixa; '1'", genero: "Pop", coluna_nova: "x" }]);
 });
+
+// ---- Gênero por artista (artista_info.genero, da INFOS ACTS) ----
+import {
+  CHARTS_D1_SCHEMA, carregarGenerosArtistas, garantirSchemaCharts,
+} from "../backend/src/services/chartsD1/repo";
+import { artistasDoCsvInfos } from "./charts-d1-carga-inicial";
+
+test("migração: artista_info antiga (sem genero) ganha a coluna e mantém os dados; rodar de novo não quebra", async () => {
+  const db = criarD1Sqlite();
+  await db.prepare("CREATE TABLE artista_info (nome_upper TEXT PRIMARY KEY, nome TEXT, nacionalidade TEXT, foto TEXT)").run();
+  await db.prepare("INSERT INTO artista_info VALUES ('ANTIGO', 'Antigo', 'BRASIL', 'a.jpg')").run();
+  // Antes da migração a leitura não quebra: só não há gêneros de artista.
+  expect(await carregarGenerosArtistas(db)).toEqual(new Map());
+  await garantirSchemaCharts(db);
+  await garantirSchemaCharts(db); // idempotente ("duplicate column" ignorado)
+  expect((await ingerirSemana(db, { linhas: linhasFake("11/11/2026"), artistas: [["Novo", "EUA", "n.jpg", "Pop"]] })).ok).toBe(true);
+  const info = await db.prepare("SELECT nome_upper, foto, genero FROM artista_info ORDER BY nome_upper").all<any>();
+  expect(info.results).toEqual([
+    { nome_upper: "ANTIGO", foto: "a.jpg", genero: null },
+    { nome_upper: "NOVO", foto: "n.jpg", genero: "Pop" },
+  ]);
+  // Banco novo: o CREATE já traz a coluna.
+  const novo = criarD1Sqlite();
+  await garantirSchemaCharts(novo);
+  const cols = await novo.prepare("PRAGMA table_info(artista_info)").all<{ name: string }>();
+  expect(cols.results.map((c) => c.name)).toContain("genero");
+  expect(CHARTS_D1_SCHEMA.some((s) => /artista_info[\s\S]*genero TEXT/.test(s))).toBe(true);
+});
+
+test("upsert de artista_info: gênero opcional, vazio/'-'/ausente não apaga o já gravado", async () => {
+  const db = criarD1Sqlite();
+  const enviar = async (artistas: string[][]) =>
+    expect((await ingerirSemana(db, { linhas: linhasFake("11/11/2026"), artistas })).ok).toBe(true);
+  const ler = async () => (await db.prepare("SELECT foto, genero FROM artista_info WHERE nome_upper = 'ARTISTA X'").all<any>()).results[0];
+  await enviar([["Artista X", "Brasil", "f.jpg", " Pop "], ["Sem Genero", "", "", ""]]);
+  expect(await ler()).toEqual({ foto: "f.jpg", genero: "Pop" });
+  await enviar([["Artista X", "Brasil", "g.jpg"]]); // 3 elementos (planilha sem coluna de gênero)
+  expect(await ler()).toEqual({ foto: "g.jpg", genero: "Pop" });
+  await enviar([["Artista X", "Brasil", "g.jpg", ""]]);
+  await enviar([["Artista X", "Brasil", "g.jpg", "-"]]);
+  expect((await ler()).genero).toBe("Pop");
+  await enviar([["Artista X", "Brasil", "g.jpg", "Rock"]]);
+  expect((await ler()).genero).toBe("Rock");
+  const sem = await db.prepare("SELECT genero FROM artista_info WHERE nome_upper = 'SEM GENERO'").all<any>();
+  expect(sem.results[0].genero).toBeNull();
+  expect(await carregarGenerosArtistas(db)).toEqual(new Map([["ARTISTA X", "Rock"]]));
+});
+
+test("gênero na leitura: o da música vence; sem ele, o do artista principal (vale pra semanas antigas)", async () => {
+  const db = criarD1Sqlite();
+  await criarMusicasFake(db);
+  // Faixas 1 e 2 fora do catálogo: chart_semana.genero fica vazio.
+  await db.prepare("DELETE FROM musicas WHERE titulo IN ('Faixa 1', 'Faixa 2')").run();
+  const artistas = [["Artista 1", "", "", "Funk"], ["Artista 2", "", ""], ["Artista 3", "", "", "Jazz"]];
+  expect((await ingerirSemana(db, { linhas: linhasLeitura("04/11/2026", false), artistas })).ok).toBe(true);
+
+  let rows = await linhasDoChart(db, "BILLBOARD HOT 100", "04/11/2026", "", catFake, new Map());
+  expect(rows.slice(0, 3).map((r) => r.style)).toEqual(["Funk", "", "Pop"]); // #3: catálogo (Pop) vence o artista (Jazz)
+  expect(await generosDoChart(db, "BILLBOARD HOT 100")).toEqual(["Funk", "Pop", "Rock"]);
+  const funk = await linhasDoChart(db, "BILLBOARD HOT 100", "04/11/2026", "Funk", catFake, new Map());
+  expect(funk.map((r) => r.pos)).toEqual([1]);
+  expect(await linhasDoChart(db, "BILLBOARD HOT 100", "04/11/2026", "Jazz", catFake, new Map())).toEqual([]);
+
+  // Gênero do Artista 2 preenchido depois (outra semana): a semana antiga passa a usá-lo.
+  expect((await ingerirSemana(db, { linhas: linhasLeitura("11/11/2026", false), artistas: [["Artista 2", "", "", "Trap"]] })).ok).toBe(true);
+  rows = await linhasDoChart(db, "BILLBOARD HOT 100", "04/11/2026", "", catFake, new Map());
+  expect(rows[1].style).toBe("Trap");
+  expect(await generosDoChart(db, "BILLBOARD HOT 100", "04/11/2026")).toEqual(["Funk", "Pop", "Rock", "Trap"]);
+  // Mapa passado pelo controller (cache) é o usado, sem reler artista_info.
+  const doCache = new Map([["ARTISTA 1", "Axé"]]);
+  rows = await linhasDoChart(db, "BILLBOARD HOT 100", "04/11/2026", "Axé", catFake, new Map(), doCache);
+  expect(rows.map((r) => r.pos)).toEqual([1]);
+  expect(await generosDoChart(db, "BILLBOARD HOT 100", "04/11/2026", doCache)).toEqual(["Axé", "Pop", "Rock"]);
+});
+
+test("/api/charts: filtro de gênero do Hot 100 usa o gênero do artista", async () => {
+  const db = criarD1Sqlite();
+  // Sem catálogo: só o gênero do artista existe.
+  expect((await ingerirSemana(db, { linhas: linhasLeitura("04/11/2026", false), artistas: [["Artista 5", "", "", "Funk"]] })).ok).toBe(true);
+  await ativarD1(db);
+  await comApiCharts(db, {}, async (lidas) => {
+    expect(await api("action=getFilters&tab=BILLBOARD HOT 100")).toEqual({ dates: ["04/11/2026"], styles: ["Funk"] });
+    const rows = await api("action=getChart&tab=BILLBOARD HOT 100&date=04/11/2026&style=Funk");
+    expect(rows.map((r: any) => [r.pos, r.tit, r.style])).toEqual([[5, "Artista 5 - Faixa 5", "Funk"]]);
+    expect(lidas.filter((l) => l.startsWith("chartsBase"))).toEqual([]);
+  });
+});
+
+test("carga inicial --infos: colunas pelo cabeçalho, gênero opcional", () => {
+  const comGenero = artistasDoCsvInfos([
+    ["Nome", "x", "Gênero Musical", "", "", "", "Foto", "", "", "", "", "", "", "Nacionalidade"],
+    ["Ana", "", "Pop", "", "", "", "a.jpg", "", "", "", "", "", "", "Brasil"],
+    ["", "", "Rock", "", "", "", "", "", "", "", "", "", "", ""],
+  ]);
+  expect(comGenero).toEqual([["Ana", "Brasil", "a.jpg", "Pop"]]);
+  const linha = Array.from({ length: 14 }, (_, i) => `c${i}`);
+  expect(artistasDoCsvInfos([Array(14).fill(""), linha])).toEqual([["c0", "c13", "c6"]]); // sem cabeçalho reconhecido: A/G/N
+  expect(artistasDoCsvInfos([["ARTISTA", "ESTILO"], ["Bia", "Funk"]])).toEqual([["Bia", "", "", "Funk"]]);
+});
