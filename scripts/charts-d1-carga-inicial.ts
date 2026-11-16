@@ -199,7 +199,10 @@ async function principal() {
     jaCarregadas = new Set(j.datas);
     enviar = async (p) => {
       try {
-        const resp = await fetch(url!, { method: "POST", headers: { ...cab, "Content-Type": "application/json" }, body: JSON.stringify(p) });
+        const post = () => fetch(url!, { method: "POST", headers: { ...cab, "Content-Type": "application/json" }, body: JSON.stringify(p) });
+        let resp = await post();
+        // 5xx passageiro do Worker/D1 (ex.: 503): espera e tenta mais uma vez antes de dar erro.
+        if (resp.status >= 500) { await new Promise((ok) => setTimeout(ok, 5000)); resp = await post(); }
         return (await resp.json().catch(() => ({ ok: false, erros: [`HTTP ${resp.status} sem JSON`] }))) as { ok: boolean; erros?: string[] };
       } catch (e) {
         return { ok: false, erros: [`falha de rede: ${e instanceof Error ? e.message : String(e)}`] };

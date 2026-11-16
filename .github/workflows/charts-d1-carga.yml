@@ -3,7 +3,7 @@ name: charts-d1-carga
 # Carga inicial do histórico dos charts no D1, uma parte por dia: envia as
 # semanas ainda não gravadas do CSV da aba DADOS
 # (scripts/fixtures/charts-d1-dados.csv.gz) para POST /api/charts/ingest, em
-# ordem cronológica, até 25.000 linhas (dentro das 100 mil escritas/dia do plano
+# ordem cronológica, até 20.000 linhas (dentro das 100 mil escritas/dia do plano
 # grátis). Quando não sobra semana pendente, liga a leitura do D1
 # (charts_d1_ativo = '1'). Depois disso cada execução não faz nada.
 # Guia: docs/charts-d1-envio-semanal.md.
@@ -45,7 +45,7 @@ jobs:
             --dados dados.csv \
             --pesos scripts/fixtures/charts-d1-pesos.csv \
             --url "$INGEST_URL" \
-            --limite 25000 \
+            --limite 20000 \
             --ativar 2>&1 | tee resumo.txt
 
       - name: Resumo
