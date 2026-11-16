@@ -47,6 +47,10 @@ import {
 import {
   getNotificacoesController,
   marcarNotificacoesLidasController,
+  getPreferenciasNotificacaoController,
+  salvarPreferenciasNotificacaoController,
+  inscreverPushController,
+  desinscreverPushController,
 } from "../controllers/notificacoesController";
 import {
   criarVideoPendenteEmpireTvController,
@@ -585,6 +589,9 @@ export async function handleEmpireApiRoutes(
     "/api/forum/meus-comentarios",
     "/api/notificacoes",
     "/api/notificacoes/marcar-lidas",
+    "/api/notificacoes/preferencias",
+    "/api/notificacoes/push/inscrever",
+    "/api/notificacoes/push/desinscrever",
     "/api/gestao/musica",
     "/api/gestao/video",
     "/api/gestao/video-empire-tv-pendente",
@@ -1290,7 +1297,7 @@ export async function handleEmpireApiRoutes(
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await curtirSocialPostController(request);
+    response = await curtirSocialPostController(request, ctx);
   } else if (url.pathname === "/api/social/comentarios") {
     if (request.method !== "GET") {
       return new Response(
@@ -1306,7 +1313,7 @@ export async function handleEmpireApiRoutes(
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await comentarSocialPostController(request);
+    response = await comentarSocialPostController(request, ctx);
   } else if (url.pathname === "/api/social/comentario/editar") {
     if (request.method !== "POST") {
       return new Response(
@@ -1812,6 +1819,30 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await marcarNotificacoesLidasController(request);
+  } else if (url.pathname === "/api/notificacoes/preferencias") {
+    if (request.method === "GET") response = await getPreferenciasNotificacaoController(request);
+    else if (request.method === "POST") response = await salvarPreferenciasNotificacaoController(request);
+    else
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET ou POST para /api/notificacoes/preferencias." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+  } else if (url.pathname === "/api/notificacoes/push/inscrever") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/notificacoes/push/inscrever." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await inscreverPushController(request);
+  } else if (url.pathname === "/api/notificacoes/push/desinscrever") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/notificacoes/push/desinscrever." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await desinscreverPushController(request);
   } else if (url.pathname === "/api/turnes/locais") {
     if (request.method !== "GET") {
       return new Response(
