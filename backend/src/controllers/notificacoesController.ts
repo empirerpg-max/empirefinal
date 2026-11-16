@@ -276,16 +276,18 @@ export async function getPreferenciasNotificacaoController(request: Request): Pr
   const tgId = (url.searchParams.get("tgId") || "").trim();
   if (!tgId) return json({ success: false, error: "tgId é obrigatório." }, 400);
   const endpoint = (url.searchParams.get("endpoint") || "").trim();
-  const [prefs, inscrito] = await Promise.all([
+  const [prefs, inscrito, pushDisponivel, vapidPublicKey] = await Promise.all([
     lerPreferencias(tgId),
     endpoint ? temInscricao(tgId, endpoint) : Promise.resolve(false),
+    pushConfigurado(),
+    getVapidPublicKey(),
   ]);
   return json({
     success: true,
     data: {
       prefs,
-      pushDisponivel: pushConfigurado(),
-      vapidPublicKey: getVapidPublicKey(),
+      pushDisponivel,
+      vapidPublicKey,
       inscrito,
     },
   });
@@ -312,7 +314,7 @@ export async function inscreverPushController(request: Request): Promise<Respons
     return json({ success: false, error: "Inscrição inválida." }, 400);
   }
   if (!/^https:\/\//.test(sub.endpoint)) return json({ success: false, error: "Endpoint inválido." }, 400);
-  if (!pushConfigurado()) {
+  if (!(await pushConfigurado())) {
     return json({ success: false, error: "Notificações no celular ainda não foram configuradas no servidor." }, 503);
   }
   await adicionarInscricao(tgId, sub);

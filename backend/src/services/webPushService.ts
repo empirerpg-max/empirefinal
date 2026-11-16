@@ -15,12 +15,18 @@
 //   push:subs:<tgId>  -> PushSubscriptionJson[] (um por aparelho/navegador)
 //   notif:prefs:<tgId> -> NotifPrefs
 //
-// Secrets necessários (wrangler secret put): VAPID_PUBLIC_KEY (ponto público
-// P-256 sem compressão, base64url, 65 bytes) e VAPID_PRIVATE_KEY (escalar
-// "d", base64url, 32 bytes). Gerar com: node scripts/gerar-chaves-vapid.mjs
+// Chaves VAPID: se os secrets VAPID_PUBLIC_KEY (ponto público P-256 sem
+// compressão, base64url, 65 bytes) e VAPID_PRIVATE_KEY (escalar "d",
+// base64url) existirem, usa eles. Senão, o próprio Worker gera um par na
+// primeira vez e guarda no D1 (tabela config_app) — nenhum passo manual de
+// deploy. D1 (e não KV) porque é consistente na hora: com KV, dois isolates
+// podiam gerar pares diferentes ao mesmo tempo e metade das inscrições
+// ficaria presa a uma chave que o servidor não usa mais. INSERT OR IGNORE +
+// releitura garante que todo mundo acaba com o MESMO par.
 // VAPID_SUBJECT é opcional (mailto: ou https: de contato).
 
 import { readRuntimeEnv } from "../google/service-account";
+import { getCatalogoDb } from "./catalogoDbService";
 
 export interface PushSubscriptionJson {
   endpoint: string;
@@ -89,12 +95,69 @@ type Bytes = Uint8Array<ArrayBuffer>;
 
 // -------------------- KV: inscrições e preferências --------------------
 
-export function getVapidPublicKey(): string {
-  return readRuntimeEnv("VAPID_PUBLIC_KEY").trim();
+interface VapidKeys {
+  pub: string;
+  d: string;
 }
 
-export function pushConfigurado(): boolean {
-  return !!getVapidPublicKey() && !!readRuntimeEnv("VAPID_PRIVATE_KEY").trim() && !!getKv();
+let vapidKeysCache: VapidKeys | null = null;
+
+async function gerarParVapid(): Promise<VapidKeys> {
+  const kp = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const raw = new Uint8Array((await crypto.subtle.exportKey("raw", kp.publicKey)) as ArrayBuffer);
+  const jwk = (await crypto.subtle.exportKey("jwk", kp.privateKey)) as JsonWebKey;
+  return { pub: bytesToB64url(raw), d: String(jwk.d) };
+}
+
+async function getVapidKeys(): Promise<VapidKeys | null> {
+  if (vapidKeysCache) return vapidKeysCache;
+  const envPub = readRuntimeEnv("VAPID_PUBLIC_KEY").trim();
+  const envPriv = readRuntimeEnv("VAPID_PRIVATE_KEY").trim();
+  if (envPub && envPriv) {
+    vapidKeysCache = { pub: envPub, d: envPriv };
+    return vapidKeysCache;
+  }
+  const db = getCatalogoDb();
+  if (!db) return null;
+  try {
+    await db
+      .prepare("CREATE TABLE IF NOT EXISTS config_app (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)")
+      .run();
+    const lerChave = async () =>
+      (
+        await db
+          .prepare("SELECT valor FROM config_app WHERE chave = ?")
+          .bind("vapid_keys")
+          .all<{ valor: string }>()
+      ).results[0]?.valor;
+    let valor = await lerChave();
+    if (!valor) {
+      const novo = await gerarParVapid();
+      await db
+        .prepare("INSERT OR IGNORE INTO config_app (chave, valor) VALUES (?, ?)")
+        .bind("vapid_keys", JSON.stringify(novo))
+        .run();
+      valor = await lerChave();
+    }
+    const parsed = valor ? (JSON.parse(valor) as VapidKeys) : null;
+    if (!parsed?.pub || !parsed?.d) return null;
+    vapidKeysCache = parsed;
+    return parsed;
+  } catch (err) {
+    console.warn("[webPush] Falha ao obter/gerar chaves VAPID no D1:", err);
+    return null;
+  }
+}
+
+export async function getVapidPublicKey(): Promise<string> {
+  return (await getVapidKeys())?.pub || "";
+}
+
+export async function pushConfigurado(): Promise<boolean> {
+  return !!getKv() && !!(await getVapidKeys());
 }
 
 async function lerSubs(tgId: string): Promise<PushSubscriptionJson[]> {
@@ -162,7 +225,9 @@ export async function gravarPreferencias(tgId: string, prefs: Partial<NotifPrefs
 let vapidKeyCache: { pub: string; key: CryptoKey } | null = null;
 
 async function getVapidSigningKey(): Promise<CryptoKey> {
-  const pub = getVapidPublicKey();
+  const keys = await getVapidKeys();
+  if (!keys) throw new Error("Chaves VAPID indisponíveis");
+  const pub = keys.pub;
   if (vapidKeyCache && vapidKeyCache.pub === pub) return vapidKeyCache.key;
   const pubBytes = b64urlToBytes(pub);
   if (pubBytes.length !== 65 || pubBytes[0] !== 4) throw new Error("VAPID_PUBLIC_KEY inválida");
@@ -173,7 +238,7 @@ async function getVapidSigningKey(): Promise<CryptoKey> {
       crv: "P-256",
       x: bytesToB64url(pubBytes.slice(1, 33)),
       y: bytesToB64url(pubBytes.slice(33, 65)),
-      d: readRuntimeEnv("VAPID_PRIVATE_KEY").trim(),
+      d: keys.d,
       ext: true,
     },
     { name: "ECDSA", namedCurve: "P-256" },
@@ -197,7 +262,7 @@ async function vapidAuthHeader(endpoint: string): Promise<string> {
   const sig = new Uint8Array(
     await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, enc.encode(unsigned)),
   );
-  return `vapid t=${unsigned}.${bytesToB64url(sig)}, k=${getVapidPublicKey()}`;
+  return `vapid t=${unsigned}.${bytesToB64url(sig)}, k=${await getVapidPublicKey()}`;
 }
 
 // -------------------- Criptografia do conteúdo (RFC 8291) --------------------
@@ -286,7 +351,7 @@ export async function enviarPushParaUsuario(
 ): Promise<void> {
   try {
     const id = (tgId || "").trim();
-    if (!id || !pushConfigurado()) return;
+    if (!id || !(await pushConfigurado())) return;
     const prefs = await lerPreferencias(id);
     if (!prefs[tipo]) return;
     const subs = await lerSubs(id);
