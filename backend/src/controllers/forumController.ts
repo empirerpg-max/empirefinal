@@ -887,7 +887,16 @@ export async function createCommentController(
               const db = getCatalogoDb();
               if (db) {
                 await db
-                  .prepare(`UPDATE musicas SET id_topico = ? WHERE codigo_unico = ?`)
+                  // Versões da mesma música repetem o código: só grava o
+                  // tópico se houver UMA única versão desse código ainda sem
+                  // tópico (senão daria o mesmo tópico a todas). A chave da
+                  // linha passa a ser o tópico (ver chaveMusica).
+                  .prepare(
+                    `UPDATE musicas SET id_topico = ?1, chave = 't:' || ?1
+                     WHERE codigo_unico = ?2 AND coalesce(trim(id_topico), '') = ''
+                       AND (SELECT count(*) FROM musicas WHERE codigo_unico = ?2 AND coalesce(trim(id_topico), '') = '') = 1
+                       AND NOT EXISTS (SELECT 1 FROM musicas WHERE chave = 't:' || ?1)`,
+                  )
                   .bind(topicIdClean, codigoUnico)
                   .run()
                   .catch((err) =>
