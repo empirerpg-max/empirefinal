@@ -330,3 +330,27 @@ export async function desinscreverPushController(request: Request): Promise<Resp
   await removerInscricao(tgId, endpoint);
   return json({ success: true });
 }
+
+/**
+ * GET /api/notificacoes/admin/diag?n=30
+ * Diagnóstico read-only: cabeçalho, total de linhas e as últimas N linhas da
+ * aba Notificacoes (pra conferir se cada tipo de evento segue sendo gravado).
+ */
+export async function diagNotificacoesController(request: Request): Promise<Response> {
+  const n = Math.min(100, Math.max(1, Number(new URL(request.url).searchParams.get("n")) || 30));
+  const rows = await googleSheetsService.principal.readValues(NOTIF_SHEET).catch((e) => {
+    return [["ERRO", String((e as Error)?.message || e)]];
+  });
+  const porEvento: Record<string, { total: number; ultimaData: string }> = {};
+  for (const r of rows.slice(1)) {
+    const ev = (r[10] || "").trim() || "(vazio=comentario_forum)";
+    porEvento[ev] = { total: (porEvento[ev]?.total || 0) + 1, ultimaData: r[8] || "" };
+  }
+  return json({
+    success: true,
+    cabecalho: rows[0] || [],
+    totalLinhas: Math.max(0, rows.length - 1),
+    porEvento,
+    ultimas: rows.slice(-n).map((r) => [r[0], r[3], r[4], (r[5] || "").slice(0, 40), r[8], r[9], r[10]]),
+  });
+}

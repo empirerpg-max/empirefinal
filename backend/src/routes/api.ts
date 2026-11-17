@@ -48,6 +48,7 @@ import {
   getNotificacoesController,
   marcarNotificacoesLidasController,
   getPreferenciasNotificacaoController,
+  diagNotificacoesController,
   salvarPreferenciasNotificacaoController,
   inscreverPushController,
   desinscreverPushController,
@@ -590,6 +591,7 @@ export async function handleEmpireApiRoutes(
     "/api/notificacoes",
     "/api/notificacoes/marcar-lidas",
     "/api/notificacoes/preferencias",
+    "/api/notificacoes/admin/diag",
     "/api/notificacoes/push/inscrever",
     "/api/notificacoes/push/desinscrever",
     "/api/gestao/musica",
@@ -1819,6 +1821,8 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await marcarNotificacoesLidasController(request);
+  } else if (url.pathname === "/api/notificacoes/admin/diag") {
+    response = await diagNotificacoesController(request);
   } else if (url.pathname === "/api/notificacoes/preferencias") {
     if (request.method === "GET") response = await getPreferenciasNotificacaoController(request);
     else if (request.method === "POST") response = await salvarPreferenciasNotificacaoController(request);
