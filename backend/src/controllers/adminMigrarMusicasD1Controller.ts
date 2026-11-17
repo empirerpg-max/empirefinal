@@ -94,43 +94,7 @@ export async function adminMigrarMusicasD1Controller(): Promise<Response> {
     const extra = extraPorCodigo.get(normalizeComparison(codigoUnico));
     const dataLancamento = normalizeText(row[0]) || null; // A
 
-    const item: MusicaUpsert = {
-      codigoUnico,
-      idTopico: topicId,
-      titulo,
-      artista: normalizeText(row[13]) || "", // N — ACT PRINCIPAL
-      artista2: normalizeText(row[14]) || null, // O
-      artista3: normalizeText(row[15]) || null, // P
-      artista4: normalizeText(row[16]) || null, // Q
-      artista5: normalizeText(row[17]) || null, // R
-      artista6: normalizeText(row[18]) || null, // S
-      album: normalizeText(row[10]) || null, // K
-      album2: normalizeText(row[26]) || null, // AA
-      album3: normalizeText(row[27]) || null, // AB
-      album4: normalizeText(row[28]) || null, // AC
-      album5: normalizeText(row[29]) || null, // AD
-      capaUrl: normalizeText(row[3]) || null, // D
-      audioUrl: normalizeText(row[2]) || null, // C — ID do arquivo
-      letra: normalizeText(row[4]) || null, // E
-      letraSincronizada: normalizeText(row[30]) || null, // AE
-      genero: normalizeText(row[19]) || null, // T
-      tipoSingle: normalizeText(row[8]) || null, // I
-      tipoMusica: normalizeText(row[9]) || null, // J
-      dataLancamento,
-      dataLancamentoIso: parseDateToIso(dataLancamento),
-      weeks: parseIntOrNull(normalizeText(row[11])), // L
-      weeksVideo: parseIntOrNull(normalizeText(row[12])), // M
-      ordem: parseIntOrNull(normalizeText(row[20])), // U
-      idCriador: normalizeText(row[6]) || null, // G
-      comentariosPara: normalizeText(row[5]) || null, // F
-      metacriticPorJogador: normalizeText(row[21]) || null, // V
-      metacriticMedia: parseFloatOrNull(normalizeText(row[22])), // W
-      pendente: normalizeComparison(normalizeText(row[23])) === "sim", // X
-      reportadoIncorreto: normalizeComparison(normalizeText(row[24])) === "sim", // Y
-      shopJson: extra?.shop ?? null,
-      lojaInfo: extra?.info ?? null,
-      arteExtraJson: extra?.arte ?? null,
-    };
+    const item = musicaDaLinhaPlanilha(row, extra);
 
     itens.push({
       statement: buildMusicaUpsertStatement(db, item),
@@ -146,4 +110,68 @@ export async function adminMigrarMusicasD1Controller(): Promise<Response> {
     status: 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
+}
+
+export type ExtraMusica = { shop: string | null; info: string | null; arte: string | null };
+
+/** Linha da aba "Musicas" (A:AE) -> registro de `musicas` (mesmo mapeamento da migração). */
+export function musicaDaLinhaPlanilha(row: string[], extra: ExtraMusica | undefined): MusicaUpsert {
+  const topicId = normalizeText(row[1]) || null;
+  const titulo = normalizeText(row[7]);
+  const codigoUnico = normalizeText(row[25]);
+  const dataLancamento = normalizeText(row[0]) || null; // A
+  return {
+    codigoUnico,
+    idTopico: topicId,
+    titulo,
+    artista: normalizeText(row[13]) || "", // N — ACT PRINCIPAL
+    artista2: normalizeText(row[14]) || null, // O
+    artista3: normalizeText(row[15]) || null, // P
+    artista4: normalizeText(row[16]) || null, // Q
+    artista5: normalizeText(row[17]) || null, // R
+    artista6: normalizeText(row[18]) || null, // S
+    album: normalizeText(row[10]) || null, // K
+    album2: normalizeText(row[26]) || null, // AA
+    album3: normalizeText(row[27]) || null, // AB
+    album4: normalizeText(row[28]) || null, // AC
+    album5: normalizeText(row[29]) || null, // AD
+    capaUrl: normalizeText(row[3]) || null, // D
+    audioUrl: normalizeText(row[2]) || null, // C — ID do arquivo
+    letra: normalizeText(row[4]) || null, // E
+    letraSincronizada: normalizeText(row[30]) || null, // AE
+    genero: normalizeText(row[19]) || null, // T
+    tipoSingle: normalizeText(row[8]) || null, // I
+    tipoMusica: normalizeText(row[9]) || null, // J
+    dataLancamento,
+    dataLancamentoIso: parseDateToIso(dataLancamento),
+    weeks: parseIntOrNull(normalizeText(row[11])), // L
+    weeksVideo: parseIntOrNull(normalizeText(row[12])), // M
+    ordem: parseIntOrNull(normalizeText(row[20])), // U
+    idCriador: normalizeText(row[6]) || null, // G
+    comentariosPara: normalizeText(row[5]) || null, // F
+    metacriticPorJogador: normalizeText(row[21]) || null, // V
+    metacriticMedia: parseFloatOrNull(normalizeText(row[22])), // W
+    pendente: normalizeComparison(normalizeText(row[23])) === "sim", // X
+    reportadoIncorreto: normalizeComparison(normalizeText(row[24])) === "sim", // Y
+    shopJson: extra?.shop ?? null,
+    lojaInfo: extra?.info ?? null,
+    arteExtraJson: extra?.arte ?? null,
+  };
+}
+
+/** Extra_Musicas: código único -> {shop, info, arte}. */
+export async function lerExtrasMusicas(): Promise<Map<string, ExtraMusica>> {
+  const extraRows = await googleSheetsService.principal.readValues("Extra_Musicas", "A:D").catch(() => []);
+  const mapa = new Map<string, ExtraMusica>();
+  for (let i = 1; i < extraRows.length; i++) {
+    const row = extraRows[i];
+    const codigo = row ? normalizeText(row[0]) : "";
+    if (!codigo) continue;
+    mapa.set(normalizeComparison(codigo), {
+      shop: normalizeText(row[1]) || null,
+      info: normalizeText(row[2]) || null,
+      arte: normalizeText(row[3]) || null,
+    });
+  }
+  return mapa;
 }
