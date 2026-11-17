@@ -82,6 +82,10 @@ const RUNTIME_ENV_KEYS = [
   "RESEND_API_KEY",
   "SESSION_TOKEN_SECRET",
   "TV_WEBHOOK_SECRET",
+  "CHARTS_INGEST_TOKEN",
+  "VAPID_PUBLIC_KEY",
+  "VAPID_PRIVATE_KEY",
+  "VAPID_SUBJECT",
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────

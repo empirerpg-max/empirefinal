@@ -1,0 +1,63 @@
+name: charts-d1-carga
+
+# Carga inicial do histórico dos charts no D1, uma parte por dia: envia as
+# semanas ainda não gravadas do CSV da aba DADOS
+# (scripts/fixtures/charts-d1-dados.csv.gz) para POST /api/charts/ingest, em
+# ordem cronológica, até 20.000 linhas (dentro das 100 mil escritas/dia do plano
+# grátis). Quando não sobra semana pendente, liga a leitura do D1
+# (charts_d1_ativo = '1'). Depois disso cada execução não faz nada.
+# Guia: docs/charts-d1-envio-semanal.md.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "17 3 * * *"
+
+# Duas execuções nunca se sobrepõem (gravariam a mesma parte duas vezes).
+concurrency:
+  group: charts-d1-carga
+  cancel-in-progress: false
+
+jobs:
+  carga:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Envia pelo próprio app (POST /api/charts/ingest): o Worker grava no D1
+      # com o binding dele — não depende de permissão de D1 no token da Cloudflare.
+      CHARTS_INGEST_TOKEN: ${{ secrets.CHARTS_INGEST_TOKEN }}
+      INGEST_URL: https://tanstack-start-app.empirerpg-forum.workers.dev/api/charts/ingest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Enviar a parte do dia (e ativar quando terminar)
+        run: |
+          set -o pipefail
+          if [ -z "$CHARTS_INGEST_TOKEN" ]; then echo "Secret CHARTS_INGEST_TOKEN não configurado."; exit 1; fi
+          gunzip -c scripts/fixtures/charts-d1-dados.csv.gz > dados.csv
+          bun scripts/charts-d1-carga-inicial.ts \
+            --dados dados.csv \
+            --pesos scripts/fixtures/charts-d1-pesos.csv \
+            --url "$INGEST_URL" \
+            --limite 20000 \
+            --ativar 2>&1 | tee resumo.txt
+
+      - name: Resumo
+        if: always()
+        run: |
+          if [ -f resumo.txt ]; then
+            { echo '```'; tail -n 40 resumo.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: charts-d1-carga-resumo
+          path: resumo.txt
+          if-no-files-found: ignore

@@ -1,0 +1,44 @@
+// Adaptador D1 → bun:sqlite em memória, pros testes e pra carga local dos
+// charts (D1 é SQLite, então o mesmo SQL roda aqui). `batch` roda dentro de
+// uma transação: tudo ou nada, igual ao D1.
+import { Database } from "bun:sqlite";
+import type { D1DatabaseLike, D1PreparedStatement } from "../backend/src/services/catalogoDbService";
+
+type Valor = string | number | bigint | boolean | null | Uint8Array;
+
+/** Chamado a cada statement executado (SQL, parâmetros e nº de linhas devolvidas) — usado pra medir leituras. */
+export type AoExecutar = (sql: string, params: unknown[], linhas: number) => void;
+
+/** D1 + `exec` (script SQL cru com vários statements, como `wrangler d1 execute --file`). */
+export type D1Sqlite = D1DatabaseLike & { exec(sql: string): void };
+
+export function criarD1Sqlite(arquivo = ":memory:", aoExecutar?: AoExecutar): D1Sqlite {
+  const sqlite = new Database(arquivo);
+
+  const executar = (sql: string, params: unknown[]) => {
+    const linhas = sqlite.prepare(sql).all(...(params.map((v) => (v === undefined ? null : v)) as Valor[]));
+    aoExecutar?.(sql, params, linhas.length);
+    return linhas;
+  };
+
+  const criarStatement = (sql: string, params: unknown[] = []): D1PreparedStatement & { executar(): unknown[] } => ({
+    bind: (...values: unknown[]) => criarStatement(sql, values),
+    executar: () => executar(sql, params),
+    run: async () => {
+      executar(sql, params);
+      return { results: [], success: true };
+    },
+    all: async <T>() => ({ results: executar(sql, params) as T[], success: true }),
+  });
+
+  return {
+    exec: (sql: string) => {
+      sqlite.exec(sql);
+    },
+    prepare: (sql: string) => criarStatement(sql),
+    batch: async (statements: D1PreparedStatement[]) =>
+      sqlite.transaction(() =>
+        statements.map((s) => ({ results: (s as ReturnType<typeof criarStatement>).executar(), success: true })),
+      )(),
+  };
+}

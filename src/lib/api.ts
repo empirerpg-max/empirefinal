@@ -2066,11 +2066,12 @@ export const api = {
     });
     return res.json();
   },
-  async curtirPostSocial(postId: string, tgId: string): Promise<any> {
+  async curtirPostSocial(postId: string, tgId: string, autor?: string): Promise<any> {
     const res = await fetch("/api/social/curtir", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postId, tgId }),
+      // autor = nome/handle de quem curtiu, só pra notificação do dono do post.
+      body: JSON.stringify({ postId, tgId, autor }),
     });
     return res.json();
   },

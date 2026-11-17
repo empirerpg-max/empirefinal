@@ -1,4 +1,12 @@
 import { googleSheetsService } from "../services/googleSheetsService";
+import { normalizarTitulo, type MusicaCatalogo } from "../services/chartsD1/artistas";
+import { fixImg, fmt } from "../services/chartsD1/formato";
+import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
+import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
+import {
+  CHARTS_HOF, carregarCatalogo, carregarFotos, carregarGenerosArtistas, chartsD1Ativo, datasDoChart, generosDoChart, linhasDoChart, linhasPaises,
+  numero1DaUltimaSemana, perfilHOF, temPesosPais,
+} from "../services/chartsD1/repo";
 
 // Empire Charts — migrado do Apps Script (script.google.com/macros/.../exec)
 // que servia isso antes. Mesma lógica, linha por linha, só trocando
@@ -18,38 +26,104 @@ function jsonOk(data: unknown): Response {
   });
 }
 
-// Mesma lógica do fmt() original: "-"/vazio → "0", senão número formatado
-// pt-BR (separador de milhar).
-function fmt(v: unknown): string {
-  const s = String(v ?? "");
-  if (!s || s === "-") return "0";
-  const n = Number(s.replace(/[^\d]/g, ""));
-  return n.toLocaleString("pt-BR");
-}
-
-// Mesma lógica do fixImg() original: extrai o ID do Drive de dentro de
-// qualquer formato de link (uc?id=, /file/d/.../view, thumbnail?id=, etc)
-// e devolve um link de thumbnail padronizado. O frontend já sabe rotear
-// qualquer link drive.google.com pelo proxy autenticado (resolveImg).
-function fixImg(u: unknown): string {
-  const s = String(u ?? "");
-  // "" vazio faz o frontend usar o próprio fallback visual (ícone/estrela)
-  // — devolver uma URL fixa aqui (como era antes, "via.placeholder.com",
-  // serviço desativado há tempos) faz o <img> tentar carregar um link morto
-  // e sempre falhar, mesmo quando a capa é legitimamente vazia.
-  if (!s || s === "-") return "";
-  const m = s.match(/[-\w]{25,}/);
-  return m ? `https://drive.google.com/thumbnail?id=${m[0]}&sz=s1000` : s;
-}
-
 async function readSheet(spreadsheetKey: keyof typeof googleSheetsService, sheetName: string): Promise<Row[]> {
   const svc = googleSheetsService[spreadsheetKey] as { readValues: (s: string) => Promise<Row[]> };
   const rows = await svc.readValues(sheetName).catch(() => []);
   return rows || [];
 }
 
+// ---- D1 (5 charts semanais + COUNTRIES) ----
+// Se a leitura do D1 foi ativada (chart_config.charts_d1_ativo = '1', ao fim
+// da carga inicial — antes disso o D1 está pela metade) e o chart tem semanas
+// lá, a leitura vem do D1; senão (banco ausente, não ativado, chart vazio ou
+// erro) segue o caminho da planilha abaixo. Flag, datas por chart e
+// catálogo/fotos/gêneros de artista ficam em cache por isolate com o mesmo TTL das respostas
+// (limparCacheCharts zera tudo após uma ingestão).
+interface ReferenciasD1 {
+  cat: Map<string, MusicaCatalogo>;
+  fotos: Map<string, string>;
+  /** artista_info.genero por nome_upper: gênero quando a música não tem um no catálogo. */
+  generosArtistas: Map<string, string>;
+}
+const datasD1Cache = new Map<ChartId, { valor: Promise<string[]>; expiresAt: number }>();
+let ativoD1Cache: { valor: Promise<boolean>; expiresAt: number } | null = null;
+
+function ativoD1(db: D1DatabaseLike): Promise<boolean> {
+  if (ativoD1Cache && ativoD1Cache.expiresAt > Date.now()) return ativoD1Cache.valor;
+  const valor = chartsD1Ativo(db);
+  const entrada = { valor, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS };
+  valor.catch(() => {
+    if (ativoD1Cache === entrada) ativoD1Cache = null;
+  });
+  ativoD1Cache = entrada;
+  return valor;
+}
+let referenciasD1Cache: { valor: Promise<ReferenciasD1>; expiresAt: number } | null = null;
+
+function datasD1(db: D1DatabaseLike, chart: ChartId): Promise<string[]> {
+  const c = datasD1Cache.get(chart);
+  if (c && c.expiresAt > Date.now()) return c.valor;
+  const valor = datasDoChart(db, chart);
+  const entrada = { valor, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS };
+  valor.catch(() => {
+    if (datasD1Cache.get(chart) === entrada) datasD1Cache.delete(chart);
+  });
+  datasD1Cache.set(chart, entrada);
+  return valor;
+}
+
+function referenciasD1(db: D1DatabaseLike): Promise<ReferenciasD1> {
+  if (referenciasD1Cache && referenciasD1Cache.expiresAt > Date.now()) return referenciasD1Cache.valor;
+  const valor = Promise.all([carregarCatalogo(db), carregarFotos(db), carregarGenerosArtistas(db)]).then(
+    ([cat, fotos, generosArtistas]) => ({ cat, fotos, generosArtistas }),
+  );
+  const entrada = { valor, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS };
+  valor.catch(() => {
+    if (referenciasD1Cache === entrada) referenciasD1Cache = null;
+  });
+  referenciasD1Cache = entrada;
+  return valor;
+}
+
+/** Aba de /api/charts → chart do D1 ("SPOTIFY COUNTRIES" → SPOTIFY + países); null se não migrada. */
+function chartD1DaAba(tab: string): { chart: ChartId; paises: boolean } | null {
+  if ((CHARTS as string[]).includes(tab)) return { chart: tab as ChartId, paises: false };
+  const base = tab.endsWith(" COUNTRIES") ? tab.slice(0, -" COUNTRIES".length) : "";
+  if ((CHARTS_COM_PAIS as string[]).includes(base)) return { chart: base as ChartId, paises: true };
+  return null;
+}
+
+/** Roda `ler` no D1 se a leitura está ativada e o chart tem dados lá; `undefined` (inclusive vindo de `ler`) = usar a planilha. */
+async function viaD1<T>(
+  chart: ChartId,
+  ler: (db: D1DatabaseLike, datas: string[]) => Promise<T | undefined>,
+): Promise<T | undefined> {
+  const db = getCatalogoDb();
+  if (!db) return undefined;
+  try {
+    if (!(await ativoD1(db))) return undefined;
+    const datas = await datasD1(db, chart);
+    if (!datas.length) return undefined;
+    return await ler(db, datas);
+  } catch (e) {
+    console.warn(`[charts-d1] leitura de ${chart} no D1 falhou; usando a planilha:`, e);
+    return undefined;
+  }
+}
+
 // ---- FILTROS ----
 async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] }> {
+  const alvo = chartD1DaAba(tab);
+  if (alvo) {
+    const d1 = await viaD1(alvo.chart, async (db, datas) => {
+      if (alvo.paises) return (await temPesosPais(db, alvo.chart)) ? { dates: datas, styles: [] } : undefined;
+      // Gêneros da semana mais recente (a lista do filtro acompanha o chart atual).
+      const { generosArtistas } = await referenciasD1(db);
+      return { dates: datas, styles: await generosDoChart(db, alvo.chart, datas[0], generosArtistas) };
+    });
+    if (d1) return d1;
+  }
+
   const isA = tab === "DADOS ÁLBUNS";
   const isC = tab.includes("COUNTRIES");
   const key = isA ? "chartsAlbums" : isC ? "chartsCountries" : "chartsBase";
@@ -73,6 +147,19 @@ async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] 
 
 // ---- CHART ----
 async function fetchC(tab: string, date: string, style: string): Promise<unknown[]> {
+  const alvo = chartD1DaAba(tab);
+  if (alvo) {
+    const d1 = await viaD1<unknown[]>(alvo.chart, async (db) => {
+      // Sem pesos de país no D1, COUNTRIES ainda é da planilha.
+      if (alvo.paises && !(await temPesosPais(db, alvo.chart))) return undefined;
+      const { cat, fotos, generosArtistas } = await referenciasD1(db);
+      return alvo.paises
+        ? linhasPaises(db, alvo.chart, date, cat, fotos)
+        : linhasDoChart(db, alvo.chart, date, style, cat, fotos, generosArtistas);
+    });
+    if (d1) return d1;
+  }
+
   const isA = tab === "DADOS ÁLBUNS";
   const isC = tab.includes("COUNTRIES");
   const key = isA ? "chartsAlbums" : isC ? "chartsCountries" : "chartsBase";
@@ -121,23 +208,6 @@ async function fetchC(tab: string, date: string, style: string): Promise<unknown
             style: r[17],
           },
     );
-}
-
-// Normaliza título pra cruzamento robusto: remove acentos, qualquer trecho
-// entre parênteses (feat., remix, edit etc. — abas de origem e Musicas às
-// vezes discordam se incluem isso no título) e "feat./ft. ..." mesmo quando
-// vem SEM parênteses (achado no diagnóstico: "TED - Mind Maze (feat. Rayna)"
-// em "EM Alta" vs "TED - Mind Maze feat. Rayna" em Musicas — sem parênteses
-// dos dois lados, ou só de um, o corte tem que valer em ambos os casos).
-function normalizarTitulo(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/\([^)]*\)/g, "")
-    .replace(/\b(feat|ft)\.?\s+.*/i, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
 }
 
 // Musicas!H guarda "Artista - Título" (não só o título) — o cruzamento por
@@ -272,10 +342,35 @@ function contarNumero1(items: { t: string; v: string }[]): number {
   }).length;
 }
 
+// Parte dos charts semanais no HOF vinda do D1, só dos charts que já têm
+// semanas lá (os outros campos seguem da HALL_OF_FAME_DB).
+async function perfilHOFDoD1(artist: string): Promise<Record<string, unknown>> {
+  const db = getCatalogoDb();
+  if (!db) return {};
+  try {
+    if (!(await ativoD1(db))) return {};
+    const [hot100, spotify, apple, youtube] = await Promise.all(
+      CHARTS_HOF.map(async (c) => (await datasD1(db, c)).length > 0),
+    );
+    if (!hot100 && !spotify && !apple && !youtube) return {};
+    const p = await perfilHOF(db, artist);
+    return {
+      ...(hot100 ? { n1_hot100: p.n1_hot100, runs: p.runs } : {}),
+      ...(spotify ? { n1_spotify: p.n1_spotify, sp: p.sp } : {}),
+      ...(apple ? { am: p.am } : {}),
+      ...(youtube ? { n1_youtube: p.n1_youtube, yt: p.yt } : {}),
+    };
+  } catch (e) {
+    console.warn("[charts-d1] HOF do D1 falhou; usando a planilha:", e);
+    return {};
+  }
+}
+
 async function fetchHOFProfile(artist: string): Promise<unknown> {
   const data = await readSheet("chartsBase", "HALL_OF_FAME_DB");
   const r = data.find((row) => (row[0] || "").trim().toUpperCase() === artist.trim().toUpperCase());
   if (!r) return {};
+  const doD1 = await perfilHOFDoD1(artist);
   const runsBase = parseHOFList(r[12]);
   const runsLegado = parseHOFList(r[13]);
   const runsCombinados = [...runsBase, ...runsLegado];
@@ -297,6 +392,15 @@ async function fetchHOFProfile(artist: string): Promise<unknown> {
     am: parseHOFList(r[10]),
     alb: parseHOFList(r[11]),
     runs: runsCombinados,
+    ...doD1,
+    // Runs legados (col. N) seguem somando por cima do Hot 100 do D1, como
+    // somavam por cima da col. M.
+    ...(doD1.runs
+      ? {
+          runs: [...(doD1.runs as { t: string; v: string }[]), ...runsLegado],
+          n1_hot100: String(Number(doD1.n1_hot100) + contarNumero1(runsLegado)),
+        }
+      : {}),
   };
 }
 
@@ -386,17 +490,27 @@ async function fetchBannerN1s(): Promise<Record<string, unknown>> {
   // de origem (BILLBOARD HOT 100, SPOTIFY etc.) raramente têm as colunas de
   // capa (P/Q) preenchidas, então os cards "Top por plataforma" da Início
   // ficavam sem nenhuma imagem.
-  const capaPorTitulo = await buildCapaPorTituloCatalogo();
+  // Só lido quando algum chart realmente cai na planilha.
+  let capaPorTituloP: Promise<Map<string, string>> | null = null;
+  const capaPorTitulo = () => (capaPorTituloP ??= buildCapaPorTituloCatalogo());
 
   await Promise.all(
     platforms.map(async ({ key, tab }) => {
+      const doD1 = await viaD1(tab as ChartId, async (db) => {
+        const { cat, fotos } = await referenciasD1(db);
+        return numero1DaUltimaSemana(db, tab as ChartId, cat, fotos);
+      });
+      if (doD1) {
+        result[key] = doD1;
+        return;
+      }
       const data = await readSheet("chartsBase", tab);
       if (data.length === 0) return;
       const row = latestRow(data.slice(1));
       if (row) {
         const capaPropria = fixImg(row[15] || row[16] || "");
-        const capaCatalogo = fixImg(capaPorTitulo.get(normalizarTitulo(row[3] || "")));
-        result[key] = { tit: row[3] || "", art: row[7] || "", capa: capaPropria || capaCatalogo };
+        const capa = capaPropria || fixImg((await capaPorTitulo()).get(normalizarTitulo(row[3] || "")));
+        result[key] = { tit: row[3] || "", art: row[7] || "", capa };
       }
     }),
   );
@@ -407,8 +521,8 @@ async function fetchBannerN1s(): Promise<Record<string, unknown>> {
       const row = latestRow(data.slice(1));
       if (row) {
         const capaPropria = fixImg(row[10] || "");
-        const capaCatalogo = fixImg(capaPorTitulo.get(normalizarTitulo(row[3] || "")));
-        result["bb200"] = { tit: row[3] || "", art: row[11] || "", capa: capaPropria || capaCatalogo };
+        const capa = capaPropria || fixImg((await capaPorTitulo()).get(normalizarTitulo(row[3] || "")));
+        result["bb200"] = { tit: row[3] || "", art: row[11] || "", capa };
       }
     }
   } catch {
@@ -484,6 +598,14 @@ async function fetchReleases(): Promise<unknown[]> {
 const CHARTS_RESPONSE_CACHE_TTL_MS = 5 * 60_000;
 const chartsResponseCache = new Map<string, { body: string; expiresAt: number }>();
 const chartsResponseInFlight = new Map<string, Promise<string>>();
+
+/** Descarta as respostas em cache deste isolate (chamado após ingerir uma semana no D1). */
+export function limparCacheCharts(): void {
+  chartsResponseCache.clear();
+  datasD1Cache.clear();
+  referenciasD1Cache = null;
+  ativoD1Cache = null;
+}
 
 export async function chartsApiController(request: Request): Promise<Response> {
   const url = new URL(request.url);
