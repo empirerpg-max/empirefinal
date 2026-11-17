@@ -1,4 +1,7 @@
+import { getOwnerIdForArtist } from "./artistasController";
+import { getCatalogoDb } from "../services/catalogoDbService";
 import {
+  appendRows,
   googleSheetsService,
   ensureSheetTab,
   normalizeComparison,
@@ -193,8 +196,13 @@ export async function getNotificacoesController(request: Request): Promise<Respo
         lida: (r[9] || "").trim().toUpperCase() === "TRUE",
         evento: (r[10] || "").trim() || "comentario_forum",
       }))
-      .filter((n) => n.id && normalizeComparison(n.ownerId) === normTg)
-      .reverse()
+      .map((n, i) => ({ n, i }))
+      .filter(({ n }) => n.id && normalizeComparison(n.ownerId) === normTg)
+      // Mais recentes primeiro pela DATA (não pela posição na aba): as
+      // notificações retroativas (backfill do fórum) entram no fim da aba
+      // mas com a data original do comentário.
+      .sort((a, b) => parseDataBR(b.n.data) - parseDataBR(a.n.data) || b.i - a.i)
+      .map(({ n }) => n)
       .slice(0, 50);
 
     const unreadCount = items.filter((n) => !n.lida).length;
@@ -352,5 +360,164 @@ export async function diagNotificacoesController(request: Request): Promise<Resp
     totalLinhas: Math.max(0, rows.length - 1),
     porEvento,
     ultimas: rows.slice(-n).map((r) => [r[0], r[3], r[4], (r[5] || "").slice(0, 40), r[8], r[9], r[10]]),
+  });
+}
+
+// "17/11/2026, 10:03:00" / "17/11/2026 10:03" -> epoch ms (0 se não der).
+function parseDataBR(data: string): number {
+  const m = (data || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return 0;
+  const [, d, mo, y, h = "0", mi = "0", se = "0"] = m;
+  return Date.UTC(+y, +mo - 1, +d, +h, +mi, +se);
+}
+
+/**
+ * GET /api/notificacoes/admin/backfill-forum?desde=01/11/2026[&confirmar=1]
+ * Notificações RETROATIVAS de comentários no fórum: varre as 3 abas de
+ * comentário (músicas, álbuns, vídeos) a partir de `desde`, descobre o dono
+ * do artista de cada tópico e cria a notificação que faltou no sininho
+ * (com a data original do comentário). Nunca duplica: pula o que já existe
+ * (mesmo dono + autor + tópico + começo do comentário). Sem `confirmar=1`
+ * só simula e mostra o que faria. Não manda push (seria spam de coisa
+ * antiga) e entra como não lida.
+ */
+export async function backfillNotificacoesForumController(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const desdeStr = (url.searchParams.get("desde") || "").trim();
+  const desde = parseDataBR(desdeStr);
+  if (!desde) return json({ success: false, error: "Informe desde=dd/mm/aaaa." }, 400);
+  const confirmar = url.searchParams.get("confirmar") === "1";
+
+  await ensureNotifSheet();
+  const notifRows = await googleSheetsService.principal.readValues(NOTIF_SHEET).catch(() => []);
+  const chave = (owner: string, autor: string, topic: string, coment: string) =>
+    [owner, autor, topic, coment.replace(/…$/, "").slice(0, 60)].map((x) => normalizeComparison(x || "")).join("|");
+  const existentes = new Set(notifRows.slice(1).map((r) => chave(r[1], r[2], r[6], r[7] || "")));
+
+  // Mapa tópico -> { título, artista } por tipo de mídia.
+  type Info = { titulo: string; artista: string };
+  const fromTitulo = (t: string): Info => {
+    const sep = t.indexOf(" - ");
+    return { titulo: t, artista: sep >= 0 ? t.slice(0, sep).trim() : "" };
+  };
+  const [musicas, albuns, mvs, cMus, cAlb, cMv] = await Promise.all([
+    googleSheetsService.principal.readValues("Musicas").catch(() => []),
+    googleSheetsService.principal.readValues("Albuns").catch(() => []),
+    googleSheetsService.principal.readValues("Music Videos").catch(() => []),
+    googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
+    googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
+    googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
+  ]);
+  const mapaMus = new Map<string, Info>();
+  for (const r of musicas.slice(1)) {
+    const t = normalizeText(r[1]);
+    if (t) mapaMus.set(t, { titulo: normalizeText(r[7]), artista: normalizeText(r[13]) });
+  }
+  const mapaAlb = new Map<string, Info>();
+  for (const r of albuns.slice(1)) {
+    const t = normalizeText(r[1]);
+    if (t) mapaAlb.set(t, fromTitulo(normalizeText(r[6])));
+  }
+  const mapaMv = new Map<string, Info>();
+  for (const r of mvs.slice(1)) {
+    const t = normalizeText(r[5]);
+    if (t) mapaMv.set(t, fromTitulo(normalizeText(r[1])));
+  }
+
+  // Músicas que só existem no D1 (mesmo fallback do createCommentController).
+  const db = getCatalogoDb();
+  const buscarMusicaD1 = async (topic: string): Promise<Info | undefined> => {
+    if (!db) return undefined;
+    const res = await db
+      .prepare("SELECT titulo, artista FROM musicas WHERE id_topico = ? LIMIT 1")
+      .bind(topic)
+      .all<{ titulo: string; artista: string }>()
+      .catch(() => null);
+    const row = res?.results?.[0];
+    return row ? { titulo: normalizeText(row.titulo), artista: normalizeText(row.artista) } : undefined;
+  };
+
+  const fontes = [
+    { tipoMedia: "musica", rows: cMus, colData: 5, mapa: mapaMus },
+    { tipoMedia: "album", rows: cAlb, colData: 4, mapa: mapaAlb },
+    { tipoMedia: "music-video", rows: cMv, colData: 4, mapa: mapaMv },
+  ];
+
+  const ownerCache = new Map<string, string>();
+  const novas: string[][] = [];
+  const semArtista: string[] = [];
+  let analisados = 0;
+  let jaExistiam = 0;
+  let semDono = 0;
+  let base = Date.now();
+
+  for (const f of fontes) {
+    for (const r of f.rows.slice(1)) {
+      const topic = normalizeText(r[0]);
+      const autorId = normalizeText(r[1]);
+      const autorNome = normalizeText(r[2]);
+      const comentario = normalizeText(r[3]);
+      const data = normalizeText(r[f.colData]);
+      if (!topic || !autorId || !comentario || parseDataBR(data) < desde) continue;
+      analisados++;
+
+      let info = f.mapa.get(topic);
+      if ((!info || !info.artista) && f.tipoMedia === "musica") {
+        info = (await buscarMusicaD1(topic)) || info;
+        if (info) f.mapa.set(topic, info);
+      }
+      if (!info?.artista) {
+        if (semArtista.length < 30) semArtista.push(`${f.tipoMedia}:${topic}`);
+        continue;
+      }
+      const artKey = normalizeComparison(info.artista);
+      if (!ownerCache.has(artKey)) ownerCache.set(artKey, await getOwnerIdForArtist(info.artista).catch(() => ""));
+      const ownerId = (ownerCache.get(artKey) || "").trim();
+      if (!ownerId) {
+        semDono++;
+        continue;
+      }
+      if (normalizeComparison(ownerId) === normalizeComparison(autorId)) continue;
+
+      const trecho = comentario.length > 140 ? `${comentario.slice(0, 140).trim()}…` : comentario;
+      const k = chave(ownerId, autorId, topic, trecho);
+      if (existentes.has(k)) {
+        jaExistiam++;
+        continue;
+      }
+      existentes.add(k);
+      novas.push([
+        `N${base++}${Math.floor(Math.random() * 1000)}`,
+        ownerId,
+        autorId,
+        autorNome,
+        f.tipoMedia,
+        info.titulo || topic,
+        topic,
+        trecho,
+        data,
+        "FALSE",
+        "comentario_forum",
+      ]);
+    }
+  }
+
+  if (confirmar && novas.length > 0) {
+    for (let i = 0; i < novas.length; i += 500) {
+      await appendRows("principal", NOTIF_SHEET, novas.slice(i, i + 500));
+    }
+  }
+
+  return json({
+    success: true,
+    modo: confirmar ? "gravado" : "simulação (use &confirmar=1 pra gravar)",
+    desde: desdeStr,
+    comentariosAnalisados: analisados,
+    jaExistiam,
+    criadas: confirmar ? novas.length : 0,
+    seriamCriadas: novas.length,
+    semDonoCadastrado: semDono,
+    topicosSemArtista: semArtista,
+    amostra: novas.slice(0, 25).map((r) => `${r[8]} — ${r[3]} comentou ${r[5]} (dono ${r[1]})`),
   });
 }

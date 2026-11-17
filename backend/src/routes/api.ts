@@ -49,6 +49,7 @@ import {
   marcarNotificacoesLidasController,
   getPreferenciasNotificacaoController,
   diagNotificacoesController,
+  backfillNotificacoesForumController,
   salvarPreferenciasNotificacaoController,
   inscreverPushController,
   desinscreverPushController,
@@ -592,6 +593,7 @@ export async function handleEmpireApiRoutes(
     "/api/notificacoes/marcar-lidas",
     "/api/notificacoes/preferencias",
     "/api/notificacoes/admin/diag",
+    "/api/notificacoes/admin/backfill-forum",
     "/api/notificacoes/push/inscrever",
     "/api/notificacoes/push/desinscrever",
     "/api/gestao/musica",
@@ -1821,6 +1823,8 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await marcarNotificacoesLidasController(request);
+  } else if (url.pathname === "/api/notificacoes/admin/backfill-forum") {
+    response = await backfillNotificacoesForumController(request);
   } else if (url.pathname === "/api/notificacoes/admin/diag") {
     response = await diagNotificacoesController(request);
   } else if (url.pathname === "/api/notificacoes/preferencias") {
