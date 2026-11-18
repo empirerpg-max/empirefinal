@@ -263,6 +263,7 @@ import { buscaController } from "../controllers/buscaController";
 import { adminDiagMusicasVersoesD1Controller } from "../controllers/adminDiagMusicasVersoesD1Controller";
 import { adminMusicasChaveD1Controller } from "../controllers/adminMusicasChaveD1Controller";
 import { adminTopicoComentariosMusicasController } from "../controllers/adminTopicoComentariosMusicasController";
+import { adminCorrigirCodigosMusicasController } from "../controllers/adminCorrigirCodigosMusicasController";
 import { adminEspelhoAlbunsD1Controller } from "../controllers/adminEspelhoAlbunsD1Controller";
 import {
   adminApagarTesteBotAlbumController,
@@ -2280,6 +2281,8 @@ export async function handleEmpireApiRoutes(
     // PK (pivot 2026-10-14) — destrutivo só nessas 2 tabelas, chamado
     // manualmente via admin-call.yml antes de remigrar.
     response = await adminRecriarTabelasMusicasD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/corrigir-codigos-musicas") {
+    response = await adminCorrigirCodigosMusicasController(request);
   } else if (url.pathname === "/api/empire-play/admin/topico-comentarios-musicas") {
     response = await adminTopicoComentariosMusicasController(request);
   } else if (url.pathname === "/api/empire-play/admin/musicas-chave-d1") {
