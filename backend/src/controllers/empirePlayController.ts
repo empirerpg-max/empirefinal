@@ -2077,27 +2077,26 @@ export async function getEmpirePlayForumTopicController(
           .bind(topicIdParam)
           .all<MusicaD1Row>();
         const musicaRow = musicaRowResult.results?.[0];
-        // comentarios_musicas só guarda o Código único, e versões da mesma
-        // música (original x live…) repetem o código — por aqui os
-        // comentários de uma versão apareciam na outra (Bad Friend,
-        // 2026-11-18). Código com mais de uma versão -> caminho normal, que
-        // filtra os comentários pelo tópico.
-        const versoesDoCodigo = musicaRow?.codigo_unico
+        // Identidade no Fórum = o TÓPICO da música (cada versão tem o seu; o
+        // código único se repete entre versões — Bad Friend x Bad Friend
+        // (Live at Grammys), 2026-11-18). Só usa o atalho se TODO comentário
+        // desse código já tem o tópico preenchido; senão, caminho normal.
+        const comentariosSemTopico = musicaRow?.codigo_unico
           ? Number(
               (
                 await db
-                  .prepare("SELECT count(*) AS n FROM musicas WHERE codigo_unico = ?")
+                  .prepare("SELECT count(*) AS n FROM comentarios_musicas WHERE musica_id = ? AND coalesce(id_topico, '') = ''")
                   .bind(musicaRow.codigo_unico)
                   .all<{ n: number }>()
               ).results?.[0]?.n ?? 0,
             )
-          : 0;
-        if (musicaRow?.codigo_unico && versoesDoCodigo === 1) {
+          : 1;
+        if (musicaRow?.codigo_unico && musicaRow.id_topico && comentariosSemTopico === 0) {
           const comentariosResult = await db
             .prepare(
-              "SELECT * FROM comentarios_musicas WHERE musica_id = ? ORDER BY id ASC",
+              "SELECT * FROM comentarios_musicas WHERE id_topico = ? ORDER BY id ASC",
             )
-            .bind(musicaRow.codigo_unico)
+            .bind(musicaRow.id_topico)
             .all<{
               id: number;
               jogador_id: string | null;

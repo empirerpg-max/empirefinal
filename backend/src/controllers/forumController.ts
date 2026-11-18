@@ -738,6 +738,7 @@ export async function createCommentController(
               reacoesJson: null,
               dataHora: nowStr,
               replyTo: null,
+              idTopico: topicIdClean,
             }).run();
           }
         }
