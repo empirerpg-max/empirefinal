@@ -4,6 +4,7 @@
 // Motivo: a limpeza de Stories vencidos apagava de vez a capa da música
 // compartilhada no Story, e editar a capa de uma faixa apagava a capa
 // compartilhada com outras (ambos corrigidos em 2026-11-18).
+import { existsSync, readFileSync } from "node:fs";
 import { google } from "googleapis";
 
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID || "1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo";
@@ -71,6 +72,23 @@ async function main() {
       }
     }
   }
+  // Lista exportada do banco D1 do app (fonte real do catálogo de músicas —
+  // a aba Musicas da planilha está incompleta em relação a ele).
+  const listPath = new URL("../data/cover-ids-d1.json", import.meta.url);
+  if (existsSync(listPath)) {
+    const list = JSON.parse(readFileSync(listPath, "utf8")) as { tab: string; title: string; id: string }[];
+    console.log(`\nLista do D1: ${list.length} referência(s).`);
+    for (const item of list) {
+      total += 1;
+      const r = await check(item.id);
+      if (r.status !== "ok") {
+        const line = `[${r.status.toUpperCase()}] D1 ${item.tab} · "${item.title}" · ${item.id}${r.name ? ` (${r.name})` : ""}${r.detail ? ` — ${r.detail}` : ""}`;
+        problems.push(line);
+        console.log("  " + line);
+      }
+    }
+  }
+
   console.log("\n──────── Resumo ────────");
   console.log(`${total} referência(s) de capa verificada(s), ${cache.size} arquivo(s) distinto(s).`);
   const count = (s: string) => problems.filter((p) => p.startsWith(`[${s}]`)).length;
