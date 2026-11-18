@@ -1,6 +1,6 @@
 # Catálogo "D1 primeiro" (planilha vira backup) — design
 
-Data: 2026-11-18 · Status: aguardando aprovação
+Data: 2026-11-18 · Status: aguardando aprovação (rev. 2)
 
 ## Intenção e porquê
 
@@ -179,6 +179,16 @@ despachante confere que a linha reservada está vazia; se não estiver,
 para, registra no log e avisa (alguém mexeu na planilha à mão) — nunca
 sobrescreve.
 
+Confirmado pelo dono (2026-11-18): hoje **só o app acrescenta linhas** nas
+duas abas de EDIÇÃO CHARTS (as fórmulas ficam no topo de cada coluna e se
+estendem sozinhas); acrescentar/apagar à mão pode ser preciso um dia. Para
+esse dia: existe uma ação de admin "recalcular contador" que relê a
+planilha e acerta a próxima linha livre. Atenção registrada no log do
+sistema quando o contador é recalculado: **apagar uma linha da EDIÇÃO CHARTS
+renumera o Código único de todas as linhas abaixo** (a fórmula usa o número
+da linha) — isso já é verdade hoje e continua; o recomendado é limpar a
+linha em vez de apagá-la.
+
 **Outras fórmulas.** O builder levanta, na carga inicial, todas as colunas
 com fórmula nas abas "D1 primeiro" da tabela acima e reproduz cada uma no
 porteiro; a carga compara o valor calculado com o da planilha e aborta se
@@ -256,6 +266,13 @@ quais ficam e quais saem antes de desativar.
 Cada fase: carga inicial (cópia exata planilha → planilha virtual, com
 validação célula a célula, abortando se divergir) → ligar a chave da aba →
 desligar o caminho antigo daquela aba.
+
+## Leitores externos da planilha
+
+Confirmado pelo dono (2026-11-18): até onde se sabe, nada fora do app lê as
+abas do catálogo "ao vivo". O atraso da cópia de backup (minutos; mais em
+dia de pico do Google) é aceitável. Se um leitor externo aparecer, a aba
+dele ganha prioridade no despachante.
 
 ## Como reverter
 
