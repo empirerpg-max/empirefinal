@@ -314,3 +314,76 @@ export async function uploadStreamToDrive(
 
   return `https://drive.google.com/file/d/${json.id}/view?usp=drivesdk`;
 }
+
+// Upload DIRETO do navegador pro Drive (sem passar o arquivo pelo Worker) —
+// o Worker só abre a sessão resumable e devolve a URL dela. Motivo: o
+// Cloudflare limita o corpo de cada requisição que passa pelo Worker a
+// 100MB, e há clipes maiores que isso. A URL da sessão já funciona como
+// credencial de uso único (não precisa do token), e mandando o header
+// Origin aqui o Drive libera CORS pra esse mesmo site nos PUTs seguintes.
+export async function criarSessaoUploadDrive(
+  fileName: string,
+  folderId: string,
+  mimeType: string,
+  size: number,
+  origin: string,
+): Promise<string> {
+  const token = await getDriveOAuthAccessToken();
+  const res = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": mimeType || "application/octet-stream",
+        "X-Upload-Content-Length": String(size),
+        Origin: origin,
+      },
+      body: JSON.stringify({ name: fileName, parents: [folderId] }),
+    },
+  );
+  const sessionUrl = res.headers.get("location");
+  if (!res.ok || !sessionUrl) {
+    const detalhe = await res.text().catch(() => "");
+    registrarLogSistema({
+      categoria: "Falha de escrita",
+      oQueAconteceu: `Não consegui abrir a sessão de upload direto do arquivo "${fileName}" no Google Drive (pasta ${folderId}).`,
+      onde: "googleDriveService.criarSessaoUploadDrive",
+      causaProvavel:
+        res.status === 401 || res.status === 403
+          ? "Token/permissão do Drive inválido ou quota da conta esgotada."
+          : "Erro retornado pela própria API do Google Drive — ver detalhe técnico.",
+      comoResolver: "Copie o detalhe técnico e mande pro Claude investigar a causa exata.",
+      detalheTecnico: `HTTP ${res.status} | mimeType=${mimeType} | tamanho=${size} | resposta=${detalhe.slice(0, 500)}`,
+    }).catch(() => {});
+    throw new Error(`Falha ao abrir o upload no Drive (HTTP ${res.status}).`);
+  }
+  return sessionUrl;
+}
+
+// Depois do upload direto: confere que o arquivo existe, deixa público
+// (mesmo "extra" de uploadFileToDrive) e devolve o link no formato padrão.
+export async function finalizarUploadDrive(fileId: string): Promise<string> {
+  const token = await getDriveOAuthAccessToken();
+  const check = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,size`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!check.ok) {
+    throw new Error(`Arquivo enviado não foi encontrado no Drive (HTTP ${check.status}).`);
+  }
+  try {
+    const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", type: "anyone" }),
+    });
+    if (!permRes.ok) {
+      console.warn(`[finalizarUploadDrive] Permissão pública não aplicada (HTTP ${permRes.status}) pro arquivo ${fileId}`);
+    }
+  } catch (permErr) {
+    console.warn("[finalizarUploadDrive] Permissão de visualização:", permErr);
+  }
+  return `https://drive.google.com/file/d/${fileId}/view?usp=drivesdk`;
+}

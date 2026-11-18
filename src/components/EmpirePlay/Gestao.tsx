@@ -34,6 +34,7 @@ import { BannersManager } from "./BannersManager";
 import { GestaoEmpireTv } from "./GestaoEmpireTv";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { useImageCrop } from "@/hooks/use-image-crop";
+import { uploadDiretoDrive } from "@/lib/driveUpload";
 import {
   ExtraMaterialEditor,
   emptyExtraMaterialEditorValue,
@@ -836,7 +837,24 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     const usarStreaming = folderType === "video" || folderType === "musicaAudio" || ARQUIVO_GRANDE;
     let erroServidor: string | null = null;
 
-    // 0. Streaming (vídeo/áudio/arquivo grande)
+    const LIMITE_WORKER = 95 * 1024 * 1024; // teto de corpo do Cloudflare (100MB) com folga
+
+    // 0. Vídeo/áudio/arquivo grande: primeiro DIRETO pro Drive (sem limite
+    // de 100MB do Cloudflare — há clipes maiores que isso); se falhar,
+    // streaming pelo servidor (só cabe até 95MB).
+    if (usarStreaming) {
+      try {
+        return await uploadDiretoDrive(file, resolvedFolderType, customName || file.name);
+      } catch (err) {
+        console.warn("[Gestao] Upload direto pro Drive falhou, tentando streaming:", err);
+        erroServidor = err instanceof Error ? err.message : String(err);
+        if (file.size > LIMITE_WORKER) {
+          throw new Error(
+            `Não foi possível enviar o arquivo pro Drive (${erroServidor}). Tente novamente — com arquivo grande, uma conexão mais estável ajuda.`,
+          );
+        }
+      }
+    }
     if (usarStreaming) {
       try {
         const res = await fetchComTimeout("/api/gestao/upload-stream", {

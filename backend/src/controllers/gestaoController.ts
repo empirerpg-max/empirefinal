@@ -5,7 +5,13 @@ import {
   type GoogleSheetRow,
 } from "../services/googleSheetsService";
 import { withWriteLock } from "../services/writeLockService";
-import { DRIVE_FOLDERS, uploadFileToDrive, uploadStreamToDrive } from "../services/googleDriveService";
+import {
+  DRIVE_FOLDERS,
+  criarSessaoUploadDrive,
+  finalizarUploadDrive,
+  uploadFileToDrive,
+  uploadStreamToDrive,
+} from "../services/googleDriveService";
 import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { getOwnerIdForArtist } from "./artistasController";
@@ -3729,5 +3735,72 @@ export async function uploadStreamController(request: Request): Promise<Response
       success: false,
       error: error?.message || "Falha ao enviar o arquivo para o Google Drive.",
     });
+  }
+}
+
+// Upload direto navegador → Drive (sem limite de 100MB do Cloudflare):
+// passo 1 abre a sessão, passo 2 (finalizar) publica e devolve o link.
+const MAX_UPLOAD_DIRETO_BYTES = 2 * 1024 * 1024 * 1024; // 2GB — teto de sanidade
+
+export async function uploadSessaoController(request: Request): Promise<Response> {
+  const json = (status: number, payload: unknown) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  try {
+    const body = (await request.json().catch(() => ({}))) as {
+      fileName?: string;
+      folderType?: UploadFolderType;
+      mimeType?: string;
+      size?: number;
+    };
+    const size = Number(body.size || 0);
+    if (!Number.isFinite(size) || size <= 0) {
+      return json(400, { success: false, error: "Nenhum arquivo foi recebido de verdade (upload vazio) — tente selecionar o arquivo de novo." });
+    }
+    if (size > MAX_UPLOAD_DIRETO_BYTES) {
+      return json(413, { success: false, error: `Arquivo de ${(size / (1024 * 1024)).toFixed(0)}MB é grande demais (máximo 2GB).` });
+    }
+    const origin = request.headers.get("origin") || new URL(request.url).origin;
+    const sessionUrl = await criarSessaoUploadDrive(
+      body.fileName || `file_${Date.now()}`,
+      resolverPastaUpload(body.folderType || "musica"),
+      body.mimeType || "application/octet-stream",
+      size,
+      origin,
+    );
+    return json(200, { success: true, data: { sessionUrl } });
+  } catch (error: any) {
+    console.error("[uploadSessaoController] Erro:", error);
+    return json(502, { success: false, error: error?.message || "Falha ao abrir o upload no Drive." });
+  }
+}
+
+export async function uploadFinalizarController(request: Request): Promise<Response> {
+  const json = (status: number, payload: unknown) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  try {
+    const body = (await request.json().catch(() => ({}))) as { fileId?: string };
+    const fileId = String(body.fileId || "");
+    if (!/^[\w-]{10,}$/.test(fileId)) {
+      return json(400, { success: false, error: "ID de arquivo inválido." });
+    }
+    const fileUrl = await finalizarUploadDrive(fileId);
+    return json(200, { success: true, data: { fileUrl } });
+  } catch (error: any) {
+    console.error("[uploadFinalizarController] Erro:", error);
+    registrarLogSistema({
+      categoria: "Falha de escrita",
+      oQueAconteceu: "Falha ao finalizar upload direto pro Drive.",
+      onde: "uploadFinalizarController",
+      causaProvavel: "O arquivo não chegou inteiro no Drive, ou erro na API do Drive — ver detalhe técnico.",
+      comoResolver: "Copie o detalhe técnico e mande pro Claude investigar a causa exata.",
+      detalheTecnico: error?.message || String(error),
+    }).catch(() => {});
+    return json(502, { success: false, error: error?.message || "Falha ao finalizar o upload no Drive." });
   }
 }

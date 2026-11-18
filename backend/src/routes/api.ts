@@ -73,6 +73,8 @@ import {
   substituirAlbumController,
   uploadDriveController,
   uploadStreamController,
+  uploadSessaoController,
+  uploadFinalizarController,
   updateFaixaLetraController,
   updateFaixaLetraSincronizadaController,
   publicarFaixaPendenteController,
@@ -620,6 +622,8 @@ export async function handleEmpireApiRoutes(
     "/api/gestao/meus-albuns",
     "/api/gestao/upload",
     "/api/gestao/upload-stream",
+    "/api/gestao/upload-sessao",
+    "/api/gestao/upload-finalizar",
     "/api/gestao/extra",
     "/api/editar",
     "/api/empire-play/home",
@@ -1043,6 +1047,20 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await uploadStreamController(request);
+  } else if (
+    url.pathname === "/api/gestao/upload-sessao" ||
+    url.pathname === "/api/gestao/upload-finalizar"
+  ) {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: `Use POST para ${url.pathname}.` }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response =
+      url.pathname === "/api/gestao/upload-sessao"
+        ? await uploadSessaoController(request)
+        : await uploadFinalizarController(request);
   } else if (url.pathname === "/api/acervo/revistas") {
     response =
       request.method === "GET"
