@@ -4,10 +4,9 @@ name: Converter vídeos do Drive para formato compatível (Music Videos)
 # em todo navegador (ex.: Edge no Windows) para H.264 em máxima qualidade,
 # substituindo o próprio arquivo (mesmo link, sem cópia).
 #
-# - Manual: Actions > este workflow > "Run workflow". Comece com dry_run
-#   ligado (só lista o que precisa converter).
-# - Automático: roda todo dia de madrugada e converte só os vídeos novos
-#   (os já verificados são pulados), cobrindo uploads novos do Gestão.
+# - Só manual: Actions > este workflow > "Run workflow". Comece com dry_run
+#   ligado (só lista o que precisa converter). Sem rodada automática até o
+#   dono do projeto decidir entre substituir o arquivo ou manter o original.
 
 on:
   workflow_dispatch:
@@ -24,16 +23,6 @@ on:
         description: "Só vídeos cujo título contenha este texto, ou este ID do Drive (vazio = todos)"
         type: string
         default: ""
-  # Temporário: roda só o modo teste (lista, sem alterar nada) ao enviar
-  # para esta branch, já que o botão manual só aparece depois do merge.
-  push:
-    branches: [claude/intelligent-sagan-woiah1]
-    paths:
-      - .github/workflows/convert-drive-videos.yml
-      - telegram-media/scripts/convert-drive-videos.ts
-  schedule:
-    # 06:17 UTC = 03:17 em Brasília
-    - cron: "17 6 * * *"
 
 concurrency:
   group: convert-drive-videos
@@ -64,8 +53,7 @@ jobs:
           DRIVE_OAUTH_CLIENT_ID: ${{ secrets.DRIVE_OAUTH_CLIENT_ID }}
           DRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.DRIVE_OAUTH_CLIENT_SECRET }}
           DRIVE_OAUTH_REFRESH_TOKEN: ${{ secrets.DRIVE_OAUTH_REFRESH_TOKEN }}
-          # Agendada converte de verdade; push é sempre só teste.
-          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || (github.event_name == 'push' && 'true' || inputs.dry_run) }}
+          DRY_RUN: ${{ inputs.dry_run }}
           LIMIT: ${{ inputs.limit }}
           TARGET: ${{ inputs.target }}
         run: npm run convert-drive-videos
