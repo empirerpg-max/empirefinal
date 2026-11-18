@@ -2077,7 +2077,22 @@ export async function getEmpirePlayForumTopicController(
           .bind(topicIdParam)
           .all<MusicaD1Row>();
         const musicaRow = musicaRowResult.results?.[0];
-        if (musicaRow?.codigo_unico) {
+        // comentarios_musicas só guarda o Código único, e versões da mesma
+        // música (original x live…) repetem o código — por aqui os
+        // comentários de uma versão apareciam na outra (Bad Friend,
+        // 2026-11-18). Código com mais de uma versão -> caminho normal, que
+        // filtra os comentários pelo tópico.
+        const versoesDoCodigo = musicaRow?.codigo_unico
+          ? Number(
+              (
+                await db
+                  .prepare("SELECT count(*) AS n FROM musicas WHERE codigo_unico = ?")
+                  .bind(musicaRow.codigo_unico)
+                  .all<{ n: number }>()
+              ).results?.[0]?.n ?? 0,
+            )
+          : 0;
+        if (musicaRow?.codigo_unico && versoesDoCodigo === 1) {
           const comentariosResult = await db
             .prepare(
               "SELECT * FROM comentarios_musicas WHERE musica_id = ? ORDER BY id ASC",
