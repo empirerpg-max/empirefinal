@@ -213,3 +213,104 @@ export async function uploadFileToDrive(
     throw new Error("Falha ao enviar arquivo pro Drive.");
   }
 }
+
+// Upload em STREAMING (sessão resumable do Drive) — usado pra arquivos
+// grandes (vídeo/áudio). BUG REAL (reportado: jogadores não conseguiam
+// subir vídeo, "tentativas esgotadas"): o caminho antigo (uploadFileToDrive)
+// lê o arquivo INTEIRO na memória do Worker, converte pra base64 (+33%) e
+// ainda concatena tudo numa string multipart — pra um vídeo de 40MB+ isso
+// passa fácil dos 128MB de memória de um Worker do Cloudflare, e o Worker
+// é morto no meio sem conseguir nem gravar log (por isso a falha "muda").
+// Aqui os bytes passam direto do navegador pro Drive, sem base64 e sem
+// guardar o arquivo inteiro na memória.
+export async function uploadStreamToDrive(
+  fileName: string,
+  folderId: string,
+  mimeType: string,
+  body: ReadableStream<Uint8Array>,
+  size: number,
+): Promise<string> {
+  const token = await getDriveOAuthAccessToken();
+
+  // 1. Abre a sessão resumable (só metadados) — o Drive devolve a URL de
+  // upload no header Location.
+  const initRes = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": mimeType || "application/octet-stream",
+        "X-Upload-Content-Length": String(size),
+      },
+      body: JSON.stringify({ name: fileName, parents: [folderId] }),
+    },
+  );
+  const sessionUrl = initRes.headers.get("location");
+  if (!initRes.ok || !sessionUrl) {
+    const detalhe = await initRes.text().catch(() => "");
+    registrarLogSistema({
+      categoria: "Falha de escrita",
+      oQueAconteceu: `Não consegui abrir a sessão de upload do arquivo "${fileName}" no Google Drive (pasta ${folderId}).`,
+      onde: "googleDriveService.uploadStreamToDrive",
+      causaProvavel:
+        initRes.status === 401 || initRes.status === 403
+          ? "Token/permissão do Drive inválido ou quota da conta esgotada."
+          : "Erro retornado pela própria API do Google Drive — ver detalhe técnico.",
+      comoResolver: "Copie o detalhe técnico e mande pro Claude investigar a causa exata.",
+      detalheTecnico: `HTTP ${initRes.status} | mimeType=${mimeType} | tamanho=${size} | resposta=${detalhe.slice(0, 500)}`,
+    }).catch(() => {});
+    throw new Error(`Falha ao enviar arquivo pro Drive (HTTP ${initRes.status}).`);
+  }
+
+  // 2. Envia os bytes. FixedLengthStream (runtime do Workers) faz o fetch
+  // sair com Content-Length em vez de chunked — o Drive exige o tamanho
+  // exato. Sem ele (ex.: rodando fora do Workers), cai pra bufferizar o
+  // arquivo uma vez (ainda bem melhor que base64).
+  const FLS = (globalThis as any).FixedLengthStream;
+  let uploadBody: BodyInit;
+  if (typeof FLS === "function") {
+    const { readable, writable } = new FLS(size);
+    body.pipeTo(writable).catch(() => {});
+    uploadBody = readable;
+  } else {
+    uploadBody = await new Response(body).arrayBuffer();
+  }
+
+  const putRes = await fetch(sessionUrl, {
+    method: "PUT",
+    headers: { "Content-Type": mimeType || "application/octet-stream" },
+    body: uploadBody,
+  });
+  const json = (await putRes.json().catch(() => ({}))) as any;
+  if (!putRes.ok || !json?.id) {
+    registrarLogSistema({
+      categoria: "Falha de escrita",
+      oQueAconteceu: `Não consegui enviar o arquivo "${fileName}" pro Google Drive (pasta ${folderId}) — upload em streaming.`,
+      onde: "googleDriveService.uploadStreamToDrive",
+      causaProvavel:
+        putRes.status === 400 || putRes.status === 413
+          ? "Arquivo rejeitado pela API do Drive (tamanho ou formato), ou a conexão caiu no meio do envio."
+          : "Erro retornado pela própria API do Google Drive — ver detalhe técnico.",
+      comoResolver: "Copie o detalhe técnico e mande pro Claude investigar a causa exata.",
+      detalheTecnico: `HTTP ${putRes.status} | mimeType=${mimeType} | tamanho=${size} | resposta=${JSON.stringify(json).slice(0, 500)}`,
+    }).catch(() => {});
+    throw new Error(`Falha ao enviar arquivo pro Drive (HTTP ${putRes.status}).`);
+  }
+
+  try {
+    const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${json.id}/permissions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", type: "anyone" }),
+    });
+    if (!permRes.ok) {
+      console.warn(`[uploadStreamToDrive] Permissão pública não aplicada (HTTP ${permRes.status}) pro arquivo ${json.id}`);
+    }
+  } catch (permErr) {
+    console.warn("[uploadStreamToDrive] Permissão de visualização:", permErr);
+  }
+
+  return `https://drive.google.com/file/d/${json.id}/view?usp=drivesdk`;
+}

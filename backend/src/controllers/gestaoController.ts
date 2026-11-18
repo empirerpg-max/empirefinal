@@ -5,7 +5,7 @@ import {
   type GoogleSheetRow,
 } from "../services/googleSheetsService";
 import { withWriteLock } from "../services/writeLockService";
-import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
+import { DRIVE_FOLDERS, uploadFileToDrive, uploadStreamToDrive } from "../services/googleDriveService";
 import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { getOwnerIdForArtist } from "./artistasController";
@@ -3263,6 +3263,52 @@ export async function createAlbumController(request: Request): Promise<Response>
   }
 }
 
+// Pasta do Drive de cada tipo de upload (compartilhado entre o upload
+// normal e o upload em streaming).
+function resolverPastaUpload(folderType: UploadFolderType): string {
+  return (
+      folderType === "album"
+        ? DRIVE_FOLDERS.albuns
+        : folderType === "musicVideo"
+          ? DRIVE_FOLDERS.musicVideos
+          : folderType === "video"
+            ? DRIVE_FOLDERS.videos
+            : folderType === "musicaAudio"
+              ? DRIVE_FOLDERS.musicasAudio
+              : folderType === "socialPosts"
+                ? DRIVE_FOLDERS.socialPosts
+                : folderType === "socialStories"
+                  ? DRIVE_FOLDERS.socialStories
+                  : folderType === "socialAvatars"
+                    ? DRIVE_FOLDERS.socialAvatars
+                    : folderType === "socialNews"
+                      ? DRIVE_FOLDERS.socialNews
+                      : folderType === "playerAvatars"
+                        ? DRIVE_FOLDERS.playerAvatars
+                        : folderType === "artistPhotos"
+                          ? DRIVE_FOLDERS.artistPhotos
+                          : folderType === "playlistTracks"
+                            ? DRIVE_FOLDERS.playlistTracks
+                            : folderType === "tvChatGifs"
+                              ? DRIVE_FOLDERS.tvChatGifs
+                              : folderType === "turnes" || folderType === "redCarpet"
+                                ? // Sem pasta própria ainda — reaproveita a de
+                                  // posts sociais (mesmo padrão do artistPhotos
+                                  // acima) até existir uma pasta dedicada.
+                                  DRIVE_FOLDERS.socialPosts
+                                : folderType === "acervo"
+                                  ? DRIVE_FOLDERS.acervo
+                                  : folderType === "materiaisMusica"
+                                    ? DRIVE_FOLDERS.materiaisMusica
+                                    : folderType === "materiaisAlbum"
+                                      ? DRIVE_FOLDERS.materiaisAlbum
+                                      : folderType === "performanceAward"
+                                        ? // Sem pasta própria ainda — reaproveita a de
+                                          // Music Videos (mesmo padrão do "videos" acima).
+                                          DRIVE_FOLDERS.musicVideos
+                                        : DRIVE_FOLDERS.musicas);
+}
+
 // Controller para Upload de Capa / Encartes no Google Drive
 export async function uploadDriveController(request: Request): Promise<Response> {
   try {
@@ -3322,47 +3368,7 @@ export async function uploadDriveController(request: Request): Promise<Response>
       );
     }
 
-    const folderId =
-      folderType === "album"
-        ? DRIVE_FOLDERS.albuns
-        : folderType === "musicVideo"
-          ? DRIVE_FOLDERS.musicVideos
-          : folderType === "video"
-            ? DRIVE_FOLDERS.videos
-            : folderType === "musicaAudio"
-              ? DRIVE_FOLDERS.musicasAudio
-              : folderType === "socialPosts"
-                ? DRIVE_FOLDERS.socialPosts
-                : folderType === "socialStories"
-                  ? DRIVE_FOLDERS.socialStories
-                  : folderType === "socialAvatars"
-                    ? DRIVE_FOLDERS.socialAvatars
-                    : folderType === "socialNews"
-                      ? DRIVE_FOLDERS.socialNews
-                      : folderType === "playerAvatars"
-                        ? DRIVE_FOLDERS.playerAvatars
-                        : folderType === "artistPhotos"
-                          ? DRIVE_FOLDERS.artistPhotos
-                          : folderType === "playlistTracks"
-                            ? DRIVE_FOLDERS.playlistTracks
-                            : folderType === "tvChatGifs"
-                              ? DRIVE_FOLDERS.tvChatGifs
-                              : folderType === "turnes" || folderType === "redCarpet"
-                                ? // Sem pasta própria ainda — reaproveita a de
-                                  // posts sociais (mesmo padrão do artistPhotos
-                                  // acima) até existir uma pasta dedicada.
-                                  DRIVE_FOLDERS.socialPosts
-                                : folderType === "acervo"
-                                  ? DRIVE_FOLDERS.acervo
-                                  : folderType === "materiaisMusica"
-                                    ? DRIVE_FOLDERS.materiaisMusica
-                                    : folderType === "materiaisAlbum"
-                                      ? DRIVE_FOLDERS.materiaisAlbum
-                                      : folderType === "performanceAward"
-                                        ? // Sem pasta própria ainda — reaproveita a de
-                                          // Music Videos (mesmo padrão do "videos" acima).
-                                          DRIVE_FOLDERS.musicVideos
-                                        : DRIVE_FOLDERS.musicas;
+    const folderId = resolverPastaUpload(folderType);
 
     // BUG REAL corrigido aqui (reportado em produção — TED/"nostalgic
     // traveller" e outros antes dela, mesmo padrão sempre): quando
@@ -3657,4 +3663,71 @@ export async function adminFixVernissageEdicaoChartsController(): Promise<Respon
     JSON.stringify({ success: true, data: { edicaoChartsRowIndex, codigoUnico } }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
+}
+
+// Upload em streaming (corpo cru = bytes do arquivo; nome/pasta em
+// headers) — usado pra vídeo/áudio. Ver uploadStreamToDrive: o caminho
+// multipart/base64 de uploadDriveController estoura a memória do Worker
+// com arquivos grandes, e o upload morria sem erro nem log.
+export async function uploadStreamController(request: Request): Promise<Response> {
+  const json = (status: number, payload: unknown) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  let fileName = "";
+  let folderType: UploadFolderType = "musica";
+  try {
+    const rawName = request.headers.get("x-file-name") || "";
+    try {
+      fileName = decodeURIComponent(rawName);
+    } catch {
+      fileName = rawName;
+    }
+    fileName = fileName || `file_${Date.now()}`;
+    folderType = ((request.headers.get("x-folder-type") || "musica") as UploadFolderType);
+    const mimeType = request.headers.get("content-type") || "application/octet-stream";
+    const size = Number(
+      request.headers.get("content-length") || request.headers.get("x-file-size") || "0",
+    );
+
+    const MAX_UPLOAD_BYTES = 95 * 1024 * 1024; // mesmo teto do upload normal
+    if (!request.body || !Number.isFinite(size) || size <= 0) {
+      return json(400, {
+        success: false,
+        error: "Nenhum arquivo foi recebido de verdade (upload vazio) — tente selecionar o arquivo de novo.",
+      });
+    }
+    if (size > MAX_UPLOAD_BYTES) {
+      return json(413, {
+        success: false,
+        error: `Arquivo de ${(size / (1024 * 1024)).toFixed(0)}MB é grande demais (máximo 95MB). Envie um arquivo menor.`,
+      });
+    }
+
+    const fileUrl = await uploadStreamToDrive(
+      fileName,
+      resolverPastaUpload(folderType),
+      mimeType,
+      request.body,
+      size,
+    );
+    return json(200, { success: true, data: { fileName, fileUrl, folderType } });
+  } catch (error: any) {
+    console.error("[uploadStreamController] Erro:", error);
+    registrarLogSistema({
+      categoria: "Erro do app",
+      oQueAconteceu: `Falha no upload em streaming de "${fileName || "(sem nome)"}" (folderType=${folderType}).`,
+      onde: "uploadStreamController",
+      causaProvavel:
+        "Conexão do jogador caiu no meio do envio, ou erro inesperado ao repassar o arquivo pro Drive — ver detalhe técnico.",
+      comoResolver: "Copie o detalhe técnico e mande pro Claude investigar a causa exata.",
+      detalheTecnico: error?.message || String(error),
+    }).catch(() => {});
+    return json(502, {
+      success: false,
+      error: error?.message || "Falha ao enviar o arquivo para o Google Drive.",
+    });
+  }
 }

@@ -811,7 +811,19 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     // chega a dar erro no servidor, só é abortada no meio do caminho).
     // Arquivo de áudio ganha bem mais tempo; imagem/capa/encarte continua
     // com o teto original (não tem motivo pra demorar).
-    const TIMEOUT_MS = folderType === "musicaAudio" ? 120_000 : 45_000;
+    //
+    // BUG REAL (reportado: jogadores não conseguiam subir VÍDEO, sempre
+    // "tentativas esgotadas"): vídeo ficava com o teto de 45s (só áudio
+    // tinha mais tempo) e ia pelo caminho multipart → base64 no Worker,
+    // que estoura a memória do Worker com arquivo grande. Agora o tempo
+    // escala com o tamanho do arquivo (piso 2min, ~100KB/s, teto 20min) e
+    // vídeo/áudio/arquivos grandes vão primeiro pelo upload em STREAMING
+    // (/api/gestao/upload-stream — bytes direto pro Drive, sem base64).
+    const BASE_TIMEOUT_MS = folderType === "musicaAudio" ? 120_000 : 45_000;
+    const TIMEOUT_MS = Math.min(
+      20 * 60_000,
+      Math.max(BASE_TIMEOUT_MS, Math.ceil(file.size / 100_000) * 1000),
+    );
     const fetchComTimeout = (input: string, init: RequestInit) => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -819,6 +831,45 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         clearTimeout(timer),
       );
     };
+
+    const ARQUIVO_GRANDE = file.size > 8 * 1024 * 1024;
+    const usarStreaming = folderType === "video" || folderType === "musicaAudio" || ARQUIVO_GRANDE;
+    let erroServidor: string | null = null;
+
+    // 0. Streaming (vídeo/áudio/arquivo grande)
+    if (usarStreaming) {
+      try {
+        const res = await fetchComTimeout("/api/gestao/upload-stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+            "x-file-name": encodeURIComponent(customName || file.name),
+            "x-folder-type": resolvedFolderType,
+            "x-file-size": String(file.size),
+          },
+          body: file,
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success && data?.data?.fileUrl) {
+          return data.data.fileUrl;
+        }
+        // Arquivo grande demais é definitivo — não adianta tentar de novo.
+        if (res.status === 413) {
+          throw new Error(data?.error || "Arquivo grande demais (máximo 95MB).");
+        }
+        erroServidor = data?.error || `erro ${res.status}`;
+      } catch (err) {
+        if (err instanceof Error && /grande demais/.test(err.message)) throw err;
+        console.warn("[Gestao] Upload em streaming falhou, tentando FormData:", err);
+      }
+      // Os caminhos abaixo convertem pra base64 no servidor — com arquivo
+      // grande eles só estouram a memória do Worker, então nem tenta.
+      if (ARQUIVO_GRANDE) {
+        throw new Error(
+          `Não foi possível enviar o arquivo pro Drive${erroServidor ? ` (${erroServidor})` : ""}. Tente novamente — se o arquivo for grande, uma conexão mais estável pode ajudar.`,
+        );
+      }
+    }
 
     // 1. Tentar via FormData primeiro (evita estouro de memória Base64 no cliente)
     try {

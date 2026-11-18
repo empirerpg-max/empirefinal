@@ -72,6 +72,7 @@ import {
   reordenarAlbumFaixasController,
   substituirAlbumController,
   uploadDriveController,
+  uploadStreamController,
   updateFaixaLetraController,
   updateFaixaLetraSincronizadaController,
   publicarFaixaPendenteController,
@@ -490,7 +491,7 @@ import { handleMediaRoutes } from "./mediaRoutes";
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Range, x-telegram-id",
+  "Access-Control-Allow-Headers": "Content-Type, Range, x-telegram-id, x-file-name, x-folder-type, x-file-size",
 };
 
 export async function handleEmpireApiRoutes(
@@ -618,6 +619,7 @@ export async function handleEmpireApiRoutes(
     "/api/gestao/faixa/publicar",
     "/api/gestao/meus-albuns",
     "/api/gestao/upload",
+    "/api/gestao/upload-stream",
     "/api/gestao/extra",
     "/api/editar",
     "/api/empire-play/home",
@@ -1033,6 +1035,14 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await uploadDriveController(request);
+  } else if (url.pathname === "/api/gestao/upload-stream") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/gestao/upload-stream." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await uploadStreamController(request);
   } else if (url.pathname === "/api/acervo/revistas") {
     response =
       request.method === "GET"
