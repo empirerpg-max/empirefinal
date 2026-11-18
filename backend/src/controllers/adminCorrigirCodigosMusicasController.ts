@@ -10,6 +10,7 @@ import { googleSheetsService, normalizeText, readValuesFresh } from "../services
 import { getCatalogoDb } from "../services/catalogoDbService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { CORRECOES_CODIGOS_MUSICAS } from "../data/correcoesCodigosMusicas20261118";
+import { tituloBase } from "../services/musicasRekeyD1";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json; charset=utf-8" } });
@@ -32,7 +33,8 @@ export async function adminCorrigirCodigosMusicasController(request: Request): P
         const z = normalizeText(r[25]);
         const casa = topico
           ? normalizeText(r[1]) === topico
-          : !normalizeText(r[1]) && normalizeText(r[7]) === c.titulo.trim() && (z === c.atual || z === c.correto);
+          : !normalizeText(r[1]) && tituloBase(normalizeText(r[7])) === tituloBase(c.titulo) && // D1 às vezes guarda sem o "Artista - "
+             (z === c.atual || z === c.correto);
         if (casa) linhas.push(i + 1);
       }
       if (linhas.length !== 1) {
