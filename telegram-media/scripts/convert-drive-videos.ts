@@ -246,6 +246,7 @@ async function main() {
   let skippedMarked = 0;
   let failed = 0;
   const toConvert: string[] = [];
+  let toConvertBytes = 0;
 
   try {
     for (const item of items) {
@@ -282,6 +283,7 @@ async function main() {
         }
 
         toConvert.push(`${item.title} (${desc})`);
+        toConvertBytes += Number(meta.data.size || 0);
         if (DRY_RUN) {
           console.log(`${tag} ⚠ PRECISA converter (${desc})`);
           converted += 1;
@@ -344,6 +346,7 @@ async function main() {
   if (DRY_RUN) {
     console.log(`${toConvert.length} vídeo(s) PRECISAM ser convertidos:`);
     for (const t of toConvert) console.log(`  - ${t}`);
+    console.log(`Espaço ocupado hoje por esses vídeos: ${(toConvertBytes / 1024 / 1024 / 1024).toFixed(2)} GB`);
   } else {
     console.log(`${converted} convertido(s).`);
   }
