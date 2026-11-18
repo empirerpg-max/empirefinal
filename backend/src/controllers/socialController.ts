@@ -8,7 +8,7 @@ import {
 } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
 import { ADMIN_TG_ID, requestProvesAdmin, verifySessionToken, extractBearerToken } from "../services/sessionService";
-import { deleteFileFromDrive } from "../services/googleDriveService";
+import { DRIVE_FOLDERS, trashDriveFileIfInFolders } from "../services/googleDriveService";
 import { registrarNotificacao } from "./notificacoesController";
 
 type WaitUntilCtx = { waitUntil: (promise: Promise<unknown>) => void };
@@ -554,10 +554,17 @@ export async function limparStoriesExpiradosScheduled(): Promise<{ apagados: num
 
   for (const { row, rowIndex } of expirados) {
     const mediaUrl = normalizeText(row[5]);
+    // Só mídia enviada pro próprio Social (pastas de Stories/Posts) vai pra
+    // lixeira — nunca a capa de música/álbum do catálogo que um Story de
+    // música usa como media_url (ver trashDriveFileIfInFolders).
     if (mediaUrl) {
-      await deleteFileFromDrive(mediaUrl).catch((err) =>
-        console.warn(`[limparStoriesExpiradosScheduled] Falha ao apagar mídia do Drive (linha ${rowIndex}):`, err),
-      );
+      const r = await trashDriveFileIfInFolders(mediaUrl, [
+        DRIVE_FOLDERS.socialStories,
+        DRIVE_FOLDERS.socialPosts,
+      ]);
+      if (r === "error") {
+        console.warn(`[limparStoriesExpiradosScheduled] Falha ao mandar mídia pra lixeira (linha ${rowIndex}).`);
+      }
     }
     // CAUSA RAIZ do desalinhamento que voltou em 2026-09-12 (sábado):
     // essa limpeza automática de Story vencido só apagava A:J, esquecendo
