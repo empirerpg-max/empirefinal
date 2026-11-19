@@ -1,0 +1,36 @@
+name: Investigar vídeos sumidos (só leitura)
+
+on:
+  workflow_dispatch:
+    inputs:
+      search:
+        description: "Títulos a investigar, separados por | "
+        type: string
+        default: "fuori rotta|bright night"
+  push:
+    branches: [claude/intelligent-sagan-woiah1]
+    paths:
+      - .github/workflows/investigate-missing-videos.yml
+      - telegram-media/scripts/investigate-missing-videos.ts
+
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: telegram-media
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - name: Investigar
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GCP_SA_KEY }}
+          DRIVE_OAUTH_CLIENT_ID: ${{ secrets.DRIVE_OAUTH_CLIENT_ID }}
+          DRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.DRIVE_OAUTH_CLIENT_SECRET }}
+          DRIVE_OAUTH_REFRESH_TOKEN: ${{ secrets.DRIVE_OAUTH_REFRESH_TOKEN }}
+          SEARCH: ${{ inputs.search || 'fuori rotta|bright night' }}
+        run: npx tsx scripts/investigate-missing-videos.ts

@@ -32,6 +32,8 @@ import { LancarFaixaAlbumModal } from "./LancarFaixaAlbumModal";
 import { PerformanceAwardModal } from "./PerformanceAwardModal";
 import { BannersManager } from "./BannersManager";
 import { GestaoEmpireTv } from "./GestaoEmpireTv";
+import { PainelCatalogoD1 } from "./PainelCatalogoD1";
+import { uploadVideoDireto, descartarVideoEnviado } from "@/lib/uploadVideoDireto";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import {
@@ -1135,6 +1137,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
     setConfirmacao(null);
     setIsSubmitting(true);
     setUploadProgress("Fazendo upload da capa do vídeo...");
+    // Link do vídeo enviado nesta tentativa — se o cadastro falhar depois,
+    // o arquivo vai pra lixeira em vez de ficar órfão no Drive.
+    let videoEnviadoAgora: string | null = null;
 
     try {
       let capaUrl = "";
@@ -1148,12 +1153,16 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 
       let mediaUrl = mediaUrlInput.trim();
       if (mediaFile) {
-        setUploadProgress("Fazendo upload do arquivo de vídeo...");
-        mediaUrl = await handleUploadToDrive(
+        // Vídeo sobe DIRETO do navegador para o Drive (sem passar pelo
+        // Worker, que tem limite de tamanho por requisição) — ver
+        // src/lib/uploadVideoDireto.ts.
+        setUploadProgress("Enviando vídeo... 0%");
+        mediaUrl = await uploadVideoDireto(
           mediaFile,
-          "video",
           `VIDEO_${artistaResponsavel}_${tituloVideo}_${Date.now()}`,
+          (pct) => setUploadProgress(`Enviando vídeo... ${pct}%`),
         );
+        videoEnviadoAgora = mediaUrl;
       }
 
       setUploadProgress("Cadastrando vídeo...");
@@ -1205,6 +1214,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setDataProgramaEmpireTv("");
     } catch (err: any) {
       console.error(err);
+      if (videoEnviadoAgora) await descartarVideoEnviado(videoEnviadoAgora);
       setErrorMsg(err.message || "Erro ao publicar vídeo.");
     } finally {
       setIsSubmitting(false);
@@ -1773,7 +1783,12 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           Só admin (mesmo dono do "810141686" hardcoded em outros pontos do
           app) — o backend também recusa sem o token de sessão de admin. */}
           {activeTab === "banners" && isAdminUser && <BannersManager tgId={loginTgId} />}
-          {activeTab === "empiretv" && isAdminUser && <GestaoEmpireTv />}
+          {activeTab === "empiretv" && isAdminUser && (
+            <>
+              <PainelCatalogoD1 />
+              <GestaoEmpireTv />
+            </>
+          )}
 
           {/* MENSAGENS DE SUCESSO E ERRO (músicas/vídeos/álbuns) */}
           {activeTab !== "banners" && activeTab !== "empiretv" && successMsg && (

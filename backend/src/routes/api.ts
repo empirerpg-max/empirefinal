@@ -1,3 +1,4 @@
+import { requestProvesAdmin } from "../services/sessionService";
 import {
   getCatalogKindController,
   getLancamentosController,
@@ -528,6 +529,8 @@ export async function handleEmpireApiRoutes(
   // [])), nunca dando erro visível. Foi isso que fazia o banner da Home
   // nunca aparecer, mesmo com o componente certo montado.
   const isPresavePath = url.pathname.startsWith("/api/presave/");
+  // Admin do catálogo "D1 primeiro" (status/carregar/desligar/verificar).
+  const isAdminD1PrimeiroPath = url.pathname.startsWith("/api/admin/d1primeiro/");
 
   const supportedPaths = new Set([
     "/api/charts",
@@ -618,6 +621,9 @@ export async function handleEmpireApiRoutes(
     "/api/gestao/faixa/publicar",
     "/api/gestao/meus-albuns",
     "/api/gestao/upload",
+    "/api/gestao/video-upload-sessao",
+    "/api/gestao/video-upload-descartar",
+    "/api/admin/fila-backup/despachar",
     "/api/gestao/extra",
     "/api/editar",
     "/api/empire-play/home",
@@ -752,7 +758,8 @@ export async function handleEmpireApiRoutes(
     !isPlaylistsPath &&
     !isSalvosPath &&
     !isAlbunsAntigosPath &&
-    !isPresavePath
+    !isPresavePath &&
+    !isAdminD1PrimeiroPath
   ) {
     return null;
   }
@@ -894,6 +901,26 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await criarVideoPendenteEmpireTvController(request);
+  } else if (url.pathname.startsWith("/api/admin/d1primeiro/")) {
+    const { adminD1PrimeiroController } = await import("../controllers/adminD1PrimeiroController");
+    response = await adminD1PrimeiroController(request, url.pathname.split("/").pop() || "");
+  } else if (url.pathname === "/api/admin/fila-backup/despachar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    if (!(await requestProvesAdmin(request))) {
+      return new Response(JSON.stringify({ success: false, error: "Acesso restrito ao admin." }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    const { despacharFila } = await import("../services/despachanteFilaBackup");
+    response = new Response(JSON.stringify({ success: true, data: await despacharFila() }), {
+      headers: { "Content-Type": "application/json" },
+    });
   } else if (url.pathname === "/api/gestao/admin/empire-tv-pendentes") {
     response = await getEmpireTvPendentesController(request);
   } else if (url.pathname === "/api/gestao/admin/empire-tv-publicar") {
@@ -1025,6 +1052,20 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await publicarFaixaPendenteController(request);
+  } else if (url.pathname === "/api/gestao/video-upload-sessao" || url.pathname === "/api/gestao/video-upload-descartar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    const { criarSessaoUploadVideoController, descartarUploadVideoController } = await import(
+      "../controllers/videoUploadSessaoController"
+    );
+    response =
+      url.pathname === "/api/gestao/video-upload-sessao"
+        ? await criarSessaoUploadVideoController(request)
+        : await descartarUploadVideoController(request);
   } else if (url.pathname === "/api/gestao/upload") {
     if (request.method !== "POST") {
       return new Response(

@@ -452,6 +452,34 @@ export default {
         })
         .catch((err) => console.error("[scheduled] Erro na reconciliação D1 de vídeos:", err)),
     );
+    // Catálogo "D1 primeiro" (2026-11-18): copia para a planilha real (backup)
+    // as gravações feitas no D1 pelas abas ligadas. Depois do recálculo de
+    // likes acima, que também grava em Music Videos.
+    ctx.waitUntil(
+      likesVideos
+        .then(async () => {
+          const { despacharFila } = await import("../backend/src/services/despachanteFilaBackup");
+          const r = await despacharFila();
+          if (r.gravados || r.pendentes || r.erros.length) {
+            console.log("[scheduled] Fila de backup da planilha:", JSON.stringify(r).slice(0, 2000));
+          }
+        })
+        .catch((err) => console.error("[scheduled] Erro no despachante da fila de backup:", err)),
+    );
+    // Conferência diária do backup (planilha) x D1 das abas "D1 primeiro":
+    // só registra diferenças no log, nunca altera o D1. 1x/dia, 06:00 UTC.
+    {
+      const agora = new Date();
+      if (agora.getUTCHours() === 6 && agora.getUTCMinutes() < 10) {
+        ctx.waitUntil(
+          (async () => {
+            const { verificarIntegridade } = await import("../backend/src/controllers/adminD1PrimeiroController");
+            const r = await verificarIntegridade();
+            if (r.some((x) => !x.ok)) console.log("[scheduled] Backup da planilha difere do D1:", JSON.stringify(r).slice(0, 2000));
+          })().catch((err) => console.error("[scheduled] Erro na conferência do backup:", err)),
+        );
+      }
+    }
     // Mesma rede de segurança pro espelho D1 dos álbuns (espelhoAbasD1.ts).
     ctx.waitUntil(
       (async () => {
