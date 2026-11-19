@@ -1,3 +1,4 @@
+import { requestProvesAdmin } from "../services/sessionService";
 import {
   getCatalogKindController,
   getLancamentosController,
@@ -894,6 +895,23 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await criarVideoPendenteEmpireTvController(request);
+  } else if (url.pathname === "/api/admin/fila-backup/despachar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    if (!(await requestProvesAdmin(request))) {
+      return new Response(JSON.stringify({ success: false, error: "Acesso restrito ao admin." }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    const { despacharFila } = await import("../services/despachanteFilaBackup");
+    response = new Response(JSON.stringify({ success: true, data: await despacharFila() }), {
+      headers: { "Content-Type": "application/json" },
+    });
   } else if (url.pathname === "/api/gestao/admin/empire-tv-pendentes") {
     response = await getEmpireTvPendentesController(request);
   } else if (url.pathname === "/api/gestao/admin/empire-tv-publicar") {

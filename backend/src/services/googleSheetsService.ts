@@ -743,6 +743,7 @@ async function deleteRowsGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   rowIndexes1Based: number[],
+  espelhar = true,
 ): Promise<void> {
   if (rowIndexes1Based.length === 0) return;
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
@@ -774,7 +775,7 @@ async function deleteRowsGoogle(
     [SHEETS_READWRITE_SCOPE],
   );
   invalidateReadCache(spreadsheetId, sheetName);
-  await espelharNoD1SeAplicavel(spreadsheetId, sheetName, { tipo: "delete", linhas: ordenadoDesc });
+  if (espelhar) await espelharNoD1SeAplicavel(spreadsheetId, sheetName, { tipo: "delete", linhas: ordenadoDesc });
 }
 
 /**
@@ -1057,6 +1058,42 @@ export async function ensureRowCapacity(
   return ensureRowCapacityGoogle(spreadsheetKeyOrId, sheetName, minRows);
 }
 
+/** values:batchUpdate na planilha real, LANÇANDO o erro original (sem retry) — só para o despachante. */
+async function loteLancando(
+  spreadsheetId: string,
+  entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[],
+): Promise<void> {
+  await sheetsRequest(
+    `/${spreadsheetId}/values:batchUpdate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        valueInputOption: "USER_ENTERED",
+        data: entries.map((e) => ({ range: buildA1Range(e.sheetName, e.range), majorDimension: "ROWS", values: e.values })),
+      }),
+    },
+    [SHEETS_READWRITE_SCOPE],
+  );
+  for (const sheetName of new Set(entries.map((e) => e.sheetName))) invalidateReadCache(spreadsheetId, sheetName);
+}
+
+/**
+ * deleteRows na planilha real (já lança erro), SEM disparar o espelho — só
+ * para o despachante: ele copia o que já está no D1, não há o que espelhar.
+ */
+export const deleteRowsDireto = (spreadsheetId: string, sheetName: string, linhas: number[]) =>
+  deleteRowsGoogle(spreadsheetId, sheetName, linhas, false);
+
+/** values:clear na planilha real, LANÇANDO o erro original — só para o despachante. */
+async function limparLancando(spreadsheetId: string, sheetName: string, range: string): Promise<void> {
+  await sheetsRequest(
+    `/${spreadsheetId}/values/${encodeURIComponent(buildA1Range(sheetName, range))}:clear`,
+    { method: "POST", body: JSON.stringify({}) },
+    [SHEETS_READWRITE_SCOPE],
+  );
+  invalidateReadCache(spreadsheetId, sheetName);
+}
+
 /**
  * Acesso DIRETO à planilha real, sem passar pelo porteiro — só para o
  * despachante da fila de backup e para a carga inicial / integridade.
@@ -1069,6 +1106,8 @@ export const googleDireto = {
   appendRow: appendRowGoogle,
   deleteRows: deleteRowsGoogle,
   clearValues: clearValuesGoogle,
+  loteLancando,
+  limparLancando,
 };
 
 export const googleSheetsService = {
