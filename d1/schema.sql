@@ -109,3 +109,27 @@ CREATE TABLE reacao (
 );
 
 CREATE INDEX idx_reacao_comentario ON reacao(comentario_id);
+
+-- Catálogo "D1 primeiro" (2026-11-18): planilha virtual posicional (fonte de
+-- verdade das abas ligadas) e fila de backup D1 -> planilha.
+-- Ver backend/src/services/planilhaVirtualD1.ts.
+CREATE TABLE IF NOT EXISTS planilha_virtual (
+  planilha TEXT NOT NULL,
+  aba TEXT NOT NULL,
+  linha INTEGER NOT NULL,
+  celulas_json TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (planilha, aba, linha)
+);
+CREATE TABLE IF NOT EXISTS fila_backup_planilha (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  planilha TEXT NOT NULL,
+  aba TEXT NOT NULL,
+  operacao TEXT NOT NULL CHECK (operacao IN ('update','append','delete','clear')),
+  intervalo TEXT,
+  valores_json TEXT,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  tentativas INTEGER NOT NULL DEFAULT 0,
+  ultimo_erro TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_fila_backup_aba ON fila_backup_planilha(planilha, aba, id);
