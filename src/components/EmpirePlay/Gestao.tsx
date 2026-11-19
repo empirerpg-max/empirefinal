@@ -32,6 +32,7 @@ import { LancarFaixaAlbumModal } from "./LancarFaixaAlbumModal";
 import { PerformanceAwardModal } from "./PerformanceAwardModal";
 import { BannersManager } from "./BannersManager";
 import { GestaoEmpireTv } from "./GestaoEmpireTv";
+import { PainelCatalogoD1 } from "./PainelCatalogoD1";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import {
@@ -1773,7 +1774,12 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           Só admin (mesmo dono do "810141686" hardcoded em outros pontos do
           app) — o backend também recusa sem o token de sessão de admin. */}
           {activeTab === "banners" && isAdminUser && <BannersManager tgId={loginTgId} />}
-          {activeTab === "empiretv" && isAdminUser && <GestaoEmpireTv />}
+          {activeTab === "empiretv" && isAdminUser && (
+            <>
+              <PainelCatalogoD1 />
+              <GestaoEmpireTv />
+            </>
+          )}
 
           {/* MENSAGENS DE SUCESSO E ERRO (músicas/vídeos/álbuns) */}
           {activeTab !== "banners" && activeTab !== "empiretv" && successMsg && (

@@ -895,6 +895,9 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await criarVideoPendenteEmpireTvController(request);
+  } else if (url.pathname.startsWith("/api/admin/d1primeiro/")) {
+    const { adminD1PrimeiroController } = await import("../controllers/adminD1PrimeiroController");
+    response = await adminD1PrimeiroController(request, url.pathname.split("/").pop() || "");
   } else if (url.pathname === "/api/admin/fila-backup/despachar") {
     if (request.method !== "POST") {
       return new Response(JSON.stringify({ success: false, error: "Use POST." }), {

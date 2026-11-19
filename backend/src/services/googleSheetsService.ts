@@ -1108,6 +1108,9 @@ export const googleDireto = {
   clearValues: clearValuesGoogle,
   loteLancando,
   limparLancando,
+  /** Fórmulas cruas (FORMULA), sem cache e sem GViz — lança em erro. */
+  lerFormulas: (spreadsheetKeyOrId: SpreadsheetKey | string, sheetName: string) =>
+    readValuesUncached(spreadsheetKeyOrId, sheetName, "A:ZZ", "FORMULA", false),
 };
 
 export const googleSheetsService = {
