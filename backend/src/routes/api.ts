@@ -529,6 +529,8 @@ export async function handleEmpireApiRoutes(
   // [])), nunca dando erro visível. Foi isso que fazia o banner da Home
   // nunca aparecer, mesmo com o componente certo montado.
   const isPresavePath = url.pathname.startsWith("/api/presave/");
+  // Admin do catálogo "D1 primeiro" (status/carregar/desligar/verificar).
+  const isAdminD1PrimeiroPath = url.pathname.startsWith("/api/admin/d1primeiro/");
 
   const supportedPaths = new Set([
     "/api/charts",
@@ -619,6 +621,9 @@ export async function handleEmpireApiRoutes(
     "/api/gestao/faixa/publicar",
     "/api/gestao/meus-albuns",
     "/api/gestao/upload",
+    "/api/gestao/video-upload-sessao",
+    "/api/gestao/video-upload-descartar",
+    "/api/admin/fila-backup/despachar",
     "/api/gestao/extra",
     "/api/editar",
     "/api/empire-play/home",
@@ -753,7 +758,8 @@ export async function handleEmpireApiRoutes(
     !isPlaylistsPath &&
     !isSalvosPath &&
     !isAlbunsAntigosPath &&
-    !isPresavePath
+    !isPresavePath &&
+    !isAdminD1PrimeiroPath
   ) {
     return null;
   }
@@ -1046,6 +1052,20 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await publicarFaixaPendenteController(request);
+  } else if (url.pathname === "/api/gestao/video-upload-sessao" || url.pathname === "/api/gestao/video-upload-descartar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    const { criarSessaoUploadVideoController, descartarUploadVideoController } = await import(
+      "../controllers/videoUploadSessaoController"
+    );
+    response =
+      url.pathname === "/api/gestao/video-upload-sessao"
+        ? await criarSessaoUploadVideoController(request)
+        : await descartarUploadVideoController(request);
   } else if (url.pathname === "/api/gestao/upload") {
     if (request.method !== "POST") {
       return new Response(
