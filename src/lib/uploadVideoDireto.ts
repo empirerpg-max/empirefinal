@@ -5,12 +5,14 @@
 //
 // Falha de rede no meio do envio: tenta de novo do zero com uma sessão
 // nova, até 2 vezes. Progresso real (0-100) pelo callback.
+import { authHeaders } from "@/lib/api";
+
 const TENTATIVAS = 3;
 
 async function abrirSessao(file: File, nome: string): Promise<string> {
   const res = await fetch("/api/gestao/video-upload-sessao", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ fileName: nome, mimeType: file.type || "video/mp4", size: file.size }),
   });
   const data = await res.json().catch(() => null);
@@ -67,7 +69,7 @@ export async function descartarVideoEnviado(link: string): Promise<void> {
   if (!fileId) return;
   await fetch("/api/gestao/video-upload-descartar", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ fileId }),
   }).catch(() => {});
 }

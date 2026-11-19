@@ -33,7 +33,17 @@ export const PLANILHA_VIRTUAL_CREATE_STATEMENTS: string[] = [
     ultimo_erro TEXT
   )`,
   "CREATE INDEX IF NOT EXISTS idx_fila_backup_aba ON fila_backup_planilha(planilha, aba, id)",
+  // Conferência otimista (revisão C1): uma gravação que leu a linha e só
+  // depois grava a linha INTEIRA inclui um INSERT aqui que só acontece se a
+  // linha mudou nesse meio-tempo — e o CHECK faz o lote inteiro falhar
+  // (rollback). Nunca guarda nada.
+  `CREATE TABLE IF NOT EXISTS planilha_virtual_guarda (
+    falhou INTEGER NOT NULL CHECK (falhou = 0)
+  )`,
 ];
+
+/** Mensagem de erro do D1/SQLite quando a conferência otimista recusa o lote. */
+export const ehConflitoDeLinha = (err: unknown) => /CHECK constraint failed/i.test(err instanceof Error ? err.message : String(err));
 
 const MAX_COL = 701; // ZZ
 
@@ -115,6 +125,16 @@ async function linhasExistentes(
   return mapa;
 }
 
+/** Falha o lote (CHECK) se a linha não estiver mais como foi lida. */
+function stmtConferirLinha(planilha: string, aba: string, linha: number, lida: string[] | undefined): D1PreparedStatement {
+  return db()
+    .prepare(
+      `INSERT INTO planilha_virtual_guarda (falhou)
+       SELECT 1 WHERE (SELECT celulas_json FROM planilha_virtual WHERE planilha = ? AND aba = ? AND linha = ?) IS NOT ?`,
+    )
+    .bind(planilha, aba, linha, lida === undefined ? null : JSON.stringify(lida));
+}
+
 function stmtGravarLinha(planilha: string, aba: string, linha: number, celulas: string[]): D1PreparedStatement {
   const c = aparar(celulas);
   if (c.length === 0) {
@@ -155,8 +175,10 @@ export async function gravarIntervalo(
   const { c1, r1 } = parseA1(range);
   if (valores.length === 0) return [];
   const mapa = await linhasExistentes(planilha, aba, r1, r1 + valores.length - 1);
-  return valores.map((linhaValores, i) => {
+  const conferir: D1PreparedStatement[] = [];
+  const gravar = valores.map((linhaValores, i) => {
     const linha = r1 + i;
+    conferir.push(stmtConferirLinha(planilha, aba, linha, mapa.get(linha)));
     const celulas = [...(mapa.get(linha) || [])];
     linhaValores.forEach((v, j) => {
       while (celulas.length < c1 + j) celulas.push("");
@@ -164,18 +186,21 @@ export async function gravarIntervalo(
     });
     return stmtGravarLinha(planilha, aba, linha, celulas);
   });
+  return [...conferir, ...gravar];
 }
 
 export async function limparIntervalo(planilha: string, aba: string, range: string): Promise<D1PreparedStatement[]> {
   const { c1, r1, c2, r2 } = parseA1(range);
   const mapa = await linhasExistentes(planilha, aba, r1, r2);
-  const out: D1PreparedStatement[] = [];
+  const conferir: D1PreparedStatement[] = [];
+  const gravar: D1PreparedStatement[] = [];
   for (const [linha, celulas] of mapa) {
+    conferir.push(stmtConferirLinha(planilha, aba, linha, celulas));
     const novo = [...celulas];
     for (let c = c1; c <= Math.min(c2 ?? MAX_COL, novo.length - 1); c++) novo[c] = "";
-    out.push(stmtGravarLinha(planilha, aba, linha, novo));
+    gravar.push(stmtGravarLinha(planilha, aba, linha, novo));
   }
-  return out;
+  return [...conferir, ...gravar];
 }
 
 export async function proximaLinhaAppend(planilha: string, aba: string): Promise<number> {

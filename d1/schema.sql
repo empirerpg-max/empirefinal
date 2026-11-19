@@ -133,3 +133,9 @@ CREATE TABLE IF NOT EXISTS fila_backup_planilha (
   ultimo_erro TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_fila_backup_aba ON fila_backup_planilha(planilha, aba, id);
+-- Revisão da Fase 1: conferência otimista de linha, estado das abas (no D1,
+-- consistente — não no KV) e trava do despachante. Todas também são criadas
+-- sob demanda pelo app (porteiroD1.garantirTabelas).
+CREATE TABLE IF NOT EXISTS planilha_virtual_guarda (falhou INTEGER NOT NULL CHECK (falhou = 0));
+CREATE TABLE IF NOT EXISTS catalogo_estado_aba (aba TEXT PRIMARY KEY, estado TEXT NOT NULL, atualizado_em_ms INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS despachante_lock (id INTEGER PRIMARY KEY CHECK (id = 1), ate_ms INTEGER NOT NULL);

@@ -7,6 +7,11 @@ mock.module(R + "google/service-account.ts", () => ({
   getDriveOAuthAccessToken: async () => "tok-drive",
   readRuntimeEnv: () => "",
 }));
+mock.module(R + "services/sessionService.ts", () => ({
+  extractBearerToken: (r: Request) => r.headers.get("Authorization")?.replace(/^Bearer /, "") ?? null,
+  verifySessionToken: async (t: string | null) => (t === "valido" ? { usuario: "Jogador", id: "123" } : null),
+  requestProvesAdmin: async () => false,
+}));
 mock.module(R + "services/logSistemaService.ts", () => ({
   registrarLogSistema: async () => {},
   traduzirErroEscrita: () => ({ causaProvavel: "", comoResolver: "" }),
@@ -37,10 +42,10 @@ const { definirEstadoAba, PLANILHA_PRINCIPAL_ID: P } = await import(R + "service
 const C = await import(R + "controllers/videoUploadSessaoController.ts");
 const FILE = "1AbCdEfGhIjKlMnOpQrStUvWxYz012345";
 
-const req = (body: unknown, origin = "https://app.exemplo") =>
+const req = (body: unknown, origin = "https://app.exemplo", token = "valido") =>
   new Request("https://worker.exemplo/api/gestao/video-upload-sessao", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Origin: origin },
+    headers: { "Content-Type": "application/json", Origin: origin, Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
   });
 
@@ -73,8 +78,18 @@ test("sessão recusa arquivo que não é vídeo e arquivo acima de 5 GB", async 
   expect(chamadas).toEqual([]);
 });
 
-const reqDescartar = (fileId: string) =>
-  new Request("https://worker.exemplo/api/gestao/video-upload-descartar", { method: "POST", body: JSON.stringify({ fileId }) });
+const reqDescartar = (fileId: string, token = "valido") =>
+  new Request("https://worker.exemplo/api/gestao/video-upload-descartar", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ fileId }),
+  });
+
+test("I6: sem login válido, sessão e descarte são recusados (401) sem tocar no Drive", async () => {
+  expect((await C.criarSessaoUploadVideoController(req({ fileName: "a.mp4", mimeType: "video/mp4", size: 10 }, "https://app.exemplo", "falso"))).status).toBe(401);
+  expect((await C.descartarUploadVideoController(reqDescartar(FILE, "falso"))).status).toBe(401);
+  expect(chamadas).toEqual([]);
+});
 
 test("descarte manda para a lixeira arquivo recente e sem uso", async () => {
   const res = await C.descartarUploadVideoController(reqDescartar(FILE));

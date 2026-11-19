@@ -74,3 +74,19 @@ test("itemFila entra na fila", async () => {
   const r = await db.prepare("SELECT aba, operacao, intervalo, valores_json FROM fila_backup_planilha").all();
   expect(r.results).toEqual([{ aba: "MV", operacao: "update", intervalo: "A2:B2", valores_json: '[["x","y"]]' }]);
 });
+
+test("C1: gravação montada com leitura velha é recusada e não sobrescreve a linha", async () => {
+  await db.batch(await substituirAba("p", "C", [["a", "b", "c"]]));
+  const velhos = await gravarIntervalo("p", "C", "A1", [["X"]]); // leu a linha antes
+  await db.batch(await gravarIntervalo("p", "C", "C1", [["Z"]])); // outra gravação no meio
+  await expect(db.batch(velhos)).rejects.toThrow();
+  expect(await lerIntervalo("p", "C", "A1:C1")).toEqual([["a", "b", "Z"]]);
+});
+
+test("C1: limpeza montada com leitura velha também é recusada", async () => {
+  await db.batch(await substituirAba("p", "C", [["a", "b"]]));
+  const velhos = await limparIntervalo("p", "C", "A1");
+  await db.batch(await gravarIntervalo("p", "C", "B1", [["Y"]]));
+  await expect(db.batch(velhos)).rejects.toThrow();
+  expect(await lerIntervalo("p", "C", "A1:B1")).toEqual([["a", "Y"]]);
+});

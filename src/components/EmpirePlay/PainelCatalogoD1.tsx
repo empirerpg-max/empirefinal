@@ -4,7 +4,7 @@ import { authHeaders } from "@/lib/api";
 
 interface StatusAba {
   aba: string;
-  estado: "off" | "carregando" | "on";
+  estado: "off" | "carregando" | "on" | "pausado";
   pendentesFila: number;
   linhasD1: number;
 }
@@ -13,6 +13,7 @@ const NOME_ESTADO: Record<StatusAba["estado"], string> = {
   off: "Planilha (antigo)",
   carregando: "Carregando…",
   on: "D1 (planilha = backup)",
+  pausado: "Desligando…",
 };
 
 // Painel só de admin do catálogo "D1 primeiro" (docs/superpowers/specs/2026-11-18-catalogo-d1-primeiro-design.md):
@@ -65,6 +66,7 @@ export function PainelCatalogoD1() {
       const r = await chamar("carregar", { aba });
       if (r.ok) return `"${aba}" ligada no D1 (${r.linhas} linhas copiadas).`;
       if (r.motivo === "formula") return `"${aba}" NÃO foi ligada: tem fórmula nas células ${r.celulas.join(", ")}.`;
+      if (r.motivo === "ja-ligada") return `"${aba}" já está ligada (ou em transição) — nada foi copiado.`;
       if (r.motivo === "fila-pendente") return `"${aba}" NÃO foi ligada: ainda há cópias na fila de backup. Envie a fila e tente de novo.`;
       if (r.motivo === "divergencia") return `"${aba}" NÃO foi ligada: a cópia divergiu nas linhas ${r.linhas.join(", ")}.`;
       return `"${aba}" NÃO foi ligada: ${r.erro || r.motivo}.`;
@@ -73,7 +75,10 @@ export function PainelCatalogoD1() {
   const desligar = (aba: string) =>
     acao(`desligar:${aba}`, async () => {
       const r = await chamar("desligar", { aba });
-      return r.ok ? `"${aba}" voltou para a planilha.` : `"${aba}" não foi desligada: ainda há ${r.pendentes} cópia(s) na fila.`;
+      if (r.ok) return `"${aba}" voltou para a planilha (backup conferido).`;
+      if (r.motivo === "fila-pendente") return `"${aba}" continua no D1: ${r.pendentes} cópia(s) ainda não chegaram à planilha (Google no limite?). Tente mais tarde.`;
+      if (r.motivo === "divergencia") return `"${aba}" continua no D1: a planilha difere do D1 nas linhas ${r.linhas.slice(0, 10).join(", ")}. Nada foi perdido.`;
+      return `"${aba}" continua no D1: ${r.erro || r.motivo}.`;
     });
 
   return (
@@ -92,7 +97,7 @@ export function PainelCatalogoD1() {
       </div>
       <p className="text-[11px] text-neutral-400">
         Ligar copia a aba da planilha para o D1 (leva ~40 s). Depois disso o app lê e grava só no D1, e a planilha recebe
-        uma cópia a cada 10 minutos.
+        uma cópia a cada 10 minutos. Desligar (~40 s) envia a fila, confere a planilha e só então volta para ela.
       </p>
 
       <div className="space-y-2">

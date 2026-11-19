@@ -11,9 +11,12 @@ import {
   PLANILHA_PRINCIPAL_ID as P,
   definirEstadoAba,
   estadoAba,
+  estadoAbaSemCache,
+  garantirTabelas,
   lerD1,
   type EstadoAba,
 } from "../services/porteiroD1";
+import { despacharFila } from "../services/despachanteFilaBackup";
 import { requestProvesAdmin } from "../services/sessionService";
 
 type Aba = (typeof ABAS_D1_PRIMEIRO_FASE1)[number];
@@ -26,11 +29,13 @@ function db() {
 }
 
 async function pendentesDaAba(aba: string): Promise<number> {
+  await garantirTabelas();
   const r = await db().prepare("SELECT count(*) AS n FROM fila_backup_planilha WHERE planilha = ? AND aba = ?").bind(P, aba).all<{ n: number }>();
   return r.results?.[0]?.n ?? 0;
 }
 
 async function linhasNoD1(aba: string): Promise<number> {
+  await garantirTabelas();
   const r = await db().prepare("SELECT count(*) AS n FROM planilha_virtual WHERE planilha = ? AND aba = ?").bind(P, aba).all<{ n: number }>();
   return r.results?.[0]?.n ?? 0;
 }
@@ -68,16 +73,30 @@ function linhasDiferentes(a: string[][], b: string[][]): number[] {
 
 export type ResultadoCarga =
   | { ok: true; linhas: number }
-  | { ok: false; motivo: "aba-invalida" | "fila-pendente" | "formula" | "divergencia" | "erro"; celulas?: string[]; linhas?: number[]; erro?: string };
+  | {
+      ok: false;
+      motivo: "aba-invalida" | "ja-ligada" | "fila-pendente" | "formula" | "divergencia" | "erro";
+      celulas?: string[];
+      linhas?: number[];
+      erro?: string;
+    };
+
+// Espera padrão das transições: o estado de cada aba fica em cache por 30 s
+// em cada servidor; esperando 31 s todos já viram a mudança (o estado mora
+// no D1, consistente na hora — sem o atraso de propagação do KV).
+const ESPERA_TRANSICAO_MS = 31_000;
 
 export async function carregarAba(aba: string, opts: { esperaMs?: number } = {}): Promise<ResultadoCarga> {
   if (!ehAba(aba)) return { ok: false, motivo: "aba-invalida" };
+  // Nunca recopia a planilha por cima de uma aba que já tem o D1 como
+  // verdade (revisão I5) — lido sem cache.
+  if ((await estadoAbaSemCache(aba)) !== "off") return { ok: false, motivo: "ja-ligada" };
   if ((await pendentesDaAba(aba)) > 0) return { ok: false, motivo: "fila-pendente" };
   await definirEstadoAba(aba, "carregando");
   try {
-    // Cada servidor guarda o estado da aba por 30 s: espera todos verem
-    // "carregando" (gravações recusadas) antes de copiar a planilha.
-    const espera = opts.esperaMs ?? 31_000;
+    // Espera todos os servidores verem "carregando" (gravações recusadas)
+    // antes de copiar a planilha.
+    const espera = opts.esperaMs ?? ESPERA_TRANSICAO_MS;
     if (espera > 0) await new Promise((r) => setTimeout(r, espera));
 
     const formulas = await lerPlanilhaReal(aba, true);
@@ -112,12 +131,44 @@ export async function carregarAba(aba: string, opts: { esperaMs?: number } = {})
   }
 }
 
-export async function desligarAba(aba: string): Promise<{ ok: true } | { ok: false; motivo: string; pendentes?: number }> {
+/**
+ * Volta a aba para a planilha real com segurança (revisão C2): pausa as
+ * gravações (leituras seguem no D1), espera todos os servidores verem,
+ * esvazia a fila na planilha e confere planilha x D1. Só então "off".
+ * Qualquer problema volta para "on" — o D1 continua sendo a verdade.
+ */
+export async function desligarAba(
+  aba: string,
+  opts: { esperaMs?: number } = {},
+): Promise<{ ok: true } | { ok: false; motivo: string; pendentes?: number; linhas?: number[]; erro?: string }> {
   if (!ehAba(aba)) return { ok: false, motivo: "aba-invalida" };
-  const pendentes = await pendentesDaAba(aba);
-  if (pendentes > 0) return { ok: false, motivo: "fila-pendente", pendentes };
-  await definirEstadoAba(aba, "off");
-  return { ok: true };
+  const atual = await estadoAbaSemCache(aba);
+  if (atual === "off") return { ok: true };
+  if (atual === "carregando") return { ok: false, motivo: "carregando" };
+  await definirEstadoAba(aba, "pausado");
+  try {
+    const espera = opts.esperaMs ?? ESPERA_TRANSICAO_MS;
+    if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+    for (let i = 0; i < 5 && (await pendentesDaAba(aba)) > 0; i++) {
+      const r = await despacharFila();
+      if (r.parouPorLimite) break;
+    }
+    const pendentes = await pendentesDaAba(aba);
+    if (pendentes > 0) {
+      await definirEstadoAba(aba, "on");
+      return { ok: false, motivo: "fila-pendente", pendentes };
+    }
+    const diferentes = linhasDiferentes(await lerPlanilhaReal(aba), await lerD1(P, aba));
+    if (diferentes.length) {
+      await definirEstadoAba(aba, "on");
+      return { ok: false, motivo: "divergencia", linhas: diferentes };
+    }
+    await definirEstadoAba(aba, "off");
+    return { ok: true };
+  } catch (err) {
+    await definirEstadoAba(aba, "on");
+    return { ok: false, motivo: "erro", erro: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function statusAbas(): Promise<{ aba: string; estado: EstadoAba; pendentesFila: number; linhasD1: number }[]> {

@@ -10,6 +10,7 @@
 import { getDriveOAuthAccessToken } from "../google/service-account";
 import { DRIVE_FOLDERS, trashDriveFileIfInFolders } from "../services/googleDriveService";
 import { readValues } from "../services/googleSheetsService";
+import { extractBearerToken, verifySessionToken } from "../services/sessionService";
 
 const MAX_BYTES = 5 * 1024 ** 3; // 5 GB
 const JANELA_DESCARTE_MS = 2 * 60 * 60 * 1000; // 2 h
@@ -18,8 +19,17 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+// Só jogador logado abre sessão de upload ou descarta arquivo (revisão I6):
+// a sessão aceita até 5 GB direto no Drive do app.
+async function exigeLogin(request: Request): Promise<Response | null> {
+  const sessao = await verifySessionToken(extractBearerToken(request));
+  return sessao ? null : json({ success: false, error: "Faça login para enviar vídeos." }, 401);
+}
+
 /** POST /api/gestao/video-upload-sessao { fileName, mimeType, size } -> { uploadUrl } */
 export async function criarSessaoUploadVideoController(request: Request): Promise<Response> {
+  const negado = await exigeLogin(request);
+  if (negado) return negado;
   try {
     const { fileName, mimeType, size } = (await request.json().catch(() => ({}))) as {
       fileName?: string;
@@ -64,6 +74,8 @@ export async function criarSessaoUploadVideoController(request: Request): Promis
  * nem na fila do programa de TV.
  */
 export async function descartarUploadVideoController(request: Request): Promise<Response> {
+  const negado = await exigeLogin(request);
+  if (negado) return negado;
   try {
     const { fileId } = (await request.json().catch(() => ({}))) as { fileId?: string };
     const id = fileId?.match(/[-\w]{25,}/)?.[0];

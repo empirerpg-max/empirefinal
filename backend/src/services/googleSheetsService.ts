@@ -1,6 +1,7 @@
 import { getGoogleAccessToken } from "../google/service-account";
 import {
   MENSAGEM_MANUTENCAO,
+  type EstadoAba,
   abaDoPorteiro,
   appendD1,
   estadoAba,
@@ -899,6 +900,14 @@ async function clearValuesGoogle(
 // virtual no D1 + fila de backup. Abas fora do catálogo nunca consultam o KV.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Leitura no D1 quando a aba está "on" ou "pausado".
+const leNoD1 = (e: EstadoAba) => e === "on" || e === "pausado";
+
+/** Gravação em aba do porteiro: "carregando"/"pausado" recusam LANÇANDO (nunca fingem sucesso — revisão I1). */
+function recusarSeEmTransicao(e: EstadoAba): void {
+  if (e === "carregando" || e === "pausado") throw new Error(MENSAGEM_MANUTENCAO);
+}
+
 export async function readValues(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
@@ -906,7 +915,7 @@ export async function readValues(
   valueRenderOption: ValueRenderOption = "FORMATTED_VALUE",
 ): Promise<string[][]> {
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
-  if ((await estadoAba(id, sheetName)) === "on") return lerD1(id, sheetName, range);
+  if (leNoD1(await estadoAba(id, sheetName))) return lerD1(id, sheetName, range);
   return readValuesGoogle(spreadsheetKeyOrId, sheetName, range, valueRenderOption);
 }
 
@@ -916,7 +925,7 @@ export async function readValuesFresh(
   range = "A:ZZ",
 ): Promise<string[][]> {
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
-  if ((await estadoAba(id, sheetName)) === "on") return lerD1(id, sheetName, range);
+  if (leNoD1(await estadoAba(id, sheetName))) return lerD1(id, sheetName, range);
   return readValuesFreshGoogle(spreadsheetKeyOrId, sheetName, range);
 }
 
@@ -929,16 +938,8 @@ export async function updateValues(
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
   const estado = await estadoAba(id, sheetName);
   if (estado === "off") return updateValuesGoogle(spreadsheetKeyOrId, sheetName, range, values);
-  if (estado === "carregando") {
-    console.warn(`[porteiro] Gravação em "${sheetName}" recusada: ${MENSAGEM_MANUTENCAO}`);
-    return false;
-  }
-  try {
-    await gravarD1(id, sheetName, range, values);
-  } catch (err) {
-    console.warn(`[porteiro] Falha ao gravar no D1 (${sheetName}!${range}):`, err);
-    return false;
-  }
+  recusarSeEmTransicao(estado);
+  await gravarD1(id, sheetName, range, values);
   await espelharNoD1SeAplicavel(id, sheetName, { tipo: "update", range });
   return true;
 }
@@ -950,19 +951,11 @@ export async function updateValuesBatch(
   if (entries.length === 0) return true;
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
   const estados = await Promise.all(entries.map((e) => estadoAba(id, e.sheetName)));
-  if (estados.includes("carregando")) {
-    console.warn(`[porteiro] Lote recusado: ${MENSAGEM_MANUTENCAO}`);
-    return false;
-  }
+  estados.forEach(recusarSeEmTransicao);
   const noD1 = entries.filter((_, i) => estados[i] === "on");
-  const noGoogle = entries.filter((_, i) => estados[i] !== "on");
+  const noGoogle = entries.filter((_, i) => estados[i] === "off");
   for (const e of noD1) {
-    try {
-      await gravarD1(id, e.sheetName, e.range, e.values);
-    } catch (err) {
-      console.warn(`[porteiro] Falha ao gravar no D1 (${e.sheetName}!${e.range}):`, err);
-      return false;
-    }
+    await gravarD1(id, e.sheetName, e.range, e.values);
     await espelharNoD1SeAplicavel(id, e.sheetName, { tipo: "update", range: e.range });
   }
   return noGoogle.length ? updateValuesBatchGoogle(spreadsheetKeyOrId, noGoogle) : true;
@@ -977,7 +970,7 @@ export async function appendRows(
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
   const estado = await estadoAba(id, sheetName);
   if (estado === "off") return appendRowsGoogle(spreadsheetKeyOrId, sheetName, rows, range);
-  if (estado === "carregando") throw new Error(MENSAGEM_MANUTENCAO);
+  recusarSeEmTransicao(estado);
   const linhas: number[] = [];
   for (const r of rows) linhas.push(await appendD1(id, sheetName, r, range));
   await espelharNoD1SeAplicavel(id, sheetName, { tipo: "append", linhas });
@@ -992,12 +985,13 @@ export async function deleteRows(
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
   const estado = await estadoAba(id, sheetName);
   if (estado === "off") return deleteRowsGoogle(spreadsheetKeyOrId, sheetName, rowIndexes1Based);
-  if (estado === "carregando") throw new Error(MENSAGEM_MANUTENCAO);
+  recusarSeEmTransicao(estado);
   const ordenadoDesc = [...new Set(rowIndexes1Based)].sort((a, b) => b - a);
   await removerD1(id, sheetName, ordenadoDesc);
   await espelharNoD1SeAplicavel(id, sheetName, { tipo: "delete", linhas: ordenadoDesc });
 }
 
+/** Em aba do porteiro ligada, devolve a linha gravada; falha LANÇA (nunca null). */
 export async function appendRow(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
@@ -1008,17 +1002,8 @@ export async function appendRow(
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
   const estado = await estadoAba(id, sheetName);
   if (estado === "off") return appendRowGoogle(spreadsheetKeyOrId, sheetName, values, range, insertDataOption);
-  if (estado === "carregando") {
-    console.warn(`[porteiro] Append em "${sheetName}" recusado: ${MENSAGEM_MANUTENCAO}`);
-    return null;
-  }
-  let linha: number;
-  try {
-    linha = await appendD1(id, sheetName, values, range);
-  } catch (err) {
-    console.warn(`[porteiro] Falha ao acrescentar linha no D1 (${sheetName}):`, err);
-    return null;
-  }
+  recusarSeEmTransicao(estado);
+  const linha = await appendD1(id, sheetName, values, range);
   await espelharNoD1SeAplicavel(id, sheetName, { tipo: "append", linhas: [linha] });
   return linha;
 }
@@ -1031,20 +1016,15 @@ export async function clearValues(
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
   const estado = await estadoAba(id, sheetName);
   if (estado === "off") return clearValuesGoogle(spreadsheetKeyOrId, sheetName, range);
-  if (estado === "carregando") return false;
-  try {
-    await limparD1(id, sheetName, range);
-  } catch (err) {
-    console.warn(`[porteiro] Falha ao limpar no D1 (${sheetName}!${range}):`, err);
-    return false;
-  }
+  recusarSeEmTransicao(estado);
+  await limparD1(id, sheetName, range);
   await espelharNoD1SeAplicavel(id, sheetName, { tipo: "update", range });
   return true;
 }
 
 export async function ensureSheetTab(spreadsheetKeyOrId: SpreadsheetKey | string, sheetName: string): Promise<void> {
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
-  if (abaDoPorteiro(id, sheetName) && (await estadoAba(id, sheetName)) === "on") return;
+  if (abaDoPorteiro(id, sheetName) && (await estadoAba(id, sheetName)) !== "off") return;
   return ensureSheetTabGoogle(spreadsheetKeyOrId, sheetName);
 }
 
@@ -1054,7 +1034,7 @@ export async function ensureRowCapacity(
   minRows: number,
 ): Promise<void> {
   const id = resolveSpreadsheetId(spreadsheetKeyOrId);
-  if ((await estadoAba(id, sheetName)) === "on") return;
+  if (leNoD1(await estadoAba(id, sheetName))) return;
   return ensureRowCapacityGoogle(spreadsheetKeyOrId, sheetName, minRows);
 }
 
@@ -1111,6 +1091,8 @@ export const googleDireto = {
   /** Fórmulas cruas (FORMULA), sem cache e sem GViz — lança em erro. */
   lerFormulas: (spreadsheetKeyOrId: SpreadsheetKey | string, sheetName: string) =>
     readValuesUncached(spreadsheetKeyOrId, sheetName, "A:ZZ", "FORMULA", false),
+  ensureSheetTab: ensureSheetTabGoogle,
+  ensureRowCapacity: ensureRowCapacityGoogle,
 };
 
 export const googleSheetsService = {

@@ -19,9 +19,10 @@ let googleCalls: string[] = [];
 };
 const kv = new Map<string, string>();
 (globalThis as any).__FLAGS_KV__ = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) };
+let sqliteAtual: any;
 
 const { PLANILHA_VIRTUAL_CREATE_STATEMENTS } = await import(R + "services/planilhaVirtualD1.ts");
-const { definirEstadoAba, estadoAba } = await import(R + "services/porteiroD1.ts");
+const { definirEstadoAba, estadoAba, limparCacheEstado } = await import(R + "services/porteiroD1.ts");
 const G = await import(R + "services/googleSheetsService.ts");
 
 async function contarFila(aba: string): Promise<number> {
@@ -32,6 +33,7 @@ async function contarFila(aba: string): Promise<number> {
 
 beforeEach(async () => {
   const sqlite = instalarFakeD1();
+  sqliteAtual = sqlite;
   for (const s of PLANILHA_VIRTUAL_CREATE_STATEMENTS) sqlite.exec(s);
   // tabelas tipadas do espelho de vídeos não existem aqui: o espelho falha em silêncio (já é o contrato dele)
   kv.clear();
@@ -89,11 +91,70 @@ test("dois appendRow em paralelo ganham linhas diferentes", async () => {
   expect((await G.readValues("principal", "Comentarios_MV")).length).toBe(2);
 });
 
-test("carregando: gravação recusada com mensagem amigável", async () => {
-  await definirEstadoAba("Comentarios_MV", "carregando");
-  expect(await estadoAba("1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo", "Comentarios_MV")).toBe("carregando");
-  await expect(G.appendRows("principal", "Comentarios_MV", [["z"]])).rejects.toThrow("manutenção");
-  expect(await G.appendRow("principal", "Comentarios_MV", ["z"])).toBeNull();
+test("I1: carregando/pausado — toda gravação LANÇA (nunca finge sucesso)", async () => {
+  for (const estado of ["carregando", "pausado"] as const) {
+    await definirEstadoAba("Comentarios_MV", estado);
+    expect(await estadoAba("1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo", "Comentarios_MV")).toBe(estado);
+    await expect(G.appendRows("principal", "Comentarios_MV", [["z"]])).rejects.toThrow("manutenção");
+    await expect(G.appendRow("principal", "Comentarios_MV", ["z"])).rejects.toThrow("manutenção");
+    await expect(G.updateValues("principal", "Comentarios_MV", "A1", [["z"]])).rejects.toThrow("manutenção");
+    await expect(G.clearValues("principal", "Comentarios_MV", "A1")).rejects.toThrow("manutenção");
+    await expect(G.updateValuesBatch("principal", [{ sheetName: "Comentarios_MV", range: "A1", values: [["z"]] }])).rejects.toThrow("manutenção");
+  }
+  expect(googleCalls).toEqual([]);
+});
+
+test("pausado: leitura continua no D1", async () => {
+  await definirEstadoAba("Music Videos", "on");
+  await G.updateValues("principal", "Music Videos", "A1", [["d1"]]);
+  await definirEstadoAba("Music Videos", "pausado");
+  expect(await G.readValues("principal", "Music Videos")).toEqual([["d1"]]);
+  expect(googleCalls).toEqual([]);
+});
+
+test("I1: falha do D1 numa gravação de aba ligada LANÇA", async () => {
+  await definirEstadoAba("Music Videos", "on");
+  const db = (globalThis as any).__CATALOGO_DB__;
+  const batchOriginal = db.batch;
+  db.batch = async () => { throw new Error("D1 fora do ar"); };
+  await expect(G.updateValues("principal", "Music Videos", "A1", [["x"]])).rejects.toThrow("D1 fora do ar");
+  await expect(G.appendRow("principal", "Music Videos", ["x"])).rejects.toThrow("D1 fora do ar");
+  db.batch = batchOriginal;
+});
+
+test("C1: duas gravações simultâneas em células diferentes da mesma linha — as duas ficam", async () => {
+  await definirEstadoAba("Music Videos", "on");
+  await G.updateValues("principal", "Music Videos", "A2:C2", [["a", "b", "c"]]);
+  await Promise.all([
+    G.updateValues("principal", "Music Videos", "A2", [["likes"]]),
+    G.updateValues("principal", "Music Videos", "C2", [["reportado"]]),
+  ]);
+  expect(await G.readValues("principal", "Music Videos", "A2:C2")).toEqual([["likes", "b", "reportado"]]);
+});
+
+test("C2: estado vem do D1 (não do KV) e expira: carregando velho volta a 'off', pausado velho volta a 'on'", async () => {
+  kv.set("d1primeiro:Music Videos", "on"); // KV não manda mais em nada
+  expect(await estadoAba("1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo", "Music Videos")).toBe("off");
+  await definirEstadoAba("Music Videos", "carregando");
+  await definirEstadoAba("Comentarios_MV", "pausado");
+  sqliteAtual.exec("UPDATE catalogo_estado_aba SET atualizado_em_ms = atualizado_em_ms - 6 * 60 * 1000");
+  limparCacheEstado();
+  expect(await estadoAba("1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo", "Music Videos")).toBe("off");
+  expect(await estadoAba("1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo", "Comentarios_MV")).toBe("on");
+});
+
+test("C2: sem D1 e sem estado conhecido, aba do porteiro não cai para a planilha", async () => {
+  limparCacheEstado();
+  delete (globalThis as any).__CATALOGO_DB__;
+  await expect(G.readValues("principal", "Comentarios_MV")).rejects.toThrow();
+  await expect(G.appendRow("principal", "Comentarios_MV", ["x"])).rejects.toThrow();
+  expect(googleCalls).toEqual([]);
+});
+
+test("I2: tabelas são criadas sozinhas num D1 vazio", async () => {
+  instalarFakeD1(); // banco novo, sem nenhuma tabela
+  await definirEstadoAba("Comentarios_MV", "on");
+  expect(await G.appendRow("principal", "Comentarios_MV", ["x"])).toBe(1);
 });
 
 test("updateValuesBatch misto separa D1 e Google", async () => {
@@ -118,7 +179,7 @@ test("deleteRows e clearValues em aba ligada mexem só no D1 e vão para a fila"
   expect(await contarFila("Comentarios_MV")).toBe(3);
 });
 
-test("aba fora da lista nunca consulta o KV", async () => {
-  kv.set("d1primeiro:Social", "on");
+test("aba fora da lista é sempre 'off', sem consultar nada", async () => {
+  delete (globalThis as any).__CATALOGO_DB__;
   expect(await estadoAba("1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo", "Social")).toBe("off");
 });

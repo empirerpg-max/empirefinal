@@ -27,8 +27,8 @@ test("rotas de admin do D1 primeiro existem e exigem admin", async () => {
 test("rotas de upload direto de vídeo existem", async () => {
   const sessao = await chamar("/api/gestao/video-upload-sessao");
   expect(sessao).not.toBeNull();
-  expect(sessao!.status).toBe(400); // corpo vazio -> nome ausente
+  expect(sessao!.status).toBe(401); // sem login
   const descartar = await chamar("/api/gestao/video-upload-descartar");
   expect(descartar).not.toBeNull();
-  expect(descartar!.status).toBe(400);
+  expect(descartar!.status).toBe(401);
 });

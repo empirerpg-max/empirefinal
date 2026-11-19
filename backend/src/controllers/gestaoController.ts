@@ -1046,15 +1046,20 @@ export async function criarVideoNoCatalogo(
     ];
     let videoRowIndexNovo: number | null = null;
     try {
-      const colunaB = await googleSheetsService.principal.readValues("Music Videos", "B2:B5000");
-      const idxVazio = colunaB.findIndex((r) => !(r[0] || "").trim());
-      const linhaLivre = idxVazio >= 0 ? idxVazio + 2 : colunaB.length + 2;
-      await googleSheetsService.principal.updateValues(
-        "Music Videos",
-        `A${linhaLivre}:T${linhaLivre}`,
-        [rowValues],
-      );
-      videoRowIndexNovo = linhaLivre;
+      // Trava (revisão I7, "bug da Rayna"): sem ela, dois lançamentos
+      // simultâneos achavam a mesma linha livre e um apagava o outro.
+      videoRowIndexNovo = await withWriteLock("linha-livre:Music Videos", async () => {
+        const colunaB = await googleSheetsService.principal.readValues("Music Videos", "B2:B5000");
+        const idxVazio = colunaB.findIndex((r) => !(r[0] || "").trim());
+        const linhaLivre = idxVazio >= 0 ? idxVazio + 2 : colunaB.length + 2;
+        const gravou = await googleSheetsService.principal.updateValues(
+          "Music Videos",
+          `A${linhaLivre}:T${linhaLivre}`,
+          [rowValues],
+        );
+        if (!gravou) throw new Error("gravação recusada");
+        return linhaLivre;
+      });
       upsertMidiaD1({
         id: topicId,
         tipo: "video",
@@ -1067,7 +1072,13 @@ export async function criarVideoNoCatalogo(
         thumbUrl: capaUrl || null,
       }).catch(() => {});
     } catch (err) {
+      // Antes só registrava um aviso e seguia respondendo "publicado" mesmo
+      // sem o vídeo ter sido gravado (revisão I1). Agora o jogador vê o erro.
       console.warn("[createVideoController] Erro ao gravar em Music Videos:", err);
+      return {
+        success: false,
+        error: `Não foi possível registrar o vídeo agora (${err instanceof Error ? err.message : String(err)}). Tente de novo em instantes.`,
+      };
     }
 
     const warnings: string[] = [];
