@@ -13,9 +13,11 @@ export function instalarFakeD1(): Database {
     all: async () => ({ results: sqlite.query(sql).all(...(b as never[])), success: true }),
     first: async () => sqlite.query(sql).get(...(b as never[])) ?? null,
   });
-  (globalThis as any).__CATALOGO_DB__ = {
-    prepare: (s: string) => prep(s),
-    batch: async (st: any[]) => {
+  // O D1 real executa um batch por vez (transação serializada); aqui uma fila
+  // de promessas imita isso, senão dois batches simultâneos abririam
+  // transações aninhadas no SQLite.
+  let fila: Promise<unknown> = Promise.resolve();
+  const executar = async (st: any[]) => {
       const out = [];
       sqlite.exec("BEGIN");
       try {
@@ -26,6 +28,13 @@ export function instalarFakeD1(): Database {
         throw e;
       }
       return out;
+  };
+  (globalThis as any).__CATALOGO_DB__ = {
+    prepare: (s: string) => prep(s),
+    batch: (st: any[]) => {
+      const p = fila.then(() => executar(st));
+      fila = p.catch(() => {});
+      return p;
     },
   };
   return sqlite;

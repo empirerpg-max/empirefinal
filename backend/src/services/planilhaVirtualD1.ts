@@ -182,8 +182,8 @@ export async function proximaLinhaAppend(planilha: string, aba: string): Promise
   const r = await db()
     .prepare("SELECT max(linha) AS m FROM planilha_virtual WHERE planilha = ? AND aba = ?")
     .bind(planilha, aba)
-    .first<{ m: number | null }>();
-  return (r?.m ?? 0) + 1;
+    .all<{ m: number | null }>();
+  return (r.results?.[0]?.m ?? 0) + 1;
 }
 
 /** Remove as linhas e desloca as de baixo (mesma semântica do deleteDimension do Sheets). */
