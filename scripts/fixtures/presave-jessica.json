@@ -1,0 +1,228 @@
+{
+ "id": "PRESAVE-d4fd66d2",
+ "jogadorId": "7701082951",
+ "jogadorNome": "daniel",
+ "artista": "Jessica Johnson",
+ "albumTituloFull": "Jessica Johnson - Bad Behavior",
+ "capaUrl": "https://drive/capa",
+ "tipoAlbum": "Álbum",
+ "modo": "missao",
+ "dataInicioISO": "2026-11-05T01:43:18.607Z",
+ "dataLancamento": "2026-11-22",
+ "duracaoDias": 14,
+ "tetoFinal": 4062230,
+ "status": "ativa",
+ "faixas": [
+  {
+   "num": 1,
+   "inedita": true,
+   "titulo": "Pretty Woman",
+   "participantes": [],
+   "mediaUrl": "https://drive/1",
+   "letra": "letra 1",
+   "abrirTopico": false,
+   "mostrarNomeReal": false,
+   "revelada": false
+  },
+  {
+   "num": 2,
+   "inedita": true,
+   "titulo": "No Strings Attached",
+   "participantes": [],
+   "mediaUrl": "https://drive/2",
+   "letra": "letra 2",
+   "abrirTopico": false,
+   "mostrarNomeReal": false,
+   "revelada": false
+  },
+  {
+   "num": 3,
+   "inedita": false,
+   "titulo": "Jessica Johnson - REIGN",
+   "participantes": [],
+   "abrirTopico": false,
+   "mostrarNomeReal": true,
+   "revelada": true
+  },
+  {
+   "num": 4,
+   "inedita": false,
+   "titulo": "Jessica Johnson - Sweet Spot",
+   "participantes": [],
+   "abrirTopico": false,
+   "mostrarNomeReal": true,
+   "revelada": true
+  },
+  {
+   "num": 5,
+   "inedita": true,
+   "titulo": "Très Jolie",
+   "participantes": [],
+   "mediaUrl": "https://drive/5",
+   "letra": "letra 5",
+   "abrirTopico": false,
+   "mostrarNomeReal": false,
+   "revelada": false
+  },
+  {
+   "num": 6,
+   "inedita": true,
+   "titulo": "Shipbait",
+   "participantes": [
+    "Samantha Cooper"
+   ],
+   "mediaUrl": "https://drive/6",
+   "letra": "letra 6",
+   "abrirTopico": false,
+   "mostrarNomeReal": false,
+   "revelada": false
+  },
+  {
+   "num": 7,
+   "inedita": true,
+   "titulo": "Freakquency",
+   "participantes": [],
+   "mediaUrl": "https://drive/7",
+   "letra": "letra 7",
+   "abrirTopico": false,
+   "mostrarNomeReal": false,
+   "revelada": false
+  },
+  {
+   "num": 8,
+   "inedita": true,
+   "titulo": "Marie Antoinette",
+   "participantes": [],
+   "mediaUrl": "https://drive/8",
+   "letra": "letra 8",
+   "abrirTopico": false,
+   "mostrarNomeReal": false,
+   "revelada": false
+  },
+  {
+   "num": 9,
+   "inedita": false,
+   "titulo": "Jessica Johnson - Nobody's Wife",
+   "participantes": [],
+   "abrirTopico": false,
+   "mostrarNomeReal": true,
+   "revelada": true
+  },
+  {
+   "num": 10,
+   "inedita": true,
+   "titulo": "Afterimage",
+   "participantes": [],
+   "mediaUrl": "https://drive/10",
+   "letra": "letra 10",
+   "abrirTopico": false,
+   "mostrarNomeReal": false,
+   "revelada": false
+  },
+  {
+   "num": 11,
+   "inedita": true,
+   "titulo": "Good In Bed",
+   "participantes": [
+    "Anníbal Paris"
+   ],
+   "mediaUrl": "https://drive/11",
+   "letra": "letra 11",
+   "abrirTopico": false,
+   "mostrarNomeReal": false,
+   "revelada": false,
+   "tipoMusica": "PARCERIA"
+  },
+  {
+   "num": 12,
+   "inedita": true,
+   "titulo": "Bad Behavior",
+   "participantes": [],
+   "mediaUrl": "https://drive/12",
+   "letra": "letra 12",
+   "abrirTopico": true,
+   "mostrarNomeReal": false,
+   "revelada": false
+  }
+ ],
+ "missoes": [
+  {
+   "dia": 1,
+   "tipo": "bastidores",
+   "status": "completa"
+  },
+  {
+   "dia": 2,
+   "tipo": "bastidores",
+   "status": "completa"
+  },
+  {
+   "dia": 3,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 4,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 5,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 6,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 7,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 8,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 9,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 10,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 11,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 12,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 13,
+   "tipo": "bastidores",
+   "status": "perdida"
+  },
+  {
+   "dia": 14,
+   "tipo": "bastidores",
+   "status": "perdida"
+  }
+ ],
+ "albumTopicId": "album_1793842998607_xvp873",
+ "codigoUnicoAlbum": "",
+ "encartesUrls": [
+  "https://drive/enc1"
+ ],
+ "criadoEmISO": "2026-11-05T01:43:18.607Z",
+ "extraMaterialJson": "{\"shopAtivo\": true, \"shop\": [{\"foto\": \"https://drive/shop\", \"titulo\": \"Official Merchandising\"}], \"infoAtivo\": true, \"info\": \"info\", \"visualAtivo\": true, \"arte\": [{\"tipo\": \"imagem\", \"url\": \"https://drive/arte\"}]}",
+ "_rowIndex": 9
+}
