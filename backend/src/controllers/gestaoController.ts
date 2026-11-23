@@ -296,7 +296,7 @@ const INFOS_MUSICAS_SHEET = "INFOS MÚSICAS";
 // capa escolhida pelo artista — o ADM pode sobrescrever D à mão quando
 // quiser. F ("nova capa solicitada") fica em branco, reservada pro fluxo
 // de troca de capa (ver propagarCapaParaInfosMusicas em editController.ts).
-async function registrarInfosMusicas(params: {
+export async function registrarInfosMusicas(params: {
   fullTitle: string; // "Artista - Título"
   capaUrl: string;
   genero?: string;
@@ -1569,6 +1569,60 @@ export async function vincularFaixaExistenteAoAlbum(
 // pra toda faixa inédita) e em publicarFaixaPendenteController (que agora
 // só precisa acionar a parte de INFOS MÚSICAS, ver
 // atualizarFaixaNosChartsAoPublicar).
+// Linha em "REGISTRO DE MÚSICA" (registrosCharts) — extraída de
+// registrarFaixaNosCharts para o pre-save em passos. LANÇA em falha (quem
+// chama decide se engole: registrarFaixaNosCharts engole, como sempre fez).
+export async function registrarNoRegistroDeMusica(p: {
+  songTitle: string;
+  tipoSingle: string;
+  tipoMusica: string;
+  album: string;
+  artistaPrincipal: string;
+  participantes: string[];
+}): Promise<void> {
+  const { songTitle, tipoSingle, tipoMusica, album, artistaPrincipal, participantes } = p;
+  await withWriteLock("gestao:registro-de-musica", async () => {
+    const registroRows =
+      await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
+    let targetRow = (registroRows?.length || 0) + 1;
+    if (registroRows && registroRows.length > 1) {
+      for (let i = 1; i < registroRows.length; i++) {
+        if (!(registroRows[i][1] || "").trim()) {
+          targetRow = i + 1;
+          break;
+        }
+      }
+    } else if (!registroRows || registroRows.length === 0) {
+      targetRow = 2;
+    }
+
+    const ok = await googleSheetsService.registrosCharts.updateValues(
+      "REGISTRO DE MÚSICA",
+      `B${targetRow}:P${targetRow}`,
+      [
+        [
+          songTitle, // B - Título
+          tipoSingle, // C - Tipo de Single
+          tipoMusica, // D - Tipo de Música
+          album, // E - ÁLBUM
+          "", // F
+          "", // G
+          artistaPrincipal, // H - ACT PRINCIPAL
+          participantes[0] || "", // I - Artista 2
+          participantes[1] || "", // J - Artista 3
+          participantes[2] || "", // K - Artista 4
+          participantes[3] || "", // L - Artista 5
+          participantes[4] || "", // M - Artista 6
+          "Não", // N - SUBSTITUIR NOS CHARTS?
+          "", // O - Por qual música?
+          "OK", // P - ENVIAR
+        ],
+      ],
+    );
+    if (!ok) throw new Error(`Falha ao gravar "${songTitle}" em REGISTRO DE MÚSICA (linha ${targetRow}).`);
+  });
+}
+
 async function registrarFaixaNosCharts(params: {
   dataFormatada: string;
   songTitle: string;
@@ -1610,48 +1664,13 @@ async function registrarFaixaNosCharts(params: {
   }
 
   try {
-    // Trava de concorrência (ver writeLockService.ts, "bug da Rayna") —
-    // mesmo padrão arriscado de "ler última linha livre + escrever" sem
-    // proteção nenhuma contra outra escrita concorrente calculando a
-    // MESMA targetRow.
-    await withWriteLock("gestao:registro-de-musica", async () => {
-      const registroRows =
-        await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
-      let targetRow = (registroRows?.length || 0) + 1;
-      if (registroRows && registroRows.length > 1) {
-        for (let i = 1; i < registroRows.length; i++) {
-          if (!(registroRows[i][1] || "").trim()) {
-            targetRow = i + 1;
-            break;
-          }
-        }
-      } else if (!registroRows || registroRows.length === 0) {
-        targetRow = 2;
-      }
-
-      await googleSheetsService.registrosCharts.updateValues(
-        "REGISTRO DE MÚSICA",
-        `B${targetRow}:P${targetRow}`,
-        [
-          [
-            songTitle, // B - Título
-            tipoSingle, // C - Tipo de Single
-            tipoMusica, // D - Tipo de Música
-            album, // E - ÁLBUM
-            "", // F
-            "", // G
-            artistaPrincipal, // H - ACT PRINCIPAL
-            participantes[0] || "", // I - Artista 2
-            participantes[1] || "", // J - Artista 3
-            participantes[2] || "", // K - Artista 4
-            participantes[3] || "", // L - Artista 5
-            participantes[4] || "", // M - Artista 6
-            "Não", // N - SUBSTITUIR NOS CHARTS?
-            "", // O - Por qual música?
-            "OK", // P - ENVIAR
-          ],
-        ],
-      );
+    await registrarNoRegistroDeMusica({
+      songTitle,
+      tipoSingle,
+      tipoMusica,
+      album,
+      artistaPrincipal,
+      participantes,
     });
   } catch (err) {
     console.warn("[registrarFaixaNosCharts] Erro ao gravar em REGISTRO DE MÚSICA:", err);
@@ -1828,12 +1847,61 @@ async function proximaLinhaLivreMusicas(): Promise<number> {
   return rows.length + 1;
 }
 
-async function appendRowMusicasSeguro(values: GoogleSheetRow): Promise<number> {
+export async function appendRowMusicasSeguro(values: GoogleSheetRow): Promise<number> {
   return withWriteLock("gestao:musicas-append", async () => {
     const linhaAlvo = await proximaLinhaLivreMusicas();
     await gravarLinhaMusicasNaPosicao(linhaAlvo, values);
     return linhaAlvo;
   });
+}
+
+// Linha A:X de "Musicas" para uma faixa INÉDITA de álbum — extraída de
+// processarFaixasDoAlbum para o pre-save em passos (presaveLancamento/)
+// gravar exatamente a mesma linha, uma faixa por vez. Pura (sem I/O).
+export function montarLinhaMusicasFaixaInedita(p: {
+  dataFormatada: string;
+  faixa: TrackItemPayload;
+  artistaAlbum: string;
+  albumFullTitle: string;
+  capaUrl: string;
+  jogadorId: string;
+  trackTopicId: string;
+  weeksOverride?: string;
+}): { songTitle: string; linha: GoogleSheetRow; pendente: boolean } {
+  const { dataFormatada, faixa, artistaAlbum, albumFullTitle, capaUrl, jogadorId, trackTopicId, weeksOverride } = p;
+  const participantesLimpos = (faixa.participantes || []).filter(Boolean);
+  const tituloFaixaSemPrefixoDuplicado = dedupeArtistPrefix(faixa.titulo, artistaAlbum);
+  const songTitle = tituloFaixaSemPrefixoDuplicado.includes(" - ")
+    ? tituloFaixaSemPrefixoDuplicado
+    : `${artistaAlbum} - ${tituloFaixaSemPrefixoDuplicado}`;
+  const pendente = !faixa.abrirTopico;
+  const linha: GoogleSheetRow = [
+    dataFormatada, // A - Data de lançamento
+    trackTopicId, // B - ID do tópico (só se abrir tópico próprio)
+    faixa.mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
+    capaUrl || "", // D - Capa da música
+    faixa.letra || "", // E - Letra
+    trackTopicId, // F - Comentários para
+    jogadorId || "", // G - ID do Criador
+    songTitle, // H - Nome da música
+    faixa.tipoSingle || "TRACKLIST ALBUM", // I - TIPO DE SINGLE
+    faixa.tipoMusica || "SOLO", // J - TIPO DE MÚSICA
+    albumFullTitle, // K - ALBUM
+    weeksOverride || "", // L - WEEKS
+    "", // M - WEEKS VIDEO
+    artistaAlbum, // N - ACT PRINCIPAL
+    participantesLimpos[0] || "", // O - ARTISTA 2
+    participantesLimpos[1] || "", // P - ARTISTA 3
+    participantesLimpos[2] || "", // Q - ARTISTA 4
+    participantesLimpos[3] || "", // R - ARTISTA 5
+    participantesLimpos[4] || "", // S - ARTISTA 6
+    "", // T - GÊNERO
+    String(faixa.num || ""), // U - Ordem
+    "", // V - Metacritic por jogador
+    "", // W - Média Metacritic
+    pendente ? "Sim" : "Não", // X - Pendente?
+  ];
+  return { songTitle, linha, pendente };
 }
 
 // Processa a lista de faixas de um álbum (criação ou substituição): faixa
@@ -1926,45 +1994,26 @@ export async function processarFaixasDoAlbum(
 
     // Faixa inédita.
     const participantesLimpos = (faixa.participantes || []).filter(Boolean);
-    const tituloFaixaSemPrefixoDuplicado = dedupeArtistPrefix(faixa.titulo, artistaAlbum);
-    const songTitle = tituloFaixaSemPrefixoDuplicado.includes(" - ")
-      ? tituloFaixaSemPrefixoDuplicado
-      : `${artistaAlbum} - ${tituloFaixaSemPrefixoDuplicado}`;
     const abrirTopico = !!faixa.abrirTopico;
-    const pendente = abrirTopico ? "Não" : "Sim";
     const trackTopicId = abrirTopico
       ? `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${faixa.num}`
       : "";
+    const { songTitle, linha: linhaMusicas, pendente: faixaPendente } = montarLinhaMusicasFaixaInedita({
+      dataFormatada,
+      faixa,
+      artistaAlbum,
+      albumFullTitle,
+      capaUrl,
+      jogadorId,
+      trackTopicId,
+      weeksOverride,
+    });
+    const pendente = faixaPendente ? "Sim" : "Não";
 
     faixasIneditasEsperadas++;
     let faixaRowIndex: number | null = null;
     try {
-      faixaRowIndex = await appendRowMusicasComCursor([
-        dataFormatada, // A - Data de lançamento
-        trackTopicId, // B - ID do tópico (só se abrir tópico próprio)
-        faixa.mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
-        capaUrl || "", // D - Capa da música
-        faixa.letra || "", // E - Letra
-        trackTopicId, // F - Comentários para
-        jogadorId || "", // G - ID do Criador
-        songTitle, // H - Nome da música
-        faixa.tipoSingle || "TRACKLIST ALBUM", // I - TIPO DE SINGLE
-        faixa.tipoMusica || "SOLO", // J - TIPO DE MÚSICA
-        albumFullTitle, // K - ALBUM
-        weeksOverride || "", // L - WEEKS
-        "", // M - WEEKS VIDEO
-        artistaAlbum, // N - ACT PRINCIPAL
-        participantesLimpos[0] || "", // O - ARTISTA 2
-        participantesLimpos[1] || "", // P - ARTISTA 3
-        participantesLimpos[2] || "", // Q - ARTISTA 4
-        participantesLimpos[3] || "", // R - ARTISTA 5
-        participantesLimpos[4] || "", // S - ARTISTA 6
-        "", // T - GÊNERO
-        String(faixa.num || ""), // U - Ordem
-        "", // V - Metacritic por jogador
-        "", // W - Média Metacritic
-        pendente, // X - Pendente?
-      ]);
+      faixaRowIndex = await appendRowMusicasComCursor(linhaMusicas);
       faixasIneditasGravadas++;
       if (trackTopicId) {
         upsertMidiaD1({
@@ -3048,6 +3097,47 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
 // migrarAlbunsLegadosController (cada álbum legado antigo vira um álbum
 // retroativo de verdade, com tópico no fórum e entrada nos charts). Lança
 // erro em caso de validação/falha; quem chama decide como responder.
+// Linha A:K de "Albuns" (acha a última linha com "Novo Nome" e escreve na
+// seguinte, dentro da trava "gestao:edicao-charts-albuns" — ver o porquê em
+// publicarAlbum). Extraída de publicarAlbum para o pre-save em passos.
+// LANÇA se a escrita falhar: sem essa linha o álbum não existe de verdade.
+export async function gravarLinhaAlbumEmAlbuns(p: {
+  dataFormatada: string;
+  albumTopicId: string;
+  capaUrl: string;
+  jogadorId: string;
+  nomeJogador: string;
+  albumFullTitle: string;
+  encartesStr: string;
+  tipoAlbum: string;
+}): Promise<number> {
+  return withWriteLock("gestao:edicao-charts-albuns", async () => {
+    const albunsRowsAtuais = await googleSheetsService.principal.readValues("Albuns", "A2:G20000");
+    let ultimaLinhaComAlbum = 1; // linha 1 = cabeçalho
+    for (let i = 0; i < albunsRowsAtuais.length; i++) {
+      if ((albunsRowsAtuais[i]?.[6] || "").trim()) ultimaLinhaComAlbum = i + 2;
+    }
+    const linhaAlvo = ultimaLinhaComAlbum + 1;
+    const ok = await googleSheetsService.principal.updateValues("Albuns", `A${linhaAlvo}:K${linhaAlvo}`, [
+      [
+        p.dataFormatada, // A - Data de lançamento
+        p.albumTopicId, // B - ID do tópico
+        p.capaUrl || "", // C - Capa
+        p.albumTopicId, // D - Comentários para / Referente ao tópico
+        p.jogadorId || "", // E - ID do Criador
+        p.nomeJogador, // F - Nome do criador
+        p.albumFullTitle, // G - Novo Nome
+        "", // H - Metacritic por jogador
+        "", // I - Média Metacritic
+        p.encartesStr, // J - Encarte
+        p.tipoAlbum, // K - Tipo (EP/Álbum/Deluxe)
+      ],
+    ]);
+    if (!ok) throw new Error(`Falha ao gravar o álbum "${p.albumFullTitle}" em Albuns (linha ${linhaAlvo}).`);
+    return linhaAlvo;
+  });
+}
+
 export async function publicarAlbum(body: CreateAlbumPayload) {
   const {
     tituloAlbum,
@@ -3129,32 +3219,15 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
   // escrevem na mesma linha em sequência (aqui, depois Albuns!L lá) —
   // tem que ser uma seção crítica única, não duas travas separadas que
   // ainda deixariam a janela entre elas desprotegida.
-  const albumRowIndexNovo = await withWriteLock("gestao:edicao-charts-albuns", async () => {
-    const albunsRowsAtuais = await googleSheetsService.principal.readValues(
-      "Albuns",
-      "A2:G20000",
-    );
-    let ultimaLinhaComAlbum = 1; // linha 1 = cabeçalho
-    for (let i = 0; i < albunsRowsAtuais.length; i++) {
-      if ((albunsRowsAtuais[i]?.[6] || "").trim()) ultimaLinhaComAlbum = i + 2;
-    }
-    const linhaAlvo = ultimaLinhaComAlbum + 1;
-    await googleSheetsService.principal.updateValues("Albuns", `A${linhaAlvo}:K${linhaAlvo}`, [
-      [
-        dataFormatada, // A - Data de lançamento
-        albumTopicId, // B - ID do tópico
-        capaUrl || "", // C - Capa
-        albumTopicId, // D - Comentários para / Referente ao tópico
-        jogadorId || "", // E - ID do Criador
-        nomeJogador, // F - Nome do criador
-        albumFullTitle, // G - Novo Nome
-        "", // H - Metacritic por jogador
-        "", // I - Média Metacritic
-        encartesStr, // J - Encarte
-        tipoAlbum, // K - Tipo (EP/Álbum/Deluxe)
-      ],
-    ]);
-    return linhaAlvo;
+  const albumRowIndexNovo = await gravarLinhaAlbumEmAlbuns({
+    dataFormatada,
+    albumTopicId,
+    capaUrl,
+    jogadorId,
+    nomeJogador,
+    albumFullTitle,
+    encartesStr,
+    tipoAlbum,
   });
   upsertMidiaD1({
     id: albumTopicId,
