@@ -1120,7 +1120,18 @@ function SocialPage() {
     haptic.light();
     setLikedPulse(postId);
     window.setTimeout(() => setLikedPulse((cur) => (cur === postId ? null : cur)), 350);
-    const res = await (api as any).curtirPostSocial(postId, myTgId);
+    // Nome de quem curtiu (vai na notificação do dono do post): mesmo
+    // critério do comentário — handle do meu artista na rede do post, ou o
+    // nome do artista se não houver perfil configurado nessa rede.
+    const norm = (s: string) => (s || "").trim().toLowerCase();
+    const postAlvo = posts.find((p) => p.id === postId);
+    const perfilNaRede = activeArtist
+      ? profiles.find(
+          (p) => norm(p.artista) === norm(activeArtist.nome) && norm(p.rede) === norm(postAlvo?.tipo || ""),
+        )
+      : undefined;
+    const autorCurtida = perfilNaRede?.handle || activeArtist?.nome || user?.name || "";
+    const res = await (api as any).curtirPostSocial(postId, myTgId, autorCurtida);
     if (res.ok) {
       setPosts((prev) =>
         prev.map((p) =>

@@ -264,6 +264,59 @@ export interface WorkerExecutionContext {
 // antigo), cai pra `await` mesmo: mais lento nesse caso, mas nunca arrisca
 // perder a escrita silenciosamente, que é o requisito inegociável aqui
 // (zero perda de dado).
+/**
+ * Descobre o artista dono do tópico e registra a notificação (sininho +
+ * push) pro dono dele. Pra "musica", o artista vem da coluna N (ACT
+ * PRINCIPAL) da linha da planilha, do D1 (tabela musicas) quando a música
+ * só existe lá, ou — em respostas, que não leem a planilha — de uma busca
+ * no D1 pelo id do tópico. Álbum/vídeo usam o título "Artista - Título".
+ */
+async function notificarDonoDoArtistaDoTopico(params: {
+  tipoMedia: string;
+  rowData: string[] | null;
+  artistaD1: string;
+  tituloOficial: string;
+  topicId: string;
+  autorId: string;
+  autorNome: string;
+  comentario: string;
+}): Promise<void> {
+  const { tipoMedia, rowData, tituloOficial, topicId } = params;
+  let artistaNome = "";
+  if (tipoMedia === "musica") {
+    artistaNome = normalizeText(rowData?.[13] || "") || params.artistaD1;
+    if (!artistaNome && topicId) {
+      const db = getCatalogoDb();
+      const res = db
+        ? await db
+            .prepare("SELECT artista FROM musicas WHERE id_topico = ? LIMIT 1")
+            .bind(topicId)
+            .all<{ artista: string }>()
+            .catch(() => null)
+        : null;
+      artistaNome = normalizeText(res?.results?.[0]?.artista || "");
+    }
+  } else {
+    const sep = tituloOficial.indexOf(" - ");
+    artistaNome = sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
+  }
+  if (!artistaNome) {
+    console.warn(`[ForumController] Notificação: artista não identificado (${tipoMedia}, tópico ${topicId}).`);
+    return;
+  }
+  const ownerId = await getOwnerIdForArtist(artistaNome).catch(() => undefined);
+  if (!ownerId) return;
+  await registrarNotificacaoComentario({
+    ownerId,
+    autorId: params.autorId,
+    autorNome: params.autorNome,
+    tipoMedia,
+    tituloMedia: tituloOficial,
+    topicId,
+    comentario: params.comentario,
+  });
+}
+
 async function runInBackground(
   ctx: WorkerExecutionContext | undefined,
   work: () => Promise<void>,
@@ -566,6 +619,7 @@ export async function createCommentController(
     // média ficam indisponíveis sem uma linha real pra gravar; o Audit Log
     // e o prestígio não dependem de linha no Sheets).
     let usouApenasD1 = false;
+    let artistaD1 = "";
     if (!isReply && tipoMedia === "musica" && foundRowIndex === -1) {
       try {
         const db = getCatalogoDb();
@@ -579,6 +633,7 @@ export async function createCommentController(
           if (row?.codigo_unico) {
             codigoUnico = row.codigo_unico;
             tituloOficial = row.titulo || tituloOficial;
+            artistaD1 = normalizeText(row.artista || "");
             usouApenasD1 = true;
           }
         }
@@ -683,6 +738,7 @@ export async function createCommentController(
               reacoesJson: null,
               dataHora: nowStr,
               replyTo: null,
+              idTopico: topicIdClean,
             }).run();
           }
         }
@@ -832,7 +888,16 @@ export async function createCommentController(
               const db = getCatalogoDb();
               if (db) {
                 await db
-                  .prepare(`UPDATE musicas SET id_topico = ? WHERE codigo_unico = ?`)
+                  // Versões da mesma música repetem o código: só grava o
+                  // tópico se houver UMA única versão desse código ainda sem
+                  // tópico (senão daria o mesmo tópico a todas). A chave da
+                  // linha passa a ser o tópico (ver chaveMusica).
+                  .prepare(
+                    `UPDATE musicas SET id_topico = ?1, chave = 't:' || ?1
+                     WHERE codigo_unico = ?2 AND coalesce(trim(id_topico), '') = ''
+                       AND (SELECT count(*) FROM musicas WHERE codigo_unico = ?2 AND coalesce(trim(id_topico), '') = '') = 1
+                       AND NOT EXISTS (SELECT 1 FROM musicas WHERE chave = 't:' || ?1)`,
+                  )
                   .bind(topicIdClean, codigoUnico)
                   .run()
                   .catch((err) =>
@@ -852,44 +917,41 @@ export async function createCommentController(
 
           // Rating por jogador e média sempre ficam em colunas adjacentes
           // (N/O, H/I, V/W conforme a aba) — uma updateValues só cobrindo o
-          // intervalo, em vez de duas chamadas sequenciais.
-          await googleSheetsService.principal.updateValues(
-            targetSheet,
-            `${ratingColLetter}${foundRowIndex}:${avgColLetter}${foundRowIndex}`,
-            [[updatedRatings, String(newAvg)]],
-          );
-
-          // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
-          // Monroe de Rose Thompson" pra quem é dono de Rose Thompson) — nunca
-          // a si mesmo. Pra "musica" o nome do artista vem da coluna N (ACT
-          // PRINCIPAL); álbum/vídeo usam o título "Artista - Título" (mesmo
-          // formato confirmado em Music Videos/Albuns).
-          const artistaNome =
-            tipoMedia === "musica"
-              ? normalizeText(rowData[13])
-              : (() => {
-                  const sep = tituloOficial.indexOf(" - ");
-                  return sep >= 0 ? tituloOficial.slice(0, sep).trim() : "";
-                })();
-          if (artistaNome) {
-            const ownerId = await getOwnerIdForArtist(artistaNome).catch(() => undefined);
-            if (ownerId) {
-              await registrarNotificacaoComentario({
-                ownerId,
-                autorId: jogadorIdClean,
-                autorNome: playerClean,
-                tipoMedia,
-                tituloMedia: tituloOficial,
-                topicId: topicIdClean,
-                comentario: comentario.trim(),
-              }).catch((err) => {
-                console.warn("[ForumController] Erro ao notificar dono do artista:", err);
-              });
-            }
-          }
+          // intervalo, em vez de duas chamadas sequenciais. Falha aqui não
+          // pode mais derrubar o resto da tarefa (antes, um erro nessa
+          // escrita pulava a notificação do dono, que vinha logo depois).
+          await googleSheetsService.principal
+            .updateValues(
+              targetSheet,
+              `${ratingColLetter}${foundRowIndex}:${avgColLetter}${foundRowIndex}`,
+              [[updatedRatings, String(newAvg)]],
+            )
+            .catch((err) => console.warn("[ForumController] Falha ao gravar nota/média:", err));
         }
       });
     }
+
+    // Notifica o dono do artista comentado (ex: "Alan comentou Marilyn
+    // Monroe" pra quem é dono de Rose Thompson) — nunca a si mesmo.
+    // CORRIGIDO (2026-11-17, "parou de notificar quem comenta no trabalho
+    // dos outros"): a notificação ficava DENTRO do bloco de nota/média, que
+    // só roda quando a música foi achada na planilha (rowData) — então
+    //   - música que só existe no D1 (caminho usouApenasD1) nunca notificava;
+    //   - respostas (isReply) nunca notificavam;
+    //   - qualquer erro ao gravar a nota/média pulava a notificação.
+    // Agora é uma tarefa própria, independente de tudo isso.
+    runInBackground(ctx, () =>
+      notificarDonoDoArtistaDoTopico({
+        tipoMedia,
+        rowData: rowDataEncontrada,
+        artistaD1,
+        tituloOficial: tituloOficial || titleClean,
+        topicId: topicIdClean,
+        autorId: jogadorIdClean,
+        autorNome: playerClean,
+        comentario: comentario.trim(),
+      }),
+    );
 
     return new Response(
       JSON.stringify({

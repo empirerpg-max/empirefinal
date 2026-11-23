@@ -1,4 +1,15 @@
 import { getGoogleAccessToken } from "../google/service-account";
+import {
+  MENSAGEM_MANUTENCAO,
+  type EstadoAba,
+  abaDoPorteiro,
+  appendD1,
+  estadoAba,
+  gravarD1,
+  lerD1,
+  limparD1,
+  removerD1,
+} from "./porteiroD1";
 
 export type GoogleSheetCellValue = string | number | boolean | null;
 export type GoogleSheetRow = GoogleSheetCellValue[];
@@ -217,7 +228,7 @@ export async function getSpreadsheetLocale(spreadsheetKeyOrId: SpreadsheetKey | 
 
 // Cria uma aba nova numa planilha, se ainda não existir (idempotente —
 // usado pra abas auxiliares de importação em lote).
-export async function ensureSheetTab(
+async function ensureSheetTabGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
 ): Promise<void> {
@@ -306,7 +317,7 @@ function invalidateReadCache(spreadsheetId: string, sheetName: string): void {
 // preSaveController.ts/readAllCampanhas).
 type ValueRenderOption = "FORMATTED_VALUE" | "UNFORMATTED_VALUE" | "FORMULA";
 
-export async function readValues(
+async function readValuesGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   range = "A:ZZ",
@@ -340,7 +351,7 @@ export async function readValues(
 // fallback GViz ignora o range pedido (devolve a aba inteira), o que faria
 // uma releitura de "H123:H123" comparar com a célula A1 e acusar falha
 // numa escrita que na verdade deu certo.
-export async function readValuesFresh(
+async function readValuesFreshGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   range = "A:ZZ",
@@ -351,7 +362,7 @@ export async function readValuesFresh(
 // Garante que a aba tenha pelo menos `minRows` linhas no grid — updateValues
 // num range explícito além do fim do grid falha ("exceeds grid limits"),
 // diferente do :append, que inseria linhas sozinho.
-export async function ensureRowCapacity(
+async function ensureRowCapacityGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   minRows: number,
@@ -596,7 +607,7 @@ async function espelharNoD1SeAplicavel(
   }
 }
 
-export async function updateValues(
+async function updateValuesGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   range: string,
@@ -645,7 +656,7 @@ export async function updateValues(
  * (todas, se a chamada única teve sucesso; nenhuma, caso contrário — o
  * batchUpdate do Sheets é atômico por requisição).
  */
-export async function updateValuesBatch(
+async function updateValuesBatchGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[],
 ): Promise<boolean> {
@@ -698,7 +709,7 @@ interface GoogleSheetsAppendResponse {
 
 // Anexa várias linhas de uma vez (uma chamada só à API) — usado por
 // importações em lote, onde appendRow linha-a-linha seria lento demais.
-export async function appendRows(
+async function appendRowsGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   rows: GoogleSheetMatrix,
@@ -729,10 +740,11 @@ function sleep(ms: number): Promise<void> {
 // Uma única chamada batchUpdate com um deleteDimension por linha, em
 // ORDEM DECRESCENTE (apagar de baixo pra cima evita que remover uma linha
 // desloque o índice das próximas antes delas serem apagadas).
-export async function deleteRows(
+async function deleteRowsGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   rowIndexes1Based: number[],
+  espelhar = true,
 ): Promise<void> {
   if (rowIndexes1Based.length === 0) return;
   const spreadsheetId = resolveSpreadsheetId(spreadsheetKeyOrId);
@@ -764,7 +776,7 @@ export async function deleteRows(
     [SHEETS_READWRITE_SCOPE],
   );
   invalidateReadCache(spreadsheetId, sheetName);
-  await espelharNoD1SeAplicavel(spreadsheetId, sheetName, { tipo: "delete", linhas: ordenadoDesc });
+  if (espelhar) await espelharNoD1SeAplicavel(spreadsheetId, sheetName, { tipo: "delete", linhas: ordenadoDesc });
 }
 
 /**
@@ -779,7 +791,7 @@ export async function deleteRows(
  * num erro passageiro (rate limit) da API do Sheets e sumir sem deixar
  * rastro nenhum (nem no comentário salvo, nem no audit log REGISTRO).
  */
-export async function appendRow(
+async function appendRowGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   values: GoogleSheetRow,
@@ -860,7 +872,7 @@ export async function appendRow(
 // até ali. Usado só pra REPARAR o estrago desse bug — nenhum fluxo normal
 // deve gravar em cima de uma coluna de fórmula; ver fix em
 // adminForumActionsController.ts/limparLinhaEdicaoCharts.
-export async function clearValues(
+async function clearValuesGoogle(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
   range: string,
@@ -880,6 +892,208 @@ export async function clearValues(
     return false;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTEIRO "D1 primeiro" (2026-11-18, ver porteiroD1.ts): as funções públicas
+// abaixo decidem, aba por aba, se a operação vai para a planilha real (as
+// implementações *Google acima, comportamento de sempre) ou para a planilha
+// virtual no D1 + fila de backup. Abas fora do catálogo nunca consultam o KV.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Leitura no D1 quando a aba está "on" ou "pausado".
+const leNoD1 = (e: EstadoAba) => e === "on" || e === "pausado";
+
+/** Gravação em aba do porteiro: "carregando"/"pausado" recusam LANÇANDO (nunca fingem sucesso — revisão I1). */
+function recusarSeEmTransicao(e: EstadoAba): void {
+  if (e === "carregando" || e === "pausado") throw new Error(MENSAGEM_MANUTENCAO);
+}
+
+export async function readValues(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  range = "A:ZZ",
+  valueRenderOption: ValueRenderOption = "FORMATTED_VALUE",
+): Promise<string[][]> {
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  if (leNoD1(await estadoAba(id, sheetName))) return lerD1(id, sheetName, range);
+  return readValuesGoogle(spreadsheetKeyOrId, sheetName, range, valueRenderOption);
+}
+
+export async function readValuesFresh(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  range = "A:ZZ",
+): Promise<string[][]> {
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  if (leNoD1(await estadoAba(id, sheetName))) return lerD1(id, sheetName, range);
+  return readValuesFreshGoogle(spreadsheetKeyOrId, sheetName, range);
+}
+
+export async function updateValues(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  range: string,
+  values: GoogleSheetMatrix,
+): Promise<boolean> {
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const estado = await estadoAba(id, sheetName);
+  if (estado === "off") return updateValuesGoogle(spreadsheetKeyOrId, sheetName, range, values);
+  recusarSeEmTransicao(estado);
+  await gravarD1(id, sheetName, range, values);
+  await espelharNoD1SeAplicavel(id, sheetName, { tipo: "update", range });
+  return true;
+}
+
+export async function updateValuesBatch(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[],
+): Promise<boolean> {
+  if (entries.length === 0) return true;
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const estados = await Promise.all(entries.map((e) => estadoAba(id, e.sheetName)));
+  estados.forEach(recusarSeEmTransicao);
+  const noD1 = entries.filter((_, i) => estados[i] === "on");
+  const noGoogle = entries.filter((_, i) => estados[i] === "off");
+  for (const e of noD1) {
+    await gravarD1(id, e.sheetName, e.range, e.values);
+    await espelharNoD1SeAplicavel(id, e.sheetName, { tipo: "update", range: e.range });
+  }
+  return noGoogle.length ? updateValuesBatchGoogle(spreadsheetKeyOrId, noGoogle) : true;
+}
+
+export async function appendRows(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  rows: GoogleSheetMatrix,
+  range = "A:ZZ",
+): Promise<void> {
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const estado = await estadoAba(id, sheetName);
+  if (estado === "off") return appendRowsGoogle(spreadsheetKeyOrId, sheetName, rows, range);
+  recusarSeEmTransicao(estado);
+  const linhas: number[] = [];
+  for (const r of rows) linhas.push(await appendD1(id, sheetName, r, range));
+  await espelharNoD1SeAplicavel(id, sheetName, { tipo: "append", linhas });
+}
+
+export async function deleteRows(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  rowIndexes1Based: number[],
+): Promise<void> {
+  if (rowIndexes1Based.length === 0) return;
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const estado = await estadoAba(id, sheetName);
+  if (estado === "off") return deleteRowsGoogle(spreadsheetKeyOrId, sheetName, rowIndexes1Based);
+  recusarSeEmTransicao(estado);
+  const ordenadoDesc = [...new Set(rowIndexes1Based)].sort((a, b) => b - a);
+  await removerD1(id, sheetName, ordenadoDesc);
+  await espelharNoD1SeAplicavel(id, sheetName, { tipo: "delete", linhas: ordenadoDesc });
+}
+
+/** Em aba do porteiro ligada, devolve a linha gravada; falha LANÇA (nunca null). */
+export async function appendRow(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  values: GoogleSheetRow,
+  range = "A:ZZ",
+  insertDataOption: "INSERT_ROWS" | "OVERWRITE" = "INSERT_ROWS",
+): Promise<number | null> {
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const estado = await estadoAba(id, sheetName);
+  if (estado === "off") return appendRowGoogle(spreadsheetKeyOrId, sheetName, values, range, insertDataOption);
+  recusarSeEmTransicao(estado);
+  const linha = await appendD1(id, sheetName, values, range);
+  await espelharNoD1SeAplicavel(id, sheetName, { tipo: "append", linhas: [linha] });
+  return linha;
+}
+
+export async function clearValues(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  range: string,
+): Promise<boolean> {
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  const estado = await estadoAba(id, sheetName);
+  if (estado === "off") return clearValuesGoogle(spreadsheetKeyOrId, sheetName, range);
+  recusarSeEmTransicao(estado);
+  await limparD1(id, sheetName, range);
+  await espelharNoD1SeAplicavel(id, sheetName, { tipo: "update", range });
+  return true;
+}
+
+export async function ensureSheetTab(spreadsheetKeyOrId: SpreadsheetKey | string, sheetName: string): Promise<void> {
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  if (abaDoPorteiro(id, sheetName) && (await estadoAba(id, sheetName)) !== "off") return;
+  return ensureSheetTabGoogle(spreadsheetKeyOrId, sheetName);
+}
+
+export async function ensureRowCapacity(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  minRows: number,
+): Promise<void> {
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  if (leNoD1(await estadoAba(id, sheetName))) return;
+  return ensureRowCapacityGoogle(spreadsheetKeyOrId, sheetName, minRows);
+}
+
+/** values:batchUpdate na planilha real, LANÇANDO o erro original (sem retry) — só para o despachante. */
+async function loteLancando(
+  spreadsheetId: string,
+  entries: { sheetName: string; range: string; values: GoogleSheetMatrix }[],
+): Promise<void> {
+  await sheetsRequest(
+    `/${spreadsheetId}/values:batchUpdate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        valueInputOption: "USER_ENTERED",
+        data: entries.map((e) => ({ range: buildA1Range(e.sheetName, e.range), majorDimension: "ROWS", values: e.values })),
+      }),
+    },
+    [SHEETS_READWRITE_SCOPE],
+  );
+  for (const sheetName of new Set(entries.map((e) => e.sheetName))) invalidateReadCache(spreadsheetId, sheetName);
+}
+
+/**
+ * deleteRows na planilha real (já lança erro), SEM disparar o espelho — só
+ * para o despachante: ele copia o que já está no D1, não há o que espelhar.
+ */
+export const deleteRowsDireto = (spreadsheetId: string, sheetName: string, linhas: number[]) =>
+  deleteRowsGoogle(spreadsheetId, sheetName, linhas, false);
+
+/** values:clear na planilha real, LANÇANDO o erro original — só para o despachante. */
+async function limparLancando(spreadsheetId: string, sheetName: string, range: string): Promise<void> {
+  await sheetsRequest(
+    `/${spreadsheetId}/values/${encodeURIComponent(buildA1Range(sheetName, range))}:clear`,
+    { method: "POST", body: JSON.stringify({}) },
+    [SHEETS_READWRITE_SCOPE],
+  );
+  invalidateReadCache(spreadsheetId, sheetName);
+}
+
+/**
+ * Acesso DIRETO à planilha real, sem passar pelo porteiro — só para o
+ * despachante da fila de backup e para a carga inicial / integridade.
+ */
+export const googleDireto = {
+  readValues: readValuesGoogle,
+  readValuesFresh: readValuesFreshGoogle,
+  updateValues: updateValuesGoogle,
+  updateValuesBatch: updateValuesBatchGoogle,
+  appendRow: appendRowGoogle,
+  deleteRows: deleteRowsGoogle,
+  clearValues: clearValuesGoogle,
+  loteLancando,
+  limparLancando,
+  /** Fórmulas cruas (FORMULA), sem cache e sem GViz — lança em erro. */
+  lerFormulas: (spreadsheetKeyOrId: SpreadsheetKey | string, sheetName: string) =>
+    readValuesUncached(spreadsheetKeyOrId, sheetName, "A:ZZ", "FORMULA", false),
+  ensureSheetTab: ensureSheetTabGoogle,
+  ensureRowCapacity: ensureRowCapacityGoogle,
+};
 
 export const googleSheetsService = {
   SPREADSHEETS,

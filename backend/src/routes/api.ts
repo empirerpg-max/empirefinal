@@ -1,3 +1,4 @@
+import { requestProvesAdmin } from "../services/sessionService";
 import {
   getCatalogKindController,
   getLancamentosController,
@@ -47,6 +48,12 @@ import {
 import {
   getNotificacoesController,
   marcarNotificacoesLidasController,
+  getPreferenciasNotificacaoController,
+  diagNotificacoesController,
+  backfillNotificacoesForumController,
+  salvarPreferenciasNotificacaoController,
+  inscreverPushController,
+  desinscreverPushController,
 } from "../controllers/notificacoesController";
 import {
   criarVideoPendenteEmpireTvController,
@@ -254,6 +261,10 @@ import {
   adminForumRapidoVideosController,
 } from "../controllers/adminMigracaoVideosD1Controller";
 import { buscaController } from "../controllers/buscaController";
+import { adminDiagMusicasVersoesD1Controller } from "../controllers/adminDiagMusicasVersoesD1Controller";
+import { adminMusicasChaveD1Controller } from "../controllers/adminMusicasChaveD1Controller";
+import { adminTopicoComentariosMusicasController } from "../controllers/adminTopicoComentariosMusicasController";
+import { adminCorrigirCodigosMusicasController } from "../controllers/adminCorrigirCodigosMusicasController";
 import { adminEspelhoAlbunsD1Controller } from "../controllers/adminEspelhoAlbunsD1Controller";
 import {
   adminApagarTesteBotAlbumController,
@@ -518,6 +529,8 @@ export async function handleEmpireApiRoutes(
   // [])), nunca dando erro visível. Foi isso que fazia o banner da Home
   // nunca aparecer, mesmo com o componente certo montado.
   const isPresavePath = url.pathname.startsWith("/api/presave/");
+  // Admin do catálogo "D1 primeiro" (status/carregar/desligar/verificar).
+  const isAdminD1PrimeiroPath = url.pathname.startsWith("/api/admin/d1primeiro/");
 
   const supportedPaths = new Set([
     "/api/charts",
@@ -585,6 +598,11 @@ export async function handleEmpireApiRoutes(
     "/api/forum/meus-comentarios",
     "/api/notificacoes",
     "/api/notificacoes/marcar-lidas",
+    "/api/notificacoes/preferencias",
+    "/api/notificacoes/admin/diag",
+    "/api/notificacoes/admin/backfill-forum",
+    "/api/notificacoes/push/inscrever",
+    "/api/notificacoes/push/desinscrever",
     "/api/gestao/musica",
     "/api/gestao/video",
     "/api/gestao/video-empire-tv-pendente",
@@ -603,6 +621,9 @@ export async function handleEmpireApiRoutes(
     "/api/gestao/faixa/publicar",
     "/api/gestao/meus-albuns",
     "/api/gestao/upload",
+    "/api/gestao/video-upload-sessao",
+    "/api/gestao/video-upload-descartar",
+    "/api/admin/fila-backup/despachar",
     "/api/gestao/extra",
     "/api/editar",
     "/api/empire-play/home",
@@ -737,7 +758,8 @@ export async function handleEmpireApiRoutes(
     !isPlaylistsPath &&
     !isSalvosPath &&
     !isAlbunsAntigosPath &&
-    !isPresavePath
+    !isPresavePath &&
+    !isAdminD1PrimeiroPath
   ) {
     return null;
   }
@@ -879,6 +901,26 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await criarVideoPendenteEmpireTvController(request);
+  } else if (url.pathname.startsWith("/api/admin/d1primeiro/")) {
+    const { adminD1PrimeiroController } = await import("../controllers/adminD1PrimeiroController");
+    response = await adminD1PrimeiroController(request, url.pathname.split("/").pop() || "");
+  } else if (url.pathname === "/api/admin/fila-backup/despachar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    if (!(await requestProvesAdmin(request))) {
+      return new Response(JSON.stringify({ success: false, error: "Acesso restrito ao admin." }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    const { despacharFila } = await import("../services/despachanteFilaBackup");
+    response = new Response(JSON.stringify({ success: true, data: await despacharFila() }), {
+      headers: { "Content-Type": "application/json" },
+    });
   } else if (url.pathname === "/api/gestao/admin/empire-tv-pendentes") {
     response = await getEmpireTvPendentesController(request);
   } else if (url.pathname === "/api/gestao/admin/empire-tv-publicar") {
@@ -1010,6 +1052,20 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await publicarFaixaPendenteController(request);
+  } else if (url.pathname === "/api/gestao/video-upload-sessao" || url.pathname === "/api/gestao/video-upload-descartar") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ success: false, error: "Use POST." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    const { criarSessaoUploadVideoController, descartarUploadVideoController } = await import(
+      "../controllers/videoUploadSessaoController"
+    );
+    response =
+      url.pathname === "/api/gestao/video-upload-sessao"
+        ? await criarSessaoUploadVideoController(request)
+        : await descartarUploadVideoController(request);
   } else if (url.pathname === "/api/gestao/upload") {
     if (request.method !== "POST") {
       return new Response(
@@ -1290,7 +1346,7 @@ export async function handleEmpireApiRoutes(
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await curtirSocialPostController(request);
+    response = await curtirSocialPostController(request, ctx);
   } else if (url.pathname === "/api/social/comentarios") {
     if (request.method !== "GET") {
       return new Response(
@@ -1306,7 +1362,7 @@ export async function handleEmpireApiRoutes(
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await comentarSocialPostController(request);
+    response = await comentarSocialPostController(request, ctx);
   } else if (url.pathname === "/api/social/comentario/editar") {
     if (request.method !== "POST") {
       return new Response(
@@ -1812,6 +1868,34 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await marcarNotificacoesLidasController(request);
+  } else if (url.pathname === "/api/notificacoes/admin/backfill-forum") {
+    response = await backfillNotificacoesForumController(request);
+  } else if (url.pathname === "/api/notificacoes/admin/diag") {
+    response = await diagNotificacoesController(request);
+  } else if (url.pathname === "/api/notificacoes/preferencias") {
+    if (request.method === "GET") response = await getPreferenciasNotificacaoController(request);
+    else if (request.method === "POST") response = await salvarPreferenciasNotificacaoController(request);
+    else
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET ou POST para /api/notificacoes/preferencias." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+  } else if (url.pathname === "/api/notificacoes/push/inscrever") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/notificacoes/push/inscrever." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await inscreverPushController(request);
+  } else if (url.pathname === "/api/notificacoes/push/desinscrever") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/notificacoes/push/desinscrever." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await desinscreverPushController(request);
   } else if (url.pathname === "/api/turnes/locais") {
     if (request.method !== "GET") {
       return new Response(
@@ -2238,6 +2322,14 @@ export async function handleEmpireApiRoutes(
     // PK (pivot 2026-10-14) — destrutivo só nessas 2 tabelas, chamado
     // manualmente via admin-call.yml antes de remigrar.
     response = await adminRecriarTabelasMusicasD1Controller();
+  } else if (url.pathname === "/api/empire-play/admin/corrigir-codigos-musicas") {
+    response = await adminCorrigirCodigosMusicasController(request);
+  } else if (url.pathname === "/api/empire-play/admin/topico-comentarios-musicas") {
+    response = await adminTopicoComentariosMusicasController(request);
+  } else if (url.pathname === "/api/empire-play/admin/musicas-chave-d1") {
+    response = await adminMusicasChaveD1Controller(request);
+  } else if (url.pathname === "/api/empire-play/admin/diag-musicas-versoes-d1") {
+    response = await adminDiagMusicasVersoesD1Controller();
   } else if (url.pathname === "/api/empire-play/admin/espelho-albuns-d1") {
     // Migração dos álbuns pro D1 (2026-11-14) — ver espelhoAbasD1.ts.
     response = await adminEspelhoAlbunsD1Controller(request);

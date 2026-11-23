@@ -13,9 +13,34 @@ import { getCatalogoDb, type D1DatabaseLike, type D1PreparedStatement } from "./
 
 export { getCatalogoDb };
 
+// CHAVE (2026-11-17): o Código único NÃO identifica uma música — versões
+// da mesma música (original, live, remix, acústico…) repetem o código, de
+// propósito (é ele que agrupa os comentários). Com o código como chave, cada
+// gravação de uma versão apagava a outra (Bad Friend x Bad Friend (Live at
+// Grammys), RELIC e seus remixes…). A chave agora é a identidade da própria
+// música: o ID do tópico; faixa ainda sem tópico (pendente de álbum) usa
+// código + título até ganhar o tópico.
+export function chaveMusica(idTopico: string | null | undefined, codigoUnico: string | null | undefined, titulo: string): string {
+  const t = (idTopico || "").trim();
+  return t ? `t:${t}` : `c:${(codigoUnico || "").trim()}|${(titulo || "").trim()}`;
+}
+
+// Faixa pendente (chave "c:código|título") que ganha tópico: a gravação nova
+// chega com chave "t:…" — este gatilho promove a linha antiga pra chave nova
+// ANTES do insert, que então cai no ON CONFLICT e atualiza (sem duplicar).
+export const MUSICAS_TRIGGER_PROMOVE_TOPICO = `CREATE TRIGGER IF NOT EXISTS musicas_promove_topico
+  BEFORE INSERT ON musicas
+  WHEN NEW.id_topico IS NOT NULL AND trim(NEW.id_topico) <> ''
+  BEGIN
+    UPDATE musicas SET chave = NEW.chave, id_topico = NEW.id_topico
+    WHERE chave = 'c:' || trim(coalesce(NEW.codigo_unico, '')) || '|' || trim(NEW.titulo)
+      AND NOT EXISTS (SELECT 1 FROM musicas WHERE chave = NEW.chave);
+  END`;
+
 export const MUSICAS_CREATE_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS musicas (
-    codigo_unico TEXT PRIMARY KEY,
+    chave TEXT PRIMARY KEY,
+    codigo_unico TEXT,
     id_topico TEXT,
     titulo TEXT NOT NULL,
     artista TEXT NOT NULL,
@@ -56,17 +81,19 @@ export const MUSICAS_CREATE_STATEMENTS: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_musicas_id_topico ON musicas(id_topico)",
   "CREATE INDEX IF NOT EXISTS idx_musicas_artista ON musicas(artista)",
   "CREATE INDEX IF NOT EXISTS idx_musicas_data ON musicas(data_lancamento_iso)",
+  "CREATE INDEX IF NOT EXISTS idx_musicas_codigo ON musicas(codigo_unico)",
+  MUSICAS_TRIGGER_PROMOVE_TOPICO,
 ];
 
 const MUSICAS_UPSERT_SQL = `INSERT INTO musicas (
-    codigo_unico, id_topico, titulo, artista, artista_2, artista_3, artista_4, artista_5, artista_6,
+    chave, codigo_unico, id_topico, titulo, artista, artista_2, artista_3, artista_4, artista_5, artista_6,
     album, album_2, album_3, album_4, album_5, capa_url, audio_url, letra, letra_sincronizada,
     genero, tipo_single, tipo_musica, data_lancamento, data_lancamento_iso, weeks, weeks_video,
     ordem, id_criador, comentarios_para, metacritic_por_jogador, metacritic_media, pendente,
     reportado_incorreto, shop_json, loja_info, arte_extra_json, atualizado_em
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  ON CONFLICT(codigo_unico) DO UPDATE SET
-    id_topico = excluded.id_topico, titulo = excluded.titulo, artista = excluded.artista,
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  ON CONFLICT(chave) DO UPDATE SET
+    codigo_unico = excluded.codigo_unico, id_topico = excluded.id_topico, titulo = excluded.titulo, artista = excluded.artista,
     artista_2 = excluded.artista_2, artista_3 = excluded.artista_3, artista_4 = excluded.artista_4,
     artista_5 = excluded.artista_5, artista_6 = excluded.artista_6,
     album = excluded.album, album_2 = excluded.album_2, album_3 = excluded.album_3,
@@ -122,7 +149,8 @@ export interface MusicaUpsert {
 
 export function buildMusicaUpsertStatement(db: D1DatabaseLike, m: MusicaUpsert): D1PreparedStatement {
   return db.prepare(MUSICAS_UPSERT_SQL).bind(
-    m.codigoUnico,
+    chaveMusica(m.idTopico, m.codigoUnico, m.titulo),
+    m.codigoUnico || null,
     m.idTopico ?? null,
     m.titulo,
     m.artista,

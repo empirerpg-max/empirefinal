@@ -6,7 +6,6 @@ import {
 import {
   DRIVE_FOLDERS,
   uploadFileToDrive,
-  deleteFileFromDrive,
 } from "../services/googleDriveService";
 import { getCatalogoDb, buildMusicaUpsertStatement } from "../services/musicasDbService";
 
@@ -310,9 +309,12 @@ export async function updateReleaseController(request: Request): Promise<Respons
 
     // 1. Processar Upload de Nova Capa se fornecida Base64
     if (capaBase64) {
-      if (oldCapaUrl) {
-        await deleteFileFromDrive(oldCapaUrl);
-      }
+      // NÃO apaga mais a capa antiga (BUG REAL, 2026-11-18): várias músicas
+      // compartilham o MESMO arquivo de capa (ex.: todos os remixes de um
+      // single usam a capa do álbum de remixes). deleteFileFromDrive apaga
+      // de vez (pula a lixeira), então editar a capa de UMA faixa sumia com
+      // a capa de todas as outras. Uma imagem antiga sobrando no Drive custa
+      // quase nada; perder a capa de várias faixas, não.
 
       let folderId: string = DRIVE_FOLDERS.musicas;
       if (tipoClean === "albuns") folderId = DRIVE_FOLDERS.albuns;

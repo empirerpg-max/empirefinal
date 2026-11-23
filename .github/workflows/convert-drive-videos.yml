@@ -1,0 +1,59 @@
+name: Converter vídeos do Drive para formato compatível (Music Videos)
+
+# Converte vídeos do Drive em HEVC (iPhone) e outros formatos que não tocam
+# em todo navegador (ex.: Edge no Windows) para H.264 em máxima qualidade,
+# substituindo o próprio arquivo (mesmo link, sem cópia).
+#
+# - Só manual: Actions > este workflow > "Run workflow". Comece com dry_run
+#   ligado (só lista o que precisa converter). Sem rodada automática até o
+#   dono do projeto decidir entre substituir o arquivo ou manter o original.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Só verificar e listar (não converter nada)?"
+        type: boolean
+        default: true
+      limit:
+        description: "Converter no máximo N vídeos (vazio = todos)"
+        type: string
+        default: ""
+      target:
+        description: "Só vídeos cujo título contenha este texto, ou este ID do Drive (vazio = todos)"
+        type: string
+        default: ""
+
+concurrency:
+  group: convert-drive-videos
+  cancel-in-progress: false
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    defaults:
+      run:
+        working-directory: telegram-media
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - run: npm install
+
+      - name: Converter
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GCP_SA_KEY }}
+          DRIVE_OAUTH_CLIENT_ID: ${{ secrets.DRIVE_OAUTH_CLIENT_ID }}
+          DRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.DRIVE_OAUTH_CLIENT_SECRET }}
+          DRIVE_OAUTH_REFRESH_TOKEN: ${{ secrets.DRIVE_OAUTH_REFRESH_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          LIMIT: ${{ inputs.limit }}
+          TARGET: ${{ inputs.target }}
+        run: npm run convert-drive-videos

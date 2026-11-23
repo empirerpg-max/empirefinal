@@ -89,6 +89,49 @@ export async function deleteFileFromDrive(fileUrl: string): Promise<boolean> {
   }
 }
 
+/**
+ * Manda pra LIXEIRA do Drive (recuperável por 30 dias) — mas só se o arquivo
+ * estiver numa das pastas permitidas. Usado pela limpeza automática de
+ * Stories vencidos.
+ *
+ * BUG REAL corrigido (2026-11-18): a limpeza chamava deleteFileFromDrive
+ * (DELETE = apaga de vez, pula a lixeira) na media_url de qualquer Story
+ * vencido. Só que Story de música grava como media_url a CAPA DA MÚSICA DO
+ * CATÁLOGO (attachedMaterial.capaUrl no SocialPostComposer) — então cada
+ * Story de música apagava pra sempre a capa oficial da música 24h depois.
+ * Conferir a pasta garante que só mídia enviada pro próprio Social é tocada.
+ */
+export async function trashDriveFileIfInFolders(
+  fileUrl: string,
+  allowedFolderIds: string[],
+): Promise<"trashed" | "skipped" | "error"> {
+  if (!fileUrl) return "skipped";
+  try {
+    const match = fileUrl.match(/[-\w]{25,}/);
+    if (!match) return "skipped";
+    const fileId = match[0];
+    const token = await getDriveOAuthAccessToken();
+    const metaRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?fields=parents,trashed`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!metaRes.ok) return metaRes.status === 404 ? "skipped" : "error";
+    const meta = (await metaRes.json()) as { parents?: string[]; trashed?: boolean };
+    if (meta.trashed) return "skipped";
+    const inAllowed = (meta.parents || []).some((p) => allowedFolderIds.includes(p));
+    if (!inAllowed) return "skipped";
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ trashed: true }),
+    });
+    return res.ok ? "trashed" : "error";
+  } catch (err) {
+    console.warn("[trashDriveFileIfInFolders] Erro:", err);
+    return "error";
+  }
+}
+
 export async function uploadFileToDrive(
   fileName: string,
   folderId: string,

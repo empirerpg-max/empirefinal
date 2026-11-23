@@ -18,22 +18,29 @@ export { getCatalogoDb };
 export const COMENTARIOS_MUSICAS_CREATE_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS comentarios_musicas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    musica_id TEXT NOT NULL REFERENCES musicas(codigo_unico) ON DELETE CASCADE,
+    -- Código único da música (agrupa os comentários de todas as versões).
+    -- SEM foreign key: o código não é mais chave da tabela musicas (2026-11-17), e
+    -- o ON DELETE CASCADE de antes apagaria comentários ao recriar a tabela.
+    musica_id TEXT NOT NULL,
     jogador_id TEXT,
     jogador_nome TEXT,
     comentario TEXT NOT NULL,
     reacoes_json TEXT,
     data_hora TEXT,
     reply_to INTEGER REFERENCES comentarios_musicas(id) ON DELETE SET NULL,
-    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Identidade do comentário no Fórum: o TÓPICO da música (cada versão tem o
+    -- seu), não o código único (2026-11-18).
+    id_topico TEXT
   )`,
+  "CREATE INDEX IF NOT EXISTS idx_comentarios_musicas_topico ON comentarios_musicas(id_topico)",
   "CREATE INDEX IF NOT EXISTS idx_comentarios_musicas_musica ON comentarios_musicas(musica_id)",
   "CREATE INDEX IF NOT EXISTS idx_comentarios_musicas_jogador ON comentarios_musicas(jogador_id)",
 ];
 
 const INSERT_SQL = `INSERT INTO comentarios_musicas
-  (musica_id, jogador_id, jogador_nome, comentario, reacoes_json, data_hora, reply_to)
-  VALUES (?, ?, ?, ?, ?, ?, ?)`;
+  (musica_id, jogador_id, jogador_nome, comentario, reacoes_json, data_hora, reply_to, id_topico)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
 export interface ComentarioMusicaInsert {
   musicaId: string;
@@ -43,6 +50,8 @@ export interface ComentarioMusicaInsert {
   reacoesJson: string | null;
   dataHora: string | null;
   replyTo: number | null;
+  /** Tópico da música (identidade no Fórum). */
+  idTopico?: string | null;
 }
 
 export function buildComentarioMusicaInsertStatement(
@@ -51,5 +60,5 @@ export function buildComentarioMusicaInsertStatement(
 ): D1PreparedStatement {
   return db
     .prepare(INSERT_SQL)
-    .bind(c.musicaId, c.jogadorId, c.jogadorNome, c.comentario, c.reacoesJson, c.dataHora, c.replyTo);
+    .bind(c.musicaId, c.jogadorId, c.jogadorNome, c.comentario, c.reacoesJson, c.dataHora, c.replyTo, c.idTopico ?? null);
 }

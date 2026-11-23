@@ -35,6 +35,7 @@ import { googleSheetsService, normalizeText, ensureSheetTab } from "../services/
 import { requestProvesAdmin } from "../services/sessionService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { criarVideoNoCatalogo, type CreateVideoPayload } from "./gestaoController";
+import { withWriteLock } from "../services/writeLockService";
 
 const SHEET = "VIDEOS_PENDENTES_EMPIRE_TV";
 const HEADER = ["ID", "JogadorId", "JogadorNome", "Artista", "Categoria", "Titulo", "DataPrograma", "CriadoEmISO", "PayloadJson"];
@@ -94,25 +95,30 @@ export async function criarVideoPendenteEmpireTvController(request: Request): Pr
       .filter(Boolean);
 
     await ensureHeader();
-    const rows = await googleSheetsService.principal.readValues(SHEET, "A2:A20000");
-    const linha = rows.length + 2;
     const id = genId();
     const tipo = body.tipoVideo || body.categoriaVideo || "Video";
     const fullTitle = tituloVideo.includes(" - ") ? tituloVideo : `${artistaResponsavel} - ${tituloVideo}`;
 
-    await googleSheetsService.principal.updateValues(SHEET, `A${linha}:I${linha}`, [
-      [
-        id,
-        normalizeText((body as any).jogadorId || ""),
-        nomeJogador,
-        artistaResponsavel,
-        tipo,
-        fullTitle,
-        dataPrograma,
-        new Date().toISOString(),
-        JSON.stringify({ ...body, musicasVinculadas }),
-      ],
-    ]);
+    // Trava (revisão I7, "bug da Rayna"): sem ela, dois envios simultâneos
+    // liam a mesma "próxima linha" e um sobrescrevia o outro.
+    await withWriteLock(`linha-livre:${SHEET}`, async () => {
+      const rows = await googleSheetsService.principal.readValues(SHEET, "A2:A20000");
+      const linha = rows.length + 2;
+      const gravou = await googleSheetsService.principal.updateValues(SHEET, `A${linha}:I${linha}`, [
+        [
+          id,
+          normalizeText((body as any).jogadorId || ""),
+          nomeJogador,
+          artistaResponsavel,
+          tipo,
+          fullTitle,
+          dataPrograma,
+          new Date().toISOString(),
+          JSON.stringify({ ...body, musicasVinculadas }),
+        ],
+      ]);
+      if (!gravou) throw new Error("Não foi possível registrar o vídeo pendente. Tente de novo.");
+    });
 
     registrarLogSistema({
       categoria: "Ação concluída",

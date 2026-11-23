@@ -38,6 +38,8 @@ export const GENEROS_FESTIVAL = [
 const ABERTURA_ISO = "2026-11-11T00:00:00-03:00";
 const ENCERRAMENTO_ISO = "2026-11-17T23:59:59-03:00";
 export const DEADLINE_LABEL = "17/11 às 23:59 (horário de Brasília)";
+const ERRO_SERVIDOR_OCUPADO =
+  "O servidor está sobrecarregado agora (muita gente se inscrevendo ao mesmo tempo). Aguarde 1 minuto e tente de novo.";
 
 export function statusInscricaoFestival(): "agendado" | "aberto" | "encerrado" {
   const agora = Date.now();
@@ -59,8 +61,43 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+// BUG REAL de produção (2026-11-17, último dia de inscrição): "Erro interno
+// no servidor." ao enviar. ensureSheetTab faz uma leitura de METADADOS da
+// planilha (listSheetTabs) sem cache, sem retry e sem catch — e o POST
+// chamava isso 2x por envio, o GET 1x, o popup 1x por abertura do app. Sob
+// pico de acesso a cota "Read requests per minute" do Sheets estoura e a
+// exceção vazava como 500. Agora: a aba só é checada uma vez por isolate
+// (ela já existe; depois de confirmada não some) e com retry em erro
+// transitório.
+const abasConfirmadas = new Set<string>();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function comRetry<T>(fn: () => Promise<T>, tentativas = 3): Promise<T> {
+  let ultimoErro: unknown;
+  for (let i = 1; i <= tentativas; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      ultimoErro = err;
+      console.warn(`[festivais] Falha no Sheets (tentativa ${i}/${tentativas}): ${(err as Error)?.message}`);
+      if (i < tentativas) await sleep(800 * i);
+    }
+  }
+  throw ultimoErro;
+}
+
+async function garantirAba(planilha: string, aba: string): Promise<void> {
+  const chave = `${planilha}::${aba}`;
+  if (abasConfirmadas.has(chave)) return;
+  await comRetry(() => ensureSheetTab(planilha, aba));
+  abasConfirmadas.add(chave);
+}
+
 async function lerInscricoes(): Promise<{ linha: number; artista: string; genero: string; data: string }[]> {
-  await ensureSheetTab(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET);
+  await garantirAba(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET);
   const rows = await readValues(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET, "A2:C20000").catch(() => []);
   return rows
     .map((row, i) => ({ linha: i + 2, artista: normalizeText(row[0]), genero: normalizeText(row[1]), data: normalizeText(row[2]) }))
@@ -76,10 +113,14 @@ export async function getFestivalInscricaoController(request: Request): Promise<
   const telegramId = normalizeText(url.searchParams.get("telegramId"));
   if (!telegramId) return jsonResponse({ success: false, error: "telegramId é obrigatório." }, 400);
 
-  const [artistas, todasInscricoes] = await Promise.all([
-    getArtistNamesForOwner(telegramId),
-    lerInscricoes(),
-  ]);
+  let artistas: string[];
+  let todasInscricoes: Awaited<ReturnType<typeof lerInscricoes>>;
+  try {
+    [artistas, todasInscricoes] = await Promise.all([getArtistNamesForOwner(telegramId), lerInscricoes()]);
+  } catch (err) {
+    console.error("[festivais] GET inscrição falhou:", err);
+    return jsonResponse({ success: false, error: ERRO_SERVIDOR_OCUPADO }, 503);
+  }
 
   const artistasNorm = new Set(artistas.map((a) => normalizeComparison(a)));
   const minhasInscricoes = todasInscricoes
@@ -104,6 +145,15 @@ export async function getFestivalInscricaoController(request: Request): Promise<
 // ao resto do app (ver getArtistNamesForOwner), que o artista escolhido é
 // de verdade de posse do jogador antes de gravar qualquer coisa.
 export async function postFestivalInscricaoController(request: Request): Promise<Response> {
+  try {
+    return await postFestivalInscricaoInterno(request);
+  } catch (err) {
+    console.error("[festivais] POST inscrição falhou:", err);
+    return jsonResponse({ success: false, error: ERRO_SERVIDOR_OCUPADO }, 503);
+  }
+}
+
+async function postFestivalInscricaoInterno(request: Request): Promise<Response> {
   const body = (await request.json().catch(() => ({}))) as {
     telegramId?: string;
     artista?: string;
@@ -136,7 +186,8 @@ export async function postFestivalInscricaoController(request: Request): Promise
     return jsonResponse({ success: false, error: "Esse artista não é seu — selecione um dos seus próprios artistas." }, 403);
   }
 
-  await ensureSheetTab(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET);
+  // lerInscricoes já garante a aba (uma vez por isolate, com retry).
+  const inscricoes = await lerInscricoes();
   const header = await readValues(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET, "A1:C1").catch(() => []);
   if (!normalizeText(header?.[0]?.[0])) {
     await updateValues(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET, "A1:C1", [
@@ -144,14 +195,14 @@ export async function postFestivalInscricaoController(request: Request): Promise
     ]);
   }
 
-  const inscricoes = await lerInscricoes();
   const existente = inscricoes.find((r) => normalizeComparison(r.artista) === normalizeComparison(artistaValido));
   const agora = dataHoraBR();
 
   if (existente) {
-    await updateValues(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET, `A${existente.linha}:C${existente.linha}`, [
+    const ok = await updateValues(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET, `A${existente.linha}:C${existente.linha}`, [
       [artistaValido, generoValido, agora],
     ]);
+    if (!ok) return jsonResponse({ success: false, error: ERRO_SERVIDOR_OCUPADO }, 503);
     return jsonResponse({ success: true, data: { editado: true, artista: artistaValido, genero: generoValido, data: agora } });
   }
 
@@ -165,9 +216,12 @@ export async function postFestivalInscricaoController(request: Request): Promise
   for (let i = 0; i < todasAsLinhas.length; i++) {
     if (normalizeText(todasAsLinhas[i]?.[0])) linhaAlvo = i + 3;
   }
-  await updateValues(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET, `A${linhaAlvo}:C${linhaAlvo}`, [
+  // Antes o retorno era ignorado: se a escrita falhasse o jogador via
+  // "Inscrito com sucesso!" sem a linha existir na planilha.
+  const ok = await updateValues(FESTIVAIS_SPREADSHEET_ID, FESTIVAIS_SHEET, `A${linhaAlvo}:C${linhaAlvo}`, [
     [artistaValido, generoValido, agora],
   ]);
+  if (!ok) return jsonResponse({ success: false, error: ERRO_SERVIDOR_OCUPADO }, 503);
 
   return jsonResponse({ success: true, data: { editado: false, artista: artistaValido, genero: generoValido, data: agora } });
 }
@@ -188,7 +242,8 @@ function hojeBR(): string {
 }
 
 async function ensurePopupSheetPronta(): Promise<void> {
-  await ensureSheetTab(POPUP_SPREADSHEET_KEY, POPUP_SHEET);
+  if (abasConfirmadas.has(`${POPUP_SPREADSHEET_KEY}::${POPUP_SHEET}`)) return;
+  await garantirAba(POPUP_SPREADSHEET_KEY, POPUP_SHEET);
   const header = await readValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, "A1:C1").catch(() => []);
   if (!normalizeText(header?.[0]?.[0])) {
     await updateValues(POPUP_SPREADSHEET_KEY, POPUP_SHEET, "A1:C1", [

@@ -8,7 +8,47 @@ import {
 } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
 import { ADMIN_TG_ID, requestProvesAdmin, verifySessionToken, extractBearerToken } from "../services/sessionService";
-import { deleteFileFromDrive } from "../services/googleDriveService";
+import { DRIVE_FOLDERS, trashDriveFileIfInFolders } from "../services/googleDriveService";
+import { registrarNotificacao } from "./notificacoesController";
+
+type WaitUntilCtx = { waitUntil: (promise: Promise<unknown>) => void };
+
+/**
+ * Notifica o dono do post (coluna I — telegram_id) de uma curtida ou
+ * comentário. Roda em segundo plano (ctx.waitUntil) quando dá, pra gravar
+ * no sininho + mandar o push sem atrasar a resposta da curtida/comentário.
+ * registrarNotificacao já ignora ação do próprio dono e nunca lança.
+ */
+function notificarDonoDoPost(
+  ctx: WaitUntilCtx | undefined,
+  params: {
+    evento: "curtida_social" | "comentario_social";
+    postRow: string[] | undefined;
+    postId: string;
+    autorId: string;
+    autorNome: string;
+    comentario?: string;
+  },
+): Promise<void> {
+  const ownerId = normalizeText(params.postRow?.[8] || "");
+  if (!params.postRow || !ownerId || !params.autorId) return Promise.resolve();
+  const textoPost = normalizeText(params.postRow[4] || "");
+  const tarefa = registrarNotificacao({
+    evento: params.evento,
+    ownerId,
+    autorId: params.autorId,
+    autorNome: params.autorNome || "Alguém",
+    tipoMedia: "social",
+    tituloMedia: textoPost,
+    topicId: params.postId,
+    comentario: params.comentario || "",
+  }).catch((err) => console.warn("[Social] Erro ao notificar dono do post:", err));
+  if (ctx) {
+    ctx.waitUntil(tarefa);
+    return Promise.resolve();
+  }
+  return tarefa;
+}
 
 /**
  * requestProvesAdmin (sessionService) só libera pro ADMIN_TG_ID hardcoded —
@@ -343,8 +383,8 @@ export async function createSocialPostController(request: Request): Promise<Resp
   return jsonResponse({ ok: true, id });
 }
 
-export async function curtirSocialPostController(request: Request): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as { postId?: string; tgId?: string };
+export async function curtirSocialPostController(request: Request, ctx?: WaitUntilCtx): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { postId?: string; tgId?: string; autor?: string };
   if (!body.postId) return jsonResponse({ ok: false, error: "postId obrigatório." }, 400);
 
   const rows = await googleSheetsService.usuarios.readValues(SHEETS.posts);
@@ -369,6 +409,13 @@ export async function curtirSocialPostController(request: Request): Promise<Resp
 
   if (tgId && !jaCurtiu) {
     await somarPrestigio({ telegramId: tgId }, "curtida").catch(() => {});
+    await notificarDonoDoPost(ctx, {
+      evento: "curtida_social",
+      postRow: rows[rowIndex],
+      postId: body.postId,
+      autorId: tgId,
+      autorNome: normalizeText(body.autor || ""),
+    });
   }
 
   return jsonResponse({ ok: true, likes: analytics.likes });
@@ -507,10 +554,17 @@ export async function limparStoriesExpiradosScheduled(): Promise<{ apagados: num
 
   for (const { row, rowIndex } of expirados) {
     const mediaUrl = normalizeText(row[5]);
+    // Só mídia enviada pro próprio Social (pastas de Stories/Posts) vai pra
+    // lixeira — nunca a capa de música/álbum do catálogo que um Story de
+    // música usa como media_url (ver trashDriveFileIfInFolders).
     if (mediaUrl) {
-      await deleteFileFromDrive(mediaUrl).catch((err) =>
-        console.warn(`[limparStoriesExpiradosScheduled] Falha ao apagar mídia do Drive (linha ${rowIndex}):`, err),
-      );
+      const r = await trashDriveFileIfInFolders(mediaUrl, [
+        DRIVE_FOLDERS.socialStories,
+        DRIVE_FOLDERS.socialPosts,
+      ]);
+      if (r === "error") {
+        console.warn(`[limparStoriesExpiradosScheduled] Falha ao mandar mídia pra lixeira (linha ${rowIndex}).`);
+      }
     }
     // CAUSA RAIZ do desalinhamento que voltou em 2026-09-12 (sábado):
     // essa limpeza automática de Story vencido só apagava A:J, esquecendo
@@ -580,7 +634,7 @@ export async function editSocialCommentController(request: Request): Promise<Res
   return jsonResponse({ ok: true });
 }
 
-export async function comentarSocialPostController(request: Request): Promise<Response> {
+export async function comentarSocialPostController(request: Request, ctx?: WaitUntilCtx): Promise<Response> {
   const body = (await request.json().catch(() => ({}))) as { payload?: string; tgId?: string };
   const payload = JSON.parse(body.payload || "{}") as { postId?: string; autor?: string; texto?: string };
 
@@ -604,6 +658,15 @@ export async function comentarSocialPostController(request: Request): Promise<Re
     analytics.comments += 1;
     await googleSheetsService.usuarios.updateValues(SHEETS.posts, `G${rowIndex + 1}`, [[JSON.stringify(analytics)]]);
   }
+
+  await notificarDonoDoPost(ctx, {
+    evento: "comentario_social",
+    postRow: rowIndex !== -1 ? rows[rowIndex] : undefined,
+    postId: payload.postId,
+    autorId: normalizeText(body.tgId || ""),
+    autorNome: payload.autor,
+    comentario: payload.texto.trim(),
+  });
 
   await somarPrestigio({ telegramId: body.tgId, usuario: payload.autor }, "comentario").catch(() => {});
 
