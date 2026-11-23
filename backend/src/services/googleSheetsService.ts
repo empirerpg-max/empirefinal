@@ -1,4 +1,5 @@
 import { getGoogleAccessToken } from "../google/service-account";
+import { registrarChamadaExterna } from "./orcamentoChamadas";
 import {
   MENSAGEM_MANUTENCAO,
   type EstadoAba,
@@ -144,6 +145,7 @@ export async function fetchGVizCsv(spreadsheetId: string, sheetName: string): Pr
     sheetName,
   )}`;
 
+  registrarChamadaExterna();
   const res = await fetch(gvizUrl);
   if (!res.ok) {
     throw new Error(`GViz CSV export retornou HTTP ${res.status}`);
@@ -155,6 +157,7 @@ export async function fetchGVizCsv(spreadsheetId: string, sheetName: string): Pr
 
 async function sheetsRequest<T>(path: string, init: RequestInit, scopes: string[]): Promise<T> {
   const accessToken = await getGoogleAccessToken(scopes);
+  registrarChamadaExterna();
   const response = await fetch(`${GOOGLE_SHEETS_API_BASE}${path}`, {
     ...init,
     headers: {
