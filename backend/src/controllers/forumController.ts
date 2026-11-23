@@ -17,6 +17,7 @@ import {
   buildComentarioMusicaInsertStatement,
 } from "../services/comentariosMusicasDbService";
 import { buildComentarioAlbumInsertStatement } from "../services/comentariosAlbunsDbService";
+import { marcarTopicoMusicaD1Incompleto } from "../services/comentariosMusicasD1Pendencia";
 
 const USUARIOS_SHEET = "Usuários";
 
@@ -719,31 +720,79 @@ export async function createCommentController(
     // aviso (o comentário real já está salvo no Sheets, que é a fonte
     // certa) e o caminho rápido simplesmente cai pro Sheets pra esse
     // tópico até a próxima sincronização.
+    //
+    // BUG REAL (2026-11-23, Andrei em "Beautiful Distortion"): uma falha
+    // única aqui (só um aviso no log) deixava o comentário fora do D1 — e o
+    // caminho rápido, que já tinha outros comentários desse tópico no D1,
+    // passava a escondê-lo pra sempre. Agora: até 3 tentativas (conferindo
+    // antes de cada nova tentativa se a anterior não gravou mesmo assim, pra
+    // não duplicar) e, se não espelhar de jeito nenhum — ou a música ainda
+    // não tem código único no D1 —, marca o tópico como incompleto
+    // (comentariosMusicasD1Pendencia.ts) pro caminho rápido ler pela planilha.
     if (tipoMedia === "musica") {
+      let espelhado = false;
+      let motivoFalha = "";
       try {
         const db = getCatalogoDb();
-        if (db) {
+        if (!db) {
+          motivoFalha = "D1 indisponível";
+        } else {
           const result = await db
             .prepare("SELECT codigo_unico FROM musicas WHERE id_topico = ?")
             .bind(topicIdClean)
             .all<{ codigo_unico: string }>()
             .catch(() => null);
           const musicaId = result?.results?.[0]?.codigo_unico;
-          if (musicaId) {
-            await buildComentarioMusicaInsertStatement(db, {
-              musicaId,
-              jogadorId: jogadorIdClean || null,
-              jogadorNome: playerClean || null,
-              comentario: comentario.trim(),
-              reacoesJson: null,
-              dataHora: nowStr,
-              replyTo: null,
-              idTopico: topicIdClean,
-            }).run();
+          if (!result) {
+            motivoFalha = "falha ao ler a música no D1";
+          } else if (!musicaId) {
+            // Música fora do D1 (ou sem código único): o caminho rápido nem
+            // é usado hoje, mas passaria a ser assim que a música ganhar
+            // código — e aí esse comentário faltaria.
+            motivoFalha = "música sem código único no D1";
+          } else {
+            for (let tentativa = 1; tentativa <= 3 && !espelhado; tentativa++) {
+              try {
+                if (tentativa > 1) {
+                  const jaGravado = await db
+                    .prepare(
+                      "SELECT 1 AS ok FROM comentarios_musicas WHERE id_topico = ? AND coalesce(jogador_id, '') = ? AND data_hora = ? AND comentario = ? LIMIT 1",
+                    )
+                    .bind(topicIdClean, jogadorIdClean || "", nowStr, comentario.trim())
+                    .all<{ ok: number }>();
+                  if ((jaGravado.results || []).length > 0) {
+                    espelhado = true;
+                    break;
+                  }
+                  await new Promise((r) => setTimeout(r, 300 * tentativa));
+                }
+                await buildComentarioMusicaInsertStatement(db, {
+                  musicaId,
+                  jogadorId: jogadorIdClean || null,
+                  jogadorNome: playerClean || null,
+                  comentario: comentario.trim(),
+                  reacoesJson: null,
+                  dataHora: nowStr,
+                  replyTo: null,
+                  idTopico: topicIdClean,
+                }).run();
+                espelhado = true;
+              } catch (err) {
+                motivoFalha = `insert falhou: ${String((err as Error)?.message || err)}`;
+                console.warn(
+                  `[ForumController] Falha ao espelhar comentário em comentarios_musicas (D1), tentativa ${tentativa}/3:`,
+                  err,
+                );
+              }
+            }
           }
         }
       } catch (err) {
+        motivoFalha = `erro inesperado: ${String((err as Error)?.message || err)}`;
         console.warn("[ForumController] Falha ao espelhar comentário em comentarios_musicas (D1):", err);
+      }
+      if (!espelhado) {
+        await marcarTopicoMusicaD1Incompleto(topicIdClean, motivoFalha || "não espelhado");
       }
     }
 

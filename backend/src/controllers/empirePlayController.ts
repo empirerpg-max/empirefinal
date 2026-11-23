@@ -12,6 +12,7 @@ import {
 } from "../services/googleSheetsService";
 import { getUserProfile } from "./userController";
 import { getCatalogoDb } from "../services/musicasDbService";
+import { topicoMusicaD1Incompleto } from "../services/comentariosMusicasD1Pendencia";
 import {
   comentariosPorTopicoD1Ativo,
   forumRapidoVideosAtivo,
@@ -2068,7 +2069,16 @@ export async function getEmpirePlayForumTopicController(
   // comentário" (pode ser um comentário ainda não espelhado), então cai
   // pro caminho antigo (lento, mas sempre correto) nesse caso — nunca
   // esconde comentário real só pra ganhar velocidade.
-  if (sheetIdLabel === "Musicas" && tipoParam !== "album") {
+  //
+  // Tópico marcado como "D1 incompleto" (algum comentário salvo na planilha
+  // não chegou no D1 — ver comentariosMusicasD1Pendencia.ts, caso Andrei em
+  // "Beautiful Distortion", 2026-11-23): pula o atalho e lê pela planilha,
+  // senão o comentário que faltou no D1 some da tela.
+  if (
+    sheetIdLabel === "Musicas" &&
+    tipoParam !== "album" &&
+    !(await topicoMusicaD1Incompleto(topicIdParam))
+  ) {
     try {
       const db = getCatalogoDb();
       if (db && topicIdParam) {
