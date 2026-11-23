@@ -2867,6 +2867,16 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
     throw new Error("Álbum não encontrado.");
   }
 
+  // Álbum de pre-save ainda sendo completado pelo lançamento em passos:
+  // gravar faixa à mão agora duplicaria o que o cron ainda vai gravar (foi
+  // assim que a Jessica Johnson ficou com 3 "Pretty Woman"). Se o D1 estiver
+  // fora, não bloqueia (nunca trava a Gestão por infraestrutura).
+  const { bloqueioPresave } = await import("./presaveLancamento/protecoes");
+  const bloqueio = await bloqueioPresave(albumFullTitle).catch(() => null);
+  if (bloqueio) {
+    throw Object.assign(new Error(bloqueio), { status: 409 });
+  }
+
   const artistaAlbum = albumFullTitle.includes(" - ")
     ? albumFullTitle.slice(0, albumFullTitle.indexOf(" - ")).trim()
     : albumFullTitle;
@@ -2982,7 +2992,7 @@ export async function substituirAlbumController(request: Request): Promise<Respo
         success: false,
         error: error.message || "Erro ao substituir álbum.",
       }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
+      { status: error?.status === 409 ? 409 : 500, headers: { "Content-Type": "application/json" } },
     );
   }
 }

@@ -47,3 +47,17 @@ export async function avisarPassoTravado(
   await deps.push("⚠️ Pre-save travado", msg).catch(() => {});
   await deps.log(msg, erro).catch(() => {});
 }
+
+export const MENSAGEM_ALBUM_EM_ANDAMENTO =
+  "Esse álbum de pre-save ainda está sendo completado automaticamente. Tente de novo quando o lançamento terminar.";
+
+/**
+ * Mensagem de bloqueio se o álbum tem um lançamento de pre-save em andamento
+ * (passos ainda não feitos), senão null. Gravar faixa à mão nesse álbum agora
+ * é exatamente o que gerou as cópias duplicadas da Jessica Johnson.
+ */
+export async function bloqueioPresave(albumFullTitle: string): Promise<string | null> {
+  if (!albumFullTitle.trim()) return null;
+  const { lancamentoEmAndamentoPorAlbum } = await import("../../services/presaveLancamentoDb");
+  return (await lancamentoEmAndamentoPorAlbum(albumFullTitle)) ? MENSAGEM_ALBUM_EM_ANDAMENTO : null;
+}
