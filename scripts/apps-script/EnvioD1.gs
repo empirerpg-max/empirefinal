@@ -155,13 +155,13 @@ function lerArtistas_() {
   };
   var cNome = col(['nome', 'artista'], 0);
   var cFoto = col(['foto'], 6);
-  var cNac = col(['nacionalidade'], 13);
-  var cGenero = colunaPorCabecalho_(cabecalho, ['genero', 'estilo', 'genero musical']);
+  var cNac = col(['nacionalidade', 'pais'], 13);
+  var cGenero = colunaPorCabecalho_(cabecalho, ['genero principal', 'genero', 'estilo', 'genero musical']);
   if (cGenero < 0) Logger.log('AVISO - INFOS ACTS sem coluna de gênero (cabeçalho "Gênero"/"Estilo"); enviando artistas sem gênero.');
   return aba.getRange(2, 1, ultima - 1, ultimaCol).getDisplayValues()
     .map(function (r) {
       var linha = [r[cNome], r[cNac], r[cFoto]];
-      if (cGenero >= 0) linha.push(r[cGenero]);
+      if (cGenero >= 0) linha.push(r[cGenero]); // "GÊNERO PRINCIPAL" (K) já é o valor final (correção do jogador em L, senão o original em M)
       return linha;
     })
     .filter(function (r) { return String(r[0]).trim() !== ''; });
