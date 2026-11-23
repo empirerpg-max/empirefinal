@@ -145,7 +145,7 @@ test("fechar grava o código só se a linha for da campanha", async () => {
 
 test("vinculo vincula a faixa existente e espelha no D1", async () => {
   const f = new FakePlanilhas();
-  const row = Array(26).fill(""); row[7] = "Jessica Johnson - Nobody's Wife";
+  const row = Array(26).fill(""); row[7] = "Jessica Johnson - Nobody's Wife"; row[25] = "EMP997";
   f.aba("principal", "Musicas").push(row);
   const r = await E.executarPasso(ctx(), passo("vinculo:9"), f.deps());
   expect(f.aba("principal", "Musicas")[1][10]).toBe(ALBUM);

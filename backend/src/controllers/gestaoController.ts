@@ -74,11 +74,11 @@ export async function mirrorMusicaRowParaD1(rowIndex: number): Promise<boolean> 
   const db = getCatalogoDb();
   if (!db) return false;
   try {
-    let row = (await googleSheetsService.principal.readValues("Musicas", `A${rowIndex}:AE${rowIndex}`))[0];
+    let row = (await googleSheetsService.principal.readValuesFresh("Musicas", `A${rowIndex}:AE${rowIndex}`))[0];
     let codigoUnico = normalizeText(row?.[25]);
     if ((!row || !codigoUnico)) {
       await new Promise((resolve) => setTimeout(resolve, 400));
-      row = (await googleSheetsService.principal.readValues("Musicas", `A${rowIndex}:AE${rowIndex}`))[0];
+      row = (await googleSheetsService.principal.readValuesFresh("Musicas", `A${rowIndex}:AE${rowIndex}`))[0];
       codigoUnico = normalizeText(row?.[25]);
     }
     // Sem código único (linha ainda sem nenhum lançamento, ou a leitura
@@ -150,9 +150,9 @@ async function gerarProximoCodigoUnico(
   prefixo: string,
   digitos: number,
 ): Promise<string> {
-  const rows = await googleSheetsService.edicaoCharts
-    .readValues(sheetName, "A1:BZ5000")
-    .catch(() => []);
+  // Leitura que falha LANÇA (antes virava [] e gerava o código nº 1, que já
+  // existe — código duplicado). Só uma aba realmente vazia começa do 1.
+  const rows = await googleSheetsService.edicaoCharts.readValuesFresh(sheetName, "A1:BZ5000");
   if (!rows || rows.length < 1) return `${prefixo}${"1".padStart(digitos, "0")}`;
   const headers = rows[0].map((h) => normalizeComparison(h));
   const col = headers.findIndex((h) => h.startsWith("codigo unico"));
@@ -225,7 +225,7 @@ async function registrarNaEdicaoChartsSemTrava(params: {
     // Em vez disso, acha a última linha com título de verdade na coluna B
     // e escreve direto na linha seguinte via updateValues — mesmo padrão
     // já usado (e confirmado funcionando) pra corrigir REGISTRO.
-    const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS", "A2:B20000");
+    const rows = await googleSheetsService.edicaoCharts.readValuesFresh("EDIÇÃO CHARTS", "A2:B20000");
     let ultimaLinhaComTitulo = 1; // linha 1 = cabeçalho
     for (let i = 0; i < rows.length; i++) {
       if ((rows[i]?.[1] || "").trim()) ultimaLinhaComTitulo = i + 2;
@@ -272,7 +272,7 @@ async function registrarNaEdicaoChartsSemTrava(params: {
 export async function lerCodigoUnicoGerado(rowIndex: number): Promise<string> {
   for (let tentativa = 1; tentativa <= 2; tentativa++) {
     try {
-      const rows = await googleSheetsService.edicaoCharts.readValues(
+      const rows = await googleSheetsService.edicaoCharts.readValuesFresh(
         "EDIÇÃO CHARTS",
         `BD${rowIndex}:BD${rowIndex}`,
       );
@@ -1583,7 +1583,7 @@ export async function registrarNoRegistroDeMusica(p: {
   const { songTitle, tipoSingle, tipoMusica, album, artistaPrincipal, participantes } = p;
   await withWriteLock("gestao:registro-de-musica", async () => {
     const registroRows =
-      await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
+      await googleSheetsService.registrosCharts.readValuesFresh("REGISTRO DE MÚSICA");
     let targetRow = (registroRows?.length || 0) + 1;
     if (registroRows && registroRows.length > 1) {
       for (let i = 1; i < registroRows.length; i++) {
@@ -2877,6 +2877,36 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
     throw Object.assign(new Error(bloqueio), { status: 409 });
   }
 
+  // Faixa inédita cujo título já existe neste álbum em Musicas: recusa em vez
+  // de criar uma cópia (porta das 3 "Pretty Woman" da Jessica Johnson).
+  // Leitura fresca: com cache/GViz uma faixa recém-gravada passaria batido.
+  const ineditasNovas = novasFaixas.filter((f) => f.inedita !== false);
+  if (ineditasNovas.length > 0) {
+    const artistaDoAlbum = albumFullTitle.includes(" - ")
+      ? albumFullTitle.slice(0, albumFullTitle.indexOf(" - ")).trim()
+      : albumFullTitle;
+    const albumNorm = normalizeComparison(albumFullTitle);
+    const musicasRows = await googleSheetsService.principal.readValuesFresh("Musicas", "A1:AD50000");
+    const titulosNoAlbum = new Set(
+      musicasRows
+        .slice(1)
+        .filter((r) => [r[10], r[26], r[27], r[28], r[29]].some((a) => normalizeComparison(a || "") === albumNorm))
+        .map((r) => normalizeComparison(r[7] || "")),
+    );
+    const repetidas = ineditasNovas
+      .map((f) => {
+        const semPrefixo = dedupeArtistPrefix(f.titulo, artistaDoAlbum);
+        return semPrefixo.includes(" - ") ? semPrefixo : `${artistaDoAlbum} - ${semPrefixo}`;
+      })
+      .filter((t) => titulosNoAlbum.has(normalizeComparison(t)));
+    if (repetidas.length > 0) {
+      throw Object.assign(
+        new Error(`Essas faixas já existem neste álbum (não criei cópias): ${repetidas.join(", ")}.`),
+        { status: 409 },
+      );
+    }
+  }
+
   const artistaAlbum = albumFullTitle.includes(" - ")
     ? albumFullTitle.slice(0, albumFullTitle.indexOf(" - ")).trim()
     : albumFullTitle;
@@ -3038,7 +3068,7 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
       // explícita não impede o Sheets de pular pra longe por causa das
       // colunas de cálculo à direita). Acha a última linha com NOME DO ALBUM
       // de verdade (coluna D) e escreve direto na seguinte via updateValues.
-      const albunsRows = await googleSheetsService.edicaoCharts.readValues(
+      const albunsRows = await googleSheetsService.edicaoCharts.readValuesFresh(
         "EDIÇÃO CHARTS ÁLBUMS",
         "A2:D20000",
       );
@@ -3047,7 +3077,7 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
         if ((albunsRows[i]?.[3] || "").trim()) ultimaLinhaComAlbum = i + 2;
       }
       const linhaAlvoAlbum = ultimaLinhaComAlbum + 1;
-      await googleSheetsService.edicaoCharts.updateValues(
+      const gravou = await googleSheetsService.edicaoCharts.updateValues(
         "EDIÇÃO CHARTS ÁLBUMS",
         `A${linhaAlvoAlbum}:R${linhaAlvoAlbum}`,
         [
@@ -3081,6 +3111,13 @@ export async function registrarAlbumNaEdicaoChartsAlbuns(params: {
       // Como esse código é gerado pelo próprio app (não por fórmula), já
       // temos o valor em mãos — leva a mesma cópia pro catálogo (Albuns!L),
       // sem precisar reler nada.
+      // updateValues devolve false (nunca lança) quando as tentativas falham:
+      // sem a linha aqui o álbum não existe nos charts — não devolve código
+      // nem copia para Albuns!L (senão quem chama acha que deu certo).
+      if (!gravou) {
+        console.warn(`[registrarAlbumNaEdicaoChartsAlbuns] Falha ao gravar "${albumFullTitle}" (linha ${linhaAlvoAlbum}).`);
+        return "";
+      }
       if (albumRowIndexEmAlbuns) {
         await googleSheetsService.principal
           .updateValues("Albuns", `L${albumRowIndexEmAlbuns}`, [[codigoUnico]])
@@ -3122,7 +3159,7 @@ export async function gravarLinhaAlbumEmAlbuns(p: {
   tipoAlbum: string;
 }): Promise<number> {
   return withWriteLock("gestao:edicao-charts-albuns", async () => {
-    const albunsRowsAtuais = await googleSheetsService.principal.readValues("Albuns", "A2:G20000");
+    const albunsRowsAtuais = await googleSheetsService.principal.readValuesFresh("Albuns", "A2:G20000");
     let ultimaLinhaComAlbum = 1; // linha 1 = cabeçalho
     for (let i = 0; i < albunsRowsAtuais.length; i++) {
       if ((albunsRowsAtuais[i]?.[6] || "").trim()) ultimaLinhaComAlbum = i + 2;

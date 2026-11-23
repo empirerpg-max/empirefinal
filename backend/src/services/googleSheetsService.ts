@@ -1140,6 +1140,8 @@ export const googleSheetsService = {
   registrosCharts: {
     readValues: (sheetName: string, range?: string) =>
       readValues("registrosCharts", sheetName, range),
+    readValuesFresh: (sheetName: string, range?: string) =>
+      readValuesFresh("registrosCharts", sheetName, range),
     readSheetObjects: (sheetName: string, range?: string) =>
       readSheetObjects("registrosCharts", sheetName, range),
     findRows: (
@@ -1161,6 +1163,8 @@ export const googleSheetsService = {
   },
   edicaoCharts: {
     readValues: (sheetName: string, range?: string) => readValues("edicaoCharts", sheetName, range),
+    readValuesFresh: (sheetName: string, range?: string) =>
+      readValuesFresh("edicaoCharts", sheetName, range),
     readValuesRaw: (sheetName: string, range?: string) =>
       readValues("edicaoCharts", sheetName, range, "UNFORMATTED_VALUE"),
     readValuesFormula: (sheetName: string, range?: string) =>

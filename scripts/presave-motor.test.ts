@@ -68,7 +68,7 @@ test("campanha de 12 faixas completa em várias execuções, sem duplicar nada",
 
 test("status vira lancada assim que o álbum existe", async () => {
   const { c, f, deps } = cenario();
-  await M.executarMotorLancamentos({ orcamento: 12, agora: AGORA, deps: deps() });
+  await M.executarMotorLancamentos({ orcamento: 30, agora: AGORA, deps: deps() });
   expect(f.aba("principal", "Albuns").length).toBe(2);
   expect(c.status).toBe("lancada");
   expect(f.aba("principal", "PreSave_Album")[8][12]).toBe("lancada");

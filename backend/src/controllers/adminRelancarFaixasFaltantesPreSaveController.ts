@@ -17,6 +17,7 @@ import { montarPassosLancamento } from "./presaveLancamento/montarPassos";
 import { acharAlbumParaReconciliar } from "./presaveLancamento/busca";
 import { depsReais } from "./presaveLancamento/executores";
 import { executarMotorLancamentos, type DepsMotor } from "./presaveLancamento/motor";
+import { jaFoiLancadaDeVerdade } from "../services/writeLockService";
 
 export async function relancarPresave(
   campanhaId: string,
@@ -51,7 +52,9 @@ export async function relancarPresave(
     return { status: 200, body: { success: true, acao: "reabrir", reabertos, motor } };
   }
 
-  if (c.status === "ativa") {
+  // "ativa" com a marca de já publicada (status não gravou — caso DERBY) é
+  // reconciliável; "ativa" sem marca ainda não chegou ao dia D (o cron cria).
+  if (c.status === "ativa" && !(await jaFoiLancadaDeVerdade(campanhaId))) {
     return {
       status: 400,
       body: { success: false, error: "Campanha ainda ativa e sem lançamento: o cron do pre-save cria a lista no dia D." },

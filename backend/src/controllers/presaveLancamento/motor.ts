@@ -15,15 +15,18 @@ import {
   type PreSaveCampanha,
 } from "../preSaveController";
 import * as DB from "../../services/presaveLancamentoDb";
-import { chamadasRestantes, encerrarOrcamento, iniciarOrcamento } from "../../services/orcamentoChamadas";
+import { chamadasRestantes, comOrcamento, registrarChamadaExterna } from "../../services/orcamentoChamadas";
 import { jaFoiLancadaDeVerdade, marcarLancadaDeVerdade, withWriteLock } from "../../services/writeLockService";
 import { montarPassosLancamento } from "./montarPassos";
 import { criarContexto, depsReais, executarPasso, type DepsEscrita } from "./executores";
 import { avisarPassoTravado } from "./protecoes";
 
-export const ORCAMENTO_CHAMADAS_PRESAVE = 35;
-/** Nunca começa um passo com menos chamadas que isso sobrando (um passo faz até ~6). */
-const FOLGA_MINIMA = 10;
+/** Chamadas externas por execução (Google + D1). Conservador: cabe no plano Free (50 subrequests). */
+export const ORCAMENTO_CHAMADAS_PRESAVE = 40;
+/** Nunca começa um passo com menos chamadas que isso sobrando (um passo faz até ~10 + D1). */
+const FOLGA_MINIMA = 15;
+/** Chamadas ao D1 por passo (anotar início, marcar feito/falha) — o contador do Google não as vê. */
+const D1_POR_PASSO = 2;
 const DATA_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface DepsMotor {
@@ -33,8 +36,9 @@ export interface DepsMotor {
   marcarCampanhaLancada(c: PreSaveCampanha): Promise<void>;
   avisarTravado(c: PreSaveCampanha, passo: string, erro: string): Promise<void>;
   log(mensagem: string, categoria: "Ação concluída" | "Falha de escrita"): void;
-  /** Só para testes (simular queda entre gravar e anotar). */
+  /** Só para testes (simular queda entre gravar e anotar / D1 fora). */
   marcarFeito?: typeof DB.marcarFeito;
+  registrarFalha?: typeof DB.registrarFalha;
 }
 
 function depsMotorReais(): DepsMotor {
@@ -99,6 +103,14 @@ async function processarCampanha(c: PreSaveCampanha, deps: DepsMotor): Promise<R
       r.orcamentoEsgotado = true;
       return r;
     }
+    // C1: anota "procurar antes" ANTES de gravar. Se nem isso der, não grava.
+    try {
+      await DB.anotarInicio(c.id, p.passo);
+      registrarChamadaExterna(D1_POR_PASSO);
+    } catch (err) {
+      deps.log(`Pre-save "${c.albumTituloFull}": D1 indisponível, passo "${p.passo}" adiado: ${err instanceof Error ? err.message : err}`, "Falha de escrita");
+      return r;
+    }
     try {
       const resultado = await executarPasso(ctx, p, deps.escrita);
       await marcarFeito(c.id, p.passo, resultado);
@@ -111,7 +123,7 @@ async function processarCampanha(c: PreSaveCampanha, deps: DepsMotor): Promise<R
     } catch (err) {
       r.falhas++;
       const msg = err instanceof Error ? err.message : String(err);
-      const estado = await DB.registrarFalha(c.id, p.passo, msg);
+      const estado = await (deps.registrarFalha ?? DB.registrarFalha)(c.id, p.passo, msg);
       if (estado === "travado") {
         await deps.avisarTravado(c, p.passo, msg).catch(() => {});
       } else {
@@ -133,8 +145,7 @@ export async function executarMotorLancamentos(opts?: {
 }): Promise<{ lancados: number; falhas: number; passosFeitos: number }> {
   const deps = opts?.deps ?? depsMotorReais();
   const total = { lancados: 0, falhas: 0, passosFeitos: 0 };
-  iniciarOrcamento(opts?.orcamento ?? ORCAMENTO_CHAMADAS_PRESAVE);
-  try {
+  await comOrcamento(opts?.orcamento ?? ORCAMENTO_CHAMADAS_PRESAVE, async () => {
     const campanhas = await deps.lerCampanhas();
     const porId = new Map(campanhas.map((c) => [c.id, c]));
     const hoje = (opts?.agora ?? new Date()).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -143,8 +154,13 @@ export async function executarMotorLancamentos(opts?: {
     for (const c of campanhas) {
       if (c.status !== "ativa" || !DATA_ISO_REGEX.test(c.dataLancamento) || c.dataLancamento > hoje) continue;
       if (await DB.obterLancamento(c.id)) continue;
-      // Campanha lançada pelo fluxo antigo (marca no D1): só entra pelo admin, em reconciliação.
-      if (await jaFoiLancadaDeVerdade(c.id)) continue;
+      // Campanha lançada pelo fluxo antigo (marca no D1): só entra pelo admin,
+      // em reconciliação. Se o status ficou "ativa" (a gravação dele falhou —
+      // caso DERBY), corrige o status aqui para ela não ficar ativa pra sempre.
+      if (await jaFoiLancadaDeVerdade(c.id)) {
+        await promoverParaLancada(c, deps);
+        continue;
+      }
       aplicarDiasPerdidos(c);
       const bonus = c.modo === "missao" ? Math.round(calcularAcumulado(c)) : null;
       await DB.criarLancamento(
@@ -174,8 +190,6 @@ export async function executarMotorLancamentos(opts?: {
       total.passosFeitos += r.feitos;
       if (r.orcamentoEsgotado) break;
     }
-  } finally {
-    encerrarOrcamento();
-  }
+  });
   return total;
 }

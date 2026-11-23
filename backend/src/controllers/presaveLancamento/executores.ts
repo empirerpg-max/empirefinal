@@ -177,25 +177,36 @@ function exigir(ok: boolean, msg: string): void {
   if (!ok) throw new Error(msg);
 }
 
+// Revisão C2: uma leitura que caiu no fallback GViz devolve o cabeçalho da
+// aba ("Código único", "Data de lançamento"...) no lugar do valor — nunca
+// aceitar como Código único algo fora do formato real.
+const CODIGO_FAIXA = /^EMP\d+$/i;
+const CODIGO_ALBUM = /^EMPALBM\d+$/i;
+function exigirCodigo(codigo: string, re: RegExp, onde: string): string {
+  const c = String(codigo || "").trim();
+  exigir(re.test(c), `Código único inválido em ${onde}: "${c}".`);
+  return c;
+}
+
 async function passoAlbum(ctx: ContextoLancamento, p: Passo, deps: DepsEscrita) {
   const { c } = ctx;
   if (p.procurarAntes) {
     const achado = await acharAlbumPorTopico(deps, c.albumTopicId);
     if (achado) {
-      let codigo = achado.codigoUnicoAlbum;
-      if (!codigo) {
-        // Linha em Albuns existe; a de EDIÇÃO CHARTS ÁLBUMS talvez também
-        // (só a cópia do código para Albuns!L falhou).
-        const naEca = await acharAlbumNaEdicaoChartsAlbuns(deps, ctx.albumFullTitle);
-        if (naEca?.codigoUnicoAlbum) {
-          codigo = naEca.codigoUnicoAlbum;
+      // Revisão I1: Albuns!L preenchido não garante a linha em EDIÇÃO CHARTS
+      // ÁLBUMS (a escrita lá pode ter falhado) — confere lá, pelo nome.
+      const naEca = await acharAlbumNaEdicaoChartsAlbuns(deps, ctx.albumFullTitle);
+      let codigo: string;
+      if (naEca && CODIGO_ALBUM.test(naEca.codigoUnicoAlbum)) {
+        codigo = naEca.codigoUnicoAlbum;
+        if (achado.codigoUnicoAlbum !== codigo) {
           exigir(
             await deps.updateValues("principal", "Albuns", `L${achado.linhaAlbuns}`, [[codigo]]),
             "Falha ao copiar o Código único do álbum para Albuns!L.",
           );
-        } else {
-          codigo = await registrarNaEca(ctx, deps, achado.linhaAlbuns);
         }
+      } else {
+        codigo = await registrarNaEca(ctx, deps, achado.linhaAlbuns);
       }
       return { linhaAlbuns: achado.linhaAlbuns, codigoUnicoAlbum: codigo, albumTopicId: c.albumTopicId };
     }
@@ -225,8 +236,7 @@ async function registrarNaEca(ctx: ContextoLancamento, deps: DepsEscrita, linhaA
     numeroFaixas: ctx.c.faixas.length,
     albumRowIndexEmAlbuns: linhaAlbuns,
   });
-  exigir(!!codigo, "EDIÇÃO CHARTS ÁLBUMS não devolveu o Código único do álbum.");
-  return codigo;
+  return exigirCodigo(codigo, CODIGO_ALBUM, "EDIÇÃO CHARTS ÁLBUMS");
 }
 
 async function passoFaixaMusicas(ctx: ContextoLancamento, num: number, p: Passo, deps: DepsEscrita) {
@@ -258,8 +268,8 @@ async function passoFaixaCharts(ctx: ContextoLancamento, num: number, p: Passo, 
   if (p.procurarAntes) {
     const achado = await acharFaixaEmEdicaoCharts(deps, songTitle, ctx.albumFullTitle);
     if (achado) {
-      exigir(!!achado.codigoUnico, `Linha ${achado.linha} de EDIÇÃO CHARTS sem Código único.`);
-      return { linhaCharts: achado.linha, codigoUnico: achado.codigoUnico, preexistente: true };
+      const codigoAchado = exigirCodigo(achado.codigoUnico, CODIGO_FAIXA, `EDIÇÃO CHARTS linha ${achado.linha}`);
+      return { linhaCharts: achado.linha, codigoUnico: codigoAchado, preexistente: true };
     }
   }
   const linhaCharts = await deps.registrarNaEdicaoCharts({
@@ -272,8 +282,11 @@ async function passoFaixaCharts(ctx: ContextoLancamento, num: number, p: Passo, 
     participantes: (f.participantes || []).filter(Boolean),
   });
   exigir(!!linhaCharts, `Falha ao gravar "${songTitle}" em EDIÇÃO CHARTS.`);
-  const codigoUnico = await deps.lerCodigoUnicoGerado(linhaCharts as number);
-  exigir(!!codigoUnico, `EDIÇÃO CHARTS não gerou Código único na linha ${linhaCharts}.`);
+  const codigoUnico = exigirCodigo(
+    await deps.lerCodigoUnicoGerado(linhaCharts as number),
+    CODIGO_FAIXA,
+    `EDIÇÃO CHARTS linha ${linhaCharts}`,
+  );
   return { linhaCharts, codigoUnico };
 }
 
@@ -337,8 +350,15 @@ async function passoVinculo(ctx: ContextoLancamento, num: number, deps: DepsEscr
   const { normalizeComparison: norm } = await import("../../services/googleSheetsService");
   const rows = await deps.readFresh("principal", "Musicas", "A1:Z50000");
   const linhas: number[] = [];
-  for (let i = 1; i < rows.length; i++) if (norm(rows[i]?.[7]) === norm(f.titulo)) linhas.push(i + 1);
-  for (const l of linhas) {
+  const comCodigo: number[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (norm(rows[i]?.[7]) !== norm(f.titulo)) continue;
+    linhas.push(i + 1);
+    // Revisão I2: linha sem Código único (ex.: pendente criada pelo vínculo)
+    // não tem chave no D1 — não é falha, só não há o que espelhar ainda.
+    if (CODIGO_FAIXA.test(String(rows[i]?.[25] || "").trim())) comCodigo.push(i + 1);
+  }
+  for (const l of comCodigo) {
     exigir(await deps.mirrorMusicaRowParaD1(l), `Falha ao espelhar Musicas linha ${l} no D1.`);
   }
   return { linhas };

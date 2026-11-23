@@ -184,6 +184,21 @@ export async function marcarFeito(
     .run();
 }
 
+/**
+ * Liga "procurar antes de gravar" ANTES de executar o passo (revisão C1): se
+ * o Worker morrer entre gravar na planilha e anotar no D1 — sem nem chegar ao
+ * catch —, a próxima execução procura antes e não duplica.
+ */
+export async function anotarInicio(campanhaId: string, passo: string): Promise<void> {
+  const d = await db();
+  await d
+    .prepare(
+      `UPDATE presave_lancamento_passos SET procurar_antes = 1, atualizado_em = datetime('now') WHERE campanha_id = ? AND passo = ?`,
+    )
+    .bind(campanhaId, passo)
+    .run();
+}
+
 /** Incrementa tentativas e liga "procurar antes de gravar". "travado" ao chegar em MAX_TENTATIVAS. */
 export async function registrarFalha(campanhaId: string, passo: string, erro: string): Promise<EstadoPasso> {
   const d = await db();
