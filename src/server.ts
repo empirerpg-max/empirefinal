@@ -361,8 +361,26 @@ export default {
   // Roda a cada 10 min (ver wrangler.jsonc, "triggers.crons") — processa
   // transmissões da Empire TV recém-encerradas e grava a participação dos
   // jogadores (presença + chat) em REGISTRO.
-  async scheduled(_event: unknown, env: unknown, ctx: { waitUntil: (p: Promise<unknown>) => void }) {
+  async scheduled(event: { cron?: string } | undefined, env: unknown, ctx: { waitUntil: (p: Promise<unknown>) => void }) {
     injectRuntimeEnv(env);
+    // Cron próprio do pre-save (ver src/cronJobs.ts): roda SÓ o lançamento
+    // em passos, com o limite de chamadas da execução inteiro para ele.
+    const { ehCronPresave } = await import("./cronJobs");
+    if (ehCronPresave(event?.cron)) {
+      ctx.waitUntil(
+        (async () => {
+          const { processarLancamentosPreSaveScheduled } = await import("../backend/src/controllers/preSaveController");
+          return processarLancamentosPreSaveScheduled();
+        })()
+          .then((r) => {
+            if (r.lancados > 0 || r.falhas > 0) {
+              console.log(`[scheduled] Pre-save: ${r.lancados} álbum(ns) lançado(s), ${r.falhas} falha(s).`);
+            }
+          })
+          .catch((err) => console.error("[scheduled] Erro ao processar lançamentos de pre-save:", err)),
+      );
+      return;
+    }
     const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
     const {
       limparStoriesExpiradosScheduled,
@@ -507,23 +525,6 @@ export default {
           r.atualizou ? console.log(`[scheduled] Snapshot Metacritic semanal atualizado (semana ${r.semanaId}).`) : null,
         )
         .catch((err) => console.error("[scheduled] Erro ao atualizar snapshot Metacritic:", err)),
-    );
-    // Pre-save de álbum (Catálogo > Gestão Pre save): checa a cada ciclo do
-    // cron (10 min) se alguma campanha ativa já chegou na data de
-    // lançamento e, se sim, lança o álbum de verdade (reaproveita
-    // publicarAlbum) e grava o bônus final na coluna PRE-SAVE quando o
-    // modo foi "com missão" — ver preSaveController.ts.
-    ctx.waitUntil(
-      (async () => {
-        const { processarLancamentosPreSaveScheduled } = await import("../backend/src/controllers/preSaveController");
-        return processarLancamentosPreSaveScheduled();
-      })()
-        .then((r) => {
-          if (r.lancados > 0 || r.falhas > 0) {
-            console.log(`[scheduled] Pre-save: ${r.lancados} álbum(ns) lançado(s), ${r.falhas} falha(s).`);
-          }
-        })
-        .catch((err) => console.error("[scheduled] Erro ao processar lançamentos de pre-save:", err)),
     );
   },
 

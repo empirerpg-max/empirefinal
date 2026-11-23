@@ -1,4 +1,5 @@
 import { getGoogleAccessToken } from "../google/service-account";
+import { registrarChamadaExterna } from "./orcamentoChamadas";
 import {
   MENSAGEM_MANUTENCAO,
   type EstadoAba,
@@ -144,6 +145,7 @@ export async function fetchGVizCsv(spreadsheetId: string, sheetName: string): Pr
     sheetName,
   )}`;
 
+  registrarChamadaExterna();
   const res = await fetch(gvizUrl);
   if (!res.ok) {
     throw new Error(`GViz CSV export retornou HTTP ${res.status}`);
@@ -155,6 +157,7 @@ export async function fetchGVizCsv(spreadsheetId: string, sheetName: string): Pr
 
 async function sheetsRequest<T>(path: string, init: RequestInit, scopes: string[]): Promise<T> {
   const accessToken = await getGoogleAccessToken(scopes);
+  registrarChamadaExterna();
   const response = await fetch(`${GOOGLE_SHEETS_API_BASE}${path}`, {
     ...init,
     headers: {
@@ -1137,6 +1140,8 @@ export const googleSheetsService = {
   registrosCharts: {
     readValues: (sheetName: string, range?: string) =>
       readValues("registrosCharts", sheetName, range),
+    readValuesFresh: (sheetName: string, range?: string) =>
+      readValuesFresh("registrosCharts", sheetName, range),
     readSheetObjects: (sheetName: string, range?: string) =>
       readSheetObjects("registrosCharts", sheetName, range),
     findRows: (
@@ -1158,6 +1163,8 @@ export const googleSheetsService = {
   },
   edicaoCharts: {
     readValues: (sheetName: string, range?: string) => readValues("edicaoCharts", sheetName, range),
+    readValuesFresh: (sheetName: string, range?: string) =>
+      readValuesFresh("edicaoCharts", sheetName, range),
     readValuesRaw: (sheetName: string, range?: string) =>
       readValues("edicaoCharts", sheetName, range, "UNFORMATTED_VALUE"),
     readValuesFormula: (sheetName: string, range?: string) =>

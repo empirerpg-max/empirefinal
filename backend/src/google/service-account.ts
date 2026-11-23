@@ -1,3 +1,5 @@
+import { registrarChamadaExterna } from "../services/orcamentoChamadas";
+
 export interface GoogleServiceAccountCredentials {
   clientEmail: string;
   privateKey: string;
@@ -163,6 +165,7 @@ export async function getGoogleAccessToken(scopes: string[]): Promise<string> {
 
   const credentials = resolveServiceAccount();
   const assertion = await createSignedJwt(credentials, scopes);
+  registrarChamadaExterna();
   const response = await fetch(credentials.tokenUri, {
     method: "POST",
     headers: {
