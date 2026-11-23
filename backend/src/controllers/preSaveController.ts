@@ -66,11 +66,9 @@ import {
   type GoogleSheetRow,
 } from "../services/googleSheetsService";
 import { registrarLogSistema } from "../services/logSistemaService";
-import { withWriteLock, jaFoiLancadaDeVerdade, marcarLancadaDeVerdade } from "../services/writeLockService";
-import { publicarAlbum, type TrackItemPayload } from "./gestaoController";
+import { withWriteLock } from "../services/writeLockService";
 import { createAcervoEntrevistaController } from "./acervoController";
 import { createSocialPostController } from "./socialController";
-import { saveExtraMaterialController } from "./extraMaterialController";
 
 const PRESAVE_SHEET = "PreSave_Album";
 export const PRESAVE_DURACAO_DIAS_DEFAULT = 14;
@@ -458,7 +456,7 @@ export async function writeCampanhaSemTrava(c: PreSaveCampanha): Promise<void> {
   }
 }
 
-async function writeCampanha(c: PreSaveCampanha): Promise<void> {
+export async function writeCampanha(c: PreSaveCampanha): Promise<void> {
   await withWriteLock(`presave:campanha:${c.id}`, () => writeCampanhaSemTrava(c));
 }
 
@@ -685,7 +683,7 @@ export function valoresPorDia(c: PreSaveCampanha): { dia: number; valor: number 
 // Marca como "perdida" (sem reposição) qualquer dia de missão cuja data já
 // passou e que ainda estava "pendente" — chamado sempre que o estado é
 // lido, pra manter o calendário honesto sem depender de um cron próprio.
-function aplicarDiasPerdidos(c: PreSaveCampanha): boolean {
+export function aplicarDiasPerdidos(c: PreSaveCampanha): boolean {
   if (c.modo !== "missao" || c.status !== "ativa") return false;
   const hojeIndex = diaCampanhaAtual(c);
   let mudou = false;
@@ -1832,332 +1830,29 @@ export async function cancelarCampanhaPreSaveController(request: Request): Promi
 
 // -------------------- LANÇAMENTO NO DIA D (hook do cron) --------------------
 
-// Chamado pelo scheduled() do worker (src/server.ts), a cada ciclo do cron
-// existente (10 min) — encontra campanhas "ativa" cuja dataLancamento já
-// chegou e lança o álbum de verdade, reaproveitando publicarAlbum
-// (gestaoController.ts) pra não duplicar lógica nenhuma do lançamento
-// normal. Nunca lança excessão pra fora — cada falha individual só fica
-// registrada no LOGS didático, sem travar as demais campanhas do lote.
+// Lançamento automático no dia D — agora em PASSOS (design:
+// docs/superpowers/specs/2026-11-23-presave-lancamento-em-passos-design.md).
+//
+// O fluxo antigo (publicarAlbum inteiro numa execução só) não cabia no
+// limite de chamadas de uma execução do Worker: gravava 3-4 faixas e o
+// resto falhava sem log (Jessica Johnson, "Bad Behavior", 22/11/2026),
+// marcava "lançado" mesmo assim e nada retomava. O motor
+// (presaveLancamento/motor.ts) grava um passo por vez, anota cada um no D1
+// e continua na próxima execução do cron — nunca grava nada duas vezes.
+// Campanhas lançadas pelo fluxo antigo (marca em presave_lancamentos_
+// confirmados) não são tocadas aqui; só pelo relançamento admin.
 export async function processarLancamentosPreSaveScheduled(): Promise<{
   lancados: number;
   falhas: number;
 }> {
-  let lancados = 0;
-  let falhas = 0;
   try {
-    const campanhas = await readAllCampanhas();
-    const hojeStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD
-    // Bug real confirmado em produção: álbum publicado ~10 dias antes da
-    // data combinada (Max Gorghan/FOLLIA, PRESAVE-7da5f189) — a comparação
-    // de string `c.dataLancamento <= hojeStr` confia ciegamente que
-    // dataLancamento sempre vem no formato certo "YYYY-MM-DD". Se por
-    // QUALQUER motivo (leitura caindo pro fallback GViz, célula
-    // temporariamente corrompida, linha desalinhada etc. — mesma classe
-    // de bug já vista na corrupção dessa mesma coluna) o valor lido vier
-    // vazio ("") ou num formato que não seja data, a comparação lexical
-    // podia dar falso positivo (string vazia é "menor" que qualquer data,
-    // por exemplo) e lançar o álbum achando que o dia já passou. Fix:
-    // NUNCA lança uma campanha cuja dataLancamento não bata exatamente
-    // com o formato esperado — trata "formato inválido" como "ainda não
-    // é dia de lançar" (falha segura, nunca o oposto) e registra no LOGS
-    // didático pra alguém notar, em vez de arriscar lançar antes da hora.
-    const DATA_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-    for (const c of campanhas) {
-      if (c.status === "ativa" && c.dataLancamento && !DATA_ISO_REGEX.test(c.dataLancamento)) {
-        falhas++;
-        registrarLogSistema({
-          categoria: "Erro do app",
-          oQueAconteceu: `Campanha de pre-save "${c.albumTituloFull}" (${c.id}) tem dataLancamento num formato inesperado ("${c.dataLancamento}", esperado YYYY-MM-DD) — NÃO lancei por segurança (evita repetir o bug do álbum lançado antes da hora). Confira a célula J da linha ${c._rowIndex} de "PreSave_Album".`,
-          onde: "processarLancamentosPreSaveScheduled",
-        }).catch(() => {});
-      }
-    }
-    const paraLancar = campanhas.filter(
-      (c) =>
-        c.status === "ativa" &&
-        DATA_ISO_REGEX.test(c.dataLancamento) &&
-        c.dataLancamento <= hojeStr,
-    );
-
-    for (const c of paraLancar) {
-      try {
-        // BUG REAL confirmado em produção (Max Gorghan, "Follia", lançou 4
-        // vezes no mesmo dia D): nada aqui impedia duas execuções do cron
-        // (rodando a cada 10min, mas que pode sobrepor se uma invocação
-        // demorar mais que isso, ou disparar de novo antes da anterior
-        // terminar) de lerem a MESMA campanha como "ativa" e publicarem o
-        // álbum duas (ou mais) vezes em paralelo — o status só virava
-        // "lancada" no FIM do processamento (linha ~1875, bem depois de
-        // publicarAlbum já ter rodado), quando já era tarde demais pra
-        // impedir a segunda cópia. withWriteLock trava por campanha
-        // (chave própria, D1) ANTES de publicar, e TTL generoso (5min,
-        // cobre o publicarAlbum inteiro — o TTL padrão de 20s é curto
-        // demais pra isso, pensado pra round-trips rápidos de Sheets).
-        // Dentro da trava, relê o status direto da planilha — se outra
-        // execução já lançou essa campanha enquanto esperava a trava
-        // liberar, pula sem publicar de novo.
-        const lancou = await withWriteLock(
-          `presave:lancamento:${c.id}`,
-          async () => {
-            const statusAtual = await googleSheetsService.principal
-              .readValues(PRESAVE_SHEET, `M${c._rowIndex}:M${c._rowIndex}`)
-              .catch(() => []);
-            // Coluna M (índice 12, 0-based) = "Status" — ver campanhaToRow/
-            // rowToCampanha acima; confirmado lendo o mapeamento real, não
-            // assumido.
-            const statusJaMudou = normalizeComparison(statusAtual?.[0]?.[0] || "") !== "ativa";
-            // Proteção REAL contra republicar (ver writeLockService.ts,
-            // jaFoiLancadaDeVerdade): a planilha dizendo "ativa" não
-            // significa que o álbum não foi publicado — pode ser só a
-            // gravação do status que falhou depois de publicarAlbum já
-            // ter rodado com sucesso (causa raiz do bug do DERBY). Esse
-            // marcador no D1 é a fonte de verdade de "já publiquei",
-            // independente do Sheets.
-            const jaPublicouDeVerdade = await jaFoiLancadaDeVerdade(c.id);
-            if (statusJaMudou) {
-              return false; // outra execução concorrente já lançou essa campanha
-            }
-            if (jaPublicouDeVerdade) {
-              // Álbum já foi criado antes; só a gravação do status na
-              // planilha que ficou pendente. NUNCA chama publicarAlbum de
-              // novo aqui — só tenta corrigir o status pra não ficar
-              // reexecutando pra sempre.
-              try {
-                c.status = "lancada";
-                await writeCampanha(c);
-              } catch (err) {
-                console.warn(
-                  `[processarLancamentosPreSaveScheduled] Campanha ${c.id} já publicada (D1 confirma), mas ainda não consegui corrigir o status na planilha:`,
-                  err,
-                );
-              }
-              return false; // não conta como novo lançamento
-            }
-            await lancarCampanhaPreSave(c);
-            return true;
-          },
-          { ttlMs: 5 * 60_000 },
-        );
-        if (lancou) lancados++;
-      } catch (err: any) {
-        falhas++;
-        console.error(
-          `[processarLancamentosPreSaveScheduled] Falha ao lançar campanha ${c.id}:`,
-          err,
-        );
-        registrarLogSistema({
-          categoria: "Falha de escrita",
-          oQueAconteceu: `Falha ao lançar automaticamente o pre-save de "${c.albumTituloFull}": ${err?.message || err}`,
-          onde: "processarLancamentosPreSaveScheduled",
-        }).catch(() => {});
-      }
-    }
+    const { executarMotorLancamentos } = await import("./presaveLancamento/motor");
+    const r = await executarMotorLancamentos();
+    return { lancados: r.lancados, falhas: r.falhas };
   } catch (err) {
     console.error("[processarLancamentosPreSaveScheduled] Erro geral:", err);
+    return { lancados: 0, falhas: 1 };
   }
-  return { lancados, falhas };
-}
-
-// Extraído de dentro do loop de processarLancamentosPreSaveScheduled —
-// roda inteiro dentro da trava por campanha (ver acima), nunca chamado
-// direto de outro lugar.
-async function lancarCampanhaPreSave(c: PreSaveCampanha): Promise<void> {
-  aplicarDiasPerdidos(c);
-    const acumuladoFinal = calcularAcumulado(c);
-
-        // BUG REAL confirmado em produção (FOLLIA, Max Gorghan): esse
-        // filtro excluía TODA faixa não-inédita (já existente, vinculada
-        // pelo jogador na criação da campanha — ex: músicas já lançadas
-        // antes do pre-save) e TODA faixa inédita sem áudio ainda —
-        // sumindo essas faixas do catálogo inteiramente em vez de
-        // registrá-las como pendente. processarFaixasDoAlbum (chamado
-        // logo abaixo via publicarAlbum) já sabe lidar com os dois casos
-        // sem precisar desse pré-filtro: faixa não-inédita vai por
-        // vincularFaixaExistenteAoAlbum (não depende de mediaUrl) e faixa
-        // inédita sem áudio é gravada mesmo assim (campo C vazio, mesma
-        // degradação graciosa já usada no lançamento normal de álbum) —
-        // o jogador só precisa subir o áudio depois, a faixa (nome,
-        // participantes, letra etc.) já fica cadastrada no catálogo
-        // desde o dia D, como deveria. Passa TODAS as faixas da campanha,
-        // sem excluir nenhuma.
-        const faixasSemAudio = c.faixas.filter((f) => f.inedita && !normalizeText(f.mediaUrl));
-        const faixasPayload: TrackItemPayload[] = c.faixas.map((f) => ({
-          num: f.num,
-          inedita: f.inedita,
-          titulo: f.titulo,
-          tipoSingle: f.tipoSingle,
-          tipoMusica: f.tipoMusica,
-          participantes: f.participantes,
-          mediaUrl: f.mediaUrl,
-          letra: f.letra,
-          abrirTopico: f.abrirTopico,
-        }));
-
-        if (faixasSemAudio.length > 0) {
-          registrarLogSistema({
-            categoria: "Ação concluída",
-            oQueAconteceu: `Pre-save de "${c.albumTituloFull}" lançado no dia D com ${faixasSemAudio.length} faixa(s) ainda sem áudio: ${faixasSemAudio.map((f) => f.titulo).join(", ")}. Já estão cadastradas no catálogo (pendente) — suba o áudio e publique quando estiver pronto.`,
-            onde: "processarLancamentosPreSaveScheduled",
-          }).catch(() => {});
-        }
-
-        const resultado = await publicarAlbum({
-          tituloAlbum: c.albumTituloFull.startsWith(`${c.artista} - `)
-            ? c.albumTituloFull.slice(c.artista.length + 3)
-            : c.albumTituloFull,
-          artistaAlbum: c.artista,
-          tipoAlbum: c.tipoAlbum,
-          capaUrl: c.capaUrl,
-          encartesUrls: c.encartesUrls,
-          nomeJogador: c.jogadorNome,
-          jogadorId: c.jogadorId,
-          faixas: faixasPayload,
-        });
-
-        // EXIGÊNCIA do usuário (2026-11-11, caso real: álbum da Samantha
-        // Cooper lançado com só 3 das 11 faixas cadastradas, sem nenhum
-        // aviso visível em lugar nenhum): publicarAlbum já sabe quando
-        // alguma faixa inédita falhou (faixasIneditasEsperadas vs
-        // faixasIneditasGravadas), mas esse detalhe só ia pra resposta
-        // HTTP de createAlbumController — o lançamento automático do
-        // pre-save (aqui) nunca lia nem logava essa divergência. Checagem
-        // explícita e bem visível em LOGS sempre que um álbum de pre-save
-        // lança com menos faixas do que devia, pra nunca mais passar
-        // despercebido.
-        const faixasFaltando = resultado.faixasIneditasEsperadas - resultado.faixasIneditasGravadas;
-        if (faixasFaltando > 0) {
-          registrarLogSistema({
-            categoria: "Erro do app",
-            oQueAconteceu: `ATENÇÃO: pre-save de "${c.albumTituloFull}" lançado automaticamente, mas ${faixasFaltando} de ${resultado.faixasIneditasEsperadas} faixa(s) inédita(s) esperada(s) NÃO foram gravadas (${resultado.faixasIneditasGravadas} gravadas). A campanha tinha ${c.faixas.length} faixa(s) cadastradas no total. Confira "Musicas"/EDIÇÃO CHARTS pra esse álbum e relance as faixas faltantes manualmente se precisar.`,
-            onde: "lancarCampanhaPreSave",
-            causaProvavel:
-              "Falha transiente do Google Sheets (quota/timeout) durante alguma das escritas de faixa — ver outros logs 'Falha de escrita' de processarFaixasDoAlbum na mesma janela de horário.",
-            comoResolver:
-              "Compare as faixas da campanha (FaixasJson) com as linhas reais em Musicas pra esse álbum; relance manualmente (Gestão > Lançar Faixa de Álbum) as que faltarem.",
-          }).catch(() => {});
-        }
-
-        // Marca IMEDIATAMENTE no D1 que essa campanha já foi publicada de
-        // verdade — antes de qualquer outra escrita (material extra,
-        // coluna PRE-SAVE, status na planilha). É essa marca, não o
-        // status="lancada" na planilha, que impede o cron de chamar
-        // publicarAlbum outra vez pra essa campanha caso qualquer escrita
-        // abaixo falhe (ver processarLancamentosPreSaveScheduled).
-        await marcarLancadaDeVerdade(c.id);
-
-        // Material extra (Shop/Info/Visual) coletado na criação da
-        // campanha só pode ser salvo agora, com o Código único real em
-        // mãos (mesmo fluxo de handleSubmitAlbum em Gestao.tsx).
-        if (c.extraMaterialJson && resultado.codigoUnico) {
-          try {
-            const extra = parseJsonSafe<{
-              shopAtivo?: boolean;
-              shop?: unknown[];
-              infoAtivo?: boolean;
-              info?: string;
-              visualAtivo?: boolean;
-              arte?: unknown[];
-            }>(c.extraMaterialJson);
-            if (extra && (extra.shopAtivo || extra.infoAtivo || extra.visualAtivo)) {
-              const fakeRequest = new Request("https://internal.empire/api/gestao/extra", {
-                method: "POST",
-                body: JSON.stringify({
-                  codigoUnico: resultado.codigoUnico,
-                  tipo: "album",
-                  shop: extra.shopAtivo ? extra.shop || [] : [],
-                  info: extra.infoAtivo ? extra.info || "" : "",
-                  arte: extra.visualAtivo ? extra.arte || [] : [],
-                }),
-              });
-              await saveExtraMaterialController(fakeRequest);
-            }
-          } catch (err) {
-            console.warn(
-              "[processarLancamentosPreSaveScheduled] Falha ao salvar material extra:",
-              err,
-            );
-          }
-        }
-
-        // Modo "missao": grava o valor final acumulado na coluna S
-        // ("PRE-SAVE") da linha recém-criada em "EDIÇÃO CHARTS ÁLBUMS" —
-        // a fórmula de Q já usa essa coluna (S2*3,33 quando C2=1). Modo
-        // "contagem" NUNCA escreve nada em S (vanity puro, nunca afeta o
-        // placar do álbum).
-        if (c.modo === "missao" && resultado.codigoUnico) {
-          try {
-            const rows = await googleSheetsService.edicaoCharts.readValues(
-              "EDIÇÃO CHARTS ÁLBUMS",
-              "A1:T20000",
-            );
-            const header = rows[0] || [];
-            // Confirma o índice real da coluna "PRE-SAVE" lendo o cabeçalho
-            // em vez de assumir a posição 19 (S) às ciegas — se o usuário
-            // mover a coluna, isso continua certo.
-            let colIndex = header.findIndex(
-              (h) => normalizeComparison(h) === "pre save" || normalizeComparison(h) === "presave",
-            );
-            if (colIndex < 0) colIndex = 18; // fallback: S = índice 18 (0-based), 19ª coluna
-            const colLetra = String.fromCharCode(65 + colIndex);
-            let linhaAlvo = -1;
-            for (let i = 1; i < rows.length; i++) {
-              if (
-                normalizeComparison(rows[i]?.[17]) === normalizeComparison(resultado.codigoUnico)
-              ) {
-                linhaAlvo = i + 1;
-                break;
-              }
-            }
-            if (linhaAlvo > 0) {
-              await googleSheetsService.edicaoCharts.updateValues(
-                "EDIÇÃO CHARTS ÁLBUMS",
-                `${colLetra}${linhaAlvo}:${colLetra}${linhaAlvo}`,
-                [[String(Math.round(acumuladoFinal))]],
-              );
-            } else {
-              // BUG REAL confirmado em produção (2026-11-12, Samantha Cooper
-              // "WELL, IT'S OVER"): quando a linha não é achada (ex: leitura
-              // de 400 mil células demorando/rate-limit bem na hora em que a
-              // linha do álbum acabou de ser criada), o bônus de missão
-              // nunca é gravado em S E ninguém nunca fica sabendo — essa
-              // falha ficava só num console.warn que ninguém vê. Agora
-              // sempre loga em LOGS (visível pro admin) quando a linha não é
-              // encontrada, igual já é feito pra faixas inéditas faltando.
-              registrarLogSistema({
-                categoria: "Erro do app",
-                oQueAconteceu: `ATENÇÃO: bônus de missão (${Math.round(acumuladoFinal)}) do pre-save de "${c.albumTituloFull}" NÃO foi gravado na coluna PRE-SAVE de EDIÇÃO CHARTS ÁLBUMS — linha com Código único "${resultado.codigoUnico}" não encontrada.`,
-                onde: "lancarCampanhaPreSave",
-                causaProvavel:
-                  "A linha do álbum em EDIÇÃO CHARTS ÁLBUMS pode não ter sido criada ainda (timing) ou a leitura falhou por rate-limit do Sheets.",
-                comoResolver:
-                  `Confira a linha do álbum "${c.albumTituloFull}" em EDIÇÃO CHARTS ÁLBUMS e grave manualmente ${Math.round(acumuladoFinal)} na coluna PRE-SAVE (S) se estiver vazia.`,
-              }).catch(() => {});
-            }
-          } catch (err) {
-            console.warn(
-              "[processarLancamentosPreSaveScheduled] Falha ao gravar coluna PRE-SAVE:",
-              err,
-            );
-            registrarLogSistema({
-              categoria: "Erro do app",
-              oQueAconteceu: `ATENÇÃO: falha ao gravar o bônus de missão (${Math.round(acumuladoFinal)}) do pre-save de "${c.albumTituloFull}" na coluna PRE-SAVE de EDIÇÃO CHARTS ÁLBUMS.`,
-              onde: "lancarCampanhaPreSave",
-              detalheTecnico: err instanceof Error ? err.message : String(err),
-              comoResolver:
-                `Confira a linha do álbum "${c.albumTituloFull}" em EDIÇÃO CHARTS ÁLBUMS e grave manualmente ${Math.round(acumuladoFinal)} na coluna PRE-SAVE (S) se estiver vazia.`,
-            }).catch(() => {});
-          }
-        }
-
-  c.status = "lancada";
-  c.codigoUnicoAlbum = resultado.codigoUnico || "";
-  await writeCampanha(c);
-
-  registrarLogSistema({
-    categoria: "Ação concluída",
-    oQueAconteceu: `Pre-save de "${c.albumTituloFull}" lançado automaticamente no dia D (modo ${c.modo}).`,
-    onde: "processarLancamentosPreSaveScheduled",
-  }).catch(() => {});
 }
 
 // -------------------- LOCK DE COMENTÁRIOS (pré-lançamento) --------------------

@@ -123,7 +123,18 @@ export async function criarLancamento(
         ),
     ),
   ];
-  await d.batch(statements);
+  try {
+    await d.batch(statements);
+  } catch (err) {
+    // Corrida: outra execução criou o mesmo lançamento entre o SELECT e o
+    // INSERT (o batch é atômico, então nada parcial ficou gravado).
+    const agora = await d
+      .prepare(`SELECT campanha_id FROM presave_lancamentos WHERE campanha_id = ?`)
+      .bind(l.campanhaId)
+      .all();
+    if ((agora.results?.length || 0) > 0) return false;
+    throw err;
+  }
   return true;
 }
 

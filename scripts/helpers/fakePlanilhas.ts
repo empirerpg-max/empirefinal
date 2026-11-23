@@ -6,6 +6,7 @@
 // - Albuns / EDIÇÃO CHARTS ÁLBUMS / REGISTRO DE MÚSICA / PreSave_Album.
 // `falhas` deixa um teste fazer uma operação lançar (uma vez ou sempre).
 import type { DepsEscrita } from "../../backend/src/controllers/presaveLancamento/executores";
+import { registrarChamadaExterna } from "../../backend/src/services/orcamentoChamadas";
 
 type Aba = string[][]; // índice 0 = linha 1
 export const norm = (v: unknown) =>
@@ -46,6 +47,7 @@ export class FakePlanilhas {
   }
 
   private talvezFalhar(op: string) {
+    registrarChamadaExterna(); // cada operação falsa conta como 1 chamada externa
     const n = this.falhas.get(op) ?? 0;
     if (n > 0) {
       this.falhas.set(op, n - 1);
