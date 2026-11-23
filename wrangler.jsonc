@@ -28,7 +28,8 @@
   // TV_Participacao_Processada, a transmissão de 12/08 foi marcada como
   // processada manualmente (evita duplicar o lote já gravado em REGISTRO) e
   // REGISTRO foi conferido sem duplicatas.
+  // 2º cron = pre-save em passos, separado dos outros jobs (src/cronJobs.ts).
   "triggers": {
-    "crons": ["*/10 * * * *"]
+    "crons": ["*/10 * * * *", "2-59/10 * * * *"]
   }
 }
