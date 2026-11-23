@@ -17,6 +17,7 @@ import {
   acharFaixaEmEdicaoCharts,
   acharFaixaEmMusicas,
   acharNoRegistro,
+  existeExtraDoAlbum,
 } from "./busca";
 
 type PlanilhaChave = "principal" | "edicaoCharts" | "registrosCharts";
@@ -258,7 +259,7 @@ async function passoFaixaCharts(ctx: ContextoLancamento, num: number, p: Passo, 
     const achado = await acharFaixaEmEdicaoCharts(deps, songTitle, ctx.albumFullTitle);
     if (achado) {
       exigir(!!achado.codigoUnico, `Linha ${achado.linha} de EDIÇÃO CHARTS sem Código único.`);
-      return { linhaCharts: achado.linha, codigoUnico: achado.codigoUnico };
+      return { linhaCharts: achado.linha, codigoUnico: achado.codigoUnico, preexistente: true };
     }
   }
   const linhaCharts = await deps.registrarNaEdicaoCharts({
@@ -276,11 +277,20 @@ async function passoFaixaCharts(ctx: ContextoLancamento, num: number, p: Passo, 
   return { linhaCharts, codigoUnico };
 }
 
-async function passoFaixaCodigo(ctx: ContextoLancamento, num: number, deps: DepsEscrita) {
+async function passoFaixaCodigo(ctx: ContextoLancamento, num: number, p: Passo, deps: DepsEscrita) {
   const musicas = resultadoDe(ctx, `faixa:${num}:musicas`);
   const charts = resultadoDe(ctx, `faixa:${num}:charts`);
   const linha = Number(musicas.linha);
   const codigoUnico = String(charts.codigoUnico);
+  if (p.procurarAntes) {
+    // Código já copiado = este passo já rodou (INFOS MÚSICAS incluso): só
+    // garante o espelho no D1, sem regravar nada na planilha.
+    const z = await deps.readFresh("principal", "Musicas", `Z${linha}:Z${linha}`);
+    if (String(z?.[0]?.[0] || "").trim() === codigoUnico) {
+      exigir(await deps.mirrorMusicaRowParaD1(linha), `Falha ao espelhar Musicas linha ${linha} no D1.`);
+      return { codigoUnico, linha, jaCopiado: true };
+    }
+  }
   exigir(
     await deps.updateValues("principal", "Musicas", `Z${linha}`, [[codigoUnico]]),
     `Falha ao copiar o Código único para Musicas!Z${linha}.`,
@@ -295,8 +305,12 @@ async function passoFaixaCodigo(ctx: ContextoLancamento, num: number, deps: Deps
 async function passoFaixaRegistro(ctx: ContextoLancamento, num: number, p: Passo, deps: DepsEscrita) {
   const f = faixaDoNum(ctx, num);
   const songTitle = String(resultadoDe(ctx, `faixa:${num}:musicas`).songTitle);
-  if (p.procurarAntes && (await acharNoRegistro(deps, songTitle, ctx.albumFullTitle))) {
-    return { songTitle, achado: true };
+  if (p.procurarAntes) {
+    // Reconciliação: faixa que já estava na EDIÇÃO CHARTS já foi registrada.
+    if (p.resultado?.reconciliacao && resultadoDe(ctx, `faixa:${num}:charts`).preexistente) {
+      return { songTitle, jaNosCharts: true };
+    }
+    if (await acharNoRegistro(deps, songTitle, ctx.albumFullTitle)) return { songTitle, achado: true };
   }
   await deps.registrarNoRegistroDeMusica({
     songTitle,
@@ -330,16 +344,20 @@ async function passoVinculo(ctx: ContextoLancamento, num: number, deps: DepsEscr
   return { linhas };
 }
 
-async function passoTracklist(ctx: ContextoLancamento, deps: DepsEscrita) {
+async function passoTracklist(ctx: ContextoLancamento, p: Passo, deps: DepsEscrita) {
   const album = resultadoDe(ctx, "album");
   const linha = Number(album.linhaAlbuns);
+  // Campanha do fluxo antigo: o álbum ficou com outro tópico (não o reservado).
+  const topico = String(album.albumTopicId || ctx.c.albumTopicId);
   // Confere que a linha é mesmo deste álbum antes de gravar (erro real de
   // 23/11: tracklist gravada na linha do álbum vizinho).
-  const conf = await deps.readFresh("principal", "Albuns", `B${linha}:B${linha}`);
+  const conf = await deps.readFresh("principal", "Albuns", `B${linha}:M${linha}`);
   exigir(
-    String(conf?.[0]?.[0] || "").trim() === ctx.c.albumTopicId,
-    `Albuns linha ${linha} não é do álbum ${ctx.c.albumTopicId} — tracklist NÃO gravada.`,
+    String(conf?.[0]?.[0] || "").trim() === topico,
+    `Albuns linha ${linha} não é do álbum ${topico} — tracklist NÃO gravada.`,
   );
+  // Já existe tracklist (ex.: reordenada pelo jogador depois): não sobrescreve.
+  if (p.procurarAntes && String(conf?.[0]?.[11] || "").trim()) return { linhaAlbuns: linha, mantida: true };
   const { construirTracklistEntries } = await import("../gestaoController");
   const tracklist = construirTracklistEntries(ctx.c.faixas.map(comoPayload), ctx.c.artista);
   exigir(
@@ -349,8 +367,10 @@ async function passoTracklist(ctx: ContextoLancamento, deps: DepsEscrita) {
   return { linhaAlbuns: linha, faixas: tracklist.length };
 }
 
-async function passoExtra(ctx: ContextoLancamento, deps: DepsEscrita) {
+async function passoExtra(ctx: ContextoLancamento, p: Passo, deps: DepsEscrita) {
   const codigoUnico = String(resultadoDe(ctx, "album").codigoUnicoAlbum);
+  // Já gravado (talvez editado depois pelo jogador): não sobrescreve.
+  if (p.procurarAntes && (await existeExtraDoAlbum(deps, codigoUnico))) return { codigoUnico, mantido: true };
   const e = JSON.parse(ctx.c.extraMaterialJson || "{}") as {
     shopAtivo?: boolean;
     shop?: unknown[];
@@ -382,6 +402,9 @@ async function passoBonus(ctx: ContextoLancamento, p: Passo, deps: DepsEscrita) 
   let linha = -1;
   for (let i = 1; i < rows.length; i++) if (norm(rows[i]?.[17]) === norm(codigo)) linha = i + 1;
   exigir(linha > 0, `Álbum ${codigo} não encontrado em EDIÇÃO CHARTS ÁLBUMS (bônus não gravado).`);
+  const atual = String(rows[linha - 1]?.[col] ?? "").trim();
+  // Bônus já gravado (talvez corrigido à mão): não sobrescreve.
+  if (p.procurarAntes && atual) return { valor: Number(atual.replace(/\D/g, "")) || atual, linha, mantido: true };
   const letra = String.fromCharCode(65 + col);
   exigir(
     await deps.updateValues("edicaoCharts", "EDIÇÃO CHARTS ÁLBUMS", `${letra}${linha}`, [[String(Math.round(valor))]]),
@@ -415,7 +438,7 @@ export async function executarPasso(
     const num = Number(faixa[1]);
     if (faixa[2] === "musicas") return passoFaixaMusicas(ctx, num, p, deps);
     if (faixa[2] === "charts") return passoFaixaCharts(ctx, num, p, deps);
-    if (faixa[2] === "codigo") return passoFaixaCodigo(ctx, num, deps);
+    if (faixa[2] === "codigo") return passoFaixaCodigo(ctx, num, p, deps);
     return passoFaixaRegistro(ctx, num, p, deps);
   }
   const vinculo = p.passo.match(/^vinculo:(\d+)$/);
@@ -424,9 +447,9 @@ export async function executarPasso(
     case "album":
       return passoAlbum(ctx, p, deps);
     case "tracklist":
-      return passoTracklist(ctx, deps);
+      return passoTracklist(ctx, p, deps);
     case "extra":
-      return passoExtra(ctx, deps);
+      return passoExtra(ctx, p, deps);
     case "bonus":
       return passoBonus(ctx, p, deps);
     case "fechar":

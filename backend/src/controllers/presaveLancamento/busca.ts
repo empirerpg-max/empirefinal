@@ -80,3 +80,35 @@ export async function acharNoRegistro(
   const rows = await deps.readFresh("registrosCharts", "REGISTRO DE MÚSICA", "A1:E20000");
   return rows.some((r) => norm(r?.[1]) === norm(songTitle) && norm(r?.[4]) === norm(albumFullTitle));
 }
+
+/**
+ * Reconciliação de campanha lançada pelo fluxo antigo (que gerava um tópico
+ * NOVO em vez de usar o reservado): acha a linha do álbum em Albuns pelo
+ * tópico reservado, senão pelo Código único (L), senão pelo nome (G) — só
+ * se o nome casar com UMA linha.
+ */
+export async function acharAlbumParaReconciliar(
+  deps: DepsEscrita,
+  c: { albumTopicId: string; codigoUnicoAlbum: string },
+  albumFullTitle: string,
+): Promise<{ linhaAlbuns: number; codigoUnicoAlbum: string; albumTopicId: string } | null> {
+  const rows = await deps.readFresh("principal", "Albuns", "A1:L20000");
+  const linha = (i: number) => ({
+    linhaAlbuns: i + 1,
+    codigoUnicoAlbum: String(rows[i]?.[11] || "").trim(),
+    albumTopicId: String(rows[i]?.[1] || "").trim(),
+  });
+  for (let i = 1; i < rows.length; i++) if (norm(rows[i]?.[1]) === norm(c.albumTopicId)) return linha(i);
+  if (c.codigoUnicoAlbum) {
+    for (let i = 1; i < rows.length; i++) if (norm(rows[i]?.[11]) === norm(c.codigoUnicoAlbum)) return linha(i);
+  }
+  const porNome: number[] = [];
+  for (let i = 1; i < rows.length; i++) if (norm(rows[i]?.[6]) === norm(albumFullTitle)) porNome.push(i);
+  return porNome.length === 1 ? linha(porNome[0]) : null;
+}
+
+/** Linha do álbum em Extra_Albuns (A == Código único)? */
+export async function existeExtraDoAlbum(deps: DepsEscrita, codigoUnicoAlbum: string): Promise<boolean> {
+  const rows = await deps.readFresh("principal", "Extra_Albuns", "A1:A20000");
+  return rows.some((r, i) => i > 0 && norm(r?.[0]) === norm(codigoUnicoAlbum));
+}

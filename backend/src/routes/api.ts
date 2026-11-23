@@ -1032,6 +1032,10 @@ export async function handleEmpireApiRoutes(
     // sem acesso de rede direto ao domínio do Worker, só faz GET sem
     // corpo. Ver readParamsBodyOrQuery em preSaveController.ts.
     response = await recalcularTetoPreSaveController(request);
+  } else if (url.pathname === "/api/presave/admin/lancamento") {
+    // Estado do lançamento em passos (só leitura) — ver presaveLancamento/motor.ts.
+    const { adminPresaveLancamentoController } = await import("../controllers/adminPresaveLancamentoController");
+    response = await adminPresaveLancamentoController(request);
   } else if (url.pathname === "/api/presave/editar-faixa") {
     response = await editarFaixaPreSavecontroller(request);
   } else if (url.pathname === "/api/presave/vincular-faixa-existente") {

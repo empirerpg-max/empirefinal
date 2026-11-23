@@ -40,7 +40,13 @@ export function montarPassosLancamento(
 
   const faixas = [...c.faixas].sort((a, b) => a.num - b.num);
   for (const f of faixas.filter((x) => x.inedita)) {
-    for (const sub of SUBPASSOS_FAIXA) add(`faixa:${f.num}:${sub}`);
+    for (const sub of SUBPASSOS_FAIXA) {
+      // Reconciliação: o REGISTRO DE MÚSICA é uma fila que se esvazia depois
+      // de processada — não dá pra saber se a faixa já passou por lá. Se a
+      // faixa já existe na EDIÇÃO CHARTS, ela já foi registrada: não reenvia.
+      if (sub === "registro" && opts.reconciliacao) add(`faixa:${f.num}:${sub}`, { resultado: { reconciliacao: true } });
+      else add(`faixa:${f.num}:${sub}`);
+    }
   }
   for (const f of faixas.filter((x) => !x.inedita)) add(`vinculo:${f.num}`);
 
