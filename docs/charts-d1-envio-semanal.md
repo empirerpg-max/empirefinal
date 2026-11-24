@@ -1,5 +1,7 @@
 # Envio semanal dos charts para o app (Google → Cloudflare D1)
 
+Regras dos países e paradas oficiais: ver docs/charts-regras-paises.md
+
 Toda quinta-feira, depois que a aba **DADOS** da planilha EMPIRE - CHARTS recebe
 a semana nova, um script do Google manda essa semana para o app. O app calcula
 posição anterior, peak, semanas e países e grava no banco. O app **não lê mais**

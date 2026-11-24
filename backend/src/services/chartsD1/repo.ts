@@ -8,8 +8,9 @@ import {
   buscarNoCatalogo, chaveMusica, extrairArtistasDoTitulo, indexarCatalogo, resolverArtistas, semAcentoMaiusculo,
   type LinhaCatalogo, type MusicaCatalogo,
 } from "./artistas";
-import { rankingsDaSemana, type MusicaParaPais, type Pesos } from "./paises";
 import { fixImg, fmt } from "./formato";
+import { regrasDeConfig } from "./regras";
+import { FOCO_SCHEMA } from "./foco";
 
 // Idempotente — roda no começo de cada ingestão (padrão do projeto).
 // Plano grátis do D1: cada linha e cada entrada de índice gravada conta no
@@ -84,6 +85,10 @@ export const CHARTS_D1_SCHEMA: string[] = [
     mensagem TEXT,
     criado_em TEXT DEFAULT (datetime('now'))
   )`,
+  // Regras das paradas por país congeladas na ingestão de cada semana (1 escrita/semana).
+  // Semana sem linha usa REGRAS_PADRAO (versão 1, fixa no código).
+  "CREATE TABLE IF NOT EXISTS chart_regras_semana (data TEXT PRIMARY KEY, versao INTEGER NOT NULL, regras TEXT NOT NULL)",
+  ...FOCO_SCHEMA,
 ];
 
 /**
@@ -388,7 +393,7 @@ async function gravarArtistasEPesos(db: D1DatabaseLike, artistas: string[][], pe
 }
 
 const CATALOGO_SQL =
-  "SELECT titulo, artista, artista_2, artista_3, artista_4, artista_5, artista_6, capa_url, genero, tipo_single FROM musicas";
+  "SELECT titulo, codigo_unico, artista, artista_2, artista_3, artista_4, artista_5, artista_6, capa_url, genero, tipo_single FROM musicas";
 
 export async function carregarCatalogo(db: D1DatabaseLike): Promise<Map<string, MusicaCatalogo>> {
   try {
@@ -527,6 +532,20 @@ function prepararLinhas(
   return { ok: true, dataIso: datas[0], linhas, anomalias };
 }
 
+/**
+ * Statement que grava as regras das paradas por país da semana a partir do
+ * chart_config atual (lido aqui, antes do batch). OR IGNORE: um reenvio da
+ * semana mantém as regras gravadas antes, então mudar o chart_config só afeta
+ * semanas futuras.
+ */
+async function statementRegrasDaSemana(db: D1DatabaseLike, dataIso: string): Promise<D1PreparedStatement> {
+  const cfg = await db.prepare("SELECT chave, valor FROM chart_config").all<{ chave: string; valor: string }>();
+  const regras = regrasDeConfig(new Map(cfg.results.map((c) => [c.chave, String(c.valor ?? "")])));
+  return db
+    .prepare("INSERT OR IGNORE INTO chart_regras_semana (data, versao, regras) VALUES (?, 1, ?)")
+    .bind(dataIso, JSON.stringify(regras));
+}
+
 /** Libera a leitura do D1 na tela (chart_config.charts_d1_ativo = '1'). */
 async function ativarLeitura(db: D1DatabaseLike): Promise<void> {
   await db.prepare("UPDATE chart_config SET valor = '1' WHERE chave = 'charts_d1_ativo'").run();
@@ -623,13 +642,15 @@ export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao
   }
 
   const chartsGravados = CHARTS.filter((c) => calculadas.some((l) => l.chart === c));
-  // Tudo ou nada: a semana, as datas e o HOF entram juntos.
+  const regrasDaSemana = await statementRegrasDaSemana(db, dataIso);
+  // Tudo ou nada: a semana, as datas, o HOF e as regras da semana entram juntos.
   await db.batch([
     db.prepare(`DELETE FROM chart_semana WHERE chart IN (${CHARTS.map(() => "?").join(", ")}) AND data = ?`).bind(...CHARTS, dataIso),
     db.prepare(`DELETE FROM chart_datas WHERE chart IN (${CHARTS.map(() => "?").join(", ")}) AND data = ?`).bind(...CHARTS, dataIso),
     ...insertsChartSemana(db, dataIso, calculadas),
     ...insertsEmLotes(db, "INSERT INTO chart_datas (chart, data)", chartsGravados.map((c) => [c, dataIso])),
     ...hof,
+    regrasDaSemana,
   ]);
   await recalcularSemanaSeguinte(db, charts, dataIso);
   if (payload.ativar === true) await ativarLeitura(db);
@@ -640,7 +661,7 @@ export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao
 // ---- Leitura (/api/charts) ----
 
 /** Banco sem as tabelas dos charts (nenhuma ingestão ainda) → leitura vazia, não erro. */
-async function consultar<T>(db: D1DatabaseLike, sql: string, ...params: unknown[]): Promise<T[]> {
+export async function consultar<T>(db: D1DatabaseLike, sql: string, ...params: unknown[]): Promise<T[]> {
   try {
     return (await db.prepare(sql).bind(...params).all<T>()).results;
   } catch (e) {
@@ -683,7 +704,7 @@ export async function carregarGenerosArtistas(db: D1DatabaseLike): Promise<Map<s
 const generoEfetivo = (generoMusica: string | null, art: string, generosArtistas: Map<string, string>): string =>
   (generoMusica ?? "").trim() || generosArtistas.get(chaveArtistaInfo(art)) || "";
 
-const lerArtistas = (json: string | null): string[] => {
+export const lerArtistas = (json: string | null): string[] => {
   try {
     const v = JSON.parse(json || "[]");
     return Array.isArray(v) ? v.map((a) => String(a ?? "").trim()).filter(Boolean) : [];
@@ -693,11 +714,11 @@ const lerArtistas = (json: string | null): string[] => {
 };
 
 /** Primeiro artista gravado; sem nenhum, o principal do "Artista - Título". */
-const artistaPrincipal = (artistas: string[], titulo: string): string =>
+export const artistaPrincipal = (artistas: string[], titulo: string): string =>
   artistas[0] || extrairArtistasDoTitulo(titulo)[0] || "";
 
 /** Capa: catálogo (single vence álbum) → foto do artista principal → "". */
-const capaDe = (titulo: string, art: string, cat: Map<string, MusicaCatalogo>, fotos: Map<string, string>): string =>
+export const capaDe = (titulo: string, art: string, cat: Map<string, MusicaCatalogo>, fotos: Map<string, string>): string =>
   fixImg(buscarNoCatalogo(titulo, cat)?.capa) || fixImg(fotos.get(art.trim().toUpperCase())) || "";
 
 /** Há pesos de país pra plataforma? Sem eles, COUNTRIES segue da planilha. */
@@ -811,97 +832,9 @@ export interface LinhaPaisApi {
   art: string;
   capa: string;
   st: string;
-}
-
-const numeroConfig = (v: string | undefined, padrao: number): number => {
-  const n = v === undefined ? NaN : Number(v);
-  return Number.isFinite(n) ? n : padrao;
-};
-
-/**
- * Ranking de cada país de `pais_peso` (regra B + bônus de nacionalidade) na
- * semana; `st` compara com o ranking do mesmo país na semana anterior do chart.
- * `mes` leva a data da semana (`dd/mm/aaaa`), que o front exibe como vier.
- */
-export async function linhasPaises(
-  db: D1DatabaseLike,
-  plataforma: ChartId,
-  dataBr: string,
-  cat: Map<string, MusicaCatalogo>,
-  fotos: Map<string, string>,
-): Promise<LinhaPaisApi[]> {
-  const dataIso = dataBrParaIso(dataBr);
-  const [pesosRows, cfgRows, nacRows, anteriorRows] = await Promise.all([
-    consultar<{ pais: string; peso: number }>(
-      db,
-      "SELECT pais, peso FROM pais_peso WHERE plataforma = ? ORDER BY peso DESC, pais",
-      plataforma,
-    ),
-    consultar<{ chave: string; valor: string }>(db, "SELECT chave, valor FROM chart_config"),
-    consultar<{ nome_upper: string; nacionalidade: string }>(
-      db,
-      "SELECT nome_upper, nacionalidade FROM artista_info WHERE nacionalidade IS NOT NULL AND nacionalidade != ''",
-    ),
-    consultar<{ data: string | null }>(db, "SELECT MAX(data) AS data FROM chart_semana WHERE chart = ? AND data < ?", plataforma, dataIso),
-  ]);
-  const pesos: Pesos = new Map(pesosRows.map((p) => [p.pais.trim().toUpperCase(), p.peso]));
-  if (!pesos.size) return [];
-  // Nacionalidade casa com o país de pais_peso sem diferenciar acento ("Australia" = "AUSTRÁLIA").
-  const paisDePesos = new Map([...pesos.keys()].map((p) => [semAcentoMaiusculo(p), p]));
-  const cfg = new Map(cfgRows.map((c) => [c.chave, c.valor]));
-  const bonus = numeroConfig(cfg.get("bonus_nacionalidade"), 0.2);
-  const top = numeroConfig(cfg.get("top_pais"), 50);
-  const nacionalidade = new Map(
-    nacRows.map((n) => {
-      const pais = semAcentoMaiusculo(n.nacionalidade);
-      return [semAcentoMaiusculo(n.nome_upper), paisDePesos.get(pais) ?? pais];
-    }),
-  );
-
-  const musicasDaSemana = async (iso: string): Promise<MusicaParaPais[]> => {
-    const rows = await consultar<{ titulo: string; titulo_norm: string; valor: number; artistas: string }>(
-      db,
-      "SELECT titulo, titulo_norm, valor, artistas FROM chart_semana WHERE chart = ? AND data = ? ORDER BY pos",
-      plataforma,
-      iso,
-    );
-    return rows.map((r) => {
-      const artistas = lerArtistas(r.artistas);
-      const nacs = new Set<string>();
-      for (const a of artistas) {
-        const n = nacionalidade.get(semAcentoMaiusculo(a));
-        if (n) nacs.add(n);
-      }
-      return {
-        tituloNorm: r.titulo_norm,
-        titulo: r.titulo || "",
-        artistaPrincipal: artistaPrincipal(artistas, r.titulo || ""),
-        valor: r.valor ?? 0,
-        nacionalidades: nacs,
-      };
-    });
-  };
-  const anteriorIso = anteriorRows[0]?.data ?? null;
-  const [atual, anterior] = await Promise.all([
-    musicasDaSemana(dataIso),
-    anteriorIso ? musicasDaSemana(anteriorIso) : Promise.resolve([] as MusicaParaPais[]),
-  ]);
-  if (!atual.length) return [];
-
-  // Capa por título resolvida uma vez (o mesmo título aparece em vários países).
-  const capas = new Map<string, string>();
-  const capa = (titulo: string, art: string) => {
-    const k = `${titulo}\u0000${art}`;
-    if (!capas.has(k)) capas.set(k, capaDe(titulo, art, cat, fotos));
-    return capas.get(k)!;
-  };
-  const linhas: LinhaPaisApi[] = [];
-  for (const [pais, ranking] of rankingsDaSemana(atual, anterior, pesos, bonus, top)) {
-    for (const m of ranking) {
-      linhas.push({ pais, pos: m.pos, tit: m.titulo, val: fmt(m.val), mes: dataBr, art: m.art, capa: capa(m.titulo, m.art), st: m.st });
-    }
-  }
-  return linhas;
+  /** Só nas paradas oficiais: ordem no seletor e descrição da metodologia. */
+  ordem?: number;
+  desc?: string;
 }
 
 /** #1 da semana mais recente do chart (banners da Início); null sem dados. */

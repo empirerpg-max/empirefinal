@@ -49,6 +49,8 @@ export function semAcentoMaiusculo(s: string): string {
 
 export interface MusicaCatalogo {
   chave: string;
+  /** musicas.codigo_unico (liga o chart ao histórico de foco); "" se ausente. */
+  codigoUnico: string;
   artistas: string[];
   capa: string;
   genero: string;
@@ -57,6 +59,7 @@ export interface MusicaCatalogo {
 
 export interface LinhaCatalogo {
   titulo: string;
+  codigo_unico?: string | null;
   artista: string;
   artista_2?: string | null;
   artista_3?: string | null;
@@ -89,6 +92,7 @@ export function indexarCatalogo(rows: LinhaCatalogo[]): Map<string, MusicaCatalo
       if (atual && !(atual.ehFaixaDeAlbum && !ehFaixaDeAlbum)) continue;
       cat.set(chave, {
         chave,
+        codigoUnico: (r.codigo_unico || "").trim(),
         artistas,
         capa: (r.capa_url || "").trim(),
         genero: (r.genero || "").trim(),

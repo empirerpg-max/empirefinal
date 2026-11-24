@@ -42,6 +42,8 @@ import {
   saveExtraMaterial,
   type ExtraMaterialEditorValue,
 } from "./ExtraMaterial";
+import { FocoSelect } from "./FocoSelect";
+import { salvarFoco, rotuloFoco } from "@/lib/focoMusica";
 
 export type TabType = "musica" | "video" | "album" | "banners" | "empiretv";
 
@@ -81,6 +83,46 @@ export interface TrackConfig {
   // Disco dentro do álbum (1, 2, 3...) — só relevante pra "Deluxe"/"Edição
   // Especial" (ver TIPOS_ALBUM_MULTIDISCO abaixo); ausente = disco 1.
   disco?: number;
+  // Foco (país-alvo) — só pedido quando a faixa sai como single na hora
+  // (inédita + tópico próprio + tipo ≠ TRACKLIST ALBUM). Só fica no front:
+  // é gravado depois, com o Código único devolvido pelo backend.
+  foco?: string;
+}
+
+// Faixa de álbum que vira single já na publicação precisa de foco.
+// Álbum retroativo força todas as faixas a pendentes (sem tópico agora).
+function faixaExigeFoco(f: TrackConfig, retroativo = false): boolean {
+  return (
+    !retroativo &&
+    f.inedita &&
+    !!f.abrirTopico &&
+    (f.tipoSingle || "TRACKLIST ALBUM") !== "TRACKLIST ALBUM"
+  );
+}
+
+type CodigoFaixaInedita = { num: number; disco: number; titulo: string; codigoUnico: string };
+
+// Grava o foco de cada faixa enviada, casando com o Código único devolvido
+// pelo backend por disco + número + título (como foram enviados). Devolve
+// quantas faixas ficaram sem foco salvo.
+async function salvarFocosFaixas(
+  enviadas: { num: number; disco: number; titulo: string; foco: string }[],
+  codigos: CodigoFaixaInedita[] | undefined,
+): Promise<number> {
+  let falhas = 0;
+  for (const f of enviadas) {
+    const achado = (codigos || []).find(
+      (c) => c.num === f.num && (c.disco || 1) === f.disco && c.titulo === f.titulo,
+    );
+    const ok = achado
+      ? await salvarFoco(achado.codigoUnico, f.foco).then(
+          () => true,
+          () => false,
+        )
+      : false;
+    if (!ok) falhas++;
+  }
+  return falhas;
 }
 
 export interface MusicaEmChart {
@@ -196,8 +238,10 @@ const CATEGORIAS_VIDEO = [
 export const FaixaEditor: React.FC<{
   faixa: TrackConfig;
   onChange: (patch: Partial<TrackConfig>) => void;
+  /** Faixa sai como single agora: mostra o select de foco (obrigatório). */
+  focoObrigatorio?: boolean;
   myChartSongs: MusicaEmChart[];
-}> = ({ faixa, onChange, myChartSongs }) => {
+}> = ({ faixa, onChange, myChartSongs, focoObrigatorio }) => {
   const buscaResultados = (faixa.buscaQuery || "").trim()
     ? myChartSongs.filter((m) =>
         m.label.toLowerCase().includes((faixa.buscaQuery || "").trim().toLowerCase()),
@@ -336,6 +380,19 @@ export const FaixaEditor: React.FC<{
             />
             Abrir tópico próprio pra essa faixa no fórum (senão ela fica só dentro do álbum)
           </label>
+          {focoObrigatorio && (
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                Foco do lançamento
+              </span>
+              <FocoSelect
+                value={faixa.foco || ""}
+                onChange={(v) => onChange({ foco: v })}
+                obrigatorio
+                className="w-full min-w-0 bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none disabled:opacity-50"
+              />
+            </div>
+          )}
         </>
       ) : (
         <div className="relative">
@@ -529,10 +586,16 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [nomeMusica, setNomeMusica] = useState<string>("");
   const [tipoSingle, setTipoSingle] = useState<string>("LEAD SINGLE");
   const [tipoMusica, setTipoMusica] = useState<string>("SOLO");
+  // Foco (país-alvo) do lançamento — obrigatório só em "Lançamento Novo":
+  // substituir/vincular usam o código da música que já existe (e o foco
+  // dela, se já definido, fica travado).
+  const [focoMusica, setFocoMusica] = useState<string>("");
   const [letraInput, setLetraInput] = useState<string>("");
   // Música existente referenciada (obrigatório quando opcaoChart é "b" ou "c")
   const [musicaReferenciaQuery, setMusicaReferenciaQuery] = useState<string>("");
   const [musicaReferencia, setMusicaReferencia] = useState<ExistingTrack | null>(null);
+
+  const exigeFocoMusica = opcaoChart === OPCOES_CHART[0].value;
 
   // Aviso de "essa música já existe" quando o jogador escolhe "Lançamento
   // Novo" (a) mas digita um título parecido com algo que o artista dele já
@@ -931,6 +994,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setErrorMsg("Informe a data real de lançamento do material antigo.");
       return;
     }
+    if (exigeFocoMusica && !focoMusica) {
+      setErrorMsg("Escolha o foco do lançamento.");
+      return;
+    }
 
     // Duplo aviso antes de publicar de fato — mostra um resumo do que foi
     // preenchido pro jogador conferir (a pedido do usuário, depois do erro
@@ -947,6 +1014,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         { label: "Tipo de Single", valor: tipoSingle },
         { label: "Tipo de Música", valor: tipoMusica },
         { label: "Objetivo no Chart", valor: opcaoEscolhida?.title || opcaoChart },
+        ...(exigeFocoMusica
+          ? [{ label: "Foco do lançamento", valor: rotuloFoco(focoMusica) }]
+          : []),
         ...(musicaReferencia
           ? [
               {
@@ -1040,6 +1110,19 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         }).catch(() => {});
       }
 
+      // Foco do lançamento — mesmo esquema do material extra: só dá pra
+      // gravar agora, com o Código único real. Se falhar, a música já foi
+      // criada: avisa em vez de desfazer o cadastro.
+      if (exigeFocoMusica && focoMusica) {
+        const focoOk = codigoUnicoNovo
+          ? await salvarFoco(codigoUnicoNovo, focoMusica).then(
+              () => true,
+              () => false,
+            )
+          : false;
+        if (!focoOk) setErrorMsg("Música registrada, mas o foco não foi salvo. Defina na edição.");
+      }
+
       setSuccessMsg("Lançamento de Música publicado com sucesso!");
       setNomeMusica("");
       setCapaFile(null);
@@ -1050,6 +1133,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setMusicaReferenciaQuery("");
       setMusicaReferencia(null);
       setOpcaoChart(OPCOES_CHART[0].value);
+      setFocoMusica("");
       setExtraMusica(emptyExtraMaterialEditorValue());
       setDataLancamentoAntigo("");
     } catch (err: any) {
@@ -1261,6 +1345,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         );
         return;
       }
+      if (faixaExigeFoco(faixa, albumRetroativo) && !faixa.foco) {
+        setErrorMsg(`Escolha o foco do lançamento da Faixa #${faixa.num}.`);
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -1312,6 +1400,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
 
       setUploadProgress("Registrando álbum no sistema...");
 
+      // Mesma numeração enviada ao backend — usada também pra casar o foco
+      // de cada faixa com o Código único devolvido.
+      const faixasOrdenadas = recalcularOrdemPorDisco(faixasComAudio);
+
       const payload = {
         tituloAlbum,
         artistaAlbum: artistaResponsavel,
@@ -1326,7 +1418,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         // construirTracklistEntries em gestaoController.ts). Álbum sem
         // multi-disco (disco sempre 1 implícito) continua se comportando
         // exatamente como antes.
-        faixas: recalcularOrdemPorDisco(faixasComAudio).map((f) => ({
+        faixas: faixasOrdenadas.map((f) => ({
           num: f.num,
           disco: f.disco || 1,
           inedita: f.inedita,
@@ -1362,6 +1454,18 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           info: extraAlbum.infoAtivo ? extraAlbum.info : "",
           arte: extraAlbum.visualAtivo ? extraAlbum.arte : [],
         }).catch(() => {});
+      }
+
+      // Foco das faixas lançadas como single — só dá pra gravar agora, com
+      // o Código único de cada uma. Falha não desfaz o álbum, só avisa.
+      const faixasComFoco = faixasOrdenadas
+        .filter((f) => faixaExigeFoco(f, albumRetroativo) && f.foco)
+        .map((f) => ({ num: f.num, disco: f.disco || 1, titulo: f.titulo, foco: f.foco || "" }));
+      if (faixasComFoco.length > 0) {
+        const falhasFoco = await salvarFocosFaixas(faixasComFoco, data.data?.codigosFaixasIneditas);
+        if (falhasFoco > 0) {
+          setErrorMsg("Música registrada, mas o foco não foi salvo. Defina na edição.");
+        }
       }
 
       // BUG REAL encontrado (álbum de 12 faixas publicando só 5, sem
@@ -1423,6 +1527,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         setErrorMsg(
           `Informe o link do áudio (Drive ou YouTube) ou envie um arquivo pra nova faixa #${faixa.num}.`,
         );
+        return;
+      }
+      if (faixaExigeFoco(faixa) && !faixa.foco) {
+        setErrorMsg(`Escolha o foco do lançamento da nova faixa #${faixa.num}.`);
         return;
       }
     }
@@ -1505,6 +1613,18 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Erro ao substituir álbum.");
+      }
+
+      // Foco das novas faixas lançadas como single (o backend grava sempre
+      // no disco 1 aqui, já que a substituição não manda disco).
+      const novasComFoco = substFaixasComAudio
+        .filter((f) => faixaExigeFoco(f) && f.foco)
+        .map((f) => ({ num: f.num, disco: 1, titulo: f.titulo, foco: f.foco || "" }));
+      if (novasComFoco.length > 0) {
+        const falhasFoco = await salvarFocosFaixas(novasComFoco, data.data?.codigosFaixasIneditas);
+        if (falhasFoco > 0) {
+          setErrorMsg("Música registrada, mas o foco não foi salvo. Defina na edição.");
+        }
       }
 
       setSuccessMsg("Álbum atualizado com sucesso!");
@@ -1921,6 +2041,22 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 </div>
               </div>
 
+              {/* FOCO DO LANÇAMENTO — só em "Lançamento Novo" */}
+              {exigeFocoMusica && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    Foco do lançamento
+                  </label>
+                  <FocoSelect
+                    value={focoMusica}
+                    onChange={setFocoMusica}
+                    obrigatorio
+                    disabled={isSubmitting}
+                    className="w-full min-w-0 bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+              )}
+
               {/* OPÇÕES DE CHART — ícone/cor própria por opção (antes eram 3
               cards visualmente idênticos, causa de gente clicar errado). */}
               <div className="space-y-3">
@@ -2199,13 +2335,18 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               </div>
 
               {/* BOTÃO PRINCIPAL DE ENVIO */}
+              {exigeFocoMusica && !focoMusica && (
+                <p className="text-[11px] font-bold text-amber-400 text-center">
+                  Escolha o foco do lançamento.
+                </p>
+              )}
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={isSubmitting || (exigeFocoMusica && !focoMusica)}
+                className="w-full px-3 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <Sparkles className="size-5" />
-                <span>
+                <Sparkles className="size-5 shrink-0" />
+                <span className="min-w-0 text-center">
                   {isSubmitting ? uploadProgress || "Enviando..." : "Publicar Lançamento de Música"}
                 </span>
               </button>
@@ -2843,6 +2984,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                           <FaixaEditor
                             faixa={faixa}
                             myChartSongs={myChartSongs}
+                            focoObrigatorio={faixaExigeFoco(faixa, albumRetroativo)}
                             onChange={(patch) => {
                               const updated = [...faixasConfig];
                               updated[idx] = { ...updated[idx], ...patch };
@@ -3057,6 +3199,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                               key={idx}
                               faixa={faixa}
                               myChartSongs={myChartSongs}
+                              focoObrigatorio={faixaExigeFoco(faixa)}
                               onChange={(patch) => {
                                 const updated = [...substNovasFaixas];
                                 updated[idx] = { ...updated[idx], ...patch };

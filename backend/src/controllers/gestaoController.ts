@@ -1925,6 +1925,14 @@ export async function processarFaixasDoAlbum(
   const resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
   let faixasIneditasEsperadas = 0;
   let faixasIneditasGravadas = 0;
+  // Código único de cada faixa inédita (com num/disco/título como vieram do
+  // front) — devolvido pro front salvar o foco das faixas lançadas como single.
+  const codigosFaixasIneditas: {
+    num: number;
+    disco: number;
+    titulo: string;
+    codigoUnico: string;
+  }[] = [];
 
   // BUG REAL encontrado (álbum retroativo de 12 faixas publicando só 5):
   // a versão antiga lia H2:H50000 (quase 50 mil células) TODA VEZ que era
@@ -2098,6 +2106,12 @@ export async function processarFaixasDoAlbum(
       if (faixaRowIndex && edicaoChartsRowIndex) {
         const codigoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
         if (codigoGerado) {
+          codigosFaixasIneditas.push({
+            num: faixa.num,
+            disco: faixa.disco || 1,
+            titulo: faixa.titulo,
+            codigoUnico: codigoGerado,
+          });
           await googleSheetsService.principal
             .updateValues("Musicas", `Z${faixaRowIndex}`, [[codigoGerado]])
             .catch((err) =>
@@ -2152,7 +2166,12 @@ export async function processarFaixasDoAlbum(
     }
   }
 
-  return { resultadosFaixasExistentes, faixasIneditasEsperadas, faixasIneditasGravadas };
+  return {
+    resultadosFaixasExistentes,
+    faixasIneditasEsperadas,
+    faixasIneditasGravadas,
+    codigosFaixasIneditas,
+  };
 }
 
 // Lista os álbuns já lançados na aba Albuns (planilha principal) — usado na
@@ -2271,6 +2290,7 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
           letra: row[4] || "",
           letraSincronizada: row[30] || "",
           pendente: !(row[1] || "").trim(), // sem tópico (coluna B vazia) = pendente
+          codigoUnico: (row[25] || "").trim(), // Z - Código único (o front lê o foco travado dele)
         };
       })
       .sort((a, b) => (a.disco - b.disco) || (a.ordem - b.ordem));
@@ -2941,8 +2961,10 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
   }
 
   let resultadosFaixasExistentes: { titulo: string; ok: boolean; criada: boolean }[] = [];
+  let codigosFaixasIneditas: { num: number; disco: number; titulo: string; codigoUnico: string }[] =
+    [];
   if (novasFaixas.length > 0) {
-    ({ resultadosFaixasExistentes } = await processarFaixasDoAlbum(
+    ({ resultadosFaixasExistentes, codigosFaixasIneditas } = await processarFaixasDoAlbum(
       novasFaixas,
       albumFullTitle,
       artistaAlbum,
@@ -3002,7 +3024,7 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
     mensagem += ` Falha ao vincular: "${faixasFalhas.join('", "')}".`;
   }
 
-  return { titulo: albumFullTitle, mensagem, faixasCriadas, faixasFalhas };
+  return { titulo: albumFullTitle, mensagem, faixasCriadas, faixasFalhas, codigosFaixasIneditas };
 }
 
 // Controller para Substituir álbum já lançado — fina camada HTTP em cima
@@ -3306,7 +3328,7 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
 
   // 3. Processar cada faixa (existente ou inédita) — só depois do álbum
   // já existir de verdade em "Albuns".
-  const { faixasIneditasEsperadas, faixasIneditasGravadas } = await processarFaixasDoAlbum(
+  const resultadoFaixas = await processarFaixasDoAlbum(
     faixasFinal,
     albumFullTitle,
     artistaAlbum,
@@ -3316,6 +3338,8 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
     retroativo ? String(numeroSemanas) : undefined,
     albumTopicId,
   );
+  const { faixasIneditasEsperadas, faixasIneditasGravadas, codigosFaixasIneditas } =
+    resultadoFaixas;
 
   // Grava a tracklist (disco+ordem por faixa, dentro DESTE álbum) em
   // Albuns!M — ver TracklistEntry. Não bloqueia o lançamento se falhar
@@ -3357,6 +3381,7 @@ export async function publicarAlbum(body: CreateAlbumPayload) {
     faixasIneditasGravadas,
     faixasIneditasEsperadas,
     codigoUnico: codigoUnicoAlbum,
+    codigosFaixasIneditas,
     mensagem:
       faixasIneditasFalharam > 0
         ? `Álbum registrado, mas ${faixasIneditasFalharam} faixa(s) inédita(s) falharam ao gravar — confira e adicione de novo se precisar.`

@@ -581,7 +581,7 @@ function Index() {
         <section className="mb-12" aria-labelledby="billboard-h">
           <div className="flex items-center justify-between mb-4">
             <h2 id="billboard-h" className="text-xs font-black uppercase tracking-[0.2em]">
-              Billboard Hot 100 #1
+              Global 100 #1
             </h2>
           </div>
           <Link
@@ -594,7 +594,7 @@ function Index() {
               src={data?.foto}
               size={800}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-              alt={data?.musica ? `Capa: ${data.musica}` : "Billboard Hot 100"}
+              alt={data?.musica ? `Capa: ${data.musica}` : "Global 100"}
               fallback={
                 <div className="w-full h-full flex flex-col items-center justify-center gap-4 opacity-20">
                   <TrendingUp className="size-20" aria-hidden="true" />
@@ -613,7 +613,7 @@ function Index() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-white text-sm font-black uppercase tracking-tight leading-tight mb-0.5 line-clamp-1">
-                    {data?.musica || "Ver Billboard Hot 100"}
+                    {data?.musica || "Ver Global 100"}
                   </h3>
                   <p className="text-primary text-[11px] font-bold uppercase tracking-wider truncate">
                     {data?.artista || "Dados semanais"}

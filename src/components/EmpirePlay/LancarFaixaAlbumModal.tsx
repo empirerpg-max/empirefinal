@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Search, Loader2, Rocket, Disc, Upload, Image as ImageIcon, Plus, Minus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { haptic } from "@/lib/telegram";
@@ -10,6 +10,8 @@ import {
   saveExtraMaterial,
   type ExtraMaterialEditorValue,
 } from "./ExtraMaterial";
+import { FocoSelect } from "./FocoSelect";
+import { lerFoco, salvarFoco, rotuloFoco } from "@/lib/focoMusica";
 
 const TIPOS_SINGLE_FAIXA = [
   "TRACKLIST ALBUM",
@@ -82,6 +84,14 @@ export function LancarFaixaAlbumModal({
   const [audioUrlInput, setAudioUrlInput] = useState("");
   const [extraEdit, setExtraEdit] = useState<ExtraMaterialEditorValue>(emptyExtraMaterialEditorValue());
 
+  // Foco (país-alvo) — obrigatório quando a faixa sai como single (tipo ≠
+  // TRACKLIST ALBUM). Se a faixa já tem foco salvo, ele fica travado.
+  const [foco, setFoco] = useState("");
+  const [focoTravado, setFocoTravado] = useState<string | null>(null);
+  // Faixa selecionada no momento — descarta resposta de lerFoco que chega
+  // depois de o jogador já ter trocado de faixa.
+  const selecionadaRef = useRef<number | null>(null);
+
   const [publicando, setPublicando] = useState(false);
 
   useEffect(() => {
@@ -114,6 +124,17 @@ export function LancarFaixaAlbumModal({
     setCapaPreview(f.capaUrl || null);
     setAudioFile(null);
     setAudioUrlInput(f.audioUrl || "");
+    setFoco("");
+    setFocoTravado(null);
+    selecionadaRef.current = f.musicaRowIndex;
+    if (f.codigoUnico) {
+      lerFoco(f.codigoUnico)
+        .then((r) => {
+          if (selecionadaRef.current !== f.musicaRowIndex) return;
+          if (r.foco) setFocoTravado(r.foco.pais);
+        })
+        .catch(() => {});
+    }
     // Botões do tópico (Shop/Info/Visual) — mesma opção que "Nova Música"
     // já tem, faltava aqui. Se a faixa já tem Código único (comum: faixa
     // inédita de álbum já ganha um na criação), carrega o que já existe
@@ -141,8 +162,14 @@ export function LancarFaixaAlbumModal({
     reader.readAsDataURL(file);
   }
 
+  const exigeFoco = tipoSingle !== "TRACKLIST ALBUM" && !focoTravado;
+
   async function handlePublicar() {
     if (!selecionada) return;
+    if (exigeFoco && !foco) {
+      toast.error("Escolha o foco do lançamento.");
+      return;
+    }
     setPublicando(true);
     try {
       let capaUrl: string | undefined = undefined;
@@ -183,7 +210,23 @@ export function LancarFaixaAlbumModal({
         }).catch(() => {});
       }
 
+      // Foco só dá pra gravar com o Código único devolvido pela publicação.
+      let focoFalhou = false;
+      if (exigeFoco && foco) {
+        focoFalhou =
+          !codigoUnico ||
+          !(await salvarFoco(codigoUnico, foco).then(
+            () => true,
+            () => false,
+          ));
+      }
+
       haptic.success();
+      if (focoFalhou) {
+        toast.warning("Música registrada, mas o foco não foi salvo. Defina na edição.", {
+          duration: 8000,
+        });
+      }
       if (data.aviso) {
         // Tópico foi criado de verdade, mas o backend não achou a linha em
         // EDIÇÃO CHARTS pra atualizar — avisa explicitamente em vez de só
@@ -336,6 +379,30 @@ export function LancarFaixaAlbumModal({
               </div>
             </div>
 
+            {tipoSingle !== "TRACKLIST ALBUM" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                  Foco do lançamento
+                </label>
+                {focoTravado ? (
+                  <div className="rounded-xl bg-neutral-900 border border-white/10 px-3 py-2.5">
+                    <p className="text-xs font-bold text-white">{rotuloFoco(focoTravado)}</p>
+                    <p className="text-[11px] text-neutral-500">
+                      Para alterar, fale com a administração.
+                    </p>
+                  </div>
+                ) : (
+                  <FocoSelect
+                    value={foco}
+                    onChange={setFoco}
+                    obrigatorio
+                    disabled={publicando}
+                    className="w-full min-w-0 px-3 py-2.5 bg-neutral-900 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                  />
+                )}
+              </div>
+            )}
+
             {tipoMusica !== "SOLO" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-neutral-400">
@@ -449,13 +516,22 @@ export function LancarFaixaAlbumModal({
               />
             </div>
 
+            {exigeFoco && !foco && (
+              <p className="text-[11px] font-bold text-amber-400 text-center">
+                Escolha o foco do lançamento.
+              </p>
+            )}
             <button
               onClick={handlePublicar}
-              disabled={publicando}
-              className="w-full h-12 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase text-sm tracking-wide disabled:opacity-50 flex items-center justify-center gap-2 transition"
+              disabled={publicando || (exigeFoco && !foco)}
+              className="w-full min-w-0 h-12 px-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase text-sm tracking-wide disabled:opacity-50 flex items-center justify-center gap-2 transition"
             >
-              {publicando ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
-              Lançar faixa
+              {publicando ? (
+                <Loader2 className="size-4 shrink-0 animate-spin" />
+              ) : (
+                <Rocket className="size-4 shrink-0" />
+              )}
+              <span className="truncate">Lançar faixa</span>
             </button>
           </div>
         )}
