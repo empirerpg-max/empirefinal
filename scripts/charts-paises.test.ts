@@ -94,3 +94,25 @@ test("REGRAS_PADRAO: valores sentinela, sem vendas e regrasDeConfig sem referên
   expect(REGRAS_PADRAO.paradas.find((p) => p.id === "EUA")!.recorrencia).not.toBe(
     REGRAS_PADRAO.paradas.find((p) => p.id === "CA")!.recorrencia);
 });
+
+import { indexarFocos, focoVigente, carregarFocos, FOCO_SCHEMA } from "../backend/src/services/chartsD1/foco";
+test("focoVigente: só depois de 'desde'; troca do admin não muda semanas anteriores; GLOBAL = null", () => {
+  const h = indexarFocos([
+    { codigo_unico: "EMP1", pais: "ESTADOS UNIDOS", desde: "2026-11-01" },
+    { codigo_unico: "EMP1", pais: "REINO UNIDO", desde: "2026-11-20" },
+    { codigo_unico: "EMP2", pais: "GLOBAL", desde: "2026-01-01" },
+  ]);
+  expect(focoVigente(h, "EMP1", "2026-11-01")).toBeNull();
+  expect(focoVigente(h, "EMP1", "2026-11-11")).toBe("ESTADOS UNIDOS");
+  expect(focoVigente(h, "EMP1", "2026-11-20")).toBe("ESTADOS UNIDOS");
+  expect(focoVigente(h, "EMP1", "2026-11-27")).toBe("REINO UNIDO");
+  expect(focoVigente(h, "EMP2", "2026-11-27")).toBeNull();
+  expect(focoVigente(h, undefined, "2026-11-27")).toBeNull();
+});
+test("carregarFocos: 'no such table' → mapa vazio; lê linhas existentes; schema definido", async () => {
+  const semTabela: any = { prepare: () => ({ all: async () => { throw new Error("D1_ERROR: no such table: musica_foco"); } }) };
+  expect((await carregarFocos(semTabela)).size).toBe(0);
+  const comLinhas: any = { prepare: () => ({ all: async () => ({ results: [{ codigo_unico: "A", pais: "BRASIL", desde: "2026-01-01" }] }) }) };
+  expect(focoVigente(await carregarFocos(comLinhas), "A", "2026-02-01")).toBe("BRASIL");
+  expect(FOCO_SCHEMA[0]).toContain("musica_foco");
+});
