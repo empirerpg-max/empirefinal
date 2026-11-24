@@ -2,7 +2,9 @@ import { test, expect } from "bun:test";
 // Charts semanais no D1. Uso: bun test scripts/charts-d1.test.ts
 import { CHARTS, type LinhaDados } from "../backend/src/services/chartsD1/tipos";
 import { calcularMovimento } from "../backend/src/services/chartsD1/movimento";
-import { fatiasPorPais, rankingPais, type Pesos } from "../backend/src/services/chartsD1/paises";
+import { rankingsPorPais, type EntradaMusica, type Pesos } from "../backend/src/services/chartsD1/paises";
+import { REGRAS_PADRAO } from "../backend/src/services/chartsD1/regras";
+import { calcularSemanaPaises } from "../backend/src/services/chartsD1/semanaPaises";
 import { parseNumeroBR, dataBrParaIso, dataIsoParaBr, parseLinhaDados, validarSemana } from "../backend/src/services/chartsD1/dados";
 
 const semanaFake = (dataIso: string, n: number): LinhaDados[] =>
@@ -42,27 +44,6 @@ test("movimento", () => {
   expect(calcularMovimento(7, h).status).toBe("↓");
   expect(calcularMovimento(3, h).status).toBe("=");
   expect(calcularMovimento(3, { ...h, posAnterior: null }).status).toBe("NEW"); // reentrada
-});
-test("fatias: soma fecha em 1 com resto, com Σ>1 e com dupla nacionalidade", () => {
-  const soma = (m: Map<string, number>, resto: number) => [...m.values()].reduce((a, b) => a + b, 0) + resto;
-  const p1: Pesos = new Map([["BRASIL", 0.072], ["ESTADOS UNIDOS", 0.1845]]); // Σ<1
-  const f1 = fatiasPorPais(p1, new Set(), 0.2);
-  expect(f1.get("BRASIL")).toBeCloseTo(0.072);
-  const f2 = fatiasPorPais(p1, new Set(["BRASIL", "ESTADOS UNIDOS"]), 0.2);
-  expect(f2.get("BRASIL")!).toBeGreaterThan(0.072);
-  expect(soma(f2, (1 - 0.2565) / (0.2565 + 0.4 + (1 - 0.2565)))).toBeCloseTo(1);
-  const p3: Pesos = new Map([["A", 0.7], ["B", 0.5]]); // Σ>1 (como YouTube 119,96%)
-  const f3 = fatiasPorPais(p3, new Set(), 0.2);
-  expect(f3.get("A")! + f3.get("B")!).toBeCloseTo(1);
-});
-test("rankingPais: artista local sobe no próprio país", () => {
-  const pesos: Pesos = new Map([["AUSTRÁLIA", 0.025], ["BRASIL", 0.072]]);
-  const ms = [
-    { tituloNorm: "a", titulo: "X - A", artistaPrincipal: "X", valor: 1000, nacionalidades: new Set<string>() },
-    { tituloNorm: "b", titulo: "Amanda Brokne - B", artistaPrincipal: "Amanda Brokne", valor: 800, nacionalidades: new Set(["AUSTRÁLIA"]) },
-  ];
-  expect(rankingPais(ms, pesos, "AUSTRÁLIA", 0.2, 50)[0].tituloNorm).toBe("b");
-  expect(rankingPais(ms, pesos, "BRASIL", 0.2, 50)[0].tituloNorm).toBe("a");
 });
 
 import { indexarCatalogo, buscarNoCatalogo, resolverArtistas, extrairArtistasDoTitulo, chaveMusica } from "../backend/src/services/chartsD1/artistas";
@@ -253,7 +234,7 @@ test("controller: 405 (PUT), 400 e 200 com token", async () => {
 // ---- Leitura (/api/charts) a partir do D1 ----
 import { readFileSync } from "node:fs";
 import {
-  datasDoChart, generosDoChart, linhasDoChart, linhasPaises, numero1DaUltimaSemana, perfilHOF,
+  datasDoChart, generosDoChart, linhasDoChart, numero1DaUltimaSemana, perfilHOF,
 } from "../backend/src/services/chartsD1/repo";
 
 // Catálogo fake: "Artista i - Faixa i" com capa própria; ímpar = Pop, par = Rock.
@@ -319,24 +300,25 @@ test("filtros do D1: datas mais recentes primeiro e gêneros do catálogo", asyn
   expect(await datasDoChart(db, "SPOTIFY")).toEqual(["11/11/2026", "04/11/2026"]);
   expect(await generosDoChart(db, "SPOTIFY")).toEqual(["Pop", "Rock"]);
 });
-test("países: 81 × top 50, artista local acima no próprio país", async () => {
+test("países (regra C): 81 × top 50 no recorte do Spotify, nacionalidade sem acento casa com o país", async () => {
   const pesos = pesosDoCsv();
   const nPaises = pesos.slice(1).filter((p) => p[0].trim() && p[1].trim()).length;
   expect(nPaises).toBe(81);
   // "Australia" sem acento casa com "AUSTRÁLIA" de pais_peso.
   const db = await dbComDuasSemanas([["Artista 60", "Austrália", "f60.jpg"], ["Artista 61", "Australia", ""]], pesos);
-  const rows = await linhasPaises(db, "SPOTIFY", "11/11/2026", catFake, new Map());
+  const rows = (await calcularSemanaPaises(db, "11/11/2026", catFake, new Map())).countries.get("SPOTIFY")!;
   expect(Object.keys(rows[0]).sort()).toEqual(["art", "capa", "mes", "pais", "pos", "st", "tit", "val"]);
   expect(new Set(rows.map((r) => r.pais)).size).toBe(nPaises);
   expect(rows).toHaveLength(nPaises * 50);
   const brasil = rows.filter((r) => r.pais === "BRASIL");
   expect(brasil).toHaveLength(50);
-  expect(brasil[0]).toMatchObject({ pos: 1, tit: "Artista 2 - Faixa 2", mes: "11/11/2026", art: "Artista 2", st: "↑", capa: "capa-2.jpg" });
-  expect(brasil[1].st).toBe("↓");
-  expect(brasil.some((r) => r.tit === "Artista 60 - Faixa 60")).toBe(false);
-  const australia = rows.filter((r) => r.pais === "AUSTRÁLIA");
-  expect(australia[0]).toMatchObject({ pos: 1, tit: "Artista 60 - Faixa 60", st: "=" });
-  expect(australia[1]).toMatchObject({ pos: 2, tit: "Artista 61 - Faixa 61", st: "=" });
+  expect(brasil.map((r) => r.pos)).toEqual(brasil.map((_, i) => i + 1));
+  expect(brasil[0]).toMatchObject({ mes: "11/11/2026" });
+  // Artistas australianos ("Austrália" e "Australia") ficam acima no próprio país do que no Brasil.
+  const posEm = (pais: string, tit: string) => rows.find((r) => r.pais === pais && r.tit === tit)?.pos ?? 99;
+  for (const tit of ["Artista 60 - Faixa 60", "Artista 61 - Faixa 61"]) {
+    expect(posEm("AUSTRÁLIA", tit)).toBeLessThan(posEm("BRASIL", tit));
+  }
 });
 test("datas vazias → fallback", async () => {
   expect(await datasDoChart(criarD1Sqlite(), "DIGITAL SALES")).toEqual([]);
@@ -363,15 +345,6 @@ test("HOF: #1s e runs cronológicos pelos artistas da música", async () => {
   const p20 = await perfilHOF(db, "Artista 20"); // não confunde com "Artista 2"
   expect(p20.runs).toEqual([{ t: "Artista 20 - Faixa 20", v: "20 - 20" }]);
   expect(p20.n1_hot100).toBe("0");
-});
-test("rankingPais: país de peso pequeno ordena pelo valor real, não pelo arredondado", () => {
-  const pesos: Pesos = new Map([["ANGOLA", 0.0005]]);
-  const ms = [
-    { tituloNorm: "a", titulo: "A", artistaPrincipal: "A", valor: 1000, nacionalidades: new Set<string>() },
-    { tituloNorm: "z", titulo: "Z", artistaPrincipal: "Z", valor: 1200, nacionalidades: new Set<string>() },
-  ];
-  const r = rankingPais(ms, pesos, "ANGOLA", 0.2, 50);
-  expect(r.map((m) => [m.tituloNorm, m.val])).toEqual([["z", 1], ["a", 1]]);
 });
 
 import { googleSheetsService } from "../backend/src/services/googleSheetsService";
@@ -431,38 +404,25 @@ test("/api/charts HOF: números/runs dos charts do D1 sobre img/country/style e 
   });
 });
 
-import { rankingsDaSemana, type MusicaParaPais } from "../backend/src/services/chartsD1/paises";
-
 test("países: 81 × 100 músicas × 2 semanas cabe no orçamento de CPU", () => {
   const pesos: Pesos = new Map(
     pesosDoCsv().slice(1).filter((p) => p[1]?.trim()).map((p) => [p[0].trim().toUpperCase(), parseNumeroBR(p[1].replace("%", ""))! / 100]),
   );
   expect(pesos.size).toBe(81);
   const paises = [...pesos.keys()];
-  const semana = (desloc: number): MusicaParaPais[] =>
+  const semana = (desloc: number): EntradaMusica[] =>
     Array.from({ length: 100 }, (_, i) => ({
-      tituloNorm: `m${(i + desloc) % 100}`, titulo: `M ${i}`, artistaPrincipal: `A ${i}`, valor: (100 - i) * 1000,
-      nacionalidades: new Set(i % 3 ? [paises[i % paises.length]] : []),
+      tituloNorm: `m${(i + desloc) % 100}`, titulo: `M ${i}`, artistaPrincipal: `A ${i}`, artistas: [`A ${i}`], valor: (100 - i) * 1000,
+      nacionalidades: new Set(i % 3 ? [paises[i % paises.length]] : []), foco: i % 5 ? null : paises[(i * 7) % paises.length],
     }));
-  rankingsDaSemana(semana(1), semana(0), pesos, 0.2, 50); // aquece o JIT
+  const R = REGRAS_PADRAO.paises;
+  rankingsPorPais(semana(1), semana(0), pesos, "2026-11-11", "2026-11-04", R); // aquece o JIT
   const t0 = performance.now();
-  const r = rankingsDaSemana(semana(1), semana(0), pesos, 0.2, 50);
+  const r = rankingsPorPais(semana(1), semana(0), pesos, "2026-11-11", "2026-11-04", R);
   const ms = performance.now() - t0;
   expect(r.size).toBe(81);
   expect([...r.values()].every((l) => l.length === 50)).toBe(true);
   expect(ms).toBeLessThan(50);
-});
-test("rankingsDaSemana bate com rankingPais país a país", () => {
-  const pesos: Pesos = new Map([["AUSTRÁLIA", 0.025], ["BRASIL", 0.072]]);
-  const ms = [
-    { tituloNorm: "a", titulo: "X - A", artistaPrincipal: "X", valor: 1000, nacionalidades: new Set<string>() },
-    { tituloNorm: "b", titulo: "Y - B", artistaPrincipal: "Y", valor: 800, nacionalidades: new Set(["AUSTRÁLIA"]) },
-  ];
-  const r = rankingsDaSemana(ms, [ms[1], ms[0]].map((m, i) => ({ ...m, valor: 1000 - i * 200 })), pesos, 0.2, 50);
-  for (const pais of pesos.keys()) {
-    expect(r.get(pais)!.map(({ st, ...m }) => m)).toEqual(rankingPais(ms, pesos, pais, 0.2, 50));
-  }
-  expect(r.get("BRASIL")!.map((m) => m.st)).toEqual(["↑", "↓"]);
 });
 test("/api/charts COUNTRIES sem pesos no D1 cai na planilha", async () => {
   const db = await dbComDuasSemanas(); // sem pesos
@@ -574,7 +534,7 @@ test("ingestão e leitura não varrem chart_semana: histórico por ix_chart_norm
   await datasCarregadas(db);
   await generosDoChart(db, "SPOTIFY");
   await linhasDoChart(db, "SPOTIFY", "11/11/2026", "Pop", catFake, new Map());
-  await linhasPaises(db, "SPOTIFY", "11/11/2026", catFake, new Map());
+  await calcularSemanaPaises(db, "11/11/2026", catFake, new Map());
   await numero1DaUltimaSemana(db, "SPOTIFY", catFake, new Map());
   await perfilHOF(db, "Artista 2");
   const planos = await planosDe(db, execs);

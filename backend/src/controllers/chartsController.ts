@@ -4,9 +4,10 @@ import { fixImg, fmt } from "../services/chartsD1/formato";
 import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
 import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
 import {
-  CHARTS_HOF, carregarCatalogo, carregarFotos, carregarGenerosArtistas, chartsD1Ativo, datasDoChart, generosDoChart, linhasDoChart, linhasPaises,
+  CHARTS_HOF, carregarCatalogo, carregarFotos, carregarGenerosArtistas, chartsD1Ativo, datasDoChart, generosDoChart, linhasDoChart,
   numero1DaUltimaSemana, perfilHOF, temPesosPais,
 } from "../services/chartsD1/repo";
+import { ROTULO_PARADAS, calcularSemanaPaises, type PlataformaCountries, type SemanaPaises } from "../services/chartsD1/semanaPaises";
 
 // Empire Charts — migrado do Apps Script (script.google.com/macros/.../exec)
 // que servia isso antes. Mesma lógica, linha por linha, só trocando
@@ -85,11 +86,42 @@ function referenciasD1(db: D1DatabaseLike): Promise<ReferenciasD1> {
   return valor;
 }
 
-/** Aba de /api/charts → chart do D1 ("SPOTIFY COUNTRIES" → SPOTIFY + países); null se não migrada. */
-function chartD1DaAba(tab: string): { chart: ChartId; paises: boolean } | null {
-  if ((CHARTS as string[]).includes(tab)) return { chart: tab as ChartId, paises: false };
+// Semana por país (COUNTRIES das 3 plataformas + paradas oficiais) calculada
+// inteira de uma vez e guardada por data: os pedidos seguintes da mesma semana
+// (outras plataformas, paradas) saem daqui. Semana passada não muda → 24 h;
+// a mais recente usa o TTL das respostas (e limparCacheCharts zera após ingestão).
+// Só datas que existem no Global 100 entram no cache (data inventada não acumula).
+const SEMANA_PASSADA_TTL_MS = 24 * 60 * 60_000;
+const semanaPaisesCache = new Map<string, { valor: Promise<SemanaPaises>; expiresAt: number }>();
+
+async function semanaPaises(db: D1DatabaseLike, dataBr: string): Promise<SemanaPaises> {
+  const c = semanaPaisesCache.get(dataBr);
+  if (c && c.expiresAt > Date.now()) return c.valor;
+  const [{ cat, fotos }, datasGlobal] = await Promise.all([referenciasD1(db), datasD1(db, "BILLBOARD HOT 100")]);
+  const indice = datasGlobal.indexOf(dataBr);
+  if (indice < 0) return calcularSemanaPaises(db, dataBr, cat, fotos);
+  // Outro pedido pode ter preenchido o cache enquanto as referências carregavam.
+  const ja = semanaPaisesCache.get(dataBr);
+  if (ja && ja.expiresAt > Date.now()) return ja.valor;
+  const valor = calcularSemanaPaises(db, dataBr, cat, fotos);
+  const ttl = indice > 0 ? SEMANA_PASSADA_TTL_MS : CHARTS_RESPONSE_CACHE_TTL_MS;
+  const entrada = { valor, expiresAt: Date.now() + ttl };
+  valor.catch(() => {
+    if (semanaPaisesCache.get(dataBr) === entrada) semanaPaisesCache.delete(dataBr);
+  });
+  semanaPaisesCache.set(dataBr, entrada);
+  return valor;
+}
+
+/**
+ * Aba de /api/charts → chart do D1 ("SPOTIFY COUNTRIES" → SPOTIFY + países;
+ * "PARADAS OFICIAIS" → datas do Global 100 + paradas); null se não migrada.
+ */
+export function chartD1DaAba(tab: string): { chart: ChartId; paises: boolean; paradas: boolean } | null {
+  if (tab === ROTULO_PARADAS) return { chart: "BILLBOARD HOT 100", paises: true, paradas: true };
+  if ((CHARTS as string[]).includes(tab)) return { chart: tab as ChartId, paises: false, paradas: false };
   const base = tab.endsWith(" COUNTRIES") ? tab.slice(0, -" COUNTRIES".length) : "";
-  if ((CHARTS_COM_PAIS as string[]).includes(base)) return { chart: base as ChartId, paises: true };
+  if ((CHARTS_COM_PAIS as string[]).includes(base)) return { chart: base as ChartId, paises: true, paradas: false };
   return null;
 }
 
@@ -114,6 +146,10 @@ async function viaD1<T>(
 // ---- FILTROS ----
 async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] }> {
   const alvo = chartD1DaAba(tab);
+  if (alvo?.paradas) {
+    // Paradas oficiais só existem no D1 (sem planilha): fora dele, lista vazia.
+    return (await viaD1(alvo.chart, async (_db, datas) => ({ dates: datas, styles: [] as string[] }))) ?? { dates: [], styles: [] };
+  }
   if (alvo) {
     const d1 = await viaD1(alvo.chart, async (db, datas) => {
       if (alvo.paises) return (await temPesosPais(db, alvo.chart)) ? { dates: datas, styles: [] } : undefined;
@@ -146,18 +182,29 @@ async function fetchF(tab: string): Promise<{ dates: string[]; styles: string[] 
 }
 
 // ---- CHART ----
-async function fetchC(tab: string, date: string, style: string): Promise<unknown[]> {
+/** Preenchido por fetchC: `semanaPassada` = resposta do D1 de uma semana que não é a mais recente do chart. */
+interface InfoChart {
+  semanaPassada: boolean;
+}
+
+async function fetchC(tab: string, date: string, style: string, info: InfoChart = { semanaPassada: false }): Promise<unknown[]> {
   const alvo = chartD1DaAba(tab);
   if (alvo) {
-    const d1 = await viaD1<unknown[]>(alvo.chart, async (db) => {
-      // Sem pesos de país no D1, COUNTRIES ainda é da planilha.
-      if (alvo.paises && !(await temPesosPais(db, alvo.chart))) return undefined;
-      const { cat, fotos, generosArtistas } = await referenciasD1(db);
-      return alvo.paises
-        ? linhasPaises(db, alvo.chart, date, cat, fotos)
-        : linhasDoChart(db, alvo.chart, date, style, cat, fotos, generosArtistas);
+    const d1 = await viaD1<unknown[]>(alvo.chart, async (db, datas) => {
+      // Sem pesos de país no D1, COUNTRIES ainda é da planilha (paradas não têm planilha).
+      if (alvo.paises && !alvo.paradas && !(await temPesosPais(db, alvo.chart))) return undefined;
+      let linhas: unknown[];
+      if (alvo.paradas) linhas = (await semanaPaises(db, date)).paradas;
+      else if (alvo.paises) linhas = (await semanaPaises(db, date)).countries.get(alvo.chart as PlataformaCountries) ?? [];
+      else {
+        const { cat, fotos, generosArtistas } = await referenciasD1(db);
+        linhas = await linhasDoChart(db, alvo.chart, date, style, cat, fotos, generosArtistas);
+      }
+      info.semanaPassada = datas.indexOf(date) > 0;
+      return linhas;
     });
     if (d1) return d1;
+    if (alvo.paradas) return [];
   }
 
   const isA = tab === "DADOS ÁLBUNS";
@@ -596,13 +643,27 @@ async function fetchReleases(): Promise<unknown[]> {
 // longo aqui (5min) corta a maior parte dessas leituras repetidas sem
 // prejuízo real pro jogador.
 const CHARTS_RESPONSE_CACHE_TTL_MS = 5 * 60_000;
-const chartsResponseCache = new Map<string, { body: string; expiresAt: number }>();
-const chartsResponseInFlight = new Map<string, Promise<string>>();
+/** Semana passada servida do D1 não muda: o navegador/CDN pode guardar por 24 h. */
+const CACHE_CONTROL_SEMANA_PASSADA = "public, max-age=86400";
+interface RespostaCharts {
+  body: string;
+  /** Só para semana passada do D1; semana atual e demais ações seguem sem o cabeçalho. */
+  cacheControl?: string;
+}
+const chartsResponseCache = new Map<string, RespostaCharts & { expiresAt: number }>();
+const chartsResponseInFlight = new Map<string, Promise<RespostaCharts>>();
+
+function respostaJson(r: RespostaCharts): Response {
+  const headers: Record<string, string> = { "Content-Type": "application/json; charset=utf-8" };
+  if (r.cacheControl) headers["Cache-Control"] = r.cacheControl;
+  return new Response(r.body, { status: 200, headers });
+}
 
 /** Descarta as respostas em cache deste isolate (chamado após ingerir uma semana no D1). */
 export function limparCacheCharts(): void {
   chartsResponseCache.clear();
   datasD1Cache.clear();
+  semanaPaisesCache.clear();
   referenciasD1Cache = null;
   ativoD1Cache = null;
 }
@@ -614,23 +675,34 @@ export async function chartsApiController(request: Request): Promise<Response> {
   const cacheKey = url.search;
 
   const cached = chartsResponseCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return new Response(cached.body, { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } });
-  }
+  if (cached && cached.expiresAt > Date.now()) return respostaJson(cached);
   const emAndamento = chartsResponseInFlight.get(cacheKey);
-  if (emAndamento) {
-    return new Response(await emAndamento, { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } });
-  }
+  if (emAndamento) return respostaJson(await emAndamento);
 
   const promise = (async () => {
-    const body = await computeChartsResponseBody(action, p);
-    chartsResponseCache.set(cacheKey, { body, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS });
-    return body;
+    const resposta = await computeChartsResponse(action, p);
+    chartsResponseCache.set(cacheKey, { ...resposta, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS });
+    return resposta;
   })().finally(() => {
     chartsResponseInFlight.delete(cacheKey);
   });
   chartsResponseInFlight.set(cacheKey, promise);
-  return new Response(await promise, { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } });
+  return respostaJson(await promise);
+}
+
+async function computeChartsResponse(action: string, p: URLSearchParams): Promise<RespostaCharts> {
+  if (action === "getChart") {
+    const info: InfoChart = { semanaPassada: false };
+    let body: string;
+    try {
+      body = JSON.stringify(await fetchC(p.get("tab") || "", p.get("date") || "", p.get("style") || "", info));
+    } catch (err: any) {
+      console.error("[chartsApiController] Erro:", err);
+      return { body: JSON.stringify({ error: err.message || "Erro ao carregar Charts." }) };
+    }
+    return info.semanaPassada ? { body, cacheControl: CACHE_CONTROL_SEMANA_PASSADA } : { body };
+  }
+  return { body: await computeChartsResponseBody(action, p) };
 }
 
 async function computeChartsResponseBody(action: string, p: URLSearchParams): Promise<string> {
@@ -641,8 +713,6 @@ async function computeChartsResponseBody(action: string, p: URLSearchParams): Pr
         return toBody(await fetchRT());
       case "getFilters":
         return toBody(await fetchF(p.get("tab") || ""));
-      case "getChart":
-        return toBody(await fetchC(p.get("tab") || "", p.get("date") || "", p.get("style") || ""));
       case "getMonthlyStats":
         return toBody(
           await fetchM(p.get("platform") || "", p.get("month") || "", p.get("artist") || "", p.get("year") || ""),

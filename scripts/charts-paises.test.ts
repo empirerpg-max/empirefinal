@@ -322,3 +322,85 @@ test("paradas: `st` compara com a semana anterior calculada pelas regras dela (d
   expect(linhas.length).toBeGreaterThan(2);
   expect(linhas.filter((l) => l.st !== "NEW").length).toBe(2);
 });
+
+// ───────────── API /api/charts: COUNTRIES (regra C) e PARADAS OFICIAIS ─────────────
+import { googleSheetsService } from "../backend/src/services/googleSheetsService";
+import { chartD1DaAba, chartsApiController, limparCacheCharts } from "../backend/src/controllers/chartsController";
+
+test("chartD1DaAba: PARADAS OFICIAIS lê as datas do Global 100", () => {
+  expect(chartD1DaAba("PARADAS OFICIAIS")).toEqual({ chart: "BILLBOARD HOT 100", paises: true, paradas: true });
+  expect(chartD1DaAba("SPOTIFY COUNTRIES")).toEqual({ chart: "SPOTIFY", paises: true, paradas: false });
+  expect(chartD1DaAba("SPOTIFY")).toEqual({ chart: "SPOTIFY", paises: false, paradas: false });
+  expect(chartD1DaAba("DIGITAL SALES COUNTRIES")).toBeNull();
+});
+
+/** Roda `fn` com `db` como D1 do app e as planilhas trocadas por stubs vazios (registra o que foi lido). */
+async function comApi(db: unknown, fn: (lidas: string[]) => Promise<void>) {
+  const g = globalThis as Record<string, unknown>;
+  const svc = googleSheetsService as unknown as Record<string, { readValues: (s: string) => Promise<string[][]> }>;
+  const chaves = ["chartsBase", "chartsCountries", "chartsAlbums", "principal"];
+  const antes = { db: g.__CATALOGO_DB__, ...Object.fromEntries(chaves.map((k) => [k, svc[k].readValues])) } as Record<string, any>;
+  const lidas: string[] = [];
+  g.__CATALOGO_DB__ = db;
+  for (const k of chaves) svc[k].readValues = async (s: string) => { lidas.push(`${k}:${s}`); return []; };
+  limparCacheCharts();
+  try {
+    await fn(lidas);
+  } finally {
+    g.__CATALOGO_DB__ = antes.db;
+    for (const k of chaves) svc[k].readValues = antes[k];
+    limparCacheCharts();
+  }
+}
+const chamar = (q: string) => chartsApiController(new Request(`http://x/api/charts?${q}`));
+const PARADAS_Q = (data: string) => `action=getChart&tab=${encodeURIComponent(ROTULO_PARADAS)}&date=${encodeURIComponent(data)}`;
+
+test("/api/charts PARADAS OFICIAIS e COUNTRIES: semana calculada (regra C), JSON idêntico entre chamadas, sem planilha", async () => {
+  const db = await bancoDeTeste();
+  expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
+  const esperado = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  // Conta os cálculos de semana (a consulta de chart_semana do orquestrador).
+  let calculos = 0;
+  const contando = { prepare: (sql: string) => { if (/FROM chart_semana\s+WHERE chart IN/.test(sql)) calculos++; return db.prepare(sql); } };
+  await comApi(contando, async (lidas) => {
+    expect(await (await chamar(`action=getFilters&tab=${encodeURIComponent(ROTULO_PARADAS)}`)).json())
+      .toEqual({ dates: ["11/11/2026", "04/11/2026"], styles: [] });
+    const r1 = await (await chamar(PARADAS_Q("11/11/2026"))).text();
+    const r2 = await (await chamar(PARADAS_Q("11/11/2026"))).text();
+    expect(r2).toBe(r1);
+    const linhas = JSON.parse(r1) as { pais: string }[];
+    expect(linhas).toEqual(JSON.parse(JSON.stringify(esperado.paradas)));
+    expect(linhas.length).toBeGreaterThan(0);
+    const nomes = new Set(linhas.map((l) => l.pais));
+    expect(nomes.has("UK Official Charts")).toBe(true);
+    expect(nomes.has("Billboard Hot 100")).toBe(true);
+    // COUNTRIES da mesma semana sai do cache da semana (sem recalcular).
+    const antes = calculos;
+    const spotify = await (await chamar("action=getChart&tab=SPOTIFY%20COUNTRIES&date=11%2F11%2F2026")).json();
+    expect(spotify).toEqual(JSON.parse(JSON.stringify(esperado.countries.get("SPOTIFY"))));
+    expect(calculos).toBe(antes);
+    expect(lidas).toEqual([]);
+  });
+});
+test("/api/charts: Cache-Control longo só para semana passada servida do D1", async () => {
+  const db = await bancoDeTeste();
+  expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
+  await comApi(db, async () => {
+    const atual = await chamar(PARADAS_Q("11/11/2026"));
+    expect(atual.headers.get("Cache-Control")).toBeNull();
+    const passada = await chamar(PARADAS_Q("04/11/2026"));
+    expect(passada.headers.get("Cache-Control")).toBe("public, max-age=86400");
+    expect(((await passada.json()) as unknown[]).length).toBeGreaterThan(0);
+    // Também na resposta que sai do cache por URL.
+    expect((await chamar(PARADAS_Q("04/11/2026"))).headers.get("Cache-Control")).toBe("public, max-age=86400");
+    expect((await chamar("action=getChart&tab=SPOTIFY&date=04%2F11%2F2026")).headers.get("Cache-Control")).toBe("public, max-age=86400");
+  });
+});
+test("/api/charts PARADAS OFICIAIS sem D1 ativo → [] e nenhuma planilha lida", async () => {
+  const db = await bancoDeTeste(); // leitura do D1 não ativada
+  await comApi(db, async (lidas) => {
+    expect(await (await chamar(PARADAS_Q("11/11/2026"))).json()).toEqual([]);
+    expect(await (await chamar(`action=getFilters&tab=${encodeURIComponent(ROTULO_PARADAS)}`)).json()).toEqual({ dates: [], styles: [] });
+    expect(lidas).toEqual([]);
+  });
+});
