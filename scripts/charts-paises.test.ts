@@ -10,6 +10,7 @@ import { calcularSemanaPaises, ROTULO_PARADAS } from "../backend/src/services/ch
 import { indexarCatalogo } from "../backend/src/services/chartsD1/artistas";
 import { validarGravacaoFoco, musicaFocoController } from "../backend/src/controllers/musicaFocoController";
 import { issueSessionToken, ADMIN_TG_ID } from "../backend/src/services/sessionService";
+import { rankingAoVivoPorPais, type ItemAoVivo, type LinhaAoVivoPais } from "../backend/src/services/chartsD1/aoVivoPaises";
 
 test("sorteio01: determinístico, em [0,1), varia com a chave", () => {
   expect(sorteio01("2026-11-11|x|BRASIL|nac")).toBe(sorteio01("2026-11-11|x|BRASIL|nac"));
@@ -562,4 +563,26 @@ test("paradas: proporção pontos/unidades distorcida continua ≤ 1000", () => 
     ms("y", { pontosGlobal100: 1, porPais: { SPOTIFY: pais(4_000_000) }, totalGlobal: { SPOTIFY: 4_000_000 } }),
   ];
   for (const x of calcularParada(l, P("UK"), "REINO UNIDO", 0.45)) expect(x.val).toBeLessThanOrEqual(1000);
+});
+
+test("ao vivo por país: soma + resto = streams; fatia fixa na semana; países por peso", () => {
+  const pesos: Pesos = new Map([["EUA", 0.3], ["BRASIL", 0.05], ["AUSTRÁLIA", 0.02]]);
+  const R = REGRAS_PADRAO.paises;
+  const it = (t: string, n: number, nac: string[] = []): ItemAoVivo =>
+    ({ t, n, c: "", artistas: [t.split(" - ")[0]], nacionalidades: new Set(nac), foco: null });
+  const a = rankingAoVivoPorPais([it("A - x", 1000, ["BRASIL"]), it("B - y", 800)], pesos, "2026-11-18", R);
+  expect([...new Set(a.map((l) => l.pais))]).toEqual(["EUA", "BRASIL", "AUSTRÁLIA"]);
+  const b = rankingAoVivoPorPais([it("A - x", 2000, ["BRASIL"]), it("B - y", 1600)], pesos, "2026-11-18", R);
+  // streams dobraram → valores dobram (mesma fatia na mesma semana)
+  const va = (l: LinhaAoVivoPais[], p: string, t: string) => Number(l.find((x) => x.pais === p && x.t === t)!.s.replace(/\./g, ""));
+  expect(Math.abs(va(b, "BRASIL", "A - x") - 2 * va(a, "BRASIL", "A - x"))).toBeLessThanOrEqual(1);
+  expect(rankingAoVivoPorPais([it("A - x", 1000, ["BRASIL"])], pesos, "2026-11-18", R))
+    .toEqual(rankingAoVivoPorPais([it("A - x", 1000, ["BRASIL"])], pesos, "2026-11-18", R));
+});
+test("ao vivo por país: valor inválido conta 0; sem nacionalidade não some", () => {
+  const pesos: Pesos = new Map([["BRASIL", 0.05]]);
+  const r = rankingAoVivoPorPais(
+    [{ t: "Z - w", n: NaN, c: "", artistas: [], nacionalidades: new Set(), foco: null }],
+    pesos, "2026-11-18", REGRAS_PADRAO.paises);
+  expect(r).toEqual([{ pais: "BRASIL", pos: 1, t: "Z - w", s: "0", c: "", art: "Z" }]);
 });
