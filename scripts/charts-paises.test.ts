@@ -8,7 +8,8 @@ import { criarD1Sqlite } from "./charts-d1-sqlite";
 import { CHARTS_D1_SCHEMA, ingerirSemana } from "../backend/src/services/chartsD1/repo";
 import { calcularSemanaPaises, ROTULO_PARADAS } from "../backend/src/services/chartsD1/semanaPaises";
 import { indexarCatalogo } from "../backend/src/services/chartsD1/artistas";
-import { validarGravacaoFoco } from "../backend/src/controllers/musicaFocoController";
+import { validarGravacaoFoco, musicaFocoController } from "../backend/src/controllers/musicaFocoController";
+import { issueSessionToken, ADMIN_TG_ID } from "../backend/src/services/sessionService";
 
 test("sorteio01: determinístico, em [0,1), varia com a chave", () => {
   expect(sorteio01("2026-11-11|x|BRASIL|nac")).toBe(sorteio01("2026-11-11|x|BRASIL|nac"));
@@ -415,4 +416,71 @@ test("validarGravacaoFoco: trava após definido; admin troca; país inválido re
   expect(validarGravacaoFoco(h, "REINO UNIDO", P, false)).toMatchObject({ ok: false, status: 409 });
   expect(validarGravacaoFoco(h, "REINO UNIDO", P, true)).toEqual({ ok: true });
   expect(validarGravacaoFoco(h, "BRASIL", P, true)).toMatchObject({ ok: false, status: 409 });
+});
+
+// ---- Handlers reais do foco (GET/POST) sobre SQLite em memória ----
+async function comFocoDb(fn: (db: ReturnType<typeof criarD1Sqlite>) => Promise<void>) {
+  const db = criarD1Sqlite();
+  for (const sql of CHARTS_D1_SCHEMA) await db.prepare(sql).run();
+  for (const [plat, pais] of [["spotify", "BRASIL"], ["youtube", "BRASIL"], ["spotify", "ÁFRICA DO SUL"], ["youtube", "AFRICA DO SUL"], ["spotify", "REINO UNIDO"]]) {
+    await db.prepare("INSERT INTO pais_peso (plataforma, pais, peso) VALUES (?, ?, 1)").bind(plat, pais).run();
+  }
+  const g = globalThis as Record<string, unknown>;
+  const antes = g.__CATALOGO_DB__;
+  g.__CATALOGO_DB__ = db;
+  try { await fn(db); } finally { g.__CATALOGO_DB__ = antes; }
+}
+const focoGet = async (codigo: string) => (await musicaFocoController(new Request(`http://x/api/musica-foco?codigo=${codigo}`), "")).json() as Promise<any>;
+const focoPost = (codigo: string, pais: string, token?: string) =>
+  musicaFocoController(new Request("http://x/api/musica-foco", {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: JSON.stringify({ codigo, pais }),
+  }), "");
+
+test("foco API: lista de países distintos, alfabética, sem duplicata por acento", async () => {
+  await comFocoDb(async () => {
+    const r = await (await musicaFocoController(new Request("http://x/api/musica-foco/paises"), "paises")).json() as any;
+    expect(r.success).toBe(true);
+    expect(r.paises).toEqual(["ÁFRICA DO SUL", "BRASIL", "REINO UNIDO"]);
+  });
+});
+
+test("foco API: não-admin grava, GET devolve travado; 2ª gravação 409; admin troca; mesmo dia atualiza a linha; grafia de pais_peso", async () => {
+  await comFocoDb(async (db) => {
+    expect((await focoGet("EMP1")).foco).toBeNull();
+    expect((await focoGet("EMP1")).travado).toBe(false);
+
+    // (f) entrada com outra caixa/acento → grafia de pais_peso
+    const p1 = await focoPost("EMP1", "áfrica do sul");
+    expect(p1.status).toBe(200);
+    const j1 = await p1.json() as any;
+    expect(j1.foco.pais).toBe("ÁFRICA DO SUL");
+    const g = await focoGet("EMP1");
+    expect(g.travado).toBe(true);
+    expect(g.foco.pais).toBe("ÁFRICA DO SUL");
+
+    // (c) segunda gravação de não-admin
+    const p2 = await focoPost("EMP1", "BRASIL");
+    expect(p2.status).toBe(409);
+    expect((await p2.json() as any).error).toBe("O foco deste lançamento já foi definido. Peça à administração para alterar.");
+
+    // (d) admin real (token da conta fixa de admin)
+    const token = await issueSessionToken("admin", ADMIN_TG_ID);
+    const p3 = await focoPost("EMP1", "brasil", token);
+    expect(p3.status).toBe(200);
+    expect((await focoGet("EMP1")).foco.pais).toBe("BRASIL");
+    const rep = await focoPost("EMP1", "Brasil", token);
+    expect(rep.status).toBe(409);
+    expect((await rep.json() as any).error).toBe("Esse já é o foco atual.");
+
+    // (e) mesmo dia: segunda troca do admin atualiza a linha, sem duplicar
+    const p4 = await focoPost("EMP1", "REINO UNIDO", token);
+    expect(p4.status).toBe(200);
+    const linhas = (await db.prepare("SELECT pais, por_admin FROM musica_foco WHERE codigo_unico = ?").bind("EMP1").all<{ pais: string; por_admin: number }>()).results;
+    expect(linhas).toEqual([{ pais: "REINO UNIDO", por_admin: 1 }]);
+
+    // país inválido
+    expect((await focoPost("EMP2", "MARTE")).status).toBe(400);
+  });
 });
