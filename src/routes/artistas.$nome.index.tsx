@@ -844,7 +844,7 @@ function ChartsTab({ nome }: { nome: string }) {
   }
 
   const n1s = [
-    { label: "Hot 100", val: hof.n1_hot100, color: "text-red-400" },
+    { label: "Global 100", val: hof.n1_hot100, color: "text-red-400" },
     { label: "Spotify", val: hof.n1_spotify, color: "text-emerald-400" },
     { label: "YouTube", val: hof.n1_youtube, color: "text-red-500" },
     { label: "BB 200", val: hof.n1_bb200, color: "text-amber-400" },

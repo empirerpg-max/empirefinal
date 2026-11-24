@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { driveImg } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { useBackClose } from "@/hooks/use-back-close";
@@ -193,6 +193,9 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [focoEdit, setFocoEdit] = useState("");
   const [salvandoFoco, setSalvandoFoco] = useState(false);
   const [focoMsg, setFocoMsg] = useState<{ ok: boolean; texto: string } | null>(null);
+  // Código da música em edição no momento — descarta resposta de lerFoco
+  // que chega depois de o jogador já ter trocado de item.
+  const focoCodigoRef = useRef<string | null>(null);
   // Mesma regra de admin de Gestao.tsx (isAdminUser) — o backend confere de
   // novo pelo token de sessão, isso aqui só decide o que mostrar.
   const { user: telegramUser } = useTelegramUser();
@@ -338,16 +341,24 @@ export const EditModal: React.FC<EditModalProps> = ({
     setFocoAtual(null);
     setFocoEdit("");
     setFocoMsg(null);
+    focoCodigoRef.current = item.tipo === "musicas" && item.codigoUnico ? item.codigoUnico : null;
+    setFocoCarregando(false);
     if (item.tipo === "musicas" && item.codigoUnico) {
       const codigo = item.codigoUnico;
       setFocoCarregando(true);
       lerFoco(codigo)
         .then((r) => {
+          if (focoCodigoRef.current !== codigo) return;
           setFocoAtual(r.foco?.pais ?? null);
           setFocoEdit(r.foco?.pais ?? "");
         })
-        .catch(() => setFocoMsg({ ok: false, texto: "Não foi possível carregar o foco atual." }))
-        .finally(() => setFocoCarregando(false));
+        .catch(() => {
+          if (focoCodigoRef.current !== codigo) return;
+          setFocoMsg({ ok: false, texto: "Não foi possível carregar o foco atual." });
+        })
+        .finally(() => {
+          if (focoCodigoRef.current === codigo) setFocoCarregando(false);
+        });
     }
     setExtraEdit(emptyExtraMaterialEditorValue());
     if (item.codigoUnico && item.tipo !== "videos") {
@@ -567,13 +578,25 @@ export const EditModal: React.FC<EditModalProps> = ({
       // publicação. Falhou: a faixa já foi publicada, só avisa.
       if (exigeFoco) {
         const codigo: string = json.data?.codigoUnico || "";
-        const focoOk = codigo
-          ? await salvarFoco(codigo, focoEscolhido).then(
-              () => true,
+        // Faixa que já tinha foco salvo (travado) não grava de novo — senão
+        // o 409 do backend viraria um aviso falso de "foco não salvo".
+        const jaTemFoco = codigo
+          ? await lerFoco(codigo).then(
+              (r) => r.foco !== null,
               () => false,
             )
           : false;
-        if (!focoOk) setErrorMsg("Música registrada, mas o foco não foi salvo. Defina na edição.");
+        if (!jaTemFoco) {
+          const focoOk = codigo
+            ? await salvarFoco(codigo, focoEscolhido).then(
+                () => true,
+                () => false,
+              )
+            : false;
+          if (!focoOk) {
+            setErrorMsg("Música registrada, mas o foco não foi salvo. Defina na edição.");
+          }
+        }
       }
       setSuccessMsg("Faixa publicada com sucesso!");
       if (editingItem?.fields?.topicId) {
@@ -1202,37 +1225,6 @@ export const EditModal: React.FC<EditModalProps> = ({
                                     disabled={publicandoFaixaIdx === idx}
                                     className="w-full min-w-0 text-[11px] font-bold bg-neutral-900 border border-white/10 rounded-md py-1 px-1.5 text-neutral-300 outline-none focus:border-amber-500 disabled:opacity-50"
                                   />
-                                </div>
-                              </div>
-                            )}
-
-                            {editingFaixaLetraIndex === idx && (
-                              <div className="mt-1.5 p-2.5 bg-neutral-800/60 border border-amber-500/30 rounded-xl space-y-2">
-                                <textarea
-                                  rows={6}
-                                  autoFocus
-                                  value={faixaLetraText}
-                                  onChange={(e) => setFaixaLetraText(e.target.value)}
-                                  placeholder="Cole ou digite a letra completa..."
-                                  className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none resize-y"
-                                />
-                                <div className="flex justify-end gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingFaixaLetraIndex(null)}
-                                    className="px-3 py-1.5 rounded-lg bg-neutral-900 text-neutral-400 text-[11px] font-bold uppercase"
-                                  >
-                                    Cancelar
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={savingFaixaLetra}
-                                    onClick={() => handleSaveFaixaLetra(faixa, idx)}
-                                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black uppercase inline-flex items-center gap-1.5 disabled:opacity-50"
-                                  >
-                                    <Check className="size-3.5" />
-                                    {savingFaixaLetra ? "Salvando..." : "Salvar Letra"}
-                                  </button>
                                 </div>
                               </div>
                             )}

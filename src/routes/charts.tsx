@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Music, Flame, Youtube, Disc3, DollarSign, Search, X, ChevronLeft, ChevronRight, Loader2, Radio,
+  Music, Flame, Youtube, Disc3, DollarSign, Search, X, ChevronLeft, ChevronRight, Loader2, Radio, Globe,
 } from "lucide-react";
 import {
   getChartFilters, getChartData,
@@ -12,12 +12,12 @@ import { resolveImg } from "@/lib/api";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
-type CategoryId = "hot100" | "spotify" | "apple" | "youtube" | "albums" | "sales";
+type CategoryId = "hot100" | "paradas" | "spotify" | "apple" | "youtube" | "albums" | "sales";
 type TabId = "live" | CategoryId;
 
 // "Início" removido a pedido do usuário — mantém só os blocos de verdade
 // (Ao vivo + categorias de chart).
-const VALID_TABS: TabId[] = ["live", "hot100", "spotify", "apple", "youtube", "albums", "sales"];
+const VALID_TABS: TabId[] = ["live", "hot100", "paradas", "spotify", "apple", "youtube", "albums", "sales"];
 
 export const Route = createFileRoute("/charts")({
   head: () => ({
@@ -38,15 +38,17 @@ interface CategoryConfig {
   tab: string;
   hasStyle?: boolean;
   countryTab?: string;
+  paradas?: boolean;
   monthlyPlatform?: string;
   icon: typeof Music;
   color: string;
 }
 
 const CATEGORIES: CategoryConfig[] = [
-  { id: "hot100", label: "Hot 100", tab: "BILLBOARD HOT 100", hasStyle: true, icon: Flame, color: "text-red-400" },
+  { id: "hot100", label: "Global 100", tab: "BILLBOARD HOT 100", hasStyle: true, icon: Flame, color: "text-red-400" },
+  { id: "paradas", label: "Paradas Oficiais", tab: "PARADAS OFICIAIS", icon: Globe, color: "text-amber-300", paradas: true },
   {
-    id: "spotify", label: "Spotify", tab: "SPOTIFY", icon: Music, color: "text-emerald-400",
+    id: "spotify", label: "Spotify Global", tab: "SPOTIFY", icon: Music, color: "text-emerald-400",
     countryTab: "SPOTIFY COUNTRIES", monthlyPlatform: "SPOTIFY",
   },
   {
@@ -329,6 +331,7 @@ type SubView = "global" | "country" | "monthly";
 
 function ChartsCategoryView({ category }: { category: CategoryConfig }) {
   const [subView, setSubView] = useState<SubView>("global");
+  if (category.paradas) return <ChartsCountryView tab={category.tab} ordenarPor="ordem" />;
   const hasSubTabs = !!category.countryTab || !!category.monthlyPlatform;
 
   return (
@@ -561,7 +564,7 @@ function ChartsGlobalView({ category }: { category: CategoryConfig }) {
 }
 
 // ---------- Charts por país ----------
-function ChartsCountryView({ tab }: { tab: string }) {
+function ChartsCountryView({ tab, ordenarPor }: { tab: string; ordenarPor?: "ordem" }) {
   const [dates, setDates] = useState<string[]>([]);
   const [date, setDate] = useState<string | null>(null);
   const [rows, setRows] = useState<ChartRow[] | null>(null);
@@ -601,8 +604,25 @@ function ChartsCountryView({ tab }: { tab: string }) {
 
   const countries = useMemo(() => {
     if (!rows) return [];
-    return Array.from(new Set(rows.map((r) => r.pais).filter(Boolean))).sort();
-  }, [rows]);
+    const names = Array.from(new Set(rows.map((r) => r.pais).filter(Boolean))) as string[];
+    if (ordenarPor !== "ordem") return names.sort();
+    const ord = new Map<string, number>();
+    for (const r of rows) {
+      const n = Number(r.ordem);
+      if (r.pais && !ord.has(r.pais)) ord.set(r.pais, Number.isFinite(n) ? n : 9999);
+    }
+    return names.sort((a, b) => (ord.get(a)! - ord.get(b)!) || a.localeCompare(b));
+  }, [rows, ordenarPor]);
+
+  // Modo paradas: sempre uma parada selecionada (a primeira por ordem).
+  useEffect(() => {
+    if (ordenarPor === "ordem" && countries.length && !countries.includes(country)) setCountry(countries[0]);
+  }, [ordenarPor, countries, country]);
+
+  const paradaDesc = useMemo(() => {
+    if (ordenarPor !== "ordem" || !rows) return "";
+    return rows.find((r) => r.pais === country && r.desc)?.desc || "";
+  }, [ordenarPor, rows, country]);
 
   const filtered = useMemo(() => {
     if (!rows) return [];
@@ -637,7 +657,7 @@ function ChartsCountryView({ tab }: { tab: string }) {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="País, artista ou música..."
+            placeholder={ordenarPor === "ordem" ? "Parada, artista ou música..." : "País, artista ou música..."}
             className="w-full h-10 pl-9 pr-9 rounded-full bg-muted/60 border border-border/60 text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
           />
           {search && (
@@ -646,17 +666,31 @@ function ChartsCountryView({ tab }: { tab: string }) {
             </button>
           )}
         </div>
-        <select
-          value={country}
-          onChange={(e) => setCountry(e.target.value)}
-          className="h-10 px-3 rounded-full bg-muted/60 border border-border/60 text-sm font-semibold outline-none focus:ring-1 focus:ring-primary shrink-0"
-        >
-          <option value="">Todos os países</option>
-          {countries.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
+        {ordenarPor !== "ordem" && (
+          <select
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            className="h-10 px-3 rounded-full bg-muted/60 border border-border/60 text-sm font-semibold outline-none focus:ring-1 focus:ring-primary shrink-0"
+          >
+            <option value="">Todos os países</option>
+            {countries.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        )}
       </div>
+
+      {ordenarPor === "ordem" && (
+        <div className="mb-4">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Parada</div>
+          <PillScroller>
+            {countries.map((c) => (
+              <ChartsPill key={c} active={c === country} onClick={() => setCountry(c)}>{c}</ChartsPill>
+            ))}
+          </PillScroller>
+          {paradaDesc && <p className="mt-2 text-xs text-muted-foreground">{paradaDesc}</p>}
+        </div>
+      )}
 
       {loadingRows ? (
         <LoadingBlock text="Carregando chart..." />
@@ -852,27 +886,17 @@ function MonthlyArtistProfile({
 }
 
 function PillScroller({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const scrollBy = (dir: 1 | -1) => ref.current?.scrollBy({ left: dir * 160, behavior: "smooth" });
+  const scroll = useDragScroll<HTMLDivElement>();
   return (
-    <div className="relative flex items-center gap-1">
-      <button
-        onClick={() => scrollBy(-1)}
-        className="hidden sm:grid shrink-0 size-7 place-items-center rounded-full hover:bg-muted text-muted-foreground"
-        aria-label="Anterior"
+    <div className="relative">
+      <div
+        ref={scroll.ref}
+        className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none py-1"
       >
-        <ChevronLeft className="size-4" />
-      </button>
-      <div ref={ref} className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <StickyScrollArrowLeft show={scroll.canScrollLeft} onClick={() => scroll.scrollByAmount(-1)} />
         {children}
+        <StickyScrollArrowRight show={scroll.canScrollRight} onClick={() => scroll.scrollByAmount(1)} />
       </div>
-      <button
-        onClick={() => scrollBy(1)}
-        className="hidden sm:grid shrink-0 size-7 place-items-center rounded-full hover:bg-muted text-muted-foreground"
-        aria-label="Próximo"
-      >
-        <ChevronRight className="size-4" />
-      </button>
     </div>
   );
 }

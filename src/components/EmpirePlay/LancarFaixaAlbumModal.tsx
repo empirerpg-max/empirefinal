@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Search, Loader2, Rocket, Disc, Upload, Image as ImageIcon, Plus, Minus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { haptic } from "@/lib/telegram";
@@ -88,6 +88,9 @@ export function LancarFaixaAlbumModal({
   // TRACKLIST ALBUM). Se a faixa já tem foco salvo, ele fica travado.
   const [foco, setFoco] = useState("");
   const [focoTravado, setFocoTravado] = useState<string | null>(null);
+  // Faixa selecionada no momento — descarta resposta de lerFoco que chega
+  // depois de o jogador já ter trocado de faixa.
+  const selecionadaRef = useRef<number | null>(null);
 
   const [publicando, setPublicando] = useState(false);
 
@@ -123,9 +126,11 @@ export function LancarFaixaAlbumModal({
     setAudioUrlInput(f.audioUrl || "");
     setFoco("");
     setFocoTravado(null);
+    selecionadaRef.current = f.musicaRowIndex;
     if (f.codigoUnico) {
       lerFoco(f.codigoUnico)
         .then((r) => {
+          if (selecionadaRef.current !== f.musicaRowIndex) return;
           if (r.foco) setFocoTravado(r.foco.pais);
         })
         .catch(() => {});
