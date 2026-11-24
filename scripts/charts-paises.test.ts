@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 // Paradas por país nos charts. Uso: bun test scripts/charts-paises.test.ts
 import { sorteio01 } from "../backend/src/services/chartsD1/sorteio";
-import { fatiasRegraC, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
+import { fatiasRegraC, valoresPorPais, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
 import { regrasDeConfig, parseRegrasSemana, REGRAS_PADRAO } from "../backend/src/services/chartsD1/regras";
 import { fontes, pontos, emAcr, calcularParada, fatorPontos, PONTOS_MAX_PARADA, resolverPaisParada, mapaPaisPorNome, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
 import { criarD1Sqlite } from "./charts-d1-sqlite";
@@ -585,4 +585,24 @@ test("ao vivo por país: valor inválido conta 0; sem nacionalidade não some", 
     [{ t: "Z - w", n: NaN, c: "", artistas: [], nacionalidades: new Set(), foco: null }],
     pesos, "2026-11-18", REGRAS_PADRAO.paises);
   expect(r).toEqual([{ pais: "BRASIL", pos: 1, t: "Z - w", s: "0", c: "", art: "Z" }]);
+});
+test("ao vivo por país: itens com a mesma chave são somados (uma linha por país)", () => {
+  const pesos: Pesos = new Map([["EUA", 0.3], ["BRASIL", 0.05]]);
+  const R = REGRAS_PADRAO.paises;
+  const mk = (t: string, n: number): ItemAoVivo => ({ t, n, c: "capa", artistas: ["A"], nacionalidades: new Set(), foco: null });
+  const dup = rankingAoVivoPorPais([mk("A - x", 600), mk("a - X", 400), mk("B - y", NaN)], pesos, "2026-11-18", R);
+  const uno = rankingAoVivoPorPais([mk("A - x", 1000), mk("B - y", NaN)], pesos, "2026-11-18", R);
+  expect(dup.filter((l) => l.pais === "EUA").length).toBe(2);
+  expect(dup).toEqual(uno);
+  expect(dup.find((l) => l.pais === "EUA")!.t).toBe("A - x");
+});
+test("regra C: soma dos países + resto = streams (sem bônus/variação)", () => {
+  const pesos: Pesos = new Map([["EUA", 0.3], ["BRASIL", 0.05], ["AUSTRÁLIA", 0.02]]);
+  const R = { ...REGRAS_PADRAO.paises, variacao: 0 };
+  const m: EntradaMusica = { tituloNorm: "a x", titulo: "A - x", artistaPrincipal: "A", artistas: ["A"], valor: 1000, nacionalidades: new Set(), foco: null };
+  const por = valoresPorPais([m], pesos, "2026-11-18", R).get("a x")!;
+  const soma = [...por.values()].reduce((x, y) => x + y, 0);
+  const resto = 1000 * Math.max(0, 1 - 0.37);
+  expect(soma).toBeLessThanOrEqual(1000);
+  expect(Math.abs(soma + resto - 1000)).toBeLessThanOrEqual(1);
 });

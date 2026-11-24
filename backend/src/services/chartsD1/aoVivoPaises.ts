@@ -37,26 +37,49 @@ export function rankingAoVivoPorPais(
   dataIso: string,
   r: RegraPaises,
 ): LinhaAoVivoPais[] {
-  const musicas: EntradaMusica[] = itens.map((i) => ({
-    // Mesma identidade usada em titulo_norm do chart_semana.
-    tituloNorm: chaveMusica(i.t),
-    titulo: i.t,
-    artistaPrincipal: artistaDe(i),
-    artistas: i.artistas,
-    valor: Number.isFinite(i.n) ? i.n : 0,
-    nacionalidades: i.nacionalidades,
-    foco: i.foco,
-  }));
+  // Junta itens da mesma música (mesma chaveMusica, identidade de titulo_norm):
+  // soma os streams (inválido = 0), mantém o primeiro título/capa/foco não nulo
+  // e une artistas e nacionalidades.
+  const porChave = new Map<string, ItemAoVivo>();
+  for (const i of itens) {
+    const chave = chaveMusica(i.t);
+    const n = Number.isFinite(i.n) ? i.n : 0;
+    const ex = porChave.get(chave);
+    if (!ex) {
+      porChave.set(chave, { ...i, n, artistas: [...new Set(i.artistas)], nacionalidades: new Set(i.nacionalidades) });
+      continue;
+    }
+    ex.n += n;
+    for (const a of i.artistas) if (!ex.artistas.includes(a)) ex.artistas.push(a);
+    for (const nac of i.nacionalidades) ex.nacionalidades.add(nac);
+    if (ex.foco === null) ex.foco = i.foco;
+  }
+  const musicas: EntradaMusica[] = [];
+  const capaPorChave = new Map<string, string>();
+  for (const [chave, i] of porChave) {
+    capaPorChave.set(chave, i.c);
+    musicas.push({
+      // Mesma identidade usada em titulo_norm do chart_semana.
+      tituloNorm: chave,
+      titulo: i.t,
+      artistaPrincipal: artistaDe(i),
+      artistas: i.artistas,
+      valor: i.n,
+      nacionalidades: i.nacionalidades,
+      foco: i.foco,
+    });
+  }
   const valores = valoresPorPais(musicas, pesos, dataIso, r);
   // Países por peso desc, empate por nome.
-  const paises = [...pesos.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([p]) => p);
-  const capaPorChave = new Map<string, string>();
-  for (const i of itens) if (!capaPorChave.has(chaveMusica(i.t))) capaPorChave.set(chaveMusica(i.t), i.c);
+  const porNome = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  const paises = [...pesos.entries()]
+    .sort((a, b) => b[1] - a[1] || porNome(a[0], b[0]))
+    .map(([p]) => p);
   const out: LinhaAoVivoPais[] = [];
   for (const pais of paises) {
     musicas
       .map((m) => ({ m, bruto: valores.get(m.tituloNorm)?.get(pais) ?? 0 }))
-      .sort((a, b) => b.bruto - a.bruto || (a.m.tituloNorm < b.m.tituloNorm ? -1 : a.m.tituloNorm > b.m.tituloNorm ? 1 : 0))
+      .sort((a, b) => b.bruto - a.bruto || porNome(a.m.tituloNorm, b.m.tituloNorm))
       .slice(0, r.top_pais)
       .forEach(({ m, bruto }, idx) => {
         out.push({
