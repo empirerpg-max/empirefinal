@@ -527,7 +527,8 @@ function ChartsGlobalView({ category }: { category: CategoryConfig }) {
             const title = r.musica || r.titulo || r.album || r.tit || r.t || "—";
             const artist = r.artista || r.art || r.a || "";
             const val = r.semana || r.streams || r.pontos || r.vendas || r.val || r.s || "0";
-            const valTotal = r.valTotal || r.total || r.geral || "";
+            // Global 100: só existe o total da semana (pontos), não um acumulado.
+            const valTotal = category.id === "hot100" ? "" : r.valTotal || r.total || r.geral || "";
             const st = r.status || r.st || "=";
             const stColor = st === "↑" ? "text-emerald-400" : st === "↓" ? "text-red-400" : st === "NEW" ? "text-primary" : "text-muted-foreground";
             const stLabel = st === "↑" ? "▲" : st === "↓" ? "▼" : st === "NEW" ? "NEW" : "=";
