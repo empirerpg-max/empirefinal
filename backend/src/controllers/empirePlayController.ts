@@ -47,6 +47,7 @@ interface MusicaD1Row {
   letra: string | null;
   letra_sincronizada: string | null;
   genero: string | null;
+  tipo_single: string | null;
   data_lancamento: string | null;
   data_lancamento_iso: string | null;
   weeks: number | null;
@@ -71,6 +72,9 @@ function musicaD1RowToSheetRecord(row: MusicaD1Row): SheetRecord {
     letra: row.letra || "",
     letra_sincronizada: row.letra_sincronizada || "",
     genero: row.genero || "",
+    // "Single" x "Tracklist Album" — o cruzamento dos charts (indexarCatalogo)
+    // usa pra fazer o single vencer a faixa de álbum de mesmo título.
+    tipo_single: row.tipo_single || "",
     data_de_lancamento: row.data_lancamento || "",
     id_do_topico: row.id_topico || "",
     ordem: row.ordem != null ? String(row.ordem) : "",
@@ -609,6 +613,10 @@ export interface EmpirePlayCleanItem {
   // Código único (Musicas!Z / Albuns!L) — usado pros botões Shop/Info/Visual
   // (ver extraMaterialController.ts). Ausente em conteúdo legado sem código.
   codigoUnico?: string | null;
+  // Tipo do lançamento (musicas.tipo_single: "Single", "Tracklist Album"...).
+  // Usado pelas playlists pra repetir o cruzamento dos charts, em que o
+  // single vence a faixa de álbum de mesmo título.
+  tipoSingle?: string | null;
   // Quantidade de semanas no chart. Pra música vem direto da própria linha
   // (Musicas!L, "WEEKS"); pra vídeo e álbum não existe coluna própria —
   // é cruzado depois de buildCleanItem (ver getEmpirePlayForumTopicController):
@@ -1123,6 +1131,8 @@ export function buildCleanItem(
   // Extra_Albuns (botões Shop/Info/Visual, ver extraMaterialController.ts).
   const codigoUnico = getValue(record, ["codigo_unico"]);
   if (codigoUnico) item.codigoUnico = codigoUnico;
+  const tipoSingle = getValue(record, ["tipo_single"]);
+  if (tipoSingle) item.tipoSingle = tipoSingle;
 
   return item;
 }
