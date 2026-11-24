@@ -10,6 +10,8 @@ import {
 } from "./artistas";
 import { rankingsDaSemana, type MusicaParaPais, type Pesos } from "./paises";
 import { fixImg, fmt } from "./formato";
+import { regrasDeConfig } from "./regras";
+import { FOCO_SCHEMA } from "./foco";
 
 // Idempotente — roda no começo de cada ingestão (padrão do projeto).
 // Plano grátis do D1: cada linha e cada entrada de índice gravada conta no
@@ -84,6 +86,10 @@ export const CHARTS_D1_SCHEMA: string[] = [
     mensagem TEXT,
     criado_em TEXT DEFAULT (datetime('now'))
   )`,
+  // Regras das paradas por país congeladas na ingestão de cada semana (1 escrita/semana).
+  // Semana sem linha usa REGRAS_PADRAO (versão 1, fixa no código).
+  "CREATE TABLE IF NOT EXISTS chart_regras_semana (data TEXT PRIMARY KEY, versao INTEGER NOT NULL, regras TEXT NOT NULL)",
+  ...FOCO_SCHEMA,
 ];
 
 /**
@@ -388,7 +394,7 @@ async function gravarArtistasEPesos(db: D1DatabaseLike, artistas: string[][], pe
 }
 
 const CATALOGO_SQL =
-  "SELECT titulo, artista, artista_2, artista_3, artista_4, artista_5, artista_6, capa_url, genero, tipo_single FROM musicas";
+  "SELECT titulo, codigo_unico, artista, artista_2, artista_3, artista_4, artista_5, artista_6, capa_url, genero, tipo_single FROM musicas";
 
 export async function carregarCatalogo(db: D1DatabaseLike): Promise<Map<string, MusicaCatalogo>> {
   try {
@@ -527,6 +533,20 @@ function prepararLinhas(
   return { ok: true, dataIso: datas[0], linhas, anomalias };
 }
 
+/**
+ * Grava as regras das paradas por país da semana a partir do chart_config
+ * atual. OR IGNORE: um reenvio da semana mantém as regras gravadas antes, então
+ * mudar o chart_config só afeta semanas futuras.
+ */
+async function congelarRegrasDaSemana(db: D1DatabaseLike, dataIso: string): Promise<void> {
+  const cfg = await db.prepare("SELECT chave, valor FROM chart_config").all<{ chave: string; valor: string }>();
+  const regras = regrasDeConfig(new Map(cfg.results.map((c) => [c.chave, String(c.valor ?? "")])));
+  await db
+    .prepare("INSERT OR IGNORE INTO chart_regras_semana (data, versao, regras) VALUES (?, 1, ?)")
+    .bind(dataIso, JSON.stringify(regras))
+    .run();
+}
+
 /** Libera a leitura do D1 na tela (chart_config.charts_d1_ativo = '1'). */
 async function ativarLeitura(db: D1DatabaseLike): Promise<void> {
   await db.prepare("UPDATE chart_config SET valor = '1' WHERE chave = 'charts_d1_ativo'").run();
@@ -632,6 +652,7 @@ export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao
     ...hof,
   ]);
   await recalcularSemanaSeguinte(db, charts, dataIso);
+  await congelarRegrasDaSemana(db, dataIso);
   if (payload.ativar === true) await ativarLeitura(db);
   await registrarIngestao(db, dataIso, modo, calculadas.length, true, prep.anomalias.join("; ") || "ok");
   return { ok: true, data: dataIso, linhas: calculadas.length };
@@ -640,7 +661,7 @@ export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao
 // ---- Leitura (/api/charts) ----
 
 /** Banco sem as tabelas dos charts (nenhuma ingestão ainda) → leitura vazia, não erro. */
-async function consultar<T>(db: D1DatabaseLike, sql: string, ...params: unknown[]): Promise<T[]> {
+export async function consultar<T>(db: D1DatabaseLike, sql: string, ...params: unknown[]): Promise<T[]> {
   try {
     return (await db.prepare(sql).bind(...params).all<T>()).results;
   } catch (e) {
@@ -683,7 +704,7 @@ export async function carregarGenerosArtistas(db: D1DatabaseLike): Promise<Map<s
 const generoEfetivo = (generoMusica: string | null, art: string, generosArtistas: Map<string, string>): string =>
   (generoMusica ?? "").trim() || generosArtistas.get(chaveArtistaInfo(art)) || "";
 
-const lerArtistas = (json: string | null): string[] => {
+export const lerArtistas = (json: string | null): string[] => {
   try {
     const v = JSON.parse(json || "[]");
     return Array.isArray(v) ? v.map((a) => String(a ?? "").trim()).filter(Boolean) : [];
@@ -693,11 +714,11 @@ const lerArtistas = (json: string | null): string[] => {
 };
 
 /** Primeiro artista gravado; sem nenhum, o principal do "Artista - Título". */
-const artistaPrincipal = (artistas: string[], titulo: string): string =>
+export const artistaPrincipal = (artistas: string[], titulo: string): string =>
   artistas[0] || extrairArtistasDoTitulo(titulo)[0] || "";
 
 /** Capa: catálogo (single vence álbum) → foto do artista principal → "". */
-const capaDe = (titulo: string, art: string, cat: Map<string, MusicaCatalogo>, fotos: Map<string, string>): string =>
+export const capaDe = (titulo: string, art: string, cat: Map<string, MusicaCatalogo>, fotos: Map<string, string>): string =>
   fixImg(buscarNoCatalogo(titulo, cat)?.capa) || fixImg(fotos.get(art.trim().toUpperCase())) || "";
 
 /** Há pesos de país pra plataforma? Sem eles, COUNTRIES segue da planilha. */
@@ -811,6 +832,9 @@ export interface LinhaPaisApi {
   art: string;
   capa: string;
   st: string;
+  /** Só nas paradas oficiais: ordem no seletor e descrição da metodologia. */
+  ordem?: number;
+  desc?: string;
 }
 
 const numeroConfig = (v: string | undefined, padrao: number): number => {

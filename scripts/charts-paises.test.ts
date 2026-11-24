@@ -4,6 +4,10 @@ import { sorteio01 } from "../backend/src/services/chartsD1/sorteio";
 import { fatiasRegraC, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
 import { regrasDeConfig, parseRegrasSemana, REGRAS_PADRAO } from "../backend/src/services/chartsD1/regras";
 import { fontes, pontos, emAcr, calcularParada, resolverPaisParada, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
+import { criarD1Sqlite } from "./charts-d1-sqlite";
+import { CHARTS_D1_SCHEMA, ingerirSemana } from "../backend/src/services/chartsD1/repo";
+import { calcularSemanaPaises, ROTULO_PARADAS } from "../backend/src/services/chartsD1/semanaPaises";
+import { indexarCatalogo } from "../backend/src/services/chartsD1/artistas";
 
 test("sorteio01: determinístico, em [0,1), varia com a chave", () => {
   expect(sorteio01("2026-11-11|x|BRASIL|nac")).toBe(sorteio01("2026-11-11|x|BRASIL|nac"));
@@ -196,4 +200,77 @@ test("resolverPaisParada: aliases sem acento; ausente → parada omitida", () =>
   const r = paradasDaSemana([ms("a")], [], REGRAS_PADRAO, new Set(["REINO UNIDO"]));
   expect(r.map((x) => x.parada.id)).toEqual(["UK"]);
   expect(r[0].linhas[0].st).toBe("NEW");
+});
+
+// ───────────── Orquestrador da semana (SQLite em memória) ─────────────
+
+/** Schema + 2 semanas (Global 100 + 4 plataformas) + pais_peso + artista_info + musica_foco. */
+async function bancoDeTeste(o: { semApple?: boolean; semSales?: boolean } = {}) {
+  const db = criarD1Sqlite();
+  for (const s of CHARTS_D1_SCHEMA) db.exec(s);
+  const musicas = [
+    ["Amanda - Koala", "Amanda"],
+    ["Bob - Freedom", "Bob"],
+    ["Bob - Liberty", "Bob"],
+    ["Carl - Tea", "Carl"],
+    ["Dua - Hit", "Dua"],
+  ];
+  const charts = ["BILLBOARD HOT 100", "SPOTIFY", "YOUTUBE"];
+  if (!o.semApple) charts.push("APPLE MUSIC");
+  if (!o.semSales) charts.push("DIGITAL SALES");
+  const semana = (data: string, fator: number) =>
+    charts.flatMap((chart, ci) =>
+      // Ordem muda por chart/semana: rankings diferentes entre plataformas.
+      musicas.map((_, i) => musicas[(i + ci + fator) % musicas.length]).map(([titulo, art], i) =>
+        [chart, data, String(i + 1), titulo, String((musicas.length - i) * 1000 * fator), "", "", art]),
+    );
+  const pesos = [
+    ["ESTADOS UNIDOS", "30,00%", "35,00%", "25,00%"],
+    ["REINO UNIDO", "8,00%", "9,00%", "6,00%"],
+    ["AUSTRÁLIA", "2,00%", "2,50%", "1,50%"],
+  ];
+  const artistas = [["Amanda", "Australia", "", ""], ["Bob", "Reino Unido", "", ""], ["Carl", "Estados Unidos", "", ""]];
+  for (const [data, fator] of [["04/11/2026", 1], ["11/11/2026", 2]] as const) {
+    const r = await ingerirSemana(db, { linhas: semana(data, fator), modo: "historico", pesos, artistas });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+  }
+  db.exec("INSERT INTO musica_foco (codigo_unico, pais, desde, por_admin) VALUES ('C1', 'AUSTRALIA', '2026-01-01', 0)");
+  return db;
+}
+
+test("calcularSemanaPaises: COUNTRIES e paradas; mesma música em 4 plataformas não duplica; fixo por data", async () => {
+  const db = await bancoDeTeste(); // helper no próprio arquivo: schema + 2 semanas + pais_peso + artista_info + musica_foco
+  const a = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  const b = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  expect(a).toEqual(b);
+  const uk = a.paradas.filter((l) => l.pais === "UK Official Charts");
+  expect(new Set(uk.map((l) => l.tit)).size).toBe(uk.length);
+  expect(a.countries.get("SPOTIFY")!.length).toBeGreaterThan(0);
+  // mudar chart_config não muda semana que já tem regras gravadas
+  await db.prepare("INSERT OR REPLACE INTO chart_config (chave, valor) VALUES ('nac_max','9')").run();
+  expect(await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map())).toEqual(a);
+});
+test("semana só com Spotify/YouTube/Global (antes de Apple e Sales): paradas sem NaN", async () => {
+  const db = await bancoDeTeste({ semApple: true, semSales: true });
+  const r = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  expect(r.paradas.every((l) => !String(l.val).includes("NaN"))).toBe(true);
+});
+test("calcularSemanaPaises: ingestão grava as regras da semana uma vez; formato das linhas; foco via catálogo", async () => {
+  const db = await bancoDeTeste();
+  const regras = await db.prepare("SELECT data, versao FROM chart_regras_semana ORDER BY data").all<{ data: string; versao: number }>();
+  expect(regras.results).toEqual([{ data: "2026-11-04", versao: 1 }, { data: "2026-11-11", versao: 1 }]);
+  const a = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  // COUNTRIES só das 3 plataformas com recorte; sem "DIGITAL SALES COUNTRIES".
+  expect([...a.countries.keys()].sort()).toEqual(["APPLE MUSIC", "SPOTIFY", "YOUTUBE"]);
+  const eua = a.paradas.filter((l) => l.pais === "Billboard Hot 100");
+  expect(eua.map((l) => l.pos)).toEqual(eua.map((_, i) => i + 1));
+  expect(eua[0]).toMatchObject({ mes: "11/11/2026", ordem: 1, desc: "Estados Unidos · vendas + streaming" });
+  expect(["↑", "↓", "=", "NEW"]).toContain(eua[0].st);
+  expect(ROTULO_PARADAS).toBe("PARADAS OFICIAIS");
+  // Foco na Austrália (via codigo_unico do catálogo) aumenta o valor de Dua lá.
+  const cat = indexarCatalogo([{ titulo: "Hit", artista: "Dua", codigo_unico: "C1", capa_url: "", genero: "", tipo_single: "" }]);
+  const comFoco = await calcularSemanaPaises(db, "11/11/2026", cat, new Map());
+  const valAu = (s: typeof a) =>
+    Number(s.countries.get("SPOTIFY")!.find((l) => l.pais === "AUSTRÁLIA" && l.tit === "Dua - Hit")!.val.replace(/\D/g, ""));
+  expect(valAu(comFoco)).toBeGreaterThan(valAu(a));
 });

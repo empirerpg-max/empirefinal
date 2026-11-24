@@ -195,8 +195,8 @@ test("semanal: PONTOS/VENDAS vazio ou ilegível recusa a semana", async () => {
 });
 test("artistas resolvidos do catálogo/título, artista_info e pais_peso com upsert", async () => {
   const db = criarD1Sqlite();
-  await db.prepare("CREATE TABLE musicas (titulo TEXT, artista TEXT, artista_2 TEXT, artista_3 TEXT, artista_4 TEXT, artista_5 TEXT, artista_6 TEXT, capa_url TEXT, genero TEXT, tipo_single TEXT)").run();
-  await db.prepare("INSERT INTO musicas VALUES ('Faixa 1', 'Artista 1', 'Convidada', NULL, NULL, NULL, NULL, 'c.jpg', 'Pop', 'SINGLE')").run();
+  await db.prepare("CREATE TABLE musicas (titulo TEXT, codigo_unico TEXT, artista TEXT, artista_2 TEXT, artista_3 TEXT, artista_4 TEXT, artista_5 TEXT, artista_6 TEXT, capa_url TEXT, genero TEXT, tipo_single TEXT)").run();
+  await db.prepare("INSERT INTO musicas VALUES ('Faixa 1', NULL, 'Artista 1', 'Convidada', NULL, NULL, NULL, NULL, 'c.jpg', 'Pop', 'SINGLE')").run();
   const linhas = linhasFake("11/11/2026").map((l) => [...l.slice(0, 7), "", "", "", "", ""]);
   linhas[1] = [linhas[1][0], linhas[1][1], linhas[1][2], "Amanda Brokne - Faixa X (feat. Zed)", ...linhas[1].slice(4)];
   const r = await ingerirSemana(db, {
@@ -265,7 +265,7 @@ const catFake = indexarCatalogo(musicasFake as any);
 
 /** Tabela musicas do D1 com o catálogo fake (o gênero é gravado na ingestão). */
 async function criarMusicasFake(db: ReturnType<typeof criarD1Sqlite>) {
-  await db.prepare("CREATE TABLE musicas (titulo TEXT, artista TEXT, artista_2 TEXT, artista_3 TEXT, artista_4 TEXT, artista_5 TEXT, artista_6 TEXT, capa_url TEXT, genero TEXT, tipo_single TEXT)").run();
+  await db.prepare("CREATE TABLE musicas (titulo TEXT, codigo_unico TEXT, artista TEXT, artista_2 TEXT, artista_3 TEXT, artista_4 TEXT, artista_5 TEXT, artista_6 TEXT, capa_url TEXT, genero TEXT, tipo_single TEXT)").run();
   for (const m of musicasFake) {
     await db.prepare("INSERT INTO musicas (titulo, artista, capa_url, genero, tipo_single) VALUES (?, ?, ?, ?, ?)").bind(m.titulo, m.artista, m.capa_url, m.genero, m.tipo_single).run();
   }
