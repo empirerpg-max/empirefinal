@@ -73,3 +73,24 @@ test("rankingsPorPais: sem semana anterior → tudo NEW", () => {
   const e: EntradaMusica = { tituloNorm: "a", titulo: "A", artistaPrincipal: "x", artistas: ["x"], valor: 10, nacionalidades: new Set(), foco: null };
   expect(rankingsPorPais([e], [], pesos, "d", null, R).get("BRASIL")![0].st).toBe("NEW");
 });
+
+test("REGRAS_PADRAO: valores sentinela, sem vendas e regrasDeConfig sem referências compartilhadas", () => {
+  const ex = REGRAS_PADRAO.paradas.find((p) => p.id === "EXCL_US")!;
+  expect(ex.ordem).toBe(0);
+  expect(ex.top).toBe(100);
+  const de = REGRAS_PADRAO.paradas.find((p) => p.id === "DE")!;
+  expect(de.tipo).toBe("receita");
+  expect(de.tp).toBe(0.008);
+  for (const p of REGRAS_PADRAO.paradas) expect("a" in p).toBe(false);
+  expect(regrasDeConfig(new Map([["paradas", "[]"]])).paradas.length).toBe(12);
+  expect(regrasDeConfig(new Map([["paradas", "[1]"]])).paradas.length).toBe(12);
+  const orig = REGRAS_PADRAO.paradas[0].nome;
+  const r = regrasDeConfig(new Map());
+  r.paradas[0].nome = "MUTADO";
+  expect(REGRAS_PADRAO.paradas[0].nome).toBe(orig);
+  const eua = r.paradas.find((p) => p.id === "EUA")!;
+  const ca = r.paradas.find((p) => p.id === "CA")!;
+  expect(eua.recorrencia).not.toBe(ca.recorrencia);
+  expect(REGRAS_PADRAO.paradas.find((p) => p.id === "EUA")!.recorrencia).not.toBe(
+    REGRAS_PADRAO.paradas.find((p) => p.id === "CA")!.recorrencia);
+});
