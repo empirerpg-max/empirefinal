@@ -102,6 +102,8 @@ export interface FaixaPlaylist {
   tocavel: boolean;
   musica: EmpirePlayCleanItem | null;
   clipe: EmpirePlayCleanItem | null;
+  /** Só nas playlists de gênero: posição da faixa no Global 100 (`pos` é a posição no gênero). */
+  posGlobal?: number;
 }
 
 export interface CatalogoTocavel {
@@ -348,14 +350,22 @@ const LIMITE_AO_VIVO = 100;
 const LIMITE_PAIS = 50;
 
 const CONECTIVOS = new Set(["de", "do", "da", "dos", "das", "e"]);
-/** "REINO UNIDO" → "Reino Unido"; "COREIA DO SUL" → "Coreia do Sul"; "R&B" → "R&B". */
-export function emTitulo(s: string): string {
-  return String(s ?? "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLocaleLowerCase("pt-BR")
-    .split(" ")
-    .map((w, i) => (i > 0 && CONECTIVOS.has(w) ? w : w.replace(/(^|[-&'/])(\p{L})/gu, (_, a: string, b: string) => a + b.toLocaleUpperCase("pt-BR"))))
+/**
+ * "REINO UNIDO" → "Reino Unido"; "COREIA DO SUL" → "Coreia do Sul"; "R&B" → "R&B".
+ * Com `siglas` (padrão), um nome de UMA palavra toda em caixa alta com até 3
+ * letras fica como está ("EUA", "UK"). Só vale pra palavra sozinha: em
+ * pais_peso tudo é caixa alta, e "COREIA DO SUL" tem que virar "Coreia do Sul".
+ */
+export function emTitulo(s: string, { siglas = true }: { siglas?: boolean } = {}): string {
+  const palavras = String(s ?? "").trim().split(/\s+/).filter(Boolean);
+  return palavras
+    .map((original, i) => {
+      const w = original.toLocaleLowerCase("pt-BR");
+      if (i > 0 && CONECTIVOS.has(w)) return w;
+      const letras = original.replace(/[^\p{L}]/gu, "");
+      if (siglas && palavras.length === 1 && letras.length > 0 && letras.length <= 3 && original === original.toLocaleUpperCase("pt-BR")) return original;
+      return w.replace(/(^|[-&'/])(\p{L})/gu, (_, a: string, b: string) => a + b.toLocaleUpperCase("pt-BR"));
+    })
     .join(" ");
 }
 
@@ -418,11 +428,11 @@ export async function montarPlaylist(id: IdPlaylist, fontes: FontesPlaylists): P
       const alvo = semAcentoMaiusculo(id.pais);
       const linhas = porPos((porPais[id.plataforma] ?? []).filter((l) => semAcentoMaiusculo(l.pais) === alvo)).slice(0, LIMITE_PAIS);
       if (!linhas.length) return null;
-      const pais = linhas[0].pais;
+      // id como foi pedido; o título usa a grafia de pais_peso (com acento).
       const faixas = linhas.map((l) => faixaDoChart(cat, l.t, l.pos, l.s, l.c));
       return playlist(
-        { tipo: "pais", plataforma: id.plataforma, pais },
-        `Top 50 ${emTitulo(pais)}`,
+        id,
+        `Top 50 ${emTitulo(linhas[0].pais)}`,
         `${NOME_PLATAFORMA[id.plataforma]} · ao vivo`,
         faixas,
         id.plataforma,
@@ -440,16 +450,20 @@ export async function montarPlaylist(id: IdPlaylist, fontes: FontesPlaylists): P
       if (!linhas.length) return null;
       const nome = linhas[0].pais;
       const faixas = linhas.map((l) => faixaDoChart(cat, l.tit, l.pos, l.val, l.capa));
-      return playlist({ tipo: "parada", parada: nome }, nome, SUB_SEMANA, faixas);
+      return playlist(id, nome, SUB_SEMANA, faixas);
     }
     case "genero": {
       const [semana, cat] = await Promise.all([fontes.semana(), fontes.catalogo()]);
-      // Posição = posição no Global 100; faixa sem catálogo (ou sem gênero) fica fora.
+      // Faixa sem catálogo (ou de outro gênero) fica fora; `pos` = posição no
+      // gênero (1..N), `posGlobal` = posição no Global 100.
+      const genero = normalizarGenero(id.genero);
       const faixas = semana.global100
         .map((l, k) => faixaDoChart(cat, l.titulo, k + 1, l.valor))
-        .filter((f) => f.musica && normalizarGenero(f.musica.genero || "") === id.genero);
+        .filter((f) => f.musica && normalizarGenero(f.musica.genero || "") === genero)
+        .map((f, k): FaixaPlaylist => ({ ...f, pos: k + 1, posGlobal: f.pos }));
       if (!faixas.length) return null;
-      return playlist(id, `Top ${emTitulo(faixas[0].musica!.genero || id.genero)}`, SUB_SEMANA, faixas);
+      const nome = emTitulo(faixas[0].musica!.genero || genero, { siglas: false });
+      return playlist({ tipo: "genero", genero }, `Top ${nome}`, SUB_SEMANA, faixas);
     }
     case "hot": {
       const [itens, cat] = await Promise.all([fontes.hot(), fontes.catalogo()]);

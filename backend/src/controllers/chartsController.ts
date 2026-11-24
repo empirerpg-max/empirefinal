@@ -442,6 +442,8 @@ async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtub
 
 // Ao vivo por país (regra C sobre os streams da EM Alta). Sem D1, leitura do
 // D1 ainda não ativada ou erro → listas vazias (o mundo segue funcionando).
+const aoVivoPaisesMemo = new WeakMap<EmAltaBruta, Promise<Record<PlataformaAoVivo, LinhaAoVivoPais[]>>>();
+
 export async function fetchRTPaises(): Promise<Record<PlataformaAoVivo, LinhaAoVivoPais[]>> {
   const vazio = (): Record<PlataformaAoVivo, LinhaAoVivoPais[]> => ({ spotify: [], apple: [], youtube: [] });
   const db = getCatalogoDb();
@@ -449,7 +451,20 @@ export async function fetchRTPaises(): Promise<Record<PlataformaAoVivo, LinhaAoV
   try {
     if (!(await ativoD1(db))) return vazio();
     const [emAlta, { cat }] = await Promise.all([fetchRTBruto(), referenciasD1(db)]);
-    return await calcularAoVivoPaises(db, emAlta, cat);
+    // Um cálculo por leitura da EM Alta (o objeto muda a cada 30 s): pedidos
+    // seguintes (tela de Charts, playlists por país) reusam o mesmo ranking.
+    const memo = aoVivoPaisesMemo.get(emAlta);
+    if (memo) return await memo;
+    const valor = calcularAoVivoPaises(db, emAlta, cat);
+    aoVivoPaisesMemo.set(emAlta, valor);
+    const descartar = () => {
+      if (aoVivoPaisesMemo.get(emAlta) === valor) aoVivoPaisesMemo.delete(emAlta);
+    };
+    // Vazio (sem pesos ou erro engolido por calcularAoVivoPaises) não fica guardado.
+    valor.then((r) => {
+      if (!r.spotify.length && !r.apple.length && !r.youtube.length) descartar();
+    }, descartar);
+    return await valor;
   } catch (e) {
     console.warn("[charts-d1] falha no ao vivo por país; seguindo sem ele:", e);
     return vazio();
@@ -483,9 +498,13 @@ export function semanaParaPlaylists(): Promise<SemanaPlaylistsCharts> {
   if (semanaPlaylistsCache && semanaPlaylistsCache.expiresAt > Date.now()) return semanaPlaylistsCache.valor;
   const valor = lerSemanaPlaylists();
   const entrada = { valor, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS };
-  valor.catch(() => {
+  const descartar = () => {
     if (semanaPlaylistsCache === entrada) semanaPlaylistsCache = null;
-  });
+  };
+  // Falha ou semana vazia (D1 inativo, erro engolido por viaD1) não fica 5 min em cache.
+  valor.then((r) => {
+    if (!r.global100.length) descartar();
+  }, descartar);
   semanaPlaylistsCache = entrada;
   return valor;
 }

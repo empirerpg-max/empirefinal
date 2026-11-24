@@ -9,6 +9,7 @@ import {
   limparCachePlaylists,
   montarPlaylist,
   carregarHot,
+  emTitulo,
   type CatalogoTocavel,
   type FontesPlaylists,
 } from "../backend/src/services/playlistsEmpirePlay";
@@ -301,7 +302,8 @@ test("montarPlaylist país: só as linhas do país (sem diferença de acento), t
   ]);
   // id sem acento acha o país com acento; título mantém o acento
   const austria = await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "AUSTRIA" }, fontes);
-  expect(austria).toMatchObject({ titulo: "Top 50 Áustria", id: "pais:spotify:ÁUSTRIA" });
+  // id volta como foi pedido (sem acento); o título usa a grafia de pais_peso
+  expect(austria).toMatchObject({ titulo: "Top 50 Áustria", id: "pais:spotify:AUSTRIA" });
   expect((await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "COREIA DO SUL" }, fontes))!.titulo).toBe("Top 50 Coreia do Sul");
   expect((await montarPlaylist({ tipo: "pais", plataforma: "apple", pais: "REINO UNIDO" }, fontes))!.subtitulo).toBe("Apple Music · ao vivo");
   expect(await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "JAPÃO" }, fontes)).toBeNull();
@@ -348,14 +350,19 @@ test("montarPlaylist semana: Global 100, parada (inexistente → null), gênero 
   ]);
   expect(uk!.capa_url).toBeNull();
   expect(await montarPlaylist({ tipo: "parada", parada: "NADA" }, fontes)).toBeNull();
+  expect(await montarPlaylist({ tipo: "parada", parada: "uk charts" }, fontes)).toMatchObject({ id: "semana:parada:uk charts", titulo: "UK CHARTS" });
 
   const pop = await montarPlaylist({ tipo: "genero", genero: "POP" }, fontes);
   expect(pop).toMatchObject({ id: "semana:genero:POP", titulo: "Top Pop", subtitulo: "Da semana · fecha quinta", aoVivo: false, capa_url: "follia.jpg" });
-  expect(pop!.faixas.map((f) => [f.pos, f.titulo, f.valor])).toEqual([
-    [3, "Follia", "200.000"],
-    [4, "Sweet Spot", "150.000"],
-    [5, "Shapeshifter", "100.000"],
+  // pos = posição no gênero; posGlobal = posição no Global 100
+  expect(pop!.faixas.map((f) => [f.pos, f.posGlobal, f.titulo, f.valor])).toEqual([
+    [1, 3, "Follia", "200.000"],
+    [2, 4, "Sweet Spot", "150.000"],
+    [3, 5, "Shapeshifter", "100.000"],
   ]);
+  // id montado à mão com gênero sem normalizar também funciona
+  expect(await montarPlaylist({ tipo: "genero", genero: "pop" }, fontes)).toEqual(pop);
+  expect(g!.faixas.every((f) => f.posGlobal === undefined)).toBe(true);
   expect((await montarPlaylist({ tipo: "genero", genero: "RAP" }, fontes))!.faixas.map((f) => f.titulo)).toEqual(["Bastarda"]);
   expect(await montarPlaylist({ tipo: "genero", genero: "JAZZ" }, fontes)).toBeNull();
 });
@@ -384,8 +391,8 @@ test("carregarHot: 30 mais recentes do D1 sem pendentes, cache de 5 min, sem D1 
   const db = criarD1Sqlite(":memory:", (sql) => consultas.push(sql));
   for (const s of MUSICAS_CREATE_STATEMENTS) db.exec(s);
   const valores = Array.from({ length: 35 }, (_, i) => {
-    const dia = String(i + 1).padStart(2, "0");
-    return `('k${i}', 'C${i}', 'Musica ${i}', 'Artista', '2026-10-${dia}', ${i === 34 ? 1 : 0})`;
+    const data = new Date(Date.UTC(2026, 9, 1 + i)).toISOString().slice(0, 10); // 2026-10-01 .. 2026-11-04
+    return `('k${i}', 'C${i}', 'Musica ${i}', 'Artista', '${data}', ${i === 34 ? 1 : 0})`;
   });
   db.exec(`INSERT INTO musicas (chave, codigo_unico, titulo, artista, data_lancamento_iso, pendente) VALUES ${valores.join(",")}`);
   db.exec(`INSERT INTO musicas (chave, codigo_unico, titulo, artista, data_lancamento_iso, pendente) VALUES ('kx', 'CX', 'Sem Data', 'Artista', NULL, 0)`);
@@ -403,4 +410,24 @@ test("carregarHot: 30 mais recentes do D1 sem pendentes, cache de 5 min, sem D1 
   } finally {
     limparCachePlaylists();
   }
+});
+
+test("emTitulo: palavras em Título, conectivos minúsculos, sigla de até 3 letras (palavra única) mantida", () => {
+  expect(emTitulo("REINO UNIDO")).toBe("Reino Unido");
+  expect(emTitulo("COREIA DO SUL")).toBe("Coreia do Sul");
+  expect(emTitulo("EUA")).toBe("EUA");
+  expect(emTitulo("UK")).toBe("UK");
+  expect(emTitulo("SÃO TOMÉ")).toBe("São Tomé"); // sigla só quando é a palavra sozinha
+  expect(emTitulo("ÁUSTRIA")).toBe("Áustria");
+  expect(emTitulo("GUINÉ-BISSAU")).toBe("Guiné-Bissau");
+  expect(emTitulo("  PAÍSES   BAIXOS ")).toBe("Países Baixos");
+  expect(emTitulo("POP", { siglas: false })).toBe("Pop");
+  expect(emTitulo("r&b")).toBe("R&B");
+});
+
+test("montarPlaylist país: sigla no título fica em caixa alta (Top 50 EUA)", async () => {
+  const fontes = fontesFalsas({
+    aoVivoPaises: { ...vazioPlat(), spotify: [{ pais: "EUA", pos: 1, t: "A - B", s: "1", c: "", art: "" }] },
+  });
+  expect(await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "EUA" }, fontes)).toMatchObject({ titulo: "Top 50 EUA", id: "pais:spotify:EUA" });
 });
