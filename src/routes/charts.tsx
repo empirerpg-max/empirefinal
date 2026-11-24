@@ -5,8 +5,8 @@ import {
 } from "lucide-react";
 import {
   getChartFilters, getChartData,
-  getMonthlyYears, getMonthlyDates, getMonthlyArtists, getMonthlyStats, getRealTime,
-  type ChartRow, type RealTimeData,
+  getMonthlyYears, getMonthlyDates, getMonthlyArtists, getMonthlyStats, getRealTime, getRealTimePaises,
+  type ChartRow, type RealTimeData, type RealTimePaisesData,
 } from "@/lib/charts";
 import { resolveImg } from "@/lib/api";
 import { useDragScroll } from "@/hooks/useDragScroll";
@@ -193,6 +193,9 @@ function ChartsRealTime() {
   const [data, setData] = useState<RealTimeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<keyof RealTimeData | null>(null);
+  const [view, setView] = useState<"mundo" | "pais">("mundo");
+  const [paisesData, setPaisesData] = useState<RealTimePaisesData | null>(null);
+  const [pais, setPais] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -201,22 +204,36 @@ function ChartsRealTime() {
         .then((d) => alive && setData(d))
         .catch(() => alive && setData({}))
         .finally(() => alive && setLoading(false));
+      // Por país só busca quando a visão está aberta (mesmo intervalo de 30 s).
+      if (view === "pais") {
+        getRealTimePaises()
+          .then((d) => alive && setPaisesData(d))
+          .catch(() => alive && setPaisesData({}));
+      }
     };
     load();
     const id = setInterval(load, 30_000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
+  }, [view]);
+
+  const backToGrid = () => { setSelected(null); setView("mundo"); setPais(null); };
 
   if (loading) return <LoadingBlock text="Carregando ao vivo..." />;
 
   const activeCol = REALTIME_COLS.find((c) => c.key === selected);
   if (activeCol) {
-    const items = data?.[activeCol.key] || [];
+    const rowsPais = paisesData?.[activeCol.key] || [];
+    // Países na ordem que a API devolve (peso desc), sem repetir.
+    const paises = Array.from(new Set(rowsPais.map((r) => String(r.pais ?? "")).filter(Boolean)));
+    const paisAtual = pais && paises.includes(pais) ? pais : paises[0] ?? null;
+    const items = view === "pais"
+      ? rowsPais.filter((r) => String(r.pais ?? "") === paisAtual)
+      : data?.[activeCol.key] || [];
     const maxVal = Math.max(1, ...items.map((it) => parseNum(it.streams || it.semana || it.val || it.s)));
     return (
       <div className="p-4">
         <button
-          onClick={() => setSelected(null)}
+          onClick={backToGrid}
           className="flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-foreground mb-4"
         >
           <ChevronLeft className="size-4" /> Ao vivo
@@ -224,8 +241,33 @@ function ChartsRealTime() {
         <h1 className={`font-['Fjalla_One'] text-2xl uppercase tracking-tight mb-5 flex items-center gap-2 ${activeCol.color}`}>
           <activeCol.icon className="size-5" /> {activeCol.label}
         </h1>
+        <div className="flex items-center gap-1.5 mb-3">
+          <ChartsPill active={view === "mundo"} onClick={() => setView("mundo")}>Mundo</ChartsPill>
+          <ChartsPill active={view === "pais"} onClick={() => setView("pais")}>Por país</ChartsPill>
+        </div>
+        {view === "pais" && paises.length > 0 && (
+          <div className="mb-4">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">País</div>
+            <PillScroller>
+              {paises.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPais(p)}
+                  aria-label={`País: ${p}`}
+                  className={`shrink-0 h-8 px-3 rounded-full text-xs font-semibold transition ${
+                    p === paisAtual ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </PillScroller>
+          </div>
+        )}
         {items.length === 0 ? (
-          <div className="text-sm text-muted-foreground italic py-10 text-center">Sem dados agora.</div>
+          <div className="text-sm text-muted-foreground italic py-10 text-center">
+            {view === "pais" ? (paisesData ? "Sem dados por país agora." : "Carregando...") : "Sem dados agora."}
+          </div>
         ) : (
           <div className="space-y-3">
             {items.map((it, i) => {
