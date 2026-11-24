@@ -20,8 +20,9 @@ type ClipeTeste = { titulo: string; codigo_unico?: string; tipo_video: string; v
 
 /** Monta um CatalogoTocavel a partir de itens já no formato EmpirePlayCleanItem. */
 function catalogoDeTeste(musicas: MusicaTeste[], clipes: ClipeTeste[], fotos?: Map<string, string>): CatalogoTocavel {
-  const m: EmpirePlayCleanItem[] = musicas.map((x, i) => ({
-    id: `musicas_${x.codigo_unico || `idx${i + 1}`}`,
+  const m: EmpirePlayCleanItem[] = musicas.map((x) => ({
+    // id estável como o real (tópico/código), nunca a posição na lista
+    id: `musicas_${x.codigo_unico || x.audioUrl || x.titulo}`,
     type: "musicas",
     title: x.titulo,
     artist: x.artista,
@@ -31,8 +32,8 @@ function catalogoDeTeste(musicas: MusicaTeste[], clipes: ClipeTeste[], fotos?: M
     ...(x.genero ? { genero: x.genero } : {}),
     ...(x.tipoSingle ? { tipoSingle: x.tipoSingle } : {}),
   }));
-  const c: EmpirePlayCleanItem[] = clipes.map((x, i) => ({
-    id: `videos_${i + 100}`,
+  const c: EmpirePlayCleanItem[] = clipes.map((x) => ({
+    id: `videos_${x.videoUrl || x.titulo}`,
     type: "videos",
     title: x.titulo,
     artist: "Artista",
@@ -118,7 +119,10 @@ test("carregarCatalogoTocavel: lê só o D1 (musicas, Music Videos, fotos), cach
              ('k2', 'EMP9', NULL, 'Escondida', 'Jessica Johnson', NULL, 'p.mp3', 'Pop', 1)`);
     db.exec(`INSERT INTO videos (id_topico, titulo_topico, tipo_video, link_video, thumb_url, codigo_unico, linha_planilha)
       VALUES ('900', 'Jessica Johnson - Sweet Spot', 'Music Video', 'https://youtu.be/abc', 't.jpg', 'EMP1', 2),
-             ('901', 'Jessica Johnson - Sweet Spot (Live)', 'Live', 'https://youtu.be/live', 't2.jpg', 'EMP1', 3)`);
+             ('901', 'Jessica Johnson - Sweet Spot (Live)', 'Live', 'https://youtu.be/live', 't2.jpg', 'EMP1', 3),
+             ('902', 'Jessica Johnson - Outra', 'music video ', 'https://youtu.be/outra', 't3.jpg', 'EMP3', 4)`);
+    db.exec(`INSERT INTO musicas (chave, codigo_unico, titulo, artista, audio_url, pendente)
+      VALUES ('k3', 'EMP3', 'Outra', 'Jessica Johnson', 'o.mp3', 0)`);
     db.exec(`INSERT INTO artista_info (nome_upper, nome, foto) VALUES ('JESSICA JOHNSON', 'Jessica Johnson', 'jj.jpg')`);
     g.__CATALOGO_DB__ = db;
 
@@ -128,6 +132,8 @@ test("carregarCatalogoTocavel: lê só o D1 (musicas, Music Videos, fotos), cach
     expect(f.musica).toMatchObject({ id: "musicas_77", title: "Sweet Spot", audioUrl: "a.mp3", genero: "Pop" });
     expect(f.clipe).toMatchObject({ title: "Sweet Spot", category: "Music Video", codigoUnico: "EMP1" });
     expect(f.clipe?.videoUrl).toBeTruthy();
+    // "music video " (caixa/espaço diferentes) também entra
+    expect(ligarFaixa(cat, "Jessica Johnson - Outra", 3, "1").clipe).toMatchObject({ codigoUnico: "EMP3", title: "Outra" });
     // faixa pendente nunca entra (mesma regra de /api/empire-play/musicas)
     expect(ligarFaixa(cat, "Jessica Johnson - Escondida", 2, "1")).toMatchObject({ musica: null, capa_url: "jj.jpg" });
 
@@ -165,5 +171,35 @@ test("carregarCatalogoTocavel: falha do D1 não fica em cache", async () => {
   } finally {
     g.__CATALOGO_DB__ = antes;
     limparCachePlaylists();
+  }
+});
+
+test("montarCatalogoTocavel: entrada embaralhada dá o mesmo resultado (empates não dependem da ordem do D1)", () => {
+  const musicas: MusicaTeste[] = [
+    { titulo: "Igual", artista: "A", codigo_unico: "X2", audioUrl: "x2.mp3", coverUrl: "x2.jpg" },
+    { titulo: "Igual", artista: "A", codigo_unico: "X1", audioUrl: "x1.mp3", coverUrl: "x1.jpg" },
+    { titulo: "Sem Codigo", artista: "B", audioUrl: "b1.mp3" },
+    { titulo: "Sem Codigo", artista: "B", audioUrl: "b2.mp3" },
+    { titulo: "Outra", artista: "C", codigo_unico: "C1", audioUrl: "c.mp3" },
+  ];
+  const clipes: ClipeTeste[] = [
+    { titulo: "Clipe 2", codigo_unico: "X1", tipo_video: "Music Video", videoUrl: "v2.mp4" },
+    { titulo: "Clipe 1", codigo_unico: "X1", tipo_video: "Music Video", videoUrl: "v1.mp4" },
+    { titulo: "Clipe C", codigo_unico: "C1", tipo_video: "Music Video", videoUrl: "vc.mp4" },
+  ];
+  const titulos = ["A - Igual", "B - Sem Codigo", "C - Outra", "Igual"];
+  const ligar = (m: MusicaTeste[], c: ClipeTeste[]) => {
+    const cat = catalogoDeTeste(m, c);
+    return titulos.map((t, i) => {
+      const f = ligarFaixa(cat, t, i + 1, "1");
+      return { chave: f.chave, audio: f.musica?.audioUrl, capa: f.capa_url, clipe: f.clipe?.videoUrl };
+    });
+  };
+  const base = ligar(musicas, clipes);
+  expect(base[0]).toMatchObject({ chave: "X1", clipe: "v1.mp4" });
+  for (const ordem of [[4, 3, 2, 1, 0], [2, 0, 4, 1, 3], [1, 4, 0, 3, 2]]) {
+    const m = ordem.map((i) => musicas[i]);
+    const c = ordem.filter((i) => i < clipes.length).map((i) => clipes[i]);
+    expect(ligar(m, c)).toEqual(base);
   }
 });

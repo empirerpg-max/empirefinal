@@ -113,10 +113,27 @@ const ehMusicVideo = (item: EmpirePlayCleanItem): boolean =>
 const SEM_CODIGO = "\u0000sem-codigo:";
 
 /**
+ * Ordem estável (codigo_unico, título, artista, id): os empates "o primeiro
+ * vence" (índice dos charts, clipe por código) não dependem da ordem em que
+ * o D1 devolve as linhas.
+ */
+const chaveOrdem = (i: EmpirePlayCleanItem): string[] => [(i.codigoUnico || "").trim(), i.title, i.artist, i.id];
+function ordenarEstavel(itens: EmpirePlayCleanItem[]): EmpirePlayCleanItem[] {
+  return [...itens].sort((a, b) => {
+    const ka = chaveOrdem(a);
+    const kb = chaveOrdem(b);
+    for (let k = 0; k < ka.length; k++) {
+      if (ka[k] !== kb[k]) return ka[k] < kb[k] ? -1 : 1;
+    }
+    return 0;
+  });
+}
+
+/**
  * Função pura: monta o catálogo a partir dos itens já no formato do front
  * (`EmpirePlayCleanItem`). Clipes que não são "Music Video" ou sem código
  * único ficam de fora; com vários clipes pro mesmo código, vence o primeiro
- * que tem vídeo (na ordem recebida).
+ * que tem vídeo (na ordem estável de ordenarEstavel, nunca na recebida).
  */
 export function montarCatalogoTocavel(
   musicas: EmpirePlayCleanItem[],
@@ -124,7 +141,7 @@ export function montarCatalogoTocavel(
   fotos: Map<string, string> = new Map(),
 ): CatalogoTocavel {
   const musicaPorLigacao = new Map<string, EmpirePlayCleanItem>();
-  const linhas: LinhaCatalogo[] = musicas.map((m, i) => {
+  const linhas: LinhaCatalogo[] = ordenarEstavel(musicas).map((m, i) => {
     const ligacao = (m.codigoUnico || "").trim() || `${SEM_CODIGO}${i}`;
     if (!musicaPorLigacao.has(ligacao)) musicaPorLigacao.set(ligacao, m);
     const feats = m.featArtists || [];
@@ -144,7 +161,7 @@ export function montarCatalogoTocavel(
   });
 
   const clipePorCodigo = new Map<string, EmpirePlayCleanItem>();
-  for (const c of clipes) {
+  for (const c of ordenarEstavel(clipes)) {
     const codigo = (c.codigoUnico || "").trim();
     if (!codigo || !ehMusicVideo(c)) continue;
     const atual = clipePorCodigo.get(codigo);
