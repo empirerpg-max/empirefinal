@@ -77,3 +77,38 @@ export function mesclarTracklist(
   }
   return resultado;
 }
+
+export interface PlanoReordenacao {
+  // Só as faixas cuja Musicas!U muda de fato — cada escrita + espelho D1
+  // custa chamadas na cota da planilha, então não regrava o que já está certo.
+  escritasU: { musicaRowIndex: number; ordem: number }[];
+  // Tracklist nova pra Albuns!M, ou null quando o álbum NÃO tem tracklist
+  // (álbum antigo): nesse caso a ordem continua vivendo só em Musicas!U.
+  // Criar uma tracklist a partir de Musicas!H "cru" faria a página pública
+  // (que casa por "Artista - Título" normalizado) perder faixas de títulos
+  // legados fora do padrão.
+  tracklistNova: TracklistEntry[] | null;
+}
+
+// Decide o que gravar numa reordenação. `ordens` já vem na ordem da tela;
+// `linhasMusicas` é Musicas!H:U lida a partir da linha 1 (índice =
+// rowIndex - 1; coluna 0 = H, coluna 13 = U).
+export function planejarReordenacao(
+  ordens: { musicaRowIndex: number; ordem: number }[],
+  linhasMusicas: string[][],
+  tracklistAtual: TracklistEntry[],
+): PlanoReordenacao {
+  const escritasU = ordens.filter(
+    ({ musicaRowIndex, ordem }) =>
+      (linhasMusicas[musicaRowIndex - 1]?.[13] || "").trim() !== String(ordem),
+  );
+  if (tracklistAtual.length === 0) return { escritasU, tracklistNova: null };
+
+  const titulos = ordens.map(({ musicaRowIndex }) =>
+    (linhasMusicas[musicaRowIndex - 1]?.[0] || "").trim(),
+  );
+  if (titulos.some((t) => !t)) {
+    throw new Error("Não foi possível ler o título de alguma faixa pra gravar a tracklist.");
+  }
+  return { escritasU, tracklistNova: reordenarTracklist(tracklistAtual, titulos) };
+}

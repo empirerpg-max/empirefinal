@@ -59,3 +59,50 @@ test("mesclar respeita o disco da faixa nova", () => {
     e("A - n", 2, 2),
   ]);
 });
+
+// planejarReordenacao: linhas = Musicas!H..U lidas de H1 (índice rowIndex-1;
+// coluna 0 = H, coluna 13 = U).
+const { planejarReordenacao } = await import("../backend/src/controllers/albumTracklist.ts");
+const linha = (h: string, u: string) => {
+  const r = Array(14).fill("");
+  r[0] = h;
+  r[13] = u;
+  return r;
+};
+const linhas = [linha("Titulo", "Ordem"), linha("A - x", "1"), linha("A - y", "2"), linha("A - z", "3")];
+
+test("planejar grava U só das faixas cuja ordem mudou", () => {
+  const plano = planejarReordenacao(
+    [
+      { musicaRowIndex: 3, ordem: 1 },
+      { musicaRowIndex: 2, ordem: 2 },
+      { musicaRowIndex: 4, ordem: 3 },
+    ],
+    linhas,
+    [e("A - x", 1), e("A - y", 2), e("A - z", 3)],
+  );
+  expect(plano.escritasU).toEqual([
+    { musicaRowIndex: 3, ordem: 1 },
+    { musicaRowIndex: 2, ordem: 2 },
+  ]);
+  expect(plano.tracklistNova).toEqual([e("A - y", 1), e("A - x", 2), e("A - z", 3)]);
+});
+
+test("planejar NÃO cria tracklist em álbum antigo (M vazia)", () => {
+  const plano = planejarReordenacao(
+    [
+      { musicaRowIndex: 3, ordem: 1 },
+      { musicaRowIndex: 2, ordem: 2 },
+    ],
+    linhas,
+    [],
+  );
+  expect(plano.tracklistNova).toBeNull();
+  expect(plano.escritasU.length).toBe(2);
+});
+
+test("planejar recusa título vazio quando há tracklist", () => {
+  expect(() =>
+    planejarReordenacao([{ musicaRowIndex: 9, ordem: 1 }], linhas, [e("A - x", 1)]),
+  ).toThrow();
+});
