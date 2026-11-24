@@ -67,6 +67,17 @@ export const REGRAS_PADRAO: RegrasSemana = {
 
 const CHAVES_PAISES = Object.keys(REGRAS_PADRAO.paises) as (keyof RegraPaises)[];
 
+const ehNumero = (x: unknown) => typeof x === "number" && Number.isFinite(x);
+
+/** Item de `paradas` da config só vale completo: ids/nomes texto, aliases em array, tipo conhecido e números finitos. */
+function paradaValida(x: any): boolean {
+  return !!x && typeof x === "object" &&
+    typeof x.id === "string" && typeof x.nome === "string" &&
+    Array.isArray(x.paises) && x.paises.every((a: unknown) => typeof a === "string") &&
+    (x.tipo === "unidades" || x.tipo === "receita" || x.tipo === "excl") &&
+    ["top", "ordem", "a", "tp", "tga", "tgv"].every((k) => ehNumero(x[k]));
+}
+
 /** Monta as regras a partir da config (chave → texto); valores inválidos caem no padrão. */
 export function regrasDeConfig(cfg: Map<string, string>): RegrasSemana {
   const paises = { ...REGRAS_PADRAO.paises };
@@ -81,9 +92,7 @@ export function regrasDeConfig(cfg: Map<string, string>): RegrasSemana {
   if (js) {
     try {
       const v = JSON.parse(js);
-      if (Array.isArray(v) && v.length > 0 && v.every((x) => x && typeof x === "object" && typeof x.id === "string")) {
-        paradas = v as Parada[];
-      }
+      if (Array.isArray(v) && v.length > 0 && v.every(paradaValida)) paradas = v as Parada[];
     } catch { /* mantém o padrão */ }
   }
   return { versao: 1, paises, paradas: paradas ?? structuredClone(REGRAS_PADRAO.paradas) };

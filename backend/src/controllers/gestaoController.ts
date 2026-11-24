@@ -2290,6 +2290,7 @@ export async function getAlbumFaixasController(request: Request): Promise<Respon
           letra: row[4] || "",
           letraSincronizada: row[30] || "",
           pendente: !(row[1] || "").trim(), // sem tópico (coluna B vazia) = pendente
+          codigoUnico: (row[25] || "").trim(), // Z - Código único (o front lê o foco travado dele)
         };
       })
       .sort((a, b) => (a.disco - b.disco) || (a.ordem - b.ordem));

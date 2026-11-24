@@ -65,6 +65,7 @@ interface AlbumFaixa {
   letra?: string;
   letraSincronizada?: string;
   pendente?: boolean;
+  codigoUnico?: string;
 }
 
 interface MusicaEmChart {
@@ -186,6 +187,9 @@ export const EditModal: React.FC<EditModalProps> = ({
   // Foco (país-alvo) escolhido pra cada faixa pendente — obrigatório quando
   // ela sai como single (tipo ≠ TRACKLIST ALBUM).
   const [publicarFoco, setPublicarFoco] = useState<Record<number, string>>({});
+  // Foco já travado de faixas pendentes (musicaRowIndex → país). Faixa que já
+  // tem foco mostra ele só-leitura e não exige escolher de novo.
+  const [focosTravadosFaixa, setFocosTravadosFaixa] = useState<Record<number, string>>({});
 
   // Foco do lançamento da música em edição: null = ainda sem foco salvo.
   const [focoAtual, setFocoAtual] = useState<string | null>(null);
@@ -288,6 +292,24 @@ export const EditModal: React.FC<EditModalProps> = ({
       })
       .catch(() => {});
   }, [isOpen, category, selectedArtist]);
+
+  // Lê o foco travado das faixas pendentes que já têm Código único.
+  useEffect(() => {
+    let vivo = true;
+    for (const f of albumFaixas) {
+      if (!f.pendente || !f.codigoUnico) continue;
+      const linha = f.musicaRowIndex;
+      lerFoco(f.codigoUnico)
+        .then((r) => {
+          if (!vivo || !r.foco) return;
+          setFocosTravadosFaixa((prev) => (prev[linha] === r.foco!.pais ? prev : { ...prev, [linha]: r.foco!.pais }));
+        })
+        .catch(() => {});
+    }
+    return () => {
+      vivo = false;
+    };
+  }, [albumFaixas]);
 
   const fetchAlbumFaixas = (topicId: string) => {
     setLoadingFaixas(true);
@@ -553,7 +575,8 @@ export const EditModal: React.FC<EditModalProps> = ({
   const handlePublicarFaixa = async (faixa: AlbumFaixa, idx: number) => {
     const tipoEscolhido = publicarTipoSingle[faixa.musicaRowIndex] || "LEAD SINGLE";
     const focoEscolhido = publicarFoco[faixa.musicaRowIndex] || "";
-    const exigeFoco = tipoEscolhido !== "TRACKLIST ALBUM";
+    // Faixa com foco já travado não exige escolher (nem grava) de novo.
+    const exigeFoco = tipoEscolhido !== "TRACKLIST ALBUM" && !focosTravadosFaixa[faixa.musicaRowIndex];
     if (exigeFoco && !focoEscolhido) {
       setErrorMsg("Escolha o foco do lançamento.");
       return;
@@ -1087,8 +1110,9 @@ export const EditModal: React.FC<EditModalProps> = ({
                           faixa.pendente &&
                           (publicarTipoSingle[faixa.musicaRowIndex] || "LEAD SINGLE") !==
                             "TRACKLIST ALBUM";
+                        const focoTravadoFaixa = focosTravadosFaixa[faixa.musicaRowIndex];
                         const faltaFocoPublicar =
-                          publicaComoSingle && !publicarFoco[faixa.musicaRowIndex];
+                          publicaComoSingle && !focoTravadoFaixa && !publicarFoco[faixa.musicaRowIndex];
                         return (
                       <div key={faixa.musicaRowIndex}>
                           {mostraCabecalhoDisco && (
@@ -1212,6 +1236,14 @@ export const EditModal: React.FC<EditModalProps> = ({
                                   Foco
                                 </span>
                                 <div className="flex-1 min-w-0">
+                                  {focoTravadoFaixa ? (
+                                    <p className="truncate px-1 text-[11px] font-bold text-white">
+                                      {rotuloFoco(focoTravadoFaixa)}
+                                      <span className="ml-1.5 font-normal text-neutral-500">
+                                        (já definido)
+                                      </span>
+                                    </p>
+                                  ) : (
                                   <FocoSelect
                                     value={publicarFoco[faixa.musicaRowIndex] || ""}
                                     onChange={(v) =>
@@ -1225,6 +1257,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                                     disabled={publicandoFaixaIdx === idx}
                                     className="w-full min-w-0 text-[11px] font-bold bg-neutral-900 border border-white/10 rounded-md py-1 px-1.5 text-neutral-300 outline-none focus:border-amber-500 disabled:opacity-50"
                                   />
+                                  )}
                                 </div>
                               </div>
                             )}

@@ -21,13 +21,22 @@ export interface MusicaSemana {
 export type Fontes = { vendas: number; pagos: number; gratis_audio: number; gratis_video: number };
 export type LinhaParada = Posicao & { st: "↑" | "↓" | "=" | "NEW" };
 
-/** Primeiro alias da parada presente em pais_peso (sem acento/caixa); devolve o nome como está lá. */
-export function resolverPaisParada(p: Parada, paisesExistentes: Set<string>): string | null {
+/**
+ * Nome normalizado (sem acento/caixa) → nome como está em pais_peso. Duas grafias da mesma
+ * chave: vale a primeira em ordem alfabética (determinístico, independe da ordem de entrada).
+ */
+export function mapaPaisPorNome(nomes: Iterable<string>): Map<string, string> {
   const porNorm = new Map<string, string>();
-  for (const nome of paisesExistentes) {
+  for (const nome of [...nomes].sort()) {
     const k = semAcentoMaiusculo(nome);
     if (!porNorm.has(k)) porNorm.set(k, nome);
   }
+  return porNorm;
+}
+
+/** Primeiro alias da parada presente em pais_peso (sem acento/caixa); devolve o nome como está lá. */
+export function resolverPaisParada(p: Parada, paisesExistentes: Set<string>): string | null {
+  const porNorm = mapaPaisPorNome(paisesExistentes);
   for (const alias of p.paises ?? []) {
     const achou = porNorm.get(semAcentoMaiusculo(alias));
     if (achou !== undefined) return achou;

@@ -1,9 +1,8 @@
 // Foco (país-alvo) do lançamento de cada música: leitura, lista de países e gravação com trava.
 import { getCatalogoDb } from "../services/catalogoDbService";
 import { requestProvesAdmin } from "../services/sessionService";
-import { FOCO_SCHEMA, carregarFocos } from "../services/chartsD1/foco";
+import { FOCO_SCHEMA } from "../services/chartsD1/foco";
 import { semAcentoMaiusculo } from "../services/chartsD1/artistas";
-import { limparCacheCharts } from "./chartsController";
 
 type FocoAtual = { pais: string; desde: string };
 export type ResultadoValidacao = { ok: true } | { ok: false; status: 400 | 403 | 409; erro: string };
@@ -31,6 +30,29 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json; charset=utf-8" } });
 }
 
+// Schema criado uma vez por isolate/binding (se falhar, tenta de novo no próximo pedido).
+const schemaPronto = new WeakMap<object, Promise<void>>();
+function garantirSchema(db: NonNullable<ReturnType<typeof getCatalogoDb>>): Promise<void> {
+  let p = schemaPronto.get(db);
+  if (!p) {
+    p = (async () => {
+      for (const sql of FOCO_SCHEMA) await db.prepare(sql).run();
+    })();
+    schemaPronto.set(db, p);
+    p.catch(() => { if (schemaPronto.get(db) === p) schemaPronto.delete(db); });
+  }
+  return p;
+}
+
+/** Histórico de focos de uma música (só as linhas dela), ordenado por `desde`. */
+async function focosDa(db: NonNullable<ReturnType<typeof getCatalogoDb>>, codigo: string): Promise<FocoAtual[]> {
+  const r = await db
+    .prepare("SELECT pais, desde FROM musica_foco WHERE codigo_unico = ? ORDER BY desde")
+    .bind(codigo)
+    .all<FocoAtual>();
+  return r.results;
+}
+
 const hojeIso = () => new Date().toISOString().slice(0, 10);
 
 const naoAscii = (s: string) => (s.match(/[^\x00-\x7f]/g) ?? []).length;
@@ -52,7 +74,7 @@ export async function musicaFocoController(request: Request, subPath: "" | "pais
   const db = getCatalogoDb();
   if (!db) return json({ success: false, error: "Banco indisponível." }, 503);
   try {
-    for (const sql of FOCO_SCHEMA) await db.prepare(sql).run();
+    await garantirSchema(db);
 
     if (subPath === "paises") {
       if (request.method !== "GET") return json({ success: false, error: "Use GET." }, 405);
@@ -62,7 +84,7 @@ export async function musicaFocoController(request: Request, subPath: "" | "pais
     if (request.method === "GET") {
       const codigo = (new URL(request.url).searchParams.get("codigo") ?? "").trim();
       if (!codigo) return json({ success: false, error: "Código obrigatório." }, 400);
-      const lista = (await carregarFocos(db)).get(codigo) ?? [];
+      const lista = await focosDa(db, codigo);
       const foco = lista.length ? lista[lista.length - 1] : null;
       return json({ success: true, foco, travado: foco !== null });
     }
@@ -80,7 +102,7 @@ export async function musicaFocoController(request: Request, subPath: "" | "pais
     const pais = chave === "GLOBAL" ? "GLOBAL" : chaveParaGrafia.get(chave) ?? chave;
 
     const ehAdmin = await requestProvesAdmin(request);
-    const atual = (await carregarFocos(db)).get(codigo) ?? [];
+    const atual = await focosDa(db, codigo);
     const v = validarGravacaoFoco(atual, pais, new Set(paises), ehAdmin);
     if (!v.ok) return json({ success: false, error: v.erro }, v.status);
 
@@ -107,7 +129,7 @@ export async function musicaFocoController(request: Request, subPath: "" | "pais
         return json({ success: false, error: "O foco deste lançamento já foi definido. Peça à administração para alterar." }, 409);
       }
     }
-    limparCacheCharts();
+    // Sem limparCacheCharts: o novo foco só vale para semanas depois de `desde`, ainda não calculadas.
     return json({ success: true, foco: { pais, desde } });
   } catch (e) {
     console.warn("[musica-foco] falha:", e);

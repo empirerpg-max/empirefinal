@@ -7,7 +7,7 @@ import { buscarNoCatalogo, semAcentoMaiusculo, type MusicaCatalogo } from "./art
 import { carregarFocos, focoVigente, type HistoricoFoco } from "./foco";
 import { fmt } from "./formato";
 import { rankingsPorPais, valoresPorPais, type EntradaMusica, type Pesos } from "./paises";
-import { paradasDaSemana, type MusicaSemana, type Plataforma } from "./paradas";
+import { mapaPaisPorNome, paradasDaSemana, type MusicaSemana, type Plataforma } from "./paradas";
 import { REGRAS_PADRAO, parseRegrasSemana, type RegrasSemana } from "./regras";
 import { artistaPrincipal, capaDe, consultar, lerArtistas, type LinhaPaisApi } from "./repo";
 
@@ -154,7 +154,7 @@ export async function calcularSemanaPaises(
   if (!paisesExistentes.size) return vazio();
 
   // Nacionalidade e foco casam com o país de pais_peso sem diferenciar acento ("Australia" = "AUSTRÁLIA").
-  const paisDePesos = new Map([...paisesExistentes].sort().map((p) => [semAcentoMaiusculo(p), p]));
+  const paisDePesos = mapaPaisPorNome(paisesExistentes);
   const resolverPais = (nome: string) => {
     const k = semAcentoMaiusculo(nome);
     return paisDePesos.get(k) ?? k;

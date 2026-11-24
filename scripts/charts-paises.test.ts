@@ -3,7 +3,7 @@ import { test, expect } from "bun:test";
 import { sorteio01 } from "../backend/src/services/chartsD1/sorteio";
 import { fatiasRegraC, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
 import { regrasDeConfig, parseRegrasSemana, REGRAS_PADRAO } from "../backend/src/services/chartsD1/regras";
-import { fontes, pontos, emAcr, calcularParada, resolverPaisParada, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
+import { fontes, pontos, emAcr, calcularParada, resolverPaisParada, mapaPaisPorNome, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
 import { criarD1Sqlite } from "./charts-d1-sqlite";
 import { CHARTS_D1_SCHEMA, ingerirSemana } from "../backend/src/services/chartsD1/repo";
 import { calcularSemanaPaises, ROTULO_PARADAS } from "../backend/src/services/chartsD1/semanaPaises";
@@ -21,8 +21,14 @@ test("regrasDeConfig: sobrepõe números válidos e paradas; ignora lixo", () =>
   const r = regrasDeConfig(new Map([["nac_max", "5"], ["variacao", "abc"], ["paradas", "[{\"id\":\"X\"}]"]]));
   expect(r.paises.nac_max).toBe(5);
   expect(r.paises.variacao).toBe(0.15);
-  expect(r.paradas[0].id).toBe("X");
+  // item incompleto ("X" sem nome/paises/tipo/números) → padrão inteiro
+  expect(r.paradas.length).toBe(12);
   expect(regrasDeConfig(new Map([["paradas", "{quebrado"]])).paradas.length).toBe(12);
+  const ok = { id: "X", nome: "N", paises: ["BRASIL"], tipo: "unidades", top: 10, ordem: 1, a: 0, tp: 1, tga: 2, tgv: 3, descricao: "d" };
+  const cfg = (o: object) => new Map([["paradas", JSON.stringify([{ ...ok, ...o }])]]);
+  expect(regrasDeConfig(cfg({})).paradas.map((x) => x.id)).toEqual(["X"]);
+  for (const ruim of [{ nome: 1 }, { paises: "BRASIL" }, { paises: [1] }, { tipo: "outro" }, { top: "10" }, { tga: null }, { ordem: undefined }])
+    expect(regrasDeConfig(cfg(ruim)).paradas.length).toBe(12);
 });
 test("parseRegrasSemana: null para vazio/inválido", () => {
   expect(parseRegrasSemana(null)).toBeNull();
@@ -196,6 +202,26 @@ test("Excl. US = mundo − EUA", () => {
   const esperado = pontos(fontes(m, null, 0.45), p) - pontos(fontes(m, "ESTADOS UNIDOS", 0.45), p);
   expect(calcularParada([m], p, "ESTADOS UNIDOS", 0.45)[0].val).toBe(Math.round(esperado));
 });
+test("resolverPaisParada e mapaPaisPorNome: duas grafias do mesmo país → mesma escolha, qualquer ordem", () => {
+  const a = new Set(["AUSTRÁLIA", "AUSTRALIA"]);
+  const b = new Set(["AUSTRALIA", "AUSTRÁLIA"]);
+  expect(resolverPaisParada(P("AU"), a)).toBe(resolverPaisParada(P("AU"), b));
+  expect(mapaPaisPorNome(a).get("AUSTRALIA")).toBe(resolverPaisParada(P("AU"), a)!);
+  expect([...mapaPaisPorNome(a)]).toEqual([...mapaPaisPorNome(b)]);
+});
+test("cache da semana por país: LRU com no máximo 6 semanas", () => {
+  limparCacheCharts();
+  const futuro = Date.now() + 60_000;
+  const ent = () => ({ valor: Promise.resolve({} as any), expiresAt: futuro });
+  for (let i = 1; i <= 8; i++) gravarSemanaPaisesCache(`0${i}/01/2026`, ent());
+  expect(tamanhoCacheSemanaPaises()).toBe(6);
+  // vencida é descartada na inserção seguinte
+  gravarSemanaPaisesCache("vencida", { valor: Promise.resolve({} as any), expiresAt: Date.now() - 1 });
+  gravarSemanaPaisesCache("09/01/2026", ent());
+  expect(tamanhoCacheSemanaPaises()).toBe(6);
+  limparCacheCharts();
+  expect(tamanhoCacheSemanaPaises()).toBe(0);
+});
 test("resolverPaisParada: aliases sem acento; ausente → parada omitida", () => {
   expect(resolverPaisParada(P("EUA"), new Set(["EUA"]))).toBe("EUA");
   expect(resolverPaisParada(P("AU"), new Set(["AUSTRALIA"]))).toBe("AUSTRALIA");
@@ -327,7 +353,7 @@ test("paradas: `st` compara com a semana anterior calculada pelas regras dela (d
 
 // ───────────── API /api/charts: COUNTRIES (regra C) e PARADAS OFICIAIS ─────────────
 import { googleSheetsService } from "../backend/src/services/googleSheetsService";
-import { chartD1DaAba, chartsApiController, limparCacheCharts } from "../backend/src/controllers/chartsController";
+import { chartD1DaAba, chartsApiController, limparCacheCharts, gravarSemanaPaisesCache, tamanhoCacheSemanaPaises } from "../backend/src/controllers/chartsController";
 
 test("chartD1DaAba: PARADAS OFICIAIS lê as datas do Global 100", () => {
   expect(chartD1DaAba("PARADAS OFICIAIS")).toEqual({ chart: "BILLBOARD HOT 100", paises: true, paradas: true });

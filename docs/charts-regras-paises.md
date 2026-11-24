@@ -124,7 +124,7 @@ ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor;
 | Chave | Padrão | Aumentar | Diminuir |
 |-------|--------|----------|----------|
 | `nac_min` | 1.5 | Nativo ganha mais bônus, mesmo no piso | Nativo perde força |
-| `nac_max` | 4 | Teto do multiplicador de nativo sobe (mais variação entre músicas) | Nativos ficam mais parecidos; não pode ficar abaixo de `nac_min` |
+| `nac_max` | 4 | Teto do multiplicador de nativo sobe (mais variação entre músicas) | Nativos ficam mais parecidos; o ideal é não ficar abaixo de `nac_min` (o app **não valida** isso) |
 | `foco_min` | 0.5 | Foco vale mais, mesmo no piso | Foco quase sem efeito |
 | `foco_max` | 1.5 | Foco pode render mais | Foco rende menos |
 | `bonus_teto` | 0.2 | Países grandes (EUA) podem receber bônus maior | Bônus cortado cedo; país grande quase sem efeito |
@@ -133,8 +133,9 @@ ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor;
 | `fracao_paga_spotify` | 0.45 | Mais Spotify vira "pago" (mais peso nas paradas que ignoram grátis, ex. SNEP) | O inverso |
 | `paradas` | (JSON) | Ver seção 5 | Ver seção 5 |
 
-Dica: mantenha `foco_max` menor ou igual a `nac_min` (hoje 1.5 e 1.5), para o
-foco nunca render mais que a nacionalidade.
+Dica: o ideal é manter `foco_max` menor ou igual a `nac_min` (hoje 1.5 e 1.5),
+para o foco nunca render mais que a nacionalidade. O app **não valida** isso:
+se a regra for quebrada, o cálculo roda normalmente com os valores informados.
 
 **Importante:** a mudança só vale para semanas **novas** (seção 7). A chave
 antiga `bonus_nacionalidade` ainda existe na tabela, mas **não é mais usada**;
@@ -143,8 +144,10 @@ não mexa nela esperando efeito.
 ## 5. Incluir ou tirar uma parada
 
 A chave `paradas` guarda a lista completa em JSON. Se existir, **substitui**
-todas as 12 (então copie a lista inteira e edite). Se estiver vazia ou o JSON
-for inválido, vale a lista padrão. Exemplo de uma parada nova (Itália):
+todas as 12 (então copie a lista inteira e edite). Se estiver vazia, o JSON
+for inválido ou algum item estiver incompleto (precisa de `id` e `nome` em texto,
+`paises` em lista, `tipo` válido e `top`, `ordem`, `a`, `tp`, `tga`, `tgv`
+numéricos), vale a lista padrão inteira. Exemplo de uma parada nova (Itália):
 
 ```json
 {
@@ -154,11 +157,25 @@ for inválido, vale a lista padrão. Exemplo de uma parada nova (Itália):
 }
 ```
 
+- **Taxa 0 desliga a fonte** (nunca divide por zero): ex. `"a": 0` ignora as
+  vendas daquela parada.
 - `tipo`: `unidades`, `receita` ou `excl` (mundo menos o país).
 - `ordem`: posição no seletor (menor aparece primeiro).
 - Opcionais: `acr`, `max_por_artista`, `recorrencia` (veja `regras.ts`).
 - Para tirar uma parada, grave a lista sem ela.
 - O país precisa existir em `pais_peso`, senão a parada é omitida.
+
+Para gravar a chave `paradas` no Console do D1, use SQL com o JSON entre aspas
+simples. Dentro do JSON, toda aspa simples (`'`) precisa ser **dobrada** (`''`),
+senão o SQL quebra (ex.: `Côte d'Ivoire` vira `Côte d''Ivoire`). Modelo com uma
+parada só (lembre: a lista inteira substitui as 12, então inclua todas):
+
+```sql
+INSERT INTO chart_config (chave, valor) VALUES ('paradas',
+'[{"id":"IT","nome":"FIMI","paises":["ITÁLIA"],"tipo":"unidades","top":50,"ordem":12,"a":1,"tp":100,"tga":300,"tgv":300,"descricao":"Itália · vendas + streaming"},
+{"id":"CI","nome":"Top Côte d''Ivoire","paises":["COSTA DO MARFIM"],"tipo":"unidades","top":20,"ordem":13,"a":0,"tp":300,"tga":300,"tgv":300,"descricao":"Costa do Marfim · só streaming"}]')
+ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor;
+```
 
 ## 6. Foco do lançamento
 
@@ -171,8 +188,8 @@ for inválido, vale a lista padrão. Exemplo de uma parada nova (Itália):
   administração para alterar"). **Só o admin** troca; a troca vira uma linha
   nova no histórico (ou atualiza a linha do mesmo dia).
 - API: `GET /api/musica-foco?codigo=...` (foco atual e se está travado),
-  `GET /api/musica-foco/paises` (lista de países), `POST` com `codigo` e `pais`. Gravar limpa o cache
-  dos charts.
+  `GET /api/musica-foco/paises` (lista de países), `POST` com `codigo` e `pais`. Gravar **não** limpa o cache
+  dos charts: o novo foco só vale para semanas depois de `desde`, ainda não calculadas.
 
 ## 7. Por que o passado não muda (e o que ainda muda)
 
@@ -182,6 +199,10 @@ for inválido, vale a lista padrão. Exemplo de uma parada nova (Itália):
   em vigor na tabela `chart_regras_semana` (`data`, `versao`, `regras`), uma
   vez só (reenviar a semana não troca). Mudar o `chart_config` afeta só
   semanas que chegarem depois.
+- **Semanas ingeridas antes desta mudança não têm linha congelada** em
+  `chart_regras_semana`. Reenviar uma dessas semanas congela as regras
+  **atuais** do `chart_config` para ela. Por isso: só altere o `chart_config`
+  depois de reenviar essas semanas, ou mantenha-o no padrão.
 - **Semanas sem linha** em `chart_regras_semana` usam `REGRAS_PADRAO` versão 1,
   que está **congelada no código**. **Nunca edite `REGRAS_PADRAO`**: isso
   mudaria todo o histórico antigo.

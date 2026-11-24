@@ -92,24 +92,56 @@ function referenciasD1(db: D1DatabaseLike): Promise<ReferenciasD1> {
 // a mais recente usa o TTL das respostas (e limparCacheCharts zera após ingestão).
 // Só datas que existem no Global 100 entram no cache (data inventada não acumula).
 const SEMANA_PASSADA_TTL_MS = 24 * 60 * 60_000;
+// LRU de no máximo SEMANA_PAISES_CACHE_MAX semanas (~2–4 MB cada): navegar pelo histórico
+// não pode estourar os 128 MB do isolate. A ordem de inserção do Map é a ordem de uso.
+const SEMANA_PAISES_CACHE_MAX = 6;
 const semanaPaisesCache = new Map<string, { valor: Promise<SemanaPaises>; expiresAt: number }>();
 
-async function semanaPaises(db: D1DatabaseLike, dataBr: string): Promise<SemanaPaises> {
+/** Quantas semanas estão no cache (para testes). */
+export function tamanhoCacheSemanaPaises(): number {
+  return semanaPaisesCache.size;
+}
+
+/** Cache hit válido: move a semana para "mais recente" (delete + set). */
+function lerSemanaPaisesCache(dataBr: string): Promise<SemanaPaises> | null {
   const c = semanaPaisesCache.get(dataBr);
-  if (c && c.expiresAt > Date.now()) return c.valor;
+  if (!c || c.expiresAt <= Date.now()) return null;
+  semanaPaisesCache.delete(dataBr);
+  semanaPaisesCache.set(dataBr, c);
+  return c.valor;
+}
+
+/** Insere a semana: descarta vencidas e expulsa as mais antigas além do limite. */
+export function gravarSemanaPaisesCache(
+  dataBr: string,
+  entrada: { valor: Promise<SemanaPaises>; expiresAt: number },
+): void {
+  semanaPaisesCache.delete(dataBr);
+  semanaPaisesCache.set(dataBr, entrada);
+  const agora = Date.now();
+  for (const [k, e] of semanaPaisesCache) if (e.expiresAt <= agora) semanaPaisesCache.delete(k);
+  while (semanaPaisesCache.size > SEMANA_PAISES_CACHE_MAX) {
+    const maisAntiga = semanaPaisesCache.keys().next().value as string;
+    semanaPaisesCache.delete(maisAntiga);
+  }
+}
+
+async function semanaPaises(db: D1DatabaseLike, dataBr: string): Promise<SemanaPaises> {
+  const hit = lerSemanaPaisesCache(dataBr);
+  if (hit) return hit;
   const [{ cat, fotos }, datasGlobal] = await Promise.all([referenciasD1(db), datasD1(db, "BILLBOARD HOT 100")]);
   const indice = datasGlobal.indexOf(dataBr);
   if (indice < 0) return calcularSemanaPaises(db, dataBr, cat, fotos);
   // Outro pedido pode ter preenchido o cache enquanto as referências carregavam.
-  const ja = semanaPaisesCache.get(dataBr);
-  if (ja && ja.expiresAt > Date.now()) return ja.valor;
+  const ja = lerSemanaPaisesCache(dataBr);
+  if (ja) return ja;
   const valor = calcularSemanaPaises(db, dataBr, cat, fotos);
   const ttl = indice > 0 ? SEMANA_PASSADA_TTL_MS : CHARTS_RESPONSE_CACHE_TTL_MS;
   const entrada = { valor, expiresAt: Date.now() + ttl };
   valor.catch(() => {
     if (semanaPaisesCache.get(dataBr) === entrada) semanaPaisesCache.delete(dataBr);
   });
-  semanaPaisesCache.set(dataBr, entrada);
+  gravarSemanaPaisesCache(dataBr, entrada);
   return valor;
 }
 
