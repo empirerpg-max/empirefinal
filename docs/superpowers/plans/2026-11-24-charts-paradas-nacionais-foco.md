@@ -22,7 +22,7 @@
 
 ## Review Focus
 
-1. **Semana em que uma plataforma não existe** (Apple Music antes de 20/01/2022, Digital Sales antes de 11/04/2025): paradas calculam com as fontes que existem, sem `NaN`, sem quebrar. → teste em Task 4.
+1. **Semana em que uma plataforma não existe** (Apple Music antes de 20/01/2022): paradas calculam com as fontes que existem, sem `NaN`, sem quebrar. → teste em Task 4.
 2. **Nome de país de `pais_peso` diferente do da parada** ("EUA" vs "ESTADOS UNIDOS"): resolve por aliases; se nenhum existir, a parada é omitida (não aparece vazia nem quebra). → teste em Task 4.
 3. **A mesma música com títulos levemente diferentes entre plataformas**: junta pelas fontes via `titulo_norm`; não aparece duplicada numa parada. → teste em Task 4.
 4. **Primeira semana do histórico / semana sem anterior**: todo `st` = `NEW`, sem erro. → teste em Task 4.
@@ -40,16 +40,15 @@
 | `backend/src/services/chartsD1/foco.ts` (novo) | schema `musica_foco`, `focoVigente` |
 | `backend/src/services/chartsD1/paradas.ts` (novo) | fontes por país, metodologias, ACR, recorrência, máx. por artista, Excl. US |
 | `backend/src/services/chartsD1/semanaPaises.ts` (novo) | lê D1, monta entradas, chama as funções puras, devolve COUNTRIES + PARADAS da semana |
-| `backend/src/services/chartsD1/repo.ts` | schema `chart_regras_semana`, gravação na ingestão, pesos DIGITAL SALES, `codigoUnico` no catálogo; remove `linhasPaises` |
+| `backend/src/services/chartsD1/repo.ts` | schema `chart_regras_semana`, gravação na ingestão, `codigoUnico` no catálogo; remove `linhasPaises` |
 | `backend/src/services/chartsD1/artistas.ts` | `MusicaCatalogo.codigoUnico` |
 | `backend/src/controllers/chartsController.ts` | aba `PARADAS OFICIAIS`, COUNTRIES via `semanaPaises` |
 | `backend/src/controllers/musicaFocoController.ts` (novo) + `backend/src/routes/api.ts` | `GET/POST /api/musica-foco`, `GET /api/musica-foco/paises` |
-| `scripts/apps-script/EnvioD1.gs` | envia aba PAÍSES E PESOS (com coluna DIGITAL SALES) |
 | `src/lib/focoMusica.ts` (novo) + `src/components/EmpirePlay/FocoSelect.tsx` (novo) | cliente e select do foco |
 | `src/components/EmpirePlay/Gestao.tsx`, `EditModal.tsx`, `LancarFaixaAlbumModal.tsx` | foco obrigatório onde nasce single; edição única |
 | `src/routes/charts.tsx`, `src/routes/artistas.$nome.index.tsx`, `src/routes/index.tsx` | rótulos Global 100 / Spotify Global, tab Paradas Oficiais |
 | `scripts/charts-paises.test.ts` (novo) | testes das funções puras |
-| `docs/charts-regras-paises.md` (novo), `docs/charts-d1-envio-semanal.md` | documento para mantenedores |
+| `docs/charts-regras-paises.md` (novo) | documento para mantenedores |
 
 Testes: `bun test scripts/charts-paises.test.ts` e `bun test scripts/charts-d1.test.ts` (existente).
 
@@ -65,28 +64,28 @@ Testes: `bun test scripts/charts-paises.test.ts` e `bun test scripts/charts-d1.t
 - Produces:
   - `sorteio01(chave: string): number` — FNV-1a 32 bits sobre UTF-8 de `chave`, `>>> 0`, ÷ 2^32.
   - `interface RegraPaises { nac_min: number; nac_max: number; foco_min: number; foco_max: number; bonus_teto: number; variacao: number; top_pais: number; fracao_paga_spotify: number }`
-  - `interface Parada { id: string; nome: string; paises: string[] /* aliases, 1º que existir em pais_peso */; tipo: "unidades" | "receita" | "excl"; top: number; ordem: number; a: number; tp: number; tga: number; tgv: number; descricao: string; acr?: { semanas: number; quedas: number; tp: number; tga: number; tgv: number } | null; max_por_artista?: number | null; recorrencia?: { semanas: number; pos: number }[] | null }`
+  - `interface Parada { id: string; nome: string; paises: string[] /* aliases, 1º que existir em pais_peso */; tipo: "unidades" | "receita" | "excl"; top: number; ordem: number; tp: number; tga: number; tgv: number; descricao: string; acr?: { semanas: number; quedas: number; tp: number; tga: number; tgv: number } | null; max_por_artista?: number | null; recorrencia?: { semanas: number; pos: number }[] | null }`
   - `interface RegrasSemana { versao: 1; paises: RegraPaises; paradas: Parada[] }`
   - `REGRAS_PADRAO: RegrasSemana`
   - `regrasDeConfig(cfg: Map<string, string>): RegrasSemana` — cada chave de `RegraPaises` sobrepõe o padrão se for número finito; `paradas` = `JSON.parse(cfg.get("paradas"))` se for array válido, senão padrão.
   - `parseRegrasSemana(json: string | null | undefined): RegrasSemana | null`
 
-Valores de `REGRAS_PADRAO` (do spec, seção 8 e 16). Taxa `0` = fonte não conta. Para `tipo: "receita"`, `a`/`tp`/`tga`/`tgv` são **preços por unidade** (multiplicam), não divisores:
+Valores de `REGRAS_PADRAO` (do spec, seção 8 e 16). Taxa `0` = fonte não conta. Para `tipo: "receita"`, `tp`/`tga`/`tgv` são **preços por stream** (multiplicam), não divisores. **Digital Sales não entra em nada novo (decisão do usuário, spec rev. 4): não existe campo `a`/vendas.**
 
-| id | nome | paises | tipo | top | a | tp | tga | tgv | extras | descricao |
-|---|---|---|---|---|---|---|---|---|---|---|
-| EUA | Billboard Hot 100 | ESTADOS UNIDOS, EUA, USA | unidades | 50 | 1 | 100 | 300 | 300 | recorrência `[{semanas:20,pos:50},{semanas:52,pos:25}]` | Estados Unidos · vendas + streaming |
-| UK | UK Official Charts | REINO UNIDO, UK, INGLATERRA | unidades | 50 | 1 | 100 | 600 | 600 | acr `{semanas:9,quedas:3,tp:200,tga:1200,tgv:1200}`, max_por_artista 3 | Reino Unido · vendas + streaming |
-| AU | ARIA Charts | AUSTRÁLIA | unidades | 50 | 1 | 100 | 600 | 600 | — | Austrália · vendas + streaming |
-| JP | Oricon | JAPÃO | unidades | 50 | 2 | 300 | 300 | 300 | — | Japão · vendas pesam mais |
-| KR | Circle Chart | COREIA DO SUL, CORÉIA DO SUL | unidades | 50 | 1 | 100 | 200 | 200 | — | Coreia do Sul · streaming + downloads |
-| DE | Offizielle Deutsche Charts | ALEMANHA | receita | 50 | 1.29 | 0.008 | 0.0008 | 0.0008 | — | Alemanha · por receita |
-| FR | SNEP | FRANÇA | unidades | 50 | 1 | 150 | 0 | 0 | — | França · vendas + streaming pago |
-| CA | Billboard Canadian Hot 100 | CANADÁ | unidades | 50 | 1 | 100 | 300 | 300 | recorrência igual EUA | Canadá · vendas + streaming |
-| BR | Billboard Brasil Hot 100 | BRASIL | unidades | 50 | 0 | 100 | 300 | 300 | — | Brasil · só streaming |
-| AR | Billboard Argentina Hot 100 | ARGENTINA | unidades | 50 | 0 | 100 | 300 | 300 | — | Argentina · só streaming |
-| MX | Billboard México | MÉXICO | unidades | 50 | 0 | 100 | 300 | 300 | — | México · só streaming |
-| EXCL_US | Global Excl. US | ESTADOS UNIDOS, EUA, USA | excl | 100 | 1 | 100 | 300 | 300 | — | Mundo sem os EUA · vendas + streaming |
+| id | nome | paises | tipo | top | tp | tga | tgv | extras | descricao |
+|---|---|---|---|---|---|---|---|---|---|
+| EUA | Billboard Hot 100 | ESTADOS UNIDOS, EUA, USA | unidades | 50 | 100 | 300 | 300 | recorrência `[{semanas:20,pos:50},{semanas:52,pos:25}]` | Estados Unidos · streaming pago e grátis |
+| UK | UK Official Charts | REINO UNIDO, UK, INGLATERRA | unidades | 50 | 100 | 600 | 600 | acr `{semanas:9,quedas:3,tp:200,tga:1200,tgv:1200}`, max_por_artista 3 | Reino Unido · streaming pago e grátis |
+| AU | ARIA Charts | AUSTRÁLIA | unidades | 50 | 100 | 600 | 600 | — | Austrália · streaming de áudio e vídeo |
+| JP | Oricon | JAPÃO | unidades | 50 | 300 | 300 | 300 | — | Japão · todos os streams |
+| KR | Circle Chart | COREIA DO SUL, CORÉIA DO SUL | unidades | 50 | 100 | 200 | 200 | — | Coreia do Sul · streaming |
+| DE | Offizielle Deutsche Charts | ALEMANHA | receita | 50 | 0.008 | 0.0008 | 0.0008 | — | Alemanha · por receita |
+| FR | SNEP | FRANÇA | unidades | 50 | 150 | 0 | 0 | — | França · só streaming pago |
+| CA | Billboard Canadian Hot 100 | CANADÁ | unidades | 50 | 100 | 300 | 300 | recorrência igual EUA | Canadá · streaming pago e grátis |
+| BR | Billboard Brasil Hot 100 | BRASIL | unidades | 50 | 100 | 300 | 300 | — | Brasil · streaming pago e grátis |
+| AR | Billboard Argentina Hot 100 | ARGENTINA | unidades | 50 | 100 | 300 | 300 | — | Argentina · streaming pago e grátis |
+| MX | Billboard México | MÉXICO | unidades | 50 | 100 | 300 | 300 | — | México · streaming pago e grátis |
+| EXCL_US | Global Excl. US | ESTADOS UNIDOS, EUA, USA | excl | 100 | 100 | 300 | 300 | — | Mundo sem os EUA · streaming |
 
 `ordem`: EXCL_US = 0 (primeiro no seletor); depois 1..11 na ordem EUA, UK, AU, JP, KR, DE, FR, CA, BR, AR, MX.
 
@@ -247,11 +246,11 @@ test("focoVigente: só depois de 'desde'; troca do admin não muda semanas anter
 **Interfaces:**
 - Consumes: `Parada`, `RegrasSemana` (Task 1); `Posicao` (Task 2).
 - Produces:
-  - `type Plataforma = "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE" | "DIGITAL SALES"`
+  - `type Plataforma = "SPOTIFY" | "APPLE MUSIC" | "YOUTUBE"` (Digital Sales não entra — spec rev. 4)
   - `interface MusicaSemana { tituloNorm: string; titulo: string; artistaPrincipal: string; semanas: number /* Global 100 se estiver lá, senão maior entre plataformas */; totalGlobal: Partial<Record<Plataforma, number>>; porPais: Partial<Record<Plataforma, Map<string, number>>>; streamsGlobaisAnteriores: number[] /* [d-1, d-2, d-3] Spotify+Apple+YouTube; ausente = 0 */ }`
   - `resolverPaisParada(p: Parada, paisesExistentes: Set<string>): string | null` — 1º alias (comparado sem acento/caixa via `semAcentoMaiusculo`) presente; devolve o nome como está em `pais_peso`.
-  - `fontes(m: MusicaSemana, pais: string | null /* null = mundo */, fracaoPaga: number): { vendas: number; pagos: number; gratis_audio: number; gratis_video: number }` — fórmula da seção 8 do spec; plataforma ausente = 0; `pais === null` usa `totalGlobal`.
-  - `pontos(f: ReturnType<typeof fontes>, p: Pick<Parada,"tipo"|"a"|"tp"|"tga"|"tgv">): number` — `unidades`/`excl`: `a·vendas + pagos/tp + ga/tga + gv/tgv` (divisor 0 ⇒ termo 0); `receita`: `a·vendas + tp·pagos + tga·ga + tgv·gv`.
+  - `fontes(m: MusicaSemana, pais: string | null /* null = mundo */, fracaoPaga: number): { pagos: number; gratis_audio: number; gratis_video: number }` — fórmula da seção 8 do spec; plataforma ausente = 0; `pais === null` usa `totalGlobal`.
+  - `pontos(f: ReturnType<typeof fontes>, p: Pick<Parada,"tipo"|"tp"|"tga"|"tgv">): number` — `unidades`/`excl`: `pagos/tp + ga/tga + gv/tgv` (divisor 0 ⇒ termo 0); `receita`: `tp·pagos + tga·ga + tgv·gv`.
   - `emAcr(m: MusicaSemana, totalAtual: number, acr: NonNullable<Parada["acr"]>): boolean` — `m.semanas > acr.semanas` e `totalAtual < ant[0] < ant[1] < ant[2]` (caiu em cada uma das `quedas` últimas semanas).
   - `calcularParada(musicas: MusicaSemana[], p: Parada, pais: string, fracaoPaga: number): Posicao[]` — passos: pontos por música (ACR troca `tp/tga/tgv`); ordena desc por pontos, desempate pela soma de `totalGlobal` desc, depois `tituloNorm`; aplica `max_por_artista` (por `semAcentoMaiusculo(artistaPrincipal)`); aplica `recorrencia` (remove quem tem `semanas ≥ s` e posição provisória `> pos`, com posições provisórias calculadas **uma vez** antes de remover); corta em `top`; `val = Math.round(pontos)` (receita: `Math.round`, exibido como número). Para `tipo: "excl"`: pontos = `pontos(fontes(m, null)) − pontos(fontes(m, pais))`.
   - `paradasDaSemana(atual: MusicaSemana[], anterior: MusicaSemana[], regras: RegrasSemana, paisesExistentes: Set<string>): { parada: Parada; linhas: (Posicao & { st: "↑" | "↓" | "=" | "NEW" })[] }[]` — ordem por `ordem`; parada sem país resolvido é omitida; `st` contra `calcularParada(anterior, …)`.
@@ -262,20 +261,20 @@ test("focoVigente: só depois de 'desde'; troca do admin não muda semanas anter
 const pais = (v: number) => new Map([["REINO UNIDO", v], ["ESTADOS UNIDOS", v * 3]]);
 const ms = (t: string, o: Partial<MusicaSemana> = {}): MusicaSemana => ({
   tituloNorm: t, titulo: t, artistaPrincipal: t, semanas: 1, streamsGlobaisAnteriores: [0, 0, 0],
-  totalGlobal: { SPOTIFY: 1000, YOUTUBE: 600, "APPLE MUSIC": 300, "DIGITAL SALES": 10 },
-  porPais: { SPOTIFY: pais(100), YOUTUBE: pais(60), "APPLE MUSIC": pais(30), "DIGITAL SALES": pais(1) }, ...o });
+  totalGlobal: { SPOTIFY: 1000, YOUTUBE: 600, "APPLE MUSIC": 300 },
+  porPais: { SPOTIFY: pais(100), YOUTUBE: pais(60), "APPLE MUSIC": pais(30) }, ...o });
 const P = (id: string) => REGRAS_PADRAO.paradas.find((p) => p.id === id)!;
 
 test("fontes: pagos = Apple + 45% Spotify; plataforma ausente = 0", () => {
-  expect(fontes(ms("a"), "REINO UNIDO", 0.45)).toEqual({ vendas: 1, pagos: 30 + 45, gratis_audio: 55, gratis_video: 60 });
+  expect(fontes(ms("a"), "REINO UNIDO", 0.45)).toEqual({ pagos: 30 + 45, gratis_audio: 55, gratis_video: 60 });
   const semApple = ms("b", { porPais: { SPOTIFY: pais(100) } });
-  expect(fontes(semApple, "REINO UNIDO", 0.45)).toEqual({ vendas: 0, pagos: 45, gratis_audio: 55, gratis_video: 0 });
+  expect(fontes(semApple, "REINO UNIDO", 0.45)).toEqual({ pagos: 45, gratis_audio: 55, gratis_video: 0 });
 });
-test("pontos: SNEP ignora grátis; Brasil ignora vendas; Alemanha por receita", () => {
-  const f = { vendas: 10, pagos: 1500, gratis_audio: 6000, gratis_video: 6000 };
-  expect(pontos(f, P("FR"))).toBeCloseTo(10 + 10, 9);
+test("pontos: SNEP ignora grátis; Brasil pagos÷100 + grátis÷300; Alemanha por receita", () => {
+  const f = { pagos: 1500, gratis_audio: 6000, gratis_video: 6000 };
+  expect(pontos(f, P("FR"))).toBeCloseTo(10, 9);
   expect(pontos(f, P("BR"))).toBeCloseTo(15 + 20 + 20, 9);
-  expect(pontos(f, P("DE"))).toBeCloseTo(10 * 1.29 + 1500 * 0.008 + 12000 * 0.0008, 9);
+  expect(pontos(f, P("DE"))).toBeCloseTo(1500 * 0.008 + 12000 * 0.0008, 9);
 });
 test("UK: no máximo 3 por artista", () => {
   const l = ["a", "b", "c", "d"].map((t, i) => ms(t, { artistaPrincipal: "Mia", porPais: { SPOTIFY: pais(1000 - i) } }));
@@ -328,7 +327,6 @@ test("resolverPaisParada: aliases sem acento; ausente → parada omitida", () =>
 - Produces:
   - Schema novo em `CHARTS_D1_SCHEMA`: `CREATE TABLE IF NOT EXISTS chart_regras_semana (data TEXT PRIMARY KEY, versao INTEGER NOT NULL, regras TEXT NOT NULL)` + `...FOCO_SCHEMA`.
   - Na ingestão (`ingerirSemana`, depois do batch da semana): `INSERT OR IGNORE INTO chart_regras_semana (data, versao, regras) VALUES (?, 1, ?)` com `JSON.stringify(regrasDeConfig(cfg))`.
-  - `PLATAFORMAS_PESO = ["SPOTIFY", "APPLE MUSIC", "YOUTUBE", "DIGITAL SALES"]` (linha de pesos `[país, spotify, apple, youtube, sales]`; coluna ausente é ignorada).
   - `export const ROTULO_PARADAS = "PARADAS OFICIAIS"`
   - `interface SemanaPaises { countries: Map<"SPOTIFY" | "APPLE MUSIC" | "YOUTUBE", LinhaPaisApi[]>; paradas: LinhaPaisApi[] }` — em `paradas`, `pais` = nome da parada, e linha extra opcional `ordem: number`, `desc: string`.
   - `async function calcularSemanaPaises(db: D1DatabaseLike, dataBr: string, cat: Map<string, MusicaCatalogo>, fotos: Map<string, string>): Promise<SemanaPaises>`
@@ -338,15 +336,14 @@ Algoritmo de `calcularSemanaPaises` (o que os testes não determinam):
 2. Uma consulta: `SELECT chart, data, titulo, titulo_norm, valor, artistas, semanas FROM chart_semana WHERE data IN (?,?,?,?)` (≈2.000 linhas no máximo).
 3. Em paralelo: `pais_peso`, `chart_config`, `artista_info` (nacionalidade), `carregarFocos`, `SELECT data, regras FROM chart_regras_semana WHERE data IN (d, d-1)`.
 4. Regras da semana: linha de `chart_regras_semana`; senão `REGRAS_PADRAO` (semente "padrão", decisão do construtor no spec §10 — escolhida: **sem semear linhas**; semana sem linha usa `REGRAS_PADRAO` versão 1, que é congelada no código). **Não** usar `chart_config` atual para semana sem linha.
-5. Pesos de DIGITAL SALES ausentes → usar os de APPLE MUSIC.
-6. Para `d` e `d-1`: por plataforma, `EntradaMusica[]` (nacionalidade como em `linhasPaises` de hoje; foco = `focoVigente(h, buscarNoCatalogo(titulo, cat)?.codigoUnico, data)` resolvido para o nome em `pais_peso` sem acento/caixa); `valoresPorPais` → `porPais`; `rankingsPorPais` → `countries` (só d).
-7. `MusicaSemana` por `titulo_norm` (junta as 4 plataformas; `semanas` = do Global 100 se presente, senão máximo; `streamsGlobaisAnteriores` das semanas d-1..d-3).
-8. `paradasDaSemana(atual, anterior, regras, new Set(pesos.keys()))` → linhas `{ pais: parada.nome, pos, tit, val: fmt(val), mes: dataBr, art, capa, st, ordem, desc }`.
+5. Para `d` e `d-1`: por plataforma, `EntradaMusica[]` (nacionalidade como em `linhasPaises` de hoje; foco = `focoVigente(h, buscarNoCatalogo(titulo, cat)?.codigoUnico, data)` resolvido para o nome em `pais_peso` sem acento/caixa); `valoresPorPais` → `porPais`; `rankingsPorPais` → `countries` (só d).
+6. `MusicaSemana` por `titulo_norm` (junta as 3 plataformas Spotify/Apple/YouTube — Digital Sales não é lido; `semanas` = do Global 100 se presente, senão máximo; `streamsGlobaisAnteriores` das semanas d-1..d-3).
+7. `paradasDaSemana(atual, anterior, regras, new Set(pesos.keys()))` → linhas `{ pais: parada.nome, pos, tit, val: fmt(val), mes: dataBr, art, capa, st, ordem, desc }`.
 
-- [ ] **Step 1: Write the failing test** (SQLite em memória, 2 semanas, 4 plataformas, 3 países):
+- [ ] **Step 1: Write the failing test** (SQLite em memória, 2 semanas, Global + 3 plataformas, 3 países):
 
 ```ts
-test("calcularSemanaPaises: COUNTRIES e paradas; mesma música em 4 plataformas não duplica; fixo por data", async () => {
+test("calcularSemanaPaises: COUNTRIES e paradas; mesma música em 3 plataformas não duplica; fixo por data", async () => {
   const db = await bancoDeTeste(); // helper no próprio arquivo: schema + 2 semanas + pais_peso + artista_info + musica_foco
   const a = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
   const b = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
@@ -358,8 +355,8 @@ test("calcularSemanaPaises: COUNTRIES e paradas; mesma música em 4 plataformas 
   await db.prepare("INSERT OR REPLACE INTO chart_config (chave, valor) VALUES ('nac_max','9')").run();
   expect(await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map())).toEqual(a);
 });
-test("semana só com Spotify/YouTube/Global (antes de Apple e Sales): paradas sem NaN", async () => {
-  const db = await bancoDeTeste({ semApple: true, semSales: true });
+test("semana só com Spotify/YouTube/Global (antes do Apple Music): paradas sem NaN", async () => {
+  const db = await bancoDeTeste({ semApple: true });
   const r = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
   expect(r.paradas.every((l) => !String(l.val).includes("NaN"))).toBe(true);
 });
@@ -478,26 +475,23 @@ Mudanças:
 
 ---
 
-### Task 10: Pesos do Digital Sales no envio semanal + documentação
+### Task 10: Documentação para mantenedores
 
 **Files:**
-- Modify: `scripts/apps-script/EnvioD1.gs`, `docs/charts-d1-envio-semanal.md`
 - Create: `docs/charts-regras-paises.md`
 
-Mudanças:
-- `EnvioD1.gs`: função `lerPesos_()` lê a aba **PAÍSES E PESOS** da planilha cujo ID está na Propriedade do Script `PESOS_SPREADSHEET_ID` (se ausente, usa a própria EMPIRE - CHARTS; se a aba não existir, envia sem `pesos` e registra `AVISO` no log). Localiza colunas por cabeçalho (`PAÍS`, `SPOTIFY`, `APPLE MUSIC`, `YOUTUBE`, `DIGITAL SALES`, sem acento/caixa) e envia `payload.pesos = [[país, spotify, apple, youtube, sales], ...]` (texto como está na planilha, ex. "7,20%").
-- `docs/charts-d1-envio-semanal.md`: nova propriedade `PESOS_SPREADSHEET_ID` e a coluna DIGITAL SALES na aba PAÍSES E PESOS.
-- `docs/charts-regras-paises.md`: conteúdo listado no spec §13, com os números reais de `REGRAS_PADRAO`, os dois exemplos numéricos (australiana com foco nos EUA; hit 1.000.000 vs nativo 200.000/500.000 num país de 2%, iguais aos testes da Task 2), a tabela das 12 paradas, cada chave de `chart_config` (`nac_min`, `nac_max`, `foco_min`, `foco_max`, `bonus_teto`, `variacao`, `top_pais`, `fracao_paga_spotify`, `paradas`) com efeito de aumentar/diminuir, como incluir uma parada (exemplo de JSON), por que é fixo por data (`sorteio01` + `chart_regras_semana`; semanas sem linha usam `REGRAS_PADRAO` v1 do código, que não pode ser editado — mudança de fórmula = `versao` 2), o que ainda muda o passado (nacionalidade, `pais_peso`), foco (vigência, trava, admin), e como rodar os testes.
+(Digital Sales fora — spec rev. 4: nenhuma mudança no `EnvioD1.gs` nem em planilhas.)
 
-- [ ] **Step 1:** Implementar o `.gs` (não há teste automatizado; revisar contra `lerArtistas_` existente, mesmo estilo ES5).
-- [ ] **Step 2:** Escrever os dois documentos.
-- [ ] **Step 3: Verificação:** `bun test scripts/charts-paises.test.ts scripts/charts-d1.test.ts` (nada quebrou) e conferir que cada chave citada no documento existe em `regras.ts`.
-- [ ] **Step 4: Commit** `git commit -m "docs(charts): regras de países/paradas; envio dos pesos do Digital Sales"`
+Conteúdo, em português simples: o listado no spec §13, com os números reais de `REGRAS_PADRAO`, os dois exemplos numéricos (australiana com foco nos EUA; hit 1.000.000 vs nativo 200.000/500.000 num país de 2%, iguais aos testes da Task 2), a tabela das 12 paradas, cada chave de `chart_config` (`nac_min`, `nac_max`, `foco_min`, `foco_max`, `bonus_teto`, `variacao`, `top_pais`, `fracao_paga_spotify`, `paradas`) com efeito de aumentar/diminuir e o comando SQL pronto para o Console do D1 (`INSERT INTO chart_config (chave, valor) VALUES ('nac_max','5') ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor`), como incluir uma parada (exemplo de JSON), por que é fixo por data (`sorteio01` + `chart_regras_semana`; semanas sem linha usam `REGRAS_PADRAO` v1 do código, que não pode ser editado — mudança de fórmula = `versao` 2), o que ainda muda o passado (nacionalidade, `pais_peso`), foco (vigência, trava, admin), que Digital Sales não participa, e como rodar os testes.
+
+- [ ] **Step 1:** Escrever o documento.
+- [ ] **Step 2: Verificação:** conferir que cada chave citada existe em `backend/src/services/chartsD1/regras.ts` e que os exemplos batem com os testes da Task 2.
+- [ ] **Step 3: Commit** `git commit -m "docs(charts): regras de países e paradas oficiais"`
 
 ---
 
 ## Self-review (feito)
 
-- Cobertura do spec: regra C (T2), fixo por data (T1, T5), foco dados/trava/UI (T3, T7, T8), paradas e metodologias (T4), Excl. US (T4), Digital Sales pesos (T5, T10), API/cache (T6), front e rótulos (T9), documento (T10), histórico sem gravação em massa (T5 passo 4: semanas sem linha usam `REGRAS_PADRAO` congelado). IFPI fora (não-objetivo).
+- Cobertura do spec: regra C (T2), fixo por data (T1, T5), foco dados/trava/UI (T3, T7, T8), paradas e metodologias (T4), Excl. US (T4), API/cache (T6), front e rótulos (T9), documento (T10), histórico sem gravação em massa (T5 passo 4: semanas sem linha usam `REGRAS_PADRAO` congelado). IFPI fora (não-objetivo).
 - Decisão do construtor tomada aqui: semente do histórico = nenhuma linha; `REGRAS_PADRAO` v1 é o congelamento das semanas antigas (zero escritas). Consequência documentada em T10: `REGRAS_PADRAO` v1 não pode ser editado.
 - Nomes consistentes: `sorteio01`, `RegrasSemana`, `fatiasRegraC`, `rankingsPorPais`, `MusicaSemana`, `calcularParada`, `paradasDaSemana`, `calcularSemanaPaises`, `focoVigente`, `validarGravacaoFoco`.
