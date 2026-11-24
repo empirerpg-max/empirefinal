@@ -6,9 +6,8 @@ import {
   type LinhaAoVivoPais,
   type PlataformaAoVivo,
 } from "../services/chartsD1/aoVivoPaises";
-import { normalizarTitulo, type MusicaCatalogo } from "../services/chartsD1/artistas";
+import { buscarNoCatalogo, normalizarTitulo, type MusicaCatalogo } from "../services/chartsD1/artistas";
 import { fixImg, fmt } from "../services/chartsD1/formato";
-import { parseNumeroBR } from "../services/chartsD1/dados";
 import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
 import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
 import {
@@ -355,28 +354,61 @@ type ItemEmAltaBruto = ItemEmAlta & { p: string; s: string };
 type EmAltaBruta = Record<PlataformaAoVivo, ItemEmAltaBruto[]>;
 let emAltaCache: { valor: Promise<EmAltaBruta>; expiresAt: number } | null = null;
 
+// Capas do catálogo para a EM Alta. A cada 30 s só a aba "EM Alta" é lida:
+// com o catálogo no D1 (cache `referenciasD1`, 5 min) as capas saem dele, sem
+// tocar na planilha; sem D1, cai na leitura da aba Musicas, em cache de 5 min
+// (promessa de módulo; falha não fica em cache).
+const CAPAS_PLANILHA_TTL_MS = 5 * 60 * 1000;
+let capasPlanilhaCache: { valor: Promise<Map<string, string>>; expiresAt: number } | null = null;
+
+function capasPlanilhaCatalogo(): Promise<Map<string, string>> {
+  if (capasPlanilhaCache && capasPlanilhaCache.expiresAt > agoraAoVivo()) return capasPlanilhaCache.valor;
+  const valor = buildCapaPorTituloCatalogo();
+  const entrada = { valor, expiresAt: agoraAoVivo() + CAPAS_PLANILHA_TTL_MS };
+  valor.catch(() => {
+    if (capasPlanilhaCache === entrada) capasPlanilhaCache = null;
+  });
+  capasPlanilhaCache = entrada;
+  return valor;
+}
+
+async function capaDoCatalogoPorTitulo(): Promise<(titulo: string) => string | undefined> {
+  const db = getCatalogoDb();
+  if (db) {
+    try {
+      if (await ativoD1(db)) {
+        const { cat } = await referenciasD1(db);
+        return (titulo) => buscarNoCatalogo(titulo, cat)?.capa;
+      }
+    } catch (e) {
+      console.warn("[charts-d1] catálogo D1 indisponível para as capas do ao vivo; usando a planilha:", e);
+    }
+  }
+  const capaPorTitulo = await capasPlanilhaCatalogo();
+  return (titulo) => capaPorTitulo.get(normalizarTitulo(titulo));
+}
+
 async function lerEmAlta(): Promise<EmAltaBruta> {
-  const [data, capaPorTitulo] = await Promise.all([
+  const [data, capaDoCatalogo] = await Promise.all([
     readSheet("chartsRealtime", "EM Alta"),
     // A aba "EM Alta" quase nunca vem com a própria coluna de capa (G)
-    // preenchida — cruza por título com o catálogo real (Musicas, planilha
-    // principal) pra herdar a capa de verdade, mesmo padrão já usado pros
-    // cards de Apple Music/YouTube do Catálogo (ver empirePlayController).
-    buildCapaPorTituloCatalogo(),
+    // preenchida — cruza por título com o catálogo real pra herdar a capa.
+    capaDoCatalogoPorTitulo(),
   ]);
 
   const out: EmAltaBruta = { spotify: [], apple: [], youtube: [] };
   data.slice(1).forEach((r) => {
     if (!r[1]) return;
     const capaPlanilha = fixImg(r[6]);
-    const capaCatalogo = capaPorTitulo.get(normalizarTitulo(r[1] || ""));
+    const capaCatalogo = capaDoCatalogo(r[1] || "");
     // Catálogo (capa real da música/álbum) tem prioridade sobre a coluna G
     // da própria "EM Alta": quando essa coluna vem preenchida, geralmente é
     // com a foto do ARTISTA (não da capa), o que gerava o bug relatado de
     // charts mostrando foto de artista em vez da capa do material.
     const item: ItemEmAltaBruto = {
       t: r[1],
-      n: parseNumeroBR(String(r[3] ?? "")) ?? 0,
+      // Mesmo critério do `fmt` (só dígitos): "1,234,567" vale igual no mundo e nos países.
+      n: Number(String(r[3] ?? "").replace(/[^\d]/g, "")) || 0,
       s: fmt(r[3]),
       p: r[5],
       c: fixImg(capaCatalogo) || capaPlanilha,
@@ -769,6 +801,7 @@ export function limparCacheCharts(): void {
   referenciasD1Cache = null;
   ativoD1Cache = null;
   emAltaCache = null;
+  capasPlanilhaCache = null;
   limparCacheAoVivoPaises();
 }
 

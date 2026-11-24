@@ -79,7 +79,10 @@ País: ‹ EUA · Reino Unido · Brasil · Alemanha … ›   (rolável)
 
 ## Custo
 
-- Planilha: as mesmas leituras de hoje (uma por 30 s por isolate).
+- Planilha: antes desta mudança o `getRealTime` era servido de um cache de
+  5 min; agora cada isolate ativo lê só a aba "EM Alta" no máximo uma vez a
+  cada 30 s. As capas vêm do catálogo no D1 (sem ler a planilha Musicas); só
+  sem D1 há fallback para a aba Musicas, em cache de 5 min.
 - D1: `pais_peso`, `artista_info`, `musica_foco`, `chart_config` e a última
   data do Global 100, em cache por isolate (5 min, como o catálogo).
 

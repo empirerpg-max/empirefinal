@@ -134,7 +134,7 @@ interface Referencias {
 }
 
 // Cache de módulo: Date.now só decide a expiração, nunca entra no cálculo.
-let cacheReferencias: { em: number; refs: Referencias } | null = null;
+let cacheReferencias: { em: number; refs: Promise<Referencias> } | null = null;
 
 export function limparCacheAoVivoPaises(): void {
   cacheReferencias = null;
@@ -164,10 +164,15 @@ async function carregarReferencias(db: D1DatabaseLike): Promise<Referencias> {
   };
 }
 
-async function referencias(db: D1DatabaseLike): Promise<Referencias> {
+// Promessa em cache: chamadas simultâneas dividem a mesma carga; se falhar, descarta.
+function referencias(db: D1DatabaseLike): Promise<Referencias> {
   if (cacheReferencias && Date.now() - cacheReferencias.em < TTL_REFERENCIAS_MS) return cacheReferencias.refs;
-  const refs = await carregarReferencias(db);
-  cacheReferencias = { em: Date.now(), refs };
+  const refs = carregarReferencias(db);
+  const entrada = { em: Date.now(), refs };
+  refs.catch(() => {
+    if (cacheReferencias === entrada) cacheReferencias = null;
+  });
+  cacheReferencias = entrada;
   return refs;
 }
 

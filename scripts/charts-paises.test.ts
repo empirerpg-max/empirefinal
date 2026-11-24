@@ -623,6 +623,40 @@ test("calcularAoVivoPaises: usa próxima data de chart; vazio sem chart_datas/pe
   expect(await calcularAoVivoPaises(db, entrada, new Map())).toEqual(r);
 });
 
+test("calcularAoVivoPaises: o sorteio usa proximaData (max chart_datas + 7), não a última data", async () => {
+  const db = await bancoDeTeste(); // última data do Global 100: 2026-11-11
+  limparCacheAoVivoPaises();
+  const em = [{ t: "Amanda - Koala", n: 1_000_000, c: "" }, { t: "Bob - Freedom", n: 900_000, c: "" }, { t: "Carl - Tea", n: 800_000, c: "" }];
+  const r = await calcularAoVivoPaises(db, { spotify: em, apple: [], youtube: [] }, new Map());
+  const pesos = new Map<string, number>();
+  for (const l of (await db.prepare("SELECT pais, peso FROM pais_peso WHERE plataforma = 'SPOTIFY'").all<{ pais: string; peso: number }>()).results) pesos.set(l.pais, l.peso);
+  // Mesmos itens que a função resolve: artista_info do bancoDeTeste (Amanda→AUS, Bob→UK, Carl→EUA), sem foco.
+  const nac: Record<string, string> = { Amanda: "AUSTRÁLIA", Bob: "REINO UNIDO", Carl: "ESTADOS UNIDOS" };
+  const itens = (): ItemAoVivo[] => em.map((i) => {
+    const a = i.t.split(" - ")[0];
+    return { ...i, artistas: [a], nacionalidades: new Set<string>(nac[a] ? [nac[a]] : []), foco: null };
+  });
+  const esperado = rankingAoVivoPorPais(itens(), pesos, "2026-11-18", REGRAS_PADRAO.paises);
+  const outraData = rankingAoVivoPorPais(itens(), pesos, "2026-11-11", REGRAS_PADRAO.paises);
+  expect(r.spotify.length).toBeGreaterThan(0);
+  expect(r.spotify).toEqual(esperado);
+  // Com a última data (em vez da próxima) o sorteio muda: prova que proximaData é usada.
+  expect(r.spotify).not.toEqual(outraData);
+});
+
+test("calcularAoVivoPaises: plataforma com EM Alta mas sem pais_peso → []", async () => {
+  const db = await bancoDeTeste();
+  db.exec("DELETE FROM pais_peso WHERE plataforma = 'YOUTUBE'");
+  limparCacheAoVivoPaises();
+  const r = await calcularAoVivoPaises(db, {
+    spotify: [{ t: "Amanda - Koala", n: 1000, c: "" }],
+    apple: [],
+    youtube: [{ t: "Dua - Hit", n: 5000, c: "" }],
+  }, new Map());
+  expect(r.youtube).toEqual([]);
+  expect(r.spotify.length).toBeGreaterThan(0);
+});
+
 // ───────────── API do ao vivo: getRealTime / getRealTimePaises (cache de 30 s) ─────────────
 import { definirRelogioAoVivo } from "../backend/src/controllers/chartsController";
 
@@ -699,6 +733,54 @@ test("/api/charts ao vivo: resposta não sobrevive à leitura da EM Alta de onde
     avancar(2_000); // t=31 s: leitura e resposta de t=29 s já venceram
     await chamar("action=getRealTime&x=1");
     expect(leiturasEmAlta(lidas)).toBe(2);
+  });
+});
+
+const leiturasMusicas = (lidas: string[]) => lidas.filter((l) => l === "principal:Musicas").length;
+
+test("/api/charts ao vivo: a cada 30 s só a EM Alta é lida; Musicas no máximo 1 vez (0 com D1)", async () => {
+  // Sem D1: capas pela planilha Musicas, em cache de 5 min.
+  await comAoVivo(undefined, async (lidas, avancar) => {
+    await chamar("action=getRealTime");
+    avancar(31_000);
+    await chamar("action=getRealTime");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+    expect(leiturasMusicas(lidas)).toBeLessThanOrEqual(1);
+    avancar(31_000);
+    await chamar("action=getRealTime");
+    expect(leiturasEmAlta(lidas)).toBe(3);
+    expect(leiturasMusicas(lidas)).toBeLessThanOrEqual(1);
+  });
+  // Com D1: capas vêm do catálogo (tabela musicas), planilha nunca lida.
+  const db = await bancoDeTeste();
+  expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
+  db.exec("CREATE TABLE musicas (titulo TEXT, codigo_unico TEXT, artista TEXT, artista_2 TEXT, artista_3 TEXT, artista_4 TEXT, artista_5 TEXT, artista_6 TEXT, capa_url TEXT, genero TEXT, tipo_single TEXT)");
+  db.exec("INSERT INTO musicas (titulo, codigo_unico, artista, capa_url) VALUES ('Koala', 'K1', 'Amanda', 'https://exemplo.com/capa-koala.jpg')");
+  await comAoVivo(db, async (lidas, avancar) => {
+    const r1 = (await (await chamar("action=getRealTime")).json()) as Record<string, { t: string; c: string }[]>;
+    expect(r1.spotify[0].c).toContain("capa-koala");
+    avancar(31_000);
+    await chamar("action=getRealTime");
+    await chamar("action=getRealTimePaises");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+    expect(leiturasMusicas(lidas)).toBe(0);
+  });
+});
+
+test("/api/charts ao vivo: streams '1,234,567' valem igual no mundo e nos países", async () => {
+  const db = await bancoDeTeste();
+  expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
+  await comAoVivo(db, async () => {
+    const svc = googleSheetsService as unknown as Record<string, { readValues: (s: string) => Promise<string[][]> }>;
+    svc.chartsRealtime.readValues = async () => [
+      EM_ALTA[0],
+      ["", "Amanda - Koala", "", "1,234,567", "Spotify", "+1", ""],
+    ];
+    const mundo = (await (await chamar("action=getRealTime")).json()) as { spotify: { s: string }[] };
+    expect(mundo.spotify[0].s).toBe("1.234.567");
+    const paises = (await (await chamar("action=getRealTimePaises")).json()) as { spotify: { s: string }[] };
+    const total = paises.spotify.reduce((a, l) => a + Number(l.s.replace(/\./g, "")), 0);
+    expect(total).toBeGreaterThan(0);
   });
 });
 
