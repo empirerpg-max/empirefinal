@@ -178,6 +178,10 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [albumFaixas, setAlbumFaixas] = useState<AlbumFaixa[]>([]);
   const [loadingFaixas, setLoadingFaixas] = useState<boolean>(false);
   const [savingOrdem, setSavingOrdem] = useState<boolean>(false);
+  // Erro ao gravar a ordem das faixas — mostrado logo acima da lista de
+  // faixas (o errorMsg geral fica lá embaixo, perto do botão Salvar, e
+  // passaria despercebido enquanto a pessoa mexe nas setas).
+  const [erroOrdem, setErroOrdem] = useState<string | null>(null);
   const [musicasEmChart, setMusicasEmChart] = useState<MusicaEmChart[]>([]);
   const [publicandoFaixaIdx, setPublicandoFaixaIdx] = useState<number | null>(null);
   // Tipo escolhido pra cada faixa pendente na hora de publicar — por padrão
@@ -348,6 +352,7 @@ export const EditModal: React.FC<EditModalProps> = ({
     setSuccessMsg(null);
     setErrorMsg(null);
     setAlbumFaixas([]);
+    setErroOrdem(null);
     setAddingFaixa(false);
     setNovaFaixaTitulo("");
     setNovaFaixaBusca("");
@@ -397,6 +402,36 @@ export const EditModal: React.FC<EditModalProps> = ({
     }
   };
 
+  // Grava a ordem nova no servidor (Musicas!U + tracklist do álbum em
+  // Albuns!M, via topicId). Antes a resposta era ignorada e a tela mostrava
+  // a ordem nova mesmo quando nada tinha sido gravado; agora, se falhar,
+  // avisa e recarrega as faixas do servidor pra tela mostrar o que vale.
+  const salvarOrdemFaixas = async (reindexed: AlbumFaixa[]) => {
+    const topicId = editingItem?.fields?.topicId || "";
+    setSavingOrdem(true);
+    try {
+      const res = await fetch("/api/gestao/album-faixas/reordenar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topicId,
+          ordens: reindexed.map((f) => ({ musicaRowIndex: f.musicaRowIndex, ordem: f.ordem })),
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || json?.success !== true) {
+        throw new Error(json?.error || "Não foi possível salvar a nova ordem das faixas.");
+      }
+      setErroOrdem(null);
+    } catch (err: any) {
+      console.error("Erro ao reordenar faixas:", err);
+      setErroOrdem(err?.message || "Não foi possível salvar a nova ordem das faixas.");
+      if (topicId) fetchAlbumFaixas(topicId);
+    } finally {
+      setSavingOrdem(false);
+    }
+  };
+
   // Move uma faixa pra cima/baixo na lista, trocando a Ordem com a vizinha,
   // e já salva as duas mudanças na planilha.
   const handleMoveFaixa = async (index: number, direction: -1 | 1) => {
@@ -408,20 +443,7 @@ export const EditModal: React.FC<EditModalProps> = ({
     // Reatribui a Ordem em sequência (1, 2, 3...) conforme a nova posição.
     const reindexed = updated.map((f, i) => ({ ...f, ordem: i + 1 }));
     setAlbumFaixas(reindexed);
-    setSavingOrdem(true);
-    try {
-      await fetch("/api/gestao/album-faixas/reordenar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ordens: reindexed.map((f) => ({ musicaRowIndex: f.musicaRowIndex, ordem: f.ordem })),
-        }),
-      });
-    } catch (err) {
-      console.error("Erro ao reordenar faixas:", err);
-    } finally {
-      setSavingOrdem(false);
-    }
+    await salvarOrdemFaixas(reindexed);
   };
 
   // Edita a Ordem digitando o número direto, em vez de só subir/descer uma
@@ -440,20 +462,7 @@ export const EditModal: React.FC<EditModalProps> = ({
     updated.splice(alvo, 0, faixa);
     const reindexed = updated.map((f, i) => ({ ...f, ordem: i + 1 }));
     setAlbumFaixas(reindexed);
-    setSavingOrdem(true);
-    try {
-      await fetch("/api/gestao/album-faixas/reordenar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ordens: reindexed.map((f) => ({ musicaRowIndex: f.musicaRowIndex, ordem: f.ordem })),
-        }),
-      });
-    } catch (err) {
-      console.error("Erro ao reordenar faixas:", err);
-    } finally {
-      setSavingOrdem(false);
-    }
+    await salvarOrdemFaixas(reindexed);
   };
 
   const handleToggleFaixaLetra = (idx: number) => {
@@ -1087,6 +1096,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                     <ListMusic className="size-3.5 text-amber-400" />
                     Faixas do Álbum
                   </label>
+
+                  {erroOrdem && (
+                    <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-[11px] font-bold flex items-center gap-2">
+                      <AlertCircle className="size-4 shrink-0" />
+                      <span className="min-w-0">{erroOrdem}</span>
+                    </div>
+                  )}
 
                   {loadingFaixas ? (
                     <div className="flex items-center gap-2 text-xs text-neutral-400 py-4">

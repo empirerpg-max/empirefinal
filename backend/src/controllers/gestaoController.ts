@@ -10,6 +10,7 @@ import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
 import { getOwnerIdForArtist } from "./artistasController";
 import { upsertMidiaD1 } from "../services/catalogoDbService";
+import { mesclarTracklist, planejarReordenacao } from "./albumTracklist";
 import {
   getCatalogoDb,
   buildMusicaUpsertStatement,
@@ -2797,15 +2798,30 @@ export async function publicarFaixaPendenteController(request: Request): Promise
 }
 
 export interface ReordenarFaixasPayload {
+  // ID do tópico do álbum (Albuns!B) — com ele a ordem também é gravada na
+  // tracklist do álbum (Albuns!M), que é de onde a tela de edição e a
+  // página pública leem a ordem. Sem ele (chamador antigo) só Musicas!U.
+  topicId?: string;
   ordens: { musicaRowIndex: number; ordem: number }[];
 }
 
-// Atualiza a coluna Ordem (Musicas!U) de cada faixa informada — usado pra
-// reordenar a tracklist de um álbum na tela de edição.
+// Grava a nova ordem da tracklist de um álbum, vinda da tela de edição.
+// Antes gravava SÓ Musicas!U — mas desde a tracklist por álbum (Albuns!M)
+// a leitura vem de M, então a ordem nova "voltava" ao reabrir (caso Johny
+// Slaver — Utopia, 2026-11-24). Agora:
+// - Musicas!U continua sendo gravada (só as faixas que mudaram, em lote) e
+//   espelhada no D1 — é a fonte da ordem de álbum antigo sem tracklist;
+// - se o álbum TEM tracklist, Albuns!M é regravada inteira na ordem da tela
+//   (planejarReordenacao/reordenarTracklist: deduplica títulos, mantém o
+//   disco, preserva entradas órfãs no fim). Álbum sem tracklist continua
+//   sem — ver PlanoReordenacao. A escrita em Albuns já é espelhada no D1.
 export async function reordenarAlbumFaixasController(request: Request): Promise<Response> {
   try {
     const body = (await request.json()) as ReordenarFaixasPayload;
-    const ordens = body.ordens || [];
+    const ordens = (body.ordens || [])
+      .filter(({ musicaRowIndex }) => musicaRowIndex && musicaRowIndex >= 2)
+      .sort((a, b) => a.ordem - b.ordem);
+    const topicId = (body.topicId || "").trim();
 
     if (ordens.length === 0) {
       return new Response(
@@ -2814,12 +2830,61 @@ export async function reordenarAlbumFaixasController(request: Request): Promise<
       );
     }
 
-    for (const { musicaRowIndex, ordem } of ordens) {
-      if (!musicaRowIndex || musicaRowIndex < 2) continue;
-      await googleSheetsService.principal.updateValues("Musicas", `U${musicaRowIndex}`, [
-        [String(ordem)],
-      ]);
-    }
+    // Tudo que decide O QUE gravar é lido SEM cache e SEM fallback GViz
+    // (readValuesFresh): o cache de 15s pode estar velho por escrita feita
+    // em outra instância (ex.: faixa recém-adicionada sumiria da tracklist),
+    // e o GViz ignora o range (devolveria a coluna A no lugar dos títulos).
+    // A trava por álbum serializa com o "adicionar faixas", que também
+    // regrava Albuns!M (ver substituirAlbumController).
+    const executar = async (): Promise<Response | null> => {
+      let albumRowIndex = -1;
+      let tracklistAtual: TracklistEntry[] = [];
+      if (topicId) {
+        const colunasAlbum = await googleSheetsService.principal.readValuesFresh("Albuns", "A:M");
+        for (let i = 1; i < colunasAlbum.length; i++) {
+          if ((colunasAlbum[i][1] || "").trim() === topicId) {
+            albumRowIndex = i + 1;
+            tracklistAtual = lerTracklistAlbum(colunasAlbum[i]);
+            break;
+          }
+        }
+        if (albumRowIndex === -1) {
+          return new Response(JSON.stringify({ success: false, error: "Álbum não encontrado." }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      const maiorLinha = Math.max(...ordens.map((o) => o.musicaRowIndex));
+      const linhasMusicas = await googleSheetsService.principal.readValuesFresh(
+        "Musicas",
+        `H1:U${maiorLinha}`,
+      );
+      const plano = planejarReordenacao(ordens, linhasMusicas, tracklistAtual);
+
+      if (plano.escritasU.length > 0) {
+        await googleSheetsService.principal.updateValuesBatch(
+          plano.escritasU.map(({ musicaRowIndex, ordem }) => ({
+            sheetName: "Musicas",
+            range: `U${musicaRowIndex}`,
+            values: [[String(ordem)]],
+          })),
+        );
+        for (const { musicaRowIndex } of plano.escritasU) await mirrorMusicaRowParaD1(musicaRowIndex);
+      }
+      if (plano.tracklistNova) {
+        await googleSheetsService.principal.updateValues("Albuns", `M${albumRowIndex}`, [
+          [JSON.stringify(plano.tracklistNova)],
+        ]);
+      }
+      return null;
+    };
+
+    const erro = topicId
+      ? await withWriteLock(`album-tracklist:${topicId}`, executar)
+      : await executar();
+    if (erro) return erro;
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -2996,14 +3061,24 @@ export async function completarAlbumExistente(body: SubstituirAlbumPayload) {
 
     // Mescla as faixas novas na tracklist JSON já existente em Albuns!M
     // (em vez de sobrescrever) — álbum antigo sem tracklist ainda (lido
-    // como []) começa uma nova só com as faixas recém-adicionadas.
+    // como []) começa uma nova só com as faixas recém-adicionadas. Título
+    // que já está na tracklist não entra de novo e faixa nova vai pro fim
+    // do disco (mesclarTracklist) — antes concatenava e duplicava entradas.
     try {
-      const tracklistAtual = lerTracklistAlbum(rows[rowIndex - 1]);
-      const novasEntries = construirTracklistEntries(novasFaixas, artistaAlbum);
-      const tracklistFinal = [...tracklistAtual, ...novasEntries];
-      await googleSheetsService.principal.updateValues("Albuns", `M${rowIndex}`, [
-        [JSON.stringify(tracklistFinal)],
-      ]);
+      // Mesma trava e leitura sem cache do reordenar (ver
+      // reordenarAlbumFaixasController): os dois regravam Albuns!M inteira.
+      await withWriteLock(`album-tracklist:${albumTopicId.trim()}`, async () => {
+        const [linhaAlbum] = await googleSheetsService.principal.readValuesFresh(
+          "Albuns",
+          `A${rowIndex}:M${rowIndex}`,
+        );
+        const tracklistAtual = lerTracklistAlbum(linhaAlbum);
+        const novasEntries = construirTracklistEntries(novasFaixas, artistaAlbum);
+        const tracklistFinal = mesclarTracklist(tracklistAtual, novasEntries);
+        await googleSheetsService.principal.updateValues("Albuns", `M${rowIndex}`, [
+          [JSON.stringify(tracklistFinal)],
+        ]);
+      });
     } catch (err) {
       console.warn("[substituirAlbumController] Erro ao mesclar tracklist (Albuns!M):", err);
     }
