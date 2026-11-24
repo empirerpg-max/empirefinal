@@ -3,7 +3,7 @@ import { test, expect } from "bun:test";
 import { sorteio01 } from "../backend/src/services/chartsD1/sorteio";
 import { fatiasRegraC, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
 import { regrasDeConfig, parseRegrasSemana, REGRAS_PADRAO } from "../backend/src/services/chartsD1/regras";
-import { fontes, pontos, emAcr, calcularParada, fatorPontos, resolverPaisParada, mapaPaisPorNome, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
+import { fontes, pontos, emAcr, calcularParada, fatorPontos, PONTOS_MAX_PARADA, resolverPaisParada, mapaPaisPorNome, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
 import { criarD1Sqlite } from "./charts-d1-sqlite";
 import { CHARTS_D1_SCHEMA, ingerirSemana } from "../backend/src/services/chartsD1/repo";
 import { calcularSemanaPaises, ROTULO_PARADAS } from "../backend/src/services/chartsD1/semanaPaises";
@@ -189,13 +189,13 @@ test("UK: música em ACR recebe val menor que a mesma fora do ACR", () => {
   const base = { porPais: { SPOTIFY: pais(1_000_000), YOUTUBE: pais(600_000) } };
   // Streams globais atuais = 1000 + 600 + 300 = 1900, caindo há 3 semanas.
   // pontosGlobal100 = unidades globais da parada, para o fator ser 1 e o val ficar em unidades.
-  const g100 = pontos(fontes(ms("a"), null, 0.45), P("UK"));
+  const g100 = pontos(fontes(ms("a"), null, 0.45), P("UK")) * 0.1; // fator 0,1: fica abaixo do teto
   const acr = ms("a", { ...base, pontosGlobal100: g100, semanas: 10, streamsGlobaisAnteriores: [2000, 2100, 2200] });
   const normal = ms("a", { ...base, pontosGlobal100: g100, semanas: 1, streamsGlobaisAnteriores: [2000, 2100, 2200] });
   const vAcr = calcularParada([acr], P("UK"), "REINO UNIDO", 0.45)[0].val;
   const vNormal = calcularParada([normal], P("UK"), "REINO UNIDO", 0.45)[0].val;
-  expect(vNormal).toBe(Math.round(450_000 / 100 + 550_000 / 600 + 600_000 / 600));
-  expect(vAcr).toBe(Math.round(450_000 / 200 + 550_000 / 1200 + 600_000 / 1200));
+  expect(vNormal).toBe(Math.round((450_000 / 100 + 550_000 / 600 + 600_000 / 600) * 0.1));
+  expect(vAcr).toBe(Math.round((450_000 / 200 + 550_000 / 1200 + 600_000 / 1200) * 0.1));
   expect(vAcr).toBeLessThan(vNormal);
 });
 test("Excl. US = mundo − EUA", () => {
@@ -535,12 +535,31 @@ test("foco API: não-admin nunca sobrescreve linha do mesmo dia (corrida) → 40
   });
 });
 
-test("paradas: pontos na moeda do Global 100 (≤ 1000 quando o Global 100 é ≤ 1000) sem mudar a ordem", () => {
+test("paradas: pontos na moeda do Global 100 (≤ 1000) sem mudar a ordem", () => {
   const l = ["a", "b", "c"].map((t, i) => ms(t, { pontosGlobal100: [705, 400, 100][i], porPais: { SPOTIFY: pais(1_000_000 * (3 - i)) }, totalGlobal: { SPOTIFY: 187_000_000 / (i + 1) } }));
-  const sem = calcularParada(l.map((m) => ({ ...m, pontosGlobal100: 0 })), P("UK"), "REINO UNIDO", 0.45);
-  const com = calcularParada(l, P("UK"), "REINO UNIDO", 0.45);
-  expect(com.map((x) => x.tituloNorm)).toEqual(sem.map((x) => x.tituloNorm));
-  for (const x of com) expect(x.val).toBeLessThanOrEqual(1000);
-  const f = fatorPontos(l, P("UK"), 0.45);
-  expect(f).toBeGreaterThan(0);
+  const p = P("UK");
+  const com = calcularParada(l, p, "REINO UNIDO", 0.45);
+  // Ordem esperada: direto pelas unidades brutas do país.
+  const bruto = [...l].sort((x, y) => pontos(fontes(y, "REINO UNIDO", 0.45), p) - pontos(fontes(x, "REINO UNIDO", 0.45), p)).map((m) => m.tituloNorm);
+  expect(com.map((x) => x.tituloNorm)).toEqual(bruto);
+  for (const x of com) expect(x.val).toBeLessThanOrEqual(PONTOS_MAX_PARADA);
+  expect(fatorPontos(l, p, 0.45)).toBeGreaterThan(0);
+});
+
+test("paradas: música fora do Global 100 com unidades enormes fica em 1000 e mantém a posição", () => {
+  const l = [
+    ms("g", { pontosGlobal100: 900, porPais: { SPOTIFY: pais(1_000) } }),
+    ms("h", { pontosGlobal100: 0, porPais: { SPOTIFY: pais(900_000_000) } }),
+  ];
+  const r = calcularParada(l, P("UK"), "REINO UNIDO", 0.45);
+  expect(r[0]).toMatchObject({ tituloNorm: "h", pos: 1, val: 1000 });
+  expect(r[1].tituloNorm).toBe("g");
+});
+
+test("paradas: proporção pontos/unidades distorcida continua ≤ 1000", () => {
+  const l = [
+    ms("x", { pontosGlobal100: 1000, porPais: { SPOTIFY: pais(5_000_000) }, totalGlobal: { SPOTIFY: 5_000_000 } }),
+    ms("y", { pontosGlobal100: 1, porPais: { SPOTIFY: pais(4_000_000) }, totalGlobal: { SPOTIFY: 4_000_000 } }),
+  ];
+  for (const x of calcularParada(l, P("UK"), "REINO UNIDO", 0.45)) expect(x.val).toBeLessThanOrEqual(1000);
 });

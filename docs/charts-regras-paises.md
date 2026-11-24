@@ -115,6 +115,9 @@ mundiais da parada (taxas normais, sem ACR); ponto mostrado = unidades da
 música × fator, arredondado. Isso muda só o número exibido: ordem, ACR,
 máx. por artista, recorrência e as setas (subiu/desceu/novo) não mudam.
 Se o fator não puder ser calculado (soma zero), os pontos aparecem como 0.
+**Teto garantido:** nenhum ponto exibido passa de 1000. Se a conta der mais,
+mostra 1000. Por isso duas músicas podem aparecer empatadas em 1000, mas a
+ordem continua decidida pelas unidades brutas, não pelo número mostrado.
 
 **Mexer nos números:** aumentar `tp`/`tga`/`tgv` (dividem) faz aquela fonte
 valer **menos**; aumentar `a` faz vendas valerem **mais**; na Alemanha (que

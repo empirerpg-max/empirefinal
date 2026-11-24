@@ -101,6 +101,9 @@ function somaGlobal(m: MusicaSemana): number {
   return s;
 }
 
+/** Teto dos pontos exibidos nas paradas (a ordem continua nas unidades brutas). */
+export const PONTOS_MAX_PARADA = 1000;
+
 /**
  * Fator que converte as unidades/receita brutas da parada para a moeda do Global 100:
  * soma dos pontos do Global 100 ÷ soma das unidades mundiais da parada (taxas normais, sem ACR).
@@ -164,7 +167,7 @@ export function calcularParada(musicas: MusicaSemana[], p: Parada, pais: string,
   }
 
   return lista.slice(0, p.top).map(({ m, pts }, i) => ({
-    pos: i + 1, tituloNorm: m.tituloNorm, titulo: m.titulo, art: m.artistaPrincipal, val: Math.round(pts * fator),
+    pos: i + 1, tituloNorm: m.tituloNorm, titulo: m.titulo, art: m.artistaPrincipal, val: Math.min(PONTOS_MAX_PARADA, Math.round(pts * fator)),
   }));
 }
 
