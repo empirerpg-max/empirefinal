@@ -8,6 +8,7 @@ import { criarD1Sqlite } from "./charts-d1-sqlite";
 import { CHARTS_D1_SCHEMA, ingerirSemana } from "../backend/src/services/chartsD1/repo";
 import { calcularSemanaPaises, ROTULO_PARADAS } from "../backend/src/services/chartsD1/semanaPaises";
 import { indexarCatalogo } from "../backend/src/services/chartsD1/artistas";
+import { validarGravacaoFoco } from "../backend/src/controllers/musicaFocoController";
 
 test("sorteio01: determinístico, em [0,1), varia com a chave", () => {
   expect(sorteio01("2026-11-11|x|BRASIL|nac")).toBe(sorteio01("2026-11-11|x|BRASIL|nac"));
@@ -403,4 +404,15 @@ test("/api/charts PARADAS OFICIAIS sem D1 ativo → [] e nenhuma planilha lida",
     expect(await (await chamar(`action=getFilters&tab=${encodeURIComponent(ROTULO_PARADAS)}`)).json()).toEqual({ dates: [], styles: [] });
     expect(lidas).toEqual([]);
   });
+});
+
+test("validarGravacaoFoco: trava após definido; admin troca; país inválido recusado", () => {
+  const P = new Set(["BRASIL", "REINO UNIDO"]);
+  expect(validarGravacaoFoco([], "BRASIL", P, false)).toEqual({ ok: true });
+  expect(validarGravacaoFoco([], "GLOBAL", P, false)).toEqual({ ok: true });
+  expect(validarGravacaoFoco([], "MARTE", P, false)).toMatchObject({ ok: false, status: 400 });
+  const h = [{ pais: "BRASIL", desde: "2026-11-01" }];
+  expect(validarGravacaoFoco(h, "REINO UNIDO", P, false)).toMatchObject({ ok: false, status: 409 });
+  expect(validarGravacaoFoco(h, "REINO UNIDO", P, true)).toEqual({ ok: true });
+  expect(validarGravacaoFoco(h, "BRASIL", P, true)).toMatchObject({ ok: false, status: 409 });
 });
