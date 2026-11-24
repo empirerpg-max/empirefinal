@@ -1,8 +1,8 @@
 # Playlists do Empire Play (painel ao vivo) — design
 
-Data: 2026-11-24 · Status: aguardando aprovação
+Data: 2026-11-24 · Status: aprovado com ajustes (rev. 2)
 
-Mockup aprovado (modelo B, com títulos sempre completos):
+Mockups (rev. 2 do usuário: **topo = destaque do modelo C, resto = prateleiras do modelo A**; títulos sempre completos):
 https://claude.ai/artifact/At5D4YSEnUswTS7o9n4Lm8
 
 ## Intenção e porquê
@@ -20,21 +20,17 @@ cada abertura da tela — não usam os charts do D1 e gastam cota do Google.
 
 ## Objetivos
 
-- Topo da tela: **placar ao vivo** com o top 3 de Spotify, Apple Music e
-  YouTube (streams ao vivo da EM Alta), atualizando a cada 30 s. Tocar numa
-  coluna abre o Top 100 ao vivo daquela plataforma.
-- Embaixo: **filtro de plataforma** (Spotify · Apple Music · YouTube) que
-  troca a grade **Top 50 por país** (recorte ao vivo por país, o mesmo do
-  "Ao vivo por país" dos Charts).
-- Seção **Da semana**: Global 100, Paradas oficiais (uma playlist por
-  parada), Top por gênero (Global 100 filtrado pelo gênero do catálogo) e Hot
-  (lançamentos, como hoje).
+- Topo da tela: **destaque "Mais quente agora"** (modelo C) com a playlist
+  ao vivo que mais se mexeu, atualizando a cada 30 s.
+- Embaixo: **prateleiras** (modelo A): Charts globais (Top 100 ao vivo de
+  Spotify, Apple Music, YouTube + Global 100), **Top 50 por país** (com filtro
+  de plataforma), Paradas oficiais, Por gênero + Hot.
 - Toda playlist abre a **tela cheia que já existe** (capa grande, lista,
   tocar) e **toca** as músicas pelo catálogo.
-- **Títulos sempre completos**, sem "…" em lugar nenhum (placar, cards,
+- **Títulos sempre completos**, sem "…" em lugar nenhum (destaque, cards,
   lista da playlist): o texto quebra linha (regra do `CLAUDE.md` + pedido do
   usuário).
-- Capas geradas pelo app (cor da plataforma/país + título), sem arte nova.
+- Capas = capa da música #1 de cada playlist (material do catálogo), com o título por cima.
 
 ## Não-objetivos
 
@@ -52,7 +48,7 @@ cada abertura da tela — não usam os charts do D1 e gastam cota do Google.
 ## Abordagens
 
 - **A) Endpoint de playlists montado no servidor (escolhida).** Uma rota
-  devolve o índice (placar + lista de playlists) e outra devolve uma
+  devolve o índice (destaque + prateleiras) e outra devolve uma
   playlist já com as músicas ligadas ao catálogo, prontas para tocar. Usa
   D1 + o ao vivo existente, com cache; o celular baixa só o que abriu.
 - B) Montar no celular com as rotas atuais. Descartada: baixaria os recortes
@@ -76,7 +72,8 @@ cada abertura da tela — não usam os charts do D1 e gastam cota do Google.
 ### API (nova, em `/api/empire-play/playlists`)
 
 - `GET /api/empire-play/playlists` → índice:
-  - `placar`: `{ spotify|apple|youtube: [{pos, titulo, artista, valor}] }` (top 3).
+  - `destaque`: `{ id, titulo, musica, subiu, valor, capa }`.
+  - `capa` de cada playlist = capa da música #1 (catálogo), senão foto do artista #1.
   - `paises`: `{ spotify|apple|youtube: [{ id, pais, titulo: "Top 50 {país}" }] }`
     na ordem do peso do país.
   - `semana`: lista `{ id, titulo, subtitulo, tipo }` (Global 100, cada parada,
@@ -128,52 +125,88 @@ cada abertura da tela — não usam os charts do D1 e gastam cota do Google.
 Ler do D1 `musicas` os campos de reprodução (`audio_url`, `capa_url`,
 `id_topico`, `codigo_unico`, artistas) — ampliar o carregamento de catálogo
 usado pelos charts ou fazer uma leitura própria com cache de 5 min (decisão do
-construtor). **YouTube:** as playlists do YouTube tocam o áudio da música como
-as outras. *Call meu* — tocar o clipe exigiria ligar cada música ao vídeo, que
-é outro cruzamento.
+construtor). **YouTube:** ver "Playlists do YouTube = vitrine de clipes" abaixo.
 
-### Tela (modelo B)
+### Tela (rev. 2: destaque do C + prateleiras do A)
 
 ```
-● EM TEMPO REAL
-┌ SPOTIFY ─────┐┌ APPLE ───────┐┌ YOUTUBE ─────┐
-│1 Sweet Spot  ││1 Backstreet- ││1 Sweet Spot  │   títulos quebram linha,
-│  187.049     ││  Boy  28.122 ││  61.430      │   nunca "…"
-│2 …           ││2 …           ││2 …           │
-└──────────────┘└──────────────┘└──────────────┘
-Valores em mil streams · toque numa coluna para abrir o Top 100
-[Spotify] [Apple Music] [YouTube]           ← filtro (rola se precisar)
-Top 50 por país · ao vivo
-[BR Top 50 Brasil] [US Top 50 EUA]          ← grade 2 colunas, texto quebra
-[UK Top 50 Reino Unido] …
-Da semana · fecha quinta
-[100 Global 100] [HOT Paradas…] [POP Top Pop] [NEW Hot]
+┌──────────────────────────────────────────┐
+│ ● MAIS QUENTE AGORA                        │  destaque grande; fundo = capa
+│ TOP 50 BRASIL                              │  da música #1 da playlist
+│ Rayna - Shapeshifter subiu 6 posições      │  (escurecida p/ leitura)
+│ desde o último chart · 2.592.249           │
+└──────────────────────────────────────────┘
+Charts globais                     ver tudo
+[capa #1 ▸ TOP 100 SPOTIFY GLOBAL] [APPLE MUSIC] [YOUTUBE HITS] [GLOBAL 100]
+Top 50 por país        [Spotify|Apple|YouTube]
+[capa #1 ▸ TOP 50 BRASIL] [EUA] [REINO UNIDO] …       rola p/ o lado
+Paradas oficiais                     semanal
+[capa #1 ▸ BILLBOARD HOT 100] [UK CHARTS] …
+Por gênero                         Global 100
+[capa #1 ▸ TOP POP] [TOP RAP] [TOP FUNK] … [HOT · lançamentos]
 ```
 
-- Substitui os 4 cards atuais no topo de `empire-play.index.tsx`; o resto da
-  tela não muda.
-- Placar e grade de países atualizam a cada 30 s só enquanto a tela está
-  visível (pausa quando o jogador sai da aba/abre a playlist). *Call meu.*
-- Grade de países: mostra os 8 primeiros e um "Ver todos os países" que
-  expande. *Call meu* (são ~80 países por plataforma).
-- Playlist aberta: a tela cheia atual, com `pos` e `valor` à direita de cada
-  faixa; playlists ao vivo atualizam a lista a cada 30 s enquanto abertas,
-  sem interromper a música tocando.
-- Regras do `CLAUDE.md`: pills `shrink-0` com padding real; **nenhum texto
-  com `truncate`/`line-clamp` nos títulos de playlist e de música** (quebra
-  de linha com `overflow-wrap: anywhere`).
+- **Capas = capas dos materiais.** Cada card de playlist usa como fundo a
+  capa da música #1 daquela playlist (do catálogo D1; se não tiver, a foto
+  do artista #1; se nada, a cor da plataforma/país) com o título por cima —
+  como o `DynamicCoverCard` já faz hoje. Nenhuma capa "genérica" quando há
+  material. (Pedido do usuário; álbuns serão reorganizados depois.)
+- **Destaque "Mais quente agora"** (topo, modelo C): a playlist ao vivo
+  (plataforma ou país) cuja música #1 mais subiu **em relação ao último chart
+  semanal** daquela plataforma/país (posição ao vivo × posição no recorte da
+  última semana). Texto: "{música} subiu N posições desde o último chart ·
+  {streams}". Sem subida (empate ou sem dados) → mostra o Top 100 Spotify
+  Global. Troca sozinho quando o índice atualiza (30 s). *Call meu* — não há
+  histórico ao vivo por hora gravado, e gravar custaria escritas no D1.
+- **Prateleiras** (modelo A), cada uma rolando para o lado
+  (`useDragScroll` + setas, regra do `CLAUDE.md`): Charts globais (3 ao vivo +
+  Global 100), Top 50 por país (com o filtro Spotify | Apple Music | YouTube
+  no título da prateleira; países na ordem do peso; "ver tudo" abre a lista
+  completa), Paradas oficiais, Por gênero (+ Hot no fim).
+- Títulos sempre completos: os cards quebram linha (fonte se ajusta ao
+  espaço; nunca "…").
+- Atualização a cada 30 s só com a tela visível; a playlist aberta atualiza
+  a lista pela chave estável sem cortar a música.
 
-## Custo
+### Playlists do YouTube = vitrine de clipes
 
-- Planilha: zero leituras novas (EM Alta já é lida pelo ao vivo, 1×/30 s por
-  isolate; as 3 abas de top deixam de ser lidas pela tela).
-- D1: reaproveita os caches existentes (semana, ao vivo por país, catálogo).
-- Celular: índice pequeno a cada 30 s (~top 3 × 3 + nomes); playlist só
-  quando aberta (≤ 100 faixas).
+- Toda playlist cuja plataforma é YouTube (Top 100 YouTube Hits e Top 50
+  {país} no YouTube) abre numa **tela estilo YouTube**: grade/lista de
+  miniaturas de clipe (`thumb_url`), título e posição; tocar abre o
+  `VideoPlayer` que já existe (com "próximos" = o resto da playlist).
+- **Clipe pelo código único:** música do chart → catálogo (`musicas`,
+  `buscarNoCatalogo`) → `codigo_unico` → `videos` com o mesmo
+  `codigo_unico` e `tipo_video = 'Music Video'` (há índice em
+  `videos(codigo_unico)`). Checado na produção (24/11): 189 dos 194 Music
+  Videos têm código único e todos casam com uma música do catálogo.
+- Música sem clipe: aparece com a capa do material e o selo "Sem clipe";
+  tocar toca o áudio (se houver).
+
+## Custo (plano gratuito)
+
+Limites do plano gratuito: D1 = 5 milhões de linhas lidas/dia e 100 mil
+escritas/dia; Google Sheets ≈ 60 leituras/min por usuário de serviço.
+
+| Item | Como | Estimativa |
+|---|---|---|
+| Planilha | só a EM Alta, já lida pelo ao vivo: ≤ 1 leitura / 30 s por isolate ativo | ≤ 2/min por isolate (hoje a tela lê 3 abas a cada abertura → **diminui**) |
+| D1 — referências do ao vivo (pesos, nacionalidade, foco, config) | cache **15 min** (hoje 5) | ~1.500 linhas × 96/dia ≈ 150 mil/dia por isolate sempre ativo |
+| D1 — catálogo (capas, áudio, gênero) ~1.000 linhas | cache **15 min** | ~100 mil/dia por isolate |
+| D1 — clipes (`videos` Music Video ~200 linhas) | cache 15 min | ~20 mil/dia |
+| D1 — Hot | `ORDER BY data_lancamento_iso DESC LIMIT 30` (usa o índice `idx_musicas_data`), cache 5 min | ~10 mil/dia |
+| D1 — semana (Global 100, paradas, gêneros) | cache da semana já existente | ~2 mil por cálculo, poucas vezes/dia |
+| Escritas | nenhuma | 0 |
+
+- Pior caso realista: 3 a 5 isolates com gente olhando o dia todo ≈ 1–1,5
+  milhão de linhas/dia (20–30% do limite diário), sem escritas. Com pouco
+  movimento, bem menos (isolates frios não leem nada).
+- O celular recebe só o índice (pequeno) a cada 30 s e a playlist aberta.
+- *Call meu:* subir de 5 para 15 min o cache das referências do ao vivo e do
+  catálogo (capas/áudio novos aparecem em até 15 min).
 
 ## Testes esperados
 
-- Índice: placar com 3 plataformas × top 3; países na ordem do peso;
+- Índice: destaque escolhido pela maior subida (e Spotify Global sem subida); capa de cada playlist = capa da #1; países na ordem do peso;
   semana com Global 100, paradas existentes, gêneros com ≥ 10 músicas, Hot.
 - Playlist: ordem igual à do chart; faixa sem catálogo vem com
   `tocavel: false`; `id` inválido → 404 com mensagem em português.
@@ -192,9 +225,10 @@ Da semana · fecha quinta
 ## Calls meus (conferir)
 
 - Faixa sem catálogo aparece em cinza, não some.
-- YouTube toca o áudio (não o clipe).
-- Grade de países mostra 8 + "Ver todos os países".
+- Destaque "Mais quente agora" = maior subida do #1 ao vivo em relação ao último chart semanal.
+- Cache de 15 min para referências do ao vivo e catálogo.
+- Prateleira de países rola; "ver tudo" abre a lista completa.
 - Atualização pausa quando a tela não está visível.
 - `/api/top-playlists` continua no código, só deixa de ser usado pela tela.
 - Hot passa a vir do D1 (não da planilha).
-- Badge do país = 2 primeiras letras; valor cheio formatado (sem "mil streams").
+- Valor cheio formatado (sem "mil streams").
