@@ -12,6 +12,8 @@
 
 ## Global Constraints
 
+- Pontos exibidos nas paradas oficiais = unidades × fator da semana (Σ pontos do Global 100 ÷ Σ unidades do mundo pela fórmula da parada); a ordem das paradas não muda.
+
 - Mesmo input → mesmo resultado; sorteio pela **próxima data de chart** (última data do Global 100 em `chart_datas` + 7 dias), nunca pela hora atual.
 - Regras = `regrasDeConfig(chart_config atual)`; pesos = `pais_peso` da plataforma (SPOTIFY / APPLE MUSIC / YOUTUBE).
 - Soma dos países + resto = streams ao vivo da música.
@@ -25,6 +27,40 @@
 3. **Nenhuma data de chart no D1 / sem pesos:** resposta vazia, sem erro; o Mundo continua. → teste na Task 2.
 4. **Valor ao vivo vazio ou não numérico** ("", "-"): conta como 0, sem `NaN`. → teste na Task 1.
 5. **País escolhido some da lista na atualização seguinte:** a tela cai no primeiro país, sem tela vazia. → Task 4.
+
+---
+
+### Task 0: Pontos das paradas oficiais na moeda do Global 100
+
+(Pedido do usuário, opção A: os pontos exibidos nas paradas nunca devem passar de 1000; a ordem das paradas não muda.)
+
+**Files:**
+- Modify: `backend/src/services/chartsD1/paradas.ts` (`calcularParada` ~L94-148, `paradasDaSemana`), `backend/src/services/chartsD1/semanaPaises.ts` (passa os pontos do Global 100 da semana), `docs/charts-regras-paises.md` (seção das paradas: explicar a conversão)
+- Test: `scripts/charts-paises.test.ts`
+
+**Interfaces:**
+- `MusicaSemana` ganha `pontosGlobal100: number` (valor da música no Global 100 da semana; ausente = 0), preenchido em `semanaPaises.ts`.
+- `fatorPontos(musicas: MusicaSemana[], p: Parada, fracaoPaga: number): number` — `Σ pontosGlobal100 / Σ pontos(fontes(m, null, fracaoPaga), p)` sobre o universo da semana (para `excl`, usar a fórmula de unidades da parada com taxas normais, sem ACR); denominador 0 → 0.
+- Em `calcularParada`: a **ordenação continua pelas unidades/receita brutas** (nada muda na ordem, ACR, máx. por artista, recorrência); só o `val` exibido vira `Math.round(pts × fator)`. O `st` continua igual (posições).
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+test("paradas: pontos na moeda do Global 100 (≤ 1000 quando o Global 100 é ≤ 1000) sem mudar a ordem", () => {
+  const l = ["a", "b", "c"].map((t, i) => ms(t, { pontosGlobal100: [705, 400, 100][i], porPais: { SPOTIFY: pais(1_000_000 * (3 - i)) }, totalGlobal: { SPOTIFY: 187_000_000 / (i + 1) } }));
+  const sem = calcularParada(l.map((m) => ({ ...m, pontosGlobal100: 0 })), P("UK"), "REINO UNIDO", 0.45);
+  const com = calcularParada(l, P("UK"), "REINO UNIDO", 0.45);
+  expect(com.map((x) => x.tituloNorm)).toEqual(sem.map((x) => x.tituloNorm));
+  for (const x of com) expect(x.val).toBeLessThanOrEqual(1000);
+  const f = fatorPontos(l, P("UK"), 0.45);
+  expect(f).toBeGreaterThan(0);
+});
+```
+
+(Ajuste o helper `ms` existente para aceitar `pontosGlobal100`, padrão 0.)
+
+- [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** `bun test scripts/charts-paises.test.ts scripts/charts-d1.test.ts` — PASS (ajuste testes antigos que conferem `val` exato: compare unidades via `pontos()` ou passe `pontosGlobal100` coerente).
+- [ ] **Step 5: Commit** `git commit -m "fix(charts): pontos das paradas oficiais na escala do Global 100"`
 
 ---
 
