@@ -1,5 +1,12 @@
 import { googleSheetsService } from "../services/googleSheetsService";
-import { normalizarTitulo, type MusicaCatalogo } from "../services/chartsD1/artistas";
+import {
+  calcularAoVivoPaises,
+  limparCacheAoVivoPaises,
+  type ItemEmAlta,
+  type LinhaAoVivoPais,
+  type PlataformaAoVivo,
+} from "../services/chartsD1/aoVivoPaises";
+import { buscarNoCatalogo, normalizarTitulo, type MusicaCatalogo } from "../services/chartsD1/artistas";
 import { fixImg, fmt } from "../services/chartsD1/formato";
 import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
 import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
@@ -327,32 +334,126 @@ async function buildCapaPorTituloCatalogo(): Promise<Map<string, string>> {
 }
 
 // ---- REAL TIME ----
-async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtube: unknown[] }> {
-  const [data, capaPorTitulo] = await Promise.all([
+// O ao vivo atualiza a cada 30 s: a leitura da EM Alta (+ capas do catálogo)
+// fica em cache por isolate por esse tempo e serve tanto o mundo
+// (getRealTime) quanto os países (getRealTimePaises) — uma leitura de
+// planilha por 30 s, não importa quantos jogadores estejam com a tela aberta.
+const AO_VIVO_TTL_MS = 30_000;
+
+// Relógio dos caches do ao vivo (EM Alta + respostas getRealTime*). Só os
+// testes trocam (definirRelogioAoVivo) para simular a passagem de 30 s.
+let relogioAoVivo: () => number = () => Date.now();
+const agoraAoVivo = () => relogioAoVivo();
+/** Troca o relógio dos caches do ao vivo (null volta ao Date.now). Uso: testes. */
+export function definirRelogioAoVivo(fn: (() => number) | null): void {
+  relogioAoVivo = fn ?? (() => Date.now());
+}
+
+/** Item da EM Alta: `n` = streams brutos (col. D), `s` = os mesmos formatados como sempre, `p` = variação. */
+type ItemEmAltaBruto = ItemEmAlta & { p: string; s: string };
+type EmAltaBruta = Record<PlataformaAoVivo, ItemEmAltaBruto[]>;
+let emAltaCache: { valor: Promise<EmAltaBruta>; expiresAt: number } | null = null;
+
+// Capas do catálogo para a EM Alta. A cada 30 s só a aba "EM Alta" é lida:
+// com o catálogo no D1 (cache `referenciasD1`, 5 min) as capas saem dele, sem
+// tocar na planilha; sem D1, cai na leitura da aba Musicas, em cache de 5 min
+// (promessa de módulo; falha não fica em cache).
+const CAPAS_PLANILHA_TTL_MS = 5 * 60 * 1000;
+let capasPlanilhaCache: { valor: Promise<Map<string, string>>; expiresAt: number } | null = null;
+
+function capasPlanilhaCatalogo(): Promise<Map<string, string>> {
+  if (capasPlanilhaCache && capasPlanilhaCache.expiresAt > agoraAoVivo()) return capasPlanilhaCache.valor;
+  const valor = buildCapaPorTituloCatalogo();
+  const entrada = { valor, expiresAt: agoraAoVivo() + CAPAS_PLANILHA_TTL_MS };
+  valor.catch(() => {
+    if (capasPlanilhaCache === entrada) capasPlanilhaCache = null;
+  });
+  capasPlanilhaCache = entrada;
+  return valor;
+}
+
+async function capaDoCatalogoPorTitulo(): Promise<(titulo: string) => string | undefined> {
+  const db = getCatalogoDb();
+  if (db) {
+    try {
+      if (await ativoD1(db)) {
+        const { cat } = await referenciasD1(db);
+        return (titulo) => buscarNoCatalogo(titulo, cat)?.capa;
+      }
+    } catch (e) {
+      console.warn("[charts-d1] catálogo D1 indisponível para as capas do ao vivo; usando a planilha:", e);
+    }
+  }
+  const capaPorTitulo = await capasPlanilhaCatalogo();
+  return (titulo) => capaPorTitulo.get(normalizarTitulo(titulo));
+}
+
+async function lerEmAlta(): Promise<EmAltaBruta> {
+  const [data, capaDoCatalogo] = await Promise.all([
     readSheet("chartsRealtime", "EM Alta"),
     // A aba "EM Alta" quase nunca vem com a própria coluna de capa (G)
-    // preenchida — cruza por título com o catálogo real (Musicas, planilha
-    // principal) pra herdar a capa de verdade, mesmo padrão já usado pros
-    // cards de Apple Music/YouTube do Catálogo (ver empirePlayController).
-    buildCapaPorTituloCatalogo(),
+    // preenchida — cruza por título com o catálogo real pra herdar a capa.
+    capaDoCatalogoPorTitulo(),
   ]);
 
-  const out: { spotify: unknown[]; apple: unknown[]; youtube: unknown[] } = { spotify: [], apple: [], youtube: [] };
+  const out: EmAltaBruta = { spotify: [], apple: [], youtube: [] };
   data.slice(1).forEach((r) => {
     if (!r[1]) return;
     const capaPlanilha = fixImg(r[6]);
-    const capaCatalogo = capaPorTitulo.get(normalizarTitulo(r[1] || ""));
+    const capaCatalogo = capaDoCatalogo(r[1] || "");
     // Catálogo (capa real da música/álbum) tem prioridade sobre a coluna G
     // da própria "EM Alta": quando essa coluna vem preenchida, geralmente é
     // com a foto do ARTISTA (não da capa), o que gerava o bug relatado de
     // charts mostrando foto de artista em vez da capa do material.
-    const item = { t: r[1], s: fmt(r[3]), p: r[5], c: fixImg(capaCatalogo) || capaPlanilha };
+    const item: ItemEmAltaBruto = {
+      t: r[1],
+      // Mesmo critério do `fmt` (só dígitos): "1,234,567" vale igual no mundo e nos países.
+      n: Number(String(r[3] ?? "").replace(/[^\d]/g, "")) || 0,
+      s: fmt(r[3]),
+      p: r[5],
+      c: fixImg(capaCatalogo) || capaPlanilha,
+    };
     const plat = (r[4] || "").toLowerCase();
     if (plat.includes("spotify")) out.spotify.push(item);
     else if (plat.includes("apple")) out.apple.push(item);
     else out.youtube.push(item);
   });
   return out;
+}
+
+/** Leitura da EM Alta por plataforma, em cache por 30 s (falha não fica em cache). */
+export function fetchRTBruto(): Promise<EmAltaBruta> {
+  if (emAltaCache && emAltaCache.expiresAt > agoraAoVivo()) return emAltaCache.valor;
+  const valor = lerEmAlta();
+  const entrada = { valor, expiresAt: agoraAoVivo() + AO_VIVO_TTL_MS };
+  valor.catch(() => {
+    if (emAltaCache === entrada) emAltaCache = null;
+  });
+  emAltaCache = entrada;
+  return valor;
+}
+
+// Ao vivo mundial: mesmo formato de sempre ({t, s, p, c} por plataforma).
+async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtube: unknown[] }> {
+  const bruto = await fetchRTBruto();
+  const mundo = (l: ItemEmAltaBruto[]) => l.map((i) => ({ t: i.t, s: i.s, p: i.p, c: i.c }));
+  return { spotify: mundo(bruto.spotify), apple: mundo(bruto.apple), youtube: mundo(bruto.youtube) };
+}
+
+// Ao vivo por país (regra C sobre os streams da EM Alta). Sem D1, leitura do
+// D1 ainda não ativada ou erro → listas vazias (o mundo segue funcionando).
+async function fetchRTPaises(): Promise<Record<PlataformaAoVivo, LinhaAoVivoPais[]>> {
+  const vazio = (): Record<PlataformaAoVivo, LinhaAoVivoPais[]> => ({ spotify: [], apple: [], youtube: [] });
+  const db = getCatalogoDb();
+  if (!db) return vazio();
+  try {
+    if (!(await ativoD1(db))) return vazio();
+    const [emAlta, { cat }] = await Promise.all([fetchRTBruto(), referenciasD1(db)]);
+    return await calcularAoVivoPaises(db, emAlta, cat);
+  } catch (e) {
+    console.warn("[charts-d1] falha no ao vivo por país; seguindo sem ele:", e);
+    return vazio();
+  }
 }
 
 // ---- ADMIN DIAGNÓSTICO (temporário) ----
@@ -684,6 +785,7 @@ interface RespostaCharts {
 }
 const chartsResponseCache = new Map<string, RespostaCharts & { expiresAt: number }>();
 const chartsResponseInFlight = new Map<string, Promise<RespostaCharts>>();
+const ACOES_AO_VIVO = new Set(["getRealTime", "getRealTimePaises"]);
 
 function respostaJson(r: RespostaCharts): Response {
   const headers: Record<string, string> = { "Content-Type": "application/json; charset=utf-8" };
@@ -698,6 +800,9 @@ export function limparCacheCharts(): void {
   semanaPaisesCache.clear();
   referenciasD1Cache = null;
   ativoD1Cache = null;
+  emAltaCache = null;
+  capasPlanilhaCache = null;
+  limparCacheAoVivoPaises();
 }
 
 export async function chartsApiController(request: Request): Promise<Response> {
@@ -705,15 +810,23 @@ export async function chartsApiController(request: Request): Promise<Response> {
   const p = url.searchParams;
   const action = p.get("action") || "";
   const cacheKey = url.search;
+  // Ações do ao vivo: 30 s (no relógio do ao vivo); as demais seguem 5 min.
+  const aoVivo = ACOES_AO_VIVO.has(action);
+  const agora = () => (aoVivo ? agoraAoVivo() : Date.now());
+  const ttl = aoVivo ? AO_VIVO_TTL_MS : CHARTS_RESPONSE_CACHE_TTL_MS;
 
   const cached = chartsResponseCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return respostaJson(cached);
+  if (cached && cached.expiresAt > agora()) return respostaJson(cached);
   const emAndamento = chartsResponseInFlight.get(cacheKey);
   if (emAndamento) return respostaJson(await emAndamento);
 
   const promise = (async () => {
     const resposta = await computeChartsResponse(action, p);
-    chartsResponseCache.set(cacheKey, { ...resposta, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS });
+    // Ao vivo: a resposta não pode durar mais que a leitura da EM Alta de
+    // onde saiu (senão os dois caches de 30 s somavam até ~60 s de atraso).
+    let expiresAt = agora() + ttl;
+    if (aoVivo && emAltaCache) expiresAt = Math.min(expiresAt, emAltaCache.expiresAt);
+    chartsResponseCache.set(cacheKey, { ...resposta, expiresAt });
     return resposta;
   })().finally(() => {
     chartsResponseInFlight.delete(cacheKey);
@@ -743,6 +856,8 @@ async function computeChartsResponseBody(action: string, p: URLSearchParams): Pr
     switch (action) {
       case "getRealTime":
         return toBody(await fetchRT());
+      case "getRealTimePaises":
+        return toBody(await fetchRTPaises());
       case "getFilters":
         return toBody(await fetchF(p.get("tab") || ""));
       case "getMonthlyStats":

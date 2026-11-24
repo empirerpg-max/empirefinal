@@ -1,15 +1,16 @@
 import { test, expect } from "bun:test";
 // Paradas por país nos charts. Uso: bun test scripts/charts-paises.test.ts
 import { sorteio01 } from "../backend/src/services/chartsD1/sorteio";
-import { fatiasRegraC, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
+import { fatiasRegraC, valoresPorPais, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
 import { regrasDeConfig, parseRegrasSemana, REGRAS_PADRAO } from "../backend/src/services/chartsD1/regras";
-import { fontes, pontos, emAcr, calcularParada, resolverPaisParada, mapaPaisPorNome, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
+import { fontes, pontos, emAcr, calcularParada, fatorPontos, PONTOS_MAX_PARADA, resolverPaisParada, mapaPaisPorNome, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
 import { criarD1Sqlite } from "./charts-d1-sqlite";
 import { CHARTS_D1_SCHEMA, ingerirSemana } from "../backend/src/services/chartsD1/repo";
 import { calcularSemanaPaises, ROTULO_PARADAS } from "../backend/src/services/chartsD1/semanaPaises";
 import { indexarCatalogo } from "../backend/src/services/chartsD1/artistas";
 import { validarGravacaoFoco, musicaFocoController } from "../backend/src/controllers/musicaFocoController";
 import { issueSessionToken, ADMIN_TG_ID } from "../backend/src/services/sessionService";
+import { rankingAoVivoPorPais, calcularAoVivoPaises, proximaDataChart, limparCacheAoVivoPaises, type ItemAoVivo, type LinhaAoVivoPais } from "../backend/src/services/chartsD1/aoVivoPaises";
 
 test("sorteio01: determinístico, em [0,1), varia com a chave", () => {
   expect(sorteio01("2026-11-11|x|BRASIL|nac")).toBe(sorteio01("2026-11-11|x|BRASIL|nac"));
@@ -134,7 +135,7 @@ test("carregarFocos: 'no such table' → mapa vazio; lê linhas existentes; sche
 
 const pais = (v: number) => new Map([["REINO UNIDO", v], ["ESTADOS UNIDOS", v * 3]]);
 const ms = (t: string, o: Partial<MusicaSemana> = {}): MusicaSemana => ({
-  tituloNorm: t, titulo: t, artistaPrincipal: t, semanas: 1, streamsGlobaisAnteriores: [0, 0, 0],
+  tituloNorm: t, titulo: t, artistaPrincipal: t, semanas: 1, pontosGlobal100: 0, streamsGlobaisAnteriores: [0, 0, 0],
   totalGlobal: { SPOTIFY: 1000, YOUTUBE: 600, "APPLE MUSIC": 300, "DIGITAL SALES": 10 },
   porPais: { SPOTIFY: pais(100), YOUTUBE: pais(60), "APPLE MUSIC": pais(30), "DIGITAL SALES": pais(1) }, ...o });
 const P = (id: string) => REGRAS_PADRAO.paradas.find((p) => p.id === id)!;
@@ -188,17 +189,19 @@ test("EUA: recorrência 52/25 remove #30 e o #51 entra no Top 50", () => {
 test("UK: música em ACR recebe val menor que a mesma fora do ACR", () => {
   const base = { porPais: { SPOTIFY: pais(1_000_000), YOUTUBE: pais(600_000) } };
   // Streams globais atuais = 1000 + 600 + 300 = 1900, caindo há 3 semanas.
-  const acr = ms("a", { ...base, semanas: 10, streamsGlobaisAnteriores: [2000, 2100, 2200] });
-  const normal = ms("a", { ...base, semanas: 1, streamsGlobaisAnteriores: [2000, 2100, 2200] });
+  // pontosGlobal100 = unidades globais da parada, para o fator ser 1 e o val ficar em unidades.
+  const g100 = pontos(fontes(ms("a"), null, 0.45), P("UK")) * 0.1; // fator 0,1: fica abaixo do teto
+  const acr = ms("a", { ...base, pontosGlobal100: g100, semanas: 10, streamsGlobaisAnteriores: [2000, 2100, 2200] });
+  const normal = ms("a", { ...base, pontosGlobal100: g100, semanas: 1, streamsGlobaisAnteriores: [2000, 2100, 2200] });
   const vAcr = calcularParada([acr], P("UK"), "REINO UNIDO", 0.45)[0].val;
   const vNormal = calcularParada([normal], P("UK"), "REINO UNIDO", 0.45)[0].val;
-  expect(vNormal).toBe(Math.round(450_000 / 100 + 550_000 / 600 + 600_000 / 600));
-  expect(vAcr).toBe(Math.round(450_000 / 200 + 550_000 / 1200 + 600_000 / 1200));
+  expect(vNormal).toBe(Math.round((450_000 / 100 + 550_000 / 600 + 600_000 / 600) * 0.1));
+  expect(vAcr).toBe(Math.round((450_000 / 200 + 550_000 / 1200 + 600_000 / 1200) * 0.1));
   expect(vAcr).toBeLessThan(vNormal);
 });
 test("Excl. US = mundo − EUA", () => {
-  const m = ms("a");
   const p = P("EXCL_US");
+  const m = ms("a", { pontosGlobal100: pontos(fontes(ms("a"), null, 0.45), p) });
   const esperado = pontos(fontes(m, null, 0.45), p) - pontos(fontes(m, "ESTADOS UNIDOS", 0.45), p);
   expect(calcularParada([m], p, "ESTADOS UNIDOS", 0.45)[0].val).toBe(Math.round(esperado));
 });
@@ -531,4 +534,279 @@ test("foco API: não-admin nunca sobrescreve linha do mesmo dia (corrida) → 40
     const linhas = (await orig("SELECT pais FROM musica_foco WHERE codigo_unico = 'EMP9'").all<{ pais: string }>()).results;
     expect(linhas).toEqual([{ pais: "BRASIL" }]);
   });
+});
+
+test("paradas: pontos na moeda do Global 100 (≤ 1000) sem mudar a ordem", () => {
+  const l = ["a", "b", "c"].map((t, i) => ms(t, { pontosGlobal100: [705, 400, 100][i], porPais: { SPOTIFY: pais(1_000_000 * (3 - i)) }, totalGlobal: { SPOTIFY: 187_000_000 / (i + 1) } }));
+  const p = P("UK");
+  const com = calcularParada(l, p, "REINO UNIDO", 0.45);
+  // Ordem esperada: direto pelas unidades brutas do país.
+  const bruto = [...l].sort((x, y) => pontos(fontes(y, "REINO UNIDO", 0.45), p) - pontos(fontes(x, "REINO UNIDO", 0.45), p)).map((m) => m.tituloNorm);
+  expect(com.map((x) => x.tituloNorm)).toEqual(bruto);
+  for (const x of com) expect(x.val).toBeLessThanOrEqual(PONTOS_MAX_PARADA);
+  expect(fatorPontos(l, p, 0.45)).toBeGreaterThan(0);
+});
+
+test("paradas: música fora do Global 100 com unidades enormes fica em 1000 e mantém a posição", () => {
+  const l = [
+    ms("g", { pontosGlobal100: 900, porPais: { SPOTIFY: pais(1_000) } }),
+    ms("h", { pontosGlobal100: 0, porPais: { SPOTIFY: pais(900_000_000) } }),
+  ];
+  const r = calcularParada(l, P("UK"), "REINO UNIDO", 0.45);
+  expect(r[0]).toMatchObject({ tituloNorm: "h", pos: 1, val: 1000 });
+  expect(r[1].tituloNorm).toBe("g");
+});
+
+test("paradas: proporção pontos/unidades distorcida continua ≤ 1000", () => {
+  const l = [
+    ms("x", { pontosGlobal100: 1000, porPais: { SPOTIFY: pais(5_000_000) }, totalGlobal: { SPOTIFY: 5_000_000 } }),
+    ms("y", { pontosGlobal100: 1, porPais: { SPOTIFY: pais(4_000_000) }, totalGlobal: { SPOTIFY: 4_000_000 } }),
+  ];
+  for (const x of calcularParada(l, P("UK"), "REINO UNIDO", 0.45)) expect(x.val).toBeLessThanOrEqual(1000);
+});
+
+test("ao vivo por país: soma + resto = streams; fatia fixa na semana; países por peso", () => {
+  const pesos: Pesos = new Map([["EUA", 0.3], ["BRASIL", 0.05], ["AUSTRÁLIA", 0.02]]);
+  const R = REGRAS_PADRAO.paises;
+  const it = (t: string, n: number, nac: string[] = []): ItemAoVivo =>
+    ({ t, n, c: "", artistas: [t.split(" - ")[0]], nacionalidades: new Set(nac), foco: null });
+  const a = rankingAoVivoPorPais([it("A - x", 1000, ["BRASIL"]), it("B - y", 800)], pesos, "2026-11-18", R);
+  expect([...new Set(a.map((l) => l.pais))]).toEqual(["EUA", "BRASIL", "AUSTRÁLIA"]);
+  const b = rankingAoVivoPorPais([it("A - x", 2000, ["BRASIL"]), it("B - y", 1600)], pesos, "2026-11-18", R);
+  // streams dobraram → valores dobram (mesma fatia na mesma semana)
+  const va = (l: LinhaAoVivoPais[], p: string, t: string) => Number(l.find((x) => x.pais === p && x.t === t)!.s.replace(/\./g, ""));
+  expect(Math.abs(va(b, "BRASIL", "A - x") - 2 * va(a, "BRASIL", "A - x"))).toBeLessThanOrEqual(1);
+  expect(rankingAoVivoPorPais([it("A - x", 1000, ["BRASIL"])], pesos, "2026-11-18", R))
+    .toEqual(rankingAoVivoPorPais([it("A - x", 1000, ["BRASIL"])], pesos, "2026-11-18", R));
+});
+test("ao vivo por país: valor inválido conta 0; sem nacionalidade não some", () => {
+  const pesos: Pesos = new Map([["BRASIL", 0.05]]);
+  const r = rankingAoVivoPorPais(
+    [{ t: "Z - w", n: NaN, c: "", artistas: [], nacionalidades: new Set(), foco: null }],
+    pesos, "2026-11-18", REGRAS_PADRAO.paises);
+  expect(r).toEqual([{ pais: "BRASIL", pos: 1, t: "Z - w", s: "0", c: "", art: "Z" }]);
+});
+test("ao vivo por país: itens com a mesma chave são somados (uma linha por país)", () => {
+  const pesos: Pesos = new Map([["EUA", 0.3], ["BRASIL", 0.05]]);
+  const R = REGRAS_PADRAO.paises;
+  const mk = (t: string, n: number): ItemAoVivo => ({ t, n, c: "capa", artistas: ["A"], nacionalidades: new Set(), foco: null });
+  const dup = rankingAoVivoPorPais([mk("A - x", 600), mk("a - X", 400), mk("B - y", NaN)], pesos, "2026-11-18", R);
+  const uno = rankingAoVivoPorPais([mk("A - x", 1000), mk("B - y", NaN)], pesos, "2026-11-18", R);
+  expect(dup.filter((l) => l.pais === "EUA").length).toBe(2);
+  expect(dup).toEqual(uno);
+  expect(dup.find((l) => l.pais === "EUA")!.t).toBe("A - x");
+});
+test("regra C: soma dos países + resto = streams (sem bônus/variação)", () => {
+  const pesos: Pesos = new Map([["EUA", 0.3], ["BRASIL", 0.05], ["AUSTRÁLIA", 0.02]]);
+  const R = { ...REGRAS_PADRAO.paises, variacao: 0 };
+  const m: EntradaMusica = { tituloNorm: "a x", titulo: "A - x", artistaPrincipal: "A", artistas: ["A"], valor: 1000, nacionalidades: new Set(), foco: null };
+  const por = valoresPorPais([m], pesos, "2026-11-18", R).get("a x")!;
+  const soma = [...por.values()].reduce((x, y) => x + y, 0);
+  const resto = 1000 * Math.max(0, 1 - 0.37);
+  expect(soma).toBeLessThanOrEqual(1000);
+  expect(Math.abs(soma + resto - 1000)).toBeLessThanOrEqual(1);
+});
+
+test("calcularAoVivoPaises: usa próxima data de chart; vazio sem chart_datas/pesos", async () => {
+  expect(proximaDataChart("2026-11-11")).toBe("2026-11-18");
+  const vazio = criarD1Sqlite(); // sem tabelas
+  limparCacheAoVivoPaises();
+  expect(await calcularAoVivoPaises(vazio, { spotify: [{ t: "Amanda - Koala", n: 10, c: "" }], apple: [], youtube: [] }, new Map()))
+    .toEqual({ spotify: [], apple: [], youtube: [] });
+  const db = await bancoDeTeste();
+  limparCacheAoVivoPaises();
+  const entrada = { spotify: [{ t: "Amanda - Koala", n: 1000, c: "" }, { t: "Bob - Freedom", n: 900, c: "" }], apple: [], youtube: [] };
+  const r = await calcularAoVivoPaises(db, entrada, new Map());
+  expect(r.spotify.length).toBeGreaterThan(0);
+  expect(r.apple).toEqual([]);
+  limparCacheAoVivoPaises();
+  expect(await calcularAoVivoPaises(db, entrada, new Map())).toEqual(r);
+});
+
+test("calcularAoVivoPaises: o sorteio usa proximaData (max chart_datas + 7), não a última data", async () => {
+  const db = await bancoDeTeste(); // última data do Global 100: 2026-11-11
+  limparCacheAoVivoPaises();
+  const em = [{ t: "Amanda - Koala", n: 1_000_000, c: "" }, { t: "Bob - Freedom", n: 900_000, c: "" }, { t: "Carl - Tea", n: 800_000, c: "" }];
+  const r = await calcularAoVivoPaises(db, { spotify: em, apple: [], youtube: [] }, new Map());
+  const pesos = new Map<string, number>();
+  for (const l of (await db.prepare("SELECT pais, peso FROM pais_peso WHERE plataforma = 'SPOTIFY'").all<{ pais: string; peso: number }>()).results) pesos.set(l.pais, l.peso);
+  // Mesmos itens que a função resolve: artista_info do bancoDeTeste (Amanda→AUS, Bob→UK, Carl→EUA), sem foco.
+  const nac: Record<string, string> = { Amanda: "AUSTRÁLIA", Bob: "REINO UNIDO", Carl: "ESTADOS UNIDOS" };
+  const itens = (): ItemAoVivo[] => em.map((i) => {
+    const a = i.t.split(" - ")[0];
+    return { ...i, artistas: [a], nacionalidades: new Set<string>(nac[a] ? [nac[a]] : []), foco: null };
+  });
+  const esperado = rankingAoVivoPorPais(itens(), pesos, "2026-11-18", REGRAS_PADRAO.paises);
+  const outraData = rankingAoVivoPorPais(itens(), pesos, "2026-11-11", REGRAS_PADRAO.paises);
+  expect(r.spotify.length).toBeGreaterThan(0);
+  expect(r.spotify).toEqual(esperado);
+  // Com a última data (em vez da próxima) o sorteio muda: prova que proximaData é usada.
+  expect(r.spotify).not.toEqual(outraData);
+});
+
+test("calcularAoVivoPaises: plataforma com EM Alta mas sem pais_peso → []", async () => {
+  const db = await bancoDeTeste();
+  db.exec("DELETE FROM pais_peso WHERE plataforma = 'YOUTUBE'");
+  limparCacheAoVivoPaises();
+  const r = await calcularAoVivoPaises(db, {
+    spotify: [{ t: "Amanda - Koala", n: 1000, c: "" }],
+    apple: [],
+    youtube: [{ t: "Dua - Hit", n: 5000, c: "" }],
+  }, new Map());
+  expect(r.youtube).toEqual([]);
+  expect(r.spotify.length).toBeGreaterThan(0);
+});
+
+// ───────────── API do ao vivo: getRealTime / getRealTimePaises (cache de 30 s) ─────────────
+import { definirRelogioAoVivo } from "../backend/src/controllers/chartsController";
+
+const EM_ALTA: string[][] = [
+  ["", "Título", "", "Streams", "Plataforma", "Var", "Capa"],
+  ["", "Amanda - Koala", "", "1.234.567", "Spotify", "+1", ""],
+  ["", "Bob - Freedom", "", "900.000", "Spotify", "-", ""],
+  ["", "Carl - Tea", "", "-", "Apple Music", "=", ""],
+  ["", "Dua - Hit", "", "5000", "YouTube", "+2", ""],
+];
+
+/** Como `comApi`, mas com a EM Alta simulada e um relógio injetado só nos caches do ao vivo. */
+async function comAoVivo(db: unknown, fn: (lidas: string[], avancar: (ms: number) => void) => Promise<void>) {
+  const svc = googleSheetsService as unknown as Record<string, { readValues: (s: string) => Promise<string[][]> }>;
+  const antesRT = svc.chartsRealtime.readValues;
+  let agora = 1_000_000;
+  definirRelogioAoVivo(() => agora);
+  try {
+    await comApi(db, async (lidas) => {
+      svc.chartsRealtime.readValues = async (s: string) => { lidas.push(`chartsRealtime:${s}`); return EM_ALTA; };
+      await fn(lidas, (ms) => { agora += ms; });
+    });
+  } finally {
+    svc.chartsRealtime.readValues = antesRT;
+    definirRelogioAoVivo(null);
+  }
+}
+const leiturasEmAlta = (lidas: string[]) => lidas.filter((l) => l === "chartsRealtime:EM Alta").length;
+
+test("/api/charts getRealTimePaises: uma leitura da EM Alta a cada 30 s, compartilhada com getRealTime", async () => {
+  const db = await bancoDeTeste();
+  expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
+  await comAoVivo(db, async (lidas, avancar) => {
+    const r1 = (await (await chamar("action=getRealTimePaises")).json()) as Record<string, { pais: string }[]>;
+    expect(Object.keys(r1).sort()).toEqual(["apple", "spotify", "youtube"]);
+    expect(r1.spotify.length).toBeGreaterThan(0);
+    await chamar("action=getRealTimePaises");
+    await chamar("action=getRealTime");
+    expect(leiturasEmAlta(lidas)).toBe(1);
+    avancar(10_000);
+    await chamar("action=getRealTimePaises");
+    expect(leiturasEmAlta(lidas)).toBe(1);
+    avancar(21_000); // 31 s desde a primeira leitura
+    await chamar("action=getRealTimePaises");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+    await chamar("action=getRealTime");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+  });
+});
+test("/api/charts getRealTime: mesmo formato {t, s, p, c} de sempre", async () => {
+  await comAoVivo(undefined, async () => {
+    expect(await (await chamar("action=getRealTime")).json()).toEqual({
+      spotify: [
+        { t: "Amanda - Koala", s: "1.234.567", p: "+1", c: "" },
+        { t: "Bob - Freedom", s: "900.000", p: "-", c: "" },
+      ],
+      apple: [{ t: "Carl - Tea", s: "0", p: "=", c: "" }],
+      youtube: [{ t: "Dua - Hit", s: "5.000", p: "+2", c: "" }],
+    });
+  });
+});
+test("/api/charts getRealTimePaises sem D1 → listas vazias", async () => {
+  await comAoVivo(undefined, async () => {
+    expect(await (await chamar("action=getRealTimePaises")).json()).toEqual({ spotify: [], apple: [], youtube: [] });
+  });
+});
+test("/api/charts ao vivo: resposta não sobrevive à leitura da EM Alta de onde saiu", async () => {
+  await comAoVivo(undefined, async (lidas, avancar) => {
+    await chamar("action=getRealTime"); // t=0: lê a EM Alta (vale até t=30 s)
+    expect(leiturasEmAlta(lidas)).toBe(1);
+    avancar(29_000);
+    await chamar("action=getRealTime&x=1"); // t=29 s: resposta nova (outra URL), mesma leitura
+    expect(leiturasEmAlta(lidas)).toBe(1);
+    avancar(2_000); // t=31 s: leitura e resposta de t=29 s já venceram
+    await chamar("action=getRealTime&x=1");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+  });
+});
+
+const leiturasMusicas = (lidas: string[]) => lidas.filter((l) => l === "principal:Musicas").length;
+
+test("/api/charts ao vivo: a cada 30 s só a EM Alta é lida; Musicas no máximo 1 vez (0 com D1)", async () => {
+  // Sem D1: capas pela planilha Musicas, em cache de 5 min.
+  await comAoVivo(undefined, async (lidas, avancar) => {
+    await chamar("action=getRealTime");
+    avancar(31_000);
+    await chamar("action=getRealTime");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+    expect(leiturasMusicas(lidas)).toBeLessThanOrEqual(1);
+    avancar(31_000);
+    await chamar("action=getRealTime");
+    expect(leiturasEmAlta(lidas)).toBe(3);
+    expect(leiturasMusicas(lidas)).toBeLessThanOrEqual(1);
+  });
+  // Com D1: capas vêm do catálogo (tabela musicas), planilha nunca lida.
+  const db = await bancoDeTeste();
+  expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
+  db.exec("CREATE TABLE musicas (titulo TEXT, codigo_unico TEXT, artista TEXT, artista_2 TEXT, artista_3 TEXT, artista_4 TEXT, artista_5 TEXT, artista_6 TEXT, capa_url TEXT, genero TEXT, tipo_single TEXT)");
+  db.exec("INSERT INTO musicas (titulo, codigo_unico, artista, capa_url) VALUES ('Koala', 'K1', 'Amanda', 'https://exemplo.com/capa-koala.jpg')");
+  await comAoVivo(db, async (lidas, avancar) => {
+    const r1 = (await (await chamar("action=getRealTime")).json()) as Record<string, { t: string; c: string }[]>;
+    expect(r1.spotify[0].c).toContain("capa-koala");
+    avancar(31_000);
+    await chamar("action=getRealTime");
+    await chamar("action=getRealTimePaises");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+    expect(leiturasMusicas(lidas)).toBe(0);
+  });
+});
+
+test("/api/charts ao vivo: streams '1,234,567' valem igual no mundo e nos países", async () => {
+  const db = await bancoDeTeste();
+  expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
+  await comAoVivo(db, async () => {
+    const svc = googleSheetsService as unknown as Record<string, { readValues: (s: string) => Promise<string[][]> }>;
+    svc.chartsRealtime.readValues = async () => [
+      EM_ALTA[0],
+      ["", "Amanda - Koala", "", "1,234,567", "Spotify", "+1", ""],
+    ];
+    const mundo = (await (await chamar("action=getRealTime")).json()) as { spotify: { s: string }[] };
+    expect(mundo.spotify[0].s).toBe("1.234.567");
+    const paises = (await (await chamar("action=getRealTimePaises")).json()) as { spotify: { s: string }[] };
+    const total = paises.spotify.reduce((a, l) => a + Number(l.s.replace(/\./g, "")), 0);
+    expect(total).toBeGreaterThan(0);
+  });
+});
+
+// ---- Front: fallback do ao vivo (src/lib/charts.ts) ----
+import { fetchAoVivo } from "../src/lib/charts";
+test("fetchAoVivo: vazio/500/erro depois de um valor bom → último valor bom; vazio sem anterior → vazio", async () => {
+  const antes = globalThis.fetch;
+  const bom = { spotify: [{ t: "A", s: "1", p: "", c: "" }], apple: [], youtube: [] };
+  const vazio = { spotify: [], apple: [], youtube: [] };
+  let proxima: () => Promise<Response>;
+  globalThis.fetch = (async () => proxima()) as unknown as typeof fetch;
+  const json = (d: unknown, status = 200) => async () => new Response(JSON.stringify(d), { status });
+  try {
+    for (const [url, ruim] of [
+      ["/t/vazio", json(vazio)],
+      ["/t/500", json({ error: "x" }, 500)],
+      ["/t/throw", async () => { throw new Error("rede"); }],
+    ] as const) {
+      proxima = json(bom);
+      expect(await fetchAoVivo(url)).toEqual(bom);
+      proxima = ruim;
+      expect(await fetchAoVivo(url)).toEqual(bom);
+    }
+    proxima = json(vazio);
+    expect(await fetchAoVivo("/t/sem-anterior")).toEqual(vazio);
+  } finally {
+    globalThis.fetch = antes;
+  }
 });

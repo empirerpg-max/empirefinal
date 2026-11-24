@@ -101,8 +101,40 @@ export interface RealTimeData {
   youtube?: ChartRow[];
 }
 
+// O ao vivo é recarregado a cada 30 s pela tela: NÃO passa pelo fetchCached
+// (cache da sessão sem validade — a tela nunca via dado novo). Busca direto
+// e, se a resposta vier vazia/erro, devolve o último valor bom daquela URL.
+const ultimoAoVivo = new Map<string, unknown>();
+export async function fetchAoVivo<T>(url: string): Promise<T> {
+  try {
+    const r = await fetch(url, { redirect: "follow" });
+    const data = await r.json();
+    if (!r.ok || isEmptyish(data)) {
+      if (ultimoAoVivo.has(url)) return ultimoAoVivo.get(url) as T;
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return data as T;
+    }
+    ultimoAoVivo.set(url, data);
+    return data as T;
+  } catch (err) {
+    if (ultimoAoVivo.has(url)) return ultimoAoVivo.get(url) as T;
+    throw err;
+  }
+}
+
 export async function getRealTime(): Promise<RealTimeData> {
-  return fetchCached(`${CHARTS_API}?action=getRealTime`);
+  return fetchAoVivo<RealTimeData>(`${CHARTS_API}?action=getRealTime`);
+}
+
+/** Ao vivo por país: por plataforma, linhas `{pais, pos, t, s, c, art}` (todos os países juntos). */
+export interface RealTimePaisesData {
+  spotify?: ChartRow[];
+  apple?: ChartRow[];
+  youtube?: ChartRow[];
+}
+
+export async function getRealTimePaises(): Promise<RealTimePaisesData> {
+  return fetchAoVivo<RealTimePaisesData>(`${CHARTS_API}?action=getRealTimePaises`);
 }
 
 export interface HOFRun {
