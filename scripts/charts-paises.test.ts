@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 // Paradas por país nos charts. Uso: bun test scripts/charts-paises.test.ts
 import { sorteio01 } from "../backend/src/services/chartsD1/sorteio";
+import { fatiasRegraC, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
 import { regrasDeConfig, parseRegrasSemana, REGRAS_PADRAO } from "../backend/src/services/chartsD1/regras";
 
 test("sorteio01: determinístico, em [0,1), varia com a chave", () => {
@@ -20,4 +21,55 @@ test("parseRegrasSemana: null para vazio/inválido", () => {
   expect(parseRegrasSemana(null)).toBeNull();
   expect(parseRegrasSemana("{x")).toBeNull();
   expect(parseRegrasSemana(JSON.stringify(REGRAS_PADRAO))).toEqual(REGRAS_PADRAO);
+});
+
+const pesos: Pesos = new Map([["EUA", 0.3], ["AUSTRÁLIA", 0.02], ["BRASIL", 0.05]]);
+const R = REGRAS_PADRAO.paises;
+const m = (t: string, nac: string[] = [], foco: string | null = null) =>
+  ({ tituloNorm: t, nacionalidades: new Set(nac), foco });
+
+test("regra C: Σ pb ≥ 1 → fatias somam 1; Σ pb < 1 → sobra o resto (inclui música sem nacionalidade nem foco)", () => {
+  const cheio: Pesos = new Map([["EUA", 0.7], ["BRASIL", 0.5]]);
+  for (const x of [m("a"), m("b", ["BRASIL"]), m("c", ["EUA"], "BRASIL")]) {
+    const soma = [...fatiasRegraC(cheio, x, "2026-11-11", R).values()].reduce((s, v) => s + v, 0);
+    expect(soma).toBeCloseTo(1, 12);
+    const somaParcial = [...fatiasRegraC(pesos, x, "2026-11-11", R).values()].reduce((s, v) => s + v, 0);
+    expect(somaParcial).toBeGreaterThan(0);
+    expect(somaParcial).toBeLessThan(1);
+  }
+});
+test("regra C: determinística e sem depender da ordem dos pesos", () => {
+  const inv: Pesos = new Map([...pesos].reverse());
+  expect(fatiasRegraC(pesos, m("b", ["AUSTRÁLIA"]), "2026-11-11", R))
+    .toEqual(fatiasRegraC(inv, m("b", ["AUSTRÁLIA"]), "2026-11-11", R));
+});
+test("regra C: nativo ganha mais que estrangeiro no seu país; bônus ≤ teto", () => {
+  const nat = fatiasRegraC(pesos, m("x", ["AUSTRÁLIA"]), "2026-11-11", { ...R, variacao: 0 });
+  const est = fatiasRegraC(pesos, m("x"), "2026-11-11", { ...R, variacao: 0 });
+  expect(nat.get("AUSTRÁLIA")!).toBeGreaterThan(est.get("AUSTRÁLIA")! * 1.5);
+  const eua = fatiasRegraC(pesos, m("y", ["EUA"]), "2026-11-11", { ...R, variacao: 0, nac_min: 4, nac_max: 4 });
+  // pb 0.3 × 4 = 1.2 → limitado a 0.2
+  expect(eua.get("EUA")!).toBeCloseTo((0.3 + 0.2) / (0.5 + 0.02 + 0.05 + 0.63), 9);
+});
+test("regra C: foco no país da nacionalidade não soma; com faixas padrão, foco < nacionalidade", () => {
+  const z = { ...R, variacao: 0 };
+  expect(fatiasRegraC(pesos, m("x", ["BRASIL"], "BRASIL"), "d", z)).toEqual(fatiasRegraC(pesos, m("x", ["BRASIL"]), "d", z));
+  const foco = fatiasRegraC(pesos, m("x", [], "BRASIL"), "d", z).get("BRASIL")!;
+  const nac = fatiasRegraC(pesos, m("x", ["BRASIL"]), "d", z).get("BRASIL")!;
+  const nada = fatiasRegraC(pesos, m("x"), "d", z).get("BRASIL")!;
+  expect(foco).toBeGreaterThan(nada);
+  expect(foco).toBeLessThanOrEqual(nac); // foco_max 1.5 ≤ nac_min 1.5
+});
+test("hit mundial 4× maior vence nativo num país de 2%; nativo perto vence", () => {
+  const z = { ...R, variacao: 0, nac_min: 3, nac_max: 3 };
+  const mk = (t: string, valor: number, nac: string[]): EntradaMusica =>
+    ({ tituloNorm: t, titulo: t, artistaPrincipal: t, artistas: [t], valor, nacionalidades: new Set(nac), foco: null });
+  const r1 = rankingsPorPais([mk("hit", 1_000_000, ["EUA"]), mk("aus", 200_000, ["AUSTRÁLIA"])], [], pesos, "d", null, z);
+  expect(r1.get("AUSTRÁLIA")![0].tituloNorm).toBe("hit");
+  const r2 = rankingsPorPais([mk("hit", 1_000_000, ["EUA"]), mk("aus", 500_000, ["AUSTRÁLIA"])], [], pesos, "d", null, z);
+  expect(r2.get("AUSTRÁLIA")![0].tituloNorm).toBe("aus");
+});
+test("rankingsPorPais: sem semana anterior → tudo NEW", () => {
+  const e: EntradaMusica = { tituloNorm: "a", titulo: "A", artistaPrincipal: "x", artistas: ["x"], valor: 10, nacionalidades: new Set(), foco: null };
+  expect(rankingsPorPais([e], [], pesos, "d", null, R).get("BRASIL")![0].st).toBe("NEW");
 });
