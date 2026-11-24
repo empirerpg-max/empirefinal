@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X, MoreVertical } from "lucide-react";
+import { Flame, Sparkles, Music, Film, Play, Search, ChevronLeft, X, MoreVertical, RotateCw } from "lucide-react";
 import { type PlaylistTrack } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
@@ -24,6 +24,8 @@ function EmpirePlayInicio() {
   // mostra só o destaque e as prateleiras; a lista só abre depois do clique.
   const [activeSlidingPlaylist, setActiveSlidingPlaylist] = useState<string | null>(null);
   const [playlistAberta, setPlaylistAberta] = useState<Playlist | null>(null);
+  const [erroPlaylist, setErroPlaylist] = useState(false);
+  const [tentativaPlaylist, setTentativaPlaylist] = useState(0);
   const [slidingSearchQuery, setSlidingSearchQuery] = useState("");
   const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
 
@@ -62,6 +64,7 @@ function EmpirePlayInicio() {
   const abrirPlaylist = (id: string) => {
     setSlidingSearchQuery("");
     setPlaylistAberta(null);
+    setErroPlaylist(false);
     setActiveSlidingPlaylist(id);
   };
 
@@ -73,15 +76,19 @@ function EmpirePlayInicio() {
       return;
     }
     let vivo = true;
+    setErroPlaylist(false);
     getPlaylist(activeSlidingPlaylist)
       .then((p) => {
         if (vivo) setPlaylistAberta(p);
       })
-      .catch((err) => console.warn("[EmpirePlayInicio] Erro ao abrir playlist:", err));
+      .catch((err) => {
+        console.warn("[EmpirePlayInicio] Erro ao abrir playlist:", err);
+        if (vivo) setErroPlaylist(true);
+      });
     return () => {
       vivo = false;
     };
-  }, [activeSlidingPlaylist]);
+  }, [activeSlidingPlaylist, tentativaPlaylist]);
 
   const isYoutube = playlistAberta?.plataforma === "youtube";
 
@@ -94,7 +101,7 @@ function EmpirePlayInicio() {
         const bruto = isYoutube ? f.clipe : f.musica;
         if (!bruto) return null;
         const item: any = isYoutube ? toPlayableVideo(bruto) : toPlayableTrack(bruto);
-        return { ...item, capa_url: item.capa_url || f.capa_url || undefined };
+        return { ...item, pos: f.pos, capa_url: item.capa_url || f.capa_url || undefined };
       })
       .filter((x): x is any => x !== null);
 
@@ -128,7 +135,7 @@ function EmpirePlayInicio() {
                   : plataforma === "youtube"
                     ? "from-red-900/60"
                     : "from-purple-800/60";
-            const title = playlistAberta?.titulo ?? "Carregando playlist";
+            const title = playlistAberta?.titulo ?? (erroPlaylist ? "Playlist" : "Carregando playlist");
             const PlatformIcon =
               plataforma === "spotify"
                 ? Flame
@@ -208,7 +215,22 @@ function EmpirePlayInicio() {
 
           {/* Conteúdo de Faixas ou Vídeos */}
           <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3">
-            {!playlistAberta ? (
+            {!playlistAberta && erroPlaylist ? (
+              <div className="flex flex-col items-center gap-3 py-20 text-center">
+                <p className="text-neutral-400 font-bold text-xs">Não foi possível carregar a playlist.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErroPlaylist(false);
+                    setTentativaPlaylist((n) => n + 1);
+                  }}
+                  className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white hover:bg-white/10 active:scale-95 transition"
+                >
+                  <RotateCw className="size-3.5 shrink-0" />
+                  <span className="truncate">Tentar de novo</span>
+                </button>
+              </div>
+            ) : !playlistAberta ? (
               <div className="text-center py-20 text-neutral-500 font-bold text-xs">Carregando playlist...</div>
             ) : getSlidingPlaylistItems().length === 0 ? (
               <div className="text-center py-20 text-neutral-500 font-bold text-xs">
@@ -235,7 +257,7 @@ function EmpirePlayInicio() {
                   >
                     {/* Posição Rank */}
                     <span className="font-mono font-black text-xs text-neutral-500 min-w-[28px] text-center">
-                      {idx + 1}
+                      {item.pos ?? idx + 1}
                     </span>
 
                     {/* Capa (com fallback pra foto do artista, quando a faixa não tem capa própria) */}

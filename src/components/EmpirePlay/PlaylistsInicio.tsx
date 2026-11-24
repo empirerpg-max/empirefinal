@@ -39,10 +39,14 @@ export function PlaylistsInicio({
   pausadoRef.current = pausado;
   const montadoRef = useRef(true);
 
+  // Só a resposta do pedido mais recente vale: uma resposta lenta não
+  // sobrescreve outra mais nova.
+  const seqRef = useRef(0);
   const carregar = useCallback(() => {
+    const seq = ++seqRef.current;
     getIndicePlaylists()
       .then((i) => {
-        if (montadoRef.current) setIndice(i);
+        if (montadoRef.current && seq === seqRef.current) setIndice(i);
       })
       .catch((err) => console.warn("[PlaylistsInicio] índice:", err))
       .finally(() => {
@@ -164,12 +168,14 @@ function Destaque({
             <span className="size-2 shrink-0 rounded-full bg-red-500 animate-pulse motion-reduce:animate-none" />
             Mais quente agora
           </span>
-          <h2
-            className="mt-1.5 uppercase text-white leading-[0.95] break-words [overflow-wrap:anywhere]"
+          <span
+            role="heading"
+            aria-level={2}
+            className="mt-1.5 block uppercase text-white leading-[0.95] break-words [overflow-wrap:anywhere]"
             style={{ fontFamily: FONTE_TITULO, fontSize: "clamp(30px, 8.5vw, 60px)" }}
           >
             {d.titulo}
-          </h2>
+          </span>
           <p className="mt-2.5 max-w-2xl text-[13px] sm:text-sm font-semibold leading-snug text-white/85 break-words [overflow-wrap:anywhere]">
             {linha}
           </p>
@@ -260,20 +266,27 @@ function CartaoCapa({
       onClick={() => onAbrir(cartao.id)}
       className="group flex w-[136px] sm:w-[156px] lg:w-[172px] shrink-0 flex-col gap-1.5 text-left"
     >
+      {/* Capa quadrada que CRESCE se o título não couber: o título fica no
+          fluxo (não absoluto) e o recorte arredondado mora numa camada de
+          fundo — com overflow visível, aspect-ratio vira altura mínima. */}
       <div
-        className="relative aspect-square w-full overflow-hidden rounded-2xl border border-white/10 bg-neutral-900 transition group-hover:border-white/30 group-active:scale-[0.98]"
+        className="relative flex aspect-square w-full flex-col rounded-2xl border border-white/10 bg-neutral-900 p-2.5 transition group-hover:border-white/30 group-active:scale-[0.98]"
         style={{ containerType: "inline-size" }}
       >
-        <CapaPlaylist id={cartao.id} capaUrl={cartao.capa_url} tamanho={400} />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-black/5" />
+        <div className="absolute inset-0 overflow-hidden rounded-2xl">
+          <CapaPlaylist id={cartao.id} capaUrl={cartao.capa_url} tamanho={400} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-black/5" />
+        </div>
         {cartao.aoVivo && (
-          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white backdrop-blur-sm">
+          <span className="relative -ml-0.5 -mt-0.5 inline-flex self-start items-center gap-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white backdrop-blur-sm">
             <span className="size-1.5 shrink-0 rounded-full bg-red-500 animate-pulse motion-reduce:animate-none" />
             Ao vivo
           </span>
         )}
-        <h3
-          className="absolute inset-x-0 bottom-0 px-2.5 pb-2.5 uppercase text-white leading-[1.02] break-words [overflow-wrap:anywhere]"
+        <span
+          role="heading"
+          aria-level={3}
+          className="relative mt-auto block pt-2 uppercase text-white leading-[1.02] break-words [overflow-wrap:anywhere]"
           style={{
             fontFamily: FONTE_TITULO,
             fontSize: fonteDoTitulo(cartao.titulo),
@@ -281,7 +294,7 @@ function CartaoCapa({
           }}
         >
           {cartao.titulo}
-        </h3>
+        </span>
       </div>
       {cartao.subtitulo && (
         <p className="px-0.5 text-[11px] leading-snug text-neutral-400 break-words">
