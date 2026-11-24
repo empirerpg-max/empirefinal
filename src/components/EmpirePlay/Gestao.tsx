@@ -42,6 +42,8 @@ import {
   saveExtraMaterial,
   type ExtraMaterialEditorValue,
 } from "./ExtraMaterial";
+import { FocoSelect } from "./FocoSelect";
+import { salvarFoco, rotuloFoco } from "@/lib/focoMusica";
 
 export type TabType = "musica" | "video" | "album" | "banners" | "empiretv";
 
@@ -529,10 +531,16 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const [nomeMusica, setNomeMusica] = useState<string>("");
   const [tipoSingle, setTipoSingle] = useState<string>("LEAD SINGLE");
   const [tipoMusica, setTipoMusica] = useState<string>("SOLO");
+  // Foco (país-alvo) do lançamento — obrigatório só em "Lançamento Novo":
+  // substituir/vincular usam o código da música que já existe (e o foco
+  // dela, se já definido, fica travado).
+  const [focoMusica, setFocoMusica] = useState<string>("");
   const [letraInput, setLetraInput] = useState<string>("");
   // Música existente referenciada (obrigatório quando opcaoChart é "b" ou "c")
   const [musicaReferenciaQuery, setMusicaReferenciaQuery] = useState<string>("");
   const [musicaReferencia, setMusicaReferencia] = useState<ExistingTrack | null>(null);
+
+  const exigeFocoMusica = opcaoChart === OPCOES_CHART[0].value;
 
   // Aviso de "essa música já existe" quando o jogador escolhe "Lançamento
   // Novo" (a) mas digita um título parecido com algo que o artista dele já
@@ -931,6 +939,10 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setErrorMsg("Informe a data real de lançamento do material antigo.");
       return;
     }
+    if (exigeFocoMusica && !focoMusica) {
+      setErrorMsg("Escolha o foco do lançamento.");
+      return;
+    }
 
     // Duplo aviso antes de publicar de fato — mostra um resumo do que foi
     // preenchido pro jogador conferir (a pedido do usuário, depois do erro
@@ -947,6 +959,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         { label: "Tipo de Single", valor: tipoSingle },
         { label: "Tipo de Música", valor: tipoMusica },
         { label: "Objetivo no Chart", valor: opcaoEscolhida?.title || opcaoChart },
+        ...(exigeFocoMusica
+          ? [{ label: "Foco do lançamento", valor: rotuloFoco(focoMusica) }]
+          : []),
         ...(musicaReferencia
           ? [
               {
@@ -1040,6 +1055,19 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
         }).catch(() => {});
       }
 
+      // Foco do lançamento — mesmo esquema do material extra: só dá pra
+      // gravar agora, com o Código único real. Se falhar, a música já foi
+      // criada: avisa em vez de desfazer o cadastro.
+      if (exigeFocoMusica && focoMusica) {
+        const focoOk = codigoUnicoNovo
+          ? await salvarFoco(codigoUnicoNovo, focoMusica).then(
+              () => true,
+              () => false,
+            )
+          : false;
+        if (!focoOk) setErrorMsg("Música registrada, mas o foco não foi salvo. Defina na edição.");
+      }
+
       setSuccessMsg("Lançamento de Música publicado com sucesso!");
       setNomeMusica("");
       setCapaFile(null);
@@ -1050,6 +1078,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
       setMusicaReferenciaQuery("");
       setMusicaReferencia(null);
       setOpcaoChart(OPCOES_CHART[0].value);
+      setFocoMusica("");
       setExtraMusica(emptyExtraMaterialEditorValue());
       setDataLancamentoAntigo("");
     } catch (err: any) {
@@ -1921,6 +1950,22 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
                 </div>
               </div>
 
+              {/* FOCO DO LANÇAMENTO — só em "Lançamento Novo" */}
+              {exigeFocoMusica && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    Foco do lançamento
+                  </label>
+                  <FocoSelect
+                    value={focoMusica}
+                    onChange={setFocoMusica}
+                    obrigatorio
+                    disabled={isSubmitting}
+                    className="w-full min-w-0 bg-black/25 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-sm text-sm text-white focus:border-emerald-500 focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+              )}
+
               {/* OPÇÕES DE CHART — ícone/cor própria por opção (antes eram 3
               cards visualmente idênticos, causa de gente clicar errado). */}
               <div className="space-y-3">
@@ -2199,13 +2244,18 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               </div>
 
               {/* BOTÃO PRINCIPAL DE ENVIO */}
+              {exigeFocoMusica && !focoMusica && (
+                <p className="text-[11px] font-bold text-amber-400 text-center">
+                  Escolha o foco do lançamento.
+                </p>
+              )}
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={isSubmitting || (exigeFocoMusica && !focoMusica)}
+                className="w-full px-3 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <Sparkles className="size-5" />
-                <span>
+                <Sparkles className="size-5 shrink-0" />
+                <span className="min-w-0 text-center">
                   {isSubmitting ? uploadProgress || "Enviando..." : "Publicar Lançamento de Música"}
                 </span>
               </button>

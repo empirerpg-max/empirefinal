@@ -35,6 +35,9 @@ import {
   Search,
 } from "lucide-react";
 import { SyncStudioModal, type SyncStudioTrack } from "./SyncStudioModal";
+import { FocoSelect } from "./FocoSelect";
+import { lerFoco, salvarFoco, rotuloFoco } from "@/lib/focoMusica";
+import { getStoredLogin } from "@/components/LoginScreen";
 
 // "music-videos" foi consolidado dentro de "videos" — vivem na mesma aba
 // da planilha ("Music Videos"), diferenciados por tag, não mais categoria.
@@ -179,6 +182,20 @@ export const EditModal: React.FC<EditModalProps> = ({
   // "LEAD SINGLE", já que publicar uma faixa pendente costuma ser justamente
   // lançá-la como single durante a era do álbum.
   const [publicarTipoSingle, setPublicarTipoSingle] = useState<Record<number, string>>({});
+  // Foco (país-alvo) escolhido pra cada faixa pendente — obrigatório quando
+  // ela sai como single (tipo ≠ TRACKLIST ALBUM).
+  const [publicarFoco, setPublicarFoco] = useState<Record<number, string>>({});
+
+  // Foco do lançamento da música em edição: null = ainda sem foco salvo.
+  const [focoAtual, setFocoAtual] = useState<string | null>(null);
+  const [focoCarregando, setFocoCarregando] = useState(false);
+  const [focoEdit, setFocoEdit] = useState("");
+  const [salvandoFoco, setSalvandoFoco] = useState(false);
+  const [focoMsg, setFocoMsg] = useState<{ ok: boolean; texto: string } | null>(null);
+  // Mesma regra de admin de Gestao.tsx (isAdminUser) — o backend confere de
+  // novo pelo token de sessão, isso aqui só decide o que mostrar.
+  const loginAtual = getStoredLogin();
+  const isAdminUser = loginAtual?.id === "810141686" || loginAtual?.tipoPerfil === "Admin";
 
   // Formulário de "adicionar faixa nova"
   const [addingFaixa, setAddingFaixa] = useState<boolean>(false);
@@ -312,6 +329,20 @@ export const EditModal: React.FC<EditModalProps> = ({
     setFaixaLetraText("");
     if (item.tipo === "albuns" && item.fields?.topicId) {
       fetchAlbumFaixas(item.fields.topicId);
+    }
+    setFocoAtual(null);
+    setFocoEdit("");
+    setFocoMsg(null);
+    if (item.tipo === "musicas" && item.codigoUnico) {
+      const codigo = item.codigoUnico;
+      setFocoCarregando(true);
+      lerFoco(codigo)
+        .then((r) => {
+          setFocoAtual(r.foco?.pais ?? null);
+          setFocoEdit(r.foco?.pais ?? "");
+        })
+        .catch(() => setFocoMsg({ ok: false, texto: "Não foi possível carregar o foco atual." }))
+        .finally(() => setFocoCarregando(false));
     }
     setExtraEdit(emptyExtraMaterialEditorValue());
     if (item.codigoUnico && item.tipo !== "videos") {
@@ -504,6 +535,13 @@ export const EditModal: React.FC<EditModalProps> = ({
   // lista de pendentes, recebe comentário no fórum e conta prestígio/REGISTRO
   // igual uma faixa avulsa (mesma regra confirmada com o usuário).
   const handlePublicarFaixa = async (faixa: AlbumFaixa, idx: number) => {
+    const tipoEscolhido = publicarTipoSingle[faixa.musicaRowIndex] || "LEAD SINGLE";
+    const focoEscolhido = publicarFoco[faixa.musicaRowIndex] || "";
+    const exigeFoco = tipoEscolhido !== "TRACKLIST ALBUM";
+    if (exigeFoco && !focoEscolhido) {
+      setErrorMsg("Escolha o foco do lançamento.");
+      return;
+    }
     setPublicandoFaixaIdx(idx);
     setErrorMsg(null);
     try {
@@ -513,12 +551,24 @@ export const EditModal: React.FC<EditModalProps> = ({
         body: JSON.stringify({
           musicaRowIndex: faixa.musicaRowIndex,
           nomeJogador: selectedArtist || "Jogador",
-          tipoSingle: publicarTipoSingle[faixa.musicaRowIndex] || "LEAD SINGLE",
+          tipoSingle: tipoEscolhido,
         }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Erro ao publicar faixa.");
+      }
+      // Foco só dá pra gravar agora, com o Código único devolvido pela
+      // publicação. Falhou: a faixa já foi publicada, só avisa.
+      if (exigeFoco) {
+        const codigo: string = json.data?.codigoUnico || "";
+        const focoOk = codigo
+          ? await salvarFoco(codigo, focoEscolhido).then(
+              () => true,
+              () => false,
+            )
+          : false;
+        if (!focoOk) setErrorMsg("Música registrada, mas o foco não foi salvo. Defina na edição.");
       }
       setSuccessMsg("Faixa publicada com sucesso!");
       if (editingItem?.fields?.topicId) {
@@ -529,6 +579,28 @@ export const EditModal: React.FC<EditModalProps> = ({
       setErrorMsg(err.message || "Erro ao publicar faixa.");
     } finally {
       setPublicandoFaixaIdx(null);
+    }
+  };
+
+  // Grava o foco da música em edição. Não-admin só consegue quando ainda
+  // não há foco (o backend devolve 409 se já tiver); admin troca sempre.
+  const handleSalvarFoco = async () => {
+    const codigo = editingItem?.codigoUnico;
+    if (!codigo || !focoEdit) return;
+    setSalvandoFoco(true);
+    setFocoMsg(null);
+    try {
+      await salvarFoco(codigo, focoEdit);
+      setFocoAtual(focoEdit);
+      setFocoMsg({ ok: true, texto: "Foco salvo." });
+    } catch (err) {
+      setFocoMsg({
+        ok: false,
+        texto:
+          err instanceof Error && err.message ? err.message : "Não foi possível salvar o foco.",
+      });
+    } finally {
+      setSalvandoFoco(false);
     }
   };
 
@@ -982,6 +1054,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                         const mostraCabecalhoDisco =
                           albumFaixas.some((f) => (f.disco || 1) !== discoAtual) &&
                           (idx === 0 || discoAtual !== discoAnterior);
+                        // Faixa pendente que sai como single precisa de foco pra publicar.
+                        const publicaComoSingle =
+                          faixa.pendente &&
+                          (publicarTipoSingle[faixa.musicaRowIndex] || "LEAD SINGLE") !==
+                            "TRACKLIST ALBUM";
+                        const faltaFocoPublicar =
+                          publicaComoSingle && !publicarFoco[faixa.musicaRowIndex];
                         return (
                       <div key={faixa.musicaRowIndex}>
                           {mostraCabecalhoDisco && (
@@ -1035,7 +1114,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                             {faixa.pendente && (
                               <button
                                 type="button"
-                                disabled={publicandoFaixaIdx === idx}
+                                disabled={publicandoFaixaIdx === idx || faltaFocoPublicar}
                                 onClick={() => handlePublicarFaixa(faixa, idx)}
                                 className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-black uppercase inline-flex items-center gap-1 disabled:opacity-50"
                                 title="Publicar faixa (abre tópico no fórum)"
@@ -1098,6 +1177,60 @@ export const EditModal: React.FC<EditModalProps> = ({
                               <ArrowDown className="size-3.5" />
                             </button>
                           </div>
+
+                            {publicaComoSingle && (
+                              <div className="mt-1.5 flex items-center gap-2 p-2.5 bg-neutral-800/40 border border-white/10 rounded-xl">
+                                <span className="shrink-0 text-[10px] font-black uppercase tracking-wide text-neutral-400">
+                                  Foco
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <FocoSelect
+                                    value={publicarFoco[faixa.musicaRowIndex] || ""}
+                                    onChange={(v) =>
+                                      setPublicarFoco((prev) => ({
+                                        ...prev,
+                                        [faixa.musicaRowIndex]: v,
+                                      }))
+                                    }
+                                    obrigatorio
+                                    semAjuda
+                                    disabled={publicandoFaixaIdx === idx}
+                                    className="w-full min-w-0 text-[11px] font-bold bg-neutral-900 border border-white/10 rounded-md py-1 px-1.5 text-neutral-300 outline-none focus:border-amber-500 disabled:opacity-50"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {editingFaixaLetraIndex === idx && (
+                              <div className="mt-1.5 p-2.5 bg-neutral-800/60 border border-amber-500/30 rounded-xl space-y-2">
+                                <textarea
+                                  rows={6}
+                                  autoFocus
+                                  value={faixaLetraText}
+                                  onChange={(e) => setFaixaLetraText(e.target.value)}
+                                  placeholder="Cole ou digite a letra completa..."
+                                  className="w-full bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none resize-y"
+                                />
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingFaixaLetraIndex(null)}
+                                    className="px-3 py-1.5 rounded-lg bg-neutral-900 text-neutral-400 text-[11px] font-bold uppercase"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={savingFaixaLetra}
+                                    onClick={() => handleSaveFaixaLetra(faixa, idx)}
+                                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black uppercase inline-flex items-center gap-1.5 disabled:opacity-50"
+                                  >
+                                    <Check className="size-3.5" />
+                                    {savingFaixaLetra ? "Salvando..." : "Salvar Letra"}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
 
                           {editingFaixaLetraIndex === idx && (
                             <div className="mt-1.5 p-2.5 bg-neutral-800/60 border border-amber-500/30 rounded-xl space-y-2">
@@ -1478,6 +1611,60 @@ export const EditModal: React.FC<EditModalProps> = ({
                     </div>
                   </div>
               </div>
+
+              {/* FOCO DO LANÇAMENTO — só música com Código único */}
+              {category === "musicas" && editingItem?.codigoUnico && (
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-wider text-amber-400">
+                    Foco do lançamento
+                  </label>
+                  {focoCarregando ? (
+                    <div className="flex items-center gap-2 text-[11px] text-neutral-400">
+                      <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                      <span>Carregando foco…</span>
+                    </div>
+                  ) : focoAtual && !isAdminUser ? (
+                    <div className="rounded-xl bg-neutral-900 border border-white/10 px-3 py-2.5">
+                      <p className="text-sm font-bold text-white">{rotuloFoco(focoAtual)}</p>
+                      <p className="text-[11px] text-neutral-500">
+                        Para alterar, fale com a administração.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <FocoSelect
+                          value={focoEdit}
+                          onChange={setFocoEdit}
+                          obrigatorio={!focoAtual}
+                          disabled={salvandoFoco}
+                          className="w-full min-w-0 bg-neutral-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:border-amber-500 focus:outline-none disabled:opacity-50"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSalvarFoco}
+                        disabled={salvandoFoco || !focoEdit || focoEdit === focoAtual}
+                        className="shrink-0 min-w-0 max-w-[45%] px-3 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black uppercase inline-flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {salvandoFoco ? (
+                          <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                        ) : (
+                          <Save className="size-3.5 shrink-0" />
+                        )}
+                        <span className="truncate">Salvar foco</span>
+                      </button>
+                    </div>
+                  )}
+                  {focoMsg && (
+                    <p
+                      className={`text-[11px] font-bold ${focoMsg.ok ? "text-emerald-400" : "text-red-400"}`}
+                    >
+                      {focoMsg.texto}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* SHOP / INFO / VISUAL — retrofit em lançamento já existente */}
               {category !== "videos" && (
