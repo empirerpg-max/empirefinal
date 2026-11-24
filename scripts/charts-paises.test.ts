@@ -155,6 +155,35 @@ test("EUA: recorrência remove ≥20 semanas abaixo de #50 e sobe os de baixo", 
   expect(r.length).toBe(50);
   expect(r.some((x) => x.tituloNorm === "m55")).toBe(false);
 });
+// Lista com Spotify EUA decrescente (posição provisória = índice + 1) e `semanas` por índice.
+const listaEua = (n: number, semanas: Record<number, number>) =>
+  Array.from({ length: n }, (_, i) => ms(`m${i}`, { semanas: semanas[i] ?? 1, porPais: { SPOTIFY: new Map([["ESTADOS UNIDOS", 1000 - i]]) } }));
+test("EUA: recorrência 20/50 remove #51 e o de baixo sobe (top ampliado para o efeito aparecer)", () => {
+  // Com top 50 quem está em #51 já sairia pelo corte; top 60 deixa a regra visível.
+  const r = calcularParada(listaEua(52, { 10: 25, 50: 25 }), { ...P("EUA"), top: 60 }, "ESTADOS UNIDOS", 0.45);
+  expect(r.length).toBe(51);
+  expect(r.some((x) => x.tituloNorm === "m50")).toBe(false);
+  expect(r.find((x) => x.tituloNorm === "m10")?.pos).toBe(11); // ≥20 semanas mas dentro do Top 50: fica
+  expect(r[50]).toMatchObject({ pos: 51, tituloNorm: "m51" });
+});
+test("EUA: recorrência 52/25 remove #30 e o #51 entra no Top 50", () => {
+  const r = calcularParada(listaEua(51, { 29: 52 }), P("EUA"), "ESTADOS UNIDOS", 0.45);
+  expect(r.length).toBe(50);
+  expect(r.some((x) => x.tituloNorm === "m29")).toBe(false);
+  expect(r[29].tituloNorm).toBe("m30");
+  expect(r[49]).toMatchObject({ pos: 50, tituloNorm: "m50" });
+});
+test("UK: música em ACR recebe val menor que a mesma fora do ACR", () => {
+  const base = { porPais: { SPOTIFY: pais(1_000_000), YOUTUBE: pais(600_000) } };
+  // Streams globais atuais = 1000 + 600 + 300 = 1900, caindo há 3 semanas.
+  const acr = ms("a", { ...base, semanas: 10, streamsGlobaisAnteriores: [2000, 2100, 2200] });
+  const normal = ms("a", { ...base, semanas: 1, streamsGlobaisAnteriores: [2000, 2100, 2200] });
+  const vAcr = calcularParada([acr], P("UK"), "REINO UNIDO", 0.45)[0].val;
+  const vNormal = calcularParada([normal], P("UK"), "REINO UNIDO", 0.45)[0].val;
+  expect(vNormal).toBe(Math.round(450_000 / 100 + 550_000 / 600 + 600_000 / 600));
+  expect(vAcr).toBe(Math.round(450_000 / 200 + 550_000 / 1200 + 600_000 / 1200));
+  expect(vAcr).toBeLessThan(vNormal);
+});
 test("Excl. US = mundo − EUA", () => {
   const m = ms("a");
   const p = P("EXCL_US");

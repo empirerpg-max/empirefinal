@@ -124,6 +124,7 @@ export function calcularParada(musicas: MusicaSemana[], p: Parada, pais: string,
     });
   }
 
+  // max_por_artista já rodou: as posições provisórias da recorrência vêm da lista depois desse filtro.
   // Recorrência: posições provisórias calculadas uma vez (sem cálculo em cadeia).
   const rec = p.recorrencia;
   if (rec && rec.length > 0) {
