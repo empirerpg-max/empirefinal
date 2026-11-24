@@ -10,6 +10,7 @@ import {
   debugRealtimeCoversController,
 } from "../controllers/chartsController";
 import { chartsIngestController } from "../controllers/chartsIngestController";
+import { getPlaylistsEmpirePlayController } from "../controllers/playlistsEmpirePlayController";
 import {
   getAcervoRevistasController,
   createAcervoRevistaController,
@@ -629,6 +630,7 @@ export async function handleEmpireApiRoutes(
     "/api/gestao/extra",
     "/api/editar",
     "/api/empire-play/home",
+    "/api/empire-play/playlists",
     "/api/empire-play/user",
     "/api/empire-play/musicas",
     "/api/empire-play/music-videos",
@@ -782,6 +784,8 @@ export async function handleEmpireApiRoutes(
     response = await getEmpirePlayForumTopicController(request);
   } else if (url.pathname === "/api/empire-play/home") {
     response = await getEmpirePlayHomeController();
+  } else if (url.pathname === "/api/empire-play/playlists") {
+    response = await getPlaylistsEmpirePlayController(request);
   } else if (url.pathname === "/api/empire-play/user") {
     response = await getEmpirePlayUserController(request);
   } else if (url.pathname === "/api/empire-play/musicas") {

@@ -478,20 +478,53 @@ export async function fetchRTPaises(): Promise<Record<PlataformaAoVivo, LinhaAoV
 export interface SemanaPlaylistsCharts {
   global100: { titulo: string; valor: string }[];
   paradas: LinhaPaisApi[];
+  /** Último chart semanal (global) de cada plataforma: título e posição, na ordem do chart. */
+  plataformas: Record<PlataformaAoVivo, { titulo: string; pos: number }[]>;
+  /** Recorte por país (COUNTRIES) da mesma semana do Global 100, por plataforma. */
+  paises: Record<PlataformaAoVivo, LinhaPaisApi[]>;
 }
+/** Plataforma das playlists → chart semanal e recorte COUNTRIES do D1. */
+const CHART_DA_PLATAFORMA: Record<PlataformaAoVivo, ChartId & PlataformaCountries> = {
+  spotify: "SPOTIFY",
+  apple: "APPLE MUSIC",
+  youtube: "YOUTUBE",
+};
+const semanaPlaylistsVazia = (): SemanaPlaylistsCharts => ({
+  global100: [],
+  paradas: [],
+  plataformas: { spotify: [], apple: [], youtube: [] },
+  paises: { spotify: [], apple: [], youtube: [] },
+});
 let semanaPlaylistsCache: { valor: Promise<SemanaPlaylistsCharts>; expiresAt: number } | null = null;
 
 async function lerSemanaPlaylists(): Promise<SemanaPlaylistsCharts> {
   const d1 = await viaD1<SemanaPlaylistsCharts>("BILLBOARD HOT 100", async (db, datas) => {
     const data = datas[0];
     const { cat, fotos, generosArtistas } = await referenciasD1(db);
-    const [linhas, semana] = await Promise.all([
+    const plats = Object.keys(CHART_DA_PLATAFORMA) as PlataformaAoVivo[];
+    // Último chart semanal de cada plataforma (para o destaque: subida do #1 ao vivo).
+    const semanalDe = async (plat: PlataformaAoVivo) => {
+      const chart = CHART_DA_PLATAFORMA[plat];
+      const ultima = (await datasD1(db, chart))[0];
+      if (!ultima) return [];
+      const l = await linhasDoChart(db, chart, ultima, "", cat, fotos, generosArtistas);
+      return l.map((x) => ({ titulo: x.tit, pos: x.pos }));
+    };
+    const [linhas, semana, ...semanais] = await Promise.all([
       linhasDoChart(db, "BILLBOARD HOT 100", data, "", cat, fotos, generosArtistas),
       semanaPaises(db, data),
+      ...plats.map(semanalDe),
     ]);
-    return { global100: linhas.map((l) => ({ titulo: l.tit, valor: l.val })), paradas: semana.paradas };
+    const saida = semanaPlaylistsVazia();
+    saida.global100 = linhas.map((l) => ({ titulo: l.tit, valor: l.val }));
+    saida.paradas = semana.paradas;
+    plats.forEach((p, i) => {
+      saida.plataformas[p] = semanais[i];
+      saida.paises[p] = semana.countries.get(CHART_DA_PLATAFORMA[p]) ?? [];
+    });
+    return saida;
   });
-  return d1 ?? { global100: [], paradas: [] };
+  return d1 ?? semanaPlaylistsVazia();
 }
 
 export function semanaParaPlaylists(): Promise<SemanaPlaylistsCharts> {
@@ -831,10 +864,12 @@ async function fetchReleases(): Promise<unknown[]> {
 const CHARTS_RESPONSE_CACHE_TTL_MS = 5 * 60_000;
 /** Semana passada servida do D1 não muda: o navegador/CDN pode guardar por 24 h. */
 const CACHE_CONTROL_SEMANA_PASSADA = "public, max-age=86400";
-interface RespostaCharts {
+export interface RespostaCharts {
   body: string;
   /** Só para semana passada do D1; semana atual e demais ações seguem sem o cabeçalho. */
   cacheControl?: string;
+  /** Padrão 200. Só respostas 200 ficam em cache. */
+  status?: number;
 }
 const chartsResponseCache = new Map<string, RespostaCharts & { expiresAt: number }>();
 const chartsResponseInFlight = new Map<string, Promise<RespostaCharts>>();
@@ -843,7 +878,7 @@ const ACOES_AO_VIVO = new Set(["getRealTime", "getRealTimePaises"]);
 function respostaJson(r: RespostaCharts): Response {
   const headers: Record<string, string> = { "Content-Type": "application/json; charset=utf-8" };
   if (r.cacheControl) headers["Cache-Control"] = r.cacheControl;
-  return new Response(r.body, { status: 200, headers });
+  return new Response(r.body, { status: r.status ?? 200, headers });
 }
 
 /** Descarta as respostas em cache deste isolate (chamado após ingerir uma semana no D1). */
@@ -863,21 +898,33 @@ export async function chartsApiController(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const p = url.searchParams;
   const action = p.get("action") || "";
-  const cacheKey = url.search;
   // Ações do ao vivo: 30 s (no relógio do ao vivo); as demais seguem 5 min.
   const aoVivo = ACOES_AO_VIVO.has(action);
+  return respostaJson(await respostaEmCache(url.search, aoVivo, () => computeChartsResponse(action, p)));
+}
+
+/**
+ * Cache de resposta por chave (com pedidos simultâneos dividindo o cálculo).
+ * Ao vivo: 30 s no relógio do ao vivo, e nunca mais que a leitura da EM Alta
+ * de onde saiu (senão os dois caches de 30 s somavam até ~60 s de atraso);
+ * demais: 5 min. Só respostas 200 ficam guardadas; limparCacheCharts zera.
+ */
+async function respostaEmCache(
+  cacheKey: string,
+  aoVivo: boolean,
+  computar: () => Promise<RespostaCharts>,
+): Promise<RespostaCharts> {
   const agora = () => (aoVivo ? agoraAoVivo() : Date.now());
   const ttl = aoVivo ? AO_VIVO_TTL_MS : CHARTS_RESPONSE_CACHE_TTL_MS;
 
   const cached = chartsResponseCache.get(cacheKey);
-  if (cached && cached.expiresAt > agora()) return respostaJson(cached);
+  if (cached && cached.expiresAt > agora()) return cached;
   const emAndamento = chartsResponseInFlight.get(cacheKey);
-  if (emAndamento) return respostaJson(await emAndamento);
+  if (emAndamento) return emAndamento;
 
   const promise = (async () => {
-    const resposta = await computeChartsResponse(action, p);
-    // Ao vivo: a resposta não pode durar mais que a leitura da EM Alta de
-    // onde saiu (senão os dois caches de 30 s somavam até ~60 s de atraso).
+    const resposta = await computar();
+    if ((resposta.status ?? 200) !== 200) return resposta;
     let expiresAt = agora() + ttl;
     if (aoVivo && emAltaCache) expiresAt = Math.min(expiresAt, emAltaCache.expiresAt);
     chartsResponseCache.set(cacheKey, { ...resposta, expiresAt });
@@ -886,7 +933,16 @@ export async function chartsApiController(request: Request): Promise<Response> {
     chartsResponseInFlight.delete(cacheKey);
   });
   chartsResponseInFlight.set(cacheKey, promise);
-  return respostaJson(await promise);
+  return promise;
+}
+
+/**
+ * Resposta JSON com a mesma regra de cache do ao vivo (getRealTime*): 30 s,
+ * limitada à validade da leitura da EM Alta. `chave` ganha um prefixo próprio
+ * (não colide com as URLs do /api/charts). Usado pelas playlists do Empire Play.
+ */
+export async function respostaAoVivoEmCache(chave: string, computar: () => Promise<RespostaCharts>): Promise<Response> {
+  return respostaJson(await respostaEmCache(`\u0000ao-vivo:${chave}`, true, computar));
 }
 
 async function computeChartsResponse(action: string, p: URLSearchParams): Promise<RespostaCharts> {

@@ -189,10 +189,19 @@ function partesDoTituloChart(tituloChart: string): { artista: string; titulo: st
   return { artista: tituloChart.slice(0, idx).trim(), titulo: tituloChart.slice(idx + 3).trim() };
 }
 
+function musicaDoChart(cat: CatalogoTocavel, tituloChart: string): EmpirePlayCleanItem | null {
+  const achado = buscarNoCatalogo(tituloChart, cat.indice);
+  return (achado && cat.musicaPorLigacao.get(achado.codigoUnico)) || null;
+}
+
+/** `chave` que ligarFaixa daria a essa linha de chart (sem montar a faixa). */
+export function chaveDaFaixa(cat: CatalogoTocavel, tituloChart: string): string {
+  return (musicaDoChart(cat, tituloChart)?.codigoUnico || "").trim() || chaveMusica(tituloChart);
+}
+
 /** Liga uma linha de chart ao catálogo (mesmo cruzamento dos charts: buscarNoCatalogo). */
 export function ligarFaixa(cat: CatalogoTocavel, tituloChart: string, pos: number, valor: string): FaixaPlaylist {
-  const achado = buscarNoCatalogo(tituloChart, cat.indice);
-  const musica = (achado && cat.musicaPorLigacao.get(achado.codigoUnico)) || null;
+  const musica = musicaDoChart(cat, tituloChart);
   const codigo = (musica?.codigoUnico || "").trim();
   const clipe = (codigo && cat.clipePorCodigo.get(codigo)) || null;
   const doChart = partesDoTituloChart(tituloChart);
@@ -315,6 +324,10 @@ export interface SemanaPlaylists {
   global100: { titulo: string; valor: string }[];
   /** Paradas oficiais da mesma semana: `pais` = nome da parada. */
   paradas: LinhaPaisApi[];
+  /** Último chart semanal global de cada plataforma (título + posição): base da subida do destaque. */
+  plataformas: Record<PlataformaPlaylist, { titulo: string; pos: number }[]>;
+  /** Recorte por país (COUNTRIES) da semana mais recente, por plataforma: base da subida dos países. */
+  paises: Record<PlataformaPlaylist, LinhaPaisApi[]>;
 }
 
 /** Fontes das playlists, injetáveis (testes usam falsas; a real é fontesReais). */
@@ -410,6 +423,73 @@ function playlist(
   };
 }
 
+// Construtores puros (dados já carregados). O índice passa só a 1ª linha
+// para montar o cartão: mesmo título/subtítulo/capa da playlist inteira.
+
+function playlistAoVivo(plataforma: PlataformaPlaylist, itens: ItemEmAltaPlaylist[], cat: CatalogoTocavel): Playlist {
+  const faixas = itens.slice(0, LIMITE_AO_VIVO).map((i, k) => faixaDoChart(cat, i.t, k + 1, fmt(i.n), i.c));
+  return playlist({ tipo: "ao-vivo", plataforma }, TITULO_AO_VIVO[plataforma], SUB_AO_VIVO, faixas, plataforma);
+}
+
+const tituloPais = (pais: string): string => `Top 50 ${emTitulo(pais)}`;
+
+/** `linhas` já do país e em ordem de posição (não vazia). */
+function playlistPais(id: IdPlaylist & { tipo: "pais" }, linhas: LinhaAoVivoPais[], cat: CatalogoTocavel): Playlist {
+  // id como foi pedido; o título usa a grafia de pais_peso (com acento).
+  const faixas = linhas.slice(0, LIMITE_PAIS).map((l) => faixaDoChart(cat, l.t, l.pos, l.s, l.c));
+  return playlist(id, tituloPais(linhas[0].pais), `${NOME_PLATAFORMA[id.plataforma]} · ao vivo`, faixas, id.plataforma);
+}
+
+function playlistGlobal100(global100: SemanaPlaylists["global100"], cat: CatalogoTocavel): Playlist {
+  const faixas = global100.map((l, k) => faixaDoChart(cat, l.titulo, k + 1, l.valor));
+  return playlist({ tipo: "global100" }, "Global 100", SUB_SEMANA, faixas);
+}
+
+/** `linhas` já da parada e em ordem de posição (não vazia). */
+function playlistParada(id: IdPlaylist & { tipo: "parada" }, linhas: LinhaPaisApi[], cat: CatalogoTocavel): Playlist {
+  const faixas = linhas.map((l) => faixaDoChart(cat, l.tit, l.pos, l.val, l.capa));
+  return playlist(id, linhas[0].pais, SUB_SEMANA, faixas);
+}
+
+/**
+ * Faixas do Global 100 por gênero (caixa alta sem acento), na ordem do chart.
+ * Faixa sem catálogo fica fora; `pos` = posição no gênero (1..N),
+ * `posGlobal` = posição no Global 100.
+ */
+function faixasPorGenero(global100: SemanaPlaylists["global100"], cat: CatalogoTocavel): Map<string, FaixaPlaylist[]> {
+  const porGenero = new Map<string, FaixaPlaylist[]>();
+  global100.forEach((l, k) => {
+    const f = faixaDoChart(cat, l.titulo, k + 1, l.valor);
+    const genero = f.musica ? normalizarGenero(f.musica.genero || "") : "";
+    if (!genero) return;
+    const lista = porGenero.get(genero) ?? [];
+    lista.push({ ...f, pos: lista.length + 1, posGlobal: f.pos });
+    porGenero.set(genero, lista);
+  });
+  return porGenero;
+}
+
+function playlistGenero(genero: string, faixas: FaixaPlaylist[]): Playlist {
+  const nome = emTitulo(faixas[0].musica!.genero || genero, { siglas: false });
+  return playlist({ tipo: "genero", genero }, `Top ${nome}`, SUB_SEMANA, faixas);
+}
+
+function playlistHot(itens: EmpirePlayCleanItem[], cat: CatalogoTocavel): Playlist {
+  return playlist({ tipo: "hot" }, "Hot", SUB_HOT, itens.map((item, k) => faixaDoItem(cat, item, k + 1)));
+}
+
+/** Agrupa por nome (sem acento/caixa), na ordem da 1ª aparição. */
+function agruparPorNome<T extends { pais: string }>(linhas: T[]): T[][] {
+  const grupos = new Map<string, T[]>();
+  for (const l of linhas) {
+    const k = semAcentoMaiusculo(l.pais);
+    const g = grupos.get(k);
+    if (g) g.push(l);
+    else grupos.set(k, [l]);
+  }
+  return [...grupos.values()];
+}
+
 /**
  * Monta uma playlist pelo id. `null` quando o país/parada/gênero não existe
  * (ou não tem nenhuma faixa). Determinístico: mesmas fontes → mesma resposta.
@@ -418,56 +498,167 @@ export async function montarPlaylist(id: IdPlaylist, fontes: FontesPlaylists): P
   switch (id.tipo) {
     case "ao-vivo": {
       const [emAlta, cat] = await Promise.all([fontes.emAlta(), fontes.catalogo()]);
-      const faixas = (emAlta[id.plataforma] ?? [])
-        .slice(0, LIMITE_AO_VIVO)
-        .map((i, k) => faixaDoChart(cat, i.t, k + 1, fmt(i.n), i.c));
-      return playlist(id, TITULO_AO_VIVO[id.plataforma], SUB_AO_VIVO, faixas, id.plataforma);
+      return playlistAoVivo(id.plataforma, emAlta[id.plataforma] ?? [], cat);
     }
     case "pais": {
       const [porPais, cat] = await Promise.all([fontes.aoVivoPaises(), fontes.catalogo()]);
       const alvo = semAcentoMaiusculo(id.pais);
-      const linhas = porPos((porPais[id.plataforma] ?? []).filter((l) => semAcentoMaiusculo(l.pais) === alvo)).slice(0, LIMITE_PAIS);
-      if (!linhas.length) return null;
-      // id como foi pedido; o título usa a grafia de pais_peso (com acento).
-      const faixas = linhas.map((l) => faixaDoChart(cat, l.t, l.pos, l.s, l.c));
-      return playlist(
-        id,
-        `Top 50 ${emTitulo(linhas[0].pais)}`,
-        `${NOME_PLATAFORMA[id.plataforma]} · ao vivo`,
-        faixas,
-        id.plataforma,
-      );
+      const linhas = porPos((porPais[id.plataforma] ?? []).filter((l) => semAcentoMaiusculo(l.pais) === alvo));
+      return linhas.length ? playlistPais(id, linhas, cat) : null;
     }
     case "global100": {
       const [semana, cat] = await Promise.all([fontes.semana(), fontes.catalogo()]);
-      const faixas = semana.global100.map((l, k) => faixaDoChart(cat, l.titulo, k + 1, l.valor));
-      return playlist(id, "Global 100", SUB_SEMANA, faixas);
+      return playlistGlobal100(semana.global100, cat);
     }
     case "parada": {
       const [semana, cat] = await Promise.all([fontes.semana(), fontes.catalogo()]);
       const alvo = semAcentoMaiusculo(id.parada);
       const linhas = porPos(semana.paradas.filter((l) => semAcentoMaiusculo(l.pais) === alvo));
-      if (!linhas.length) return null;
-      const nome = linhas[0].pais;
-      const faixas = linhas.map((l) => faixaDoChart(cat, l.tit, l.pos, l.val, l.capa));
-      return playlist(id, nome, SUB_SEMANA, faixas);
+      return linhas.length ? playlistParada(id, linhas, cat) : null;
     }
     case "genero": {
       const [semana, cat] = await Promise.all([fontes.semana(), fontes.catalogo()]);
-      // Faixa sem catálogo (ou de outro gênero) fica fora; `pos` = posição no
-      // gênero (1..N), `posGlobal` = posição no Global 100.
       const genero = normalizarGenero(id.genero);
-      const faixas = semana.global100
-        .map((l, k) => faixaDoChart(cat, l.titulo, k + 1, l.valor))
-        .filter((f) => f.musica && normalizarGenero(f.musica.genero || "") === genero)
-        .map((f, k): FaixaPlaylist => ({ ...f, pos: k + 1, posGlobal: f.pos }));
-      if (!faixas.length) return null;
-      const nome = emTitulo(faixas[0].musica!.genero || genero, { siglas: false });
-      return playlist({ tipo: "genero", genero }, `Top ${nome}`, SUB_SEMANA, faixas);
+      const faixas = faixasPorGenero(semana.global100, cat).get(genero);
+      return faixas?.length ? playlistGenero(genero, faixas) : null;
     }
     case "hot": {
       const [itens, cat] = await Promise.all([fontes.hot(), fontes.catalogo()]);
-      return playlist(id, "Hot", SUB_HOT, itens.map((item, k) => faixaDoItem(cat, item, k + 1)));
+      return playlistHot(itens, cat);
     }
   }
+}
+
+// ---- Índice: destaque + prateleiras ----
+
+export interface CartaoPlaylist {
+  id: string;
+  titulo: string;
+  subtitulo: string;
+  capa_url: string | null;
+  aoVivo: boolean;
+}
+
+export interface DestaquePlaylists {
+  id: string;
+  titulo: string;
+  /** "Artista - Título" da #1 ao vivo. */
+  musica: string;
+  /** Posições que a #1 ao vivo subiu desde o último chart semanal. */
+  subiu: number;
+  /** Valor ao vivo da #1, formatado. */
+  valor: string;
+  capa_url: string | null;
+}
+
+export interface IndicePlaylists {
+  destaque: DestaquePlaylists | null;
+  /** 3 ao vivo + Global 100 (só as que têm faixas). */
+  globais: CartaoPlaylist[];
+  /** Top 50 por país, na ordem do peso (ordem de fontes.aoVivoPaises). */
+  paises: Record<PlataformaPlaylist, CartaoPlaylist[]>;
+  /** Paradas oficiais pela `ordem` (empate pelo nome). */
+  paradas: CartaoPlaylist[];
+  /** Gêneros com ≥ MIN_FAIXAS_GENERO faixas no Global 100 (mais faixas primeiro, empate pelo nome) + Hot no fim. */
+  generos: CartaoPlaylist[];
+}
+
+const MIN_FAIXAS_GENERO = 10;
+
+/** Cartão de uma playlist; null se ela não tem faixas (prateleira não mostra playlist vazia). */
+function cartao(p: Playlist): CartaoPlaylist | null {
+  if (!p.faixas.length) return null;
+  return { id: p.id, titulo: p.titulo, subtitulo: p.subtitulo, capa_url: p.capa_url, aoVivo: p.aoVivo };
+}
+const naoNulos = <T>(l: (T | null)[]): T[] => l.filter((x): x is T => x !== null);
+const numero = (s: string): number => Number(String(s ?? "").replace(/[^\d]/g, "")) || 0;
+const comparar = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+interface CandidatoDestaque extends DestaquePlaylists {
+  valorNum: number;
+}
+
+/**
+ * Subida da faixa #1 ao vivo: posição da mesma música (`chave`) no chart
+ * semanal − 1; fora do chart semanal conta como (tamanho + 1) − 1.
+ */
+function subida(chave: string, semanal: { titulo: string; pos: number }[], chaveDe: (t: string) => string): number {
+  const achada = semanal.find((l) => chaveDe(l.titulo) === chave);
+  return (achada ? achada.pos : semanal.length + 1) - 1;
+}
+
+function candidato(p: Playlist, subiu: number, valorNum: number): CandidatoDestaque {
+  const f = p.faixas[0];
+  return {
+    id: p.id,
+    titulo: p.titulo,
+    musica: f.artista ? `${f.artista} - ${f.titulo}` : f.titulo,
+    subiu,
+    valor: f.valor,
+    capa_url: p.capa_url,
+    valorNum,
+  };
+}
+
+/**
+ * Índice das playlists. Determinístico: mesmas fontes → mesmo índice.
+ * Cartões só leem a #1 de cada playlist (o índice é recalculado a cada 30 s).
+ */
+export async function montarIndice(fontes: FontesPlaylists): Promise<IndicePlaylists> {
+  const [emAlta, porPais, semana, hot, cat] = await Promise.all([
+    fontes.emAlta(),
+    fontes.aoVivoPaises(),
+    fontes.semana(),
+    fontes.hot(),
+    fontes.catalogo(),
+  ]);
+  // O mesmo título aparece em muitos países: liga ao catálogo uma vez só.
+  const chaves = new Map<string, string>();
+  const chaveDe = (t: string): string => {
+    let c = chaves.get(t);
+    if (c === undefined) chaves.set(t, (c = chaveDaFaixa(cat, t)));
+    return c;
+  };
+
+  const candidatos: CandidatoDestaque[] = [];
+  const globais: (CartaoPlaylist | null)[] = [];
+  const paises = {} as Record<PlataformaPlaylist, CartaoPlaylist[]>;
+  for (const plat of PLATAFORMAS) {
+    const itens = emAlta[plat] ?? [];
+    const p = playlistAoVivo(plat, itens.slice(0, 1), cat);
+    globais.push(cartao(p));
+    if (p.faixas.length) candidatos.push(candidato(p, subida(p.faixas[0].chave, semana.plataformas?.[plat] ?? [], chaveDe), itens[0].n));
+
+    const semanaPorPais = new Map(
+      agruparPorNome(semana.paises?.[plat] ?? []).map((g) => [semAcentoMaiusculo(g[0].pais), porPos(g)]),
+    );
+    paises[plat] = agruparPorNome(porPais[plat] ?? []).map((g) => {
+      const linhas = porPos(g);
+      const pl = playlistPais({ tipo: "pais", plataforma: plat, pais: linhas[0].pais }, linhas.slice(0, 1), cat);
+      const semanal = (semanaPorPais.get(semAcentoMaiusculo(linhas[0].pais)) ?? []).map((l) => ({ titulo: l.tit, pos: l.pos }));
+      candidatos.push(candidato(pl, subida(pl.faixas[0].chave, semanal, chaveDe), numero(linhas[0].s)));
+      return cartao(pl)!;
+    });
+  }
+  globais.push(cartao(playlistGlobal100(semana.global100.slice(0, 1), cat)));
+
+  const paradas = agruparPorNome(semana.paradas)
+    .map((g) => porPos(g))
+    .sort((a, b) => (a[0].ordem ?? Infinity) - (b[0].ordem ?? Infinity) || comparar(a[0].pais, b[0].pais))
+    .map((linhas) => cartao(playlistParada({ tipo: "parada", parada: linhas[0].pais }, linhas.slice(0, 1), cat)));
+
+  const generos = [...faixasPorGenero(semana.global100, cat)]
+    .filter(([, faixas]) => faixas.length >= MIN_FAIXAS_GENERO)
+    .sort((a, b) => b[1].length - a[1].length || comparar(a[0], b[0]))
+    .map(([genero, faixas]) => cartao(playlistGenero(genero, faixas)));
+  generos.push(cartao(playlistHot(hot.slice(0, 1), cat)));
+
+  // Maior subida; empate: maior valor ao vivo, depois id. Ninguém subiu → Spotify Global.
+  candidatos.sort((a, b) => b.subiu - a.subiu || b.valorNum - a.valorNum || comparar(a.id, b.id));
+  const melhor = candidatos[0]?.subiu > 0 ? candidatos[0] : candidatos.find((c) => c.id === "ao-vivo:spotify");
+  const destaque: DestaquePlaylists | null = melhor
+    ? { id: melhor.id, titulo: melhor.titulo, musica: melhor.musica, subiu: melhor.subiu, valor: melhor.valor, capa_url: melhor.capa_url }
+    : null;
+
+  return { destaque, globais: naoNulos(globais), paises, paradas: naoNulos(paradas), generos: naoNulos(generos) };
 }

@@ -10,8 +10,11 @@ import {
   montarPlaylist,
   carregarHot,
   emTitulo,
+  montarIndice,
+  fontesReais,
   type CatalogoTocavel,
   type FontesPlaylists,
+  type SemanaPlaylists,
 } from "../backend/src/services/playlistsEmpirePlay";
 import type { EmpirePlayCleanItem } from "../backend/src/controllers/empirePlayController";
 import { criarD1Sqlite } from "./charts-d1-sqlite";
@@ -212,12 +215,17 @@ test("montarCatalogoTocavel: entrada embaralhada dá o mesmo resultado (empates 
 
 const vazioPlat = () => ({ spotify: [], apple: [], youtube: [] });
 
-function fontesFalsas(over: Partial<{ [K in keyof FontesPlaylists]: Awaited<ReturnType<FontesPlaylists[K]>> }>): FontesPlaylists {
+type OverFontes = Partial<Omit<{ [K in keyof FontesPlaylists]: Awaited<ReturnType<FontesPlaylists[K]>> }, "semana">> & {
+  semana?: Partial<SemanaPlaylists>;
+};
+
+function fontesFalsas(over: OverFontes): FontesPlaylists {
   const cat = over.catalogo ?? catalogoDeTeste([], []);
+  const semana: SemanaPlaylists = { global100: [], paradas: [], plataformas: vazioPlat(), paises: vazioPlat(), ...over.semana };
   return {
     emAlta: async () => over.emAlta ?? vazioPlat(),
     aoVivoPaises: async () => over.aoVivoPaises ?? vazioPlat(),
-    semana: async () => over.semana ?? { global100: [], paradas: [] },
+    semana: async () => semana,
     hot: async () => over.hot ?? [],
     catalogo: async () => cat,
   };
@@ -430,4 +438,332 @@ test("montarPlaylist país: sigla no título fica em caixa alta (Top 50 EUA)", a
     aoVivoPaises: { ...vazioPlat(), spotify: [{ pais: "EUA", pos: 1, t: "A - B", s: "1", c: "", art: "" }] },
   });
   expect(await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "EUA" }, fontes)).toMatchObject({ titulo: "Top 50 EUA", id: "pais:spotify:EUA" });
+});
+
+// ---- Índice (prateleiras + destaque) ----
+
+const linhaPais = (pais: string, pos: number, t: string, s: string) => ({ pais, pos, t, s, c: "", art: "" });
+const linhaSemanaPais = (pais: string, pos: number, tit: string) =>
+  ({ pais, pos, tit, val: "1", mes: "", art: "", capa: "", st: "" });
+const linhaParadaOrdem = (pais: string, ordem: number, pos: number, tit: string) =>
+  ({ ...linhaParada(pais, pos, tit, "1"), ordem });
+
+/** 12 Pop, 10 Axé, 10 Rock, 9 Rap no catálogo (todas no Global 100). */
+function catalogoGeneros(): { cat: CatalogoTocavel; global100: { titulo: string; valor: string }[] } {
+  const grupos: [string, number][] = [["Rock", 10], ["Pop", 12], ["Rap", 9], ["Axé", 10]];
+  const musicas: MusicaTeste[] = [];
+  for (const [genero, n] of grupos)
+    for (let i = 0; i < n; i++)
+      musicas.push({ titulo: `${genero} ${i}`, artista: `Art ${genero}`, codigo_unico: `${genero}${i}`, audioUrl: "x.mp3", coverUrl: `${genero}${i}.jpg`, genero });
+  return {
+    cat: catalogoDeTeste(musicas, []),
+    global100: musicas.map((m, k) => ({ titulo: `${m.artista} - ${m.titulo}`, valor: String(1000 - k) })),
+  };
+}
+
+function fontesIndice(): FontesPlaylists {
+  const { cat, global100 } = catalogoGeneros();
+  return fontesFalsas({
+    catalogo: cat,
+    emAlta: {
+      spotify: [{ t: "Art Pop - Pop 3", n: 5000, s: "", p: "", c: "" }],
+      apple: [{ t: "Art Rock - Rock 1", n: 400, s: "", p: "", c: "" }],
+      youtube: [{ t: "Art Rap - Rap 2", n: 30, s: "", p: "", c: "" }],
+    },
+    aoVivoPaises: {
+      spotify: [
+        linhaPais("ESTADOS UNIDOS", 1, "Art Pop - Pop 1", "10"),
+        linhaPais("REINO UNIDO", 2, "Art Pop - Pop 2", "5"),
+        linhaPais("REINO UNIDO", 1, "Art Rock - Rock 2", "9"),
+        linhaPais("ÁUSTRIA", 1, "Art Axé - Axé 0", "1"),
+      ],
+      apple: [linhaPais("BRASIL", 1, "Art Axé - Axé 1", "3")],
+      youtube: [],
+    },
+    semana: {
+      global100,
+      paradas: [
+        linhaParadaOrdem("UK CHARTS", 2, 1, "Art Rap - Rap 0"),
+        linhaParadaOrdem("BILLBOARD HOT 100", 1, 1, "Art Pop - Pop 0"),
+        linhaParadaOrdem("ARIA", 2, 1, "Art Rock - Rock 0"),
+        linhaParadaOrdem("BILLBOARD HOT 100", 1, 2, "Art Rap - Rap 1"),
+      ],
+    },
+    hot: [{ id: "musicas_h", type: "musicas", title: "Nova", artist: "Rayna", coverUrl: "nova.jpg" }],
+  });
+}
+
+test("montarIndice: ordem das prateleiras, países na ordem recebida (peso), gêneros ≥ 10 + Hot no fim", async () => {
+  const fontes = fontesIndice();
+  const ind = await montarIndice(fontes);
+  expect(ind.globais.map((c) => c.id)).toEqual(["ao-vivo:spotify", "ao-vivo:apple", "ao-vivo:youtube", "semana:global100"]);
+  expect(ind.paises.spotify.map((c) => [c.id, c.titulo])).toEqual([
+    ["pais:spotify:ESTADOS UNIDOS", "Top 50 Estados Unidos"],
+    ["pais:spotify:REINO UNIDO", "Top 50 Reino Unido"],
+    ["pais:spotify:ÁUSTRIA", "Top 50 Áustria"],
+  ]);
+  expect(ind.paises.apple.map((c) => c.id)).toEqual(["pais:apple:BRASIL"]);
+  expect(ind.paises.youtube).toEqual([]);
+  // paradas pela `ordem`, empate pelo nome
+  expect(ind.paradas.map((c) => c.titulo)).toEqual(["BILLBOARD HOT 100", "ARIA", "UK CHARTS"]);
+  // Pop (12), depois Axé e Rock (10, pelo nome); Rap (9) fica fora; Hot por último
+  expect(ind.generos.map((c) => [c.id, c.titulo])).toEqual([
+    ["semana:genero:POP", "Top Pop"],
+    ["semana:genero:AXE", "Top Axé"],
+    ["semana:genero:ROCK", "Top Rock"],
+    ["semana:hot", "Hot"],
+  ]);
+  // cada cartão = o resumo da playlist que ele abre (mesmo id, título, capa da #1)
+  const todos = [...ind.globais, ...ind.paises.spotify, ...ind.paises.apple, ...ind.paradas, ...ind.generos];
+  for (const c of todos) {
+    const p = (await montarPlaylist(parseIdPlaylist(c.id)!, fontes))!;
+    expect(c).toEqual({ id: p.id, titulo: p.titulo, subtitulo: p.subtitulo, capa_url: p.capa_url, aoVivo: p.aoVivo });
+  }
+  expect(ind.paises.spotify[1].capa_url).toBe("Rock2.jpg");
+  // determinístico
+  expect(await montarIndice(fontes)).toEqual(ind);
+});
+
+test("montarIndice: sem dados → listas vazias e destaque null", async () => {
+  expect(await montarIndice(fontesFalsas({}))).toEqual({
+    destaque: null,
+    globais: [],
+    paises: { spotify: [], apple: [], youtube: [] },
+    paradas: [],
+    generos: [],
+  });
+});
+
+test("destaque: maior subida do #1 ao vivo contra o último chart semanal; empate por valor ao vivo; sem subida → Spotify Global", async () => {
+  const base = {
+    catalogo: CAT_PLAYLISTS,
+    emAlta: {
+      spotify: [{ t: "Rayna - Shapeshifter", n: 1000, s: "", p: "", c: "" }],
+      apple: [{ t: "TED - Bastarda", n: 50, s: "", p: "", c: "" }],
+      youtube: [],
+    },
+  };
+  const semanal = (titulos: string[]) => titulos.map((titulo, k) => ({ titulo, pos: k + 1 }));
+  const fontes = fontesFalsas({
+    ...base,
+    aoVivoPaises: {
+      spotify: [
+        linhaPais("BRASIL", 1, "Brida - Follia", "100"),
+        linhaPais("REINO UNIDO", 1, "Brida - Follia", "2.592.249"),
+      ],
+      apple: [],
+      youtube: [],
+    },
+    semana: {
+      plataformas: {
+        // Shapeshifter era #3 → subiu 2
+        spotify: semanal(["A - 1", "B - 2", "Rayna - Shapeshifter", "C - 4"]),
+        // Bastarda não estava (4 faixas) → subiu 4
+        apple: semanal(["A - 1", "B - 2", "C - 3", "D - 4"]),
+        youtube: [],
+      },
+      paises: {
+        spotify: [
+          // Follia era #7 nos dois países → subiu 6; Reino Unido vence pelo valor ao vivo
+          ...["A", "B", "C", "D", "E", "F"].map((x, k) => linhaSemanaPais("REINO UNIDO", k + 1, `${x} - x`)),
+          linhaSemanaPais("REINO UNIDO", 7, "BRIDA - FOLLIA"),
+          ...["A", "B", "C", "D", "E", "F"].map((x, k) => linhaSemanaPais("BRASIL", k + 1, `${x} - x`)),
+          linhaSemanaPais("BRASIL", 7, "Brida - Follia"),
+        ],
+        apple: [],
+        youtube: [],
+      },
+    },
+  });
+  expect((await montarIndice(fontes)).destaque).toEqual({
+    id: "pais:spotify:REINO UNIDO",
+    titulo: "Top 50 Reino Unido",
+    musica: "Brida - Follia",
+    subiu: 6,
+    valor: "2.592.249",
+    capa_url: "follia.jpg",
+  });
+
+  // Sem os países: Apple (fora do chart semanal de 4 → subiu 4) vence o Spotify (subiu 2)
+  const semPaises = fontesFalsas({
+    ...base,
+    semana: {
+      plataformas: { spotify: semanal(["A - 1", "B - 2", "Rayna - Shapeshifter"]), apple: semanal(["A - 1", "B - 2", "C - 3", "D - 4"]), youtube: [] },
+    },
+  });
+  expect((await montarIndice(semPaises)).destaque).toMatchObject({ id: "ao-vivo:apple", subiu: 4, musica: "TED - Bastarda", valor: "50" });
+
+  // Ninguém subiu (#1 já era #1; chart semanal vazio conta 0) → Spotify Global com subiu 0
+  const parado = fontesFalsas({
+    ...base,
+    semana: { plataformas: { spotify: semanal(["Rayna - Shapeshifter", "A - 1"]), apple: [], youtube: [] } },
+  });
+  expect((await montarIndice(parado)).destaque).toEqual({
+    id: "ao-vivo:spotify",
+    titulo: "Top 100 Spotify Global",
+    musica: "Rayna - Shapeshifter",
+    subiu: 0,
+    valor: "1.000",
+    capa_url: "shape.jpg",
+  });
+});
+
+test("destaque: empate em subida e valor → menor id", async () => {
+  const fontes = fontesFalsas({
+    catalogo: CAT_PLAYLISTS,
+    aoVivoPaises: {
+      spotify: [linhaPais("REINO UNIDO", 1, "Brida - Follia", "10"), linhaPais("BRASIL", 1, "Brida - Follia", "10")],
+      apple: [],
+      youtube: [],
+    },
+    semana: {
+      paises: {
+        spotify: [linhaSemanaPais("REINO UNIDO", 1, "A - x"), linhaSemanaPais("BRASIL", 1, "A - x")],
+        apple: [],
+        youtube: [],
+      },
+    },
+  });
+  expect((await montarIndice(fontes)).destaque).toMatchObject({ id: "pais:spotify:BRASIL", subiu: 1 });
+});
+
+// ---- Rota /api/empire-play/playlists (fontes reais: D1 SQLite + planilhas trocadas) ----
+import { googleSheetsService } from "../backend/src/services/googleSheetsService";
+import { definirRelogioAoVivo, limparCacheCharts } from "../backend/src/controllers/chartsController";
+import { getPlaylistsEmpirePlayController } from "../backend/src/controllers/playlistsEmpirePlayController";
+import { ingerirSemana } from "../backend/src/services/chartsD1/repo";
+
+const EM_ALTA_PLAYLISTS: string[][] = [
+  ["", "Título", "", "Streams", "Plataforma", "Var", "Capa"],
+  ["", "Art9 - Song9", "", "9.000.000", "Spotify", "+1", ""],
+  ["", "Art1 - Song1", "", "5.000.000", "Spotify", "-", ""],
+  ["", "Art2 - Song2", "", "700.000", "Apple Music", "=", ""],
+  ["", "Art3 - Song3", "", "50.000", "YouTube", "+2", ""],
+];
+
+/** D1 em memória: catálogo (10 Pop) + 2 semanas de charts ativadas; `consultas` só registra depois de montado. */
+async function bancoPlaylists() {
+  const consultas: string[] = [];
+  let gravando = false;
+  const db = criarD1Sqlite(":memory:", (sql) => { if (gravando) consultas.push(sql); });
+  for (const s of [...MUSICAS_CREATE_STATEMENTS, ...VIDEOS_CREATE_STATEMENTS, ...CHARTS_D1_SCHEMA]) db.exec(s);
+  const musicas = Array.from({ length: 10 }, (_, i) => [`Art${i} - Song${i}`, `Art${i}`]);
+  db.exec(`INSERT INTO musicas (chave, codigo_unico, titulo, artista, capa_url, audio_url, genero, pendente) VALUES ${
+    musicas.map((_, i) => `('k${i}', 'S${i}', 'Song${i}', 'Art${i}', 'capa${i}.jpg', 'a${i}.mp3', 'Pop', 0)`).join(",")}`);
+  const charts = ["BILLBOARD HOT 100", "SPOTIFY", "YOUTUBE", "APPLE MUSIC", "DIGITAL SALES"];
+  const semana = (data: string, fator: number) =>
+    charts.flatMap((chart, ci) =>
+      musicas.map((_, i) => musicas[(i + ci + fator) % musicas.length]).map(([titulo, art], i) =>
+        [chart, data, String(i + 1), titulo, String((musicas.length - i) * 1000 * fator), "", "", art]),
+    );
+  const pesos = [
+    ["ESTADOS UNIDOS", "30,00%", "35,00%", "25,00%"],
+    ["REINO UNIDO", "8,00%", "9,00%", "6,00%"],
+    ["AUSTRÁLIA", "2,00%", "2,50%", "1,50%"],
+  ];
+  const artistas = [["Art0", "Australia", "", ""], ["Art1", "Reino Unido", "", ""], ["Art2", "Estados Unidos", "", ""]];
+  for (const [data, fator] of [["04/11/2026", 1], ["11/11/2026", 2]] as const) {
+    const r = await ingerirSemana(db, { linhas: semana(data, fator), modo: "historico", pesos, artistas });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+  }
+  expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
+  gravando = true;
+  return { db, consultas };
+}
+
+/** Roda `fn` com `db` como D1 do app, planilhas trocadas (EM Alta simulada) e relógio do ao vivo injetado. */
+async function comRotaPlaylists(db: unknown, fn: (lidas: string[], avancar: (ms: number) => void) => Promise<void>) {
+  const g = globalThis as Record<string, unknown>;
+  const svc = googleSheetsService as unknown as Record<string, { readValues: (s: string) => Promise<string[][]> }>;
+  const chaves = ["chartsBase", "chartsCountries", "chartsAlbums", "principal", "chartsRealtime"];
+  const antes = { db: g.__CATALOGO_DB__, ...Object.fromEntries(chaves.map((k) => [k, svc[k].readValues])) } as Record<string, any>;
+  const lidas: string[] = [];
+  let agora = 1_000_000;
+  g.__CATALOGO_DB__ = db;
+  for (const k of chaves)
+    svc[k].readValues = async (s: string) => {
+      lidas.push(`${k}:${s}`);
+      return k === "chartsRealtime" && s === "EM Alta" ? EM_ALTA_PLAYLISTS : [];
+    };
+  definirRelogioAoVivo(() => agora);
+  limparCacheCharts();
+  limparCachePlaylists();
+  try {
+    await fn(lidas, (ms) => { agora += ms; });
+  } finally {
+    g.__CATALOGO_DB__ = antes.db;
+    for (const k of chaves) svc[k].readValues = antes[k];
+    definirRelogioAoVivo(null);
+    limparCacheCharts();
+    limparCachePlaylists();
+  }
+}
+const rota = (q = "") => getPlaylistsEmpirePlayController(new Request(`http://x/api/empire-play/playlists${q}`));
+
+test("rota: id inválido ou inexistente → 404 com a mensagem exata", async () => {
+  const { db } = await bancoPlaylists();
+  await comRotaPlaylists(db, async () => {
+    for (const q of ["?id=pais:spotify:MARTE", "?id=qualquer", "?id=", "?id=semana:parada:NADA", "?id=semana:genero:JAZZ"]) {
+      const r = await rota(q);
+      expect(r.status).toBe(404);
+      expect(await r.json()).toEqual({ success: false, error: "Playlist não encontrada." });
+    }
+  });
+});
+
+test("rota sem D1 → índice com listas vazias, destaque null, status 200", async () => {
+  await comRotaPlaylists(undefined, async () => {
+    const svc = googleSheetsService as unknown as Record<string, { readValues: (s: string) => Promise<string[][]> }>;
+    svc.chartsRealtime.readValues = async () => [];
+    const r = await rota();
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({
+      success: true,
+      data: { destaque: null, globais: [], paises: { spotify: [], apple: [], youtube: [] }, paradas: [], generos: [] },
+    });
+  });
+});
+
+test("rota com D1: índice e playlist das fontes reais, só SELECT, só a EM Alta lida, 1 leitura em 30 s", async () => {
+  const { db, consultas } = await bancoPlaylists();
+  await comRotaPlaylists(db, async (lidas, avancar) => {
+    const r = await rota();
+    expect(r.status).toBe(200);
+    const corpo = (await r.json()) as { success: boolean; data: Awaited<ReturnType<typeof montarIndice>> };
+    expect(corpo.success).toBe(true);
+    const ind = corpo.data;
+    expect(ind).toEqual(JSON.parse(JSON.stringify(await montarIndice(fontesReais()))));
+    expect(ind.globais.map((c) => c.id)).toEqual(["ao-vivo:spotify", "ao-vivo:apple", "ao-vivo:youtube", "semana:global100"]);
+    expect(ind.globais[0]).toMatchObject({ titulo: "Top 100 Spotify Global", capa_url: "capa9.jpg", aoVivo: true });
+    expect(ind.paises.spotify.map((c) => c.id)).toEqual(["pais:spotify:ESTADOS UNIDOS", "pais:spotify:REINO UNIDO", "pais:spotify:AUSTRÁLIA"]);
+    expect(ind.paradas.length).toBeGreaterThan(0);
+    expect(ind.generos.map((c) => c.id)).toEqual(["semana:genero:POP"]); // sem lançamentos datados → sem Hot
+    // Song3 (#1 ao vivo no YouTube) era #10 no último YOUTUBE semanal → subiu 9
+    expect(ind.destaque).toEqual({
+      id: "ao-vivo:youtube", titulo: "Top 100 YouTube Hits", musica: "Art3 - Song3", subiu: 9, valor: "50.000", capa_url: "capa3.jpg",
+    });
+
+    const g = await rota("?id=semana:global100");
+    expect(g.status).toBe(200);
+    const pl = ((await g.json()) as { data: { id: string; faixas: { pos: number; tocavel: boolean }[] } }).data;
+    expect(pl.id).toBe("semana:global100");
+    expect(pl.faixas.map((f) => f.pos)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(pl.faixas.every((f) => f.tocavel)).toBe(true);
+    const uk = await rota(`?id=${encodeURIComponent("pais:spotify:REINO UNIDO")}`);
+    expect(((await uk.json()) as { data: { titulo: string } }).data.titulo).toBe("Top 50 Reino Unido");
+
+    // 2ª chamada em < 30 s: mesma resposta, nenhuma leitura nova (planilha ou D1).
+    // Sem o catálogo em cache, só o cache de resposta evita reler `musicas`.
+    limparCachePlaylists();
+    const n = consultas.length;
+    avancar(10_000);
+    expect(await (await rota()).json()).toEqual(corpo);
+    expect(consultas.length).toBe(n);
+    expect(lidas).toEqual(["chartsRealtime:EM Alta"]);
+    // passou de 30 s: nova leitura da EM Alta
+    avancar(21_000);
+    await rota();
+    expect(lidas).toEqual(["chartsRealtime:EM Alta", "chartsRealtime:EM Alta"]);
+    expect(consultas.every((s) => /^\s*SELECT/i.test(s))).toBe(true);
+  });
 });
