@@ -105,7 +105,7 @@ export interface RealTimeData {
 // (cache da sessão sem validade — a tela nunca via dado novo). Busca direto
 // e, se a resposta vier vazia/erro, devolve o último valor bom daquela URL.
 const ultimoAoVivo = new Map<string, unknown>();
-async function fetchAoVivo<T>(url: string): Promise<T> {
+export async function fetchAoVivo<T>(url: string): Promise<T> {
   try {
     const r = await fetch(url, { redirect: "follow" });
     const data = await r.json();

@@ -689,3 +689,42 @@ test("/api/charts getRealTimePaises sem D1 → listas vazias", async () => {
     expect(await (await chamar("action=getRealTimePaises")).json()).toEqual({ spotify: [], apple: [], youtube: [] });
   });
 });
+test("/api/charts ao vivo: resposta não sobrevive à leitura da EM Alta de onde saiu", async () => {
+  await comAoVivo(undefined, async (lidas, avancar) => {
+    await chamar("action=getRealTime"); // t=0: lê a EM Alta (vale até t=30 s)
+    expect(leiturasEmAlta(lidas)).toBe(1);
+    avancar(29_000);
+    await chamar("action=getRealTime&x=1"); // t=29 s: resposta nova (outra URL), mesma leitura
+    expect(leiturasEmAlta(lidas)).toBe(1);
+    avancar(2_000); // t=31 s: leitura e resposta de t=29 s já venceram
+    await chamar("action=getRealTime&x=1");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+  });
+});
+
+// ---- Front: fallback do ao vivo (src/lib/charts.ts) ----
+import { fetchAoVivo } from "../src/lib/charts";
+test("fetchAoVivo: vazio/500/erro depois de um valor bom → último valor bom; vazio sem anterior → vazio", async () => {
+  const antes = globalThis.fetch;
+  const bom = { spotify: [{ t: "A", s: "1", p: "", c: "" }], apple: [], youtube: [] };
+  const vazio = { spotify: [], apple: [], youtube: [] };
+  let proxima: () => Promise<Response>;
+  globalThis.fetch = (async () => proxima()) as unknown as typeof fetch;
+  const json = (d: unknown, status = 200) => async () => new Response(JSON.stringify(d), { status });
+  try {
+    for (const [url, ruim] of [
+      ["/t/vazio", json(vazio)],
+      ["/t/500", json({ error: "x" }, 500)],
+      ["/t/throw", async () => { throw new Error("rede"); }],
+    ] as const) {
+      proxima = json(bom);
+      expect(await fetchAoVivo(url)).toEqual(bom);
+      proxima = ruim;
+      expect(await fetchAoVivo(url)).toEqual(bom);
+    }
+    proxima = json(vazio);
+    expect(await fetchAoVivo("/t/sem-anterior")).toEqual(vazio);
+  } finally {
+    globalThis.fetch = antes;
+  }
+});

@@ -7,7 +7,8 @@ import {
   type PlataformaAoVivo,
 } from "../services/chartsD1/aoVivoPaises";
 import { normalizarTitulo, type MusicaCatalogo } from "../services/chartsD1/artistas";
-import { fixImg, fmt, parseNumeroBR } from "../services/chartsD1/formato";
+import { fixImg, fmt } from "../services/chartsD1/formato";
+import { parseNumeroBR } from "../services/chartsD1/dados";
 import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
 import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
 import {
@@ -375,7 +376,7 @@ async function lerEmAlta(): Promise<EmAltaBruta> {
     // charts mostrando foto de artista em vez da capa do material.
     const item: ItemEmAltaBruto = {
       t: r[1],
-      n: parseNumeroBR(r[3]),
+      n: parseNumeroBR(String(r[3] ?? "")) ?? 0,
       s: fmt(r[3]),
       p: r[5],
       c: fixImg(capaCatalogo) || capaPlanilha,
@@ -788,7 +789,11 @@ export async function chartsApiController(request: Request): Promise<Response> {
 
   const promise = (async () => {
     const resposta = await computeChartsResponse(action, p);
-    chartsResponseCache.set(cacheKey, { ...resposta, expiresAt: agora() + ttl });
+    // Ao vivo: a resposta não pode durar mais que a leitura da EM Alta de
+    // onde saiu (senão os dois caches de 30 s somavam até ~60 s de atraso).
+    let expiresAt = agora() + ttl;
+    if (aoVivo && emAltaCache) expiresAt = Math.min(expiresAt, emAltaCache.expiresAt);
+    chartsResponseCache.set(cacheKey, { ...resposta, expiresAt });
     return resposta;
   })().finally(() => {
     chartsResponseInFlight.delete(cacheKey);
