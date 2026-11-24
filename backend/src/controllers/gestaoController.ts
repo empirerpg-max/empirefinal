@@ -877,12 +877,20 @@ export async function createSongController(request: Request): Promise<Response> 
 // Musicas.
 async function resolverLinhaEdicaoCharts(
   musicaVinculada: string,
-): Promise<{ titulo: string; codigoUnico: string } | null> {
+): Promise<{ titulo: string; codigoUnico: string; linha: number; weeksVideo: string } | null> {
   const nomeNosCharts = normalizeComparison(musicaVinculada);
+  // Lida sem range (A:ZZ) — índice 0 = linha 1 (cabeçalho), então a linha
+  // real na planilha é sempre índice + 1.
   const rows = await googleSheetsService.edicaoCharts.readValues("EDIÇÃO CHARTS");
-  const porTitulo = rows.slice(1).find((r) => normalizeComparison(r[1] || "") === nomeNosCharts);
-  if (porTitulo) {
-    return { titulo: (porTitulo[1] || "").trim(), codigoUnico: (porTitulo[55] || "").trim() };
+  const montar = (idx: number) => ({
+    titulo: (rows[idx][1] || "").trim(),
+    codigoUnico: (rows[idx][55] || "").trim(),
+    linha: idx + 1,
+    weeksVideo: (rows[idx][6] || "").trim(), // G - WEEKS VIDEO
+  });
+  const idxPorTitulo = rows.findIndex((r, i) => i > 0 && normalizeComparison(r[1] || "") === nomeNosCharts);
+  if (idxPorTitulo > 0) {
+    return montar(idxPorTitulo);
   }
   try {
     const musicasRows = await googleSheetsService.principal.readValues("Musicas");
@@ -891,13 +899,40 @@ async function resolverLinhaEdicaoCharts(
       .find((r) => normalizeComparison(r[7] || "") === nomeNosCharts);
     const codigoUnicoMusicas = porTituloMusicas ? (porTituloMusicas[25] || "").trim() : "";
     if (!codigoUnicoMusicas) return null;
-    const porCodigo = rows.slice(1).find((r) => (r[55] || "").trim() === codigoUnicoMusicas);
-    return porCodigo
-      ? { titulo: (porCodigo[1] || "").trim(), codigoUnico: codigoUnicoMusicas }
-      : null;
+    const idxPorCodigo = rows.findIndex((r, i) => i > 0 && (r[55] || "").trim() === codigoUnicoMusicas);
+    return idxPorCodigo > 0 ? { ...montar(idxPorCodigo), codigoUnico: codigoUnicoMusicas } : null;
   } catch (err) {
     console.warn("[resolverLinhaEdicaoCharts] Erro no fallback por Código único:", err);
     return null;
+  }
+}
+
+// "WEEKS VIDEO" (EDIÇÃO CHARTS!G) — é a coluna que faz o videoclipe contar
+// semana nos charts. A atualização semanal da planilha (GATILHO
+// ATUALIZAÇÃO > "ATUALIZAÇÃO SEMANAS") só INCREMENTA quem já tem número;
+// linha com G vazio nunca entra. O app nunca gravava o valor inicial aqui
+// — só marcava a caixinha em PONTOS (N/O) — então todo Music Video lançado
+// pelo app ficava fora do chart de vídeo até alguém preencher G na mão.
+// Caso real (2026-11-24): "Samantha Cooper - IT’S OVER (Official Music
+// Video)", lançado pelo jogador Justino em 19/11, ficou com G vazio (assim
+// como Hyun - Ducati, Amanda Brokne - Core e Eduarda Papper - Theatrical).
+// Grava 1 (primeira semana do clipe), igual WEEKS (F) de uma faixa nova.
+// Nunca sobrescreve um valor que já existe (relançamento/2º clipe da mesma
+// música não pode zerar a contagem que já está correndo).
+async function marcarWeeksVideoNaEdicaoCharts(
+  linhaEdicaoCharts: { linha: number; weeksVideo: string } | null,
+): Promise<boolean> {
+  if (!linhaEdicaoCharts) return false;
+  if (linhaEdicaoCharts.weeksVideo) return true;
+  try {
+    return await googleSheetsService.edicaoCharts.updateValues(
+      "EDIÇÃO CHARTS",
+      `G${linhaEdicaoCharts.linha}`,
+      [["1"]],
+    );
+  } catch (err) {
+    console.warn("[marcarWeeksVideoNaEdicaoCharts] Erro ao gravar WEEKS VIDEO:", err);
+    return false;
   }
 }
 
@@ -1092,7 +1127,7 @@ export async function criarVideoNoCatalogo(
     // batiam, então o código único ficava vazio, sem nenhum aviso). Agora
     // música vinculada é sempre obrigatória, então isso não deve mais
     // acontecer — mas o aviso continua aqui como rede de segurança.
-    let linhaEdicaoCharts: { titulo: string; codigoUnico: string } | null = null;
+    let linhaEdicaoCharts: Awaited<ReturnType<typeof resolverLinhaEdicaoCharts>> = null;
     if (videoRowIndexNovo) {
       try {
         linhaEdicaoCharts = await resolverLinhaEdicaoCharts(musicasVinculadas[0]);
@@ -1136,6 +1171,18 @@ export async function criarVideoNoCatalogo(
         warnings.push(
           `Vídeo cadastrado, mas não achei "${musicasVinculadas[0]}" na aba Pontos — a caixinha de lançamento não foi marcada, confira o vínculo.`,
         );
+      }
+      const gravouWeeksVideo = await marcarWeeksVideoNaEdicaoCharts(linhaEdicaoCharts);
+      if (!gravouWeeksVideo) {
+        warnings.push(
+          `Vídeo cadastrado, mas não consegui preencher WEEKS VIDEO de "${musicasVinculadas[0]}" em EDIÇÃO CHARTS — o clipe não vai contar semana nos charts até isso ser preenchido.`,
+        );
+        registrarLogSistema({
+          categoria: "Falha de escrita",
+          oQueAconteceu: `WEEKS VIDEO (EDIÇÃO CHARTS!G) não foi preenchido pro clipe "${fullTitle}" (música "${musicasVinculadas[0]}").`,
+          onde: "criarVideoNoCatalogo",
+          comoResolver: "Preencher 1 em EDIÇÃO CHARTS!G na linha da música vinculada.",
+        }).catch(() => {});
       }
     }
     const warning = warnings.length > 0 ? warnings.join(" ") : undefined;
