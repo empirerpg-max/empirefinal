@@ -3,6 +3,7 @@ import { test, expect } from "bun:test";
 import { sorteio01 } from "../backend/src/services/chartsD1/sorteio";
 import { fatiasRegraC, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
 import { regrasDeConfig, parseRegrasSemana, REGRAS_PADRAO } from "../backend/src/services/chartsD1/regras";
+import { fontes, pontos, emAcr, calcularParada, resolverPaisParada, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
 
 test("sorteio01: determinístico, em [0,1), varia com a chave", () => {
   expect(sorteio01("2026-11-11|x|BRASIL|nac")).toBe(sorteio01("2026-11-11|x|BRASIL|nac"));
@@ -117,4 +118,53 @@ test("carregarFocos: 'no such table' → mapa vazio; lê linhas existentes; sche
   const comLinhas: any = { prepare: () => ({ all: async () => ({ results: [{ codigo_unico: "A", pais: "BRASIL", desde: "2026-01-01" }] }) }) };
   expect(focoVigente(await carregarFocos(comLinhas), "A", "2026-02-01")).toBe("BRASIL");
   expect(FOCO_SCHEMA[0]).toContain("musica_foco");
+});
+
+const pais = (v: number) => new Map([["REINO UNIDO", v], ["ESTADOS UNIDOS", v * 3]]);
+const ms = (t: string, o: Partial<MusicaSemana> = {}): MusicaSemana => ({
+  tituloNorm: t, titulo: t, artistaPrincipal: t, semanas: 1, streamsGlobaisAnteriores: [0, 0, 0],
+  totalGlobal: { SPOTIFY: 1000, YOUTUBE: 600, "APPLE MUSIC": 300, "DIGITAL SALES": 10 },
+  porPais: { SPOTIFY: pais(100), YOUTUBE: pais(60), "APPLE MUSIC": pais(30), "DIGITAL SALES": pais(1) }, ...o });
+const P = (id: string) => REGRAS_PADRAO.paradas.find((p) => p.id === id)!;
+
+test("fontes: pagos = Apple + 45% Spotify; plataforma ausente = 0", () => {
+  expect(fontes(ms("a"), "REINO UNIDO", 0.45)).toEqual({ vendas: 1, pagos: 30 + 45, gratis_audio: 55, gratis_video: 60 });
+  const semApple = ms("b", { porPais: { SPOTIFY: pais(100) } });
+  expect(fontes(semApple, "REINO UNIDO", 0.45)).toEqual({ vendas: 0, pagos: 45, gratis_audio: 55, gratis_video: 0 });
+});
+test("pontos: SNEP ignora grátis; Brasil ignora vendas; Alemanha por receita", () => {
+  const f = { vendas: 10, pagos: 1500, gratis_audio: 6000, gratis_video: 6000 };
+  expect(pontos(f, P("FR"))).toBeCloseTo(10 + 10, 9);
+  expect(pontos(f, P("BR"))).toBeCloseTo(15 + 20 + 20, 9);
+  expect(pontos(f, P("DE"))).toBeCloseTo(10 * 1.29 + 1500 * 0.008 + 12000 * 0.0008, 9);
+});
+test("UK: no máximo 3 por artista", () => {
+  const l = ["a", "b", "c", "d"].map((t, i) => ms(t, { artistaPrincipal: "Mia", porPais: { SPOTIFY: pais(1000 - i) } }));
+  l.push(ms("e", { artistaPrincipal: "Outro", porPais: { SPOTIFY: pais(1) } }));
+  expect(calcularParada(l, P("UK"), "REINO UNIDO", 0.45).map((x) => x.tituloNorm)).toEqual(["a", "b", "c", "e"]);
+});
+test("UK: ACR usa 200/1200 quando caiu 3 semanas e semanas > 9", () => {
+  const m = ms("a", { semanas: 10, streamsGlobaisAnteriores: [1800, 1900, 2000] });
+  expect(emAcr(m, 1700, P("UK").acr!)).toBe(true);
+  expect(emAcr({ ...m, semanas: 9 }, 1700, P("UK").acr!)).toBe(false);
+  expect(emAcr({ ...m, streamsGlobaisAnteriores: [1800, 1700, 2000] }, 1700, P("UK").acr!)).toBe(false);
+});
+test("EUA: recorrência remove ≥20 semanas abaixo de #50 e sobe os de baixo", () => {
+  const l = Array.from({ length: 60 }, (_, i) => ms(`m${i}`, { semanas: i === 55 ? 25 : 1, porPais: { SPOTIFY: new Map([["ESTADOS UNIDOS", 1000 - i]]) } }));
+  const r = calcularParada(l, P("EUA"), "ESTADOS UNIDOS", 0.45);
+  expect(r.length).toBe(50);
+  expect(r.some((x) => x.tituloNorm === "m55")).toBe(false);
+});
+test("Excl. US = mundo − EUA", () => {
+  const m = ms("a");
+  const p = P("EXCL_US");
+  const esperado = pontos(fontes(m, null, 0.45), p) - pontos(fontes(m, "ESTADOS UNIDOS", 0.45), p);
+  expect(calcularParada([m], p, "ESTADOS UNIDOS", 0.45)[0].val).toBe(Math.round(esperado));
+});
+test("resolverPaisParada: aliases sem acento; ausente → parada omitida", () => {
+  expect(resolverPaisParada(P("EUA"), new Set(["EUA"]))).toBe("EUA");
+  expect(resolverPaisParada(P("AU"), new Set(["AUSTRALIA"]))).toBe("AUSTRALIA");
+  const r = paradasDaSemana([ms("a")], [], REGRAS_PADRAO, new Set(["REINO UNIDO"]));
+  expect(r.map((x) => x.parada.id)).toEqual(["UK"]);
+  expect(r[0].linhas[0].st).toBe("NEW");
 });
