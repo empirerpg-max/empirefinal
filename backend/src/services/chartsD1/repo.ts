@@ -534,17 +534,17 @@ function prepararLinhas(
 }
 
 /**
- * Grava as regras das paradas por país da semana a partir do chart_config
- * atual. OR IGNORE: um reenvio da semana mantém as regras gravadas antes, então
- * mudar o chart_config só afeta semanas futuras.
+ * Statement que grava as regras das paradas por país da semana a partir do
+ * chart_config atual (lido aqui, antes do batch). OR IGNORE: um reenvio da
+ * semana mantém as regras gravadas antes, então mudar o chart_config só afeta
+ * semanas futuras.
  */
-async function congelarRegrasDaSemana(db: D1DatabaseLike, dataIso: string): Promise<void> {
+async function statementRegrasDaSemana(db: D1DatabaseLike, dataIso: string): Promise<D1PreparedStatement> {
   const cfg = await db.prepare("SELECT chave, valor FROM chart_config").all<{ chave: string; valor: string }>();
   const regras = regrasDeConfig(new Map(cfg.results.map((c) => [c.chave, String(c.valor ?? "")])));
-  await db
+  return db
     .prepare("INSERT OR IGNORE INTO chart_regras_semana (data, versao, regras) VALUES (?, 1, ?)")
-    .bind(dataIso, JSON.stringify(regras))
-    .run();
+    .bind(dataIso, JSON.stringify(regras));
 }
 
 /** Libera a leitura do D1 na tela (chart_config.charts_d1_ativo = '1'). */
@@ -643,16 +643,17 @@ export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao
   }
 
   const chartsGravados = CHARTS.filter((c) => calculadas.some((l) => l.chart === c));
-  // Tudo ou nada: a semana, as datas e o HOF entram juntos.
+  const regrasDaSemana = await statementRegrasDaSemana(db, dataIso);
+  // Tudo ou nada: a semana, as datas, o HOF e as regras da semana entram juntos.
   await db.batch([
     db.prepare(`DELETE FROM chart_semana WHERE chart IN (${CHARTS.map(() => "?").join(", ")}) AND data = ?`).bind(...CHARTS, dataIso),
     db.prepare(`DELETE FROM chart_datas WHERE chart IN (${CHARTS.map(() => "?").join(", ")}) AND data = ?`).bind(...CHARTS, dataIso),
     ...insertsChartSemana(db, dataIso, calculadas),
     ...insertsEmLotes(db, "INSERT INTO chart_datas (chart, data)", chartsGravados.map((c) => [c, dataIso])),
     ...hof,
+    regrasDaSemana,
   ]);
   await recalcularSemanaSeguinte(db, charts, dataIso);
-  await congelarRegrasDaSemana(db, dataIso);
   if (payload.ativar === true) await ativarLeitura(db);
   await registrarIngestao(db, dataIso, modo, calculadas.length, true, prep.anomalias.join("; ") || "ok");
   return { ok: true, data: dataIso, linhas: calculadas.length };

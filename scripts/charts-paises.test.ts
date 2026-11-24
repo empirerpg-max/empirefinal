@@ -230,12 +230,14 @@ async function bancoDeTeste(o: { semApple?: boolean; semSales?: boolean } = {}) 
     ["AUSTRÁLIA", "2,00%", "2,50%", "1,50%"],
   ];
   const artistas = [["Amanda", "Australia", "", ""], ["Bob", "Reino Unido", "", ""], ["Carl", "Estados Unidos", "", ""]];
-  for (const [data, fator] of [["04/11/2026", 1], ["11/11/2026", 2]] as const) {
+  const ingerir = async (data: string, fator: number) => {
     const r = await ingerirSemana(db, { linhas: semana(data, fator), modo: "historico", pesos, artistas });
     if (!r.ok) throw new Error(JSON.stringify(r));
-  }
+  };
+  await ingerir("04/11/2026", 1);
+  await ingerir("11/11/2026", 2);
   db.exec("INSERT INTO musica_foco (codigo_unico, pais, desde, por_admin) VALUES ('C1', 'AUSTRALIA', '2026-01-01', 0)");
-  return db;
+  return Object.assign(db, { ingerir });
 }
 
 test("calcularSemanaPaises: COUNTRIES e paradas; mesma música em 4 plataformas não duplica; fixo por data", async () => {
@@ -273,4 +275,50 @@ test("calcularSemanaPaises: ingestão grava as regras da semana uma vez; formato
   const valAu = (s: typeof a) =>
     Number(s.countries.get("SPOTIFY")!.find((l) => l.pais === "AUSTRÁLIA" && l.tit === "Dua - Hit")!.val.replace(/\D/g, ""));
   expect(valAu(comFoco)).toBeGreaterThan(valAu(a));
+});
+
+/** Grava (substitui) as regras de uma semana, partindo do padrão. */
+async function gravarRegras(db: Awaited<ReturnType<typeof bancoDeTeste>>, dataIso: string, mudar: (r: typeof REGRAS_PADRAO) => void) {
+  const r = structuredClone(REGRAS_PADRAO);
+  mudar(r);
+  await db.prepare("INSERT OR REPLACE INTO chart_regras_semana (data, versao, regras) VALUES (?, 1, ?)").bind(dataIso, JSON.stringify(r)).run();
+}
+const lerRegras = async (db: Awaited<ReturnType<typeof bancoDeTeste>>, dataIso: string) =>
+  parseRegrasSemana((await db.prepare("SELECT regras FROM chart_regras_semana WHERE data = ?").bind(dataIso).all<{ regras: string }>()).results[0]?.regras)!;
+
+test("regras gravadas da semana mandam no cálculo; reingestão após mudar chart_config mantém a linha original", async () => {
+  const db = await bancoDeTeste();
+  const base = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  expect(base.paradas.some((l) => l.pais === "UK Official Charts")).toBe(true);
+
+  await gravarRegras(db, "2026-11-11", (r) => {
+    r.paises.nac_min = 8;
+    r.paises.nac_max = 9;
+    r.paradas = r.paradas.filter((p) => p.id !== "UK");
+  });
+  const mudada = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  expect(mudada.paradas.some((l) => l.pais === "UK Official Charts")).toBe(false);
+  expect(mudada.countries).not.toEqual(base.countries);
+  // Amanda (australiana) ganha mais na Austrália com o bônus de nacionalidade maior.
+  const valAu = (s: typeof base) =>
+    Number(s.countries.get("SPOTIFY")!.find((l) => l.pais === "AUSTRÁLIA" && l.tit === "Amanda - Koala")!.val.replace(/\D/g, ""));
+  expect(valAu(mudada)).toBeGreaterThan(valAu(base));
+
+  // Reenvio da semana com chart_config diferente: INSERT OR IGNORE mantém a linha gravada.
+  const antes = await lerRegras(db, "2026-11-11");
+  await db.prepare("INSERT OR REPLACE INTO chart_config (chave, valor) VALUES ('nac_max','3')").run();
+  await db.ingerir("11/11/2026", 2);
+  expect(await lerRegras(db, "2026-11-11")).toEqual(antes);
+  expect(await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map())).toEqual(mudada);
+});
+test("paradas: `st` compara com a semana anterior calculada pelas regras dela (d-1)", async () => {
+  const db = await bancoDeTeste();
+  const uk = (s: Awaited<ReturnType<typeof calcularSemanaPaises>>) => s.paradas.filter((l) => l.pais === "UK Official Charts");
+  // Mesmas 5 músicas nas duas semanas: ninguém é NEW.
+  expect(uk(await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map())).some((l) => l.st === "NEW")).toBe(false);
+  // Na semana anterior o UK tinha só Top 2: quem não estava lá vira NEW agora.
+  await gravarRegras(db, "2026-11-04", (r) => { r.paradas.find((p) => p.id === "UK")!.top = 2; });
+  const linhas = uk(await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map()));
+  expect(linhas.length).toBeGreaterThan(2);
+  expect(linhas.filter((l) => l.st !== "NEW").length).toBe(2);
 });

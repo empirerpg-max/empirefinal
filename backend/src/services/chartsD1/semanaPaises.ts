@@ -268,13 +268,23 @@ export async function calcularSemanaPaises(
     countries.set(p, linhas);
   }
 
-  // Paradas oficiais (metodologia da semana d para as duas semanas).
+  // Paradas oficiais: cada semana com as próprias regras (como em COUNTRIES);
+  // `st` compara com a mesma parada (pelo id) como a semana d-1 a mostrou.
+  const posAntesPorParada = new Map<string, Map<string, number>>();
+  if (anterior) {
+    for (const { parada, linhas } of paradasDaSemana(anterior.musicas, [], regrasAnt, paisesExistentes)) {
+      posAntesPorParada.set(parada.id, new Map(linhas.map((l) => [l.tituloNorm, l.pos])));
+    }
+  }
   const paradas: LinhaPaisApi[] = [];
-  for (const { parada, linhas } of paradasDaSemana(atual.musicas, anterior?.musicas ?? [], regras, paisesExistentes)) {
+  for (const { parada, linhas } of paradasDaSemana(atual.musicas, [], regras, paisesExistentes)) {
+    const posAntes = posAntesPorParada.get(parada.id);
     for (const l of linhas) {
+      const prev = posAntes?.get(l.tituloNorm);
+      const st = prev === undefined ? "NEW" : l.pos < prev ? "↑" : l.pos > prev ? "↓" : "=";
       paradas.push({
         pais: parada.nome, pos: l.pos, tit: l.titulo, val: fmt(l.val), mes: dataBr, art: l.art,
-        capa: capa(l.titulo, l.art), st: l.st, ordem: parada.ordem, desc: parada.descricao,
+        capa: capa(l.titulo, l.art), st, ordem: parada.ordem, desc: parada.descricao,
       });
     }
   }
