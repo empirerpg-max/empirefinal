@@ -622,3 +622,70 @@ test("calcularAoVivoPaises: usa próxima data de chart; vazio sem chart_datas/pe
   limparCacheAoVivoPaises();
   expect(await calcularAoVivoPaises(db, entrada, new Map())).toEqual(r);
 });
+
+// ───────────── API do ao vivo: getRealTime / getRealTimePaises (cache de 30 s) ─────────────
+import { definirRelogioAoVivo } from "../backend/src/controllers/chartsController";
+
+const EM_ALTA: string[][] = [
+  ["", "Título", "", "Streams", "Plataforma", "Var", "Capa"],
+  ["", "Amanda - Koala", "", "1.234.567", "Spotify", "+1", ""],
+  ["", "Bob - Freedom", "", "900.000", "Spotify", "-", ""],
+  ["", "Carl - Tea", "", "-", "Apple Music", "=", ""],
+  ["", "Dua - Hit", "", "5000", "YouTube", "+2", ""],
+];
+
+/** Como `comApi`, mas com a EM Alta simulada e um relógio injetado só nos caches do ao vivo. */
+async function comAoVivo(db: unknown, fn: (lidas: string[], avancar: (ms: number) => void) => Promise<void>) {
+  const svc = googleSheetsService as unknown as Record<string, { readValues: (s: string) => Promise<string[][]> }>;
+  const antesRT = svc.chartsRealtime.readValues;
+  let agora = 1_000_000;
+  definirRelogioAoVivo(() => agora);
+  try {
+    await comApi(db, async (lidas) => {
+      svc.chartsRealtime.readValues = async (s: string) => { lidas.push(`chartsRealtime:${s}`); return EM_ALTA; };
+      await fn(lidas, (ms) => { agora += ms; });
+    });
+  } finally {
+    svc.chartsRealtime.readValues = antesRT;
+    definirRelogioAoVivo(null);
+  }
+}
+const leiturasEmAlta = (lidas: string[]) => lidas.filter((l) => l === "chartsRealtime:EM Alta").length;
+
+test("/api/charts getRealTimePaises: uma leitura da EM Alta a cada 30 s, compartilhada com getRealTime", async () => {
+  const db = await bancoDeTeste();
+  expect(await ingerirSemana(db, { ativar: true })).toEqual({ ok: true, ativo: true });
+  await comAoVivo(db, async (lidas, avancar) => {
+    const r1 = (await (await chamar("action=getRealTimePaises")).json()) as Record<string, { pais: string }[]>;
+    expect(Object.keys(r1).sort()).toEqual(["apple", "spotify", "youtube"]);
+    expect(r1.spotify.length).toBeGreaterThan(0);
+    await chamar("action=getRealTimePaises");
+    await chamar("action=getRealTime");
+    expect(leiturasEmAlta(lidas)).toBe(1);
+    avancar(10_000);
+    await chamar("action=getRealTimePaises");
+    expect(leiturasEmAlta(lidas)).toBe(1);
+    avancar(21_000); // 31 s desde a primeira leitura
+    await chamar("action=getRealTimePaises");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+    await chamar("action=getRealTime");
+    expect(leiturasEmAlta(lidas)).toBe(2);
+  });
+});
+test("/api/charts getRealTime: mesmo formato {t, s, p, c} de sempre", async () => {
+  await comAoVivo(undefined, async () => {
+    expect(await (await chamar("action=getRealTime")).json()).toEqual({
+      spotify: [
+        { t: "Amanda - Koala", s: "1.234.567", p: "+1", c: "" },
+        { t: "Bob - Freedom", s: "900.000", p: "-", c: "" },
+      ],
+      apple: [{ t: "Carl - Tea", s: "0", p: "=", c: "" }],
+      youtube: [{ t: "Dua - Hit", s: "5.000", p: "+2", c: "" }],
+    });
+  });
+});
+test("/api/charts getRealTimePaises sem D1 → listas vazias", async () => {
+  await comAoVivo(undefined, async () => {
+    expect(await (await chamar("action=getRealTimePaises")).json()).toEqual({ spotify: [], apple: [], youtube: [] });
+  });
+});

@@ -10,6 +10,14 @@ export function fmt(v: unknown): string {
   return n.toLocaleString("pt-BR");
 }
 
+// Número pt-BR da planilha ("1.234.567", "1.234,5") → number; vazio, "-" ou
+// inválido → 0.
+export function parseNumeroBR(v: unknown): number {
+  const s = String(v ?? "").trim().replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
 // Mesma lógica do fixImg() original: extrai o ID do Drive de dentro de
 // qualquer formato de link (uc?id=, /file/d/.../view, thumbnail?id=, etc)
 // e devolve um link de thumbnail padronizado. O frontend já sabe rotear
