@@ -1,6 +1,6 @@
 # Paradas oficiais por país, foco do lançamento e pesos imprevisíveis — design
 
-Data: 2026-11-24 · Status: aprovado (rev. 4 — Digital Sales fora do que é novo)
+Data: 2026-11-24 · Status: aprovado (rev. 5)
 
 Base: `docs/superpowers/specs/2026-11-14-charts-d1-design.md` (charts no D1,
 regra B de países). Este documento troca a regra de países e cria as paradas
@@ -20,11 +20,7 @@ Austrália, e em país pequeno nenhum hit mundial lidera. O usuário quer:
 4. **Paradas oficiais por país** (Hot 100 dos EUA, UK, ARIA, Oricon…), cada
    uma com a **metodologia do país real**, calculada sobre os resultados
    **daquele país** em cada plataforma (Spotify UK, YouTube UK, Apple Music
-   UK).
-
-**Digital Sales (decisão do usuário, rev. 4):** continua só como o chart
-que já é hoje. Não entra na distribuição por país nem nas paradas oficiais,
-e nenhuma planilha/aba/script muda por causa deste projeto.
+   UK, Digital Sales UK…).
 5. Documento no repositório explicando as regras para ajustes futuros.
 
 ## 2. Objetivos
@@ -70,13 +66,13 @@ CAMADA 0 — recebido da planilha (intocado)
         │  regra C (pesos por país + nacionalidade + foco + sorteio fixo)
         ▼
 CAMADA 1 — resultado de cada música em cada país, por plataforma
-  v[plataforma, país, música]   (Spotify UK, Apple UK, YouTube UK…)
+  v[plataforma, país, música]   (Spotify UK, Apple UK, YouTube UK, Sales UK…)
   Σ países + resto = total global  → é o que os recortes "COUNTRIES" mostram
         │
         │  metodologia do país (taxas de conversão + regras)
         ▼
 CAMADA 2 — paradas oficiais
-  UK Official = Spotify/Apple UK pagos ÷100 + gratuitos ÷600 …
+  UK Official = vendas UK + Spotify/Apple UK pagos ÷100 + gratuitos ÷600 …
   Top 50 por parada · Global Excl. US (Top 100)
 ```
 
@@ -104,8 +100,7 @@ O Global 100 não participa das camadas 1 e 2: é exibido como chega.
 
 ## 7. Camada 1 — regra C (distribuição por país)
 
-Vale para Spotify, Apple Music e YouTube (os pesos de `pais_peso` que já
-existem; Digital Sales fica de fora). Para cada
+Vale para Spotify, Apple Music, YouTube e **Digital Sales** (novo). Para cada
 música *s*, plataforma *p*, semana *d*:
 
 - `pb[c]` = peso base do país *c* na plataforma *p* (`pais_peso`).
@@ -143,6 +138,15 @@ nativo forte vence em casa; o sorteio varia semana a semana.
 Os recortes existentes **Spotify / Apple Music / YouTube COUNTRIES** passam a
 mostrar a camada 1 (Top 50 por país, ordenado por `v`).
 
+### Pesos do Digital Sales
+
+**Decisão do usuário (rev. 5): nenhuma planilha, aba ou script muda.** Os
+pesos do Digital Sales são os **pesos do Apple Music** que já estão em
+`pais_peso` (mercado pagante, o mais próximo de quem compra download),
+aplicados automaticamente pelo app. Se um dia houver linhas
+`plataforma = 'DIGITAL SALES'` em `pais_peso`, elas têm prioridade (ajuste pelo
+Console do D1, sem deploy).
+
 ## 8. Camada 2 — paradas oficiais
 
 ### Fontes por país (o que o jogo tem)
@@ -151,13 +155,14 @@ Para cada música *s* no país *c*, semana *d*:
 
 | Fonte | Origem | Observação |
 |---|---|---|
+| `vendas` | `v[DIGITAL SALES, c, s]` | downloads |
 | `pagos` | `v[APPLE MUSIC,c,s]` + `fracao_paga_spotify × v[SPOTIFY,c,s]` | streams de assinantes |
 | `gratis_audio` | `(1 − fracao_paga_spotify) × v[SPOTIFY,c,s]` | Spotify Free |
 | `gratis_video` | `v[YOUTUBE,c,s]` | YouTube |
 
 `fracao_paga_spotify` inicial = 0,45 (config). Escala dos dados conferida no
 export (semana 11/11/2026): Spotify #1 ≈ 187 mi, YouTube #1 ≈ 61 mi, Apple #1
-≈ 28 mi — as taxas reais (100:1 etc.) fazem sentido
+≈ 28 mi, Digital Sales #1 ≈ 2 mi — as taxas reais (100:1 etc.) fazem sentido
 nessa escala.
 
 **Universo:** todas as músicas que aparecem em qualquer um dos 4 charts de
@@ -167,7 +172,7 @@ naquela fonte.
 ### Fórmula genérica
 
 ```
-unidades(s,c) = pagos/tp + gratis_audio/tga + gratis_video/tgv
+unidades(s,c) = a·vendas + pagos/tp + gratis_audio/tga + gratis_video/tgv
 ```
 
 `tp`, `tga`, `tgv` = taxas (streams por 1 unidade); taxa `0` = fonte não
@@ -179,15 +184,15 @@ somado, depois título. Exibe `unidades` arredondadas (Alemanha: valor em €).
 
 | Parada | País | Fórmula | Regras extras |
 |---|---|---|---|
-| Billboard Hot 100 | EUA | pagos ÷100 + grátis ÷300 (áudio e vídeo) | recorrência |
+| Billboard Hot 100 | EUA | vendas + pagos ÷100 + grátis ÷300 (áudio e vídeo) | recorrência |
 | Billboard Canadian Hot 100 | Canadá | igual ao Hot 100 | recorrência |
-| UK Official Charts | Reino Unido | pagos ÷100 + grátis ÷600 | ACR; máx. 3 por artista |
-| ARIA Charts | Austrália | pagos ÷100 + grátis ÷600 (áudio e vídeo) | — |
-| Offizielle Deutsche Charts | Alemanha | **receita**: pagos × 0,008 + grátis × 0,0008 | — |
-| SNEP | França | só pagos ÷150 (grátis não conta) | — |
-| Oricon | Japão | todos os streams ÷300 (pago = grátis) | — |
-| Circle Chart | Coreia do Sul | pagos ÷100 + grátis ÷200 | — |
-| Billboard Brasil Hot 100 | Brasil | pagos ÷100 + grátis ÷300 | — |
+| UK Official Charts | Reino Unido | vendas + pagos ÷100 + grátis ÷600 | ACR; máx. 3 por artista |
+| ARIA Charts | Austrália | vendas + pagos ÷100 + grátis ÷600 (áudio e vídeo) | — |
+| Offizielle Deutsche Charts | Alemanha | **receita**: vendas × 1,29 + pagos × 0,008 + grátis × 0,0008 | — |
+| SNEP | França | vendas + pagos ÷150 (grátis não conta) | — |
+| Oricon | Japão | vendas × 2 + todos os streams ÷300 | — |
+| Circle Chart | Coreia do Sul | vendas + pagos ÷100 + grátis ÷200 | — |
+| Billboard Brasil Hot 100 | Brasil | **só streaming**: pagos ÷100 + grátis ÷300 (vendas não contam) | — |
 | Billboard Argentina Hot 100 | Argentina | só streaming, igual ao Brasil | — |
 | Billboard México | México | só streaming, igual ao Brasil | — |
 | Global Excl. US | todos menos EUA | unidades do mundo (fórmula do Hot 100, aplicada aos totais globais) − unidades dos EUA | Top 100 |
@@ -315,7 +320,7 @@ cruzamento que já existe para capa/gênero (`titulo_norm` ↔ catálogo).
   `StickyScrollArrowLeft/Right`, padrão de `src/routes/social.tsx`; pills
   `shrink-0`, padding real, sem truncar). Seletor de semana como nos
   COUNTRIES. Uma linha curta embaixo do nome: país + fontes usadas (ex.:
-  "Reino Unido · streaming pago e grátis").
+  "Reino Unido · vendas + streaming").
 - A barra de tabs principal ganha um item: se for `grid-cols-N`, vira fileira
   rolável (regra do `CLAUDE.md`).
 - Cadastro do single: campo **Foco do lançamento** (select) ao lado de "Tipo
@@ -345,7 +350,7 @@ cruzamento que já existe para capa/gênero (`titulo_norm` ↔ catálogo).
   anteriores; foco no país de nacionalidade e "GLOBAL" não somam.
 - Hit mundial vence nativo num país de 2% quando é ~4× maior; nativo vence
   quando está perto.
-- Paradas: SNEP ignora grátis; Alemanha ordena por
+- Paradas: SNEP ignora grátis; Brasil ignora vendas; Alemanha ordena por
   receita; UK limita 3 por artista; ACR troca as taxas; recorrência remove e
   sobe os de baixo; Excl. US = mundo − EUA.
 - Regras por semana: mudar `chart_config` não muda uma semana que já tem
@@ -368,11 +373,12 @@ cruzamento que já existe para capa/gênero (`titulo_norm` ↔ catálogo).
 - Apple Music = pago, YouTube = grátis (vídeo), Spotify = misto.
 - Taxas iniciais da tabela da seção 8 (inspiradas nas reais, adaptadas aos
   dados do jogo): Hot 100/Canadá 100/300, UK e ARIA 100/600, SNEP 150 só
-  pagos, Oricon streams ÷300, Circle 100/200, Alemanha por
-  receita (0,008 / 0,0008), Brasil/Argentina/México
+  pagos, Oricon vendas ×2 + streams ÷300, Circle 100/200, Alemanha por
+  receita (1,29 / 0,008 / 0,0008), Brasil/Argentina/México só streaming
   100/300.
 - Argentina e México usam a fórmula do Brasil (só streaming).
 - Global Excl. US Top 100; demais Top 50.
 - Sorteio igual entre plataformas para a mesma música/país/semana.
+- Digital Sales usa pesos do Apple Music até a coluna nova chegar.
 - Foco numa tabela própria com histórico; obrigatório em todo fluxo que
   cria single.
