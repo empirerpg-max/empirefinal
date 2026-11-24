@@ -422,7 +422,7 @@ test("validarGravacaoFoco: trava após definido; admin troca; país inválido re
 async function comFocoDb(fn: (db: ReturnType<typeof criarD1Sqlite>) => Promise<void>) {
   const db = criarD1Sqlite();
   for (const sql of CHARTS_D1_SCHEMA) await db.prepare(sql).run();
-  for (const [plat, pais] of [["spotify", "BRASIL"], ["youtube", "BRASIL"], ["spotify", "ÁFRICA DO SUL"], ["youtube", "AFRICA DO SUL"], ["spotify", "REINO UNIDO"]]) {
+  for (const [plat, pais] of [["spotify", "BRASIL"], ["youtube", "BRASIL"], ["youtube", "AFRICA DO SUL"], ["spotify", "ÁFRICA DO SUL"], ["spotify", "REINO UNIDO"]]) {
     await db.prepare("INSERT INTO pais_peso (plataforma, pais, peso) VALUES (?, ?, 1)").bind(plat, pais).run();
   }
   const g = globalThis as Record<string, unknown>;
@@ -482,5 +482,27 @@ test("foco API: não-admin grava, GET devolve travado; 2ª gravação 409; admin
 
     // país inválido
     expect((await focoPost("EMP2", "MARTE")).status).toBe(400);
+  });
+});
+
+test("foco API: não-admin nunca sobrescreve linha do mesmo dia (corrida) → 409 e linha intacta", async () => {
+  await comFocoDb(async (db) => {
+    const hoje = new Date().toISOString().slice(0, 10);
+    // Linha já gravada hoje por outra requisição, depois da validação desta.
+    const orig = db.prepare.bind(db);
+    let injetou = false;
+    (db as any).prepare = (sql: string) => {
+      const st = orig(sql);
+      if (!injetou && sql.startsWith("INSERT INTO musica_foco")) {
+        injetou = true;
+        orig("INSERT INTO musica_foco (codigo_unico, pais, desde, por_admin) VALUES ('EMP9', 'BRASIL', ?, 0)").bind(hoje).run();
+      }
+      return st;
+    };
+    const r = await focoPost("EMP9", "REINO UNIDO");
+    expect(r.status).toBe(409);
+    expect((await r.json() as any).error).toBe("O foco deste lançamento já foi definido. Peça à administração para alterar.");
+    const linhas = (await orig("SELECT pais FROM musica_foco WHERE codigo_unico = 'EMP9'").all<{ pais: string }>()).results;
+    expect(linhas).toEqual([{ pais: "BRASIL" }]);
   });
 });

@@ -33,13 +33,17 @@ function json(body: unknown, status = 200): Response {
 
 const hojeIso = () => new Date().toISOString().slice(0, 10);
 
+const naoAscii = (s: string) => (s.match(/[^\x00-\x7f]/g) ?? []).length;
+
 /** Países distintos de pais_peso (grafia original), alfabéticos, sem duplicata por acento. */
 async function listarPaises(db: NonNullable<ReturnType<typeof getCatalogoDb>>): Promise<string[]> {
-  const r = await db.prepare("SELECT DISTINCT pais FROM pais_peso").all<{ pais: string }>();
+  const r = await db.prepare("SELECT DISTINCT pais FROM pais_peso ORDER BY pais").all<{ pais: string }>();
   const porChave = new Map<string, string>();
   for (const { pais } of r.results) {
     const k = semAcentoMaiusculo(pais);
-    if (k && !porChave.has(k)) porChave.set(k, pais);
+    // Duas grafias com a mesma chave: fica a acentuada (mais caracteres não-ASCII), qualquer que seja a ordem.
+    const atual = porChave.get(k);
+    if (k && (atual === undefined || naoAscii(pais) > naoAscii(atual))) porChave.set(k, pais);
   }
   return [...porChave.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
@@ -81,14 +85,28 @@ export async function musicaFocoController(request: Request, subPath: "" | "pais
     if (!v.ok) return json({ success: false, error: v.erro }, v.status);
 
     const desde = hojeIso();
-    // Admin trocando duas vezes no mesmo dia: atualiza a linha do dia (PK = codigo+desde).
-    await db
-      .prepare(
-        "INSERT INTO musica_foco (codigo_unico, pais, desde, por_admin) VALUES (?, ?, ?, ?) " +
-          "ON CONFLICT(codigo_unico, desde) DO UPDATE SET pais = excluded.pais, por_admin = excluded.por_admin",
-      )
-      .bind(codigo, pais, desde, ehAdmin ? 1 : 0)
-      .run();
+    if (ehAdmin) {
+      // Admin trocando duas vezes no mesmo dia: atualiza a linha do dia (PK = codigo+desde).
+      await db
+        .prepare(
+          "INSERT INTO musica_foco (codigo_unico, pais, desde, por_admin) VALUES (?, ?, ?, 1) " +
+            "ON CONFLICT(codigo_unico, desde) DO UPDATE SET pais = excluded.pais, por_admin = excluded.por_admin",
+        )
+        .bind(codigo, pais, desde)
+        .run();
+    } else {
+      // Não-admin: nunca sobrescreve (corrida entre dois primeiros preenchimentos). RETURNING vazio = nada gravado.
+      const r = await db
+        .prepare(
+          "INSERT INTO musica_foco (codigo_unico, pais, desde, por_admin) VALUES (?, ?, ?, 0) " +
+            "ON CONFLICT(codigo_unico, desde) DO NOTHING RETURNING codigo_unico",
+        )
+        .bind(codigo, pais, desde)
+        .all<{ codigo_unico: string }>();
+      if (r.results.length === 0) {
+        return json({ success: false, error: "O foco deste lançamento já foi definido. Peça à administração para alterar." }, 409);
+      }
+    }
     limparCacheCharts();
     return json({ success: true, foco: { pais, desde } });
   } catch (e) {
