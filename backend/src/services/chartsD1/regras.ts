@@ -18,7 +18,8 @@ export interface Parada {
   tipo: "unidades" | "receita" | "excl";
   top: number;
   ordem: number;
-  /** Taxas por fonte (0 = fonte não conta). Em "receita" são preços por unidade (multiplicam). */
+  /** Taxas por fonte (0 = fonte não conta). Em "receita" são preços por unidade (multiplicam). a = vendas (Digital Sales). */
+  a: number;
   tp: number;
   tga: number;
   tgv: number;
@@ -38,9 +39,9 @@ const recorrenciaEua = () => [{ semanas: 20, pos: 50 }, { semanas: 52, pos: 25 }
 
 const p = (
   id: string, nome: string, paises: string[], tipo: Parada["tipo"], ordem: number,
-  tp: number, tga: number, tgv: number, descricao: string,
+  a: number, tp: number, tga: number, tgv: number, descricao: string,
   extras: Partial<Parada> = {}, top = 50,
-): Parada => ({ id, nome, paises, tipo, top, ordem, tp, tga, tgv, descricao, ...extras });
+): Parada => ({ id, nome, paises, tipo, top, ordem, a, tp, tga, tgv, descricao, ...extras });
 
 export const REGRAS_PADRAO: RegrasSemana = {
   versao: 1,
@@ -49,18 +50,18 @@ export const REGRAS_PADRAO: RegrasSemana = {
     bonus_teto: 0.2, variacao: 0.15, top_pais: 50, fracao_paga_spotify: 0.45,
   },
   paradas: [
-    p("EUA", "Billboard Hot 100", ["ESTADOS UNIDOS", "EUA", "USA"], "unidades", 1, 100, 300, 300, "Estados Unidos · streaming pago e grátis", { recorrencia: recorrenciaEua() }),
-    p("UK", "UK Official Charts", ["REINO UNIDO", "UK", "INGLATERRA"], "unidades", 2, 100, 600, 600, "Reino Unido · streaming pago e grátis", { acr: { semanas: 9, quedas: 3, tp: 200, tga: 1200, tgv: 1200 }, max_por_artista: 3 }),
-    p("AU", "ARIA Charts", ["AUSTRÁLIA"], "unidades", 3, 100, 600, 600, "Austrália · streaming de áudio e vídeo"),
-    p("JP", "Oricon", ["JAPÃO"], "unidades", 4, 300, 300, 300, "Japão · todos os streams"),
-    p("KR", "Circle Chart", ["COREIA DO SUL", "CORÉIA DO SUL"], "unidades", 5, 100, 200, 200, "Coreia do Sul · streaming"),
-    p("DE", "Offizielle Deutsche Charts", ["ALEMANHA"], "receita", 6, 0.008, 0.0008, 0.0008, "Alemanha · por receita"),
-    p("FR", "SNEP", ["FRANÇA"], "unidades", 7, 150, 0, 0, "França · só streaming pago"),
-    p("CA", "Billboard Canadian Hot 100", ["CANADÁ"], "unidades", 8, 100, 300, 300, "Canadá · streaming pago e grátis", { recorrencia: recorrenciaEua() }),
-    p("BR", "Billboard Brasil Hot 100", ["BRASIL"], "unidades", 9, 100, 300, 300, "Brasil · streaming pago e grátis"),
-    p("AR", "Billboard Argentina Hot 100", ["ARGENTINA"], "unidades", 10, 100, 300, 300, "Argentina · streaming pago e grátis"),
-    p("MX", "Billboard México", ["MÉXICO"], "unidades", 11, 100, 300, 300, "México · streaming pago e grátis"),
-    p("EXCL_US", "Global Excl. US", ["ESTADOS UNIDOS", "EUA", "USA"], "excl", 0, 100, 300, 300, "Mundo sem os EUA · streaming", {}, 100),
+    p("EUA", "Billboard Hot 100", ["ESTADOS UNIDOS", "EUA", "USA"], "unidades", 1, 1, 100, 300, 300, "Estados Unidos · vendas + streaming", { recorrencia: recorrenciaEua() }),
+    p("UK", "UK Official Charts", ["REINO UNIDO", "UK", "INGLATERRA"], "unidades", 2, 1, 100, 600, 600, "Reino Unido · vendas + streaming", { acr: { semanas: 9, quedas: 3, tp: 200, tga: 1200, tgv: 1200 }, max_por_artista: 3 }),
+    p("AU", "ARIA Charts", ["AUSTRÁLIA"], "unidades", 3, 1, 100, 600, 600, "Austrália · vendas + streaming"),
+    p("JP", "Oricon", ["JAPÃO"], "unidades", 4, 2, 300, 300, 300, "Japão · vendas pesam mais"),
+    p("KR", "Circle Chart", ["COREIA DO SUL", "CORÉIA DO SUL"], "unidades", 5, 1, 100, 200, 200, "Coreia do Sul · streaming + downloads"),
+    p("DE", "Offizielle Deutsche Charts", ["ALEMANHA"], "receita", 6, 1.29, 0.008, 0.0008, 0.0008, "Alemanha · por receita"),
+    p("FR", "SNEP", ["FRANÇA"], "unidades", 7, 1, 150, 0, 0, "França · vendas + streaming pago"),
+    p("CA", "Billboard Canadian Hot 100", ["CANADÁ"], "unidades", 8, 1, 100, 300, 300, "Canadá · vendas + streaming", { recorrencia: recorrenciaEua() }),
+    p("BR", "Billboard Brasil Hot 100", ["BRASIL"], "unidades", 9, 0, 100, 300, 300, "Brasil · só streaming"),
+    p("AR", "Billboard Argentina Hot 100", ["ARGENTINA"], "unidades", 10, 0, 100, 300, 300, "Argentina · só streaming"),
+    p("MX", "Billboard México", ["MÉXICO"], "unidades", 11, 0, 100, 300, 300, "México · só streaming"),
+    p("EXCL_US", "Global Excl. US", ["ESTADOS UNIDOS", "EUA", "USA"], "excl", 0, 1, 100, 300, 300, "Mundo sem os EUA · vendas + streaming", {}, 100),
   ],
 };
 

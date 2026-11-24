@@ -74,14 +74,16 @@ test("rankingsPorPais: sem semana anterior → tudo NEW", () => {
   expect(rankingsPorPais([e], [], pesos, "d", null, R).get("BRASIL")![0].st).toBe("NEW");
 });
 
-test("REGRAS_PADRAO: valores sentinela, sem vendas e regrasDeConfig sem referências compartilhadas", () => {
+test("REGRAS_PADRAO: valores sentinela, vendas (a) e regrasDeConfig sem referências compartilhadas", () => {
   const ex = REGRAS_PADRAO.paradas.find((p) => p.id === "EXCL_US")!;
   expect(ex.ordem).toBe(0);
   expect(ex.top).toBe(100);
   const de = REGRAS_PADRAO.paradas.find((p) => p.id === "DE")!;
   expect(de.tipo).toBe("receita");
   expect(de.tp).toBe(0.008);
-  for (const p of REGRAS_PADRAO.paradas) expect("a" in p).toBe(false);
+  expect(de.a).toBe(1.29);
+  expect(REGRAS_PADRAO.paradas.find((p) => p.id === "BR")!.a).toBe(0);
+  expect(REGRAS_PADRAO.paradas.find((p) => p.id === "JP")!.a).toBe(2);
   expect(regrasDeConfig(new Map([["paradas", "[]"]])).paradas.length).toBe(12);
   expect(regrasDeConfig(new Map([["paradas", "[1]"]])).paradas.length).toBe(12);
   const orig = REGRAS_PADRAO.paradas[0].nome;
