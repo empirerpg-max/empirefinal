@@ -31,7 +31,7 @@ import {
 // função devolve as linhas no MESMO shape de SheetRecord (chaves de
 // cabeçalho normalizado) que buildCleanItem já espera pra aba "Musicas",
 // pra reusar a função sem duplicar toda a lógica de parsing dela.
-interface MusicaD1Row {
+export interface MusicaD1Row {
   codigo_unico: string;
   id_topico: string | null;
   titulo: string;
@@ -55,7 +55,7 @@ interface MusicaD1Row {
   pendente: number;
 }
 
-function musicaD1RowToSheetRecord(row: MusicaD1Row): SheetRecord {
+export function musicaD1RowToSheetRecord(row: MusicaD1Row): SheetRecord {
   return {
     nome_da_musica: row.titulo || "",
     act_principal: row.artista || "",

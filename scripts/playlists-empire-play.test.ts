@@ -7,7 +7,10 @@ import {
   ligarFaixa,
   carregarCatalogoTocavel,
   limparCachePlaylists,
+  montarPlaylist,
+  carregarHot,
   type CatalogoTocavel,
+  type FontesPlaylists,
 } from "../backend/src/services/playlistsEmpirePlay";
 import type { EmpirePlayCleanItem } from "../backend/src/controllers/empirePlayController";
 import { criarD1Sqlite } from "./charts-d1-sqlite";
@@ -201,5 +204,203 @@ test("montarCatalogoTocavel: entrada embaralhada dá o mesmo resultado (empates 
     const m = ordem.map((i) => musicas[i]);
     const c = ordem.filter((i) => i < clipes.length).map((i) => clipes[i]);
     expect(ligar(m, c)).toEqual(base);
+  }
+});
+
+// ---- Montar cada playlist (fontes falsas) ----
+
+const vazioPlat = () => ({ spotify: [], apple: [], youtube: [] });
+
+function fontesFalsas(over: Partial<{ [K in keyof FontesPlaylists]: Awaited<ReturnType<FontesPlaylists[K]>> }>): FontesPlaylists {
+  const cat = over.catalogo ?? catalogoDeTeste([], []);
+  return {
+    emAlta: async () => over.emAlta ?? vazioPlat(),
+    aoVivoPaises: async () => over.aoVivoPaises ?? vazioPlat(),
+    semana: async () => over.semana ?? { global100: [], paradas: [] },
+    hot: async () => over.hot ?? [],
+    catalogo: async () => cat,
+  };
+}
+
+const CAT_PLAYLISTS = catalogoDeTeste([
+  { titulo: "Sweet Spot", artista: "Jessica Johnson", codigo_unico: "EMP1", audioUrl: "a.mp3", coverUrl: "sweet.jpg", genero: "Pop" },
+  { titulo: "Shapeshifter", artista: "Rayna", codigo_unico: "EMP2", audioUrl: "s.mp3", coverUrl: "shape.jpg", genero: "POP" },
+  { titulo: "Bastarda", artista: "TED", codigo_unico: "EMP3", audioUrl: "b.mp3", coverUrl: "bast.jpg", genero: "Rap" },
+  { titulo: "Follia", artista: "Brida", codigo_unico: "EMP4", audioUrl: "f.mp3", coverUrl: "follia.jpg", genero: "pop" },
+], []);
+
+test("montarPlaylist ao-vivo: ordem da EM Alta, valor cheio formatado, capa = capa da #1", async () => {
+  const fontes = fontesFalsas({
+    catalogo: CAT_PLAYLISTS,
+    emAlta: {
+      ...vazioPlat(),
+      spotify: [
+        { t: "Rayna - Shapeshifter", n: 187049605, s: "187.049.605", p: "", c: "" },
+        { t: "Ninguém - Inexistente", n: 5000, s: "5.000", p: "", c: "" },
+        { t: "Jessica Johnson - Sweet Spot", n: 1200, s: "1.200", p: "", c: "" },
+      ],
+    },
+  });
+  const p = await montarPlaylist({ tipo: "ao-vivo", plataforma: "spotify" }, fontes);
+  expect(p).toMatchObject({
+    id: "ao-vivo:spotify",
+    titulo: "Top 100 Spotify Global",
+    subtitulo: "Ao vivo · atualiza a cada 30 s",
+    plataforma: "spotify",
+    aoVivo: true,
+    capa_url: "shape.jpg",
+  });
+  expect(p!.faixas.map((f) => [f.pos, f.titulo, f.valor, f.tocavel])).toEqual([
+    [1, "Shapeshifter", "187.049.605", true],
+    [2, "Inexistente", "5.000", false],
+    [3, "Sweet Spot", "1.200", true],
+  ]);
+  expect(p!.faixas[1]).toMatchObject({ musica: null, chave: "ninguem - inexistente" });
+  expect((await montarPlaylist({ tipo: "ao-vivo", plataforma: "apple" }, fontes))!.titulo).toBe("Top 100 Apple Music");
+  const yt = await montarPlaylist({ tipo: "ao-vivo", plataforma: "youtube" }, fontes);
+  expect(yt).toMatchObject({ titulo: "Top 100 YouTube Hits", faixas: [], capa_url: null });
+  // mesmo instante → mesma resposta
+  expect(await montarPlaylist({ tipo: "ao-vivo", plataforma: "spotify" }, fontes)).toEqual(p);
+});
+
+test("montarPlaylist ao-vivo: no máximo 100 faixas", async () => {
+  const spotify = Array.from({ length: 130 }, (_, i) => ({ t: `A${i} - M${i}`, n: 1000 - i, s: "", p: "", c: "" }));
+  const p = await montarPlaylist({ tipo: "ao-vivo", plataforma: "spotify" }, fontesFalsas({ emAlta: { ...vazioPlat(), spotify } }));
+  expect(p!.faixas.length).toBe(100);
+  expect(p!.faixas[99].pos).toBe(100);
+});
+
+test("montarPlaylist país: só as linhas do país (sem diferença de acento), título em Título, país inexistente → null", async () => {
+  const linha = (pais: string, pos: number, t: string, s: string) => ({ pais, pos, t, s, c: "", art: "" });
+  const fontes = fontesFalsas({
+    catalogo: CAT_PLAYLISTS,
+    aoVivoPaises: {
+      ...vazioPlat(),
+      spotify: [
+        linha("BRASIL", 1, "TED - Bastarda", "900"),
+        linha("REINO UNIDO", 2, "Jessica Johnson - Sweet Spot", "80"),
+        linha("REINO UNIDO", 1, "Rayna - Shapeshifter", "2.592.249"),
+        linha("ÁUSTRIA", 1, "Brida - Follia", "10"),
+        linha("COREIA DO SUL", 1, "Brida - Follia", "10"),
+      ],
+      apple: [linha("REINO UNIDO", 1, "TED - Bastarda", "7")],
+    },
+  });
+  const p = await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "REINO UNIDO" }, fontes);
+  expect(p).toMatchObject({
+    id: "pais:spotify:REINO UNIDO",
+    titulo: "Top 50 Reino Unido",
+    subtitulo: "Spotify · ao vivo",
+    plataforma: "spotify",
+    aoVivo: true,
+    capa_url: "shape.jpg",
+  });
+  expect(p!.faixas.map((f) => [f.pos, f.titulo, f.valor])).toEqual([
+    [1, "Shapeshifter", "2.592.249"],
+    [2, "Sweet Spot", "80"],
+  ]);
+  // id sem acento acha o país com acento; título mantém o acento
+  const austria = await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "AUSTRIA" }, fontes);
+  expect(austria).toMatchObject({ titulo: "Top 50 Áustria", id: "pais:spotify:ÁUSTRIA" });
+  expect((await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "COREIA DO SUL" }, fontes))!.titulo).toBe("Top 50 Coreia do Sul");
+  expect((await montarPlaylist({ tipo: "pais", plataforma: "apple", pais: "REINO UNIDO" }, fontes))!.subtitulo).toBe("Apple Music · ao vivo");
+  expect(await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "JAPÃO" }, fontes)).toBeNull();
+  expect(await montarPlaylist({ tipo: "pais", plataforma: "youtube", pais: "REINO UNIDO" }, fontes)).toBeNull();
+});
+
+const linhaParada = (pais: string, pos: number, tit: string, val: string) =>
+  ({ pais, pos, tit, val, mes: "", art: "", capa: "", st: "", ordem: 1, desc: "" });
+
+test("montarPlaylist semana: Global 100, parada (inexistente → null), gênero só com faixas do catálogo daquele gênero", async () => {
+  const fontes = fontesFalsas({
+    catalogo: CAT_PLAYLISTS,
+    semana: {
+      global100: [
+        { titulo: "TED - Bastarda", valor: "300.000" },
+        { titulo: "Ninguém - Inexistente", valor: "250.000" },
+        { titulo: "Brida - Follia", valor: "200.000" },
+        { titulo: "Jessica Johnson - Sweet Spot", valor: "150.000" },
+        { titulo: "Rayna - Shapeshifter", valor: "100.000" },
+      ],
+      paradas: [
+        linhaParada("UK CHARTS", 2, "Rayna - Shapeshifter", "20"),
+        linhaParada("BILLBOARD HOT 100", 1, "TED - Bastarda", "99"),
+        linhaParada("UK CHARTS", 1, "Ninguém - Inexistente", "30"),
+      ],
+    },
+  });
+  const g = await montarPlaylist({ tipo: "global100" }, fontes);
+  expect(g).toMatchObject({ id: "semana:global100", titulo: "Global 100", subtitulo: "Da semana · fecha quinta", plataforma: null, aoVivo: false, capa_url: "bast.jpg" });
+  expect(g!.faixas.map((f) => [f.pos, f.valor, f.tocavel])).toEqual([
+    [1, "300.000", true],
+    [2, "250.000", false],
+    [3, "200.000", true],
+    [4, "150.000", true],
+    [5, "100.000", true],
+  ]);
+
+  const uk = await montarPlaylist({ tipo: "parada", parada: "UK CHARTS" }, fontes);
+  expect(uk).toMatchObject({ id: "semana:parada:UK CHARTS", titulo: "UK CHARTS", subtitulo: "Da semana · fecha quinta", aoVivo: false });
+  // faixa sem catálogo fica na posição certa, sem capa
+  expect(uk!.faixas.map((f) => [f.pos, f.titulo, f.tocavel])).toEqual([
+    [1, "Inexistente", false],
+    [2, "Shapeshifter", true],
+  ]);
+  expect(uk!.capa_url).toBeNull();
+  expect(await montarPlaylist({ tipo: "parada", parada: "NADA" }, fontes)).toBeNull();
+
+  const pop = await montarPlaylist({ tipo: "genero", genero: "POP" }, fontes);
+  expect(pop).toMatchObject({ id: "semana:genero:POP", titulo: "Top Pop", subtitulo: "Da semana · fecha quinta", aoVivo: false, capa_url: "follia.jpg" });
+  expect(pop!.faixas.map((f) => [f.pos, f.titulo, f.valor])).toEqual([
+    [3, "Follia", "200.000"],
+    [4, "Sweet Spot", "150.000"],
+    [5, "Shapeshifter", "100.000"],
+  ]);
+  expect((await montarPlaylist({ tipo: "genero", genero: "RAP" }, fontes))!.faixas.map((f) => f.titulo)).toEqual(["Bastarda"]);
+  expect(await montarPlaylist({ tipo: "genero", genero: "JAZZ" }, fontes)).toBeNull();
+});
+
+test("montarPlaylist hot: itens do D1 na ordem, com clipe pelo código único", async () => {
+  const cat = catalogoDeTeste(
+    [{ titulo: "Nova", artista: "Rayna", codigo_unico: "N1", audioUrl: "n.mp3", coverUrl: "nova.jpg" }],
+    [{ titulo: "Nova (Clipe)", codigo_unico: "N1", tipo_video: "Music Video", videoUrl: "nv.mp4" }],
+  );
+  const hot: EmpirePlayCleanItem[] = [
+    { id: "musicas_1", type: "musicas", title: "Nova", artist: "Rayna", codigoUnico: "N1", audioUrl: "n.mp3", coverUrl: "nova.jpg" },
+    { id: "musicas_2", type: "musicas", title: "Muda", artist: "TED", displayArtists: "TED, Brida" },
+  ];
+  const p = await montarPlaylist({ tipo: "hot" }, fontesFalsas({ catalogo: cat, hot }));
+  expect(p).toMatchObject({ id: "semana:hot", titulo: "Hot", subtitulo: "Lançamentos recentes", plataforma: null, aoVivo: false, capa_url: "nova.jpg" });
+  expect(p!.faixas[0]).toMatchObject({ chave: "N1", pos: 1, titulo: "Nova", artista: "Rayna", tocavel: true });
+  expect(p!.faixas[0].clipe?.videoUrl).toBe("nv.mp4");
+  expect(p!.faixas[1]).toMatchObject({ chave: "musicas_2", pos: 2, artista: "TED, Brida", tocavel: false, capa_url: null, clipe: null });
+});
+
+test("carregarHot: 30 mais recentes do D1 sem pendentes, cache de 5 min, sem D1 → vazio", async () => {
+  limparCachePlaylists();
+  expect(await carregarHot(undefined)).toEqual([]);
+  limparCachePlaylists();
+  const consultas: string[] = [];
+  const db = criarD1Sqlite(":memory:", (sql) => consultas.push(sql));
+  for (const s of MUSICAS_CREATE_STATEMENTS) db.exec(s);
+  const valores = Array.from({ length: 35 }, (_, i) => {
+    const dia = String(i + 1).padStart(2, "0");
+    return `('k${i}', 'C${i}', 'Musica ${i}', 'Artista', '2026-10-${dia}', ${i === 34 ? 1 : 0})`;
+  });
+  db.exec(`INSERT INTO musicas (chave, codigo_unico, titulo, artista, data_lancamento_iso, pendente) VALUES ${valores.join(",")}`);
+  db.exec(`INSERT INTO musicas (chave, codigo_unico, titulo, artista, data_lancamento_iso, pendente) VALUES ('kx', 'CX', 'Sem Data', 'Artista', NULL, 0)`);
+  try {
+    const hot = await carregarHot(db);
+    expect(hot.length).toBe(30);
+    expect(hot[0].title).toBe("Musica 33"); // 34 é pendente
+    expect(hot[29].title).toBe("Musica 4");
+    expect(hot.some((h) => h.title === "Sem Data")).toBe(false);
+    const n = consultas.length;
+    expect(await carregarHot(db)).toBe(hot);
+    expect(consultas.length).toBe(n);
+    expect(consultas.every((s) => /^\s*SELECT/i.test(s))).toBe(true);
+    expect(consultas.some((s) => /ORDER BY data_lancamento_iso DESC/i.test(s) && /LIMIT/i.test(s))).toBe(true);
+  } finally {
+    limparCachePlaylists();
   }
 });

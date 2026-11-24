@@ -5,8 +5,17 @@
 // `musica` e `clipe` de cada faixa são EXATAMENTE os itens que
 // /api/empire-play/musicas e /api/empire-play/videos devolvem (mesmo
 // buildCleanItem), então o front toca do mesmo jeito que já toca.
-import { buildCleanItem, readMusicasFromD1, type EmpirePlayCleanItem } from "../controllers/empirePlayController";
-import { getCatalogoDb } from "./catalogoDbService";
+import {
+  buildCleanItem,
+  musicaD1RowToSheetRecord,
+  readMusicasFromD1,
+  type EmpirePlayCleanItem,
+  type MusicaD1Row,
+} from "../controllers/empirePlayController";
+import { fetchRTBruto, fetchRTPaises, semanaParaPlaylists } from "../controllers/chartsController";
+import { getCatalogoDb, type D1DatabaseLike } from "./catalogoDbService";
+import { fixImg, fmt } from "./chartsD1/formato";
+import type { LinhaAoVivoPais } from "./chartsD1/aoVivoPaises";
 import { linhasParaObjetos, normalizeComparison } from "./googleSheetsService";
 import { linhasVideosD1 } from "./videosD1Leitura";
 import { ABA_VIDEOS } from "./videosD1Sync";
@@ -19,7 +28,7 @@ import {
   type LinhaCatalogo,
   type MusicaCatalogo,
 } from "./chartsD1/artistas";
-import { carregarFotos, chaveArtistaInfo } from "./chartsD1/repo";
+import { carregarFotos, chaveArtistaInfo, type LinhaPaisApi } from "./chartsD1/repo";
 
 // ---- Ids de playlist ----
 
@@ -205,9 +214,11 @@ export function ligarFaixa(cat: CatalogoTocavel, tituloChart: string, pos: numbe
 const TTL_CATALOGO_MS = 15 * 60_000;
 // Date.now só decide a expiração, nunca entra no resultado.
 let cacheCatalogo: { em: number; valor: Promise<CatalogoTocavel> } | null = null;
+let cacheHot: { em: number; valor: Promise<EmpirePlayCleanItem[]> } | null = null;
 
 export function limparCachePlaylists(): void {
   cacheCatalogo = null;
+  cacheHot = null;
 }
 
 async function lerCatalogoDoD1(): Promise<CatalogoTocavel> {
@@ -240,4 +251,209 @@ export function carregarCatalogoTocavel(): Promise<CatalogoTocavel> {
   });
   cacheCatalogo = entrada;
   return valor;
+}
+
+// ---- Hot: lançamentos recentes do D1 ----
+
+const TTL_HOT_MS = 5 * 60_000;
+const LIMITE_HOT = 30;
+
+async function lerHotDoD1(db: D1DatabaseLike): Promise<EmpirePlayCleanItem[]> {
+  // Usa idx_musicas_data; sem data nunca entra; desempate pela chave (determinístico).
+  const r = await db
+    .prepare(
+      `SELECT * FROM musicas
+       WHERE COALESCE(pendente, 0) = 0 AND data_lancamento_iso IS NOT NULL AND data_lancamento_iso <> ''
+       ORDER BY data_lancamento_iso DESC, chave
+       LIMIT ?`,
+    )
+    .bind(LIMITE_HOT)
+    .all<MusicaD1Row>();
+  // Mesmo mapeamento de /api/empire-play/musicas (buildCleanItem da aba "Musicas").
+  return (r?.results || []).map((row, idx) => buildCleanItem("Musicas", musicaD1RowToSheetRecord(row), idx));
+}
+
+/** 30 lançamentos mais recentes do D1 (sem pendentes), cache de 5 min; sem D1 → vazio; falha não fica em cache. */
+export function carregarHot(db: D1DatabaseLike | undefined = getCatalogoDb()): Promise<EmpirePlayCleanItem[]> {
+  if (!db) return Promise.resolve([]);
+  if (cacheHot && Date.now() - cacheHot.em < TTL_HOT_MS) return cacheHot.valor;
+  const valor = lerHotDoD1(db);
+  const entrada = { em: Date.now(), valor };
+  valor.catch(() => {
+    if (cacheHot === entrada) cacheHot = null;
+  });
+  cacheHot = entrada;
+  return valor;
+}
+
+// ---- Montar cada playlist ----
+
+export interface Playlist {
+  id: string;
+  titulo: string;
+  subtitulo: string;
+  plataforma: PlataformaPlaylist | null;
+  aoVivo: boolean;
+  /** Capa da faixa #1 (catálogo; senão foto do artista; senão capa do chart). */
+  capa_url: string | null;
+  faixas: FaixaPlaylist[];
+}
+
+/** Item da EM Alta como o chartsController devolve (fetchRTBruto). */
+export interface ItemEmAltaPlaylist {
+  t: string;
+  n: number;
+  s?: string;
+  p?: string;
+  c?: string;
+}
+
+export interface SemanaPlaylists {
+  /** Global 100 da semana mais recente, na ordem do chart; `valor` já formatado. */
+  global100: { titulo: string; valor: string }[];
+  /** Paradas oficiais da mesma semana: `pais` = nome da parada. */
+  paradas: LinhaPaisApi[];
+}
+
+/** Fontes das playlists, injetáveis (testes usam falsas; a real é fontesReais). */
+export interface FontesPlaylists {
+  emAlta(): Promise<Record<PlataformaPlaylist, ItemEmAltaPlaylist[]>>;
+  aoVivoPaises(): Promise<Record<PlataformaPlaylist, LinhaAoVivoPais[]>>;
+  semana(): Promise<SemanaPlaylists>;
+  hot(): Promise<EmpirePlayCleanItem[]>;
+  catalogo(): Promise<CatalogoTocavel>;
+}
+
+/** Fontes reais: os mesmos caches do /api/charts (EM Alta 30 s, semana) + D1 (catálogo 15 min, Hot 5 min). */
+export function fontesReais(db: D1DatabaseLike | undefined = getCatalogoDb()): FontesPlaylists {
+  return {
+    emAlta: () => fetchRTBruto(),
+    aoVivoPaises: () => fetchRTPaises(),
+    semana: () => semanaParaPlaylists(),
+    hot: () => carregarHot(db),
+    catalogo: () => carregarCatalogoTocavel(),
+  };
+}
+
+const NOME_PLATAFORMA: Record<PlataformaPlaylist, string> = { spotify: "Spotify", apple: "Apple Music", youtube: "YouTube" };
+const TITULO_AO_VIVO: Record<PlataformaPlaylist, string> = {
+  spotify: "Top 100 Spotify Global",
+  apple: "Top 100 Apple Music",
+  youtube: "Top 100 YouTube Hits",
+};
+const SUB_AO_VIVO = "Ao vivo · atualiza a cada 30 s";
+const SUB_SEMANA = "Da semana · fecha quinta";
+const SUB_HOT = "Lançamentos recentes";
+const LIMITE_AO_VIVO = 100;
+const LIMITE_PAIS = 50;
+
+const CONECTIVOS = new Set(["de", "do", "da", "dos", "das", "e"]);
+/** "REINO UNIDO" → "Reino Unido"; "COREIA DO SUL" → "Coreia do Sul"; "R&B" → "R&B". */
+export function emTitulo(s: string): string {
+  return String(s ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("pt-BR")
+    .split(" ")
+    .map((w, i) => (i > 0 && CONECTIVOS.has(w) ? w : w.replace(/(^|[-&'/])(\p{L})/gu, (_, a: string, b: string) => a + b.toLocaleUpperCase("pt-BR"))))
+    .join(" ");
+}
+
+/** Faixa de chart com a capa do próprio chart como último recurso. */
+function faixaDoChart(cat: CatalogoTocavel, titulo: string, pos: number, valor: string, capaChart?: string): FaixaPlaylist {
+  const f = ligarFaixa(cat, titulo, pos, valor);
+  return f.capa_url ? f : { ...f, capa_url: fixImg(capaChart) || null };
+}
+
+function faixaDoItem(cat: CatalogoTocavel, item: EmpirePlayCleanItem, pos: number): FaixaPlaylist {
+  const codigo = (item.codigoUnico || "").trim();
+  return {
+    chave: codigo || item.id,
+    pos,
+    valor: "",
+    titulo: item.title,
+    artista: item.displayArtists || item.artist,
+    capa_url: item.coverUrl || item.artistPhotoUrl || cat.fotos.get(chaveArtistaInfo(item.artist)) || null,
+    tocavel: !!item.audioUrl,
+    musica: item,
+    clipe: (codigo && cat.clipePorCodigo.get(codigo)) || null,
+  };
+}
+
+const porPos = <T extends { pos: number }>(l: T[]): T[] => [...l].sort((a, b) => a.pos - b.pos);
+
+function playlist(
+  id: IdPlaylist,
+  titulo: string,
+  subtitulo: string,
+  faixas: FaixaPlaylist[],
+  plataforma: PlataformaPlaylist | null = null,
+): Playlist {
+  return {
+    id: formatarIdPlaylist(id),
+    titulo,
+    subtitulo,
+    plataforma,
+    aoVivo: plataforma !== null,
+    capa_url: faixas[0]?.capa_url ?? null,
+    faixas,
+  };
+}
+
+/**
+ * Monta uma playlist pelo id. `null` quando o país/parada/gênero não existe
+ * (ou não tem nenhuma faixa). Determinístico: mesmas fontes → mesma resposta.
+ */
+export async function montarPlaylist(id: IdPlaylist, fontes: FontesPlaylists): Promise<Playlist | null> {
+  switch (id.tipo) {
+    case "ao-vivo": {
+      const [emAlta, cat] = await Promise.all([fontes.emAlta(), fontes.catalogo()]);
+      const faixas = (emAlta[id.plataforma] ?? [])
+        .slice(0, LIMITE_AO_VIVO)
+        .map((i, k) => faixaDoChart(cat, i.t, k + 1, fmt(i.n), i.c));
+      return playlist(id, TITULO_AO_VIVO[id.plataforma], SUB_AO_VIVO, faixas, id.plataforma);
+    }
+    case "pais": {
+      const [porPais, cat] = await Promise.all([fontes.aoVivoPaises(), fontes.catalogo()]);
+      const alvo = semAcentoMaiusculo(id.pais);
+      const linhas = porPos((porPais[id.plataforma] ?? []).filter((l) => semAcentoMaiusculo(l.pais) === alvo)).slice(0, LIMITE_PAIS);
+      if (!linhas.length) return null;
+      const pais = linhas[0].pais;
+      const faixas = linhas.map((l) => faixaDoChart(cat, l.t, l.pos, l.s, l.c));
+      return playlist(
+        { tipo: "pais", plataforma: id.plataforma, pais },
+        `Top 50 ${emTitulo(pais)}`,
+        `${NOME_PLATAFORMA[id.plataforma]} · ao vivo`,
+        faixas,
+        id.plataforma,
+      );
+    }
+    case "global100": {
+      const [semana, cat] = await Promise.all([fontes.semana(), fontes.catalogo()]);
+      const faixas = semana.global100.map((l, k) => faixaDoChart(cat, l.titulo, k + 1, l.valor));
+      return playlist(id, "Global 100", SUB_SEMANA, faixas);
+    }
+    case "parada": {
+      const [semana, cat] = await Promise.all([fontes.semana(), fontes.catalogo()]);
+      const alvo = semAcentoMaiusculo(id.parada);
+      const linhas = porPos(semana.paradas.filter((l) => semAcentoMaiusculo(l.pais) === alvo));
+      if (!linhas.length) return null;
+      const nome = linhas[0].pais;
+      const faixas = linhas.map((l) => faixaDoChart(cat, l.tit, l.pos, l.val, l.capa));
+      return playlist({ tipo: "parada", parada: nome }, nome, SUB_SEMANA, faixas);
+    }
+    case "genero": {
+      const [semana, cat] = await Promise.all([fontes.semana(), fontes.catalogo()]);
+      // Posição = posição no Global 100; faixa sem catálogo (ou sem gênero) fica fora.
+      const faixas = semana.global100
+        .map((l, k) => faixaDoChart(cat, l.titulo, k + 1, l.valor))
+        .filter((f) => f.musica && normalizarGenero(f.musica.genero || "") === id.genero);
+      if (!faixas.length) return null;
+      return playlist(id, `Top ${emTitulo(faixas[0].musica!.genero || id.genero)}`, SUB_SEMANA, faixas);
+    }
+    case "hot": {
+      const [itens, cat] = await Promise.all([fontes.hot(), fontes.catalogo()]);
+      return playlist(id, "Hot", SUB_HOT, itens.map((item, k) => faixaDoItem(cat, item, k + 1)));
+    }
+  }
 }

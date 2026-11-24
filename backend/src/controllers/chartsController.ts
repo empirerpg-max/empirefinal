@@ -12,7 +12,7 @@ import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbServic
 import { CHARTS, CHARTS_COM_PAIS, type ChartId } from "../services/chartsD1/tipos";
 import {
   CHARTS_HOF, carregarCatalogo, carregarFotos, carregarGenerosArtistas, chartsD1Ativo, datasDoChart, generosDoChart, linhasDoChart,
-  numero1DaUltimaSemana, perfilHOF, temPesosPais,
+  numero1DaUltimaSemana, perfilHOF, temPesosPais, type LinhaPaisApi,
 } from "../services/chartsD1/repo";
 import { ROTULO_PARADAS, calcularSemanaPaises, type PlataformaCountries, type SemanaPaises } from "../services/chartsD1/semanaPaises";
 
@@ -442,7 +442,7 @@ async function fetchRT(): Promise<{ spotify: unknown[]; apple: unknown[]; youtub
 
 // Ao vivo por país (regra C sobre os streams da EM Alta). Sem D1, leitura do
 // D1 ainda não ativada ou erro → listas vazias (o mundo segue funcionando).
-async function fetchRTPaises(): Promise<Record<PlataformaAoVivo, LinhaAoVivoPais[]>> {
+export async function fetchRTPaises(): Promise<Record<PlataformaAoVivo, LinhaAoVivoPais[]>> {
   const vazio = (): Record<PlataformaAoVivo, LinhaAoVivoPais[]> => ({ spotify: [], apple: [], youtube: [] });
   const db = getCatalogoDb();
   if (!db) return vazio();
@@ -454,6 +454,40 @@ async function fetchRTPaises(): Promise<Record<PlataformaAoVivo, LinhaAoVivoPais
     console.warn("[charts-d1] falha no ao vivo por país; seguindo sem ele:", e);
     return vazio();
   }
+}
+
+// Semana mais recente para as playlists do Empire Play: Global 100 (título +
+// valor formatado) e paradas oficiais, pelos mesmos caminhos/caches do
+// /api/charts. Sem D1 ativo ou sem dados → listas vazias. Cache com o TTL das
+// respostas (limparCacheCharts zera após ingestão).
+export interface SemanaPlaylistsCharts {
+  global100: { titulo: string; valor: string }[];
+  paradas: LinhaPaisApi[];
+}
+let semanaPlaylistsCache: { valor: Promise<SemanaPlaylistsCharts>; expiresAt: number } | null = null;
+
+async function lerSemanaPlaylists(): Promise<SemanaPlaylistsCharts> {
+  const d1 = await viaD1<SemanaPlaylistsCharts>("BILLBOARD HOT 100", async (db, datas) => {
+    const data = datas[0];
+    const { cat, fotos, generosArtistas } = await referenciasD1(db);
+    const [linhas, semana] = await Promise.all([
+      linhasDoChart(db, "BILLBOARD HOT 100", data, "", cat, fotos, generosArtistas),
+      semanaPaises(db, data),
+    ]);
+    return { global100: linhas.map((l) => ({ titulo: l.tit, valor: l.val })), paradas: semana.paradas };
+  });
+  return d1 ?? { global100: [], paradas: [] };
+}
+
+export function semanaParaPlaylists(): Promise<SemanaPlaylistsCharts> {
+  if (semanaPlaylistsCache && semanaPlaylistsCache.expiresAt > Date.now()) return semanaPlaylistsCache.valor;
+  const valor = lerSemanaPlaylists();
+  const entrada = { valor, expiresAt: Date.now() + CHARTS_RESPONSE_CACHE_TTL_MS };
+  valor.catch(() => {
+    if (semanaPlaylistsCache === entrada) semanaPlaylistsCache = null;
+  });
+  semanaPlaylistsCache = entrada;
+  return valor;
 }
 
 // ---- ADMIN DIAGNÓSTICO (temporário) ----
@@ -798,6 +832,7 @@ export function limparCacheCharts(): void {
   chartsResponseCache.clear();
   datasD1Cache.clear();
   semanaPaisesCache.clear();
+  semanaPlaylistsCache = null;
   referenciasD1Cache = null;
   ativoD1Cache = null;
   emAltaCache = null;
