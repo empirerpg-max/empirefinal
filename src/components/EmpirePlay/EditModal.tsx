@@ -38,6 +38,7 @@ import { SyncStudioModal, type SyncStudioTrack } from "./SyncStudioModal";
 import { FocoSelect } from "./FocoSelect";
 import { lerFoco, salvarFoco, rotuloFoco } from "@/lib/focoMusica";
 import { getStoredLogin } from "@/components/LoginScreen";
+import { useTelegramUser } from "@/lib/telegram";
 
 // "music-videos" foi consolidado dentro de "videos" — vivem na mesma aba
 // da planilha ("Music Videos"), diferenciados por tag, não mais categoria.
@@ -194,8 +195,12 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [focoMsg, setFocoMsg] = useState<{ ok: boolean; texto: string } | null>(null);
   // Mesma regra de admin de Gestao.tsx (isAdminUser) — o backend confere de
   // novo pelo token de sessão, isso aqui só decide o que mostrar.
+  const { user: telegramUser } = useTelegramUser();
   const loginAtual = getStoredLogin();
-  const isAdminUser = loginAtual?.id === "810141686" || loginAtual?.tipoPerfil === "Admin";
+  const loginTgId =
+    loginAtual?.id ||
+    (telegramUser?.id && telegramUser.id !== "guest" ? String(telegramUser.id) : "");
+  const isAdminUser = loginTgId === "810141686" || loginAtual?.tipoPerfil === "Admin";
 
   // Formulário de "adicionar faixa nova"
   const [addingFaixa, setAddingFaixa] = useState<boolean>(false);
