@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Music, Flame, Youtube, Disc3, DollarSign, Search, X, ChevronLeft, ChevronRight, Loader2, Radio, Globe,
+  Music, Flame, Youtube, Disc3, DollarSign, Search, X, ChevronLeft, Loader2, Radio, Globe,
 } from "lucide-react";
 import {
   getChartFilters, getChartData,
@@ -657,7 +657,7 @@ function ChartsCountryView({ tab, ordenarPor }: { tab: string; ordenarPor?: "ord
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={ordenarPor === "ordem" ? "Parada, artista ou música..." : "País, artista ou música..."}
+            placeholder={ordenarPor === "ordem" ? "Artista ou música..." : "País, artista ou música..."}
             className="w-full h-10 pl-9 pr-9 rounded-full bg-muted/60 border border-border/60 text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
           />
           {search && (
