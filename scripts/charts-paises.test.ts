@@ -10,7 +10,7 @@ import { calcularSemanaPaises, ROTULO_PARADAS } from "../backend/src/services/ch
 import { indexarCatalogo } from "../backend/src/services/chartsD1/artistas";
 import { validarGravacaoFoco, musicaFocoController } from "../backend/src/controllers/musicaFocoController";
 import { issueSessionToken, ADMIN_TG_ID } from "../backend/src/services/sessionService";
-import { rankingAoVivoPorPais, type ItemAoVivo, type LinhaAoVivoPais } from "../backend/src/services/chartsD1/aoVivoPaises";
+import { rankingAoVivoPorPais, calcularAoVivoPaises, proximaDataChart, limparCacheAoVivoPaises, type ItemAoVivo, type LinhaAoVivoPais } from "../backend/src/services/chartsD1/aoVivoPaises";
 
 test("sorteio01: determinístico, em [0,1), varia com a chave", () => {
   expect(sorteio01("2026-11-11|x|BRASIL|nac")).toBe(sorteio01("2026-11-11|x|BRASIL|nac"));
@@ -605,4 +605,20 @@ test("regra C: soma dos países + resto = streams (sem bônus/variação)", () =
   const resto = 1000 * Math.max(0, 1 - 0.37);
   expect(soma).toBeLessThanOrEqual(1000);
   expect(Math.abs(soma + resto - 1000)).toBeLessThanOrEqual(1);
+});
+
+test("calcularAoVivoPaises: usa próxima data de chart; vazio sem chart_datas/pesos", async () => {
+  expect(proximaDataChart("2026-11-11")).toBe("2026-11-18");
+  const vazio = criarD1Sqlite(); // sem tabelas
+  limparCacheAoVivoPaises();
+  expect(await calcularAoVivoPaises(vazio, { spotify: [{ t: "Amanda - Koala", n: 10, c: "" }], apple: [], youtube: [] }, new Map()))
+    .toEqual({ spotify: [], apple: [], youtube: [] });
+  const db = await bancoDeTeste();
+  limparCacheAoVivoPaises();
+  const entrada = { spotify: [{ t: "Amanda - Koala", n: 1000, c: "" }, { t: "Bob - Freedom", n: 900, c: "" }], apple: [], youtube: [] };
+  const r = await calcularAoVivoPaises(db, entrada, new Map());
+  expect(r.spotify.length).toBeGreaterThan(0);
+  expect(r.apple).toEqual([]);
+  limparCacheAoVivoPaises();
+  expect(await calcularAoVivoPaises(db, entrada, new Map())).toEqual(r);
 });

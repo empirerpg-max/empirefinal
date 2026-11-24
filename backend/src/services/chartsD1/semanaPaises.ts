@@ -86,6 +86,35 @@ function regrasDa(gravadas: Map<string, string>, dataIso: string | undefined): R
   return (dataIso && parseRegrasSemana(gravadas.get(dataIso))) || REGRAS_PADRAO;
 }
 
+/** Agrupa as linhas de pais_peso por plataforma (maiúscula) → país (maiúsculo) → peso; ignora linhas inválidas. */
+export function agruparPesos(rows: { plataforma: string; pais: string; peso: number }[]): Map<string, Pesos> {
+  const pesosPor = new Map<string, Pesos>();
+  for (const p of rows) {
+    const plat = String(p.plataforma ?? "").trim().toUpperCase();
+    const pais = String(p.pais ?? "").trim().toUpperCase();
+    const peso = Number(p.peso);
+    if (!plat || !pais || !Number.isFinite(peso)) continue;
+    (pesosPor.get(plat) ?? pesosPor.set(plat, new Map()).get(plat)!).set(pais, peso);
+  }
+  return pesosPor;
+}
+
+/** União dos países de todas as plataformas. */
+export function paisesDePesos(pesosPor: Map<string, Pesos>): Set<string> {
+  const paises = new Set<string>();
+  for (const pesos of pesosPor.values()) for (const pais of pesos.keys()) paises.add(pais);
+  return paises;
+}
+
+/** Nome de país (nacionalidade/foco) → país de pais_peso, sem diferenciar acento/caixa. */
+export function criarResolvedorPais(paisesExistentes: Set<string>): (nome: string) => string {
+  const paisDePesos = mapaPaisPorNome(paisesExistentes);
+  return (nome: string) => {
+    const k = semAcentoMaiusculo(nome);
+    return paisDePesos.get(k) ?? k;
+  };
+}
+
 /**
  * Calcula a semana `dataBr` inteira: COUNTRIES (Spotify, Apple Music, YouTube)
  * e todas as paradas oficiais. Determinístico: mesma semana, mesmo resultado
@@ -139,26 +168,14 @@ export async function calcularSemanaPaises(
   if (!semanaAtual || !PLATAFORMAS.some((p) => semanaAtual.get(p)?.size)) return vazio();
 
   // Pesos por plataforma; Digital Sales usa os próprios se houver, senão os do Apple Music.
-  const pesosPor = new Map<string, Pesos>();
-  for (const p of pesosRows) {
-    const plat = String(p.plataforma ?? "").trim().toUpperCase();
-    const pais = String(p.pais ?? "").trim().toUpperCase();
-    const peso = Number(p.peso);
-    if (!plat || !pais || !Number.isFinite(peso)) continue;
-    (pesosPor.get(plat) ?? pesosPor.set(plat, new Map()).get(plat)!).set(pais, peso);
-  }
+  const pesosPor = agruparPesos(pesosRows);
   const pesosDe = (p: Plataforma): Pesos =>
     pesosPor.get(p) ?? (p === "DIGITAL SALES" ? pesosPor.get("APPLE MUSIC") : undefined) ?? new Map();
-  const paisesExistentes = new Set<string>();
-  for (const pesos of pesosPor.values()) for (const pais of pesos.keys()) paisesExistentes.add(pais);
+  const paisesExistentes = paisesDePesos(pesosPor);
   if (!paisesExistentes.size) return vazio();
 
   // Nacionalidade e foco casam com o país de pais_peso sem diferenciar acento ("Australia" = "AUSTRÁLIA").
-  const paisDePesos = mapaPaisPorNome(paisesExistentes);
-  const resolverPais = (nome: string) => {
-    const k = semAcentoMaiusculo(nome);
-    return paisDePesos.get(k) ?? k;
-  };
+  const resolverPais = criarResolvedorPais(paisesExistentes);
   const nacionalidade = new Map(nacRows.map((n) => [semAcentoMaiusculo(n.nome_upper), resolverPais(n.nacionalidade)]));
 
   const regrasRegistradas = new Map(regrasRows.map((r) => [r.data, r.regras]));

@@ -1,8 +1,12 @@
 // Ranking "ao vivo" por país (regra C aplicada aos streams do dia). Função
 // pura: sem Math.random nem relógio — o sorteio vem de `dataIso` (mesma
 // fatia durante a semana, não depende da plataforma).
-import type { RegraPaises } from "./regras";
-import { chaveMusica } from "./artistas";
+import type { D1DatabaseLike } from "../catalogoDbService";
+import { regrasDeConfig, type RegraPaises } from "./regras";
+import { buscarNoCatalogo, chaveMusica, extrairArtistasDoTitulo, semAcentoMaiusculo, type MusicaCatalogo } from "./artistas";
+import { carregarFocos, focoVigente, type HistoricoFoco } from "./foco";
+import { consultar } from "./repo";
+import { agruparPesos, criarResolvedorPais, paisesDePesos } from "./semanaPaises";
 import { valoresPorPais, type EntradaMusica, type Pesos } from "./paises";
 
 export interface ItemAoVivo {
@@ -93,4 +97,117 @@ export function rankingAoVivoPorPais(
       });
   }
   return out;
+}
+
+// ───────────── Carregador (D1 + EM Alta) ─────────────
+
+export type PlataformaAoVivo = "spotify" | "apple" | "youtube";
+
+/** Item cru do EM Alta: título, streams do dia e capa. */
+export interface ItemEmAlta {
+  t: string;
+  n: number;
+  c: string;
+}
+
+/** Nome da plataforma em `pais_peso`. */
+const PLATAFORMA_PESO: Record<PlataformaAoVivo, string> = { spotify: "SPOTIFY", apple: "APPLE MUSIC", youtube: "YOUTUBE" };
+const PLATAFORMAS_AO_VIVO = Object.keys(PLATAFORMA_PESO) as PlataformaAoVivo[];
+const GLOBAL_100 = "BILLBOARD HOT 100";
+const TTL_REFERENCIAS_MS = 5 * 60 * 1000;
+
+/** ISO (YYYY-MM-DD) + 7 dias, em UTC: a data do próximo chart. */
+export function proximaDataChart(ultimaIso: string): string {
+  const d = new Date(`${ultimaIso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
+
+interface Referencias {
+  proximaData: string | null;
+  pesosPor: Map<string, Map<string, number>>;
+  /** nome (sem acento/caixa) → país já resolvido para pais_peso; "" quando sem nacionalidade. */
+  artistasInfo: Map<string, string>;
+  focos: HistoricoFoco;
+  regras: RegraPaises;
+  resolverPais: (nome: string) => string;
+}
+
+// Cache de módulo: Date.now só decide a expiração, nunca entra no cálculo.
+let cacheReferencias: { em: number; refs: Referencias } | null = null;
+
+export function limparCacheAoVivoPaises(): void {
+  cacheReferencias = null;
+}
+
+async function carregarReferencias(db: D1DatabaseLike): Promise<Referencias> {
+  const [datas, pesosRows, artistasRows, focos, cfgRows] = await Promise.all([
+    consultar<{ data: string | null }>(db, "SELECT MAX(data) AS data FROM chart_datas WHERE chart = ?", GLOBAL_100),
+    consultar<{ plataforma: string; pais: string; peso: number }>(db, "SELECT plataforma, pais, peso FROM pais_peso"),
+    consultar<{ nome_upper: string; nacionalidade: string | null }>(db, "SELECT nome_upper, nacionalidade FROM artista_info"),
+    carregarFocos(db),
+    consultar<{ chave: string; valor: string }>(db, "SELECT chave, valor FROM chart_config"),
+  ]);
+  const ultima = datas[0]?.data ?? null;
+  const pesosPor = agruparPesos(pesosRows);
+  const resolverPais = criarResolvedorPais(paisesDePesos(pesosPor));
+  const artistasInfo = new Map(
+    artistasRows.map((a) => [semAcentoMaiusculo(a.nome_upper), a.nacionalidade ? resolverPais(a.nacionalidade) : ""]),
+  );
+  return {
+    proximaData: ultima ? proximaDataChart(ultima) : null,
+    pesosPor,
+    artistasInfo,
+    focos,
+    regras: regrasDeConfig(new Map(cfgRows.map((r) => [r.chave, r.valor]))).paises,
+    resolverPais,
+  };
+}
+
+async function referencias(db: D1DatabaseLike): Promise<Referencias> {
+  if (cacheReferencias && Date.now() - cacheReferencias.em < TTL_REFERENCIAS_MS) return cacheReferencias.refs;
+  const refs = await carregarReferencias(db);
+  cacheReferencias = { em: Date.now(), refs };
+  return refs;
+}
+
+/**
+ * Ranking ao vivo por país das 3 plataformas do EM Alta. Sem chart ou sem pesos
+ * da plataforma → lista vazia dela; erro de D1 → tudo vazio (com aviso).
+ * O sorteio usa a data do PRÓXIMO chart (nunca o relógio): estável na semana.
+ */
+export async function calcularAoVivoPaises(
+  db: D1DatabaseLike,
+  emAlta: Record<PlataformaAoVivo, ItemEmAlta[]>,
+  cat: Map<string, MusicaCatalogo>,
+): Promise<Record<PlataformaAoVivo, LinhaAoVivoPais[]>> {
+  const saida: Record<PlataformaAoVivo, LinhaAoVivoPais[]> = { spotify: [], apple: [], youtube: [] };
+  try {
+    const ref = await referencias(db);
+    if (!ref.proximaData) return saida;
+    const proximaData = ref.proximaData;
+    for (const plat of PLATAFORMAS_AO_VIVO) {
+      const pesos = ref.pesosPor.get(PLATAFORMA_PESO[plat]);
+      if (!pesos?.size || !emAlta[plat]?.length) continue;
+      const itens: ItemAoVivo[] = emAlta[plat].map((i) => {
+        const achada = buscarNoCatalogo(i.t, cat);
+        // Sem catálogo: artistas do título, só os conhecidos em artista_info.
+        const artistas = achada
+          ? achada.artistas
+          : extrairArtistasDoTitulo(i.t).filter((a) => ref.artistasInfo.has(semAcentoMaiusculo(a)));
+        const nacionalidades = new Set<string>();
+        for (const a of artistas) {
+          const n = ref.artistasInfo.get(semAcentoMaiusculo(a));
+          if (n) nacionalidades.add(n);
+        }
+        const f = focoVigente(ref.focos, achada?.codigoUnico || undefined, proximaData);
+        return { t: i.t, n: i.n, c: i.c, artistas, nacionalidades, foco: f === null ? null : ref.resolverPais(f) };
+      });
+      saida[plat] = rankingAoVivoPorPais(itens, pesos, proximaData, ref.regras);
+    }
+    return saida;
+  } catch (e) {
+    console.warn("[charts-d1] falha ao calcular ao vivo por país; seguindo sem ele:", e);
+    return { spotify: [], apple: [], youtube: [] };
+  }
 }

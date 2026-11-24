@@ -1,4 +1,5 @@
 import { googleSheetsService } from "../services/googleSheetsService";
+import { limparCacheAoVivoPaises } from "../services/chartsD1/aoVivoPaises";
 import { normalizarTitulo, type MusicaCatalogo } from "../services/chartsD1/artistas";
 import { fixImg, fmt } from "../services/chartsD1/formato";
 import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
@@ -698,6 +699,7 @@ export function limparCacheCharts(): void {
   semanaPaisesCache.clear();
   referenciasD1Cache = null;
   ativoD1Cache = null;
+  limparCacheAoVivoPaises();
 }
 
 export async function chartsApiController(request: Request): Promise<Response> {
