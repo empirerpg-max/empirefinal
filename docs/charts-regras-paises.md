@@ -107,6 +107,15 @@ Regras extras:
 - Se o país da parada não existe em `pais_peso`, a parada some (os apelidos de
   nome, como "EUA"/"USA", ficam no campo `paises`).
 
+**Pontos exibidos (escala do Global 100):** a ordem da parada sai das
+unidades (ou receita) brutas, como descrito acima. Mas o número mostrado
+é convertido para a mesma escala do Global 100 (onde os pontos ficam até 1000).
+Conta: fator = soma dos pontos do Global 100 da semana ÷ soma das unidades
+mundiais da parada (taxas normais, sem ACR); ponto mostrado = unidades da
+música × fator, arredondado. Isso muda só o número exibido: ordem, ACR,
+máx. por artista, recorrência e as setas (subiu/desceu/novo) não mudam.
+Se o fator não puder ser calculado (soma zero), os pontos aparecem como 0.
+
 **Mexer nos números:** aumentar `tp`/`tga`/`tgv` (dividem) faz aquela fonte
 valer **menos**; aumentar `a` faz vendas valerem **mais**; na Alemanha (que
 multiplica) é o contrário: aumentar o preço faz a fonte valer mais.

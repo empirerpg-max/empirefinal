@@ -229,6 +229,7 @@ export async function calcularSemanaPaises(
         titulo: base.titulo,
         artistaPrincipal: base.art,
         semanas: global ? global.semanas : semanasMax,
+        pontosGlobal100: global && Number.isFinite(global.valor) ? global.valor : 0,
         totalGlobal,
         porPais,
         streamsGlobaisAnteriores: [1, 2, 3].map((k) => streamsGlobais(datas[i + k], tituloNorm)),

@@ -12,6 +12,8 @@ export interface MusicaSemana {
   artistaPrincipal: string;
   /** Semanas no Global 100 se estiver lá; senão o maior entre as plataformas. */
   semanas: number;
+  /** Pontos da música no Global 100 da semana (ausente = 0); define a escala dos pontos exibidos. */
+  pontosGlobal100: number;
   totalGlobal: Partial<Record<Plataforma, number>>;
   porPais: Partial<Record<Plataforma, Map<string, number>>>;
   /** [d-1, d-2, d-3]: streams globais Spotify + Apple + YouTube; ausente = 0. */
@@ -99,8 +101,26 @@ function somaGlobal(m: MusicaSemana): number {
   return s;
 }
 
+/**
+ * Fator que converte as unidades/receita brutas da parada para a moeda do Global 100:
+ * soma dos pontos do Global 100 ÷ soma das unidades mundiais da parada (taxas normais, sem ACR).
+ * Denominador 0 → 0.
+ */
+export function fatorPontos(musicas: MusicaSemana[], p: Parada, fracaoPaga: number): number {
+  let alvo = 0;
+  let bruto = 0;
+  for (const m of musicas) {
+    const g = m.pontosGlobal100;
+    alvo += typeof g === "number" && Number.isFinite(g) ? g : 0;
+    bruto += pontos(fontes(m, null, fracaoPaga), p);
+  }
+  return bruto > 0 ? alvo / bruto : 0;
+}
+
 /** Calcula uma parada para o país já resolvido. */
 export function calcularParada(musicas: MusicaSemana[], p: Parada, pais: string, fracaoPaga: number): Posicao[] {
+  // A ordem usa os valores brutos; só o `val` exibido é convertido para a escala do Global 100.
+  const fator = fatorPontos(musicas, p, fracaoPaga);
   const pontuadas = musicas.map((m) => {
     let pts: number;
     if (p.tipo === "excl") {
@@ -144,7 +164,7 @@ export function calcularParada(musicas: MusicaSemana[], p: Parada, pais: string,
   }
 
   return lista.slice(0, p.top).map(({ m, pts }, i) => ({
-    pos: i + 1, tituloNorm: m.tituloNorm, titulo: m.titulo, art: m.artistaPrincipal, val: Math.round(pts),
+    pos: i + 1, tituloNorm: m.tituloNorm, titulo: m.titulo, art: m.artistaPrincipal, val: Math.round(pts * fator),
   }));
 }
 

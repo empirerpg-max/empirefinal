@@ -3,7 +3,7 @@ import { test, expect } from "bun:test";
 import { sorteio01 } from "../backend/src/services/chartsD1/sorteio";
 import { fatiasRegraC, rankingsPorPais, type Pesos, type EntradaMusica } from "../backend/src/services/chartsD1/paises";
 import { regrasDeConfig, parseRegrasSemana, REGRAS_PADRAO } from "../backend/src/services/chartsD1/regras";
-import { fontes, pontos, emAcr, calcularParada, resolverPaisParada, mapaPaisPorNome, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
+import { fontes, pontos, emAcr, calcularParada, fatorPontos, resolverPaisParada, mapaPaisPorNome, paradasDaSemana, type MusicaSemana } from "../backend/src/services/chartsD1/paradas";
 import { criarD1Sqlite } from "./charts-d1-sqlite";
 import { CHARTS_D1_SCHEMA, ingerirSemana } from "../backend/src/services/chartsD1/repo";
 import { calcularSemanaPaises, ROTULO_PARADAS } from "../backend/src/services/chartsD1/semanaPaises";
@@ -134,7 +134,7 @@ test("carregarFocos: 'no such table' → mapa vazio; lê linhas existentes; sche
 
 const pais = (v: number) => new Map([["REINO UNIDO", v], ["ESTADOS UNIDOS", v * 3]]);
 const ms = (t: string, o: Partial<MusicaSemana> = {}): MusicaSemana => ({
-  tituloNorm: t, titulo: t, artistaPrincipal: t, semanas: 1, streamsGlobaisAnteriores: [0, 0, 0],
+  tituloNorm: t, titulo: t, artistaPrincipal: t, semanas: 1, pontosGlobal100: 0, streamsGlobaisAnteriores: [0, 0, 0],
   totalGlobal: { SPOTIFY: 1000, YOUTUBE: 600, "APPLE MUSIC": 300, "DIGITAL SALES": 10 },
   porPais: { SPOTIFY: pais(100), YOUTUBE: pais(60), "APPLE MUSIC": pais(30), "DIGITAL SALES": pais(1) }, ...o });
 const P = (id: string) => REGRAS_PADRAO.paradas.find((p) => p.id === id)!;
@@ -188,8 +188,10 @@ test("EUA: recorrência 52/25 remove #30 e o #51 entra no Top 50", () => {
 test("UK: música em ACR recebe val menor que a mesma fora do ACR", () => {
   const base = { porPais: { SPOTIFY: pais(1_000_000), YOUTUBE: pais(600_000) } };
   // Streams globais atuais = 1000 + 600 + 300 = 1900, caindo há 3 semanas.
-  const acr = ms("a", { ...base, semanas: 10, streamsGlobaisAnteriores: [2000, 2100, 2200] });
-  const normal = ms("a", { ...base, semanas: 1, streamsGlobaisAnteriores: [2000, 2100, 2200] });
+  // pontosGlobal100 = unidades globais da parada, para o fator ser 1 e o val ficar em unidades.
+  const g100 = pontos(fontes(ms("a"), null, 0.45), P("UK"));
+  const acr = ms("a", { ...base, pontosGlobal100: g100, semanas: 10, streamsGlobaisAnteriores: [2000, 2100, 2200] });
+  const normal = ms("a", { ...base, pontosGlobal100: g100, semanas: 1, streamsGlobaisAnteriores: [2000, 2100, 2200] });
   const vAcr = calcularParada([acr], P("UK"), "REINO UNIDO", 0.45)[0].val;
   const vNormal = calcularParada([normal], P("UK"), "REINO UNIDO", 0.45)[0].val;
   expect(vNormal).toBe(Math.round(450_000 / 100 + 550_000 / 600 + 600_000 / 600));
@@ -197,8 +199,8 @@ test("UK: música em ACR recebe val menor que a mesma fora do ACR", () => {
   expect(vAcr).toBeLessThan(vNormal);
 });
 test("Excl. US = mundo − EUA", () => {
-  const m = ms("a");
   const p = P("EXCL_US");
+  const m = ms("a", { pontosGlobal100: pontos(fontes(ms("a"), null, 0.45), p) });
   const esperado = pontos(fontes(m, null, 0.45), p) - pontos(fontes(m, "ESTADOS UNIDOS", 0.45), p);
   expect(calcularParada([m], p, "ESTADOS UNIDOS", 0.45)[0].val).toBe(Math.round(esperado));
 });
@@ -531,4 +533,14 @@ test("foco API: não-admin nunca sobrescreve linha do mesmo dia (corrida) → 40
     const linhas = (await orig("SELECT pais FROM musica_foco WHERE codigo_unico = 'EMP9'").all<{ pais: string }>()).results;
     expect(linhas).toEqual([{ pais: "BRASIL" }]);
   });
+});
+
+test("paradas: pontos na moeda do Global 100 (≤ 1000 quando o Global 100 é ≤ 1000) sem mudar a ordem", () => {
+  const l = ["a", "b", "c"].map((t, i) => ms(t, { pontosGlobal100: [705, 400, 100][i], porPais: { SPOTIFY: pais(1_000_000 * (3 - i)) }, totalGlobal: { SPOTIFY: 187_000_000 / (i + 1) } }));
+  const sem = calcularParada(l.map((m) => ({ ...m, pontosGlobal100: 0 })), P("UK"), "REINO UNIDO", 0.45);
+  const com = calcularParada(l, P("UK"), "REINO UNIDO", 0.45);
+  expect(com.map((x) => x.tituloNorm)).toEqual(sem.map((x) => x.tituloNorm));
+  for (const x of com) expect(x.val).toBeLessThanOrEqual(1000);
+  const f = fatorPontos(l, P("UK"), 0.45);
+  expect(f).toBeGreaterThan(0);
 });
