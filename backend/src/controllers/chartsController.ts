@@ -875,6 +875,11 @@ export interface RespostaCharts {
 // dezenas de KB): ao inserir, as vencidas saem e, passado o limite, as mais
 // antigas (ordem de inserção do Map) são expulsas. O TTL de cada uma não muda.
 const CHARTS_RESPONSE_CACHE_MAX = 200;
+// Teto de tamanho somado dos corpos (comprimento da string ≈ bytes): ~270
+// playlists × ~300 KB passariam de 60 MB num isolate de 128 MB. Acima disso,
+// as mais antigas saem até caber (a recém-inserida sempre fica).
+const CHARTS_RESPONSE_CACHE_MAX_BYTES = 16 * 1024 * 1024;
+let chartsResponseCacheBytes = 0;
 /** `aoVivo` diz em qual relógio `expiresAt` está (ao vivo ou Date.now). */
 const chartsResponseCache = new Map<string, RespostaCharts & { expiresAt: number; aoVivo: boolean }>();
 const chartsResponseInFlight = new Map<string, Promise<RespostaCharts>>();
@@ -891,17 +896,33 @@ export function tamanhoCacheRespostasCharts(): number {
   return chartsResponseCache.size;
 }
 
+/** Tamanho somado dos corpos em cache (para testes). */
+export function bytesCacheRespostasCharts(): number {
+  return chartsResponseCacheBytes;
+}
+
+function removerRespostaCache(cacheKey: string): void {
+  const e = chartsResponseCache.get(cacheKey);
+  if (!e) return;
+  chartsResponseCacheBytes -= e.body.length;
+  chartsResponseCache.delete(cacheKey);
+}
+
 /** Insere a resposta: descarta as vencidas e expulsa as mais antigas além do limite. */
 function gravarRespostaCache(cacheKey: string, entrada: RespostaCharts & { expiresAt: number; aoVivo: boolean }): void {
   const agoraVivo = agoraAoVivo();
   const agoraNormal = Date.now();
   for (const [k, e] of chartsResponseCache) {
-    if (e.expiresAt <= (e.aoVivo ? agoraVivo : agoraNormal)) chartsResponseCache.delete(k);
+    if (e.expiresAt <= (e.aoVivo ? agoraVivo : agoraNormal)) removerRespostaCache(k);
   }
-  chartsResponseCache.delete(cacheKey);
+  removerRespostaCache(cacheKey);
   chartsResponseCache.set(cacheKey, entrada);
-  while (chartsResponseCache.size > CHARTS_RESPONSE_CACHE_MAX) {
-    chartsResponseCache.delete(chartsResponseCache.keys().next().value as string);
+  chartsResponseCacheBytes += entrada.body.length;
+  while (
+    chartsResponseCache.size > CHARTS_RESPONSE_CACHE_MAX ||
+    (chartsResponseCacheBytes > CHARTS_RESPONSE_CACHE_MAX_BYTES && chartsResponseCache.size > 1)
+  ) {
+    removerRespostaCache(chartsResponseCache.keys().next().value as string);
   }
 }
 
@@ -917,6 +938,7 @@ export function aoLimparCacheCharts(fn: () => void): void {
 /** Descarta as respostas em cache deste isolate (chamado após ingerir uma semana no D1). */
 export function limparCacheCharts(): void {
   chartsResponseCache.clear();
+  chartsResponseCacheBytes = 0;
   datasD1Cache.clear();
   semanaPaisesCache.clear();
   semanaPlaylistsCache = null;

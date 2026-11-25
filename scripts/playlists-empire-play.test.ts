@@ -636,6 +636,7 @@ import {
   chartsApiController,
   definirRelogioAoVivo,
   limparCacheCharts,
+  bytesCacheRespostasCharts,
   respostaAoVivoEmCache,
   tamanhoCacheRespostasCharts,
 } from "../backend/src/controllers/chartsController";
@@ -860,4 +861,40 @@ test("limparCacheCharts também descarta o catálogo das playlists", async () =>
     await carregarCatalogoTocavel();
     expect(consultas.length).toBeGreaterThan(n);
   });
+});
+
+test("cache de respostas dos charts: acima de 16 MB somados, as mais antigas saem", async () => {
+  limparCacheCharts();
+  try {
+    const corpo = "x".repeat(3 * 1024 * 1024); // 3 MB cada
+    for (let i = 0; i < 6; i++) await respostaAoVivoEmCache(`grande-${i}`, async () => ({ body: corpo }));
+    // 6 × 3 MB = 18 MB > 16 MB: a 1ª saiu, sobram 5 (15 MB)
+    expect(tamanhoCacheRespostasCharts()).toBe(5);
+    expect(bytesCacheRespostasCharts()).toBe(5 * corpo.length);
+    // a mais antiga foi expulsa: pedir de novo recalcula; a mais nova continua em cache
+    let calculou = 0;
+    await respostaAoVivoEmCache("grande-5", async () => (calculou++, { body: corpo }));
+    expect(calculou).toBe(0);
+    await respostaAoVivoEmCache("grande-0", async () => (calculou++, { body: corpo }));
+    expect(calculou).toBe(1);
+    expect(bytesCacheRespostasCharts()).toBeLessThanOrEqual(16 * 1024 * 1024);
+    limparCacheCharts();
+    expect(bytesCacheRespostasCharts()).toBe(0);
+  } finally {
+    limparCacheCharts();
+  }
+});
+
+test("catálogo tocável: clipe sem letras, música mantém", () => {
+  const item = (over: Partial<EmpirePlayCleanItem>): EmpirePlayCleanItem =>
+    ({ id: "x", type: "t", title: "Song", artist: "Art", codigoUnico: "C1", ...over }) as EmpirePlayCleanItem;
+  const cat = montarCatalogoTocavel(
+    [item({ id: "m", lyrics: "letra", syncedLyrics: "[00:01.00]letra", audioUrl: "a.mp3" })],
+    [item({ id: "v", category: "Music Video", videoUrl: "y", lyrics: "letra", syncedLyrics: "[00:01.00]x" })],
+  );
+  const clipe = cat.clipePorCodigo.get("C1")!;
+  expect(clipe.id).toBe("v");
+  expect("lyrics" in clipe).toBe(false);
+  expect("syncedLyrics" in clipe).toBe(false);
+  expect(cat.musicaPorLigacao.get("C1")!.lyrics).toBe("letra");
 });

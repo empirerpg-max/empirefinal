@@ -144,6 +144,16 @@ export interface CatalogoTocavel {
 const ehMusicVideo = (item: EmpirePlayCleanItem): boolean =>
   normalizeComparison(item.category || "") === normalizeComparison("Music Video");
 
+/**
+ * Clipe sem as letras: o player de vídeo (toPlayableVideo) não usa
+ * lyrics/syncedLyrics, e elas pesam na resposta da playlist. A `musica`
+ * mantém as letras (o player de áudio lê direto do item).
+ */
+function semLetra(c: EmpirePlayCleanItem): EmpirePlayCleanItem {
+  const { lyrics: _l, syncedLyrics: _s, ...leve } = c;
+  return leve;
+}
+
 /** Prefixo dos códigos provisórios de músicas sem codigo_unico (nunca vira `chave`). */
 const SEM_CODIGO = "\u0000sem-codigo:";
 
@@ -200,7 +210,7 @@ export function montarCatalogoTocavel(
     const codigo = (c.codigoUnico || "").trim();
     if (!codigo || !ehMusicVideo(c)) continue;
     const atual = clipePorCodigo.get(codigo);
-    if (!atual || (!atual.videoUrl && c.videoUrl)) clipePorCodigo.set(codigo, c);
+    if (!atual || (!atual.videoUrl && c.videoUrl)) clipePorCodigo.set(codigo, semLetra(c));
   }
 
   return { indice: indexarCatalogo(linhas), musicaPorLigacao, clipePorCodigo, fotos };
