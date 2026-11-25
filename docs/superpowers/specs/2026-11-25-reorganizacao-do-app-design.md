@@ -1250,7 +1250,7 @@ carrossel "Assistir agora" e grade continuam.
 - uma linha a cada 30 s por pessoa pesa na cota do Google Sheets.
 
 **Regra (decidida pelo usuário):** a porcentagem é **só o tempo em que a
-pessoa esteve com a sala aberta**. Mensagens **não** entram na conta (quem
+pessoa esteve com a sala aberta ou o mini player tocando**. Mensagens **não** entram na conta (quem
 só assiste e comenta pouco recebe o tempo todo; quem manda várias
 mensagens e sai cedo recebe só o tempo em que ficou). Isso substitui a
 regra de hoje "vale o maior entre presença e chat (10 mensagens = 100%)".
@@ -1274,9 +1274,11 @@ regra de hoje "vale o maior entre presença e chat (10 mensagens = 100%)".
 **Como medir:**
 
 1. **Linha do tempo por minuto**, de Início a Término. A pessoa está
-   **presente num minuto** quando a **sala está aberta** e a tela está
-   ligada na aba do app (`visibilitychange`). Minimizar para o mini player
-   **não conta** (escolha do usuário; pode ser ligado depois se quiserem).
+   **presente num minuto** quando a **sala está aberta ou minimizada no
+   mini player** (autorizado pelo usuário) e a tela está ligada na aba do
+   app (`visibilitychange`). Para isso, a contagem sai da `WatchView` e
+   passa a morar no `TvPlayerContext` (que continua montado com o mini
+   player).
 2. **Tolerância a queda de conexão:** um buraco de até 2 minutos entre dois
    minutos presentes conta como presente (troca de rede, app recarregando).
 3. **Sessões somam sem contar em dobro:** sair e voltar soma; duas abas ou
@@ -1451,7 +1453,7 @@ de 360px nos dois tamanhos de texto.
 | Fase | Conteúdo | Depende de |
 |---|---|---|
 | **0a. Medição de uso** (na versão de hoje) | 6.15: envio em lote, tabelas `uso_diario` e `uso_jogador_dia`, chave em `homeFlags`, tela Admin › Uso do app. **Vai ao ar primeiro**, para medir a base por ~4 semanas antes do Beta | — |
-| **0b. Participação na TV e GIFs** (nas duas versões) | 6.19.1: minutos presentes enviados a cada 5 min, tabela `tv_presenca` (uma linha por pessoa), processamento lendo o D1, Presenca_TV com uma linha por pessoa, Início/Término do admin, Participantes com o mesmo número; 6.19.3: GIFs ao vivo, Último uso, todos os GIFs | ~~D6~~ | **Decidido:** a porcentagem é só o tempo com a sala aberta, entre Início e Término marcados pelo admin; mensagens não contam. | — | — |
+| **0b. Participação na TV e GIFs** (nas duas versões) | 6.19.1: minutos presentes enviados a cada 5 min, tabela `tv_presenca` (uma linha por pessoa), processamento lendo o D1, Presenca_TV com uma linha por pessoa, Início/Término do admin, Participantes com o mesmo número; 6.19.3: GIFs ao vivo, Último uso, todos os GIFs | ~~D6~~ | **Decidido:** a porcentagem é só o tempo com a sala aberta ou o mini player, entre Início e Término marcados pelo admin; mensagens não contam. | — | — |
 | **0. Fundações** (nada visível muda) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query + cliente de API, tokens de cor com os valores atuais | — |
 | **1. Navegação (Beta test)** | casca nova inteira **atrás do Beta test** (6.11): topo, barra/trilho/barra lateral (6.10), Criar, Meu Império, abas do Início, aviso de mudança, tutorial; chave do admin, reportes e faixa na versão anterior | 0 |
 | **1b. Sala da Empire TV** (Beta) | 6.19: enquetes no chat (6.19.4), vídeo no topo, faixa fina, folhas, chat compacto, "↓ novas", arrastar para responder, reações, celular deitado; som conforme D5 | 0b, 1 |
