@@ -1,6 +1,6 @@
 // Playlists do Empire Play: ids estáveis e catálogo "tocável" (música + clipe)
 // ligado às músicas dos charts. Só lê o D1 (musicas, videos Music Video,
-// artista_info) — nenhuma leitura de planilha, nenhuma escrita.
+// espelho de artistas) — nenhuma leitura de planilha, nenhuma escrita.
 //
 // `musica` e `clipe` de cada faixa são EXATAMENTE os itens que
 // /api/empire-play/musicas e /api/empire-play/videos devolvem (mesmo
@@ -137,7 +137,7 @@ export interface CatalogoTocavel {
   musicaPorLigacao: Map<string, EmpirePlayCleanItem>;
   /** Music Video por codigo_unico. */
   clipePorCodigo: Map<string, EmpirePlayCleanItem>;
-  /** Foto do artista (artista_info) por nome em CAIXA ALTA. */
+  /** Foto do artista (espelho de artistas) por nome em CAIXA ALTA. */
   fotos: Map<string, string>;
 }
 

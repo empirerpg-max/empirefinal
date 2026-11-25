@@ -146,6 +146,7 @@ let cache: { db: D1DatabaseLike; em: number; promessa: Promise<Map<string, Artis
 
 export function limparCacheArtistas(): void {
   cache = null;
+  cacheFlagCharts = null;
 }
 
 async function lerArtistas(db: D1DatabaseLike): Promise<Map<string, Artista>> {
@@ -605,4 +606,91 @@ export async function listarGeneros(db: D1DatabaseLike): Promise<string[]> {
   ];
   const unicos = new Set(todos.map((g) => g.trim().toUpperCase()).filter(Boolean));
   return [...unicos].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+// ---------------------------------------------------------------------------
+// Referências para charts/playlists (nacionalidade, foto e gênero por artista)
+// ---------------------------------------------------------------------------
+
+/** Mesmo formato que as consultas antigas em artista_info devolviam. */
+export interface ReferenciaArtistaCharts {
+  nome_upper: string;
+  nacionalidade: string;
+  foto: string;
+  genero: string;
+}
+
+// Flag da importação em cache (5 min) — os leitores de charts rodam a cada
+// requisição e não podem pagar uma leitura extra do D1 por vez.
+let cacheFlagCharts: { db: D1DatabaseLike; em: number; promessa: Promise<boolean> } | null = null;
+
+function importacaoFeitaEmCache(db: D1DatabaseLike): Promise<boolean> {
+  const agora = Date.now();
+  if (cacheFlagCharts && cacheFlagCharts.db === db && agora - cacheFlagCharts.em < TTL_MS) return cacheFlagCharts.promessa;
+  // Só SELECT (sem CREATE TABLE): tabela ausente = importação não feita
+  const promessa = db
+    .prepare("SELECT valor FROM chart_config WHERE chave = ?")
+    .bind(MARCA_IMPORTADO)
+    .all<{ valor: string }>()
+    .then((r) => r.results[0]?.valor === "1")
+    .catch((e) => {
+      if (/no such table/i.test(String((e as Error)?.message ?? e))) return false;
+      throw e;
+    });
+  promessa.catch(() => {
+    if (cacheFlagCharts?.promessa === promessa) cacheFlagCharts = null;
+  });
+  cacheFlagCharts = { db, em: agora, promessa };
+  return promessa;
+}
+
+/** Chave nome_upper como artista_info sempre guardou: sem espaços nas pontas, CAIXA ALTA. */
+const chaveNomeUpper = (nome: string): string => String(nome ?? "").trim().toUpperCase();
+
+/** Leitura antiga (artista_info); tabela ausente -> []; banco sem a coluna genero -> gênero vazio. */
+async function referenciasDeArtistaInfo(db: D1DatabaseLike): Promise<ReferenciaArtistaCharts[]> {
+  const ler = async (sql: string) => (await db.prepare(sql).all<Record<string, string | null>>()).results;
+  let rows: Record<string, string | null>[];
+  try {
+    try {
+      rows = await ler("SELECT nome_upper, nacionalidade, foto, genero FROM artista_info");
+    } catch (e) {
+      if (!/no such column/i.test(String((e as Error)?.message ?? e))) throw e;
+      rows = await ler("SELECT nome_upper, nacionalidade, foto FROM artista_info");
+    }
+  } catch (e) {
+    if (/no such table/i.test(String((e as Error)?.message ?? e))) return [];
+    throw e;
+  }
+  return rows.map((r) => ({
+    nome_upper: String(r.nome_upper ?? ""),
+    nacionalidade: String(r.nacionalidade ?? ""),
+    foto: String(r.foto ?? ""),
+    genero: String(r.genero ?? ""),
+  }));
+}
+
+/**
+ * Única fonte dos leitores de charts/playlists: nacionalidade (pais), foto
+ * (foto_url) e gênero (genero_principal) por nome_upper. Importação feita ->
+ * espelho `artistas` (carregarArtistas, em cache); antes dela -> artista_info
+ * (transição segura). Ordem do espelho = linha da planilha (determinístico).
+ */
+export async function referenciasArtistasParaCharts(db: D1DatabaseLike): Promise<ReferenciaArtistaCharts[]> {
+  if (!(await importacaoFeitaEmCache(db))) return referenciasDeArtistaInfo(db);
+  const mapa = await carregarArtistas(db);
+  const vistos = new Set<string>();
+  const lista: ReferenciaArtistaCharts[] = [];
+  for (const a of mapa.values()) {
+    const nomeUpper = chaveNomeUpper(a.nome);
+    if (!nomeUpper || vistos.has(nomeUpper)) continue;
+    vistos.add(nomeUpper);
+    lista.push({
+      nome_upper: nomeUpper,
+      nacionalidade: a.pais ?? "",
+      foto: a.fotoUrl ?? "",
+      genero: a.generoPrincipal ?? "",
+    });
+  }
+  return lista;
 }

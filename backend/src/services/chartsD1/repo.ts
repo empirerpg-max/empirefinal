@@ -1,6 +1,7 @@
 // Gravação dos charts semanais no D1: tabelas, histórico por música e
 // ingestão de uma semana da aba DADOS (enviada pelo Google, nunca lida daqui).
 import type { D1DatabaseLike, D1PreparedStatement } from "../catalogoDbService";
+import { referenciasArtistasParaCharts } from "../artistasD1";
 import { CHARTS, type ChartId, type LinhaDados } from "./tipos";
 import { dataBrParaIso, dataIsoParaBr, parseLinhaDados, parseNumeroBR, validarSemana } from "./dados";
 import { calcularMovimento, type HistoricoMusica, type Movimento } from "./movimento";
@@ -410,8 +411,7 @@ export async function carregarCatalogo(db: D1DatabaseLike): Promise<Map<string, 
 }
 
 async function carregarConhecidos(db: D1DatabaseLike): Promise<Set<string>> {
-  const r = await db.prepare("SELECT nome_upper FROM artista_info").all<{ nome_upper: string }>();
-  return new Set(r.results.map((x) => x.nome_upper));
+  return new Set((await referenciasArtistasParaCharts(db)).map((x) => x.nome_upper));
 }
 
 /**
@@ -579,7 +579,7 @@ export async function ingerirSemana(db: D1DatabaseLike, payload: PayloadIngestao
   }
   const dataIso = prep.dataIso;
 
-  // Antes de resolver: o filtro de artistas do título usa artista_info.
+  // Antes de resolver: o filtro de artistas do título usa o espelho (ou artista_info antes da importação).
   await gravarArtistasEPesos(db, payload.artistas ?? [], payload.pesos ?? []);
   const [cat, conhecidos] = await Promise.all([carregarCatalogo(db), carregarConhecidos(db)]);
 
@@ -670,13 +670,10 @@ export async function consultar<T>(db: D1DatabaseLike, sql: string, ...params: u
   }
 }
 
-/** Fotos de artista_info por nome em CAIXA ALTA (fallback de capa). */
+/** Fotos dos artistas (espelho; antes da importação, artista_info) por nome em CAIXA ALTA (fallback de capa). */
 export async function carregarFotos(db: D1DatabaseLike): Promise<Map<string, string>> {
-  const rows = await consultar<{ nome_upper: string; foto: string }>(
-    db,
-    "SELECT nome_upper, foto FROM artista_info WHERE foto IS NOT NULL AND foto != ''",
-  );
-  return new Map(rows.map((r) => [r.nome_upper, r.foto]));
+  const rows = await referenciasArtistasParaCharts(db);
+  return new Map(rows.filter((r) => r.foto).map((r) => [r.nome_upper, r.foto]));
 }
 
 /**
@@ -685,11 +682,8 @@ export async function carregarFotos(db: D1DatabaseLike): Promise<Map<string, str
  */
 export async function carregarGenerosArtistas(db: D1DatabaseLike): Promise<Map<string, string>> {
   try {
-    const rows = await consultar<{ nome_upper: string; genero: string }>(
-      db,
-      "SELECT nome_upper, genero FROM artista_info WHERE genero IS NOT NULL AND genero != ''",
-    );
-    return new Map(rows.map((r) => [r.nome_upper, String(r.genero).trim()]));
+    const rows = await referenciasArtistasParaCharts(db);
+    return new Map(rows.filter((r) => r.genero).map((r) => [r.nome_upper, String(r.genero).trim()]));
   } catch (e) {
     if (/no such column/i.test(e instanceof Error ? e.message : String(e))) return new Map();
     throw e;
@@ -794,7 +788,7 @@ export async function linhasDoChart(
   generosArtistas?: Map<string, string>,
 ): Promise<LinhaChartApi[]> {
   // Acumulado e gênero da música já vêm gravados: só as 100 linhas da semana
-  // (PK). O gênero do artista (fallback) vem do mapa de artista_info.
+  // (PK). O gênero do artista (fallback) vem do mapa do espelho de artistas.
   const rows = await consultar<{
     pos: number; titulo: string; valor: number; valor_total: number | null; valor_acumulado: number | null;
     artistas: string; status: string; genero: string | null;
