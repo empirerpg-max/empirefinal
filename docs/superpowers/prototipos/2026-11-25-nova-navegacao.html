@@ -338,6 +338,10 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
       </ul>
     </section>
     <section class="note">
+      <h2>Aviso "O que mudou de lugar" <span class="novo">novo</span></h2>
+      <p>Na primeira vez que o jogador abre o app novo, uma folha mostra onde ficou cada coisa. Ela aparece uma vez só e depois pode ser reaberta em Meu Império › Guia. <button class="jump" data-oque-ext>Ver no celular</button></p>
+    </section>
+    <section class="note">
       <h2>Estados de carregando, vazio e erro</h2>
       <p>Toda tela nova precisa desses três estados. Veja no Fórum:</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="jump" data-estado-ext="carregando">Carregando</button> · <button class="jump" data-estado-ext="vazio">Vazio</button> · <button class="jump" data-estado-ext="erro">Erro</button> · <button class="jump" data-estado-ext="normal">Normal</button></div>
@@ -619,7 +623,7 @@ function catalogo(){
     html += `<label class="search">${svg('search')}<input id="q" placeholder="Músicas, vídeos, álbuns, artistas" autocomplete="off"></label>`;
     html += chips(['Tudo','Músicas','Vídeos','Álbuns','Artistas','Material antigo'], state.searchFilter, 'searchFilter');
     const f = state.searchFilter;
-    html += `<div style="margin-top:6px">`;
+    html += `<div style="margin-top:6px" id="buscaRes">`;
     if (f==='Tudo'){
       html += h2('Navegar por gênero') + `<div class="grid2">${['Pop','Hip-Hop','Latina','R&B','Rock','Sertanejo'].map((t,k)=>`<button class="genre" style="background:linear-gradient(140deg,${G[k+1][0]},${G[k+1][1]})" data-open="genero" data-id="${k+1}" data-title="${t}">${t}</button>`).join('')}</div>`;
     }
@@ -950,7 +954,7 @@ const pages = {
     return {title:'Votação · VMA 2026', body:`<p class="sub" style="margin:14px 16px">6 categorias · termina em 28/11</p><div class="group">${['Álbum do Ano','Música do Ano','Clipe do Ano','Revelação','Performance','Colaboração'].map((c,k)=>`<button class="row" data-toast="Abre os indicados de ${c}"><span class="meta"><b>${c}</b><small>${k<2?'Votado ✓':'5 indicados'}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`};
   },
   notif(){
-    return {title:'Notificações', body:`<div class="card" style="margin-top:14px;display:flex;gap:10px;align-items:center"><span class="badge live">Ao vivo</span><span style="flex:1;min-width:0" class="small"><b>Red Carpet do VMA</b> começou na Empire TV</span><button class="btn pri" style="height:32px;font-size:12px" data-open="tv">Entrar</button></div>
+    return {title:'Notificações', body:`<div style="display:flex;gap:8px;padding:14px 16px 0"><button class="btn sec" style="height:34px;font-size:12.5px" data-toast="Todas marcadas como lidas">Marcar todas como lidas</button><button class="btn sec" style="height:34px;font-size:12.5px" data-toast="O que receber no celular: comentários no Fórum, comentários e curtidas no Social">Configurar</button></div><div class="card" style="margin-top:12px;display:flex;gap:10px;align-items:center"><span class="badge live">Ao vivo</span><span style="flex:1;min-width:0" class="small"><b>Red Carpet do VMA</b> começou na Empire TV</span><button class="btn pri" style="height:32px;font-size:12px" data-open="tv">Entrar</button></div>
       ${[['Bia Kalli comentou em Ruído Branco','Fórum · 5 min','forum'],['Oruã curtiu sua publicação','Social · 20 min','heart'],['Sua turnê esgotou em Rio de Janeiro','Turnês · 1 h','ticket'],['Nova edição da Rolling Empire','Acervo · 3 h','archive']].map(([t,s,ic])=>`<div class="row"><span class="gicon" style="background:var(--p-surface2);color:var(--p-fg)">${svg(ic)}</span><span class="meta"><b style="white-space:normal">${t}</b><small>${s}</small></span></div>`).join('')}`};
   },
   me(){
@@ -1068,6 +1072,7 @@ box.addEventListener('click', e => {
   if (act){ e.stopPropagation(); return openActions(act.dataset.actions, act.dataset.title); }
   const b = e.target.closest('button,[role="button"]'); if (!b) return;
   if (b.classList.contains('chipArrow')){ const row=b.parentElement.querySelector('.chips'); row.scrollBy({left:(b.classList.contains('l')?-1:1)*(row.clientWidth-96),behavior:'smooth'}); return; }
+  if (b.hasAttribute('data-oque-mudou')){ $('#sheet').setAttribute('aria-label','O que mudou'); $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:18px;margin-bottom:4px">O Empire Hub mudou de lugar <i class="novo">novo</i></b><p class="muted small" style="margin:0 0 12px">Nada saiu do app. Veja onde ficou cada coisa:</p><div class="group" style="margin:0">${[['tv','Empire TV, Turnês e Acervo','Início › abas no topo'],['plus','Gestão e Pre-save','botão Criar, no topo'],['user','Perfil, Ponto, Market, Premiações','sua foto, no topo'],['forum','Fórum','aba própria na barra de baixo'],['chart','Playlists ao vivo','Charts › Ao vivo']].map(([ic,t,d])=>`<div class="row"><span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg(ic==='plus'?'pen':ic)}</span><span class="meta"><b>${t}</b><small>${d}</small></span></div>`).join('')}</div><button class="btn pri" style="width:100%;margin-top:14px" data-close-sheet>Entendi</button>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
   if (b.dataset.estado){ state.demoEstado=b.dataset.estado; return render(true); }
   if (b.hasAttribute('data-open-rede')){ $('#sheet').setAttribute('aria-label','Filtrar por rede'); $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:10px">Mostrar posts de <i class="novo">novo</i></b><div class="group" style="margin:0">${['Todas','Instagram','Twitter','TikTok'].map(x=>`<button class="row" data-pick-rede="${x}"><span class="meta"><b>${x==='Todas'?'Todas as redes':x}</b></span>${(state.socialNet||'Todas')===x?'<b style="color:var(--p-accent)">✓</b>':''}</button>`).join('')}</div>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
   if (b.dataset.pickRede){ state.socialNet=b.dataset.pickRede; closeSheet(); return render(true); }
@@ -1119,6 +1124,19 @@ box.addEventListener('click', e => {
   if (b.hasAttribute('data-follow')){ const on=b.textContent.trim()==='Seguir'; b.textContent = on?'Seguindo':'Seguir'; b.classList.toggle('pri',!on); b.classList.toggle('sec',on); return; }
   if (b.dataset.toast) return toast(b.dataset.toast);
 });
+box.addEventListener('input', e => {
+  if (e.target.id !== 'q') return;
+  const q = e.target.value.trim().toLowerCase(), res = $('#buscaRes'); if (!res) return;
+  if (!q){ state.catTab='buscar'; return render(true); }
+  const hit = x => x.toLowerCase().includes(q);
+  const grupos = [
+    ['Artistas', ART.map((a,i)=>[a,i]).filter(([a])=>hit(a)).map(([a,i])=>`<button class="row" data-open="artist" data-id="${i}"><span class="cv sm" style="width:44px;height:44px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>Artista</small></span></button>`)],
+    ['Músicas', SONG.filter(x=>hit(x.t)||hit(ART[x.a])).map((x,i)=>songRow(x,i,{end:x.d}))],
+    ['Vídeos', VID.filter(v=>hit(v.t)).map((v,k)=>`<button class="row" data-open="topic" data-id="${k}" data-title="${v.t}" data-kind="video"><span class="meta"><b>${v.t}</b><small>${v.k}</small></span></button>`)],
+    ['Álbuns', ALB.map((a,i)=>[a,i]).filter(([a])=>hit(a.t)).map(([a,i])=>`<button class="row" data-open="album" data-id="${i}">${cover(i,'','sm')}<span class="meta"><b>${a.t}</b><small>Álbum · ${ART[a.a]}</small></span></button>`)],
+  ].filter(g=>g[1].length);
+  res.innerHTML = grupos.length ? grupos.map(([t,l])=>h2(t)+l.slice(0,4).join('')).join('') : `<div class="card" style="margin-top:12px;text-align:center"><b>Nada encontrado para “${q.replace(/[<>&"]/g,'')}”</b><p class="muted small" style="margin:6px 0 0">Confira a grafia ou tente o nome do artista.</p></div>`;
+});
 $('#mini').addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' '){ e.preventDefault(); $('#mini').click(); } });
 $('#scrim').addEventListener('click', closeSheet);
 /* deslizar entre as abas do Início e puxar para atualizar */
@@ -1137,6 +1155,7 @@ scroller.addEventListener('touchend', e=>{
 document.addEventListener('keydown', e => { if (e.key==='Escape'){ if ($('#sheet').classList.contains('in')) closeSheet(); else closeTop(); } });
 $('#mDark').addEventListener('click', ()=>setMode('dark'));
 $('#mLight').addEventListener('click', ()=>setMode('light'));
+document.querySelectorAll('[data-oque-ext]').forEach(b => b.addEventListener('click', () => { closeAll(); state.tab='inicio'; render(); const t=document.createElement('button'); t.setAttribute('data-oque-mudou',''); box.appendChild(t); t.click(); t.remove(); if (matchMedia('(max-width:900px)').matches) phone.scrollIntoView({behavior:'smooth',block:'start'}); }));
 document.querySelectorAll('[data-estado-ext]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='forum'; state.demoEstado=b.dataset.estadoExt; render(); marcarAtual(); if (matchMedia('(max-width:900px)').matches) phone.scrollIntoView({behavior:'smooth',block:'start'}); }));
 document.querySelectorAll('[data-jump-acervo]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='inicio'; state.inicioTab='acervo'; state.acervoTab=b.dataset.jumpAcervo; render(); phone.scrollIntoView({behavior:'smooth',block:'center'}); }));
 document.querySelectorAll('[data-jump]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='inicio'; state.inicioTab=b.dataset.jump; render(); phone.scrollIntoView({behavior:'smooth',block:'center'}); }));

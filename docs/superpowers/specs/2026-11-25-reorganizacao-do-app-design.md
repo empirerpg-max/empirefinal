@@ -216,18 +216,18 @@ Turnês · Acervo**. As três últimas são as telas atuais (`/tv`, `/tours`,
 1. **Cartão "Ao vivo"** (só quando há transmissão na Empire TV ou canal da
    Kick ao vivo): título, quantos assistem, **Entrar na sala** (→ sala da TV)
    e **Grade de hoje** (→ aba Empire TV).
-2. **Carrosséis de banner** que já existem: Spotlight Banner e Pre-save.
-3. **"Pra fazer hoje"** *(NOVO)*: lista do que o jogador tem pendente hoje,
+2. **"Pra fazer hoje"** *(NOVO)*: lista do que o jogador tem pendente hoje,
    montada a partir de dados que já existem:
    - ação do dia da turnê (`/api/turnes/missoes`);
    - missão do pre-save (`/api/presave/minhas-campanhas`);
    - Performance Award pendente (`listarPendenciasPerformance`);
    - indicação/votação/festival abertos (mesmas checagens dos popups).
    Cada linha leva direto à tela. Some quando não há nada.
-4. Seções que já existem hoje na home, mantidas e na mesma ordem
-   configurável por `homeFlags`: Meus Artistas, Lançamentos recentes, Global
-   100 #1, Top por plataforma, Próximos eventos, Últimas publicações do
-   Social, Revistas & Entrevistas, ticker de atividade.
+3. **Carrosséis de banner** que já existem: Spotlight Banner e Pre-save.
+4. Seções que já existem hoje na home, na ordem de U8 e configuráveis por
+   `homeFlags`: Meus Artistas, Lançamentos recentes, Global 100 #1, Top por
+   plataforma, Próximos eventos, ticker de atividade, Últimas publicações do
+   Social, Revistas & Entrevistas.
 
 **Empire TV, Turnês, Acervo:** as telas de hoje, inteiras (Início/Grade/
 Arquivo/Red Carpet; Criar/Central/Em andamento/Finalizados/Mais Rentáveis;
@@ -260,7 +260,10 @@ O painel de playlists que está aqui hoje **vai para Charts › Ao vivo**
 
 #### 5.3.2 Catálogo › Buscar
 
-- Campo de busca (usa `/api/busca`, a mesma da Busca rápida de hoje).
+- Campo de busca (usa `/api/busca`, a mesma da Busca rápida de hoje). Ao
+  digitar, mostra os resultados **agrupados** como a Busca rápida faz hoje
+  (Artistas, Músicas, Vídeos, Álbuns, até 4 por grupo); sem resultado, diz
+  "Nada encontrado para …" com uma dica.
 - Filtros (fileira rolável com seta): **Tudo · Músicas · Vídeos · Álbuns ·
   Artistas · Material antigo**. Substituem as abas Músicas, Vídeos, Álbuns,
   a lista de Artistas e a lista de Álbuns antigos. As listas são as mesmas
@@ -319,12 +322,13 @@ conferir item por item na página nova. A lista mínima está abaixo.
    > ninguém inferir quem deu nota para quem) e no **Acervo › Empirefork**
    > (Best New Track usa a nota Metacritic). Em **vídeos**, a nota é de
    > Likes e aparece no Fórum (média e em cada comentário), como hoje.
-3. Ações: **Tocar** (álbum: toca as faixas com áudio em ordem; música: a
-   faixa; vídeo: **Assistir**) · Aleatório (álbum) / Adicionar à playlist
-   (música) / Mini player (vídeo) · **Salvar** · **⋯** (Compartilhar,
-   Reportar conteúdo errado; **Editar lançamento** para dono e admin;
-   **Editar tópico**, **Marcar como pendente** e **Excluir tópico** para
-   admin, com a mesma confirmação de hoje).
+3. Ações (U5): **Tocar** (álbum: toca as faixas com áudio em ordem;
+   música: a faixa; vídeo: **Assistir**) e o 2º botão (Aleatório no álbum,
+   Adicionar à playlist na música, Mini player no vídeo) ocupam a linha.
+   **Salvar (♡)** e **⋯** ficam no cabeçalho da tela. O ⋯ tem Compartilhar,
+   Reportar conteúdo errado, **Editar lançamento** (dono e admin) e
+   **Editar tópico**, **Marcar como pendente** e **Excluir tópico** (admin,
+   com a mesma confirmação de hoje).
 4. **Botões do tópico: Shop · Info · Visual** (`ExtraMaterialButtons`), só
    os que existirem para aquele lançamento, como hoje. "Visual" troca a
    página pela arte (`VisualBlocosView`) e tem "Voltar ao normal".
@@ -378,8 +382,9 @@ na barra. Abrir um tópico = abrir a página do lançamento (5.3.4).
   internas). Em **Vídeos**, a fileira de **tipo de vídeo** que existe hoje
   (Todos + os tipos presentes nos itens).
 - **Pesquisar tópicos** (como hoje), botão **Filtros** (artista, lançado de,
-  até, limpar filtros) e a chave **Só os que não comentei** (já existe
-  dentro de Filtros; vira chave visível, call meu).
+  até, limpar filtros) **dentro do campo de busca**, e **"Não comentei"**
+  como última opção da fileira de categorias (U7; hoje fica dentro de
+  Filtros).
 - Cada tópico mostra: capa, título, tipo, artista com verificado, **nota só
   em vídeo** (como hoje), **selo de prêmio**, **pre-save**, **último comentário** (autor + começo do
   texto) *(NOVO)*, nº de comentários, última atividade e "você ainda não
@@ -458,7 +463,7 @@ leitura.
 ### 5.6 Social
 
 Mesma URL (`/social`, `?postId=&artist=`). Fileira de abas (rolável com
-seta): **Feed · Vídeos · Na Mídia · Perfis · News**. A aba **Config sai**
+seta): **Feed · Vídeos · Tá na Mídia · Perfis · News** (nomes de hoje). A aba **Config sai**
 e vira "Configurar meus perfis" (5.6.3).
 
 #### 5.6.1 "Interagindo como" sempre visível
@@ -513,7 +518,7 @@ em vermelho. Mantém o recorte de foto em círculo e o "Usar original".
 
 #### 5.6.4 Feed
 
-- **Filtro por rede** *(NOVO)*: `Todas · Instagram · Twitter · TikTok`.
+- **Filtro por rede** *(NOVO)*: botão **"Redes ▾"** ao lado de "Interagindo como", que abre uma folha com Todas · Instagram · Twitter · TikTok (U6).
 - Stories do Instagram no topo (como hoje, com visualizador).
 - Cada post no visual da rede dele (como hoje): Instagram com mídia e
   carrossel de até 10 fotos, Twitter com texto em primeiro plano e música
@@ -533,7 +538,7 @@ em vermelho. Mantém o recorte de foto em círculo e o "Usar original".
 
 **Vídeos:** os TikToks em tela cheia, um por tela, deslizando para cima
 (o visualizador `setTiktokViewer` que já existe), com som/sem som.
-**Na Mídia:** grade dos perfis de mídia compartilhados (como hoje).
+**Tá na Mídia:** grade dos perfis de mídia compartilhados (como hoje).
 **Perfis:** busca por nome ou @ + lista de artistas → página do perfil.
 **News:** matérias (como hoje), com "Publicar notícia" e ⋯ para quem tem
 permissão.
@@ -747,8 +752,7 @@ protótipo):
    conferindo que o escuro fica idêntico (comparação de captura de tela
    antes/depois).
 3. Unificar os dois verdes de destaque (o `primary` e o `emerald` do
-   Catálogo) e a pílula branca num token só por papel. **Ver decisão
-   aberta D3.**
+   Catálogo) e a pílula branca num token só por papel. Regra aprovada: U13.
 4. Só ligar a opção "Claro" quando todas as telas estiverem migradas.
 
 Preferência em Meu Império › Aparência: **Escuro (padrão) · Claro ·
@@ -825,7 +829,7 @@ Aplicadas no protótipo (versão 12) e obrigatórias no app:
 | U10 | **Cada aba lembra onde parou** ao trocar de aba; tocar na aba ativa volta ao topo. |
 | U11 | **Deslizar para o lado** troca entre Para você, Empire TV, Turnês e Acervo (fora de fileiras roláveis). |
 | U12 | **Puxar para atualizar** com indicador "Solte para atualizar" → "Atualizando…", em toda tela com lista. |
-| U13 | **Cor por papel** (proposta para D3): roxo = ação e link; aba/opção ativa = branco no escuro e roxo no claro; verde = tocar, alta e "tocando"; vermelho = ao vivo e queda; dourado = coroa/prêmio. |
+| U13 | **Cor por papel** (**aprovada**, D3): roxo = ação e link; aba/opção ativa = branco no escuro e roxo no claro; verde = tocar, alta e "tocando"; vermelho = ao vivo e queda; dourado = coroa/prêmio. |
 
 ### 6.6 Identidade visual (reforços)
 
@@ -845,6 +849,22 @@ Charts (Global 100, Spotify, YouTube, BB 200 + Chart Runs), Awards, Turnês
 & Projetos, Social, Gestão (dono). Mudanças só de casca: fileira de abas
 rolável com seta e **presa no topo ao rolar**; seguidores passam a ser o
 número calculado (5.6.6).
+
+### 6.8 Mudança de lugar: aviso ao jogador *(NOVO)*
+
+Na primeira abertura do app novo, uma folha **"O Empire Hub mudou de
+lugar"** mostra onde ficou cada coisa (Empire TV/Turnês/Acervo → Início;
+Gestão e Pre-save → Criar; Perfil, Ponto, Market, Premiações → sua foto;
+Fórum → aba própria; playlists ao vivo → Charts › Ao vivo). Aparece uma
+vez (guardado no aparelho) e pode ser reaberta em Meu Império › Guia.
+
+### 6.9 Pequenos acertos encontrados na 6ª conferência
+
+- **Notificações:** a tela ganha "Marcar todas como lidas" (a API já existe:
+  `/api/notificacoes/marcar-lidas`) e "Configurar" (o "O que receber no
+  celular" de hoje).
+- **Página 404** está em inglês ("Page not found", "Go home" em
+  `__root.tsx`): passa a "Página não encontrada" e "Voltar ao Início".
 
 ---
 
@@ -909,7 +929,7 @@ fase 3 deve vir logo em seguida (call meu: entregar 2 e 3 juntas se der).
 |---|---|---|---|
 | D1 | Pesos da fórmula de seguidores (`P=120, C=15, M=40, R=60` propostos) | usuário pode ajustar a qualquer momento, sem deploy | baixo |
 | ~~D2~~ | ~~Seguidores antigos~~ **Decidido:** só a fórmula para artistas; perfis de mídia mantêm o número da planilha; seguindo = digitado + real. | — | — |
-| D3 | Cor de destaque no escuro: hoje convivem o roxo do logo, o verde do `primary`, o esmeralda do Catálogo e a pílula branca. O protótipo usa roxo para ação e branco para aba ativa, e verde só para "tocar". | usuário | define o visual de todos os botões |
+| ~~D3~~ | **Decidido:** cor por papel (U13). | — | — |
 | D4 | Lista dos controllers `adminDiag*` que podem ser apagados na fase 6 | usuário (na fase 6) | só limpeza |
 
 ---

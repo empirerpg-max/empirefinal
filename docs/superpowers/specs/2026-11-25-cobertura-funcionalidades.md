@@ -289,3 +289,14 @@ de playlist; grupo **Biblioteca** no Meu Império; **Top** e **Contador em
 no chat da TV; nome **"Tá na Mídia"** (era "Na Mídia" no protótipo).
 Linhas desatualizadas pelas decisões (Ao vivo, Empirefork, Metacritic,
 página única do lançamento) foram reescritas acima.
+
+## 6ª conferência (2026-11-25, protótipo versão 13)
+Ângulo: coerência entre o documento de design e o protótipo depois das
+últimas decisões. Corrigido no documento: nome "Tá na Mídia", filtro de
+rede como botão "Redes ▾", ♡ e ⋯ no cabeçalho da página do lançamento,
+"Não comentei" na fileira do Fórum, ordem do Início (U8), D3 aprovada.
+Faltavam no protótipo e foram desenhados: resultados agrupados da busca ao
+digitar; "Marcar todas como lidas" e "Configurar" nas notificações.
+Encontrado e registrado: página 404 em inglês. Não coberto ainda:
+**layout de computador/tablet** (o protótipo e o documento só tratam o
+celular) — ver próximos passos.
