@@ -492,7 +492,8 @@ export const api = {
   async setArtistFoto(nome: string, fotoUrl: string): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/artistas/foto", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Token de sessão: o servidor confere se é o dono do artista (ou admin)
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ nome, fotoUrl }),
     });
     return res.json();
@@ -505,7 +506,8 @@ export const api = {
   ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/artistas/biografia", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Token de sessão: o servidor confere se é o dono do artista (ou admin)
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ nome, biografia }),
     });
     return res.json();
@@ -519,7 +521,8 @@ export const api = {
   ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch("/api/artistas/capa", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Token de sessão: o servidor confere se é o dono do artista (ou admin)
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ nome, capaUrl, capaMobileUrl }),
     });
     return res.json();

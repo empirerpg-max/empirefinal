@@ -506,6 +506,19 @@ export default {
         if (r.some((x) => !x.ok)) console.log("[scheduled] Reconciliação D1 de álbuns corrigiu divergência:", JSON.stringify(r));
       })().catch((err) => console.error("[scheduled] Erro na reconciliação D1 de álbuns:", err)),
     );
+    // Espelho D1 da aba ARTISTAS: sem a marca, roda a importação única (com a
+    // cópia das células completadas para a planilha); depois dela, a
+    // reconciliação planilha -> D1 no máximo 1x/hora. Falha só é logada.
+    ctx.waitUntil(
+      (async () => {
+        const { getCatalogoDb } = await import("../backend/src/services/catalogoDbService");
+        const db = getCatalogoDb();
+        if (!db) return;
+        const { rodarCronArtistas } = await import("../backend/src/controllers/artistasPerfilController");
+        const r = await rodarCronArtistas(db);
+        if (r.acao !== "nada") console.log("[scheduled] Espelho D1 de artistas:", JSON.stringify(r));
+      })().catch((err) => console.error("[scheduled] Erro no espelho D1 de artistas:", err)),
+    );
     // A reconciliação de backlog de comentários (reconciliarPontosComentariosScheduled)
     // foi REMOVIDA daqui — era uma correção pontual de um bug antigo, não
     // deveria ter ficado rodando pra sempre. Ela reinseria automaticamente

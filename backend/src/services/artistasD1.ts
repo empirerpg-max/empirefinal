@@ -208,7 +208,8 @@ async function garantirConfig(db: D1DatabaseLike): Promise<void> {
   await db.prepare("CREATE TABLE IF NOT EXISTS chart_config (chave TEXT PRIMARY KEY, valor TEXT)").run();
 }
 
-async function importacaoFeita(db: D1DatabaseLike): Promise<boolean> {
+/** A importação única já rodou? (marca em chart_config; libera reconciliação e desliga os fallbacks antigos) */
+export async function importacaoFeita(db: D1DatabaseLike): Promise<boolean> {
   await garantirConfig(db);
   const { results } = await db
     .prepare("SELECT valor FROM chart_config WHERE chave = ?")
@@ -466,12 +467,20 @@ export async function gravarPerfil(
   const sets: string[] = [];
   const valores: (string | null)[] = [];
   const celulas: { coluna: string; valor: string }[] = [];
+  let semMudanca = false;
   for (const [campo, colunaD1, colunasPlanilha] of COLUNAS_EDITAVEIS) {
     const bruto = campos[campo];
     if (bruto === undefined) continue;
     let valor: string | null = String(bruto).trim() || null;
     if (campo === "pais") {
-      if (atual.pais && !ehAdmin) return { ok: false, status: 409, erro: ERRO_PAIS_DEFINIDO };
+      if (atual.pais && !ehAdmin) {
+        // Mesmo país já salvo (sem acento/caixa): nada a mudar nesse campo, sem 409
+        if (valor && semAcentoMaiusculo(valor) === semAcentoMaiusculo(atual.pais)) {
+          semMudanca = true;
+          continue;
+        }
+        return { ok: false, status: 409, erro: ERRO_PAIS_DEFINIDO };
+      }
       if (valor) {
         valor = await paisValido(db, valor);
         if (!valor) return { ok: false, status: 400, erro: "País inválido." };
@@ -483,7 +492,10 @@ export async function gravarPerfil(
     valores.push(valor);
     for (const coluna of colunasPlanilha) celulas.push({ coluna, valor: valor ?? "" });
   }
-  if (!sets.length) return { ok: false, status: 400, erro: "Nada para salvar." };
+  if (!sets.length) {
+    if (semMudanca) return { ok: true, artista: atual };
+    return { ok: false, status: 400, erro: "Nada para salvar." };
+  }
 
   await db
     .prepare(`UPDATE artistas SET ${sets.join(", ")}, atualizado_em = ? WHERE id_unico = ?`)
@@ -523,7 +535,8 @@ function letraDaColuna(n: number): string {
  */
 export async function copiarCelulasArtistas(celulas: CelulaArtistas[]): Promise<void> {
   if (!celulas.length) return;
-  const cabecalho = ((await googleSheetsService.usuarios.readValues(ABA_ARTISTAS, "1:1"))[0] ?? []).map((c) =>
+  // Cabeçalho lido sem cache: coluna recém-criada por outra gravação não pode ser sobrescrita
+  const cabecalho = ((await googleSheetsService.usuarios.readValuesFresh(ABA_ARTISTAS, "1:1"))[0] ?? []).map((c) =>
     String(c ?? "").trim(),
   );
   const indiceDe = async (coluna: string): Promise<number> => {
@@ -548,4 +561,48 @@ export async function copiarCelulasArtistas(celulas: CelulaArtistas[]): Promise<
 /** `copiar` padrão do gravarPerfil: escreve as células na linha do artista. */
 export function copiarParaArtistas(celulas: { coluna: string; valor: string }[], linha: number): Promise<void> {
   return copiarCelulasArtistas(celulas.map((c) => ({ ...c, linha })));
+}
+
+/**
+ * Artista recém-criado pelo app (criarArtistaController): nasce no espelho
+ * na hora, sem esperar a reconciliação. Nunca sobrescreve uma linha que já
+ * exista (mesmo ID_unico).
+ */
+export async function registrarArtistaNovo(
+  db: D1DatabaseLike,
+  dados: { idUnico: string; nome: string; idUsuario: string; gravadora: string; fotoUrl: string | null; linhaPlanilha: number | null },
+  agora: Date = new Date(),
+): Promise<void> {
+  await garantirSchemaArtistas(db);
+  await db
+    .prepare(
+      `INSERT INTO artistas (id_unico, nome, nome_chave, id_usuario, gravadora, foto_url, linha_planilha, atualizado_em)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id_unico) DO NOTHING`,
+    )
+    .bind(dados.idUnico, dados.nome, semAcentoMaiusculo(dados.nome), dados.idUsuario, dados.gravadora, dados.fotoUrl, dados.linhaPlanilha, agora.toISOString())
+    .run();
+  limparCacheArtistas();
+}
+
+/**
+ * Lista fechada de estilos (gênero principal): distintos do espelho ∪
+ * distintos de musicas.genero, em caixa alta, sem repetição, ordenados.
+ */
+export async function listarGeneros(db: D1DatabaseLike): Promise<string[]> {
+  const ler = async (sql: string): Promise<string[]> => {
+    try {
+      const { results } = await db.prepare(sql).all<{ g: string | null }>();
+      return results.map((r) => String(r.g ?? ""));
+    } catch (e) {
+      if (/no such table/i.test(String((e as Error)?.message ?? e))) return [];
+      throw e;
+    }
+  };
+  await garantirSchemaArtistas(db);
+  const todos = [
+    ...(await ler("SELECT DISTINCT genero_principal AS g FROM artistas")),
+    ...(await ler("SELECT DISTINCT genero AS g FROM musicas")),
+  ];
+  const unicos = new Set(todos.map((g) => g.trim().toUpperCase()).filter(Boolean));
+  return [...unicos].sort((a, b) => a.localeCompare(b, "pt-BR"));
 }

@@ -8,6 +8,61 @@ import {
 import { registrarLogSistema } from "../services/logSistemaService";
 import { cachedRead } from "../services/shortCache";
 import { withWriteLock } from "../services/writeLockService";
+import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
+import {
+  buscarArtista,
+  carregarArtistas,
+  gravarPerfil,
+  importacaoFeita,
+  registrarArtistaNovo,
+  type CamposEditaveis,
+} from "../services/artistasD1";
+import { semAcentoMaiusculo } from "../services/chartsD1/artistas";
+import { copiaEmSegundoPlano, ERRO_SO_DONO, permissaoDeEdicao } from "./artistasPerfilController";
+
+type Ctx = { waitUntil: (promise: Promise<unknown>) => void };
+
+/**
+ * Espelho D1 de artistas pronto (importação única já feita)? Só então os
+ * endpoints antigos de perfil passam por ele; antes disso (estreia, ou sem
+ * D1 no ambiente) seguem o caminho anterior. Depois da importação, nada
+ * aqui lê a INFOS ACTS.
+ */
+async function espelhoPronto(): Promise<D1DatabaseLike | null> {
+  const db = getCatalogoDb();
+  if (!db) return null;
+  try {
+    return (await importacaoFeita(db)) ? db : null;
+  } catch (e) {
+    console.warn("[artistasController] Não deu para conferir o espelho D1 de artistas:", e);
+    return null;
+  }
+}
+
+const JSON_UTF8 = { "Content-Type": "application/json; charset=utf-8" };
+
+/** Endpoints antigos de foto/bio/capa pelo espelho: dono/admin, mesmo formato de resposta ({ success, error? }). */
+async function gravarPeloEspelho(
+  db: D1DatabaseLike,
+  request: Request,
+  nome: string,
+  campos: CamposEditaveis,
+  ctx?: Ctx,
+): Promise<Response> {
+  const artista = await buscarArtista(db, nome);
+  if (!artista) {
+    return new Response(JSON.stringify({ success: false, error: "Artista não encontrado." }), { status: 404, headers: JSON_UTF8 });
+  }
+  const permissao = await permissaoDeEdicao(request, artista);
+  if (!permissao.ok) {
+    return new Response(JSON.stringify({ success: false, error: ERRO_SO_DONO }), { status: 403, headers: JSON_UTF8 });
+  }
+  const r = await gravarPerfil(db, artista.idUnico, campos, permissao.ehAdmin, copiaEmSegundoPlano(ctx));
+  if (!r.ok) {
+    return new Response(JSON.stringify({ success: false, error: r.erro }), { status: r.status, headers: JSON_UTF8 });
+  }
+  return new Response(JSON.stringify({ success: true }), { status: 200, headers: JSON_UTF8 });
+}
 
 const ARTISTAS_SHEET = "ARTISTAS";
 const USUARIOS_SHEET = "Usuários";
@@ -346,17 +401,26 @@ export async function criarArtistaController(request: Request): Promise<Response
     };
     const row = headers.map((h) => values[h] ?? "");
 
-    await googleSheetsService.usuarios.appendRow(ARTISTAS_SHEET, row);
+    const linhaPlanilha = await googleSheetsService.usuarios.appendRow(ARTISTAS_SHEET, row);
     await registrarGravadoraNoBancoDeDados(nome, gravadora);
-    // Combinado com o usuário: todo artista criado precisa já ter sua
-    // linha em "INFOS ACTS" — antes ela só nascia preguiçosamente na
-    // primeira vez que o dono editava foto/bio/capa pelo app, deixando o
-    // artista sem perfil nenhum (foto/bio em branco, sem jeito óbvio de
-    // saber por quê) até essa primeira edição acontecer.
-    await garantirLinhaInfosActs(nome, foto);
+    // Todo artista criado já nasce com perfil: antes era uma linha na
+    // INFOS ACTS; agora é a linha no espelho D1 (a INFOS ACTS não é mais
+    // lida). Falha aqui não desfaz a criação — a reconciliação do cron cria
+    // a linha que faltar.
+    const db = getCatalogoDb();
+    if (db) {
+      await registrarArtistaNovo(db, {
+        idUnico: values.id_unico,
+        nome,
+        idUsuario: telegramId,
+        gravadora,
+        fotoUrl: foto || null,
+        linhaPlanilha: typeof linhaPlanilha === "number" ? linhaPlanilha : null,
+      }).catch((e) => console.warn("[criarArtistaController] Falha ao criar o artista no espelho D1:", e));
+    }
     registrarLogSistema({
       categoria: "Ação concluída",
-      oQueAconteceu: `Artista "${nome}" criado por telegramId ${telegramId} (gravadora: ${gravadora}), já com linha em INFOS ACTS.`,
+      oQueAconteceu: `Artista "${nome}" criado por telegramId ${telegramId} (gravadora: ${gravadora}), já com linha no espelho D1.`,
       onde: "criarArtistaController",
     }).catch(() => {});
 
@@ -418,47 +482,6 @@ async function registrarGravadoraNoBancoDeDados(nome: string, gravadora: string)
 
 const INFOS_ACTS_SHEET = "INFOS ACTS";
 
-// Garante que o artista já nasce com uma linha em "INFOS ACTS" (combinado
-// com o usuário: todo artista criado precisa aparecer lá, não só quando o
-// dono mexer em foto/bio/capa pela primeira vez). C = foto "oficial"
-// (opcional, só se já veio uma na criação); resto fica em branco pro dono
-// preencher depois. Nunca sobrescreve se a linha já existir (idempotente —
-// pode ser chamado em cima de artista já cadastrado sem perder nada).
-async function garantirLinhaInfosActs(nome: string, fotoInicial?: string): Promise<void> {
-  const normNome = normalizeComparison(nome);
-  try {
-    // Trava por artista (mesma chave usada em set*Controller abaixo) —
-    // sem isso, duas chamadas quase simultâneas (ex: criação do artista
-    // rodando junto com o dono já tentando salvar bio/foto logo em
-    // seguida) podiam cada uma ler "ainda não existe" e criar DUAS linhas
-    // novas pro mesmo artista — exatamente a classe de bug já visto na
-    // Hayley Wonderwall (e de novo em Ashley Spring/Paris Godwin,
-    // 2026-11-06: o problema ali era justamente a linha nunca ter sido
-    // criada OU ter sido duplicada, e getArtistInfoController só lê a
-    // primeira linha que bate, perdendo qualquer dado só na segunda).
-    await withWriteLock(`infos-acts:${normNome}`, async () => {
-      const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
-      const jaExiste = rows.slice(1).some((r) => normalizeComparison(r[0]) === normNome);
-      if (jaExiste) return;
-      // NUNCA appendRow (:append nativo) nesta aba: causa raiz real do bug
-      // "Ashley Spring/Paris Godwin" (2026-11-06) — "INFOS ACTS" é tão
-      // esparsa (cada artista só preenche algumas colunas: C/G foto, E
-      // bio, R/S capa) que a detecção de tabela do :append erra e escreve
-      // cada vez mais PRA DIREITA da coluna A, nunca nela — toda tentativa
-      // seguinte vira outra linha corrompida (nome fora da coluna A, logo
-      // invisível pra normalizeComparison(row[0])), em vez de atualizar a
-      // de antes. updateValues com range EXPLÍCITO nunca deixa o Sheets
-      // adivinhar coluna nenhuma.
-      const linhaAlvo = rows.length + 1;
-      await googleSheetsService.registrosCharts.updateValues(INFOS_ACTS_SHEET, `A${linhaAlvo}:C${linhaAlvo}`, [
-        [nome, "", (fotoInicial || "").trim()],
-      ]);
-    });
-  } catch (err) {
-    console.warn("[garantirLinhaInfosActs] Erro ao criar linha em INFOS ACTS:", err);
-  }
-}
-
 /**
  * GET /api/artistas/infos?nome=<nome>
  * Biografia, foto e capa do perfil do artista — vive numa aba própria
@@ -483,6 +506,24 @@ export async function getArtistInfoController(request: Request): Promise<Respons
       });
     }
 
+    const db = await espelhoPronto();
+    if (db) {
+      const a = await buscarArtista(db, nome);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            foto: a?.fotoUrl ?? "",
+            biografia: a?.biografia ?? "",
+            capa: a?.capaPerfilUrl ?? "",
+            capaMobile: a?.capaPerfilMobileUrl ?? "",
+          },
+        }),
+        { status: 200, headers: JSON_UTF8 },
+      );
+    }
+
+    // Antes da importação única: caminho anterior (INFOS ACTS)
     const rows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
     const normNome = normalizeComparison(nome);
     const row = rows.slice(1).find((r) => normalizeComparison(r[0]) === normNome);
@@ -522,7 +563,7 @@ export async function getArtistInfoController(request: Request): Promise<Respons
  * (flags de admin, não é campo de link). Cria a linha se o artista ainda
  * não tiver uma nessa aba.
  */
-export async function setArtistFotoController(request: Request): Promise<Response> {
+export async function setArtistFotoController(request: Request, ctx?: Ctx): Promise<Response> {
   try {
     const body = (await request.json().catch(() => ({}))) as { nome?: string; fotoUrl?: string };
     const nome = (body.nome || "").trim();
@@ -533,6 +574,10 @@ export async function setArtistFotoController(request: Request): Promise<Respons
         headers: { "Content-Type": "application/json; charset=utf-8" },
       });
     }
+
+    // Depois da importação: grava no espelho D1 (+ cópia para ARTISTAS FOTO/Foto), só dono/admin
+    const db = await espelhoPronto();
+    if (db) return await gravarPeloEspelho(db, request, nome, { fotoUrl }, ctx);
 
     const normNome = normalizeComparison(nome);
     // Trava por artista: sem isso, duas chamadas quase simultâneas pro
@@ -619,7 +664,7 @@ export async function setArtistFotoController(request: Request): Promise<Respons
  * artista consegue editar pelo app. Cria a linha se o artista ainda não
  * tiver uma nessa aba (mesmo padrão de setArtistFotoController).
  */
-export async function setArtistBiografiaController(request: Request): Promise<Response> {
+export async function setArtistBiografiaController(request: Request, ctx?: Ctx): Promise<Response> {
   try {
     const body = (await request.json().catch(() => ({}))) as { nome?: string; biografia?: string };
     const nome = (body.nome || "").trim();
@@ -630,6 +675,9 @@ export async function setArtistBiografiaController(request: Request): Promise<Re
         headers: { "Content-Type": "application/json; charset=utf-8" },
       });
     }
+
+    const db = await espelhoPronto();
+    if (db) return await gravarPeloEspelho(db, request, nome, { biografia }, ctx);
 
     const normNome = normalizeComparison(nome);
     // Trava por artista — mesmo motivo do setArtistFotoController acima
@@ -679,7 +727,7 @@ export async function setArtistBiografiaController(request: Request): Promise<Re
  * a versão certa, a imagem enviada pra uma tela ficava cortada/esticada na
  * outra. Mesmo padrão de setArtistBiografiaController.
  */
-export async function setArtistCapaController(request: Request): Promise<Response> {
+export async function setArtistCapaController(request: Request, ctx?: Ctx): Promise<Response> {
   try {
     const body = (await request.json().catch(() => ({}))) as {
       nome?: string;
@@ -694,6 +742,14 @@ export async function setArtistCapaController(request: Request): Promise<Respons
         JSON.stringify({ success: false, error: "nome e ao menos uma capa (desktop ou mobile) são obrigatórios." }),
         { status: 400, headers: { "Content-Type": "application/json; charset=utf-8" } },
       );
+    }
+
+    const db = await espelhoPronto();
+    if (db) {
+      const campos: CamposEditaveis = {};
+      if (capaUrl) campos.capaPerfilUrl = capaUrl;
+      if (capaMobileUrl) campos.capaPerfilMobileUrl = capaMobileUrl;
+      return await gravarPeloEspelho(db, request, nome, campos, ctx);
     }
 
     const normNome = normalizeComparison(nome);
@@ -832,6 +888,20 @@ export async function getAllArtistasController(): Promise<Response> {
     // upload mais recente do dono, só se C estiver vazia) tem prioridade
     // sobre ARTISTAS!foto sempre que existir — só cai pra ARTISTAS!foto
     // quando o artista não tiver nenhuma linha em INFOS ACTS.
+    //
+    // Depois da importação única, foto/biografia/país vêm do espelho D1
+    // (dono desses campos) e a INFOS ACTS não é mais lida.
+    const db = await espelhoPronto();
+    if (db) {
+      const espelho = await carregarArtistas(db);
+      data = data.map((a) => {
+        const m = espelho.get(semAcentoMaiusculo(a.nome));
+        if (!m) return a;
+        return { ...a, foto: m.fotoUrl || a.foto, descricao: m.biografia || a.descricao, pais: m.pais ?? "" };
+      });
+      return new Response(JSON.stringify({ success: true, data }), { status: 200, headers: JSON_UTF8 });
+    }
+
     const infosRows = await googleSheetsService.registrosCharts.readValues(INFOS_ACTS_SHEET).catch(() => []);
     const fotoPorNome = new Map<string, string>();
     for (const row of infosRows.slice(1)) {

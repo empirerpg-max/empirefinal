@@ -556,6 +556,10 @@ export async function handleEmpireApiRoutes(
     "/api/artistas/meus-nomes",
     "/api/artistas/disponiveis",
     "/api/artistas/listar-todos",
+    "/api/artistas/perfil",
+    "/api/artistas/generos",
+    "/api/admin/artistas/importar",
+    "/api/admin/artistas/atualizar-da-planilha",
     "/api/busca",
     "/api/artistas/calcular-fortuna-charts",
     "/api/prestigio/corrigir-assistir-tv-duplicado",
@@ -1635,6 +1639,15 @@ export async function handleEmpireApiRoutes(
       });
     }
     response = await registrarUsoGifController(request);
+  } else if (
+    url.pathname === "/api/artistas/perfil" ||
+    url.pathname === "/api/artistas/generos" ||
+    url.pathname === "/api/admin/artistas/importar" ||
+    url.pathname === "/api/admin/artistas/atualizar-da-planilha"
+  ) {
+    // Perfil do artista no espelho D1 (+ rotas de admin de importação/atualização)
+    const { artistasPerfilController } = await import("../controllers/artistasPerfilController");
+    response = await artistasPerfilController(request, ctx);
   } else if (url.pathname === "/api/artistas/vincular") {
     if (request.method !== "POST") {
       return new Response(
@@ -1658,7 +1671,7 @@ export async function handleEmpireApiRoutes(
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await setArtistFotoController(request);
+    response = await setArtistFotoController(request, ctx);
   } else if (url.pathname === "/api/artistas/biografia") {
     if (request.method !== "POST") {
       return new Response(
@@ -1666,7 +1679,7 @@ export async function handleEmpireApiRoutes(
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await setArtistBiografiaController(request);
+    response = await setArtistBiografiaController(request, ctx);
   } else if (url.pathname === "/api/artistas/capa") {
     if (request.method !== "POST") {
       return new Response(
@@ -1674,7 +1687,7 @@ export async function handleEmpireApiRoutes(
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await setArtistCapaController(request);
+    response = await setArtistCapaController(request, ctx);
   } else if (url.pathname === "/api/artistas/rescisao") {
     if (request.method !== "POST") {
       return new Response(
