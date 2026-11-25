@@ -19,13 +19,15 @@ acesso, o app pede para você trocar a senha por uma só sua.
 **Como o app está organizado:**
 - **Barra de baixo** (no computador, barra da esquerda): **Início ·
   Catálogo · Fórum · Charts · Social**.
-- **Topo:** **＋ Criar** (todos os lançamentos), **lupa** (busca),
-  **sino** (notificações) e **sua foto** (Meu Império: perfil, artistas,
-  economia, premiações e ajustes).
+- **Topo:** o selo **beta**, o **sino** (notificações) e **sua foto** (Meu
+  Império: perfil, artistas, economia, premiações e ajustes).
+- **Botão ＋** (flutuante, no canto de baixo): **Criar**, todos os
+  lançamentos. No computador, fica no alto da barra lateral.
+- **Busca:** em Catálogo › Buscar (no computador, no topo).
 - **Voltar** sempre leva para a tela anterior, uma de cada vez.
 - **Puxe a tela para baixo** para atualizar.
 
-**Beta test:** o selo **BETA** no topo mostra que você está na versão nova.
+**Beta test:** o selo **beta** no topo mostra que você está na versão nova.
 Tocando nele você pode **reportar um problema** ou **voltar para a versão
 anterior** quando quiser. Seus dados são os mesmos nas duas versões.
 
@@ -83,8 +85,8 @@ Toque no artista (no Início, em "Meus artistas", ou em Meu Império).
 
 ## 5. Lançar: o botão ＋ Criar
 
-O **＋ Criar** fica no topo de qualquer tela (no computador, no alto da
-barra lateral). Ele reúne tudo que você lança.
+O **＋ Criar** é o botão flutuante no canto de baixo de qualquer tela (no
+computador, no alto da barra lateral). Ele reúne tudo que você lança.
 
 ### 5.1 Nova música
 
@@ -253,7 +255,8 @@ houver), faixas com a letra de cada uma, encarte e os **comentários**.
 
 ## 12. Economia, premiações e festivais (Meu Império)
 
-- **Ponto:** distribua seus pontos (aleatório ou manual), aplique em
+- **Ponto** (também em **Charts › Meu Ponto** e em **Pra fazer hoje**,
+  quando há pontos para distribuir): distribua seus pontos (aleatório ou manual), aplique em
   playlists e veja o que vale ponto.
 - **Market:** produtos e **Spotlight Banner** (destaque do seu lançamento
   por até 4 dias), pagos com o saldo em eCoin do artista. **Leilão:** dê

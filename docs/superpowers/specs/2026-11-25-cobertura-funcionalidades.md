@@ -19,7 +19,7 @@
 | Notificações push e preferências (sino) | sino + Meu Império › Notificações | P |
 | Instalar app, aviso de versão nova | igual (global) | D |
 | Recarregar | puxar a tela pra baixo | D |
-| Busca rápida (artistas, músicas, vídeos, álbuns) | lupa no topo → Catálogo › Buscar | P |
+| Busca rápida (artistas, músicas, vídeos, álbuns) | Catálogo › Buscar (no computador, campo no topo) | P |
 | Popups VMA / votação / festival | iguais (um componente só) + "Pra fazer hoje" | P |
 | Acesso Rápido (canais), Guia de Sobrevivência | Meu Império › Canais oficiais / Guia | P |
 
@@ -107,7 +107,7 @@
 ## Economia e premiações
 | Ação hoje | Onde fica | |
 |---|---|---|
-| Ponto: distribuir (aleatório/manual), playlists, valores | Meu Império › Ponto | P |
+| Ponto: distribuir (aleatório/manual), playlists, valores | Pra fazer hoje · Charts › Meu Ponto · Meu Império › Economia · barra lateral (computador) | P |
 | Market: produtos, Spotlight Banner, leilão, regras | Meu Império › Market / Leilão / Como ganhar prestígio | P |
 | Premiações: retroativo, indicar, votação (termo, nota, performance) | Meu Império › Premiações + "Pra fazer hoje" | P |
 | Festivais: inscrição | Meu Império › Premiações e festivais | P |

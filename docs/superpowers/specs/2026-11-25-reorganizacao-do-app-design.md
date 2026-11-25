@@ -62,7 +62,7 @@ E duas condições inegociáveis:
 
 **Objetivos**
 - Barra de baixo com **5 abas que cabem na tela**: Início · Catálogo · Fórum · Charts · Social.
-- **Criar** sempre a 1 toque (topo). **Meu Império** (foto do jogador) a 1 toque.
+- **Criar** sempre a 1 toque (botão flutuante ＋). **Meu Império** (foto do jogador) a 1 toque.
 - Empire TV, Turnês e Acervo a **2 toques** (Início → aba).
 - Catálogo único (Início, Buscar, Biblioteca), Fórum com aba própria, ligados
   por uma página única de cada lançamento (o tópico, com comentários em
@@ -114,22 +114,31 @@ conferida.
 
 ```
 ┌──────────────────────────────────────────────┐
-│ [logo] EMPIRE HUB      [+ Criar] [🔍] [🔔] (RV) │  ← topo
+│ [logo] EMPIRE HUB [beta]             [🔔] (RV) │  ← topo
 ├──────────────────────────────────────────────┤
 │                                              │
 │                conteúdo                      │
 │                                              │
 │ ┌──────────────────────────────────────────┐ │
 │ │ ▣ Vidro Quebrado · Nova Valente   ⏸  ⋯  │ │  ← mini player (quando toca)
-│ └──────────────────────────────────────────┘ │
+│ └──────────────────────────────────────[＋]┘ │  ← ＋ Criar flutuante
 ├──────────────────────────────────────────────┤
 │  Início  Catálogo  Fórum  Charts  Social     │  ← barra de baixo (5)
 └──────────────────────────────────────────────┘
 ```
 
-- **Topo:** logo (→ Início) · **Criar** (folha, 5.7) · Busca (→ Catálogo ›
-  Buscar com o campo focado) · Notificações (como hoje) · **foto do jogador**
-  (→ Meu Império, 5.8).
+- **Topo (opção A refinada, escolhida pelo usuário):** logo (→ Início) com
+  um selo **"beta"** discreto, neutro (contorno cinza, sem cor de destaque),
+  que abre a folha do Beta (6.11) · Notificações · **foto do jogador** em
+  cinza neutro, sem degradê (→ Meu Império, 5.8). Nada de pílulas
+  coloridas no topo.
+- **＋ Criar:** botão **flutuante** (52px, cantos arredondados) no canto
+  direito, acima do mini player, em branco no escuro e preto no claro (call
+  meu: neutro, para não competir com o conteúdo). Abre a folha Criar (5.7).
+  Fica escondido nas telas abertas por cima. No computador, o Criar é o
+  primeiro botão da barra lateral.
+- **Busca:** no celular e no tablet, em **Catálogo › Buscar** (e nas buscas
+  do Fórum, do Social e dos Charts); no computador, campo aberto no topo.
 - **Sai do topo:** o botão Recarregar. Vira **puxar para baixo para
   atualizar** em toda tela com lista (call meu; o recarregar de hoje recarrega
   a página inteira).
@@ -873,7 +882,7 @@ largura da área do app):
 
 | Largura | Navegação | Conteúdo | Player |
 |---|---|---|---|
-| até 699px (celular) | barra de baixo com 5 abas; topo com logo, BETA, ＋, lupa, sino, foto | 1 coluna | mini player acima da barra |
+| até 699px (celular) | barra de baixo com 5 abas; topo com logo + selo beta, sino e foto; ＋ Criar flutuante | 1 coluna | mini player acima da barra |
 | 700–999px (tablet) | **trilho lateral** com as 5 abas (ícone + nome); topo igual ao celular | grades com várias colunas (cartões de ~170px), prateleiras maiores | mini player flutuante embaixo |
 | 1000px ou mais (computador) | **barra lateral completa** (240px): logo, botão **Criar**, 5 abas, **Sua biblioteca** (Minhas playlists, Salvos), **Meu Império** (Perfil e economia, Meus lançamentos); topo com **campo de busca aberto**, sino e foto | conteúdo com largura máxima de ~1100px | **barra de player fixa** embaixo, de ponta a ponta (como no Spotify) |
 
@@ -976,6 +985,22 @@ aconteceu.
   Beta, onde ficou cada coisa e três saídas: **Começar no Beta**, **Ver o
   tutorial** e **Prefiro a versão anterior**. Aparece uma vez por jogador
   (guardado no servidor junto com a escolha de versão).
+
+### 6.13 Onde fica o Ponto
+
+O Ponto era uma aba da barra de baixo. No primeiro desenho ele ficou
+escondido em Meu Império, e o próprio usuário não o encontrou. Agora ele
+tem **quatro entradas**:
+1. **"Pra fazer hoje"** (Início): "Distribuir seus pontos da semana",
+   enquanto houver saldo para distribuir (some quando já distribuiu).
+2. **Charts:** botão **"Meu Ponto"** ao lado do título (os pontos mexem
+   nos charts, então é onde o jogador pensa neles).
+3. **Meu Império:** o grupo **Economia** (Ponto, Market, Leilão) é o
+   primeiro depois de Meus artistas.
+4. **Computador:** atalho **Ponto** na barra lateral, em Meu Império.
+
+A tela do Ponto é a de hoje: saldo da semana e as 3 opções (Distribuir
+pontos, Aplicar playlists, O que vale ponto). Nenhuma regra muda.
 
 ---
 
