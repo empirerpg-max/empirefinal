@@ -231,7 +231,7 @@ Turnês · Acervo**. As três últimas são as telas atuais (`/tv`, `/tours`,
 
 **Empire TV, Turnês, Acervo:** as telas de hoje, inteiras (Início/Grade/
 Arquivo/Red Carpet; Criar/Central/Em andamento/Finalizados/Mais Rentáveis;
-Revistas/Entrevistas/Forbes/Metacritic/Empirefork/Awards). Mudanças só de
+Revistas/Entrevistas/Forbes/Metacritic/Empirefork/Awards, **com esses nomes exatos**; o Empirefork mantém Best New Track, Top Artist do mês, curtir, comentar e Arquivo por mês). Mudanças só de
 casca: fileira de abas do Início em cima, fileiras roláveis com seta,
 "Criar turnê" também disponível no Criar. Na grade da TV, o botão
 **Lembrar** *(NOVO)* avisa por notificação quando o programa começa (call
@@ -294,8 +294,17 @@ conferir item por item na página nova. A lista mínima está abaixo.
    artista(s) com **selo de verificado**, tipo, "Lançamento: dd/mm/aaaa"
    (`releaseDate`), nº de faixas (álbum). Fundo com degradê da cor da capa
    (call meu).
-2. Selos, como hoje: **nota** (`ScoreBadge`, Likes), **prêmio**
-   (`AwardBadge`), **contador de pre-save** (`PreSaveCounterBadge`, álbum).
+2. Selos, como hoje: **semanas no chart** (`semanasNoChart`), **prêmio**
+   (`AwardBadge`), **contador de pre-save** (`PreSaveCounterBadge`, álbum)
+   e, **só em vídeo**, a nota de Likes (`ScoreBadge variant="likes"`).
+
+   > **Regra das notas (não mudar):** em **músicas e álbuns, a nota
+   > (Metacritic) nunca aparece no Fórum**, nem a média, nem a nota de cada
+   > comentário. O jogador dá a nota ao comentar, e ela só aparece no
+   > **Acervo › Metacritic** (ranking atualizado **semanalmente**, para
+   > ninguém inferir quem deu nota para quem) e no **Acervo › Empirefork**
+   > (Best New Track usa a nota Metacritic). Em **vídeos**, a nota é de
+   > Likes e aparece no Fórum (média e em cada comentário), como hoje.
 3. Ações: **Tocar** (álbum: toca as faixas com áudio em ordem; música: a
    faixa; vídeo: **Assistir**) · Aleatório (álbum) / Adicionar à playlist
    (música) / Mini player (vídeo) · **Salvar** · **⋯** (Compartilhar,
@@ -306,17 +315,21 @@ conferir item por item na página nova. A lista mínima está abaixo.
    os que existirem para aquele lançamento, como hoje. "Visual" troca a
    página pela arte (`VisualBlocosView`) e tem "Voltar ao normal".
 5. **Cartão de comentários em destaque** (logo abaixo dos botões):
-   - total de comentários e a faixa de nota mais votada;
-   - **distribuição das notas** em 4 barras (45-60, 61-75, 76-90, 91-100)
-     *(NOVO; calculada no front a partir das notas dos comentários que já
-     vêm na resposta)*;
+   - total de comentários e quando foi o último;
    - o comentário mais recente;
-   - **Avaliar & Comentar** (abre a janela de hoje: nome do jogador fixo,
-     a pergunta de nota com os 4 intervalos e o texto) e **Ver todos** (rola
-     até a lista).
+   - o botão de comentar da janela de hoje (`CommentModal`): nome do
+     jogador fixo, a pergunta de nota e o texto. Música/álbum:
+     **"Metacritic & Comentário"**, com "Para o Metacritic, qual nota você
+     daria pra essa música/álbum?". Vídeo: **"Likes & Comentário"**, com
+     "Em questão de Likes, qual o intervalo que você daria?". Os mesmos 4
+     intervalos de hoje (45-60, 61-75, 76-90, 91-100);
+   - em música/álbum, uma linha avisando que a nota vai para o Metacritic
+     do Acervo e não aparece no Fórum *(NOVO, só texto)*;
+   - **Ver todos** (rola até a lista).
+   - **Sem gráfico de notas** (ideia descartada: revelaria as notas).
 6. Conteúdo do tipo (abaixo).
-7. **Lista de comentários**: avatar, nome, verificado, tempo, nota dada,
-   texto rico, **reações** (`ReactionBar`, os mesmos 12 emojis),
+7. **Lista de comentários**: avatar, nome, verificado, tempo, nota dada
+   **só em vídeo** ("N likes"), texto rico, **reações** (`ReactionBar`, os mesmos 12 emojis),
    **Responder** (respostas aninhadas), ⋯ (editar o próprio, excluir). Ordem
    como hoje.
 8. Botão **Avaliar & Comentar fixo no rodapé** da página *(NOVO na
@@ -353,8 +366,8 @@ na barra. Abrir um tópico = abrir a página do lançamento (5.3.4).
 - **Pesquisar tópicos** (como hoje), botão **Filtros** (artista, lançado de,
   até, limpar filtros) e a chave **Só os que não comentei** (já existe
   dentro de Filtros; vira chave visível, call meu).
-- Cada tópico mostra: capa, título, tipo, artista com verificado, **nota**,
-  **selo de prêmio**, **pre-save**, **último comentário** (autor + começo do
+- Cada tópico mostra: capa, título, tipo, artista com verificado, **nota só
+  em vídeo** (como hoje), **selo de prêmio**, **pre-save**, **último comentário** (autor + começo do
   texto) *(NOVO)*, nº de comentários, última atividade e "você ainda não
   comentou" quando for o caso *(NOVO, usa o mesmo dado do filtro)*.
 - **Não existe comentário anônimo.** O campo "Nome do Jogador / OFF" é
