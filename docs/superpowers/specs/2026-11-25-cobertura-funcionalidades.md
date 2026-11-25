@@ -136,7 +136,7 @@ Criar. Nenhuma URL atual deixa de abrir.
 | Turnês: missões (`/api/turnes/missoes`) | Início › Turnês + "Pra fazer hoje" | D |
 | Nova turnê: simulação de lucro (mínimo e máximo), escolha de locais | Criar › Nova turnê (tela atual) | D |
 | Empire TV: canais ao vivo da Kick | Início › Empire TV (cartão "Ao vivo") | D |
-| Empire TV: presença (tempo assistido vira prestígio) | automático na sala **e no mini player**; soma das sessões no D1 (6.19.1); faixas, REGISTRO e prestígio iguais; regra do chat conforme D6 | D (fase 0b) |
+| Empire TV: presença (tempo assistido vira prestígio) | automático com a sala aberta, entre Início e Término marcados pelo admin; soma das sessões no D1 (6.19.1); faixas, REGISTRO e prestígio iguais; mensagens não contam | D (fase 0b) |
 | Empire TV: subir GIF, responder mensagem no chat, negrito/itálico | sala da TV › caixa de mensagem (GIF, Aa) e arrastar/segurar a mensagem | P |
 | Social: postar como artista **ou como fã anônimo** (nome aleatório) | Criar › Post no Social (tela atual) | D |
 | Social: escolher rede (Instagram, TikTok, Twitter), anexar música, modo de publicação, texto rico com emoji | Criar › Post no Social (tela atual) | D |
@@ -344,7 +344,7 @@ Conferido contra `src/routes/tv.tsx` (`WatchView`, `ChatPanel`,
 | Voltar, minimizar (continua tocando) | ⌄ no canto do vídeo; voltar do celular fecha folha → sala → tela anterior | P |
 | Ativar som | "Toque para assistir com som" (D5, teste em `/tv-teste-som`) | pendente do teste |
 | Abas Chat · Red Carpet · Participantes · Sobre | chat fixo + fileira rolável que abre folhas | P |
-| Enquete por nota (notaMin–notaMax, voto secreto, "Você votou N", atualiza a cada 20 s) | enquete fixada no topo do chat + folha com as notas | P |
+| Enquete por nota da planilha (notaMin–notaMax, voto secreto, "Você votou N", atualiza a cada 20 s) | continua igual, fixada no topo do chat; também pode ser criada pelo admin na sala como tipo "Nota" | P |
 | Carregar mensagens mais antigas | carrega sozinho ao rolar para o topo | P (muda o gatilho) |
 | Responder, cancelar resposta, citação | arrastar para a esquerda ou segurar › Responder; barra "Respondendo a…" com ✕ | P |
 | Negrito `*texto*`, itálico `_texto_` | botão Aa | P |
@@ -354,6 +354,6 @@ Conferido contra `src/routes/tv.tsx` (`WatchView`, `ChatPanel`,
 | Red Carpet: postar com várias fotos, carrossel de fotos, curtir, ranking, excluir o seu | folha Red Carpet | P |
 | Participantes | folha, com a **mesma %** que será creditada | P (número muda: 6.19.1) |
 | Sobre | folha (toque no nome do programa) | P |
-| Presença a cada 30 s | minutos presentes enviados a cada 5 min (D1, uma linha por pessoa), conta também no mini player; mensagem só prova presença no minuto (D6) | D (fase 0b) |
-| — | reações com emoji, "↓ N novas", celular deitado com chat lateral, círculo da sua participação | **NOVO** |
+| Presença a cada 30 s | só tempo com a sala aberta entre Início e Término do admin; minutos enviados a cada 5 min (D1, uma linha por pessoa); mensagens não contam | D (fase 0b) |
+| — | enquetes criadas pelo admin no chat (única/múltipla), resultado no chat, arquivo 📊 Enquetes; botões Início/Término do evento (admin); reações com emoji, "↓ N novas", celular deitado com chat lateral, círculo da sua participação | **NOVO** |
 

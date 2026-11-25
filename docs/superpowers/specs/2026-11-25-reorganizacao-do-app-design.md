@@ -1249,30 +1249,42 @@ carrossel "Assistir agora" e grade continuam.
   transmissão inteira: **o número que a pessoa vê não é o que ela ganha**;
 - uma linha a cada 30 s por pessoa pesa na cota do Google Sheets.
 
-**Princípio (decisão do usuário):** a participação **é o tempo em que a
-pessoa esteve na sala**, não a quantidade de mensagens. Quem só assiste e
-comenta pouco recebe o tempo inteiro; quem manda várias mensagens e sai
-cedo recebe só o tempo em que ficou.
+**Regra (decidida pelo usuário):** a porcentagem é **só o tempo em que a
+pessoa esteve com a sala aberta**. Mensagens **não** entram na conta (quem
+só assiste e comenta pouco recebe o tempo todo; quem manda várias
+mensagens e sai cedo recebe só o tempo em que ficou). Isso substitui a
+regra de hoje "vale o maior entre presença e chat (10 mensagens = 100%)".
+
+**Início e Término marcados pelo admin, na própria sala:**
+
+- Na sala, **só o admin** vê uma faixa com **▶ Início do evento** e, depois
+  de iniciar, **■ Término**. Cada toque grava o horário exato
+  (`tv_evento`: `programa_id`, `inicio_em`, `fim_em`, quem marcou — 2
+  gravações por evento) e manda um aviso no chat ("🔴 O evento começou" /
+  "🏁 Evento encerrado").
+- A duração do evento é **Término − Início**. Não depende mais da grade.
+- **Ao tocar em Término**, o servidor já calcula a participação e envia
+  para a planilha (não precisa esperar o cron). Enquetes abertas são
+  encerradas e o resultado vai para o chat.
+- **Se o admin esquecer:** sem Início, vale o horário da grade (como hoje).
+  Sem Término, o cron encerra sozinho no fim da grade + 1 hora e avisa o
+  admin no sino. O admin pode corrigir os horários em Admin › Programação
+  da Empire TV antes de reprocessar.
 
 **Como medir:**
 
-1. **Linha do tempo por minuto.** A transmissão é dividida em minutos (do
-   início ao fim real). A pessoa está **presente num minuto** quando:
-   - a sala **ou o mini player** está aberto **e** a tela está ligada e na
-     aba do app (`visibilitychange`); **ou**
-   - mandou uma mensagem no chat naquele minuto (prova de que estava lá; a
-     mensagem só preenche o minuto em que foi mandada, nunca a
-     transmissão inteira).
+1. **Linha do tempo por minuto**, de Início a Término. A pessoa está
+   **presente num minuto** quando a **sala está aberta** e a tela está
+   ligada na aba do app (`visibilitychange`). Minimizar para o mini player
+   **não conta** (escolha do usuário; pode ser ligado depois se quiserem).
 2. **Tolerância a queda de conexão:** um buraco de até 2 minutos entre dois
    minutos presentes conta como presente (troca de rede, app recarregando).
 3. **Sessões somam sem contar em dobro:** sair e voltar soma; duas abas ou
    dois aparelhos ao mesmo tempo contam o minuto uma vez só.
-4. **% de presença = minutos presentes ÷ minutos da transmissão.** As
-   faixas da aba "Regras", a REGISTRO e o prestígio `assistir_tv` (90% ou
-   mais) continuam iguais. **Muda a regra do chat:** hoje vale o maior entre
-   presença e chat (10 mensagens = 100%); com isso, mensagem passa a ser
-   só prova de presença naquele minuto. *(Precisa do OK final do usuário,
-   D6.)*
+4. **% = minutos presentes ÷ minutos entre Início e Término.** As faixas da
+   aba "Regras", a REGISTRO e o prestígio `assistir_tv` (90% ou mais)
+   continuam iguais. O número de mensagens vai para a planilha só como
+   informação.
 
 **Como guardar, sem pesar no plano gratuito do D1** (limite do plano
 gratuito: 100 mil linhas gravadas e 5 milhões lidas por dia):
@@ -1297,13 +1309,13 @@ gratuito: 100 mil linhas gravadas e 5 milhões lidas por dia):
 
 **Enviar os dados combinados para a planilha:**
 
-10. No fim da transmissão, `processarParticipacaoTV` (cron de hoje) lê o D1
-    e conta as mensagens do chat no Supabase (como hoje, dentro da janela
-    da transmissão), e junta tudo **por pessoa**.
+10. No **Término** (ou pelo cron, se o admin esquecer),
+    `processarParticipacaoTV` lê o D1, conta as mensagens do chat no
+    Supabase (só como informação) e junta tudo **por pessoa**.
 11. Grava a **REGISTRO** como hoje (mesma % final, mesmas faixas).
 12. Grava na **Presenca_TV** **uma linha por pessoa**, numa gravação só
     (em lote): Data · Programa · Jogador · Nome · Minutos presentes ·
-    Duração · % presença · Mensagens · Entrou às · Saiu às · % final.
+    Início · Término · % presença · Mensagens · Entrou às · Saiu às.
     Assim o admin confere tudo numa linha só.
 13. **Participantes e o círculo** da sala leem a mesma conta (com cache de
     30 s), então o número da tela é o que será creditado.
@@ -1346,6 +1358,43 @@ por isso entra numa fase própria (0b, seção 8), antes do Beta.
 3. **Todos os GIFs aparecem:** a listagem do Drive passa a buscar todas as
    páginas (com cache curto no servidor).
 4. Cada GIF mostra o número de usos (Mais usados) ou "há N min" (Recentes).
+
+#### 6.19.4 Enquetes criadas pelo admin no próprio chat *(NOVO, pedido do usuário)*
+
+**Hoje:** a enquete vem da planilha (pergunta, alvo, nota de `notaMin` a
+`notaMax`, voto secreto) e aparece em cima do chat. **Continua
+funcionando** como hoje.
+
+**Novo:**
+
+1. **Criar na sala:** o admin toca em **📊** ao lado do GIF (só admin vê) e
+   preenche: pergunta; **tipo — Escolha única ou Múltipla escolha** (sempre
+   uma das duas; a "Nota" de hoje fica como terceira opção); de 2 a 10
+   opções; e as chaves **Voto secreto** (ligada por padrão), **Resultado só
+   no fim** e **Encerrar sozinha em N minutos**. **Publicar** põe a
+   enquete no chat na hora, para todos, e a **fixa no topo**.
+2. **Votar no chat:** escolha única = um toque. Múltipla = marcar as
+   opções e **Votar**. Cada pessoa vota uma vez por enquete (pode trocar o
+   voto enquanto estiver aberta). Depois de votar, vê as porcentagens ao
+   vivo (a não ser que esteja "Resultado só no fim").
+3. **Encerrar:** pelo botão **Encerrar** no cartão (admin), pelo tempo, ou
+   no **Término** do evento. Ao encerrar, o chat recebe a mensagem
+   **🏁 Resultado da enquete** com as barras, o total de votos e o
+   vencedor. Publicar uma enquete nova encerra a anterior.
+4. **Arquivo do chat:** a aba **📊 Enquetes** da sala lista todas as
+   enquetes daquela transmissão com os resultados (aberta ou encerrada).
+   Fica guardado mesmo depois da transmissão; o admin pode **baixar a
+   planilha** (enquete, tipo, opção, votos, %, horário).
+5. **Onde fica:** no **Supabase**, junto do chat (que já é em tempo real e
+   não usa a cota do D1): tabelas `tv_enquete` (sala, pergunta, tipo,
+   opções, chaves, aberta/encerrada, horários, quem criou) e
+   `tv_enquete_voto` (enquete, jogador, opções escolhidas; uma linha por
+   pessoa por enquete). O voto secreto esconde quem votou em quê de todos,
+   menos do admin na planilha baixada. No **Término**, o servidor também
+   grava os resultados na aba **Enquetes_TV** da planilha Agenda_TV, numa
+   gravação só.
+6. **Quem pode criar:** só admin (mesmo critério de hoje). A regra é
+   checada no servidor, não só escondendo o botão.
 
 #### 6.19.2 Som da Kick no celular
 
@@ -1402,10 +1451,10 @@ de 360px nos dois tamanhos de texto.
 | Fase | Conteúdo | Depende de |
 |---|---|---|
 | **0a. Medição de uso** (na versão de hoje) | 6.15: envio em lote, tabelas `uso_diario` e `uso_jogador_dia`, chave em `homeFlags`, tela Admin › Uso do app. **Vai ao ar primeiro**, para medir a base por ~4 semanas antes do Beta | — |
-| **0b. Participação na TV e GIFs** (nas duas versões) | 6.19.1: minutos presentes enviados a cada 5 min, tabela `tv_presenca` (uma linha por pessoa), processamento lendo o D1, Presenca_TV com uma linha por pessoa, Participantes com o mesmo número, mini player contando; 6.19.3: GIFs ao vivo, Último uso, todos os GIFs | D6 |
+| **0b. Participação na TV e GIFs** (nas duas versões) | 6.19.1: minutos presentes enviados a cada 5 min, tabela `tv_presenca` (uma linha por pessoa), processamento lendo o D1, Presenca_TV com uma linha por pessoa, Início/Término do admin, Participantes com o mesmo número; 6.19.3: GIFs ao vivo, Último uso, todos os GIFs | ~~D6~~ | **Decidido:** a porcentagem é só o tempo com a sala aberta, entre Início e Término marcados pelo admin; mensagens não contam. | — | — |
 | **0. Fundações** (nada visível muda) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query + cliente de API, tokens de cor com os valores atuais | — |
 | **1. Navegação (Beta test)** | casca nova inteira **atrás do Beta test** (6.11): topo, barra/trilho/barra lateral (6.10), Criar, Meu Império, abas do Início, aviso de mudança, tutorial; chave do admin, reportes e faixa na versão anterior | 0 |
-| **1b. Sala da Empire TV** (Beta) | 6.19: vídeo no topo, faixa fina, folhas, chat compacto, "↓ novas", arrastar para responder, reações, celular deitado; som conforme D5 | 0b, 1 |
+| **1b. Sala da Empire TV** (Beta) | 6.19: enquetes no chat (6.19.4), vídeo no topo, faixa fina, folhas, chat compacto, "↓ novas", arrastar para responder, reações, celular deitado; som conforme D5 | 0b, 1 |
 | **2. Charts** | Ao vivo = painel do Catálogo; `ChartPlaylist` (só tela). **Nenhuma mudança de backend nem de cálculo.** | 0, 1 |
 | **3. Catálogo e Fórum** | Catálogo Início novo, Buscar, Biblioteca, `PaginaLancamento` (tópico novo), Fórum na barra, `/meus-lancamentos` | 1, 2 (o painel sai do Catálogo na fase 2) |
 | **4. Social** | D1 do Social + migração, paginação, "Interagindo como", perfil único, configurar perfis, Repostar, Seguir, seguidores calculados, abas que não funcionavam, Compartilhar, saída do Mensagem | 0, 1 |
