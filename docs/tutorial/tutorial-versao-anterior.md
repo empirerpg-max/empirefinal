@@ -79,7 +79,10 @@ barra de baixo, leva direto para lá.
    música, o **featuring**.
 5. Selecione a **capa** do single e o **áudio**: um link do **YouTube** ou
    um arquivo **mp3**.
-6. Preencha a **letra** e clique em **Publicar**.
+6. Preencha a **letra**.
+7. Se quiser, cadastre os **botões do tópico**: **Shop**, **Info** e
+   **Visual** (aparecem no tópico do lançamento).
+8. Clique em **Publicar**.
 
 ### Vídeo
 

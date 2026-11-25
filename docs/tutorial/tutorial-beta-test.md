@@ -97,7 +97,10 @@ barra lateral). Ele reúne tudo que você lança.
 4. **Foco do lançamento** e **objetivo nos charts**.
 5. **Featuring:** quem participa da música (artistas 2 a 6).
 6. **Capa** e **áudio**: um link do **YouTube** ou um arquivo **mp3**.
-7. **Letra** (opcional) e **Publicar**. A música ganha um tópico no Fórum.
+7. **Letra** (opcional).
+8. **Botões do tópico** (opcional): **Shop**, **Info** e **Visual**, que
+   aparecem na página do lançamento.
+9. **Publicar.** A música ganha um tópico no Fórum.
 
 > Se a música já existe e você quer trocá-la, use **"Na verdade, é pra
 > substituir essa música"**, para não duplicar no chart.

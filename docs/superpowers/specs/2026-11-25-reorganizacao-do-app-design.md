@@ -967,7 +967,15 @@ aconteceu.
   destaque.
 - **As imagens do documento original** não vieram na leitura (só o texto):
   precisam ser recolocadas, de preferência com capturas do app novo.
-- O aviso "O Empire Hub mudou de lugar" (6.8) tem um link para o tutorial.
+- **Imagens:** capturas do app novo (decisão do usuário), uma por tema.
+- **Cada tema tem um botão "Abrir …"** que leva direto para a tela de que
+  ele fala (decisão do usuário).
+- Shop, Info e Visual **já funcionam** e entram no tutorial (5.1, passo 8).
+- **Popup de boas-vindas** (substitui o aviso de 6.8): aparece **logo de
+  cara** na primeira abertura do Beta (decisão do usuário), com o que é o
+  Beta, onde ficou cada coisa e três saídas: **Começar no Beta**, **Ver o
+  tutorial** e **Prefiro a versão anterior**. Aparece uma vez por jogador
+  (guardado no servidor junto com a escolha de versão).
 
 ---
 
