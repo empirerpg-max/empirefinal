@@ -23,7 +23,12 @@ function EmpirePlayInicio() {
   useEffect(() => {
     if (!activeSlidingPlaylist) return;
     window.history.pushState({ empireSlidingPlaylist: true }, "");
-    const onPopState = () => setActiveSlidingPlaylist(null);
+    // Só fecha a playlist quando o voltar saiu da entrada dela; voltar de uma
+    // tela aberta por cima (ex.: um clipe) cai de novo na entrada da playlist
+    // e deve manter a playlist aberta (regra do app: voltar = tela anterior).
+    const onPopState = () => {
+      if (!window.history.state?.empireSlidingPlaylist) setActiveSlidingPlaylist(null);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [activeSlidingPlaylist]);

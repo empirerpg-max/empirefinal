@@ -47,3 +47,20 @@ o texto sempre legível por inteiro, em qualquer tamanho de tela — é a
 forma "ajustável, responsiva e bonita" que já foi pedida e deve ser
 aplicada por padrão em qualquer barra de tabs nova ou quando um label
 novo for adicionado a uma existente.
+
+## Voltar = tela anterior (regra permanente, não precisa repetir)
+
+Em **todo** o app, o gesto/botão de voltar do celular (e do navegador) leva
+para a **tela imediatamente anterior**, nunca pula várias de uma vez. Ex.:
+abrir uma playlist e, dentro dela, um clipe → voltar fecha só o clipe e
+mostra a playlist; voltar de novo fecha a playlist.
+
+Como fazer: toda tela/painel/modal aberto **por cima** de outra (tela
+deslizante, player de vídeo, sheet, overlay) empurra a sua própria entrada
+no histórico ao abrir (`history.pushState` com uma marca própria no
+`state`), fecha no `popstate` **só quando a entrada dela saiu** (confere o
+`history.state` atual) e, ao fechar pelo X/seta, chama `history.back()` se
+a entrada dela ainda for a atual (para não deixar entrada órfã). Ver o
+padrão em `src/routes/empire-play.index.tsx` (playlist) e
+`src/components/EmpirePlay/VitrineClipes.tsx` (clipe por cima da playlist).
+Vale para qualquer tela nova sem o usuário pedir de novo.

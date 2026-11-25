@@ -85,9 +85,27 @@ export function VitrineClipes({ id, playlist, erro, onTentarDeNovo, onFechar }: 
     setVideoAberto(v);
     setChaveAberta(c?.faixa.chave ?? null);
   };
-  const fecharVideo = () => {
+  const fecharVideoLocal = () => {
     setVideoAberto(null);
     setChaveAberta(null);
+  };
+  // Voltar (gesto/botão do celular) fecha SÓ o vídeo e volta para a vitrine:
+  // ao abrir um clipe, empurra uma entrada própria no histórico; o popstate
+  // dela fecha o vídeo. Trocar de clipe na lateral não empurra outra entrada.
+  const videoEstaAberto = videoAberto !== null;
+  useEffect(() => {
+    if (!videoEstaAberto) return;
+    window.history.pushState({ empireSlidingPlaylist: true, empireClipeAberto: true }, "");
+    const onPopState = () => {
+      if (!window.history.state?.empireClipeAberto) fecharVideoLocal();
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [videoEstaAberto]);
+  // Fechar pelo X também passa pelo histórico, senão a entrada fica órfã.
+  const fecharVideo = () => {
+    if (window.history.state?.empireClipeAberto) window.history.back();
+    else fecharVideoLocal();
   };
 
   const q = busca.toLowerCase().trim();
