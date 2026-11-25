@@ -162,8 +162,8 @@ todas as telas e componentes. Cada um foi cruzado com esta lista.
 | Material extra: abas Shop (adicionar produto, comprar), Info e Visual; blocos de imagem, texto e HTML | editor de lançamento + página do álbum | D |
 | Sync Studio: marcar linha, adiantar/atrasar 0,2s, desfazer, adicionar/remover linha, pré-visualizar | Criar › Sincronizar letra e editor | D |
 | Pre-save: "Contador em 0? Verificar/corrigir", Top (ranking), calendário de missões (aleatório), missão com perguntas e respostas, Post TikTok, vídeo real (Fórum), publicar por um perfil de "Tá na Mídia" | Meus lançamentos › Pre-save + missão | D |
-| Fórum: "Avaliar & Comentar" (nota), **marcar como pendente** (admin), filtros por artista e por data (de/até), capa em tela cheia | aba Fórum › tópico | P (filtros) / D |
-| Comentar como "Nome do jogador" ou **OFF** | tópico e player | D |
+| Fórum: **marcar como pendente** (admin), filtros por artista e por data (de/até), "só tópicos que eu ainda não comentei", capa em tela cheia | aba Fórum › Filtros e tópico | P |
+| "Avaliar & Comentar": comentário com o **nome do jogador logado (fixo, não editável)** + nota em faixa (Metacritic: 45-60, 61-75, 76-90, 91-100; ou intervalo de Likes) | tópico do Fórum | D |
 | Admin › Painel do catálogo: ligar/desligar D1, enviar fila agora, conferir backup | Meu Império › Admin | P |
 | Admin › Empire TV: abrir arquivo do vídeo, vincular música, publicar tópico | Meu Império › Admin | P |
 | Admin › Banners: imagem, link de destino, legenda | Meu Império › Admin | P |
@@ -173,7 +173,7 @@ todas as telas e componentes. Cada um foi cruzado com esta lista.
 | Leilão: substituir lance | Meu Império › Leilão (tela atual) | D |
 | Votação: salvar pra mais tarde, visitar fórum (com aviso de não salvo), termo de voto, nota de 5 a 10, "Me arrependi, quero performar" | Meu Império › Premiações › Votação (tela atual) | D |
 | Social: carrossel de fotos, stories (anterior/próximo), perfil do artista por rede (Instagram, Twitter, TikTok), Seguir, "Ler matéria" (Exclusivo) | aba Social | P (parcial) / D |
-| Composer do Social: modo **Normal** ou **Blackout** (anônimo), Feed ou Story, Foto/Vídeo ou Música, com ou sem som | Criar › Post no Social (tela atual) | D |
+| Composer do Social: modo **Normal** ou **Blackout** (só no Social: posta com outro nome), Feed ou Story, Foto/Vídeo ou Música, com ou sem som | Criar › Post no Social (tela atual) | D |
 | Empire TV: carrossel "Assistir agora", ativar som, **minimizar (continua tocando)**, negrito/itálico no chat, Red Carpet com Feed e **Ranking**, várias fotos por look | Início › Empire TV + sala | P (ranking, minimizar) / D |
 | Mini player da TV: expandir, fechar | mini player | D |
 | Turnês (lista): "Ver mais", comentar direto no card | Início › Turnês | D |
@@ -192,3 +192,9 @@ no `api.ts`): ainda não foram lançadas e entram depois, no projeto
 saem do `api.ts` na etapa de limpeza de código. Antes disso, é preciso
 confirmar se o backend das três tem algo que o EmpireVerse vá
 reaproveitar.
+
+## Correções desta lista
+- 2026-11-25: a 3ª conferência dizia que dava pra "comentar como OFF" no
+  Fórum. **Errado.** O rótulo do campo é "Nome do Jogador / OFF", mas o
+  campo é somente leitura e sempre mostra o jogador logado. **Não existe
+  comentário anônimo no Fórum**, nem vai existir no projeto novo.
