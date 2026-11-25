@@ -70,6 +70,13 @@ export function registroDaLinha(cabecalho: string[], linha: string[], linhaPlani
     return null;
   };
 
+  // Casa o cabeçalho BRUTO (com caixa): "Foto" e "FOTO" normalizam igual
+  const colBruta = (nomeExato: string): string | null => {
+    const i = cabecalho.findIndex((c) => String(c ?? "").trim() === nomeExato);
+    if (i < 0) return null;
+    return String(linha[i] ?? "").trim() || null;
+  };
+
   const nome = col("Nome");
   if (!nome) return null;
   const idUsuario = col("ID Usuário");
@@ -79,7 +86,7 @@ export function registroDaLinha(cabecalho: string[], linha: string[], linhaPlani
     nome,
     idUsuario,
     gravadora: col("Gravadora"),
-    fotoUrl: col("FOTO", "Foto"),
+    fotoUrl: colBruta("FOTO") ?? colBruta("Foto"),
     capaPerfilUrl: col("CAPA PERFIL"),
     capaPerfilMobileUrl: col("CAPA PERFIL MOBILE"),
     biografia: col("BIOGRAFIA"),

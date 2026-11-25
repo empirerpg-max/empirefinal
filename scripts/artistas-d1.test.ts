@@ -18,13 +18,15 @@ test("FOTO vazia cai em Foto; sem nome é null; sem ID_unico vira nome+idUsuario
   const l = [...RAVEN]; l[18] = ""; l[1] = "http://foto"; l[15] = "";
   const a = registroDaLinha(CAB, l, 2)!;
   expect(a.fotoUrl).toBe("http://foto");
+  const f = [...RAVEN]; f[1] = "http://outra"; f[18] = "http://FOTO-S";
+  expect(registroDaLinha(CAB, f, 2)!.fotoUrl).toBe("http://FOTO-S");
   expect(a.idUnico).toBe("Raven1198902945");
   const s = [...RAVEN]; s[0] = "";
   expect(registroDaLinha(CAB, s, 2)).toBeNull();
 });
 
 function inserir(db: ReturnType<typeof criarD1Sqlite>, id: string, nome: string, chave: string, linha: number) {
-  db.exec(`INSERT INTO artistas (id_unico, nome, nome_chave, linha_planilha, atualizado_em) VALUES ('${id}','${nome}','${chave}',${linha},'x')`);
+  void db.prepare("INSERT INTO artistas (id_unico, nome, nome_chave, linha_planilha, atualizado_em) VALUES (?, ?, ?, ?, ?)").bind(id, nome, chave, linha, "x").run();
 }
 
 test("buscarArtista acha Aimê por aime e renomeado por sebastian", async () => {
