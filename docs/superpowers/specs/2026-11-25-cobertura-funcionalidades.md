@@ -258,6 +258,12 @@ um está na análise dos perfis do Social.
   Lançamentos da semana, Mais comentados no Fórum, Playlists da
   comunidade, Clipes novos, atalho para Charts ao vivo).
 
+## Encontrados na revisão do design (2026-11-25)
+| Ação hoje | Onde fica | |
+|---|---|---|
+| **Config do Social: campo "Seguindo" digitado à mão** (grava na coluna H de `SOCIAL_PERFIS`) | substituído pela contagem real de quem o artista segue (decisão do usuário: "o seguindo pode ser a quantidade real") | **!** confirmar o que acontece com o número digitado |
+| Seguidores exibidos da coluna G de `SOCIAL_PERFIS` (a tela diz "calculados automaticamente pela coluna G"); perfis de mídia com 10.000.000 | substituído pela fórmula de seguidores | **!** confirmar se a coluna G já tem fórmula e o que fazer com os perfis de mídia |
+
 ## Fora deste projeto
 **Bolsa e Empresas** (`historicoBolsa`, `listarEmpresas`, `minhasEmpresas`
 no `api.ts`): ainda não foram lançadas e entram depois, no projeto
