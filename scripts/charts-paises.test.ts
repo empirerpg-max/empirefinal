@@ -810,3 +810,73 @@ test("fetchAoVivo: vazio/500/erro depois de um valor bom → último valor bom; 
     globalThis.fetch = antes;
   }
 });
+
+// --- Espelho de artistas como fonte das referências de charts ---
+import { ARTISTAS_SCHEMA, referenciasArtistasParaCharts, limparCacheArtistas } from "../backend/src/services/artistasD1";
+
+/** Insere no espelho os mesmos 3 artistas de artista_info (país em português, como na planilha). */
+function semearEspelho(db: Awaited<ReturnType<typeof bancoDeTeste>>, paisBob = "Reino Unido", marcar = true) {
+  for (const s of ARTISTAS_SCHEMA) db.exec(s);
+  const ins = (id: string, nome: string, pais: string, linha: number) =>
+    db.exec(`INSERT INTO artistas (id_unico, nome, nome_chave, pais, linha_planilha, atualizado_em) VALUES ('${id}', '${nome}', '${nome.toUpperCase()}', '${pais}', ${linha}, 'x')`);
+  ins("a", "Amanda", "Australia", 2);
+  ins("b", "Bob", paisBob, 3);
+  ins("c", "Carl", "Estados Unidos", 4);
+  if (marcar) db.exec("CREATE TABLE IF NOT EXISTS chart_config (chave TEXT PRIMARY KEY, valor TEXT); INSERT OR REPLACE INTO chart_config VALUES ('artistas_d1_importado', '1')");
+  limparCacheArtistas();
+}
+
+test("referenciasArtistasParaCharts: sem marca de importação usa artista_info; com espelho igual, charts idênticos", async () => {
+  const db = await bancoDeTeste();
+  limparCacheArtistas();
+  const antes = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  const ref = await referenciasArtistasParaCharts(db);
+  expect(ref.map((r) => r.nome_upper).sort()).toEqual(["AMANDA", "BOB", "CARL"]);
+  expect(ref.find((r) => r.nome_upper === "BOB")!.nacionalidade).toBe("REINO UNIDO");
+  semearEspelho(db);
+  const depois = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  expect(depois).toEqual(antes);
+});
+
+test("referenciasArtistasParaCharts: país diferente no espelho vence; espelho sem marca é ignorado", async () => {
+  const db = await bancoDeTeste();
+  semearEspelho(db, "Australia", false);
+  expect((await referenciasArtistasParaCharts(db)).find((r) => r.nome_upper === "BOB")!.nacionalidade).toBe("REINO UNIDO");
+  db.exec("INSERT OR REPLACE INTO chart_config VALUES ('artistas_d1_importado', '1')");
+  limparCacheArtistas();
+  const ref = await referenciasArtistasParaCharts(db);
+  expect(ref.find((r) => r.nome_upper === "BOB")).toMatchObject({ nacionalidade: "Australia", foto: "", genero: "" });
+  const mudada = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  expect(mudada.countries.get("SPOTIFY")!.length).toBeGreaterThan(0);
+});
+
+test("referenciasArtistasParaCharts: sem tabela artista_info nem espelho → lista vazia", async () => {
+  const db = criarD1Sqlite();
+  limparCacheArtistas();
+  expect(await referenciasArtistasParaCharts(db)).toEqual([]);
+});
+
+test("referenciasArtistasParaCharts: act só da INFOS ACTS (fora da ARTISTAS) mantém a nacionalidade depois da importação", async () => {
+  const db = await bancoDeTeste();
+  limparCacheArtistas();
+  const antes = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  semearEspelho(db);
+  db.exec("DELETE FROM artistas WHERE nome = 'Carl'"); // Carl só existe em artista_info
+  limparCacheArtistas();
+  const ref = await referenciasArtistasParaCharts(db);
+  expect(ref.map((r) => r.nome_upper)).toEqual(["AMANDA", "BOB", "CARL"]);
+  expect(ref.find((r) => r.nome_upper === "CARL")!.nacionalidade).not.toBe("");
+  expect(await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map())).toEqual(antes);
+});
+
+import { carregarFotos, carregarGenerosArtistas } from "../backend/src/services/chartsD1/repo";
+
+test("carregarFotos/carregarGenerosArtistas: foto e gênero do espelho chegam aos charts", async () => {
+  const db = await bancoDeTeste();
+  semearEspelho(db);
+  db.exec("UPDATE artistas SET foto_url = 'http://foto-bob', genero_principal = 'POP' WHERE nome = 'Bob'");
+  limparCacheArtistas();
+  expect((await carregarFotos(db)).get("BOB")).toBe("http://foto-bob");
+  expect((await carregarGenerosArtistas(db)).get("BOB")).toBe("POP");
+  expect((await carregarGenerosArtistas(db)).has("AMANDA")).toBe(false);
+});

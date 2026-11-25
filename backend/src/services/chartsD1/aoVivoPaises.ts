@@ -1,6 +1,7 @@
 // Ranking "ao vivo" por país (regra C aplicada aos streams do dia). Função
 // pura: sem Math.random nem relógio — o sorteio vem de `dataIso` (mesma
 // fatia durante a semana, não depende da plataforma).
+import { referenciasArtistasParaCharts } from "../artistasD1";
 import type { D1DatabaseLike } from "../catalogoDbService";
 import { regrasDeConfig, type RegraPaises } from "./regras";
 import { buscarNoCatalogo, chaveMusica, extrairArtistasDoTitulo, semAcentoMaiusculo, type MusicaCatalogo } from "./artistas";
@@ -145,7 +146,7 @@ async function carregarReferencias(db: D1DatabaseLike): Promise<Referencias> {
   const [datas, pesosRows, artistasRows, focos, cfgRows] = await Promise.all([
     consultar<{ data: string | null }>(db, "SELECT MAX(data) AS data FROM chart_datas WHERE chart = ?", GLOBAL_100),
     consultar<{ plataforma: string; pais: string; peso: number }>(db, "SELECT plataforma, pais, peso FROM pais_peso"),
-    consultar<{ nome_upper: string; nacionalidade: string | null }>(db, "SELECT nome_upper, nacionalidade FROM artista_info"),
+    referenciasArtistasParaCharts(db),
     carregarFocos(db),
     consultar<{ chave: string; valor: string }>(db, "SELECT chave, valor FROM chart_config"),
   ]);
@@ -197,7 +198,7 @@ export async function calcularAoVivoPaises(
       if (!pesos?.size || !emAlta[plat]?.length) continue;
       const itens: ItemAoVivo[] = emAlta[plat].map((i) => {
         const achada = buscarNoCatalogo(i.t, cat);
-        // Sem catálogo: artistas do título, só os conhecidos em artista_info.
+        // Sem catálogo: artistas do título, só os conhecidos no espelho de artistas.
         const artistas = achada
           ? achada.artistas
           : extrairArtistasDoTitulo(i.t).filter((a) => ref.artistasInfo.has(semAcentoMaiusculo(a)));
