@@ -46,7 +46,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
   background:#d9d9de;
 }
 @media (max-width:900px){.phone{width:100%;max-width:420px;height:780px}}
-.screenBox{position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:var(--p-bg);color:var(--p-fg);font-size:14px}
+.screenBox{container-type:inline-size;position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:var(--p-bg);color:var(--p-fg);font-size:14px}
 
 .topbar{position:absolute;inset:0 0 auto;z-index:20;height:58px;display:flex;align-items:center;gap:6px;padding:8px 12px 0 14px;background:var(--p-bar);backdrop-filter:blur(20px) saturate(170%);border-bottom:1px solid var(--p-line)}
 .brand{display:flex;align-items:center;gap:7px;flex:1;min-width:0}
@@ -67,7 +67,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 .tabbar{position:absolute;inset:auto 0 0;z-index:20;height:74px;display:grid;grid-template-columns:repeat(5,1fr);padding:6px 6px 16px;background:var(--p-bar);backdrop-filter:blur(20px) saturate(170%);border-top:1px solid var(--p-line)}
 .tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--p-muted);font-size:10.5px;font-weight:700;min-width:0;padding:0 2px}
 .tab svg{width:22px;height:22px;flex-shrink:0}
-.tab span{max-width:100%;white-space:nowrap}
+.tab span{max-width:100%;white-space:nowrap;font-size:clamp(10px,2.9cqi,11.5px)}
+@container (max-width:379px){.createBtn{width:36px;padding:0;justify-content:center}.createBtn span{display:none}
+  .brand b{font-size:13px}.topbar{gap:2px;padding-left:10px;padding-right:8px}.ic{width:34px}
+  .idchip .muted{display:none}
+  .row{gap:9px}.row .cv{width:42px;height:42px}.rank{width:20px;font-size:15px}.delta{width:26px}
+  .row .ic[data-actions]{width:24px!important}
+  .num{letter-spacing:-.05em}}
 .tab[aria-current="page"]{color:var(--p-fg)}
 .phone:not([data-mode="light"]) .tab[aria-current="page"] svg{filter:drop-shadow(0 0 8px rgba(149,122,248,.55))}
 .phone[data-mode="light"] .tab[aria-current="page"]{color:var(--p-accent)}
@@ -104,7 +110,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 .sub{margin:-8px 16px 14px;color:var(--p-muted);font-size:13px}
 .h2{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:22px 16px 10px}
 .h2 h3{margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em}
-.h2 button{color:var(--p-accent);font-size:13px;font-weight:700;flex-shrink:0}
+.h2 button{color:var(--p-accent);font-size:13px;font-weight:700;flex-shrink:0;padding:12px 8px;margin:-12px -8px;border-radius:10px}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:2px 16px 4px;scrollbar-width:none;scroll-snap-type:x proximity;scroll-padding-inline:48px;overscroll-behavior-x:contain}
 .chips .chip{scroll-snap-align:start}
 .chips::-webkit-scrollbar{display:none}
@@ -139,6 +145,20 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 .cv.sm{font-size:0;padding:0}
 .cv .play{position:absolute;right:8px;bottom:8px;width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;backdrop-filter:blur(6px)}
 .cv .play svg{width:15px;height:15px}
+.selos{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 16px 4px}
+.selos::-webkit-scrollbar{display:none}
+.selos .badge{flex-shrink:0;font-size:10px;padding:3px 7px}
+.eq{display:inline-flex;gap:2px;align-items:flex-end;height:12px;margin-right:6px;vertical-align:-1px}
+.eq i{width:3px;background:var(--p-play);border-radius:1px;animation:eq 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:-.3s}.eq i:nth-child(3){animation-delay:-.6s}
+@keyframes eq{0%,100%{height:3px}50%{height:12px}}
+@media (prefers-reduced-motion:reduce){.eq i{animation:none;height:8px}}
+.num{font-weight:900;font-style:italic;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.crown{color:#f5c542;filter:drop-shadow(0 0 6px rgba(245,197,66,.55))}
+.ptr{position:absolute;left:50%;top:64px;z-index:18;transform:translate(-50%,-40px);opacity:0;transition:.2s;background:var(--p-surface2);color:var(--p-fg);font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;pointer-events:none}
+.ptr.in{transform:translate(-50%,0);opacity:1}
+.skel{background:linear-gradient(90deg,var(--p-surface) 0%,var(--p-surface2) 50%,var(--p-surface) 100%);background-size:200% 100%;animation:sk 1.2s linear infinite;border-radius:10px}
+@keyframes sk{to{background-position:-200% 0}}
 .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
 .live{background:var(--p-live);color:#fff}
 .live::before{content:"";width:6px;height:6px;border-radius:50%;background:#fff;animation:pulse 1.4s infinite}
@@ -282,7 +302,7 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
       <div class="screenBox" id="box">
         <header class="topbar">
           <button class="brand" data-go="inicio" aria-label="Ir para o Início"><img alt="" src="data:image/png;base64,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"><b>Empire <i>Hub</i></b></button>
-          <button class="createBtn" id="openCreate" aria-label="Criar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Criar</button>
+          <button class="createBtn" id="openCreate" aria-label="Criar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Criar</span></button>
           <button class="ic" id="openSearch" aria-label="Buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
           <button class="ic" id="openNotif" aria-label="Notificações"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="dot"></span></button>
           <button class="avatar" id="openMe" aria-label="Meu Império">RV</button>
@@ -304,6 +324,23 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
       <p>Encontrou algo que pode melhorar? Abra a tela no celular e toque em <b>Comentar esta tela</b>, ou use a lista abaixo. Cada comentário fica preso à tela de que fala.</p>
       <p id="semComentarios" class="small" hidden>Para comentar, entre na sua conta do claude.ai com acesso a esta página.</p>
       <div class="telas" id="telas"></div>
+    </section>
+    <section class="note">
+      <h2>Página do artista: formato de hoje</h2>
+      <p>Capa, foto redonda, gravadora, nome com verificado, status (Livre/Sob contrato), os 3 cartões de <b>Fortuna</b>, o nível do responsável, as ações rápidas do dono (Álbum, Turnê, Cinema) e as <b>abas</b>: Visão Geral, Discografia, Músicas, Vídeos, Charts (com Chart Runs), Awards, Turnês &amp; Projetos, Social e Gestão (só o dono). A fileira de abas fica presa no topo ao rolar. Toque em "Meus artistas" no Início para abrir.</p>
+    </section>
+    <section class="note">
+      <h2>Identidade visual: o que entrou</h2>
+      <ul>
+        <li><b>Números em preto itálico</b>, a mesma letra do "EMPIRE HUB": posições dos charts, Fortuna e estatísticas.</li>
+        <li><b>Coroa dourada no #1</b> dos charts e no Hall of Fame (o logo é uma coroa).</li>
+        <li><b>Equalizador animado</b> na faixa que está tocando (lista, chart e mini player). Fica parado para quem desativa animações no sistema.</li>
+      </ul>
+    </section>
+    <section class="note">
+      <h2>Estados de carregando, vazio e erro</h2>
+      <p>Toda tela nova precisa desses três estados. Veja no Fórum:</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="jump" data-estado-ext="carregando">Carregando</button> · <button class="jump" data-estado-ext="vazio">Vazio</button> · <button class="jump" data-estado-ext="erro">Erro</button> · <button class="jump" data-estado-ext="normal">Normal</button></div>
     </section>
     <section class="note">
       <h2>A barra de baixo agora tem 5 abas</h2>
@@ -474,7 +511,7 @@ function renderTabbar(){
 }
 function renderMini(){
   const s = SONG[state.playing.s];
-  $('#mini').innerHTML = `${cover(s.al,'','sm')}<div class="tt"><b>${s.t}</b><small>${ART[s.a]}</small></div><button class="ic" aria-label="Pausar" data-toast="Pausado">${svg('pause')}</button><span class="ic" role="button" aria-label="Opções da faixa" data-actions="faixa" data-title="${s.t}">${svg('more')}</span><span class="prog"><i></i></span>`;
+  $('#mini').innerHTML = `${cover(s.al,'','sm')}<div class="tt"><b><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>${s.t}</b><small>${ART[s.a]}</small></div><button class="ic" aria-label="Pausar" data-toast="Pausado">${svg('pause')}</button><span class="ic" role="button" aria-label="Opções da faixa" data-actions="faixa" data-title="${s.t}">${svg('more')}</span><span class="prog"><i></i></span>`;
 }
 
 /* ── telas das abas ── */
@@ -482,7 +519,7 @@ const chips = (items, cur, key) => `<div class="chipsWrap"><button class="chipAr
 const seg = (items, cur, key) => `<div class="seg">${items.map(([v,l]) => `<button data-set="${key}" data-val="${v}" aria-pressed="${v===cur}">${l}</button>`).join('')}</div>`;
 const h2 = (t, more, act) => `<div class="h2"><h3>${t}</h3>${more?`<button ${act||''}>${more}</button>`:''}</div>`;
 const albumTile = (i) => { const a = ALB[i]; return `<button class="tile" data-open="album" data-id="${i}">${cover(i, a.t)}<b>${a.t}</b><small>${ART[a.a]}</small></button>`; };
-const songRow = (s, i, opts = {}) => `<button class="row" data-open="album" data-id="${s.al}">${opts.rank?`<span class="rank">${s.p}</span><span class="delta ${s.ch==='NEW'?'new':s.ch.startsWith('+')&&s.ch!=='+0'?'up':s.ch.startsWith('-')?'down':'muted'}">${s.ch==='0'?'=':s.ch}</span>`:''}${cover(s.al,'','sm')}<span class="meta"><b>${s.t}</b><small>${opts.kind?opts.kind+' · ':''}${ART[s.a]}${opts.rank&&opts.end?' · '+opts.end:''}</small></span>${opts.end&&!opts.rank?`<span class="end">${opts.end}</span>`:''}<span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções da faixa" data-actions="faixa" data-title="${s.t}">${svg('more','chev')}</span></button>`;
+const songRow = (s, i, opts = {}) => `<button class="row" data-open="album" data-id="${s.al}">${opts.rank?`<span class="rank num">${s.p===1?'<span class="crown" aria-label="primeiro lugar">♛</span>':s.p}</span><span class="delta ${s.ch==='NEW'?'new':s.ch.startsWith('+')&&s.ch!=='+0'?'up':s.ch.startsWith('-')?'down':'muted'}">${s.ch==='0'?'=':s.ch}</span>`:''}${cover(s.al,'','sm')}<span class="meta"><b>${SONG.indexOf(s)===state.playing.s?'<span class="eq" aria-label="tocando"><i></i><i></i><i></i></span>':''}${s.t}</b><small>${opts.kind?opts.kind+' · ':''}${ART[s.a]}${opts.rank&&opts.end?' · '+opts.end:''}</small></span>${opts.end&&!opts.rank?`<span class="end">${opts.end}</span>`:''}<span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções da faixa" data-actions="faixa" data-title="${s.t}">${svg('more','chev')}</span></button>`;
 
 function banners(tipo){
   const itens = tipo==='catalogo' ? [['Spotlight','Vidro Quebrado · Nova Valente',0],['Spotlight','Maré Alta · Íris Sol',1]] : [['Patrocinado · toque para ver o tópico','Vidro Quebrado · Nova Valente',0],['Pre-save · faltam 4 dias · 2.380 fãs','Prisma · Lumi Ray',4]];
@@ -502,8 +539,6 @@ function inicio(){
   let html = `<div style="margin:6px 0 14px">${chips(tabs.map(t=>t[1]), tabs.find(t=>t[0]===state.inicioTab)[1], 'inicioTabLabel')}</div>`;
   if (state.inicioTab==='voce'){
     html += liveCard();
-    html += `<div style="height:12px"></div>` + banners('inicio');
-    html += `<div class="small muted" style="margin:6px 16px 0;padding:8px 12px;border-radius:10px;background:var(--p-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🔔 Bia Kalli comentou em Ruído Branco · Oruã postou no Social · Kai Moreau esgotou o Rio</div>`;
     html += h2('Pra fazer hoje <i class="novo">novo</i>');
     html += `<div class="group">
       <button class="todo" data-open="tour"><span class="ring" style="background:#10b98122;color:var(--p-play)">${svg('ticket')}</span><span class="meta" style="flex:1;min-width:0"><b>Ação do dia na turnê</b><small class="muted" style="display:block">Neon Tour · show 12 de 20 · São Paulo</small></span>${svg('chev','chev')}</button>
@@ -511,11 +546,13 @@ function inicio(){
       <button class="todo" data-toast="Abre o Performance Award pendente"><span class="ring" style="background:#ec489922;color:#ec4899">${svg('mic')}</span><span class="meta" style="flex:1;min-width:0"><b>Performance Award pendente</b><small class="muted" style="display:block">Responda até 27/11 · Vidro Quebrado</small></span>${svg('chev','chev')}</button>
       <button class="todo" data-open="votacao"><span class="ring" style="background:#f59e0b22;color:#f59e0b">${svg('trophy')}</span><span class="meta" style="flex:1;min-width:0"><b>Votação do VMA aberta</b><small class="muted" style="display:block">Termina em 28/11 · 6 categorias</small></span>${svg('chev','chev')}</button>
     </div>`;
+    html += `<div style="height:16px"></div>` + banners('inicio');
     html += h2('Meus artistas','Gerenciar','data-open="me"') + `<div class="shelf">${[0,4].map(i=>`<button class="tile" data-open="artist" data-id="${i}" style="width:96px;text-align:center"><span class="cv sm" style="width:96px;height:96px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><b>${ART[i]}</b></button>`).join('')}</div>`;
     html += h2('Lançamentos recentes','Ver tudo','data-go="catalogo"') + `<div class="shelf">${[2,0,1,4,3].map(albumTile).join('')}</div>`;
     html += h2('Global 100 · #1','Charts','data-go="charts"') + `<div class="card" style="display:flex;gap:12px;align-items:center;padding:12px">${cover(0,'','sm" style="width:64px;height:64px;border-radius:10px;background:linear-gradient(140deg,#7c3aed,#22d3ee)')}<div style="flex:1;min-width:0"><b style="display:block">Vidro Quebrado</b><span class="muted small">Nova Valente · 3ª semana no topo</span></div><span class="badge" style="background:var(--p-surface2)">▲ 2</span></div>`;
     html += h2('Top por plataforma','Charts','data-go="charts"') + `<div class="group">${[['Spotify','#1db954'],['Apple Music','#fc3c44'],['YouTube','#ff0000'],['Billboard 200','#957AF8'],['Digital Sales','#3b82f6']].map(([pl,c],k)=>`<button class="row" data-go="charts"><span class="gicon" style="background:${c}">${svg('music')}</span><span class="meta"><b>${pl}</b><small>#1 ${SONG[k].t} · ${ART[SONG[k].a]}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`;
     html += h2('Próximos eventos') + `<div class="group">${[['tv','Red Carpet do VMA','Empire TV · hoje 20:00'],['ticket','Neon Tour · São Paulo','Show 12 · 26/11']].map(([ic,t,st])=>`<button class="row" ${ic==='tv'?'data-open="tv"':'data-open="tour"'}><span class="gicon" style="background:var(--p-surface2);color:var(--p-fg)">${svg(ic)}</span><span class="meta"><b>${t}</b><small>${st}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`;
+    html += `<div class="small muted" style="margin:18px 16px 0;padding:8px 12px;border-radius:10px;background:var(--p-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🔔 Bia Kalli comentou em Ruído Branco · Oruã postou no Social · Kai Moreau esgotou o Rio</div>`;
     html += h2('No Social agora','Abrir','data-go="social"') + `<div class="shelf">${[0,3,5].map((i,k)=>`<button class="tile wide" data-go="social">${cover(i+2, ['Bastidores do clipe','Setlist da turnê','Capa nova!'][k])}<b>@${ART[i].toLowerCase().replace(/[^a-z]/g,'')}</b><small>${['2,1 mil curtidas','840 curtidas','3,4 mil curtidas'][k]}</small></button>`).join('')}</div>`;
     html += h2('Do Acervo','Abrir','data-set="inicioTab" data-val="acervo"') + `<div class="shelf">${['Rolling Empire · Nov','Entrevista: Íris Sol','Forbes · Top 10'].map((t,k)=>`<button class="tile" data-set="inicioTab" data-val="acervo">${cover(k+6,t)}<b>${t}</b><small>${['Revista','Entrevista','Forbes'][k]}</small></button>`).join('')}</div>`;
   }
@@ -571,7 +608,7 @@ function catalogo(){
   if (state.catTab==='inicio'){
     html += banners('catalogo');
     html += `<p class="sub" style="margin:8px 16px 12px">O painel de playlists dos charts foi para Charts › Ao vivo. Aqui fica o que é seu e o que é novo no catálogo.<i class="novo">novo</i></p>`;
-    html += h2('Continue ouvindo') + `<div class="grid2">${[0,2,1,4].map(i=>`<button class="card" style="margin:0;padding:6px;display:flex;gap:8px;align-items:center;text-align:left" data-open="album" data-id="${i}">${cover(i,'','sm" style="width:44px;height:44px;border-radius:8px;flex-shrink:0;background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<b class="small" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ALB[i].t}</b></button>`).join('')}</div>`;
+    html += h2('Continue ouvindo') + `<div class="grid2">${[0,2,1,4].map(i=>`<button class="card" style="margin:0;padding:6px;display:flex;gap:8px;align-items:center;text-align:left" data-open="album" data-id="${i}">${cover(i,'','sm" style="width:44px;height:44px;border-radius:8px;flex-shrink:0;background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<b class="small" style="min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.25">${ALB[i].t}</b></button>`).join('')}</div>`;
     html += h2('Lançamentos da semana','Ver todos','data-set="catTab" data-val="buscar" data-filter="Álbuns"') + `<div class="shelf">${[2,0,1,4,3].map(albumTile).join('')}</div>`;
     html += h2('Mais comentados no Fórum','Fórum','data-go="forum"') + `<div class="shelf">${[2,0,3].map((i,k)=>`<button class="tile" data-open="topic" data-id="${i}" data-title="${ALB[i].t}">${cover(i,ALB[i].t)}<b>${ALB[i].t}</b><small>${[77,48,22][k]} comentários</small></button>`).join('')}</div>`;
     html += h2('Playlists da comunidade','Ver todas','data-toast="Abre todas as playlists da comunidade"') + `<div class="shelf">${['Sextou no Império','Treino pesado','Só sofrência','Indie da madrugada'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+2,t)}<b>${t}</b><small>por @${['bia','oruã','lumi','dante'][k]} · ${[24,18,31,12][k]} faixas</small></button>`).join('')}</div>`;
@@ -603,9 +640,10 @@ function catalogo(){
 
 function forum(){
   let html = `<h1 class="ttl">Fórum</h1><p class="sub">Onde os jogadores discutem cada lançamento.</p>`;
-  html += chips(['Tudo','Músicas','Vídeos','Álbuns'], state.forumFilter, 'forumFilter');
+  html += `<div style="display:flex;align-items:center;margin:0 16px 10px;gap:0;border-radius:12px;background:var(--p-surface)"><label class="search" style="margin:0;flex:1;min-width:0;background:transparent">${svg('search')}<input placeholder="Pesquisar tópicos" aria-label="Pesquisar tópicos"></label><button class="ic" style="width:44px;height:44px" data-open-filters aria-label="Filtros: artista e datas">${svg('list')}</button></div>`;
+  html += chips(['Tudo','Músicas','Vídeos','Álbuns','Não comentei'], state.naoComentei?'Não comentei':state.forumFilter, 'forumFilter');
   if (state.forumFilter==='Vídeos') html += `<div style="margin-top:8px">${chips(['Todos','Music Video','Performance','Lyric Video','Visualizer','Behind the Scenes','Live'], state.videoTag||'Todos', 'videoTag')}</div>`;
-  html += `<div class="switchRow"><label class="search" style="margin:0;flex:1 1 100%;min-width:0">${svg('search')}<input placeholder="Pesquisar tópicos" aria-label="Pesquisar tópicos"></label><button class="btn sec" style="height:32px;font-size:12px" data-open-filters>${svg('list')}Filtros</button><button class="sw" data-toggle-nc aria-pressed="${!!state.naoComentei}"><i></i><span>Só os que não comentei</span></button></div>`;
+
   const topics = [
     {t:'Ruído Branco',k:'Álbum',kind:'album',a:3,c:77,last:'há 5 min',i:2,quem:'Bia Kalli',txt:'A produção da faixa 3 é absurda.',nota:'76 - 90',award:true,ps:false},
     {t:'Vidro Quebrado',k:'Música',kind:'musica',a:0,c:48,last:'há 12 min',i:0,quem:'Oruã',txt:'Refrão grudento demais, vai ficar no topo.',nota:'91 - 100',award:true},
@@ -613,6 +651,9 @@ function forum(){
     {t:'Prisma',k:'Álbum',kind:'album',a:4,c:31,last:'há 1 h',i:4,quem:'Dante Cruz',txt:'Contando os dias pro lançamento!',ps:true},
     {t:'Luz Néon',k:'Música',kind:'musica',a:4,c:15,last:'há 2 h',i:4,novo:true,quem:'Kai Moreau',txt:'Sintetizador lindo.',nota:'61 - 75'},
     {t:'Maré Alta (Visualizer)',k:'Vídeo',kind:'video',a:2,c:6,last:'há 3 h',i:1,novo:true,quem:'Bia Kalli',txt:'O visual combinou muito.',tag:'Visualizer'}];
+  if (state.demoEstado==='carregando') return html + [1,2,3,4].map(()=>`<div style="display:grid;grid-template-columns:64px 1fr;gap:12px;padding:14px 16px"><div class="skel" style="height:64px"></div><div style="display:grid;gap:8px"><div class="skel" style="height:14px;width:70%"></div><div class="skel" style="height:12px;width:45%"></div><div class="skel" style="height:26px"></div></div></div>`).join('');
+  if (state.demoEstado==='erro') return html + `<div class="card" style="margin-top:20px;text-align:center"><b>Não deu para carregar os tópicos</b><p class="muted small" style="margin:6px 0 12px">Confira sua conexão. Seus filtros continuam salvos.</p><button class="btn pri" data-estado="normal">Tentar de novo</button></div>`;
+  if (state.demoEstado==='vazio') return html + `<div class="card" style="margin-top:20px;text-align:center"><b>Nenhum tópico com esses filtros</b><p class="muted small" style="margin:6px 0 12px">Tente outra categoria ou limpe os filtros.</p><button class="btn sec" data-estado="normal">Limpar filtros</button></div>`;
   const map = {Músicas:'Música',Vídeos:'Vídeo',Álbuns:'Álbum'};
   const list = topics.filter(x => (state.forumFilter==='Tudo' || x.k===map[state.forumFilter]) && (!state.naoComentei || x.novo) && (!state.videoTag || state.videoTag==='Todos' || state.forumFilter!=='Vídeos' || x.tag===state.videoTag));
   html += `<div style="margin-top:8px;border-top:1px solid var(--p-line)">` + (list.map(x=>`<button class="topic" data-open="topic" data-id="${x.i}" data-title="${x.t}" data-kind="${x.kind}">${cover(x.i,'','sm" style="width:64px;height:'+(x.kind==='video'?'40':'64')+'px;border-radius:10px;background:linear-gradient(140deg,'+G[x.i][0]+','+G[x.i][1]+')')}<span style="min-width:0"><b>${x.t}</b>
@@ -665,7 +706,7 @@ function chartPlaylist(tab){
     const cls = r.ch==='NEW'?'new':r.ch.startsWith('+')?'up':r.ch.startsWith('-')?'down':'muted';
     const lbl = r.ch==='NEW'?'NEW':r.ch==='0'?'=':(r.ch.startsWith('+')?'▲':'▼')+r.ch.slice(1);
     const val = isSales?`${(48-i*4)} mil`:isAlb?`${[182,140,121,98,77,51][i]} mil`:`${(9.8-i*0.7).toFixed(1).replace('.',',')} mi`;
-    return `<button class="row" ${isAlb?`data-open="album" data-id="${r.al}"`:`data-play-song="${i%SONG.length}"`}><span class="rank">${r.p}</span><span class="delta ${cls}">${lbl}</span>${cover(r.al,'','sm')}<span class="meta"><b>${r.t}</b><small>${ART[r.a]} · ${val}</small></span><span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções" data-actions="faixa" data-title="${r.t}">${svg('more','chev')}</span></button>`;
+    return `<button class="row" ${isAlb?`data-open="album" data-id="${r.al}"`:`data-play-song="${i%SONG.length}"`}><span class="rank num">${r.p===1?'<span class="crown" aria-label="primeiro lugar">♛</span>':r.p}</span><span class="delta ${cls}">${lbl}</span>${cover(r.al,'','sm')}<span class="meta"><b>${!isAlb&&i%SONG.length===state.playing.s?'<span class="eq" aria-label="tocando"><i></i><i></i><i></i></span>':''}${r.t}</b><small>${ART[r.a]} · ${val}</small></span><span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções" data-actions="faixa" data-title="${r.t}">${svg('more','chev')}</span></button>`;
   }).join('');
   return html;
 }
@@ -674,10 +715,10 @@ function social(){
   const me = state.socialAs || 0;
   let html = `<h1 class="ttl">Social</h1>
     <button class="idchip" data-open-as aria-label="Trocar quem está interagindo"><span class="av cv sm" style="background:linear-gradient(140deg,${G[[0,4,8][me]][0]},${G[[0,4,8][me]][1]})"></span><span class="muted">Interagindo como</span><span>${['Nova Valente','Lumi Ray','Empire News'][me]}</span>${svg('chev')}</button>`;
+  html = html.replace('<button class="idchip"','<div style="display:flex;gap:8px;align-items:center;margin:0 16px 10px"><button class="idchip" style="margin:0;flex:1;max-width:none;min-width:0;overflow:hidden"') + (state.socialTab==='Feed'?`<button class="btn sec" style="height:38px;font-size:12px;flex-shrink:0" data-open-rede aria-label="Filtrar por rede">${state.socialNet&&state.socialNet!=='Todas'?state.socialNet:'Redes'} ▾</button>`:'') + `</div>`;
   html += chips(['Feed','Vídeos','Tá na Mídia','Perfis','News'], state.socialTab, 'socialTab');
   html += `<div style="height:8px"></div>`;
   if (state.socialTab==='Feed'){
-    html += `<p class="muted" style="margin:0 16px 6px;font-size:11.5px;font-weight:700">Filtrar por rede<i class="novo">novo</i></p><div class="chips" style="padding-bottom:10px">${['Todas','Instagram','Twitter','TikTok'].map(x=>`<button class="chip" style="padding:6px 12px;font-size:12px" data-set="socialNet" data-val="${x}" aria-pressed="${(state.socialNet||'Todas')===x}">${x}</button>`).join('')}</div>`;
     html += `<div class="stories">${[`<div class="story"><div class="av" style="background:var(--p-surface2)"><i style="display:grid;place-items:center;font-size:24px;font-weight:300">+</i></div><span>Seu story</span></div>`].concat(ART.slice(0,6).map((a,i)=>`<button class="story" data-toast="Story de ${a} (Instagram)"><div class="av"><i style="background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></i></div><span>${a.split(' ')[0]}</span></button>`)).join('')}</div>`;
     const posts = [
       {a:0,net:'Instagram',h:'novavalente',t:'3 semanas no topo do Global 100. Obrigada, império 👑 Clipe novo sexta.',l:'2,1 mil',c:184,ago:'12 min'},
@@ -735,11 +776,10 @@ const pages = {
           <h2 style="margin:14px 0 2px;font-size:22px;font-weight:800;letter-spacing:-.02em">${t}</h2>
           <button class="small" style="color:var(--p-accent);font-weight:700" data-open="artist" data-id="${a.a}">${artista} <span style="color:#38bdf8">✓</span></button>
           <span class="muted small">${isMus?'Single · Pré-álbum':'Álbum'} · Lançamento: 14/11/2026${isMus?'':` · ${a.n} faixas`}</span></div>`;
-    const badges = `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:${isVid?'flex-start':'center'};padding:8px 16px 4px">${isVid?'<span class="badge" style="background:var(--p-surface2)">👍 76 - 90 likes</span>':''}<span class="badge" style="background:#10b98122;color:var(--p-play)">📈 6 semanas no chart</span><span class="badge" style="background:#f59e0b22;color:#f59e0b">🏆 Indicado · VMA 2026</span>${kind==='album'?'<span class="badge" style="background:#957AF822;color:var(--p-accent)">🚀 2.380 pre-saves</span>':''}</div>`;
-    const acoes = `<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;padding:10px 16px">
+    const badges = `<div class="selos" style="justify-content:${isVid?'flex-start':'safe center'}">${isVid?'<span class="badge" style="background:var(--p-surface2)">👍 76 - 90 likes</span>':''}<span class="badge" style="background:#10b98122;color:var(--p-play)">📈 6 semanas no chart</span><span class="badge" style="background:#f59e0b22;color:#f59e0b">🏆 Indicado · VMA 2026</span>${kind==='album'?'<span class="badge" style="background:#957AF822;color:var(--p-accent)">🚀 2.380 pre-saves</span>':''}</div>`;
+    const acoes = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 16px">
         <button class="btn play" data-play="${i}">${svg('play')}${isVid?'Assistir':'Tocar'}</button><button class="btn sec" data-toast="${isVid?'Abre em mini player':isMus?'Escolha a playlist':'Tocando no modo aleatório'}">${svg(isVid?'tv':isMus?'list':'shuffle')}${isVid?'Mini player':isMus?'Playlist':'Aleatório'}</button>
-        <button class="btn sec" style="width:40px;padding:0" aria-label="Salvar" data-toast="Salvo na Biblioteca">${svg('heart')}</button>
-        <button class="btn sec" style="width:40px;padding:0" aria-label="Mais opções" data-actions="${dono?'albumDono':'album'}" data-title="${t}">${svg('more')}</button></div>`;
+</div>`;
     const botoes = isVid ? '' : `<div style="display:flex;gap:8px;padding:2px 16px 10px;flex-wrap:wrap">${[['bag','Shop'],['help','Info'],['image','Visual']].map(([ic,l])=>`<button class="btn sec" style="height:34px;font-size:12.5px" data-toast="${l}: botão do tópico">${svg(ic)}${l}</button>`).join('')}</div>`;
     const destaque = `<div class="card" style="margin-top:6px">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:16px">Comentários · 77</b><span class="muted small">último há 5 min</span></div>
@@ -762,24 +802,37 @@ const pages = {
       corpo += h2('Mais vídeos') + VID.map((v,k)=>`<button class="row" data-open="topic" data-id="${k}" data-title="${v.t}" data-kind="video">${cover(k+2,'','sm" style="width:96px;height:54px;border-radius:8px;background:linear-gradient(140deg,'+G[k+2][0]+','+G[k+2][1]+')')}<span class="meta"><b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></span></button>`).join('');
     }
     corpo += `<div id="cmts">${h2('Comentários · 77','Recentes','data-toast="Ordenar por: recentes, mais reações"')}</div>` + comentarios.map((c,k)=>cmt(c,k,false)).join('');
-    return {title:t, actions:'topico', body: header + badges + acoes + botoes + `<div class="pad" style="padding:0">${destaque}</div>` + corpo + `<div style="height:70px"></div><div class="composer" style="position:sticky"><button class="btn pri" style="flex:1" data-avaliar="${isVid?'video':'metacritic'}">${svg('star')}Avaliar &amp; Comentar</button></div>`};
+    return {title:t, actions: dono?'albumDono':'topico', save:true, body: header + badges + acoes + botoes + `<div class="pad" style="padding:0">${destaque}</div>` + corpo + `<div style="height:70px"></div><div class="composer" style="position:sticky"><button class="btn pri" style="flex:1" data-avaliar="${isVid?'video':'metacritic'}">${svg('star')}Avaliar &amp; Comentar</button></div>`};
   },
   artist(id){
-    const i = +id||0;
+    const i = +id||0, dono = (i===0||i===4), g = G[i%G.length];
+    const abas = ['Visão Geral','Discografia','Músicas','Vídeos','Charts','Awards','Turnês & Projetos','Social'].concat(dono?['Gestão']:[]);
+    const aba = state.artistTab && abas.includes(state.artistTab) ? state.artistTab : 'Visão Geral';
+    let c = '';
+    if (aba==='Visão Geral') c = `${h2('Biografia')}<p class="pad" style="margin:0;line-height:1.6">Cantora e compositora da King &amp; Queen. Três semanas no topo do Global 100 com Vidro Quebrado.</p>
+      <div class="grid2" style="margin-top:14px"><div class="card" style="margin:0"><span class="muted small">Álbuns</span><b class="num" style="display:block;font-size:26px">3</b></div><div class="card" style="margin:0"><span class="muted small">Seguidores</span><b class="num" style="display:block;font-size:26px">29,4 mil</b></div></div>
+      <div class="card" style="margin-top:10px;display:flex;gap:12px;align-items:center"><span class="crown" style="font-size:26px">♛</span><div><b>4 #1s no Hall of Fame</b><div class="muted small">Veja o detalhe na aba Charts</div></div></div>
+      <button class="card" style="margin-top:10px;width:calc(100% - 32px);display:flex;gap:12px;align-items:center;text-align:left" data-open="tour"><span class="badge" style="background:#10b98122;color:var(--p-play)">Turnê em andamento</span><b class="small">Neon Tour · show 12 de 20</b></button>`;
+    if (aba==='Discografia') c = `${dono?`<div class="pad" style="margin:12px 0"><button class="btn sec" style="width:100%" data-toast="Abre Criar › Novo álbum">${svg('album')}Lançar álbum</button></div>`:''}<div class="grid2" style="margin-top:10px">${[0,1,2].map(k=>`<button style="text-align:left" data-open="album" data-id="${k}">${cover(k,ALB[k].t,'" style="aspect-ratio:1;border-radius:var(--p-radius);background:linear-gradient(140deg,'+G[k][0]+','+G[k][1]+')')}<b class="small" style="display:block;margin-top:6px">${ALB[k].t}</b><span class="muted small">${ALB[k].y}</span></button>`).join('')}<button style="text-align:left" data-open="album" data-id="5">${cover(9,'Primeiras Demos','" style="aspect-ratio:1;border-radius:var(--p-radius);background:linear-gradient(140deg,'+G[9][0]+','+G[9][1]+')')}<b class="small" style="display:block;margin-top:6px">Primeiras Demos</b><span class="muted small">Material antigo · 2019</span></button></div>`;
+    if (aba==='Músicas') c = `<div style="height:8px"></div>` + SONG.slice(0,6).map((sg,k)=>songRow(sg,k,{end:sg.d})).join('');
+    if (aba==='Vídeos') c = `<div style="height:8px"></div>` + VID.map((v,k)=>`<button class="row" data-open="topic" data-id="${k}" data-title="${v.t}" data-kind="video">${cover(k+2,'','sm" style="width:96px;height:54px;border-radius:8px;background:linear-gradient(140deg,'+G[k+2][0]+','+G[k+2][1]+')')}<span class="meta"><b>${v.t}</b><small>${v.k}</small></span></button>`).join('');
+    if (aba==='Charts') c = `<div style="margin:12px 0 8px">${chips(['Global 100','Spotify','YouTube','BB 200'], state.artChart||'Global 100', 'artChart')}</div>${h2('Chart Runs')}<div class="group">${[['Vidro Quebrado','#1 · 3 sem no topo'],['Febre de Maio','#2'],['Catedral','#8']].map(([t,p])=>`<div class="row"><span class="meta"><b>${t}</b><small>pico ${p}</small></span>${p.startsWith('#1')?'<span class="crown">♛</span>':''}</div>`).join('')}</div>`;
+    if (aba==='Awards') c = `<div style="height:12px"></div><div class="group">${[['VMA 2026','3 indicações'],['Empire Music Awards','Venceu · Música do Ano']].map(([n,st])=>`<div class="row"><span class="gicon" style="background:#f59e0b">${svg('trophy')}</span><span class="meta"><b>${n}</b><small>${st}</small></span></div>`).join('')}</div>`;
+    if (aba==='Turnês & Projetos') c = `${h2('Turnês','Todas Turnês','data-set="inicioTab" data-val="tours"')}<button class="row" data-open="tour">${cover(4,'','sm')}<span class="meta"><b>Neon Tour</b><small>12 / 20 shows · em andamento</small></span>${svg('chev','chev')}</button>${h2('Projetos','+ Lançar','data-toast="Cinema: em breve"')}<button class="row" data-toast="Cinema: em breve">${cover(7,'','sm')}<span class="meta"><b>Cinema</b><small>Em breve</small></span></button>`;
+    if (aba==='Social') c = `${h2('Redes','Abrir no Social','data-go-close="social"')}<div class="group">${['Instagram','Twitter','TikTok'].map(r=>`<button class="row" data-open="socialPerfil" data-id="${i}" data-title="${r}"><span class="meta"><b>${r}</b><small>@${ART[i].toLowerCase().replace(/[^a-z]/g,'')}</small></span>${svg('chev','chev')}</button>`).join('')}</div><div class="pgrid" style="margin-top:12px">${[1,2,3,4,5,6].map(k=>`<span class="cv sm" style="background:linear-gradient(140deg,${G[k][0]},${G[k][1]})"></span>`).join('')}</div>`;
+    if (aba==='Gestão') c = `${h2('Perfil')}<div class="group">${[['image','#0ea5e9','Trocar foto'],['pen','#7c3aed','Editar biografia'],['image','#10b981','Capa do perfil']].map(([ic,cl,l])=>`<button class="row" data-toast="${l}"><span class="gicon" style="background:${cl}">${svg(ic)}</span><span class="meta"><b>${l}</b></span>${svg('chev','chev')}</button>`).join('')}</div>${h2('Administrativo')}<div class="group"><button class="row" data-toast="Confirmação de rescisão"><span class="gicon" style="background:#dc2626">${svg('logout')}</span><span class="meta"><b style="color:var(--p-down)">Rescindir</b><small>Desvincula o artista de você</small></span></button></div>`;
     return {title:ART[i], body:`
-      <div style="height:200px;position:relative;background:linear-gradient(160deg,${G[i][0]},${G[i][1]});display:flex;align-items:flex-end;padding:16px;color:#fff">
-        <div><h2 style="margin:0;font-size:30px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:-.03em">${ART[i]}</h2><span class="small" style="opacity:.85">${(12-i).toString()},4 mi ouvintes mensais · ${['King & Queen','Crown','Independent'][i%3]}</span></div>
-      </div>
-      <div style="display:flex;gap:8px;padding:14px 16px 8px;flex-wrap:wrap"><button class="btn play">${svg('play')}Tocar</button><button class="btn sec" data-follow>Seguir</button>${(i===0||i===4)?`<button class="btn pri" data-open="editarArtista" data-id="${i}">${svg('pen')}Editar artista</button>`:''}</div>
-      <div class="chips" style="margin:4px 0 0">${['Visão geral','Discografia','Músicas','Vídeos','Charts','Awards','Turnês e projetos','Social'].map((x,k)=>`<button class="chip" aria-pressed="${k===0}" data-scroll="ar-${k}">${x}</button>`).join('')}</div>
-      <div id="ar-0">${h2('Biografia')}<p class="pad muted" style="margin:0">Cantora e compositora da King &amp; Queen. Três semanas no topo do Global 100 com Vidro Quebrado.</p></div>
-      <div id="ar-2">${h2('Populares')}${SONG.slice(0,4).map((s,k)=>songRow(s,k,{end:s.d})).join('')}</div>
-      <div id="ar-1">${h2('Discografia')}<div class="shelf">${[0,1,2].map(albumTile).join('')}<button class="tile" data-open="album" data-id="5">${cover(9,'Álbum antigo')}<b>Primeiras Demos</b><small>Material antigo · 2019</small></button></div></div>
-      <div id="ar-3">${h2('Vídeos')}<div class="shelf">${VID.slice(0,2).map((v,k)=>`<button class="tile wide" data-open="album" data-id="${k}">${cover(k+2,'')}<b>${v.t}</b><small>${v.k}</small></button>`).join('')}</div></div>
-      <div id="ar-4">${h2('Charts')}<div class="group">${[['Global 100','#1 · 3 semanas'],['Spotify Global','#2'],['BB 200 (álbum)','#4'],['YouTube','#6']].map(([c,p])=>`<div class="row"><span class="meta"><b>${c}</b></span><span class="end"><b style="color:var(--p-fg)">${p}</b></span></div>`).join('')}</div></div>
-      <div id="ar-5">${h2('Awards')}<div class="group"><div class="row"><span class="gicon" style="background:#f59e0b">${svg('trophy')}</span><span class="meta"><b>VMA 2026</b><small>3 indicações</small></span></div></div></div>
-      <div id="ar-6">${h2('Turnês e projetos')}<button class="row" data-open="tour">${cover(4,'','sm')}<span class="meta"><b>Neon Tour</b><small>Show 12 de 20 · em andamento</small></span>${svg('chev','chev')}</button><button class="row" data-toast="Cinema: em breve">${cover(7,'','sm')}<span class="meta"><b>Cinema</b><small>Em breve</small></span>${svg('chev','chev')}</button></div>
-      <div id="ar-7">${h2('Social','Abrir','data-go-close="social"')}<div class="grid2" style="grid-template-columns:repeat(3,1fr);gap:4px">${[1,2,3,4,5,6].map(k=>cover(k,'','sm" style="aspect-ratio:1;border-radius:4px;background:linear-gradient(140deg,'+G[k][0]+','+G[k][1]+')')).join('')}</div></div>`};
+      <div style="position:relative;height:170px;background:linear-gradient(160deg,${g[0]},${g[1]})">${dono?`<button class="ic" style="position:absolute;right:12px;top:12px;background:rgba(0,0,0,.35);color:#fff" aria-label="Trocar capa do perfil" data-toast="Trocar capa (celular e computador)">${svg('image')}</button>`:''}</div>
+      <div style="padding:0 16px;margin-top:-48px;display:flex;align-items:flex-end;gap:12px;position:relative">
+        <button class="cv sm" style="width:96px;height:96px;border-radius:50%;border:4px solid var(--p-bg);background:linear-gradient(140deg,${g[1]},${g[0]})" aria-label="Foto do artista" ${dono?'data-toast="Trocar foto do artista"':''}></button>
+        <div style="padding-bottom:6px;min-width:0"><span class="muted small" style="font-weight:800;text-transform:uppercase;letter-spacing:.06em">${['King & Queen','Crown','Independent'][i%3]}</span></div></div>
+      <div class="pad" style="padding-top:8px"><h2 style="margin:0;font-size:28px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:-.03em">${ART[i]} <span style="color:#38bdf8;font-size:18px">✓</span></h2>
+        <span class="badge" style="margin-top:6px;background:var(--p-surface2)"><span style="width:7px;height:7px;border-radius:50%;background:${i%2?'#eab308':'var(--p-play)'}"></span>${i%2?'Sob contrato':'Livre'}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px 16px 4px">${[['Fortuna Total','$ 12,4 mi'],['Fortuna Vendas','$ 7,6 mi'],['Fortuna Turnês','$ 4,8 mi']].map(([l,v])=>`<div class="card" style="margin:0;padding:10px"><span class="muted" style="font-size:10.5px;font-weight:700">${l}</span><b class="num" style="display:block;font-size:16px;margin-top:2px">${v}</b></div>`).join('')}</div>
+      <div class="card" style="margin-top:8px;display:flex;gap:10px;align-items:center"><span class="gicon" style="background:#f59e0b">${svg('trophy')}</span><div style="flex:1;min-width:0"><span class="muted small">Responsável — Nível 7</span><b style="display:block">Estrela em ascensão</b></div><b class="num" style="color:#f59e0b">1.240 pts</b></div>
+      ${dono?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 16px 0">${[['album','Álbum','Abre Criar › Novo álbum'],['ticket','Turnê','Abre Criar › Nova turnê'],['tv','Cinema','Cinema: em breve']].map(([ic,l,t])=>`<button class="card" style="margin:0;display:grid;justify-items:center;gap:6px;padding:12px" data-toast="${t}">${svg(ic).replace('class=""','style="width:22px;height:22px;color:var(--p-accent)"')}<b class="small">${l}</b></button>`).join('')}</div>`:''}
+      <div style="margin-top:14px;position:sticky;top:0;z-index:2;background:var(--p-bg);padding:6px 0;border-bottom:1px solid var(--p-line)">${chips(abas, aba, 'artistTab')}</div>
+      ${c}<div style="height:30px"></div>`};
   },
   editarArtista(id){
     const i = +id||0;
@@ -925,7 +978,7 @@ function openPage(name, id, title, kind){
   el.className = 'stackPage';
   el.dataset.pid = id || ''; el.dataset.pname = name; el.dataset.ptitle = title || ''; el.dataset.pkind = kind || '';
   el.setAttribute('aria-label', p.title);
-  el.innerHTML = `<div class="stackHead"><button class="back" data-back aria-label="Voltar">${svg('back')}${stack.length ? 'Voltar' : TABS.find(t=>t[0]===state.tab)[1]}</button><span class="t">${p.title}</span>${p.actions?`<button class="ic" aria-label="Mais opções" data-actions="${p.actions}" data-title="${p.title}">${svg('more')}</button>`:'<span style="width:36px"></span>'}</div><div class="stackBody">${p.body}</div>`;
+  el.innerHTML = `<div class="stackHead"><button class="back" data-back aria-label="Voltar">${svg('back')}${stack.length ? 'Voltar' : TABS.find(t=>t[0]===state.tab)[1]}</button><span class="t">${p.title}</span>${p.save?`<button class="ic" aria-label="Salvar" data-toast="Salvo na Biblioteca">${svg('heart')}</button>`:''}${p.actions?`<button class="ic" aria-label="Mais opções" data-actions="${p.actions}" data-title="${p.title}">${svg('more')}</button>`:'<span style="width:36px"></span>'}</div><div class="stackBody">${p.body}</div>`;
   box.appendChild(el);
   stack.push(el);
   initArrows(el);
@@ -964,7 +1017,7 @@ const ACTIONS = {
   album:[['pen','Editar lançamento (dono)'],['heart','Salvar álbum'],['share','Compartilhar'],['help','Reportar conteúdo errado']],
   comentario:[['pen','Editar comentário'],['heart','Reagir'],['reply','Responder'],['logout','Excluir (dono ou admin)']],
   topico:[['share','Compartilhar'],['pen','Editar tópico (admin)'],['archive','Marcar como pendente (admin)'],['logout','Excluir tópico (admin)']],
-  albumDono:[['pen','Editar lançamento (você é dono)','data-open-after="editar" data-after-id="0"'],['heart','Salvar'],['share','Compartilhar'],['help','Reportar conteúdo errado'],['logout','Excluir tópico (admin)']],
+  albumDono:[['pen','Editar lançamento (você é dono)','data-open-after="editar" data-after-id="0"'],['archive','Marcar como pendente (admin)'],['heart','Salvar'],['share','Compartilhar'],['help','Reportar conteúdo errado'],['logout','Excluir tópico (admin)']],
   post:[['pen','Editar post (dono)'],['logout','Excluir post (dono ou admin)'],['share','Copiar link']],
   turne:[['pen','Editar turnê'],['image','Trocar capa'],['share','Compartilhar']],
 };
@@ -977,6 +1030,7 @@ function closeSheet(){ $('#scrim').classList.remove('in'); $('#sheet').classList
 
 /* ── render ── */
 const RENDER = {inicio, catalogo, forum, charts, social};
+const scrollPorAba = {};
 function initArrows(root){
   root.querySelectorAll('.chipsWrap').forEach(w => {
     const row = w.querySelector(".chips"), l = w.querySelector(".chipArrow.l"), r = w.querySelector(".chipArrow.r"); if (!l) return;
@@ -1014,6 +1068,9 @@ box.addEventListener('click', e => {
   if (act){ e.stopPropagation(); return openActions(act.dataset.actions, act.dataset.title); }
   const b = e.target.closest('button,[role="button"]'); if (!b) return;
   if (b.classList.contains('chipArrow')){ const row=b.parentElement.querySelector('.chips'); row.scrollBy({left:(b.classList.contains('l')?-1:1)*(row.clientWidth-96),behavior:'smooth'}); return; }
+  if (b.dataset.estado){ state.demoEstado=b.dataset.estado; return render(true); }
+  if (b.hasAttribute('data-open-rede')){ $('#sheet').setAttribute('aria-label','Filtrar por rede'); $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:10px">Mostrar posts de <i class="novo">novo</i></b><div class="group" style="margin:0">${['Todas','Instagram','Twitter','TikTok'].map(x=>`<button class="row" data-pick-rede="${x}"><span class="meta"><b>${x==='Todas'?'Todas as redes':x}</b></span>${(state.socialNet||'Todas')===x?'<b style="color:var(--p-accent)">✓</b>':''}</button>`).join('')}</div>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
+  if (b.dataset.pickRede){ state.socialNet=b.dataset.pickRede; closeSheet(); return render(true); }
   if (b.hasAttribute('data-open-as')){ const ops=['Nova Valente','Lumi Ray','Empire News']; $('#sheet').setAttribute('aria-label','Interagir como'); $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:4px">Interagir como</b><p class="muted small" style="margin:0 0 10px">Curtidas, comentários e posts saem com o @ deste perfil na rede de cada post.</p><div class="group" style="margin:0">${ops.map((n,k)=>`<button class="row" data-pick-as="${k}"><span class="cv sm" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(140deg,${G[[0,4,8][k]][0]},${G[[0,4,8][k]][1]})"></span><span class="meta"><b>${n}</b><small>${k<2?'Seu artista':'Perfil de mídia (compartilhado)'}</small></span>${(state.socialAs||0)===k?'<b style="color:var(--p-accent)">✓</b>':''}</button>`).join('')}</div>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
   if (b.dataset.pickAs!==undefined){ state.socialAs=+b.dataset.pickAs; closeSheet(); return render(true); }
   if (b.dataset.net){ const pg=b.closest('.stackPage'); const id=pg.dataset.pid; closeTop(); setTimeout(()=>openPage('socialPerfil', id, b.dataset.net), 10); return; }
@@ -1042,12 +1099,14 @@ box.addEventListener('click', e => {
   if (b.dataset.localTab){ const root=b.closest('.stackBody')||b.closest('.sheet')||scroller; b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); root.querySelectorAll('[data-'+b.dataset.localTab+']').forEach(el=>el.hidden = el.getAttribute('data-'+b.dataset.localTab)!==b.dataset.val); return; }
   if (b.dataset.scroll){ const root=b.closest('.stackBody'); b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); const t=root&&root.querySelector('#'+b.dataset.scroll); if(t) root.scrollTo({top:t.offsetTop-60,behavior:'smooth'}); return; }
   if (b.dataset.goClose){ closeAll(); state.tab=b.dataset.goClose; return render(); }
-  if (b.dataset.go){ closeAll(); if (b.dataset.go===state.tab) { scroller.scrollTo({top:0,behavior:'smooth'}); return; } state.tab=b.dataset.go; return render(); }
+  if (b.dataset.go){ closeAll(); if (b.dataset.go===state.tab) { scroller.scrollTo({top:0,behavior:'smooth'}); return; } scrollPorAba[state.tab]=scroller.scrollTop; state.tab=b.dataset.go; render(); scroller.scrollTop = scrollPorAba[state.tab]||0; return; }
   if (b.dataset.open) return openPage(b.dataset.open, b.dataset.id, b.dataset.title, b.dataset.kind);
   if (b.dataset.set){
     let k = b.dataset.set, v = b.dataset.val;
     if (k==='noop') { b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===b)); return; }
     if (k==='inicioTabLabel'){ k='inicioTab'; v=labelToKey[v]; }
+    if (k==='forumFilter'){ if (v==='Não comentei'){ state.naoComentei=!state.naoComentei; return render(true); } state.naoComentei=false; }
+    if ((k==='artistTab'||k==='artChart') && stack.length){ state[k]=v; return refreshTop(); }
     if (k==='inicioTab' && state.tab!=='inicio'){ closeAll(); state.tab='inicio'; }
     state[k]=v;
     if (k==='chartTab'||k==='chartMov'||k==='chartView'||k==='chartPais') state.chartOpen=null;
@@ -1055,16 +1114,30 @@ box.addEventListener('click', e => {
     closeAll(); return render(k!=='inicioTab' && k!=='catTab');
   }
   if (b.dataset.play!==undefined){ state.playing.s = SONG.findIndex(s=>s.al===+b.dataset.play); if (state.playing.s<0) state.playing.s=0; renderMini(); return toast('Tocando agora'); }
-  if (b.dataset.playSong!==undefined){ state.playing.s=+b.dataset.playSong; renderMini(); return toast('Tocando: '+SONG[state.playing.s].t); }
+  if (b.dataset.playSong!==undefined){ state.playing.s=+b.dataset.playSong; render(true); if (stack.length) refreshTop(); return toast('Tocando: '+SONG[state.playing.s].t); }
   if (b.hasAttribute('data-like')){ b.classList.toggle('on'); return; }
   if (b.hasAttribute('data-follow')){ const on=b.textContent.trim()==='Seguir'; b.textContent = on?'Seguindo':'Seguir'; b.classList.toggle('pri',!on); b.classList.toggle('sec',on); return; }
   if (b.dataset.toast) return toast(b.dataset.toast);
 });
 $('#mini').addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' '){ e.preventDefault(); $('#mini').click(); } });
 $('#scrim').addEventListener('click', closeSheet);
+/* deslizar entre as abas do Início e puxar para atualizar */
+const ptr = document.createElement('div'); ptr.className='ptr'; ptr.textContent='Solte para atualizar'; box.appendChild(ptr);
+let tx=0, ty=0, puxando=false;
+scroller.addEventListener('touchstart', e=>{ tx=e.touches[0].clientX; ty=e.touches[0].clientY; puxando = scroller.scrollTop<=0; }, {passive:true});
+scroller.addEventListener('touchmove', e=>{ const dy=e.touches[0].clientY-ty; if (puxando && dy>70) ptr.classList.add('in'); }, {passive:true});
+scroller.addEventListener('touchend', e=>{
+  const dx=e.changedTouches[0].clientX-tx, dy=e.changedTouches[0].clientY-ty;
+  if (ptr.classList.contains('in')){ ptr.textContent='Atualizando…'; setTimeout(()=>{ ptr.classList.remove('in'); ptr.textContent='Solte para atualizar'; toast('Atualizado'); }, 700); return; }
+  if (state.tab==='inicio' && Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)*1.5 && !e.target.closest('.shelf,.chips,.stories,.selos')){
+    const ord=['voce','tv','tours','acervo']; const i=ord.indexOf(state.inicioTab); const n=Math.max(0,Math.min(3,i+(dx<0?1:-1)));
+    if (n!==i){ state.inicioTab=ord[n]; render(); }
+  }
+}, {passive:true});
 document.addEventListener('keydown', e => { if (e.key==='Escape'){ if ($('#sheet').classList.contains('in')) closeSheet(); else closeTop(); } });
 $('#mDark').addEventListener('click', ()=>setMode('dark'));
 $('#mLight').addEventListener('click', ()=>setMode('light'));
+document.querySelectorAll('[data-estado-ext]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='forum'; state.demoEstado=b.dataset.estadoExt; render(); marcarAtual(); if (matchMedia('(max-width:900px)').matches) phone.scrollIntoView({behavior:'smooth',block:'start'}); }));
 document.querySelectorAll('[data-jump-acervo]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='inicio'; state.inicioTab='acervo'; state.acervoTab=b.dataset.jumpAcervo; render(); phone.scrollIntoView({behavior:'smooth',block:'center'}); }));
 document.querySelectorAll('[data-jump]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='inicio'; state.inicioTab=b.dataset.jump; render(); phone.scrollIntoView({behavior:'smooth',block:'center'}); }));
 

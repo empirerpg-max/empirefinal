@@ -807,6 +807,45 @@ destrutivas em vermelho e por último, e "Cancelar".
 
 Só no protótipo. No app não existe selo.
 
+### 6.5 Regras de tela pequena, toque e acessibilidade (revisão de UX/UI)
+
+Aplicadas no protótipo (versão 12) e obrigatórias no app:
+
+| # | Regra |
+|---|---|
+| U1 | **Abaixo de 380px de largura** (celulares pequenos): o botão Criar vira só o ícone ＋, a marca "EMPIRE HUB" diminui, "Interagindo como" mostra só a foto e o nome, e as linhas de lista encolhem capa e coluna de posição. Nada pode sobrepor nada (testar em 320, 360 e 390px). |
+| U2 | **Rótulos da barra de baixo** crescem com o texto do sistema só até 11,5px, para nunca se encostarem. |
+| U3 | **Área de toque mínima de 44×44px** em todo link e botão, inclusive "Ver tudo", "Gerenciar" e "Abrir" (a área cresce, o visual não muda). |
+| U4 | **Nome de música/álbum em cartão estreito** quebra em até 2 linhas, nunca "…" em 1 linha. |
+| U5 | **Página do lançamento:** Tocar + 2º botão ocupam a linha; ♡ e ⋯ ficam no cabeçalho da tela; selos numa linha só que rola. |
+| U6 | **Social:** o filtro de rede é o botão "Redes ▾" ao lado de "Interagindo como" (uma folha com Todas/Instagram/Twitter/TikTok), não uma fileira a mais. |
+| U7 | **Fórum:** botão de filtros (artista, datas) dentro do campo de busca; "Não comentei" é a última opção da fileira Tudo/Músicas/Vídeos/Álbuns. |
+| U8 | **Início › Para você:** ordem = Ao vivo → **Pra fazer hoje** → banners → Meus artistas → Lançamentos → Global 100 #1 → Top por plataforma → Próximos eventos → ticker → Social → Acervo. A ordem continua configurável por `homeFlags`. |
+| U9 | **Estados obrigatórios em toda tela nova:** carregando (esqueleto no formato do conteúdo), vazio (frase do que falta + ação) e erro (o que deu errado + "Tentar de novo"), reaproveitando o `LoadErrorState`. |
+| U10 | **Cada aba lembra onde parou** ao trocar de aba; tocar na aba ativa volta ao topo. |
+| U11 | **Deslizar para o lado** troca entre Para você, Empire TV, Turnês e Acervo (fora de fileiras roláveis). |
+| U12 | **Puxar para atualizar** com indicador "Solte para atualizar" → "Atualizando…", em toda tela com lista. |
+| U13 | **Cor por papel** (proposta para D3): roxo = ação e link; aba/opção ativa = branco no escuro e roxo no claro; verde = tocar, alta e "tocando"; vermelho = ao vivo e queda; dourado = coroa/prêmio. |
+
+### 6.6 Identidade visual (reforços)
+
+- **Números em preto itálico** (`.num`): posições de chart, Fortuna, estatísticas, a mesma letra da marca.
+- **Coroa dourada no #1** (charts, Hall of Fame), com brilho leve.
+- **Equalizador animado** ao lado da faixa que está tocando (listas, charts, mini player); parado com `prefers-reduced-motion`.
+- Mantém: fundo azul-marinho, roxo do logo, títulos de marca em preto itálico maiúsculo no escuro, cartões com degradê da cor da capa.
+
+### 6.7 Página do artista
+
+**Mantém o formato de hoje** (`src/routes/artistas.$nome.index.tsx`), que o
+usuário prefere a uma lista corrida: capa (celular/computador), foto
+redonda, gravadora, nome com verificado, status, 3 cartões de Fortuna,
+nível do responsável, ações rápidas do dono (Álbum, Turnê, Cinema, agora
+abrindo o Criar) e **abas**: Visão Geral, Discografia, Músicas, Vídeos,
+Charts (Global 100, Spotify, YouTube, BB 200 + Chart Runs), Awards, Turnês
+& Projetos, Social, Gestão (dono). Mudanças só de casca: fileira de abas
+rolável com seta e **presa no topo ao rolar**; seguidores passam a ser o
+número calculado (5.6.6).
+
 ---
 
 ## 7. Itens que mudam de texto (resquícios de Telegram)
