@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Database, Loader2, RefreshCw, Power, PowerOff, Send, ShieldCheck } from "lucide-react";
-import { authHeaders } from "@/lib/api";
+import { Database, Loader2, RefreshCw, Power, PowerOff, Send, ShieldCheck, Users, Check, X } from "lucide-react";
+import { authHeaders, atualizarArtistasDaPlanilha } from "@/lib/api";
 
 interface StatusAba {
   aba: string;
@@ -24,6 +24,8 @@ export function PainelCatalogoD1() {
   const [abas, setAbas] = useState<StatusAba[]>([]);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  // Confirmação na própria tela antes de sobrescrever o espelho de artistas.
+  const [confirmandoArtistas, setConfirmandoArtistas] = useState(false);
 
   async function chamar(caminho: string, body?: unknown) {
     const res = await fetch(`/api/admin/d1primeiro/${caminho}`, {
@@ -169,6 +171,61 @@ export function PainelCatalogoD1() {
           {ocupado === "verificar" ? <Loader2 className="size-3 animate-spin shrink-0" /> : <ShieldCheck className="size-3 shrink-0" />}
           <span className="truncate">Conferir backup</span>
         </button>
+      </div>
+
+      <div className="rounded-xl bg-white/5 px-3 py-2 space-y-2 min-w-0">
+        <p className="text-[11px] text-neutral-400">
+          Artistas: sobrescreve foto, capa, biografia, estilo e país de todos os artistas com o que está na aba ARTISTAS
+          (país vazio na planilha destrava a nacionalidade).
+        </p>
+        {confirmandoArtistas ? (
+          <div className="space-y-2">
+            <p className="text-[11px] font-bold text-amber-300">
+              Sobrescrever os dados de todos os artistas com a planilha? As edições dos jogadores que não estiverem na
+              planilha serão perdidas.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!!ocupado}
+                onClick={() => {
+                  setConfirmandoArtistas(false);
+                  acao("artistas", async () => {
+                    const r = await atualizarArtistasDaPlanilha();
+                    const n = r.filter((x) => x.campos.length > 0).length;
+                    if (!n) return `Nada mudou (${r.length} artistas conferidos).`;
+                    return `${n} ${n === 1 ? "artista atualizado" : "artistas atualizados"} (de ${r.length} conferidos).`;
+                  });
+                }}
+                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-[11px] font-bold disabled:opacity-50 min-w-0"
+              >
+                <Check className="size-3 shrink-0" />
+                <span className="truncate">Confirmar</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmandoArtistas(false)}
+                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] text-neutral-200 font-bold min-w-0"
+              >
+                <X className="size-3 shrink-0" />
+                <span className="truncate">Cancelar</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={!!ocupado}
+            onClick={() => {
+              setMensagem(null);
+              setConfirmandoArtistas(true);
+            }}
+            className="max-w-full inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] text-neutral-200 font-bold disabled:opacity-50 min-w-0"
+          >
+            {ocupado === "artistas" ? <Loader2 className="size-3 animate-spin shrink-0" /> : <Users className="size-3 shrink-0" />}
+            <span className="truncate">Atualizar todos os artistas a partir da planilha</span>
+          </button>
+        )}
       </div>
 
       {mensagem && <p className="text-[11px] text-neutral-200 bg-white/5 rounded-lg px-3 py-2">{mensagem}</p>}

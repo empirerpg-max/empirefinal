@@ -2327,3 +2327,82 @@ export function driveDirectAudio(url: string | undefined | null): string | undef
   if (!m) return undefined;
   return `https://drive.google.com/uc?export=download&id=${m[0]}`;
 }
+
+// ---------------------------------------------------------------------------
+// Perfil do artista no espelho D1 (tabela `artistas`, fonte única = aba
+// ARTISTAS). Gravação só pelo dono ou admin (Authorization de authHeaders()).
+// ---------------------------------------------------------------------------
+
+export interface ArtistaPerfil {
+  idUnico: string;
+  nome: string;
+  idUsuario: string | null;
+  gravadora: string | null;
+  fotoUrl: string | null;
+  capaPerfilUrl: string | null;
+  capaPerfilMobileUrl: string | null;
+  biografia: string | null;
+  generoPrincipal: string | null;
+  pais: string | null;
+  paisDefinidoEm: string | null;
+}
+
+export type CamposPerfilArtista = {
+  fotoUrl?: string;
+  capaPerfilUrl?: string;
+  capaPerfilMobileUrl?: string;
+  biografia?: string;
+  generoPrincipal?: string;
+  pais?: string;
+};
+
+async function respostaJson<T>(res: Response, padrao: string): Promise<T> {
+  const data = (await res.json().catch(() => null)) as { success?: boolean; data?: T; error?: string } | null;
+  if (!res.ok || !data?.success) throw new Error(data?.error || padrao);
+  return data.data as T;
+}
+
+/** Perfil do artista no espelho; null quando ainda não existe lá (404). */
+export async function lerPerfilArtista(nome: string): Promise<ArtistaPerfil | null> {
+  const res = await fetch(`/api/artistas/perfil?nome=${encodeURIComponent(nome)}`);
+  if (res.status === 404) return null;
+  return respostaJson<ArtistaPerfil>(res, "Não foi possível carregar o perfil do artista.");
+}
+
+/** Grava só os campos enviados (não mande `pais` se ele já estiver salvo e você não for admin). */
+export async function salvarPerfilArtista(nome: string, campos: CamposPerfilArtista): Promise<ArtistaPerfil> {
+  const res = await fetch("/api/artistas/perfil", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ nome, ...campos }),
+  });
+  return respostaJson<ArtistaPerfil>(res, "Não foi possível salvar o perfil do artista.");
+}
+
+let generosArtistasCache: Promise<string[]> | null = null;
+
+/** Estilos principais aceitos (gêneros já usados na ARTISTAS + catálogo). */
+export function listarGenerosArtistas(): Promise<string[]> {
+  if (!generosArtistasCache) {
+    generosArtistasCache = fetch("/api/artistas/generos")
+      .then((res) => respostaJson<string[]>(res, "Lista de estilos indisponível."))
+      .then((lista) => (Array.isArray(lista) ? lista.filter((g): g is string => typeof g === "string") : []))
+      .catch((err) => {
+        generosArtistasCache = null;
+        throw err;
+      });
+  }
+  return generosArtistasCache;
+}
+
+/** Admin: sobrescreve o espelho com a aba ARTISTAS (um artista, ou todos sem `idUnico`). */
+export async function atualizarArtistasDaPlanilha(idUnico?: string): Promise<{ id: string; campos: string[] }[]> {
+  const res = await fetch("/api/admin/artistas/atualizar-da-planilha", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(idUnico ? { idUnico } : {}),
+  });
+  const data = await respostaJson<{ id: string; campos: string[] }[]>(res, "Não foi possível atualizar a partir da planilha.");
+  return Array.isArray(data) ? data : [];
+}
+

@@ -33,6 +33,7 @@ import { PerformanceAwardModal } from "./PerformanceAwardModal";
 import { BannersManager } from "./BannersManager";
 import { GestaoEmpireTv } from "./GestaoEmpireTv";
 import { PainelCatalogoD1 } from "./PainelCatalogoD1";
+import { AvisoPerfilArtistas } from "./AvisoPerfilArtistas";
 import { uploadVideoDireto, descartarVideoEnviado } from "@/lib/uploadVideoDireto";
 import { getStoredLogin } from "@/components/LoginScreen";
 import { useImageCrop } from "@/hooks/use-image-crop";
@@ -1676,6 +1677,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               <span className="sm:hidden">Editar</span>
             </button>
           </div>
+
+          {/* Artistas do jogador sem nacionalidade/estilo no perfil */}
+          <AvisoPerfilArtistas artistas={profile?.associatedArtists || []} />
 
           {/* AÇÕES RÁPIDAS */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">

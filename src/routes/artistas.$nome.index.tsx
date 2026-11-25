@@ -34,10 +34,29 @@ import {
   Play,
   Image as ImageIcon,
   Camera,
+  Globe,
+  Check,
+  RefreshCw,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
+import { getStoredLogin } from "@/components/LoginScreen";
+import { listarPaisesFoco } from "@/lib/focoMusica";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
-import { api, fmtEC, fmtMoney, driveImg, type Artist, type AlbumPayload, type Projeto, type NivelJogador } from "@/lib/api";
+import {
+  api,
+  fmtEC,
+  fmtMoney,
+  driveImg,
+  lerPerfilArtista,
+  salvarPerfilArtista,
+  listarGenerosArtistas,
+  atualizarArtistasDaPlanilha,
+  type Artist,
+  type AlbumPayload,
+  type Projeto,
+  type NivelJogador,
+  type ArtistaPerfil,
+} from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { AwardBadge } from "@/components/AwardBadge";
 import { useImageCrop } from "@/hooks/use-image-crop";
@@ -51,6 +70,10 @@ import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
 export const Route = createFileRoute("/artistas/$nome/")({
+  // ?aba=gestao abre direto na aba Gestão (ex.: aviso "Complete o perfil" da Gestão do jogador).
+  validateSearch: (s: Record<string, unknown>): { aba?: "gestao" } => ({
+    aba: s.aba === "gestao" ? "gestao" : undefined,
+  }),
   component: ArtistDashboard,
 });
 
@@ -88,11 +111,20 @@ function paraDataIso(value: string | undefined | null): string | undefined {
 
 function ArtistDashboard() {
   const { nome } = Route.useParams();
+  const { aba } = Route.useSearch();
   const { user, ready } = useTelegramUser();
   const [artist, setArtist] = useState<Artist | null>(null);
   const [isOwner, setIsOwner] = useState(false);
+  // Admin (mesma regra das outras telas: id histórico ou tipo_de_perfil = Admin)
+  // também vê a aba Gestão — nacionalidade liberada e "Atualizar a partir da planilha".
+  const [isAdmin] = useState(() => {
+    const login = getStoredLogin();
+    return login?.id === "810141686" || login?.tipoPerfil === "Admin";
+  });
+  const podeGestao = isOwner || isAdmin;
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabId>("geral");
+  const [activeTab, setActiveTab] = useState<TabId>(aba === "gestao" ? "gestao" : "geral");
+  const abasRef = useRef<HTMLElement>(null);
   const abasScroll = useDragScroll<HTMLDivElement>();
   const [modal, setModal] = useState<null | "rescisao" | "foto" | "biografia" | "capa">(null);
   const [discografia, setDiscografia] = useState<DiscoItem[]>([]);
@@ -256,11 +288,24 @@ function ArtistDashboard() {
       { id: "tours", label: "Turnês & Projetos" },
       { id: "social", label: "Social" },
     ];
-    if (isOwner) {
+    if (podeGestao) {
       base.push({ id: "gestao", label: "Gestão" });
     }
     return base;
-  }, [isOwner]);
+  }, [podeGestao]);
+
+  // Chegou com ?aba=gestao: rola até as abas; sem permissão, volta pra Visão Geral.
+  useEffect(() => {
+    if (loading || aba !== "gestao") return;
+    if (!podeGestao) {
+      setActiveTab((t) => (t === "gestao" ? "geral" : t));
+      return;
+    }
+    // Gestão é a última aba: rola a fileira pra ela aparecer ativa.
+    const fileira = abasRef.current?.querySelector<HTMLElement>("[data-abas]");
+    if (fileira) fileira.scrollLeft = fileira.scrollWidth;
+    abasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [loading, aba, podeGestao]);
 
   if (loading) {
     return (
@@ -463,10 +508,11 @@ function ArtistDashboard() {
         )}
 
         {/* ── Abas do mega perfil ── */}
-        <section>
+        <section ref={abasRef} className="scroll-mt-4">
           <div className="relative mb-6">
             <div
               ref={abasScroll.ref}
+              data-abas
               className="flex gap-1 p-1 bg-card rounded-[1.5rem] border border-white/5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
             >
               <StickyScrollArrowLeft show={abasScroll.canScrollLeft} onClick={() => abasScroll.scrollByAmount(-1)} />
@@ -493,7 +539,9 @@ function ArtistDashboard() {
             {activeTab === "awards" && <AwardsTab nome={artist.nome} />}
             {activeTab === "tours" && <ToursProjetosTab nome={artist.nome} tourData={tourData} isOwner={isOwner} />}
             {activeTab === "social" && <SocialTab nome={artist.nome} />}
-            {isOwner && activeTab === "gestao" && <GestaoTab onAction={setModal} />}
+            {podeGestao && activeTab === "gestao" && (
+              <GestaoTab nome={artist.nome} isOwner={isOwner} isAdmin={isAdmin} onAction={setModal} />
+            )}
           </div>
         </section>
       </div>
@@ -1174,18 +1222,352 @@ function SocialTab({ nome }: { nome: string }) {
 }
 
 // ---------- Aba: Gestão (dono) ----------
-function GestaoTab({ onAction }: { onAction: (m: "rescisao" | "foto" | "biografia" | "capa") => void }) {
+function GestaoTab({
+  nome,
+  isOwner,
+  isAdmin,
+  onAction,
+}: {
+  nome: string;
+  isOwner: boolean;
+  isAdmin: boolean;
+  onAction: (m: "rescisao" | "foto" | "biografia" | "capa") => void;
+}) {
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <MiniAction label="Trocar Foto" icon={<User />} onClick={() => onAction("foto")} color="text-sky-400" />
-      <MiniAction label="Editar Biografia" icon={<FileText />} onClick={() => onAction("biografia")} color="text-emerald-400" />
-      <MiniAction label="Capa do Perfil" icon={<ImageIcon />} onClick={() => onAction("capa")} color="text-fuchsia-400" />
-      <div className="col-span-2 mt-4 space-y-3">
-        <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 px-1">Administrativo</h4>
+    <div className="space-y-6">
+      <PerfilArtistaGestao nome={nome} isAdmin={isAdmin} />
+      {isOwner && (
         <div className="grid grid-cols-2 gap-3">
-          <MiniAction label="Rescindir" icon={<FileX />} onClick={() => onAction("rescisao")} color="text-destructive font-black" />
+          <MiniAction label="Trocar Foto" icon={<User />} onClick={() => onAction("foto")} color="text-sky-400" />
+          <MiniAction label="Editar Biografia" icon={<FileText />} onClick={() => onAction("biografia")} color="text-emerald-400" />
+          <MiniAction label="Capa do Perfil" icon={<ImageIcon />} onClick={() => onAction("capa")} color="text-fuchsia-400" />
+          <div className="col-span-2 mt-4 space-y-3">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 px-1">Administrativo</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <MiniAction label="Rescindir" icon={<FileX />} onClick={() => onAction("rescisao")} color="text-destructive font-black" />
+            </div>
+          </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+type Aviso = { tipo: "ok" | "erro"; texto: string } | null;
+
+const SELECT_PERFIL =
+  "w-full min-w-0 bg-black/25 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:border-primary focus:outline-none disabled:opacity-50";
+const BOTAO_PRIMARIO =
+  "inline-flex items-center justify-center gap-1.5 min-w-0 px-3 py-2.5 rounded-xl bg-primary text-primary-foreground text-[11px] font-black uppercase tracking-wider active:scale-[0.98] transition disabled:opacity-40 disabled:active:scale-100";
+const BOTAO_SECUNDARIO =
+  "inline-flex items-center justify-center gap-1.5 min-w-0 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-[11px] font-black uppercase tracking-wider text-muted-foreground hover:text-foreground active:scale-[0.98] transition disabled:opacity-40";
+
+function AvisoLinha({ aviso }: { aviso: Aviso }) {
+  if (!aviso) return null;
+  return (
+    <p
+      role={aviso.tipo === "erro" ? "alert" : "status"}
+      className={`text-[11px] font-bold rounded-lg px-3 py-2 break-words ${
+        aviso.tipo === "erro" ? "bg-destructive/10 text-red-400" : "bg-emerald-500/10 text-emerald-400"
+      }`}
+    >
+      {aviso.texto}
+    </p>
+  );
+}
+
+// Nacionalidade (travada depois de salva — só admin troca) e estilo principal
+// (editável sempre), gravados no espelho D1 via /api/artistas/perfil. Admin
+// também tem "Atualizar a partir da planilha" (sobrescreve com a aba ARTISTAS).
+// Confirmações ficam na própria tela (sem window.confirm nem overlay).
+function PerfilArtistaGestao({ nome, isAdmin }: { nome: string; isAdmin: boolean }) {
+  const [perfil, setPerfil] = useState<ArtistaPerfil | null | undefined>(undefined);
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
+  const [paises, setPaises] = useState<string[]>([]);
+  const [erroPaises, setErroPaises] = useState(false);
+  const [generos, setGeneros] = useState<string[]>([]);
+  const [erroGeneros, setErroGeneros] = useState(false);
+  const [paisSel, setPaisSel] = useState("");
+  const [generoSel, setGeneroSel] = useState("");
+  const [confirmandoPais, setConfirmandoPais] = useState(false);
+  const [salvando, setSalvando] = useState<null | "pais" | "genero">(null);
+  const [avisoPais, setAvisoPais] = useState<Aviso>(null);
+  const [avisoGenero, setAvisoGenero] = useState<Aviso>(null);
+  const [confirmandoPlanilha, setConfirmandoPlanilha] = useState(false);
+  const [atualizandoPlanilha, setAtualizandoPlanilha] = useState(false);
+  const [avisoPlanilha, setAvisoPlanilha] = useState<Aviso>(null);
+
+  const aplicar = (p: ArtistaPerfil | null) => {
+    setPerfil(p);
+    setPaisSel(p?.pais || "");
+    setGeneroSel(p?.generoPrincipal || "");
+  };
+
+  const carregar = () =>
+    lerPerfilArtista(nome)
+      .then((p) => {
+        setErroCarga(null);
+        aplicar(p);
+      })
+      .catch((e) => {
+        setErroCarga((e as Error).message);
+        setPerfil(null);
+      });
+
+  useEffect(() => {
+    let ativo = true;
+    setPerfil(undefined);
+    lerPerfilArtista(nome)
+      .then((p) => {
+        if (!ativo) return;
+        setErroCarga(null);
+        aplicar(p);
+      })
+      .catch((e) => {
+        if (!ativo) return;
+        setErroCarga((e as Error).message);
+        setPerfil(null);
+      });
+    listarPaisesFoco()
+      .then((l) => ativo && setPaises(l))
+      .catch(() => ativo && setErroPaises(true));
+    listarGenerosArtistas()
+      .then((l) => ativo && setGeneros(l))
+      .catch(() => ativo && setErroGeneros(true));
+    return () => {
+      ativo = false;
+    };
+  }, [nome]);
+
+  if (perfil === undefined) {
+    return <div className="h-40 rounded-2xl bg-card animate-pulse" />;
+  }
+  if (!perfil) {
+    return (
+      <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-[11px] text-muted-foreground">
+        {erroCarga || "O perfil deste artista ainda não está disponível. Tente de novo em alguns minutos."}
       </div>
+    );
+  }
+
+  const paisTravado = !!perfil.pais && !isAdmin;
+  const opcoesPais = paisSel && !paises.includes(paisSel) ? [paisSel, ...paises] : paises;
+  const opcoesGenero = generoSel && !generos.includes(generoSel) ? [generoSel, ...generos] : generos;
+
+  const salvarPais = async () => {
+    setSalvando("pais");
+    setAvisoPais(null);
+    try {
+      aplicar(await salvarPerfilArtista(nome, { pais: paisSel }));
+      setAvisoPais({ tipo: "ok", texto: "Nacionalidade salva." });
+    } catch (e) {
+      setAvisoPais({ tipo: "erro", texto: (e as Error).message });
+    } finally {
+      setSalvando(null);
+      setConfirmandoPais(false);
+    }
+  };
+
+  const salvarGenero = async () => {
+    setSalvando("genero");
+    setAvisoGenero(null);
+    try {
+      // Só o estilo: `pais` nunca vai junto (evita o 409 de nacionalidade já definida).
+      const p = await salvarPerfilArtista(nome, { generoPrincipal: generoSel });
+      setPerfil(p);
+      setGeneroSel(p.generoPrincipal || "");
+      setAvisoGenero({ tipo: "ok", texto: "Estilo salvo." });
+    } catch (e) {
+      setAvisoGenero({ tipo: "erro", texto: (e as Error).message });
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  const atualizarDaPlanilha = async () => {
+    setAtualizandoPlanilha(true);
+    setAvisoPlanilha(null);
+    try {
+      const r = await atualizarArtistasDaPlanilha(perfil.idUnico);
+      const campos = r.flatMap((x) => x.campos);
+      setAvisoPlanilha({ tipo: "ok", texto: campos.length ? `Atualizado: ${campos.join(", ")}` : "Nada mudou." });
+      setAvisoPais(null);
+      setAvisoGenero(null);
+      await carregar();
+    } catch (e) {
+      setAvisoPlanilha({ tipo: "erro", texto: (e as Error).message });
+    } finally {
+      setAtualizandoPlanilha(false);
+      setConfirmandoPlanilha(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 px-1">Perfil do artista</h4>
+
+      {/* Nacionalidade */}
+      <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Globe className="size-4 text-sky-400 shrink-0" />
+          <span className="text-[11px] font-black uppercase tracking-widest truncate">Nacionalidade</span>
+        </div>
+        {paisTravado ? (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-black/25 border border-white/10 min-w-0">
+              <Lock className="size-3.5 text-muted-foreground shrink-0" />
+              <span className="text-sm font-bold truncate">{perfil.pais}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Para alterar, fale com a administração.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <select
+              value={paisSel}
+              onChange={(e) => {
+                setPaisSel(e.target.value);
+                setConfirmandoPais(false);
+                setAvisoPais(null);
+              }}
+              disabled={salvando === "pais"}
+              aria-label="Nacionalidade"
+              className={SELECT_PERFIL}
+            >
+              {!paisSel && <option value="">Escolha o país…</option>}
+              {opcoesPais.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            {erroPaises && <p className="text-[11px] text-red-400">Não foi possível carregar a lista de países.</p>}
+            <p className="text-[11px] text-muted-foreground">
+              {isAdmin
+                ? "Como admin, você pode trocar a nacionalidade a qualquer momento."
+                : "Depois de salva, só a administração pode alterar."}
+            </p>
+            {confirmandoPais ? (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2">
+                <p className="text-[11px] font-bold text-amber-300 break-words">
+                  Salvar {paisSel} como nacionalidade de {nome}? Depois de salva, só a administração pode alterar.
+                </p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={salvarPais} disabled={salvando === "pais"} className={`${BOTAO_PRIMARIO} flex-1`}>
+                    {salvando === "pais" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Check className="size-3.5 shrink-0" />}
+                    <span className="truncate">Confirmar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmandoPais(false)}
+                    disabled={salvando === "pais"}
+                    className={`${BOTAO_SECUNDARIO} flex-1`}
+                  >
+                    <X className="size-3.5 shrink-0" />
+                    <span className="truncate">Cancelar</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={!paisSel || paisSel === (perfil.pais || "") || salvando === "pais"}
+                onClick={() => (isAdmin ? salvarPais() : setConfirmandoPais(true))}
+                className={`${BOTAO_PRIMARIO} w-full`}
+              >
+                {salvando === "pais" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Globe className="size-3.5 shrink-0" />}
+                <span className="truncate">Salvar nacionalidade</span>
+              </button>
+            )}
+          </div>
+        )}
+        <AvisoLinha aviso={avisoPais} />
+      </div>
+
+      {/* Estilo principal */}
+      <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Music className="size-4 text-fuchsia-400 shrink-0" />
+          <span className="text-[11px] font-black uppercase tracking-widest truncate">Estilo principal</span>
+        </div>
+        <select
+          value={generoSel}
+          onChange={(e) => {
+            setGeneroSel(e.target.value);
+            setAvisoGenero(null);
+          }}
+          disabled={salvando === "genero"}
+          aria-label="Estilo principal"
+          className={SELECT_PERFIL}
+        >
+          {!generoSel && <option value="">Escolha o estilo…</option>}
+          {opcoesGenero.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
+        {erroGeneros && <p className="text-[11px] text-red-400">Não foi possível carregar a lista de estilos.</p>}
+        <button
+          type="button"
+          disabled={!generoSel || generoSel === (perfil.generoPrincipal || "") || salvando === "genero"}
+          onClick={salvarGenero}
+          className={`${BOTAO_PRIMARIO} w-full`}
+        >
+          {salvando === "genero" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Check className="size-3.5 shrink-0" />}
+          <span className="truncate">Salvar estilo</span>
+        </button>
+        <AvisoLinha aviso={avisoGenero} />
+      </div>
+
+      {/* Admin: sobrescrever com a aba ARTISTAS */}
+      {isAdmin && (
+        <div className="p-4 rounded-2xl bg-amber-500/[0.04] border border-amber-500/15 space-y-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <RefreshCw className="size-4 text-amber-400 shrink-0" />
+            <span className="text-[11px] font-black uppercase tracking-widest truncate">Admin · Planilha</span>
+          </div>
+          {confirmandoPlanilha ? (
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold text-amber-300 break-words">
+                Sobrescrever todos os dados de {nome} (foto, capa, biografia, estilo e país) com o que está na aba ARTISTAS?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={atualizarDaPlanilha}
+                  disabled={atualizandoPlanilha}
+                  className={`${BOTAO_PRIMARIO} flex-1`}
+                >
+                  {atualizandoPlanilha ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Check className="size-3.5 shrink-0" />}
+                  <span className="truncate">Confirmar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmandoPlanilha(false)}
+                  disabled={atualizandoPlanilha}
+                  className={`${BOTAO_SECUNDARIO} flex-1`}
+                >
+                  <X className="size-3.5 shrink-0" />
+                  <span className="truncate">Cancelar</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setAvisoPlanilha(null);
+                setConfirmandoPlanilha(true);
+              }}
+              className={`${BOTAO_SECUNDARIO} w-full`}
+            >
+              <RefreshCw className="size-3.5 shrink-0" />
+              <span className="truncate">Atualizar a partir da planilha</span>
+            </button>
+          )}
+          <AvisoLinha aviso={avisoPlanilha} />
+        </div>
+      )}
     </div>
   );
 }
