@@ -7,6 +7,7 @@ import { DynamicCoverCard, type CoverPlatform } from "./DynamicCoverCard";
 import { toPlayableTrack, toPlaylistTrack } from "./mappers";
 import { useEmpirePlayer } from "./PlayerContext";
 import { type PlayableTrack } from "./MusicPlayer";
+import { VitrineClipes } from "./VitrineClipes";
 import { getPlaylist, plataformaDoId, type FaixaPlaylist, type Playlist } from "@/lib/playlistsEmpirePlay";
 
 /** Intervalo de atualização das playlists ao vivo (mesmo cache do servidor). */
@@ -113,11 +114,9 @@ export function TelaPlaylist({ id, onFechar }: Props) {
     onFechar,
   };
 
-  // ── Gancho da Task 6 ──────────────────────────────────────────────────
-  // Playlists do YouTube abrem na vitrine de clipes. Por enquanto o
-  // placeholder só mostra a lista de áudio; a Task 6 troca esta linha por
-  // <VitrineClipes {...props} />.
-  if (playlist?.plataforma === "youtube") return <VitrineClipesPlaceholder {...props} />;
+  // Playlists do YouTube abrem na vitrine de clipes (já no carregamento/erro,
+  // pelo id, pra tela não trocar de layout quando os dados chegam).
+  if ((playlist?.plataforma ?? plataformaDoId(id)) === "youtube") return <VitrineClipes {...props} />;
 
   return <ListaAudioPlaylist {...props} />;
 }
@@ -128,11 +127,6 @@ export interface TelaProps {
   erro: boolean;
   onTentarDeNovo: () => void;
   onFechar: () => void;
-}
-
-/** TEMPORÁRIO (Task 6 substitui pela VitrineClipes): mesma lista de áudio. */
-function VitrineClipesPlaceholder(props: TelaProps) {
-  return <ListaAudioPlaylist {...props} />;
 }
 
 function ListaAudioPlaylist({ id, playlist, erro, onTentarDeNovo, onFechar }: TelaProps) {
