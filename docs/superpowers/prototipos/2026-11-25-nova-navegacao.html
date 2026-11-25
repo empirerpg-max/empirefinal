@@ -270,7 +270,7 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
         <li><b>No Início, como abas no topo:</b> <button class="jump" data-jump="tv">Empire TV</button> · <button class="jump" data-jump="tours">Turnês</button> · <button class="jump" data-jump="acervo">Acervo</button>. Ficam a 1 toque de qualquer tela (Início → aba).</li>
         <li><b>Empire TV ao vivo:</b> quando há transmissão, aparece um cartão "Ao vivo" no topo do Início e um ponto vermelho no sino. "Entrar na sala" abre o player com Chat, Participantes, Sobre e Enquete. Ao sair, o mini player continua.</li>
         <li><b>Turnês:</b> a ação do dia aparece em "Pra fazer hoje", no Início. A aba Turnês mostra as suas, as em andamento e o ranking de arrecadação. Criar turnê fica no botão Criar.</li>
-        <li><b>Acervo:</b> Revistas, Entrevistas, Críticas (Metacritic e Pitchfork), Forbes e Awards, em uma só aba. As edições novas também aparecem no Início.</li>
+        <li><b>Acervo:</b> Revistas, Entrevistas, Críticas (Metacritic e Empirefork), Forbes e Awards, em uma só aba. As edições novas também aparecem no Início.</li>
       </ul>
     </section>
     <section class="note">
@@ -289,7 +289,7 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
     </section>
     <section class="note">
       <h2>Cobertura: nada fica de fora</h2>
-      <p>Cada ação do app atual (rotas, botões e chamadas à API) foi listada e ganhou um lugar novo. A lista completa está no repositório, em <code>docs/superpowers/specs/2026-11-25-cobertura-funcionalidades.md</code>. Também estão no protótipo: Faixa de álbum, Performance Award, Cinema (em breve), Spotlight Banners, as ferramentas de admin, Editar artista e Rescisão, Meu perfil no Social, Publicar notícia e revista, Pitchfork, Ranking do Acervo, turnês finalizadas, central de notícias da turnê e o menu ⋯ de faixas, vídeos, posts, comentários e tópicos (salvar, playlist, reportar, editar, excluir).</p>
+      <p>Cada ação do app atual (rotas, botões e chamadas à API) foi listada e ganhou um lugar novo. A lista completa está no repositório, em <code>docs/superpowers/specs/2026-11-25-cobertura-funcionalidades.md</code>. Também estão no protótipo: Faixa de álbum, Performance Award, Cinema (em breve), Spotlight Banners, as ferramentas de admin, Editar artista e Rescisão, Meu perfil no Social, Publicar notícia e revista, Empirefork, Ranking do Acervo, turnês finalizadas, central de notícias da turnê e o menu ⋯ de faixas, vídeos, posts, comentários e tópicos (salvar, playlist, reportar, editar, excluir).</p>
     </section>
     <section class="note">
       <h2>De → para (nenhum link antigo quebra)</h2>
@@ -428,7 +428,7 @@ function inicio(){
   if (state.inicioTab==='tv'){
     html += liveCard();
     html += h2('Grade de hoje') + `<div class="group">${[['20:00','Red Carpet do VMA','Ao vivo agora',true],['21:30','VMA 2026 · Cerimônia','Em 1h 10min'],['23:00','Empire News','Em 2h 40min'],['00:00','Acústico: Oruã','Amanhã']].map(([h,t,s,l])=>`<div class="row"><span class="rank" style="width:auto;font-size:13px;min-width:44px">${h}</span><span class="meta"><b>${t}</b><small>${s}</small></span>${l?'<span class="badge live">Ao vivo</span>':`<button class="btn sec" style="height:32px;font-size:12px" data-toast="Você vai ser avisado quando começar">Lembrar</button>`}</div>`).join('')}</div>`;
-    html += h2('Red Carpet','Postar','data-toast="Escolha o artista e a foto do look"') + `<div class="shelf">${[0,2,5,1].map((a,k)=>`<button class="tile" data-toast="Abrindo o look de ${ART[a]}">${cover(a+3,'')}<b>${ART[a]}</b><small>${[412,388,201,177][k]} votos</small></button>`).join('')}</div>`;
+    html += h2('Red Carpet','Ranking','data-toast="Ranking de looks da noite"') + `<div class="pad" style="margin:-4px 0 10px"><button class="btn sec" style="width:100%" data-toast="Escolha o artista e as fotos do look">${svg('image')}Postar look</button></div>`; html += '' + `<div class="shelf">${[0,2,5,1].map((a,k)=>`<button class="tile" data-toast="Abrindo o look de ${ART[a]}">${cover(a+3,'')}<b>${ART[a]}</b><small>${[412,388,201,177][k]} votos</small></button>`).join('')}</div>`;
     html += h2('Arquivo') + `<div class="shelf">${['Acústico: Bia Kalli','Empire News #46','Entrevista: Kai Moreau'].map((t,k)=>`<button class="tile wide" data-open="tv">${cover(k+1,t)}<b>${t}</b><small>${['48 min','22 min','35 min'][k]}</small></button>`).join('')}</div>`;
   }
   if (state.inicioTab==='tours'){
@@ -450,7 +450,7 @@ function inicio(){
     if (t==='Ranking'){
       html += chips(['Destaques','Ranking','Artistas','Recentes','Estilo','Ano'],'Ranking','noop') + `<div style="height:8px"></div>` + SONG.slice(0,6).map((s,i)=>songRow(s,i,{rank:true,end:'nota '+(9.4-i*0.3).toFixed(1)})).join('');
     } else if (t==='Críticas'){
-      html += h2('Pitchfork · novembro','Edições anteriores','data-toast="Arquivo por mês"') + `<div class="card" style="margin-bottom:12px"><b>Neon Catedral · 8.7</b><p class="muted small" style="margin:4px 0 8px">“O pop mais ousado do ano no Empire.”</p><div class="acts" style="margin:0"><button data-like>${svg('heart')}<span>58</span></button><button data-toast="Comentários da crítica">${svg('reply')}12</button></div></div>` + h2('Metacritic') + `<div class="group">${ALB.slice(0,5).map((a,i)=>`<button class="row" data-open="album" data-id="${i}">${cover(i,'','sm')}<span class="meta"><b>${a.t}</b><small>${ART[a.a]} · Metacritic</small></span><span class="badge" style="background:${[88,74,91,62,80][i]>=80?'#10b981':'#f59e0b'};color:#fff;font-size:13px">${[88,74,91,62,80][i]}</span></button>`).join('')}</div>`;
+      html += h2('Empirefork · novembro','Edições anteriores','data-toast="Arquivo por mês"') + `<div class="card" style="margin-bottom:12px"><b>Neon Catedral · 8.7</b><p class="muted small" style="margin:4px 0 8px">“O pop mais ousado do ano no Empire.”</p><div class="acts" style="margin:0"><button data-like>${svg('heart')}<span>58</span></button><button data-toast="Comentários da crítica">${svg('reply')}12</button></div></div>` + h2('Metacritic') + `<div class="group">${ALB.slice(0,5).map((a,i)=>`<button class="row" data-open="album" data-id="${i}">${cover(i,'','sm')}<span class="meta"><b>${a.t}</b><small>${ART[a.a]} · Metacritic</small></span><span class="badge" style="background:${[88,74,91,62,80][i]>=80?'#10b981':'#f59e0b'};color:#fff;font-size:13px">${[88,74,91,62,80][i]}</span></button>`).join('')}</div>`;
     } else if (t==='Awards'){
       html += `<div class="group">${['VMA 2026','Empire Music Awards','Grammy Empire','Festival de Verão'].map((n,k)=>`<button class="row" data-toast="Abre o resultado de ${n}">${`<span class="gicon" style="background:${['#f59e0b','#7c3aed','#0ea5e9','#ec4899'][k]}">${svg('trophy')}</span>`}<span class="meta"><b>${n}</b><small>${['Votação aberta','Resultados','Indicações em dezembro','Inscrições abertas'][k]}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`;
     } else {
@@ -468,6 +468,7 @@ function catalogo(){
       <span class="badge" style="background:rgba(0,0,0,.35);color:#fff">${svg('flame').replace('class=""','style="width:12px;height:12px"')}Mais quente agora</span>
       <h4>Global 100 ao vivo</h4><span class="small" style="opacity:.85">Atualizada a cada hora · 100 faixas</span></button>`;
     html += h2('Por plataforma') + `<div class="shelf">${['Spotify Global','Apple Music Top','YouTube em alta'].map((t,k)=>`<button class="tile" data-open="playlist">${cover([4,1,3][k],t)}<b>${t}</b><small>50 faixas</small></button>`).join('')}</div>`;
+    html += h2('Playlists da comunidade','Ver todas','data-toast="Abre todas as playlists da comunidade"') + `<div class="shelf">${['Sextou no Império','Treino pesado','Só sofrência','Indie da madrugada'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+2,t)}<b>${t}</b><small>por @${['bia','oruã','lumi','dante'][k]} · ${[24,18,31,12][k]} faixas</small></button>`).join('')}</div>`;
     html += h2('Paradas por país') + `<div class="shelf">${['Brasil','Estados Unidos','Coreia do Sul','México'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+5,t)}<b>Top ${t}</b><small>Paradas Oficiais</small></button>`).join('')}</div>`;
     html += h2('Clipes','Ver todos','data-set="catTab" data-val="buscar" data-filter="Vídeos"') + `<div class="shelf">${VID.map((v,k)=>`<button class="tile wide" data-open="album" data-id="${v.a===0?0:k}">${cover(k+2,'')}<b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></button>`).join('')}</div>`;
     html += h2('Por gênero') + `<div class="shelf">${['Pop','Hip-Hop','Latina','R&B','Rock'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+1,t)}<b>${t} em alta</b><small>Gerada dos charts</small></button>`).join('')}</div>`;
@@ -487,7 +488,7 @@ function catalogo(){
     html += `</div>`;
   }
   if (state.catTab==='biblioteca'){
-    html += `<div class="group">${[['list','Minhas playlists','4','#7c3aed'],['heart','Salvos','37 faixas','#e11d48'],['users','Artistas que sigo','12','#0ea5e9'],['album','Álbuns salvos','6','#f59e0b'],['video','Vídeos salvos','9','#10b981']].map(([ic,t,n,c])=>`<button class="row" data-toast="Abre ${t}"><span class="gicon" style="background:${c}">${svg(ic)}</span><span class="meta"><b>${t}</b></span><span class="end">${n}</span>${svg('chev','chev')}</button>`).join('')}</div>`;
+    html += `<div class="group">${[['list','Minhas playlists','4','#7c3aed'],['users','Playlists da comunidade','que eu salvei · 3','#14b8a6'],['heart','Salvos','37 faixas','#e11d48'],['users','Artistas que sigo','12','#0ea5e9'],['album','Álbuns salvos','6','#f59e0b'],['video','Vídeos salvos','9','#10b981']].map(([ic,t,n,c])=>`<button class="row" data-toast="Abre ${t}"><span class="gicon" style="background:${c}">${svg(ic)}</span><span class="meta"><b>${t}</b></span><span class="end">${n}</span>${svg('chev','chev')}</button>`).join('')}</div>`;
     html += h2('Tocadas recentemente') + `<div class="grid2">${[0,2,1,4].map(i=>`<button style="text-align:left" data-open="album" data-id="${i}">${cover(i,ALB[i].t,'" style="aspect-ratio:1;border-radius:var(--p-radius);background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<b class="small" style="display:block;margin-top:6px">${ALB[i].t}</b><span class="muted small">${ART[ALB[i].a]}</span></button>`).join('')}</div>`;
     html += `<div class="pad" style="margin-top:16px"><button class="btn sec" style="width:100%" data-toast="Abre o editor de playlist">${svg('list')}Nova playlist</button></div>`;
   }
@@ -511,7 +512,11 @@ function charts(){
   const tabs = ['Ao vivo','Global 100','Paradas','Spotify','Apple Music','YouTube','Álbuns','Sales'];
   let html = `<h1 class="ttl">Charts</h1><p class="sub">Semana 47 · atualizado hoje, 09:00</p>`;
   html += chips(tabs, state.chartTab, 'chartTab');
-  html += `<div style="display:flex;gap:8px;padding:10px 16px 6px"><button class="btn sec" style="height:32px;font-size:12px" data-toast="Filtro de estilo">${svg('music')}Todos os estilos</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Filtro de país">${svg('globe')}Global</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Escolher semana ou mês">Mês</button></div>`;
+  html += `<div style="margin-top:10px">${seg([['semana','Semanal'],['pais','Por país'],['mes','Artistas do mês']], state.chartView||'semana', 'chartView')}</div>`;
+  html += `<label class="search" style="margin-bottom:8px">${svg('search')}<input placeholder="Buscar neste chart" aria-label="Buscar neste chart"></label>`;
+  if (state.chartView==='mes') return html + ART.slice(0,6).map((a,i)=>`<button class="row" data-open="artist" data-id="${i}"><span class="rank">${i+1}</span><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${(42-i*5)} mi streams no mês</small></span></button>`).join('');
+  if (state.chartView==='pais') html += chips(['Brasil','EUA','Reino Unido','Coreia do Sul','México','Japão'],'Brasil','noop') + '<div style="height:6px"></div>';
+  html += `<div style="display:flex;gap:8px;padding:6px 16px 6px"><button class="btn sec" style="height:32px;font-size:12px" data-toast="Filtro de estilo">${svg('music')}Todos os estilos</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Filtro de país">${svg('globe')}Global</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Escolher semana ou mês">Mês</button></div>`;
   if (state.chartTab==='Ao vivo'){
     html += `<div class="card" style="margin-bottom:8px"><span class="badge live">Ao vivo</span><p class="small muted" style="margin:6px 0 0">Streams da última hora em Spotify, Apple Music e YouTube.</p></div>`;
   }
@@ -646,7 +651,7 @@ const pages = {
       ${SONG.map((s,i)=>songRow(s,i,{rank:true,end:s.d})).join('')}`};
   },
   tv(){
-    return {title:'Empire TV', body:`
+    return {title:'Empire TV', body:`<div class="pad" style="padding-top:10px;display:flex;gap:8px"><button class="btn sec" style="height:32px;font-size:12px" data-back data-toast2="min">Minimizar (continua tocando)</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Som ativado">Ativar som</button></div>
       <div class="tvbox" style="background:radial-gradient(80% 80% at 70% 20%,#f43f5e,transparent 60%),linear-gradient(160deg,#4c1d95,#020617)"><div style="text-align:center"><span class="badge live">Ao vivo</span><h4 style="margin:8px 0 0;font-size:22px;font-weight:900;font-style:italic;text-transform:uppercase">Red Carpet do VMA</h4><span class="small" style="opacity:.8">1.214 assistindo</span></div></div>
       ${seg([['chat','Chat'],['part','Participantes'],['sobre','Sobre']],'chat','noop')}
       <div class="card" style="margin-bottom:8px"><b>Enquete: melhor look da noite?</b><div style="display:grid;gap:8px;margin-top:10px">${['Nova Valente','Íris Sol','The Velvet Arc'].map((n,k)=>`<button class="btn sec" style="justify-content:space-between;width:100%" data-toast="Voto registrado em ${n}"><span>${n}</span><span class="muted">${[46,38,16][k]}%</span></button>`).join('')}</div></div>

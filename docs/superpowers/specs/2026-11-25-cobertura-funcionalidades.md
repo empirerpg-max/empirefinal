@@ -146,6 +146,45 @@ Criar. Nenhuma URL atual deixa de abrir.
 | Instalar o app (aviso) | igual | D |
 | Registro de erros, heartbeat do login | automático (sem tela) | D |
 
+## Encontrados na 3ª conferência (todos os 676 elementos clicáveis)
+Método: script que lê a árvore do código (TypeScript) e lista o texto de
+todo `button`, `Link`, `a`, `label` e todo elemento com `onClick`, em
+todas as telas e componentes. Cada um foi cruzado com esta lista.
+
+| Ação hoje | Onde fica | |
+|---|---|---|
+| **Playlists da Comunidade** (aba "Comunidade" × "Minhas") | Catálogo › Início (prateleira) + Catálogo › Biblioteca | P |
+| Editor de playlist: adicionar faixa do Catálogo, por **upload de áudio** ou por **link** | editor de playlist (tela atual) | D |
+| Nova música: participantes (feat 2 a 6), **substituir música existente**, vincular comentários a música já lançada, botões do tópico, letra | Criar › Nova música (tela atual) | D |
+| Novo vídeo: categoria, músicas vinculadas, **lançar num programa da Empire TV da semana**, participantes, capa/thumb | Criar › Novo vídeo (tela atual) | D |
+| Novo álbum: **Registrar** ou **Substituir nos Charts** (troca capa, encarte, adiciona faixas), álbum retroativo, quantidade de faixas, revisar e confirmar | Criar › Novo álbum (tela atual) | D |
+| Editor de lançamento: adicionar faixa ao álbum (existente ou nova, com upload), trocar áudio, nova descrição, categoria, trocar thumb/capa, botões do tópico | Meus lançamentos › Editar | P |
+| Material extra: abas Shop (adicionar produto, comprar), Info e Visual; blocos de imagem, texto e HTML | editor de lançamento + página do álbum | D |
+| Sync Studio: marcar linha, adiantar/atrasar 0,2s, desfazer, adicionar/remover linha, pré-visualizar | Criar › Sincronizar letra e editor | D |
+| Pre-save: "Contador em 0? Verificar/corrigir", Top (ranking), calendário de missões (aleatório), missão com perguntas e respostas, Post TikTok, vídeo real (Fórum), publicar por um perfil de "Tá na Mídia" | Meus lançamentos › Pre-save + missão | D |
+| Fórum: "Avaliar & Comentar" (nota), **marcar como pendente** (admin), filtros por artista e por data (de/até), capa em tela cheia | aba Fórum › tópico | P (filtros) / D |
+| Comentar como "Nome do jogador" ou **OFF** | tópico e player | D |
+| Admin › Painel do catálogo: ligar/desligar D1, enviar fila agora, conferir backup | Meu Império › Admin | P |
+| Admin › Empire TV: abrir arquivo do vídeo, vincular música, publicar tópico | Meu Império › Admin | P |
+| Admin › Banners: imagem, link de destino, legenda | Meu Império › Admin | P |
+| Charts: **Mundo / Por país**, **Artistas do mês**, "#1 agora", busca dentro do chart | aba Charts | P |
+| Acervo: o nome é **Empirefork** (não Pitchfork); editor de revista por páginas (+ imagem, + texto), entrevista com perguntas, "Ler revista", Metacritic com "Ver música" e "Ver artista", filtro por artista | Início › Acervo | P (nome) / D |
+| Market: tipos eCoin, boost de música, boost de álbum; Resgatar; Ativar | Meu Império › Market (tela atual) | D |
+| Leilão: substituir lance | Meu Império › Leilão (tela atual) | D |
+| Votação: salvar pra mais tarde, visitar fórum (com aviso de não salvo), termo de voto, nota de 5 a 10, "Me arrependi, quero performar" | Meu Império › Premiações › Votação (tela atual) | D |
+| Social: carrossel de fotos, stories (anterior/próximo), perfil do artista por rede (Instagram, Twitter, TikTok), Seguir, "Ler matéria" (Exclusivo) | aba Social | P (parcial) / D |
+| Composer do Social: modo **Normal** ou **Blackout** (anônimo), Feed ou Story, Foto/Vídeo ou Música, com ou sem som | Criar › Post no Social (tela atual) | D |
+| Empire TV: carrossel "Assistir agora", ativar som, **minimizar (continua tocando)**, negrito/itálico no chat, Red Carpet com Feed e **Ranking**, várias fotos por look | Início › Empire TV + sala | P (ranking, minimizar) / D |
+| Mini player da TV: expandir, fechar | mini player | D |
+| Turnês (lista): "Ver mais", comentar direto no card | Início › Turnês | D |
+| Recorte de imagem: "Usar original" | igual em todo upload | D |
+| Artistas: alternar Todos / Meus | Catálogo › Buscar › Artistas + Meu Império | P |
+
+### Botão que não funciona hoje
+**Social › perfil do artista › "Mensagem"**: o botão existe, mas não tem
+ação nenhuma (`src/routes/social.tsx`, perto das linhas 2373 e 2661).
+**!** Decidir: tirar o botão ou criar mensagens diretas (projeto novo).
+
 ## Fora deste projeto
 **Bolsa e Empresas** (`historicoBolsa`, `listarEmpresas`, `minhasEmpresas`
 no `api.ts`): ainda não foram lançadas e entram depois, no projeto
