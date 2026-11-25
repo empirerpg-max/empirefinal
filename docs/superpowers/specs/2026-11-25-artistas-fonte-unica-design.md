@@ -1,6 +1,6 @@
 # Artistas: fonte única (aba ARTISTAS → D1) e edição pelo jogador — design
 
-Data: 2026-11-25 · Status: aguardando aprovação
+Data: 2026-11-25 · Status: aguardando aprovação (rev. 2)
 
 ## Intenção e porquê
 
@@ -91,6 +91,24 @@ Foto: a aba tem duas colunas ("Foto" col. B e "FOTO" col. S); no espelho
 - **D1 → planilha:** cada edição do jogador grava a(s) célula(s) da linha do
   artista na ARTISTAS em segundo plano (`ctx.waitUntil`), com nova tentativa
   se o Google recusar; falha não desfaz a edição no D1.
+
+### Botão de admin "Atualizar a partir da planilha" (pedido do usuário)
+
+Para a administração continuar podendo corrigir qualquer dado direto na aba
+ARTISTAS:
+
+- No perfil do artista (aba Gestão), **só para admin**: botão "Atualizar a
+  partir da planilha". Lê a linha do artista na ARTISTAS (pelo ID_unico) e
+  **sobrescreve todos os campos do espelho** com o que está na planilha
+  (inclusive foto, biografia, estilo e país; país vazio na planilha
+  destrava a nacionalidade). Mostra o que mudou ("Foto, País atualizados").
+- No painel de admin: o mesmo para **todos os artistas** de uma vez
+  ("Atualizar todos os artistas a partir da planilha"), uma leitura da aba
+  inteira.
+- Botões seguem as regras do `CLAUDE.md`; confirmação na própria tela antes
+  de sobrescrever.
+- Fluxo da fortuna fica fora (próximo projeto: fortuna automática às sextas,
+  com turnês e fortuna inicial de 400.000).
 
 ### Edição pelo jogador (perfil do artista, aba "Gestão")
 
