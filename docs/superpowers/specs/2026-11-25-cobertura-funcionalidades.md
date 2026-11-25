@@ -234,6 +234,30 @@ um está na análise dos perfis do Social.
 - "Seguindo / Para você", "Lembrar" (na grade da TV) e "Pra fazer hoje":
   propostas novas, marcadas **NOVO**.
 
+## Decisões do usuário (2026-11-25)
+- **Repostar:** passa a existir nas 3 redes. Quem reposta é o artista do
+  "Interagindo como". O post volta ao topo do feed (ordem por última
+  atividade = data do post ou do repost mais recente) com "Fulano
+  repostou". Desfazer o repost devolve a ordem anterior. *(Rede e desfazer:
+  call meu.)*
+- **Mensagem:** sai do app (os 2 botões de `social.tsx`).
+- **Seguir:** passa a ser de verdade, **entre artistas**: quem segue é o
+  artista do "Interagindo como", em cada rede. Perfis de mídia
+  (compartilhados) não seguem ninguém. *(Call meu.)* **!** Falta decidir o
+  que acontece com o número de seguidores que hoje vem da planilha.
+- **Charts › Ao vivo:** passa a ser o painel que hoje é o Início do
+  Catálogo, sem mudança (destaque "Mais quente agora", Top 100 ao vivo por
+  plataforma, Top 50 por país, playlists da semana). Ele substitui o "Ao
+  vivo" atual. Nada se perde: "Mundo" = Top 100 ao vivo por plataforma;
+  "Por país" = Top 50 por país (mesmos dados, mesmo intervalo de 30 s).
+- **Outros charts:** formato de playlist + recursos de chart (semana com
+  setas, movimento, pico, semanas, filtros de movimento, detalhe com
+  histórico de 8 semanas e números por plataforma). Mantém tudo o que
+  existe hoje: Global / Por país / Artistas do mês, semana, estilo, busca.
+- **Catálogo › Início:** ganha conteúdo próprio (Continue ouvindo,
+  Lançamentos da semana, Mais comentados no Fórum, Playlists da
+  comunidade, Clipes novos, atalho para Charts ao vivo).
+
 ## Fora deste projeto
 **Bolsa e Empresas** (`historicoBolsa`, `listarEmpresas`, `minhasEmpresas`
 no `api.ts`): ainda não foram lançadas e entram depois, no projeto

@@ -314,14 +314,24 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
       <p>Quando as opções não cabem, a fileira rola para o lado, como no YouTube e no Spotify. A seta fica numa faixa própria, com fundo, e nunca cobre o texto. Cada toque na seta avança uma "página" e para no começo de uma opção, nunca no meio da palavra. A opção selecionada é sempre levada para dentro da tela, e a seta some quando chega ao fim.</p>
     </section>
     <section class="note">
+      <h2>Charts</h2>
+      <ul>
+        <li><b>Ao vivo</b> passa a ser o painel que hoje é o Início do Catálogo, do jeito que foi construído: "Mais quente agora", Top 100 ao vivo por plataforma, Top 50 por país e as playlists da semana. O "Mundo" e o "Por país" do Ao vivo atual estão dentro dele, com os mesmos dados e atualizando a cada 30 s.</li>
+        <li><b>Os outros charts</b> (Global 100, Paradas, Spotify, Apple Music, YouTube, Álbuns, Sales) viram uma <b>tela de playlist com o que só um chart tem</b>: Tocar, Aleatório e Salvar; semana anterior e próxima com setas; Global / Por país / Artistas do mês; filtros de estreias, maiores altas, quedas e reentradas; busca e estilo; e, em cada faixa, a semana atual, o pico e as semanas no chart. Toque numa faixa para ver a evolução das últimas 8 semanas, os números por plataforma e os atalhos para Ouvir, Fórum e Álbum.</li>
+        <li><b>Catálogo › Início</b> ganha conteúdo próprio <span class="novo">novo</span>: Continue ouvindo, Lançamentos da semana, Mais comentados no Fórum, Playlists da comunidade, Clipes novos e um atalho para os Charts ao vivo.</li>
+      </ul>
+    </section>
+    <section class="note">
       <h2>Perfis do Social (Instagram, Twitter, TikTok)</h2>
       <ul>
         <li><b>Uma página por artista</b>, com a rede trocada no topo (Instagram, Twitter, TikTok), sem voltar para a lista. Cada rede mantém o visual dela: grade no Instagram, lista no Twitter e grade vertical no TikTok.</li>
         <li><b>"Interagindo como"</b> fica sempre visível no topo do Social e troca com um toque. Curtidas e comentários saem com o @ daquele perfil na rede de cada post.</li>
         <li><b>Configurar perfis</b> sai de uma aba própria (Config) e vira uma tela só, com as 3 redes. Uma chave copia a mesma foto e bio para as três <span class="novo">novo</span>, e avisa qual rede ainda não foi configurada.</li>
         <li><b>Feed com filtro por rede</b> <span class="novo">novo</span>. Os vídeos do TikTok abrem em tela cheia, deslizando para cima.</li>
-        <li><b>Botões mortos hoje:</b> Repostar, Compartilhar, Mensagem e as abas Reels, Marcados, Respostas, Mídia e Curtidos. Proposta: fazer funcionar os que já têm dado (Mídia, Respostas, Curtidas, Marcados por @menção e Compartilhar copiando o link). Repostar e Mensagem dependem de decisão sua.</li>
-        <li><b>Seguir</b> hoje não salva nada. Para existir um feed "Seguindo", o backend precisa passar a guardar quem segue quem.</li>
+        <li><b>Repostar</b> <span class="novo">novo</span>: o artista com que você está interagindo reposta, e o post volta ao topo do feed com "Fulano repostou". Toque em Repostar no post do Dante Cruz para ver.</li>
+        <li><b>Seguir de verdade, entre artistas</b> <span class="novo">novo</span>: quem segue é o artista (o "Interagindo como"), em cada rede. Perfis de mídia não seguem ninguém.</li>
+        <li><b>Mensagem</b>: sai do app.</li>
+        <li><b>Abas mortas do perfil</b> (Reels, Marcados, Respostas, Mídia, Curtidas, Curtidos) e <b>Compartilhar</b>: passam a funcionar com dados que já existem.</li>
       </ul>
     </section>
     <section class="note">
@@ -426,7 +436,7 @@ const SONG = [
   {t:'Midnight Velvet',a:5,al:5,d:'3:55',p:7,ch:'+1'},{t:'Catedral',a:0,al:0,d:'4:20',p:8,ch:'-2'},{t:'Asfalto',a:6,al:2,d:'2:47',p:9,ch:'+4'},{t:'Rio Fundo',a:7,al:1,d:'3:30',p:10,ch:'NEW'}];
 const VID = [{t:'Vidro Quebrado (Music Video)',a:0,k:'Clipe'},{t:'Coroa de Papel — Live no VMA',a:1,k:'Performance'},{t:'Maré Alta (Visualizer)',a:2,k:'Visualizer'},{t:'Ruído Branco — Bastidores',a:3,k:'Bastidores'}];
 
-let state = { tab:'inicio', inicioTab:'voce', catTab:'inicio', searchFilter:'Tudo', forumFilter:'Tudo', chartTab:'Global 100', socialTab:'Feed', socialFeed:'Para você', acervoTab:'Revistas', playing:{s:0} };
+let state = { tab:'inicio', inicioTab:'voce', catTab:'inicio', searchFilter:'Tudo', forumFilter:'Tudo', chartTab:'Ao vivo', socialTab:'Feed', socialFeed:'Para você', acervoTab:'Revistas', playing:{s:0} };
 
 /* ── barra de baixo ── */
 const TABS = [['inicio','Início','home'],['catalogo','Catálogo','disc'],['forum','Fórum','forum'],['charts','Charts','chart'],['social','Social','social']];
@@ -510,14 +520,13 @@ function inicio(){
 function catalogo(){
   let html = `<h1 class="ttl">Catálogo</h1>` + seg([['inicio','Início'],['buscar','Buscar'],['biblioteca','Biblioteca']], state.catTab, 'catTab');
   if (state.catTab==='inicio'){
-    html += `<button class="hero" style="width:calc(100% - 32px);text-align:left;background:radial-gradient(120% 100% at 100% 0%,#22d3ee 0%,transparent 50%),linear-gradient(160deg,#7c3aed,#1e1b4b)" data-open="playlist">
-      <span class="badge" style="background:rgba(0,0,0,.35);color:#fff">${svg('flame').replace('class=""','style="width:12px;height:12px"')}Mais quente agora</span>
-      <h4>Global 100 ao vivo</h4><span class="small" style="opacity:.85">Atualizada a cada hora · 100 faixas</span></button>`;
-    html += h2('Por plataforma') + `<div class="shelf">${['Spotify Global','Apple Music Top','YouTube em alta'].map((t,k)=>`<button class="tile" data-open="playlist">${cover([4,1,3][k],t)}<b>${t}</b><small>50 faixas</small></button>`).join('')}</div>`;
+    html += `<p class="sub" style="margin:0 16px 12px">O painel de playlists dos charts foi para Charts › Ao vivo. Aqui fica o que é seu e o que é novo no catálogo.<i class="novo">novo</i></p>`;
+    html += h2('Continue ouvindo') + `<div class="grid2">${[0,2,1,4].map(i=>`<button class="card" style="margin:0;padding:6px;display:flex;gap:8px;align-items:center;text-align:left" data-open="album" data-id="${i}">${cover(i,'','sm" style="width:44px;height:44px;border-radius:8px;flex-shrink:0;background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<b class="small" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ALB[i].t}</b></button>`).join('')}</div>`;
+    html += h2('Lançamentos da semana','Ver todos','data-set="catTab" data-val="buscar" data-filter="Álbuns"') + `<div class="shelf">${[2,0,1,4,3].map(albumTile).join('')}</div>`;
+    html += h2('Mais comentados no Fórum','Fórum','data-go="forum"') + `<div class="shelf">${[2,0,3].map((i,k)=>`<button class="tile" data-open="topic" data-id="${i}" data-title="${ALB[i].t}">${cover(i,ALB[i].t)}<b>${ALB[i].t}</b><small>${[77,48,22][k]} comentários</small></button>`).join('')}</div>`;
     html += h2('Playlists da comunidade','Ver todas','data-toast="Abre todas as playlists da comunidade"') + `<div class="shelf">${['Sextou no Império','Treino pesado','Só sofrência','Indie da madrugada'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+2,t)}<b>${t}</b><small>por @${['bia','oruã','lumi','dante'][k]} · ${[24,18,31,12][k]} faixas</small></button>`).join('')}</div>`;
-    html += h2('Paradas por país') + `<div class="shelf">${['Brasil','Estados Unidos','Coreia do Sul','México'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+5,t)}<b>Top ${t}</b><small>Paradas Oficiais</small></button>`).join('')}</div>`;
-    html += h2('Clipes','Ver todos','data-set="catTab" data-val="buscar" data-filter="Vídeos"') + `<div class="shelf">${VID.map((v,k)=>`<button class="tile wide" data-open="album" data-id="${v.a===0?0:k}">${cover(k+2,'')}<b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></button>`).join('')}</div>`;
-    html += h2('Por gênero') + `<div class="shelf">${['Pop','Hip-Hop','Latina','R&B','Rock'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+1,t)}<b>${t} em alta</b><small>Gerada dos charts</small></button>`).join('')}</div>`;
+    html += h2('Clipes novos','Ver todos','data-set="catTab" data-val="buscar" data-filter="Vídeos"') + `<div class="shelf">${VID.map((v,k)=>`<button class="tile wide" data-open="album" data-id="${k}">${cover(k+2,'')}<b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></button>`).join('')}</div>`;
+    html += h2('Charts ao vivo','Abrir','data-go="charts"') + `<button class="hero" style="width:calc(100% - 32px);height:120px;text-align:left;background:linear-gradient(160deg,#7c3aed,#1e1b4b)" data-go="charts"><span class="badge live">Ao vivo</span><h4 style="font-size:18px">Mais quente agora: Vidro Quebrado</h4></button>`;
   }
   if (state.catTab==='buscar'){
     html += `<label class="search">${svg('search')}<input id="q" placeholder="Músicas, vídeos, álbuns, artistas" autocomplete="off"></label>`;
@@ -557,18 +566,63 @@ function forum(){
 
 function charts(){
   const tabs = ['Ao vivo','Global 100','Paradas','Spotify','Apple Music','YouTube','Álbuns','Sales'];
-  let html = `<h1 class="ttl">Charts</h1><p class="sub">Semana 47 · atualizado hoje, 09:00</p>`;
+  let html = `<h1 class="ttl">Charts</h1>`;
   html += chips(tabs, state.chartTab, 'chartTab');
-  html += `<div style="margin-top:10px">${seg([['semana','Semanal'],['pais','Por país'],['mes','Artistas do mês']], state.chartView||'semana', 'chartView')}</div>`;
-  html += `<label class="search" style="margin-bottom:8px">${svg('search')}<input placeholder="Buscar neste chart" aria-label="Buscar neste chart"></label>`;
-  if (state.chartView==='mes') return html + ART.slice(0,6).map((a,i)=>`<button class="row" data-open="artist" data-id="${i}"><span class="rank">${i+1}</span><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${(42-i*5)} mi streams no mês</small></span></button>`).join('');
-  if (state.chartView==='pais') html += chips(['Brasil','EUA','Reino Unido','Coreia do Sul','México','Japão'],'Brasil','noop') + '<div style="height:6px"></div>';
-  html += `<div style="display:flex;gap:8px;padding:6px 16px 6px"><button class="btn sec" style="height:32px;font-size:12px" data-toast="Filtro de estilo">${svg('music')}Todos os estilos</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Filtro de país">${svg('globe')}Global</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Escolher semana ou mês">Mês</button></div>`;
-  if (state.chartTab==='Ao vivo'){
-    html += `<div class="card" style="margin-bottom:8px"><span class="badge live">Ao vivo</span><p class="small muted" style="margin:6px 0 0">Streams da última hora em Spotify, Apple Music e YouTube.</p></div>`;
+  if (state.chartTab==='Ao vivo') return html + aoVivo();
+  return html + chartPlaylist(state.chartTab);
+}
+/* Ao vivo = o painel que hoje é o Início do Catálogo, do jeito que foi construído */
+function aoVivo(){
+  const plat = state.aoVivoPlat || 'Spotify';
+  let html = `<p class="sub" style="margin:10px 16px 12px">Atualiza a cada 30 s · o mesmo painel que hoje é o Início do Catálogo</p>`;
+  html += `<button class="hero" style="width:calc(100% - 32px);text-align:left;background:radial-gradient(120% 100% at 100% 0%,#22d3ee 0%,transparent 50%),linear-gradient(160deg,#7c3aed,#1e1b4b)" data-open="playlist">
+      <span class="badge live">Mais quente agora</span>
+      <h4>Top 100 Spotify ao vivo</h4><span class="small" style="opacity:.9">Vidro Quebrado subiu 6 posições na última hora · 187.049.605</span></button>`;
+  html += h2('Charts globais ao vivo') + `<div class="shelf">${['Top 100 Spotify','Top 100 Apple Music','Top 100 YouTube'].map((t,k)=>`<button class="tile" data-open="playlist">${cover([4,1,3][k],t)}<b>${t}</b><small><span class="badge live" style="font-size:9px;padding:1px 6px">ao vivo</span></small></button>`).join('')}</div>`;
+  html += h2('Top 50 por país') + `<div style="margin-bottom:10px">${seg([['Spotify','Spotify'],['Apple Music','Apple Music'],['YouTube','YouTube']], plat, 'aoVivoPlat')}</div><div class="shelf">${['Brasil','Estados Unidos','Reino Unido','Coreia do Sul','México'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+5,'Top 50 '+t)}<b>Top 50 ${t}</b><small>${plat} · ao vivo</small></button>`).join('')}</div>`;
+  html += h2('Da semana') + `<div class="shelf">${[['Global 100','Semana 47'],['Parada · Reino Unido','Paradas oficiais'],['Parada · Japão','Paradas oficiais'],['Top Pop','Por gênero'],['Top Hip-Hop','Por gênero'],['Hot','30 lançamentos recentes']].map(([t,st],k)=>`<button class="tile" data-open="playlist">${cover(k+1,t)}<b>${t}</b><small>${st}</small></button>`).join('')}</div>`;
+  html += `<div class="card" style="margin-top:16px"><b class="small">O que acontece com o "Ao vivo" de hoje</b><p class="muted small" style="margin:4px 0 0">"Mundo" vira os Top 100 ao vivo por plataforma, e "Por país" vira os Top 50 por país. São os mesmos dados, atualizados a cada 30 s, só que agora tocáveis.</p></div>`;
+  return html;
+}
+/* Demais charts = formato de playlist + o que só um chart tem (posição, movimento, pico, semanas, semana anterior) */
+function chartPlaylist(tab){
+  const isAlb = tab==='Álbuns', isSales = tab==='Sales', isParada = tab==='Paradas';
+  const view = state.chartView || 'global';
+  const semana = state.chartWeek || 47;
+  let html = `<div style="display:flex;gap:14px;align-items:flex-end;padding:14px 16px 6px">
+    ${cover(isAlb?2:0,'','sm" style="width:112px;height:112px;border-radius:var(--p-radius);flex-shrink:0;background:linear-gradient(140deg,'+G[isAlb?2:0][0]+','+G[isAlb?2:0][1]+')')}
+    <div style="min-width:0"><span class="muted" style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em">Chart semanal</span>
+    <h2 style="margin:2px 0 4px;font-size:24px;font-weight:900;letter-spacing:-.02em;line-height:1.05">${isParada?'Parada · Reino Unido':tab}</h2>
+    <span class="muted small">${isAlb?'200 álbuns':'100 faixas'} · atualiza toda quinta</span></div></div>`;
+  html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 16px">
+    <button class="ic" style="background:var(--p-surface)" data-week="-1" aria-label="Semana anterior">${svg('back')}</button>
+    <button class="btn sec" style="flex:1;height:36px" data-toast="Escolher semana ou mês no calendário">Semana ${semana} · ${semana===47?'20 a 26 nov':'semana anterior'}</button>
+    <button class="ic" style="background:var(--p-surface)" data-week="1" aria-label="Próxima semana" ${semana>=47?'disabled style="opacity:.35;background:var(--p-surface)"':''}>${svg('chev')}</button></div>`;
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;padding:4px 16px 12px"><button class="btn play" data-play="0">${svg('play')}Tocar</button><button class="btn sec" data-toast="Tocando no modo aleatório">${svg('shuffle')}Aleatório</button><button class="btn sec" style="width:40px;padding:0" aria-label="Salvar na Biblioteca" data-toast="Salvo na Biblioteca">${svg('heart')}</button></div>`;
+  if (!isSales && !isAlb) html += `<div style="margin-bottom:10px">${seg([['global',isParada?'Parada':'Global'],['pais','Por país'],['mes','Artistas do mês']], view, 'chartView')}</div>`;
+  if (view==='mes' && !isSales && !isAlb){
+    html += `<div class="hero" style="margin:0 16px 10px;background:linear-gradient(160deg,${G[0][0]},${G[0][1]})"><span class="badge" style="background:rgba(0,0,0,.35);color:#fff">Artista do mês · novembro</span><h4>Nova Valente</h4><span class="small" style="opacity:.9">“O mês em que o Império cantou junto” · editorial por Rolling Empire</span></div>`;
+    return html + ART.slice(0,6).map((a,i)=>`<button class="row" data-open="artist" data-id="${i}"><span class="rank">${i+1}</span><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${(42-i*5)} mi streams · ${tab}</small></span>${svg('chev','chev')}</button>`).join('');
   }
-  const isAlb = state.chartTab==='Álbuns';
-  html += (isAlb ? ALB.map((a,i)=>({t:a.t,a:a.a,al:i,p:i+1,ch:['+1','0','NEW','-2','+3','-1'][i]})) : SONG).map((s,i)=>songRow(s,i,{rank:true,end:isAlb?`${[182,140,121,98,77,51][i]} mil`:`${(9.8-i*0.7).toFixed(1)} mi`})).join('');
+  if (view==='pais') html += `<div style="margin-bottom:6px">${chips(['Brasil','Estados Unidos','Reino Unido','Coreia do Sul','México','Japão','França'], state.chartPais||'Brasil', 'chartPais')}</div>`;
+  html += `<div style="margin:4px 0 6px">${chips(['Todas','Estreias','Maiores altas','Quedas','Reentradas'], state.chartMov||'Todas', 'chartMov')}</div>`;
+  html += `<div style="display:flex;gap:8px;padding:4px 16px 8px"><label class="search" style="margin:0;flex:1;min-width:0">${svg('search')}<input placeholder="Buscar neste chart" aria-label="Buscar neste chart"></label>${!isSales?`<button class="btn sec" style="height:40px;font-size:12px" data-toast="Filtrar por estilo">${svg('music')}Estilo</button>`:''}</div>`;
+  html += `<div class="card" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:10px">${[['5','estreias'],['+23','maior alta'],['3 sem','#1 seguido']].map(([v,l])=>`<div><b style="font-size:17px;display:block">${v}</b><span class="muted" style="font-size:11px">${l}</span></div>`).join('')}</div>`;
+  let rows = (isAlb ? ALB.map((a,i)=>({t:a.t,a:a.a,al:i,p:i+1,ch:['+1','0','NEW','-2','+3','RE'][i]})) : SONG);
+  const mov = state.chartMov||'Todas';
+  rows = rows.filter(r => mov==='Todas' || (mov==='Estreias'&&r.ch==='NEW') || (mov==='Maiores altas'&&r.ch.startsWith('+')) || (mov==='Quedas'&&r.ch.startsWith('-')) || (mov==='Reentradas'&&r.ch==='RE'));
+  const open = state.chartOpen;
+  html += rows.map((r,i)=>{
+    const cls = r.ch==='NEW'||r.ch==='RE'?'new':r.ch.startsWith('+')?'up':r.ch.startsWith('-')?'down':'muted';
+    const lbl = r.ch==='NEW'?'NOVA':r.ch==='RE'?'VOLTA':r.ch==='0'?'=':(r.ch.startsWith('+')?'▲':'▼')+r.ch.slice(1);
+    const val = isSales?`${(48-i*4)} mil vendas`:isAlb?`${[182,140,121,98,77,51][i]||40} mil unid.`:`${(9.8-i*0.7).toFixed(1)} mi`;
+    const det = open===i ? `<div class="card" style="margin:0 16px 10px"><div style="display:flex;justify-content:space-between" class="small"><b>Últimas 8 semanas</b><span class="muted">pico #${Math.max(1,r.p-2)}</span></div>
+      <div style="display:flex;align-items:flex-end;gap:5px;height:56px;margin:10px 0 6px">${[18,9,7,5,4,3,2,r.p].map((v,k)=>`<span title="#${v}" style="flex:1;border-radius:4px 4px 0 0;height:${Math.round(15+(20-Math.min(v,20))/19*85)}%;background:${k===7?'var(--p-accent)':'var(--p-surface2)'}"></span>`).join('')}</div>
+      <div class="muted" style="font-size:11px;display:flex;justify-content:space-between"><span>sem 40</span><span>sem 47</span></div>
+      ${isSales||isAlb?'':`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px;text-align:center">${[['Spotify','4,1 mi'],['Apple','2,9 mi'],['YouTube','2,8 mi']].map(([n,v])=>`<div><b class="small" style="display:block">${v}</b><span class="muted" style="font-size:11px">${n}</span></div>`).join('')}</div>`}
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn play" style="height:34px;font-size:12px" data-play="${r.al}">${svg('play')}Ouvir</button><button class="btn sec" style="height:34px;font-size:12px" data-open="topic" data-id="${r.al}" data-title="${r.t}">${svg('forum')}Fórum</button><button class="btn sec" style="height:34px;font-size:12px" data-open="album" data-id="${r.al}">${svg('disc')}Álbum</button></div></div>` : '';
+    return `<button class="row" data-chart-open="${i}" aria-expanded="${open===i}"><span class="rank">${r.p}</span><span class="delta ${cls}">${lbl}</span>${cover(r.al,'','sm')}<span class="meta"><b>${r.t}</b><small>${ART[r.a]}</small><small style="color:var(--p-muted)">${val} · pico #${Math.max(1,r.p-2)} · ${r.p+2} sem</small></span><span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções" data-actions="faixa" data-title="${r.t}">${svg('more','chev')}</span></button>${det}`;
+  }).join('') || `<p class="muted pad">Nenhuma faixa nesse filtro.</p>`;
   return html;
 }
 
@@ -583,17 +637,19 @@ function social(){
     html += `<div class="stories">${[`<div class="story"><div class="av" style="background:var(--p-surface2)"><i style="display:grid;place-items:center;font-size:24px;font-weight:300">+</i></div><span>Seu story</span></div>`].concat(ART.slice(0,6).map((a,i)=>`<button class="story" data-toast="Story de ${a} (Instagram)"><div class="av"><i style="background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></i></div><span>${a.split(' ')[0]}</span></button>`)).join('')}</div>`;
     const posts = [
       {a:0,net:'Instagram',h:'novavalente',t:'3 semanas no topo do Global 100. Obrigada, império 👑 Clipe novo sexta.',l:'2,1 mil',c:184,ago:'12 min'},
-      {a:3,net:'Twitter',h:'dantecruz',t:'Ruído Branco já está no Catálogo. Faixa 7 é a minha favorita, e a sua?',l:'842',c:77,ago:'1 h',mus:'Ruído Branco · álbum'},
+      {a:3,net:'Twitter',h:'dantecruz',t:'Ruído Branco já está no Catálogo. Faixa 7 é a minha favorita, e a sua?',l:'842',c:77,ago:'1 h',mus:'Ruído Branco · álbum',rp:'Kai Moreau repostou · há 3 min'},
       {a:1,net:'TikTok',h:'kaimoreau',t:'Ensaio pro VMA hoje à noite',l:'3,9 mil',c:88,ago:'2 h'},
       {a:2,net:'Instagram',h:'irissol',t:'Bastidores da Maré World Tour em Lisboa 🌊',l:'3,4 mil',c:240,ago:'3 h'}];
     const netColor = {Instagram:'#f472b6',Twitter:'#1d9bf0',TikTok:'#25F4EE'};
+    if (state.reposted){ const k=posts.findIndex(p=>p.a===state.reposted); if (k>0){ const [x]=posts.splice(k,1); x.rp=['Nova Valente','Lumi Ray','Empire News'][state.socialAs||0]+' repostou · agora'; posts.unshift(x); } }
     html += posts.filter(p => (state.socialNet||'Todas')==='Todas' || p.net===state.socialNet).map((p,k)=>{
-      const actions = `<div class="acts"><button data-like>${svg('heart')}<span>${p.l}</span></button><button data-toast="Abre os comentários">${svg('reply')}${p.c}</button><button data-toast="Repostar: proposta nova">${svg('repost')}<i class="novo">novo</i></button><button data-toast="Compartilhar: proposta nova">${svg('share')}<i class="novo">novo</i></button><button aria-label="Opções do post" data-actions="post" data-title="Post de ${ART[p.a]}">${svg('more')}</button></div>`;
+      const actions = `<div class="acts"><button data-like>${svg('heart')}<span>${p.l}</span></button><button data-toast="Abre os comentários">${svg('reply')}${p.c}</button><button data-repost="${p.a}" style="${state.reposted===p.a?'color:var(--p-up)':''}">${svg('repost')}<span>${state.reposted===p.a?'1':''}</span><i class="novo">novo</i></button><button data-toast="Compartilhar: proposta nova">${svg('share')}<i class="novo">novo</i></button><button aria-label="Opções do post" data-actions="post" data-title="Post de ${ART[p.a]}">${svg('more')}</button></div>`;
       const head = `<div class="hd"><b>${ART[p.a]}</b><small>@${p.h} · ${p.ago} · <span style="color:${netColor[p.net]}">${p.net}</span></small></div>`;
       const av = `<button class="av cv sm" style="background:linear-gradient(140deg,${G[p.a][0]},${G[p.a][1]})" data-open="socialPerfil" data-id="${p.a}" data-title="${p.net}" aria-label="Perfil de ${ART[p.a]}"></button>`;
-      if (p.net==='Twitter') return `<article class="post">${av}<div style="min-width:0">${head}<p>${p.t}</p>${p.mus?`<button class="card" style="margin:0 0 6px;padding:8px;display:flex;gap:8px;align-items:center;width:100%;text-align:left" data-open="album" data-id="2">${cover(2,'','sm" style="width:40px;height:40px;border-radius:6px;background:linear-gradient(140deg,'+G[2][0]+','+G[2][1]+')')}<span class="small"><b>${p.mus}</b><span class="muted" style="display:block">Ouvir no Catálogo</span></span></button>`:''}${actions}</div></article>`;
-      if (p.net==='TikTok') return `<article class="post">${av}<div style="min-width:0">${head}<button class="media cv" style="height:300px;width:200px;background:linear-gradient(170deg,${G[5][0]},${G[5][1]});display:grid;place-items:center" data-set="socialTab" data-val="Vídeos" aria-label="Abrir vídeo em tela cheia"><span class="cv sm" style="width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.4);display:grid;place-items:center">${svg('play')}</span></button><p class="small" style="margin-top:6px">${p.t}</p>${actions}</div></article>`;
-      return `<article class="post">${av}<div style="min-width:0">${head}<p>${p.t}</p><div class="media cv" style="background:linear-gradient(160deg,${G[k+4][0]},${G[k+4][1]})"></div>${actions}</div></article>`;
+      const rpl = p.rp ? `<div class="muted" style="grid-column:1/-1;font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center;margin:-4px 0 -2px 30px">${svg('repost').replace('class=""','style="width:14px;height:14px"')}${p.rp}</div>` : '';
+      if (p.net==='Twitter') return `<article class="post">${rpl}${av}<div style="min-width:0">${head}<p>${p.t}</p>${p.mus?`<button class="card" style="margin:0 0 6px;padding:8px;display:flex;gap:8px;align-items:center;width:100%;text-align:left" data-open="album" data-id="2">${cover(2,'','sm" style="width:40px;height:40px;border-radius:6px;background:linear-gradient(140deg,'+G[2][0]+','+G[2][1]+')')}<span class="small"><b>${p.mus}</b><span class="muted" style="display:block">Ouvir no Catálogo</span></span></button>`:''}${actions}</div></article>`;
+      if (p.net==='TikTok') return `<article class="post">${rpl}${av}<div style="min-width:0">${head}<button class="media cv" style="height:300px;width:200px;background:linear-gradient(170deg,${G[5][0]},${G[5][1]});display:grid;place-items:center" data-set="socialTab" data-val="Vídeos" aria-label="Abrir vídeo em tela cheia"><span class="cv sm" style="width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.4);display:grid;place-items:center">${svg('play')}</span></button><p class="small" style="margin-top:6px">${p.t}</p>${actions}</div></article>`;
+      return `<article class="post">${rpl}${av}<div style="min-width:0">${head}<p>${p.t}</p><div class="media cv" style="background:linear-gradient(160deg,${G[k+4][0]},${G[k+4][1]})"></div>${actions}</div></article>`;
     }).join('');
     html += `<p class="muted small" style="text-align:center;padding:16px">Carregando mais publicações… <i class="novo">novo</i></p>`;
   }
@@ -698,10 +754,10 @@ const pages = {
       ? [0,1,2].map(k=>`<article class="post"><span class="av cv sm" style="background:linear-gradient(140deg,${g[0]},${g[1]})"></span><div><div class="hd"><b>${nome}</b><small>@${handle} · ${k+1} d</small></div><p>${['Obrigada pelo carinho com o single!','Ensaio fechado. Até sexta.','Quem vai no show de SP?'][k]}</p><div class="acts"><button data-like>${svg('heart')}<span>${[320,190,88][k]}</span></button><button data-toast="Comentários">${svg('reply')}${[41,12,9][k]}</button></div></div></article>`).join('')
       : `<div class="pgrid ${rede==='TikTok'?'tt':''}">${[1,2,3,4,5,6].map(k=>`<button class="cv sm" style="background:linear-gradient(140deg,${G[(k+i)%G.length][0]},${G[(k+i)%G.length][1]})" data-toast="Abre o post" aria-label="Post ${k}"></button>`).join('')}</div>`;
     return {title:`${nome} · ${rede}`, body:`
-      <div style="padding:14px 16px 8px">${seg([['Instagram','Instagram'],['Twitter','Twitter'],['TikTok','TikTok']].map(x=>x), rede, 'noop').replace(/data-set="noop" data-val="(\w+)"/g,'data-net="$1"').replace('<div class="seg">','<div class="seg" style="margin:0 0 6px">')}<p class="muted" style="font-size:11.5px;margin:0">Uma página por artista; a rede troca aqui, sem voltar para a lista.<i class="novo">novo</i></p></div>
+      <div style="padding:14px 16px 8px">${seg([['Instagram','Instagram'],['Twitter','Twitter'],['TikTok','TikTok']].map(x=>x), rede, 'noop').replace(/data-set="noop" data-val="(\w+)"/g,'data-net="$1"').replace('<div class="seg">','<div class="seg" style="margin:0 0 6px">')}<p class="muted" style="font-size:11.5px;margin:0">Uma página por artista; a rede troca aqui, sem voltar para a lista.<i class="novo">novo</i></p><p class="muted" style="font-size:11.5px;margin:4px 0 0">Você segue como <b style="color:var(--p-fg)">${['Nova Valente','Lumi Ray','Empire News'][state.socialAs||0]}</b> nesta rede. Quem segue é o artista, não o jogador.<i class="novo">novo</i></p></div>
       <div style="display:flex;gap:16px;align-items:center;padding:6px 16px 12px"><span class="cv sm" style="width:80px;height:80px;border-radius:50%;flex-shrink:0;background:linear-gradient(140deg,${g[0]},${g[1]})"></span><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;flex:1;text-align:center">${[['48','posts'],[(12-i%8)+',4 mil','seguidores'],['210','seguindo']].map(([v,l])=>`<div><b style="font-size:16px;display:block">${v}</b><span class="muted" style="font-size:11.5px">${l}</span></div>`).join('')}</div></div>
       <div class="pad"><b>${nome}</b><div class="muted small">@${handle} · ${i>=8?'Perfil de mídia · qualquer jogador pode usar':'King & Queen'}</div><p class="small" style="margin:6px 0 10px">${i>=8?'Notícias do Império, 24h por dia.':'Cantora e compositora. Vidro Quebrado já disponível.'}</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${(i===0||i===4)?`<button class="btn pri" style="grid-column:1/-1" data-open="meuPerfilSocial">Editar perfil desta rede</button>`:`<button class="btn ${i%3?'pri':'sec'}" data-follow>${i%3?'Seguir':'Seguindo'}</button>${i>=8?`<button class="btn sec" data-toast="Agora você interage como ${nome}">Interagir como</button>`:`<button class="btn sec" data-open="artist" data-id="${i}">Ver artista</button>`}`}</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${(i===0||i===4)?`<button class="btn pri" style="grid-column:1/-1" data-open="meuPerfilSocial">Editar perfil desta rede</button>`:i>=8?`<button class="btn sec" disabled style="opacity:.6">Perfil de mídia</button>`:`<button class="btn ${i%3?'pri':'sec'}" data-follow>${i%3?'Seguir':'Seguindo'}</button>${i>=8?`<button class="btn sec" data-toast="Agora você interage como ${nome}">Interagir como</button>`:`<button class="btn sec" data-open="artist" data-id="${i}">Ver artista</button>`}`}</div></div>
       <div class="ptabs">${tabs.map(([ic,l,nv],k)=>`<button aria-pressed="${k===0}" ${nv?`data-toast="${l}: proposta nova (hoje o botão existe mas não faz nada)"`:`data-local-tab="pt" data-val="${k}"`}>${ic?svg(ic):''}${l}${nv?'<span class="ndot" aria-label="novo"></span>':''}</button>`).join('')}</div><p class="muted" style="font-size:11px;margin:6px 16px 0"><span class="ndot" style="vertical-align:middle;margin:0 4px 0 0"></span>aba que existe mas hoje não funciona: proposta é fazer funcionar</p>
       ${body}
       ${h2('Siga também')}<div class="shelf">${[1,2,3,5].map(k=>`<button class="tile" style="width:110px;text-align:center" data-open="socialPerfil" data-id="${k}" data-title="${rede}"><span class="cv sm" style="width:72px;height:72px;border-radius:50%;margin:0 auto;background:linear-gradient(140deg,${G[k][0]},${G[k][1]})"></span><b>${ART[k]}</b><small>${rede}</small></button>`).join('')}</div>`};
@@ -865,6 +921,9 @@ box.addEventListener('click', e => {
   if (b.hasAttribute('data-open-as')){ const ops=['Nova Valente','Lumi Ray','Empire News']; $('#sheet').setAttribute('aria-label','Interagir como'); $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:4px">Interagir como</b><p class="muted small" style="margin:0 0 10px">Curtidas, comentários e posts saem com o @ deste perfil na rede de cada post.</p><div class="group" style="margin:0">${ops.map((n,k)=>`<button class="row" data-pick-as="${k}"><span class="cv sm" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(140deg,${G[[0,4,8][k]][0]},${G[[0,4,8][k]][1]})"></span><span class="meta"><b>${n}</b><small>${k<2?'Seu artista':'Perfil de mídia (compartilhado)'}</small></span>${(state.socialAs||0)===k?'<b style="color:var(--p-accent)">✓</b>':''}</button>`).join('')}</div>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
   if (b.dataset.pickAs!==undefined){ state.socialAs=+b.dataset.pickAs; closeSheet(); return render(true); }
   if (b.dataset.net){ const pg=b.closest('.stackPage'); const id=pg.dataset.pid; closeTop(); setTimeout(()=>openPage('socialPerfil', id, b.dataset.net), 10); return; }
+  if (b.dataset.repost!==undefined){ const a=+b.dataset.repost; state.reposted = state.reposted===a ? null : a; render(false); return toast(state.reposted===a?'Repostado: o post subiu para o topo do feed':'Repost desfeito'); }
+  if (b.dataset.chartOpen!==undefined){ state.chartOpen = state.chartOpen===+b.dataset.chartOpen ? null : +b.dataset.chartOpen; return render(true); }
+  if (b.dataset.week){ state.chartWeek = Math.min(47,(state.chartWeek||47)+ +b.dataset.week); return render(true); }
   if (b.hasAttribute('data-toggle-nc')){ state.naoComentei=!state.naoComentei; return render(true); }
   if (b.hasAttribute('data-open-filters')){ $('#sheet').setAttribute('aria-label','Filtros'); $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:10px">Filtros do Fórum</b><div class="group" style="margin:0">${[['Artista','Todos'],['Lançado de','—'],['Até','—']].map(([l,v])=>`<button class="row" data-toast="Escolher ${l.toLowerCase()}"><span class="meta"><small>${l}</small><b>${v}</b></span>${svg('chev','chev')}</button>`).join('')}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn sec" data-close-sheet data-toast="Filtros limpos">Limpar filtros</button><button class="btn pri" data-close-sheet data-toast="Filtros aplicados">Aplicar</button></div>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
   if (b.id==='openCreate') return openCreate();
@@ -887,6 +946,7 @@ box.addEventListener('click', e => {
     if (k==='inicioTabLabel'){ k='inicioTab'; v=labelToKey[v]; }
     if (k==='inicioTab' && state.tab!=='inicio'){ closeAll(); state.tab='inicio'; }
     state[k]=v;
+    if (k==='chartTab'||k==='chartMov'||k==='chartView'||k==='chartPais') state.chartOpen=null;
     if (b.dataset.filter) state.searchFilter=b.dataset.filter;
     closeAll(); return render(k!=='inicioTab' && k!=='catTab');
   }
