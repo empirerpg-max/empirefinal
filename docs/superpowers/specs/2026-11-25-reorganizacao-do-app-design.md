@@ -1249,39 +1249,103 @@ carrossel "Assistir agora" e grade continuam.
   transmissão inteira: **o número que a pessoa vê não é o que ela ganha**;
 - uma linha a cada 30 s por pessoa pesa na cota do Google Sheets.
 
-**Como fica:**
+**Princípio (decisão do usuário):** a participação **é o tempo em que a
+pessoa esteve na sala**, não a quantidade de mensagens. Quem só assiste e
+comenta pouco recebe o tempo inteiro; quem manda várias mensagens e sai
+cedo recebe só o tempo em que ficou.
 
-1. **Batida por minuto:** enquanto a sala **ou o mini player** estiver
-   aberto e a aba do navegador visível, o app avisa o servidor uma vez por
-   minuto (`POST /api/tv/presenca` com `programa_id`; o jogador vem do
-   login). Ao voltar para a aba, avisa na hora.
-2. **D1, tabela `tv_presenca_minuto`** (`programa_id`, `jogador_id`,
-   `minuto` = minuto Unix; chave primária nos três; `INSERT OR IGNORE`).
-   Cada minuto conta **uma vez só**, mesmo com duas abas ou dois aparelhos
-   abertos: as sessões se **somam** sem contar em dobro.
-3. **Só vale dentro do horário real da transmissão** (a mesma janela
-   `inicioTs..fimTs` que já é usada para o chat).
-4. **Processamento** (`processarParticipacaoTV`, no cron de hoje): tempo
-   assistido = minutos distintos × 60, somando os segmentos da
-   transmissão. **Todo o resto continua igual:** porcentagem de presença,
-   regra do chat (10 mensagens = 100%), vale o maior dos dois, faixas da
-   aba "Regras", gravação na REGISTRO, prestígio `assistir_tv` com 90% ou
-   mais, a marca de "já processado".
-5. **Participantes e o círculo** mostram a **mesma conta** do
-   processamento (endpoint de leitura que usa a mesma função), então o
-   número da tela é o que será creditado.
-6. **Presenca_TV na planilha:** deixa de receber uma linha a cada 30 s. No
-   processamento, grava **uma linha por pessoa** com o total (a planilha
-   continua servindo para consulta do admin).
-7. **Transição:** transmissões que começaram antes da troca continuam sendo
-   processadas pelo jeito antigo (lendo Presenca_TV); as novas usam o D1. O
-   corte é pela data/hora de início.
-8. **Custo:** 200 pessoas × 120 min = 24 mil linhas gravadas por evento no
-   D1 (dentro do plano; apagar as linhas com mais de 30 dias no próprio
-   cron).
+**Como medir:**
+
+1. **Linha do tempo por minuto.** A transmissão é dividida em minutos (do
+   início ao fim real). A pessoa está **presente num minuto** quando:
+   - a sala **ou o mini player** está aberto **e** a tela está ligada e na
+     aba do app (`visibilitychange`); **ou**
+   - mandou uma mensagem no chat naquele minuto (prova de que estava lá; a
+     mensagem só preenche o minuto em que foi mandada, nunca a
+     transmissão inteira).
+2. **Tolerância a queda de conexão:** um buraco de até 2 minutos entre dois
+   minutos presentes conta como presente (troca de rede, app recarregando).
+3. **Sessões somam sem contar em dobro:** sair e voltar soma; duas abas ou
+   dois aparelhos ao mesmo tempo contam o minuto uma vez só.
+4. **% de presença = minutos presentes ÷ minutos da transmissão.** As
+   faixas da aba "Regras", a REGISTRO e o prestígio `assistir_tv` (90% ou
+   mais) continuam iguais. **Muda a regra do chat:** hoje vale o maior entre
+   presença e chat (10 mensagens = 100%); com isso, mensagem passa a ser
+   só prova de presença naquele minuto. *(Precisa do OK final do usuário,
+   D6.)*
+
+**Como guardar, sem pesar no plano gratuito do D1** (limite do plano
+gratuito: 100 mil linhas gravadas e 5 milhões lidas por dia):
+
+5. **O app junta os minutos e envia a cada 5 minutos** (e ao sair da sala,
+   com `sendBeacon`), não a cada minuto: uma lista de minutos presentes.
+6. **Uma linha por pessoa por transmissão** na tabela `tv_presenca`
+   (`programa_id`, `jogador_id`, `nome`, `minutos` = mapa de minutos em
+   texto, `atualizado_em`). Cada envio **junta** o mapa novo com o guardado
+   (minuto presente em qualquer envio = presente).
+7. **Conta:** 200 pessoas × 2 h ÷ 5 min ≈ **4.800 linhas gravadas por
+   evento** (~5% do limite diário gratuito). Para comparar: a primeira
+   versão desta proposta (uma linha por minuto) daria 24 mil. O servidor
+   ignora envios repetidos da mesma pessoa em menos de 4 minutos (proteção
+   contra abas duplicadas ou bug).
+8. **Somar com o resto do D1:** junto com a medição de uso (6.15, ~2 linhas
+   por jogador por dia) e o Social (5.6.7), fica abaixo de 20% do limite
+   diário num dia com evento grande. A tela Admin › Uso do app mostra o
+   consumo do dia.
+9. **Limpeza:** o cron apaga as linhas de `tv_presenca` com mais de 30 dias
+   (depois de processadas).
+
+**Enviar os dados combinados para a planilha:**
+
+10. No fim da transmissão, `processarParticipacaoTV` (cron de hoje) lê o D1
+    e conta as mensagens do chat no Supabase (como hoje, dentro da janela
+    da transmissão), e junta tudo **por pessoa**.
+11. Grava a **REGISTRO** como hoje (mesma % final, mesmas faixas).
+12. Grava na **Presenca_TV** **uma linha por pessoa**, numa gravação só
+    (em lote): Data · Programa · Jogador · Nome · Minutos presentes ·
+    Duração · % presença · Mensagens · Entrou às · Saiu às · % final.
+    Assim o admin confere tudo numa linha só.
+13. **Participantes e o círculo** da sala leem a mesma conta (com cache de
+    30 s), então o número da tela é o que será creditado.
+14. **Transição:** transmissões que começaram antes da troca continuam
+    processadas pelo jeito antigo; as novas usam o D1. O corte é pela
+    data/hora de início.
+
+**Ganho extra:** hoje cada pessoa grava uma linha na planilha a cada 30 s
+(200 pessoas = ~400 gravações por minuto). O Google Sheets limita as
+gravações por minuto; acima disso, ele recusa e o registro se perde em
+silêncio. **Isso pode ser parte da contagem ruim de hoje** (a conferir nos
+logs de erro do Worker durante um evento cheio). Com a proposta, a planilha
+recebe uma gravação por transmissão.
 
 **Vale para as duas versões** (anterior e Beta), porque é o mesmo servidor:
 por isso entra numa fase própria (0b, seção 8), antes do Beta.
+
+#### 6.19.3 GIFs do chat em tempo real
+
+**Hoje** (`tvChatGifsController.ts` e `ChatPanel`): o seletor já tem
+**Mais usados** (padrão) e **Recentes**. Os usos ficam na aba
+`TV_Chat_Gifs_Usos` da planilha Agenda_TV. Três limites:
+
+- a lista é carregada **uma vez** por sala: o que os outros mandam não
+  muda a ordem até sair e voltar;
+- **Recentes** é a ordem de upload, não de uso;
+- só os **100 GIFs mais novos** da pasta do Drive aparecem: um GIF antigo
+  muito usado some do seletor quando a pasta passa de 100.
+
+**Como fica:**
+
+1. **Ao vivo, sem custo extra:** o chat já chega em tempo real pelo
+   Supabase. Quando chega uma mensagem de GIF (de qualquer pessoa), o app
+   soma 1 no contador daquele GIF e o põe no topo de Recentes **na hora**,
+   com o seletor aberto ou fechado. Ao abrir o seletor, busca a lista de
+   novo para acertar os números.
+2. **Recentes = último uso no chat ou upload**, o que for mais recente. A
+   aba de usos ganha a coluna **Último uso** (gravada no mesmo envio que já
+   existe; nenhuma gravação a mais).
+3. **Todos os GIFs aparecem:** a listagem do Drive passa a buscar todas as
+   páginas (com cache curto no servidor).
+4. Cada GIF mostra o número de usos (Mais usados) ou "há N min" (Recentes).
 
 #### 6.19.2 Som da Kick no celular
 
@@ -1338,7 +1402,7 @@ de 360px nos dois tamanhos de texto.
 | Fase | Conteúdo | Depende de |
 |---|---|---|
 | **0a. Medição de uso** (na versão de hoje) | 6.15: envio em lote, tabelas `uso_diario` e `uso_jogador_dia`, chave em `homeFlags`, tela Admin › Uso do app. **Vai ao ar primeiro**, para medir a base por ~4 semanas antes do Beta | — |
-| **0b. Participação na TV** (nas duas versões) | 6.19.1: batida por minuto, tabela `tv_presenca_minuto`, processamento lendo o D1 (resto da regra igual), Participantes com o mesmo número, mini player contando | — |
+| **0b. Participação na TV e GIFs** (nas duas versões) | 6.19.1: minutos presentes enviados a cada 5 min, tabela `tv_presenca` (uma linha por pessoa), processamento lendo o D1, Presenca_TV com uma linha por pessoa, Participantes com o mesmo número, mini player contando; 6.19.3: GIFs ao vivo, Último uso, todos os GIFs | D6 |
 | **0. Fundações** (nada visível muda) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query + cliente de API, tokens de cor com os valores atuais | — |
 | **1. Navegação (Beta test)** | casca nova inteira **atrás do Beta test** (6.11): topo, barra/trilho/barra lateral (6.10), Criar, Meu Império, abas do Início, aviso de mudança, tutorial; chave do admin, reportes e faixa na versão anterior | 0 |
 | **1b. Sala da Empire TV** (Beta) | 6.19: vídeo no topo, faixa fina, folhas, chat compacto, "↓ novas", arrastar para responder, reações, celular deitado; som conforme D5 | 0b, 1 |
@@ -1376,6 +1440,7 @@ fase 3 deve vir logo em seguida (call meu: entregar 2 e 3 juntas se der).
 | ~~D3~~ | **Decidido:** cor por papel (U13). | — | — |
 | D4 | Lista dos controllers `adminDiag*` que podem ser apagados na fase 6 | usuário (na fase 6) | só limpeza |
 | D5 | Som da Kick: resultado do teste da opção 1 (`/tv-teste-som`) no iPhone e no Android; se não funcionar, avaliar a opção 3 | usuário (teste no celular) | sala da TV |
+| D6 | Participação na TV só pelo tempo presente (mensagem só prova presença no minuto), no lugar de "vale o maior entre presença e chat" | usuário | REGISTRO e prestígio |
 
 ---
 

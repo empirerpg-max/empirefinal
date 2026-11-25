@@ -136,7 +136,7 @@ Criar. Nenhuma URL atual deixa de abrir.
 | Turnês: missões (`/api/turnes/missoes`) | Início › Turnês + "Pra fazer hoje" | D |
 | Nova turnê: simulação de lucro (mínimo e máximo), escolha de locais | Criar › Nova turnê (tela atual) | D |
 | Empire TV: canais ao vivo da Kick | Início › Empire TV (cartão "Ao vivo") | D |
-| Empire TV: presença (tempo assistido vira prestígio) | automático na sala **e no mini player**; soma das sessões no D1 (6.19.1); faixas, regra do chat, REGISTRO e prestígio iguais | D (fase 0b) |
+| Empire TV: presença (tempo assistido vira prestígio) | automático na sala **e no mini player**; soma das sessões no D1 (6.19.1); faixas, REGISTRO e prestígio iguais; regra do chat conforme D6 | D (fase 0b) |
 | Empire TV: subir GIF, responder mensagem no chat, negrito/itálico | sala da TV › caixa de mensagem (GIF, Aa) e arrastar/segurar a mensagem | P |
 | Social: postar como artista **ou como fã anônimo** (nome aleatório) | Criar › Post no Social (tela atual) | D |
 | Social: escolher rede (Instagram, TikTok, Twitter), anexar música, modo de publicação, texto rico com emoji | Criar › Post no Social (tela atual) | D |
@@ -348,12 +348,12 @@ Conferido contra `src/routes/tv.tsx` (`WatchView`, `ChatPanel`,
 | Carregar mensagens mais antigas | carrega sozinho ao rolar para o topo | P (muda o gatilho) |
 | Responder, cancelar resposta, citação | arrastar para a esquerda ou segurar › Responder; barra "Respondendo a…" com ✕ | P |
 | Negrito `*texto*`, itálico `_texto_` | botão Aa | P |
-| GIFs: escolher, enviar, subir novo (fica para todos) | botão GIF › folha | P |
+| GIFs: escolher, enviar, subir novo (fica para todos), abas Mais usados e Recentes, contagem de uso | botão GIF › folha; ordem muda ao vivo (6.19.3) | P |
 | Pílula "Fulano chegou ao Red Carpet" que abre o look | igual, no meio do chat | P |
 | Mensagens pendentes (meia opacidade até confirmar) | igual | D |
 | Red Carpet: postar com várias fotos, carrossel de fotos, curtir, ranking, excluir o seu | folha Red Carpet | P |
 | Participantes | folha, com a **mesma %** que será creditada | P (número muda: 6.19.1) |
 | Sobre | folha (toque no nome do programa) | P |
-| Presença a cada 30 s | batida por minuto no D1, conta também no mini player | D (fase 0b) |
+| Presença a cada 30 s | minutos presentes enviados a cada 5 min (D1, uma linha por pessoa), conta também no mini player; mensagem só prova presença no minuto (D6) | D (fase 0b) |
 | — | reações com emoji, "↓ N novas", celular deitado com chat lateral, círculo da sua participação | **NOVO** |
 
