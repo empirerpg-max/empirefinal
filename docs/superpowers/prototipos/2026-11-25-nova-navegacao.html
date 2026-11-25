@@ -557,7 +557,7 @@ function catalogo(){
     const f = state.searchFilter;
     html += `<div style="margin-top:6px">`;
     if (f==='Tudo'){
-      html += h2('Navegar por gênero') + `<div class="grid2">${['Pop','Hip-Hop','Latina','R&B','Rock','Sertanejo'].map((t,k)=>`<button class="genre" style="background:linear-gradient(140deg,${G[k+1][0]},${G[k+1][1]})" data-open="playlist">${t}</button>`).join('')}</div>`;
+      html += h2('Navegar por gênero') + `<div class="grid2">${['Pop','Hip-Hop','Latina','R&B','Rock','Sertanejo'].map((t,k)=>`<button class="genre" style="background:linear-gradient(140deg,${G[k+1][0]},${G[k+1][1]})" data-open="genero" data-id="${k+1}" data-title="${t}">${t}</button>`).join('')}</div>`;
     }
     if (f==='Músicas') html += SONG.map((s,i)=>songRow(s,i,{end:s.d})).join('');
     if (f==='Vídeos') html += VID.map((v,k)=>`<button class="row" data-open="album" data-id="${k}">${cover(k+2,'','sm" style="width:86px;height:50px;border-radius:8px;background:linear-gradient(140deg,'+G[k+2][0]+','+G[k+2][1]+')')}<span class="meta"><b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></span><span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções do vídeo" data-actions="video" data-title="${v.t}">${svg('more','chev')}</span></button>`).join('');
@@ -607,9 +607,9 @@ function aoVivo(){
   html += `<button class="hero" style="width:calc(100% - 32px);text-align:left;background:radial-gradient(120% 100% at 100% 0%,#22d3ee 0%,transparent 50%),linear-gradient(160deg,#7c3aed,#1e1b4b)" data-open="playlist">
       <span class="badge live">Mais quente agora</span>
       <h4>Top 100 Spotify ao vivo</h4><span class="small" style="opacity:.9">Vidro Quebrado subiu 6 posições na última hora · 187.049.605</span></button>`;
-  html += h2('Charts globais ao vivo') + `<div class="shelf">${['Top 100 Spotify','Top 100 Apple Music','Top 100 YouTube'].map((t,k)=>`<button class="tile" data-open="playlist">${cover([4,1,3][k],t)}<b>${t}</b><small><span class="badge live" style="font-size:9px;padding:1px 6px">ao vivo</span></small></button>`).join('')}</div>`;
-  html += h2('Top 50 por país') + `<div style="margin-bottom:10px">${seg([['Spotify','Spotify'],['Apple Music','Apple Music'],['YouTube','YouTube']], plat, 'aoVivoPlat')}</div><div class="shelf">${['Brasil','Estados Unidos','Reino Unido','Coreia do Sul','México'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+5,'Top 50 '+t)}<b>Top 50 ${t}</b><small>${plat} · ao vivo</small></button>`).join('')}</div>`;
-  html += h2('Da semana') + `<div class="shelf">${[['Global 100','Semana 47'],['Parada · Reino Unido','Paradas oficiais'],['Parada · Japão','Paradas oficiais'],['Top Pop','Por gênero'],['Top Hip-Hop','Por gênero'],['Hot','30 lançamentos recentes']].map(([t,st],k)=>`<button class="tile" data-open="playlist">${cover(k+1,t)}<b>${t}</b><small>${st}</small></button>`).join('')}</div>`;
+  html += h2('Charts globais ao vivo') + `<div class="shelf">${['Top 100 Spotify','Top 100 Apple Music','Top 100 YouTube'].map((t,k)=>`<button class="tile" data-open="playlist" data-title="${t}">${cover([4,1,3][k],t)}<b>${t}</b><small><span class="badge live" style="font-size:9px;padding:1px 6px">ao vivo</span></small></button>`).join('')}</div>`;
+  html += h2('Top 50 por país') + `<div style="margin-bottom:10px">${seg([['Spotify','Spotify'],['Apple Music','Apple Music'],['YouTube','YouTube']], plat, 'aoVivoPlat')}</div><div class="shelf">${['Brasil','Estados Unidos','Reino Unido','Coreia do Sul','México'].map((t,k)=>`<button class="tile" data-open="playlist" data-title="Top 50 ${t}">${cover(k+5,'Top 50 '+t)}<b>Top 50 ${t}</b><small>${plat} · ao vivo</small></button>`).join('')}</div>`;
+  html += h2('Da semana') + `<div class="shelf">${[['Global 100','Semana 47'],['Parada · Reino Unido','Paradas oficiais'],['Parada · Japão','Paradas oficiais'],['Top Pop','Por gênero'],['Top Hip-Hop','Por gênero'],['Hot','30 lançamentos recentes']].map(([t,st],k)=>`<button class="tile" data-open="${/^Top (Pop|Hip-Hop)/.test(t)?'genero':'playlist'}" data-title="${t.replace(/^Top /,'')}" data-id="${k+1}">${cover(k+1,t)}<b>${t}</b><small>${st}</small></button>`).join('')}</div>`;
   html += `<div class="card" style="margin-top:16px"><b class="small">Nenhuma lógica muda</b><p class="muted small" style="margin:4px 0 0">Este é o painel de hoje do Catálogo, inteiro, só em outro lugar.</p></div><div class="card" style="margin-top:8px"><b class="small">O que acontece com o "Ao vivo" de hoje</b><p class="muted small" style="margin:4px 0 0">"Mundo" vira os Top 100 ao vivo por plataforma, e "Por país" vira os Top 50 por país. São os mesmos dados, atualizados a cada 30 s, só que agora tocáveis.</p></div>`;
   return html;
 }
@@ -812,9 +812,22 @@ const pages = {
       <div class="pad" style="margin-top:16px"><button class="btn pri" style="width:100%" data-toast="Perfil salvo">Salvar</button></div>`};
   },
   topic(id, title, kind){ return pages.lancamento(id, title, kind || (ALB.some(a=>a.t===title)?'album':VID.some(v=>v.t===title)?'video':'musica')); },
-  playlist(){
-    return {title:'Global 100 ao vivo', body:`
-      <div class="hero" style="margin:14px 16px;background:radial-gradient(120% 100% at 100% 0%,#22d3ee 0%,transparent 50%),linear-gradient(160deg,#7c3aed,#1e1b4b)"><span class="badge live">Ao vivo</span><h4>Global 100</h4><span class="small" style="opacity:.85">Gerada dos charts · atualizada às 09:00</span></div>
+  genero(id, title){
+    const g = title || 'Pop', i = +id||1, c = G[i%G.length];
+    const temTop = ['Pop','Hip-Hop','Latina','R&B'].includes(g);
+    return {title:g, body:`
+      <div class="hero" style="margin:14px 16px;height:150px;background:linear-gradient(160deg,${c[0]},${c[1]})"><span class="badge" style="background:rgba(0,0,0,.35);color:#fff">Gênero</span><h4 style="font-size:30px">${g}</h4></div>
+      ${temTop ? `${h2('Top '+g+' da semana')}<button class="row" data-open="playlist" data-title="Top ${g}">${cover(i,'','sm" style="width:64px;height:64px;border-radius:10px;background:linear-gradient(140deg,'+c[0]+','+c[1]+')')}<span class="meta"><b>Top ${g}</b><small>Playlist da semana que já existe (Global 100 filtrado por gênero)</small></span>${svg('chev','chev')}</button>` : `<p class="muted small pad" style="margin:0 0 4px">Este gênero ainda não tem músicas suficientes no Global 100 para a playlist "Top ${g}" da semana.</p>`}
+      ${h2('Lançamentos de '+g,'Ver todos','data-toast="Todas as músicas de '+g+', mais recentes primeiro"')}${SONG.slice(0,4).map((s2,k)=>songRow(s2,k,{end:s2.d})).join('')}
+      ${h2('Álbuns de '+g)}<div class="shelf">${[0,2,1].map(albumTile).join('')}</div>
+      ${h2('Artistas de '+g)}<div class="shelf">${ART.slice(0,5).map((a,k)=>`<button class="tile" style="width:96px;text-align:center" data-open="artist" data-id="${k}"><span class="cv sm" style="width:96px;height:96px;border-radius:50%;background:linear-gradient(140deg,${G[k][0]},${G[k][1]})"></span><b>${a}</b></button>`).join('')}</div>
+      ${h2('Clipes de '+g)}<div class="shelf">${VID.slice(0,3).map((v,k)=>`<button class="tile wide" data-open="topic" data-id="${k}" data-title="${v.t}" data-kind="video">${cover(k+2,'')}<b>${v.t}</b><small>${v.k}</small></button>`).join('')}</div>
+      <p class="muted pad" style="font-size:11.5px;margin-top:14px">Tudo aqui vem do gênero cadastrado em cada música do catálogo. Nenhuma lógica de charts muda.<i class="novo">novo</i></p>`};
+  },
+  playlist(id, title){
+    const tt = title || 'Global 100 ao vivo';
+    return {title:tt, body:`
+      <div class="hero" style="margin:14px 16px;background:radial-gradient(120% 100% at 100% 0%,#22d3ee 0%,transparent 50%),linear-gradient(160deg,#7c3aed,#1e1b4b)"><span class="badge ${/^Top 100|^Top 50|ao vivo/i.test(tt)?'live':''}" style="${/^Top 100|^Top 50|ao vivo/i.test(tt)?'':'background:rgba(0,0,0,.35);color:#fff'}">${/^Top 100|^Top 50|ao vivo/i.test(tt)?'Ao vivo':'Da semana'}</span><h4>${tt}</h4><span class="small" style="opacity:.85">Gerada dos charts · mesma playlist de hoje</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 8px"><button class="btn play" data-play="0">${svg('play')}Tocar</button><button class="btn sec" data-toast="Salva na sua Biblioteca">${svg('heart')}Salvar</button></div>
       ${SONG.map((s,i)=>songRow(s,i,{rank:true,end:s.d})).join('')}`};
   },

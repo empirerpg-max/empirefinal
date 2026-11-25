@@ -265,8 +265,22 @@ O painel de playlists que está aqui hoje **vai para Charts › Ao vivo**
   Artistas · Material antigo**. Substituem as abas Músicas, Vídeos, Álbuns,
   a lista de Artistas e a lista de Álbuns antigos. As listas são as mesmas
   de hoje (mesmas APIs, mesma busca por texto).
-- Sem texto digitado em "Tudo": grade "Navegar por gênero", que abre as
-  playlists de gênero dos charts.
+- Sem texto digitado em "Tudo": grade **"Navegar por gênero"**. Cada
+  bloco abre a **página daquele gênero** *(NOVO)*, nunca uma lista geral:
+  - **Top {gênero} da semana:** a playlist de gênero que o painel já monta
+    hoje (`semana:genero:{GÊNERO}`, Global 100 filtrado por gênero). Só
+    existe para gêneros com 10 ou mais músicas no Global 100. Quando não
+    existe, a página diz isso em uma linha e segue com o resto;
+  - **Lançamentos de {gênero}:** músicas do catálogo D1 com
+    `musicas.genero` igual ao gênero, mais recentes primeiro (com "Ver
+    todos");
+  - **Álbuns, Artistas e Clipes de {gênero}:** derivados das mesmas músicas
+    (álbum da faixa, artista da faixa, vídeos dessas músicas);
+  - os gêneros da grade são os que existem em `musicas.genero`, com a mesma
+    normalização que o painel usa (`normalizarGenero`: caixa alta, sem
+    acento);
+  - **nenhuma lógica de charts muda:** a página só lê o catálogo e reaproveita
+    a playlist de gênero que já existe.
 - Artistas: alternância Todos / Meus (como `/artistas?filter=`).
 
 #### 5.3.3 Catálogo › Biblioteca
