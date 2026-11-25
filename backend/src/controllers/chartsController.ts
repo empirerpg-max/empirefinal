@@ -871,7 +871,12 @@ export interface RespostaCharts {
   /** Padrão 200. Só respostas 200 ficam em cache. */
   status?: number;
 }
-const chartsResponseCache = new Map<string, RespostaCharts & { expiresAt: number }>();
+// Limite de respostas guardadas por isolate (algumas, como as playlists, têm
+// dezenas de KB): ao inserir, as vencidas saem e, passado o limite, as mais
+// antigas (ordem de inserção do Map) são expulsas. O TTL de cada uma não muda.
+const CHARTS_RESPONSE_CACHE_MAX = 200;
+/** `aoVivo` diz em qual relógio `expiresAt` está (ao vivo ou Date.now). */
+const chartsResponseCache = new Map<string, RespostaCharts & { expiresAt: number; aoVivo: boolean }>();
 const chartsResponseInFlight = new Map<string, Promise<RespostaCharts>>();
 const ACOES_AO_VIVO = new Set(["getRealTime", "getRealTimePaises"]);
 
@@ -879,6 +884,34 @@ function respostaJson(r: RespostaCharts): Response {
   const headers: Record<string, string> = { "Content-Type": "application/json; charset=utf-8" };
   if (r.cacheControl) headers["Cache-Control"] = r.cacheControl;
   return new Response(r.body, { status: r.status ?? 200, headers });
+}
+
+/** Quantas respostas estão no cache (para testes). */
+export function tamanhoCacheRespostasCharts(): number {
+  return chartsResponseCache.size;
+}
+
+/** Insere a resposta: descarta as vencidas e expulsa as mais antigas além do limite. */
+function gravarRespostaCache(cacheKey: string, entrada: RespostaCharts & { expiresAt: number; aoVivo: boolean }): void {
+  const agoraVivo = agoraAoVivo();
+  const agoraNormal = Date.now();
+  for (const [k, e] of chartsResponseCache) {
+    if (e.expiresAt <= (e.aoVivo ? agoraVivo : agoraNormal)) chartsResponseCache.delete(k);
+  }
+  chartsResponseCache.delete(cacheKey);
+  chartsResponseCache.set(cacheKey, entrada);
+  while (chartsResponseCache.size > CHARTS_RESPONSE_CACHE_MAX) {
+    chartsResponseCache.delete(chartsResponseCache.keys().next().value as string);
+  }
+}
+
+// Caches de outros módulos que dependem dos charts (ex.: catálogo das
+// playlists do Empire Play). Registrados por callback pra não criar ciclo de
+// import (esses módulos já importam este controller).
+const limpezasDependentes = new Set<() => void>();
+/** Registra uma limpeza extra que roda junto com limparCacheCharts. */
+export function aoLimparCacheCharts(fn: () => void): void {
+  limpezasDependentes.add(fn);
 }
 
 /** Descarta as respostas em cache deste isolate (chamado após ingerir uma semana no D1). */
@@ -892,6 +925,7 @@ export function limparCacheCharts(): void {
   emAltaCache = null;
   capasPlanilhaCache = null;
   limparCacheAoVivoPaises();
+  for (const fn of limpezasDependentes) fn();
 }
 
 export async function chartsApiController(request: Request): Promise<Response> {
@@ -927,7 +961,7 @@ async function respostaEmCache(
     if ((resposta.status ?? 200) !== 200) return resposta;
     let expiresAt = agora() + ttl;
     if (aoVivo && emAltaCache) expiresAt = Math.min(expiresAt, emAltaCache.expiresAt);
-    chartsResponseCache.set(cacheKey, { ...resposta, expiresAt });
+    gravarRespostaCache(cacheKey, { ...resposta, expiresAt, aoVivo });
     return resposta;
   })().finally(() => {
     chartsResponseInFlight.delete(cacheKey);
@@ -943,6 +977,15 @@ async function respostaEmCache(
  */
 export async function respostaAoVivoEmCache(chave: string, computar: () => Promise<RespostaCharts>): Promise<Response> {
   return respostaJson(await respostaEmCache(`\u0000ao-vivo:${chave}`, true, computar));
+}
+
+/**
+ * Resposta JSON com o TTL normal do /api/charts (5 min, Date.now), sem o teto
+ * da EM Alta. Para dados da semana (só mudam numa ingestão, e
+ * limparCacheCharts zera). Prefixo próprio, não colide com as outras chaves.
+ */
+export async function respostaSemanaEmCache(chave: string, computar: () => Promise<RespostaCharts>): Promise<Response> {
+  return respostaJson(await respostaEmCache(`\u0000semana:${chave}`, false, computar));
 }
 
 async function computeChartsResponse(action: string, p: URLSearchParams): Promise<RespostaCharts> {

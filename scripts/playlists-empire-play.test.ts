@@ -310,8 +310,9 @@ test("montarPlaylist país: só as linhas do país (sem diferença de acento), t
   ]);
   // id sem acento acha o país com acento; título mantém o acento
   const austria = await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "AUSTRIA" }, fontes);
-  // id volta como foi pedido (sem acento); o título usa a grafia de pais_peso
-  expect(austria).toMatchObject({ titulo: "Top 50 Áustria", id: "pais:spotify:AUSTRIA" });
+  // id e título voltam na grafia de pais_peso (com acento), não na do pedido
+  expect(austria).toMatchObject({ titulo: "Top 50 Áustria", id: "pais:spotify:ÁUSTRIA" });
+  expect(await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "áustria" }, fontes)).toEqual(austria);
   expect((await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "COREIA DO SUL" }, fontes))!.titulo).toBe("Top 50 Coreia do Sul");
   expect((await montarPlaylist({ tipo: "pais", plataforma: "apple", pais: "REINO UNIDO" }, fontes))!.subtitulo).toBe("Apple Music · ao vivo");
   expect(await montarPlaylist({ tipo: "pais", plataforma: "spotify", pais: "JAPÃO" }, fontes)).toBeNull();
@@ -358,7 +359,9 @@ test("montarPlaylist semana: Global 100, parada (inexistente → null), gênero 
   ]);
   expect(uk!.capa_url).toBeNull();
   expect(await montarPlaylist({ tipo: "parada", parada: "NADA" }, fontes)).toBeNull();
-  expect(await montarPlaylist({ tipo: "parada", parada: "uk charts" }, fontes)).toMatchObject({ id: "semana:parada:uk charts", titulo: "UK CHARTS" });
+  // id na grafia da parada nos dados, não na do pedido: mesma resposta pra qualquer caixa
+  expect(await montarPlaylist({ tipo: "parada", parada: "uk charts" }, fontes)).toEqual(uk);
+  expect(uk).toMatchObject({ id: "semana:parada:UK CHARTS", titulo: "UK CHARTS" });
 
   const pop = await montarPlaylist({ tipo: "genero", genero: "POP" }, fontes);
   expect(pop).toMatchObject({ id: "semana:genero:POP", titulo: "Top Pop", subtitulo: "Da semana · fecha quinta", aoVivo: false, capa_url: "follia.jpg" });
@@ -629,7 +632,13 @@ test("destaque: empate em subida e valor → menor id", async () => {
 
 // ---- Rota /api/empire-play/playlists (fontes reais: D1 SQLite + planilhas trocadas) ----
 import { googleSheetsService } from "../backend/src/services/googleSheetsService";
-import { definirRelogioAoVivo, limparCacheCharts } from "../backend/src/controllers/chartsController";
+import {
+  chartsApiController,
+  definirRelogioAoVivo,
+  limparCacheCharts,
+  respostaAoVivoEmCache,
+  tamanhoCacheRespostasCharts,
+} from "../backend/src/controllers/chartsController";
 import { getPlaylistsEmpirePlayController } from "../backend/src/controllers/playlistsEmpirePlayController";
 import { ingerirSemana } from "../backend/src/services/chartsD1/repo";
 
@@ -765,5 +774,90 @@ test("rota com D1: índice e playlist das fontes reais, só SELECT, só a EM Alt
     await rota();
     expect(lidas).toEqual(["chartsRealtime:EM Alta", "chartsRealtime:EM Alta"]);
     expect(consultas.every((s) => /^\s*SELECT/i.test(s))).toBe(true);
+  });
+});
+
+test("rota: variações de grafia do id dividem uma entrada de cache e devolvem a mesma resposta", async () => {
+  const { db } = await bancoPlaylists();
+  await comRotaPlaylists(db, async () => {
+    limparCacheCharts();
+    const antes = tamanhoCacheRespostasCharts();
+    const a = await rota(`?id=${encodeURIComponent("pais:spotify:AUSTRÁLIA")}`);
+    const b = await rota(`?id=${encodeURIComponent("pais:spotify:australia")}`);
+    expect(a.status).toBe(200);
+    const corpoA = await a.json();
+    expect(await b.json()).toEqual(corpoA);
+    expect((corpoA as { data: { id: string } }).data.id).toBe("pais:spotify:AUSTRÁLIA");
+    const ind = ((await (await rota()).json()) as { data: Awaited<ReturnType<typeof montarIndice>> }).data;
+    const parada = ind.paradas[0].id; // semana:parada:<nome>
+    const p1 = await rota(`?id=${encodeURIComponent(parada)}`);
+    const p2 = await rota(`?id=${encodeURIComponent(parada.toLowerCase())}`);
+    const corpoP = await p1.json();
+    expect(await p2.json()).toEqual(corpoP);
+    expect((corpoP as { data: { id: string } }).data.id).toBe(parada);
+    // país (1) + índice (1) + parada (1): as variações não criaram entradas novas
+    expect(tamanhoCacheRespostasCharts() - antes).toBe(3);
+    // 404 não fica em cache
+    expect((await rota("?id=pais:spotify:MARTE")).status).toBe(404);
+    expect(tamanhoCacheRespostasCharts() - antes).toBe(3);
+  });
+});
+
+test("rota: playlists da semana ficam 5 min em cache (sem o teto da EM Alta); ao vivo segue 30 s", async () => {
+  const { db, consultas } = await bancoPlaylists();
+  await comRotaPlaylists(db, async (lidas, avancar) => {
+    const g1 = await (await rota("?id=semana:global100")).json();
+    await rota("?id=ao-vivo:spotify");
+    limparCachePlaylists();
+    const n = consultas.length;
+    avancar(31_000); // passou a validade da EM Alta (relógio do ao vivo)
+    expect(await (await rota("?id=semana:global100")).json()).toEqual(g1);
+    expect(consultas.length).toBe(n); // semana: veio do cache de resposta
+    const lidasAntes = lidas.length;
+    await rota("?id=ao-vivo:spotify");
+    expect(lidas.length).toBe(lidasAntes + 1); // ao vivo: venceu e releu a EM Alta
+  });
+});
+
+test("cache de respostas dos charts: limitado a 200 entradas, mais antigas saem primeiro", async () => {
+  limparCacheCharts();
+  try {
+    for (let i = 0; i < 205; i++) await chartsApiController(new Request(`http://x/api/charts?action=nada&i=${i}`));
+    expect(tamanhoCacheRespostasCharts()).toBe(200);
+    // a mais recente continua em cache; a primeira foi expulsa (recalculada → nova entrada, ainda 200)
+    await chartsApiController(new Request("http://x/api/charts?action=nada&i=204"));
+    expect(tamanhoCacheRespostasCharts()).toBe(200);
+  } finally {
+    limparCacheCharts();
+  }
+});
+
+test("cache de respostas dos charts: vencidas saem ao inserir uma nova", async () => {
+  let agora = 5_000_000;
+  definirRelogioAoVivo(() => agora);
+  limparCacheCharts();
+  try {
+    await respostaAoVivoEmCache("teste-a", async () => ({ body: "{}" }));
+    await respostaAoVivoEmCache("teste-b", async () => ({ body: "{}" }));
+    expect(tamanhoCacheRespostasCharts()).toBe(2);
+    agora += 31_000;
+    await respostaAoVivoEmCache("teste-c", async () => ({ body: "{}" }));
+    expect(tamanhoCacheRespostasCharts()).toBe(1);
+  } finally {
+    definirRelogioAoVivo(null);
+    limparCacheCharts();
+  }
+});
+
+test("limparCacheCharts também descarta o catálogo das playlists", async () => {
+  const { db, consultas } = await bancoPlaylists();
+  await comRotaPlaylists(db, async () => {
+    await carregarCatalogoTocavel();
+    const n = consultas.length;
+    await carregarCatalogoTocavel();
+    expect(consultas.length).toBe(n);
+    limparCacheCharts();
+    await carregarCatalogoTocavel();
+    expect(consultas.length).toBeGreaterThan(n);
   });
 });

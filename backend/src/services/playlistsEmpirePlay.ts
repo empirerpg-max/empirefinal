@@ -12,7 +12,7 @@ import {
   type EmpirePlayCleanItem,
   type MusicaD1Row,
 } from "../controllers/empirePlayController";
-import { fetchRTBruto, fetchRTPaises, semanaParaPlaylists } from "../controllers/chartsController";
+import { aoLimparCacheCharts, fetchRTBruto, fetchRTPaises, semanaParaPlaylists } from "../controllers/chartsController";
 import { getCatalogoDb, type D1DatabaseLike } from "./catalogoDbService";
 import { fixImg, fmt } from "./chartsD1/formato";
 import type { LinhaAoVivoPais } from "./chartsD1/aoVivoPaises";
@@ -87,6 +87,30 @@ export function formatarIdPlaylist(p: IdPlaylist): string {
     case "hot":
       return "semana:hot";
   }
+}
+
+/**
+ * Chave de cache da resposta de uma playlist: o id com país/parada/gênero
+ * sem acento e em caixa alta. Variações de grafia do mesmo pedido
+ * ("AUSTRÁLIA"/"australia", "uk"/"UK") dividem uma entrada só — a resposta
+ * delas é a mesma, já que montarPlaylist devolve o id na grafia dos dados.
+ */
+export function chaveCachePlaylist(p: IdPlaylist): string {
+  switch (p.tipo) {
+    case "pais":
+      return `pais:${p.plataforma}:${semAcentoMaiusculo(p.pais)}`;
+    case "parada":
+      return `semana:parada:${semAcentoMaiusculo(p.parada)}`;
+    case "genero":
+      return `semana:genero:${semAcentoMaiusculo(p.genero)}`;
+    default:
+      return formatarIdPlaylist(p);
+  }
+}
+
+/** Playlists da semana (`semana:*`) usam o TTL normal de 5 min; ao vivo e países seguem o relógio do ao vivo. */
+export function ehPlaylistDaSemana(p: IdPlaylist): boolean {
+  return p.tipo === "global100" || p.tipo === "parada" || p.tipo === "genero" || p.tipo === "hot";
 }
 
 // ---- Catálogo tocável ----
@@ -231,6 +255,8 @@ export function limparCachePlaylists(): void {
   cacheCatalogo = null;
   cacheHot = null;
 }
+// Ingestão de semana (limparCacheCharts) também descarta catálogo e Hot.
+aoLimparCacheCharts(limparCachePlaylists);
 
 async function lerCatalogoDoD1(): Promise<CatalogoTocavel> {
   const db = getCatalogoDb();
@@ -435,9 +461,10 @@ const tituloPais = (pais: string): string => `Top 50 ${emTitulo(pais)}`;
 
 /** `linhas` já do país e em ordem de posição (não vazia). */
 function playlistPais(id: IdPlaylist & { tipo: "pais" }, linhas: LinhaAoVivoPais[], cat: CatalogoTocavel): Playlist {
-  // id como foi pedido; o título usa a grafia de pais_peso (com acento).
+  // id e título na grafia de pais_peso (com acento), não na do pedido: toda
+  // variação de grafia do mesmo país devolve a mesma resposta (ver chaveCachePlaylist).
   const faixas = linhas.slice(0, LIMITE_PAIS).map((l) => faixaDoChart(cat, l.t, l.pos, l.s, l.c));
-  return playlist(id, tituloPais(linhas[0].pais), `${NOME_PLATAFORMA[id.plataforma]} · ao vivo`, faixas, id.plataforma);
+  return playlist({ ...id, pais: linhas[0].pais }, tituloPais(linhas[0].pais), `${NOME_PLATAFORMA[id.plataforma]} · ao vivo`, faixas, id.plataforma);
 }
 
 function playlistGlobal100(global100: SemanaPlaylists["global100"], cat: CatalogoTocavel): Playlist {
@@ -448,7 +475,8 @@ function playlistGlobal100(global100: SemanaPlaylists["global100"], cat: Catalog
 /** `linhas` já da parada e em ordem de posição (não vazia). */
 function playlistParada(id: IdPlaylist & { tipo: "parada" }, linhas: LinhaPaisApi[], cat: CatalogoTocavel): Playlist {
   const faixas = linhas.map((l) => faixaDoChart(cat, l.tit, l.pos, l.val, l.capa));
-  return playlist(id, linhas[0].pais, SUB_SEMANA, faixas);
+  // id na grafia da parada nos dados (não na do pedido), como em playlistPais.
+  return playlist({ ...id, parada: linhas[0].pais }, linhas[0].pais, SUB_SEMANA, faixas);
 }
 
 /**
