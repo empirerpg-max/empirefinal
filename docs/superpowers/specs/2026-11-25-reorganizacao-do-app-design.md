@@ -1028,6 +1028,81 @@ tem **quatro entradas**:
 A tela do Ponto é a de hoje: saldo da semana e as 3 opções (Distribuir
 pontos, Aplicar playlists, O que vale ponto). Nenhuma regra muda.
 
+### 6.14 Cronômetro da semana *(NOVO, pedido do usuário)*
+
+O calendário de divulgações vai de **quarta 00:00 até terça 23:59
+(Brasília)**. É a mesma regra que o backend já usa
+(`semanaAtual()`/`limitesSemanaAtual()` em `marketController.ts`, Metacritic
+e reconciliação do registro). O cronômetro usa exatamente essa regra.
+
+- **Onde aparece:** no topo de **Início › Para você**, no topo dos
+  **Charts** e na tela do **Ponto**. Formato: `⏱ Semana 25/11 – 01/12 ·
+  fecha em 6d 08h 06min`. Nas últimas 24h, vira `fecha em 05:12:33` em
+  vermelho.
+- **Custo zero:** calculado **no aparelho**, a partir do relógio, sem
+  chamada ao servidor e sem escrita no banco. Atualiza a cada segundo só
+  na tela visível.
+- **Relógio errado no celular:** para não mostrar tempo errado, o app
+  corrige o relógio com a hora do servidor que já vem no cabeçalho `Date`
+  das respostas da API (diferença guardada na memória). Sem chamada extra.
+- **Uma função só** (front e back), com teste nas viradas: quarta 00:00
+  abre a semana nova, terça 23:59:59 ainda é a anterior (já conferido no
+  protótipo).
+- No **Pra fazer hoje**, o item do Ponto diz "fecha terça 23:59".
+
+### 6.15 Medição de uso *(NOVO, pedido do usuário)*
+
+**Objetivo:** descobrir com dados, e não com palpite, quais telas e ações
+os jogadores mais usam, para revisar a navegação daqui a ~1 mês. Hoje a
+percepção é: Catálogo e Fórum, depois Charts.
+
+**Entra antes do Beta, na versão de hoje (call meu).** Assim temos a base
+("como é hoje") e depois comparamos com o Beta. Sem essa base, não dá para
+saber se a navegação nova encurtou os caminhos.
+
+**O que mede**
+| Medida | Exemplo |
+|---|---|
+| Tela aberta (rota + aba/sub-aba) | `/empire-play/forum › Músicas`, `Charts › Global 100` |
+| Ações principais | tocar música, comentar, publicar lançamento, distribuir pontos, votar, postar, repostar, seguir, buscar, abrir o Criar |
+| Versão | anterior · beta |
+| Aparelho | celular · tablet · computador (pela largura) |
+| Jogadores distintos por dia e por semana | quantos usaram cada tela |
+| Caminho até as ações principais | de qual tela o jogador veio quando publicou, comentou ou distribuiu pontos |
+| Volta do Beta | quantos voltaram para a anterior, por qual motivo e em qual tela (6.11) |
+
+**O que não mede:** conteúdo de comentários ou posts, texto de busca,
+dados pessoais. O id do jogador só aparece na contagem de "jogadores
+distintos por dia". Os dados ficam guardados por 90 dias.
+
+**Como funciona, sem custo extra**
+- O app junta os eventos **na memória** e envia em lote **a cada 2
+  minutos** e quando a aba é escondida ou fechada (`navigator.sendBeacon`
+  para `/api/uso`). Não é uma chamada por clique.
+- O servidor (o mesmo Worker) **soma** os contadores numa tabela D1 nova,
+  `uso_diario (dia, versao, aparelho, evento, alvo, contagem)`, com uma
+  única instrução em lote por envio
+  (`INSERT … ON CONFLICT DO UPDATE SET contagem = contagem + ?`).
+- Jogadores distintos: `uso_jogador_dia (dia, jogador)` com `INSERT OR
+  IGNORE`, uma vez por jogador por dia (o app lembra que já mandou hoje).
+- **Conta do custo** (planos gratuitos da Cloudflare: Workers 100 mil
+  requisições/dia; D1 100 mil escritas/dia, 5 milhões de leituras/dia):
+  cada jogador ativo gera cerca de 10 envios e 60 escritas por dia. **Com
+  500 jogadores ativos/dia: ~5 mil requisições e ~30 mil escritas**, bem
+  dentro do grátis. Se um dia passar de ~1.500 ativos/dia, o app passa a
+  enviar a cada 5 minutos ou a amostrar 50% (ajuste por configuração,
+  sem deploy).
+- Uma chave em `homeFlags` liga e desliga a medição.
+
+**Como ler o resultado**
+- **Meu Império › Admin › Uso do app:** telas e ações mais usadas na
+  semana, jogadores distintos, comparação **anterior × Beta** e por
+  aparelho. Lê só a tabela somada (leituras baratas).
+- **Revisão em ~1 mês:** ler essa tela (ou consultar o D1 direto) e
+  decidir mudanças. Perguntas para a revisão: quais telas ninguém usa;
+  quantos toques até publicar, comentar e distribuir pontos; onde o Beta
+  perde jogadores.
+
 ---
 
 ## 7. Itens que mudam de texto (resquícios de Telegram)
@@ -1058,6 +1133,7 @@ de 360px nos dois tamanhos de texto.
 
 | Fase | Conteúdo | Depende de |
 |---|---|---|
+| **0a. Medição de uso** (na versão de hoje) | 6.15: envio em lote, tabelas `uso_diario` e `uso_jogador_dia`, chave em `homeFlags`, tela Admin › Uso do app. **Vai ao ar primeiro**, para medir a base por ~4 semanas antes do Beta | — |
 | **0. Fundações** (nada visível muda) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query + cliente de API, tokens de cor com os valores atuais | — |
 | **1. Navegação (Beta test)** | casca nova inteira **atrás do Beta test** (6.11): topo, barra/trilho/barra lateral (6.10), Criar, Meu Império, abas do Início, aviso de mudança, tutorial; chave do admin, reportes e faixa na versão anterior | 0 |
 | **2. Charts** | Ao vivo = painel do Catálogo; `ChartPlaylist` (só tela). **Nenhuma mudança de backend nem de cálculo.** | 0, 1 |
