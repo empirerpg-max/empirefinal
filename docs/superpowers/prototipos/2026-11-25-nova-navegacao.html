@@ -252,6 +252,16 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
 .map td{padding:8px 10px 8px 0;border-top:1px solid var(--line);vertical-align:top}
 .map td:first-child{color:var(--muted)}
 .tblWrap{overflow-x:auto}
+.telas{display:grid;gap:6px}
+.tela{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.tela span{flex:1;min-width:0;font-size:13.5px;font-weight:700}
+.tela small{display:block;color:var(--muted);font-weight:500;font-size:12px}
+.tela button{font-size:12px;font-weight:800;padding:6px 10px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.tela button.c{background:var(--brand);color:#fff;border-color:transparent}
+.tela.atual{border-color:var(--brand)}
+.comentarBar{display:flex;justify-content:center;margin-top:12px}
+.comentarBar button{display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:var(--brand);color:#fff;font-weight:800;font-size:14px}
+.comentarBar button[hidden]{display:none}
 .jump{color:var(--brand);font-weight:700;text-decoration:underline;text-underline-offset:3px}
 </style>
 
@@ -285,9 +295,16 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
         <div class="toast" id="toast" role="status"></div>
       </div>
     </div>
+    <div class="comentarBar"><button id="comentarAtual" hidden>💬 Comentar esta tela</button></div>
   </div>
 
   <div class="notes">
+    <section class="note" id="comentarios">
+      <h2>Deixe sua opinião</h2>
+      <p>Encontrou algo que pode melhorar? Abra a tela no celular e toque em <b>Comentar esta tela</b>, ou use a lista abaixo. Cada comentário fica preso à tela de que fala.</p>
+      <p id="semComentarios" class="small" hidden>Para comentar, entre na sua conta do claude.ai com acesso a esta página.</p>
+      <div class="telas" id="telas"></div>
+    </section>
     <section class="note">
       <h2>A barra de baixo agora tem 5 abas</h2>
       <p><b>Início · Catálogo · Fórum · Charts · Social.</b> Todas cabem na tela, sem rolar a barra. O <b>Criar</b> sobe para o topo, sempre a um toque. A <b>sua foto</b> abre o "Meu Império", com Perfil, Meus artistas, Ponto, Market, Premiações e Aparência. O "Recarregar" sai do topo e vira o gesto de puxar a tela para baixo.</p>
@@ -1024,8 +1041,82 @@ $('#mLight').addEventListener('click', ()=>setMode('light'));
 document.querySelectorAll('[data-jump-acervo]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='inicio'; state.inicioTab='acervo'; state.acervoTab=b.dataset.jumpAcervo; render(); phone.scrollIntoView({behavior:'smooth',block:'center'}); }));
 document.querySelectorAll('[data-jump]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='inicio'; state.inicioTab=b.dataset.jump; render(); phone.scrollIntoView({behavior:'smooth',block:'center'}); }));
 
+/* ── comentários por tela ── */
+const TELAS = [
+  ['inicio','Início › Para você','Cartão ao vivo, Pra fazer hoje, seções da home', ()=>{state.tab='inicio';state.inicioTab='voce';}],
+  ['tv','Início › Empire TV','Grade, Red Carpet, Arquivo', ()=>{state.tab='inicio';state.inicioTab='tv';}],
+  ['tours','Início › Turnês','Minha turnê, em andamento, finalizadas, ranking', ()=>{state.tab='inicio';state.inicioTab='tours';}],
+  ['acervo','Início › Acervo','Revistas, Entrevistas, Forbes, Metacritic, Awards', ()=>{state.tab='inicio';state.inicioTab='acervo';state.acervoTab='Revistas';}],
+  ['empirefork','Acervo › Empirefork','Best New Track, Top Artist, Arquivo', ()=>{state.tab='inicio';state.inicioTab='acervo';state.acervoTab='Empirefork';}],
+  ['catalogo','Catálogo › Início','Continue ouvindo, lançamentos, comunidade', ()=>{state.tab='catalogo';state.catTab='inicio';}],
+  ['buscar','Catálogo › Buscar','Filtros e Navegar por gênero', ()=>{state.tab='catalogo';state.catTab='buscar';}],
+  ['genero','Página de gênero','Top do gênero, lançamentos, artistas', ()=>{state.tab='catalogo';state.catTab='buscar';}, ['genero','1','Pop']],
+  ['biblioteca','Catálogo › Biblioteca','Playlists, salvos, artistas', ()=>{state.tab='catalogo';state.catTab='biblioteca';}],
+  ['forum','Fórum (lista)','Filtros, último comentário, não comentei', ()=>{state.tab='forum';}],
+  ['lanc-album','Página do lançamento: álbum','Faixas com letra, Shop/Info/Visual, comentários', ()=>{state.tab='forum';}, ['topic','2','Ruído Branco','album']],
+  ['lanc-musica','Página do lançamento: música','Letra, comentário com nota do Metacritic', ()=>{state.tab='forum';}, ['topic','0','Vidro Quebrado','musica']],
+  ['lanc-video','Página do lançamento: vídeo','Player, Mais vídeos, likes', ()=>{state.tab='forum';}, ['topic','3','Coroa de Papel — Live no VMA','video']],
+  ['charts-aovivo','Charts › Ao vivo','O painel de playlists que hoje está no Catálogo', ()=>{state.tab='charts';state.chartTab='Ao vivo';}],
+  ['charts-lista','Charts › um chart','Visual de playlist, mesmos dados de hoje', ()=>{state.tab='charts';state.chartTab='Spotify';}],
+  ['social','Social › Feed','Interagindo como, filtro por rede, repostar', ()=>{state.tab='social';state.socialTab='Feed';}],
+  ['social-perfil','Social › Perfil do artista','Uma página, 3 redes', ()=>{state.tab='social';}, ['socialPerfil','0','Instagram']],
+  ['criar','Botão Criar','Todas as ações de lançamento', ()=>{}, 'criar'],
+  ['lancamentos','Meus lançamentos','Editar músicas, vídeos, álbuns e pre-saves', ()=>{}, ['lancamentos']],
+  ['imperio','Meu Império (sua foto)','Perfil, Economia, Premiações, Aparência, Admin', ()=>{}, ['me']],
+  ['claro','Modo claro','Escolha "Claro" acima do celular', ()=>{setMode('light');}],
+];
+function telaAtual(){
+  const top = stack[stack.length-1];
+  if ($('#sheet').classList.contains('in') && $('#sheet').getAttribute('aria-label')==='Criar') return 'criar';
+  if (top){ const n=top.dataset.pname, k=top.dataset.pkind;
+    if (n==='topic'||n==='album'||n==='lancamento') return k==='video'?'lanc-video':k==='musica'?'lanc-musica':'lanc-album';
+    return {genero:'genero',socialPerfil:'social-perfil',lancamentos:'lancamentos',me:'imperio'}[n] || null; }
+  if (state.tab==='inicio') return state.inicioTab==='voce'?'inicio':state.inicioTab==='acervo'?(state.acervoTab==='Empirefork'?'empirefork':'acervo'):state.inicioTab;
+  if (state.tab==='catalogo') return state.catTab==='inicio'?'catalogo':state.catTab;
+  if (state.tab==='charts') return state.chartTab==='Ao vivo'?'charts-aovivo':'charts-lista';
+  return state.tab;
+}
+function marcarAtual(){ const k=telaAtual(); document.querySelectorAll('.tela').forEach(el=>el.classList.toggle('atual', el.dataset.tela===k)); }
+const telasEl = $('#telas');
+TELAS.forEach(([k,nome,desc]) => {
+  const row = document.createElement('div'); row.className='tela'; row.dataset.tela=k; row.id='tela-'+k;
+  const sp = document.createElement('span'); sp.textContent = nome; const sm=document.createElement('small'); sm.textContent=desc; sp.appendChild(sm);
+  const ver = document.createElement('button'); ver.textContent='Ver'; ver.dataset.ver=k;
+  const com = document.createElement('button'); com.textContent='Comentar'; com.className='c'; com.dataset.comentar=k; com.hidden=true;
+  row.append(sp, ver, com); telasEl.appendChild(row);
+});
+function irPara(k){
+  const t = TELAS.find(x=>x[0]===k); if (!t) return;
+  closeAll(); closeSheet(); if (k!=='claro') setMode(phone.dataset.mode);
+  t[3](); render();
+  if (t[4]==='criar') openCreate(); else if (Array.isArray(t[4])) openPage(...t[4]);
+  marcarAtual();
+  if (matchMedia('(max-width:900px)').matches) phone.scrollIntoView({behavior:'smooth',block:'start'});
+}
+telasEl.addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.ver) return irPara(b.dataset.ver);
+  if (b.dataset.comentar) return comentar(b.dataset.comentar);
+});
+let comentariosApi = null;
+async function comentar(k){
+  if (!comentariosApi) return;
+  const row = document.getElementById('tela-'+k);
+  try { const r = await comentariosApi.openComposer({element: row}); if (!r.opened) row.scrollIntoView({behavior:'smooth',block:'center'}); }
+  catch(err){ $('#semComentarios').hidden=false; }
+}
+$('#comentarAtual').addEventListener('click', () => { const k = telaAtual(); if (k) comentar(k); else $('#comentarios').scrollIntoView({behavior:'smooth'}); });
+box.addEventListener('click', () => setTimeout(marcarAtual, 350));
+(async () => {
+  for (let n=0; n<20 && !window.claude; n++) await new Promise(r=>setTimeout(r,250));
+  try { comentariosApi = window.claude ? await window.claude.use('comments') : null; } catch(e){ comentariosApi = null; }
+  if (comentariosApi){ document.querySelectorAll('[data-comentar]').forEach(b=>b.hidden=false); $('#comentarAtual').hidden=false; }
+  else $('#semComentarios').hidden=false;
+})();
+
 let saved = 'dark'; try { saved = localStorage.getItem('ehp-mode') || 'dark'; } catch(e){}
 setMode(saved);
 render();
+marcarAtual();
 })();
 </script>
