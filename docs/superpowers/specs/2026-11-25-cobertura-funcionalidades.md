@@ -117,8 +117,39 @@
 `/acoes/tour`: viram redirecionamentos para a página de álbum e para
 Criar. Nenhuma URL atual deixa de abrir.
 
-## Funções do `api.ts` sem tela hoje
-`historicoBolsa`, `listarEmpresas`, `minhasEmpresas`, `listarArquivoTV`
-(o Arquivo da TV usa outro caminho): não têm botão no app atual. **!**
-Confirmar se são de uma funcionalidade planejada (bolsa/empresas) ou
-código morto.
+## Encontrados na 2ª conferência (chamadas montadas com variável e componentes)
+| Ação hoje | Onde fica | |
+|---|---|---|
+| Home: carrossel de Spotlight Banners e de Pre-save | Início › Para você (topo, abaixo do "Ao vivo") | D |
+| Home: ticker de atividade recente | Início › Para você | D |
+| Home: "Top por plataforma" e Global 100 #1 (liga/desliga por `homeFlags`) | Início › Para você | P (#1) / D (top) |
+| Catálogo: carrossel de banners do Social (`BannerCarousel`) | Catálogo › Início (topo) | D |
+| Catálogo: trocar plataforma das playlists (Spotify / Apple / YouTube) | Catálogo › Início › Por plataforma | P |
+| Tela da playlist: buscar dentro da lista, salvar / adicionar à playlist | página da playlist | D |
+| Vitrine de clipes do YouTube (por cima da playlist) | página da playlist › Clipes | D |
+| Player de música: expandir, ver letra, "Ver no Fórum" | player expandido (mini player → toque) | D |
+| Player de vídeo: mini player (popup), vídeos relacionados, "Ver no Fórum" | player de vídeo | D |
+| Comentários e reações direto na mídia (`CommentModal`, `ReactionBar`) | player e tópico | D |
+| Nota/score dos vídeos (`ScoreBadge`), selo verificado, selo de award | onde aparecem hoje (capas, nomes) | D |
+| Pre-save: contador público, selo no Fórum, ranking (leaderboard) | página do pre-save + tópico + Meus lançamentos › Pre-save | D |
+| Material antigo: editar e excluir álbum antigo (dono) | Meus lançamentos › Álbuns | D |
+| Turnês: missões (`/api/turnes/missoes`) | Início › Turnês + "Pra fazer hoje" | D |
+| Nova turnê: simulação de lucro (mínimo e máximo), escolha de locais | Criar › Nova turnê (tela atual) | D |
+| Empire TV: canais ao vivo da Kick | Início › Empire TV (cartão "Ao vivo") | D |
+| Empire TV: presença (tempo assistido vira prestígio) | automático na sala | D |
+| Empire TV: subir GIF, responder mensagem no chat | sala da TV › Chat | P (GIF) / D (responder) |
+| Social: postar como artista **ou como fã anônimo** (nome aleatório) | Criar › Post no Social (tela atual) | D |
+| Social: escolher rede (Instagram, TikTok, Twitter), anexar música, modo de publicação, texto rico com emoji | Criar › Post no Social (tela atual) | D |
+| Social: seguir perfis, ver stories | Social › Perfis e Feed | P |
+| Página de award (`/awards/$nome`) | Início › Acervo › Awards → página do award | D |
+| Notificações: marcar como lidas | sino | D |
+| Instalar o app (aviso) | igual | D |
+| Registro de erros, heartbeat do login | automático (sem tela) | D |
+
+## Fora deste projeto
+**Bolsa e Empresas** (`historicoBolsa`, `listarEmpresas`, `minhasEmpresas`
+no `api.ts`): ainda não foram lançadas e entram depois, no projeto
+**EmpireVerse**. Não ganham lugar na navegação agora. As três funções
+saem do `api.ts` na etapa de limpeza de código. Antes disso, é preciso
+confirmar se o backend das três tem algo que o EmpireVerse vá
+reaproveitar.
