@@ -288,12 +288,14 @@ function ListaAudioPlaylist({ id, playlist, erro, onTentarDeNovo, onFechar }: Te
             };
             return (
               <div
-                key={faixa.chave}
+                key={`${faixa.chave}:${faixa.pos}`}
                 role={track ? "button" : undefined}
                 tabIndex={track ? 0 : undefined}
                 aria-disabled={track ? undefined : true}
                 onClick={tocar}
                 onKeyDown={(e) => {
+                  // Só a própria linha: Enter/Espaço no botão "Salvar" de dentro não toca a faixa.
+                  if (e.target !== e.currentTarget) return;
                   if (track && (e.key === "Enter" || e.key === " ")) {
                     e.preventDefault();
                     tocar();

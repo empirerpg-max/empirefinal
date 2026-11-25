@@ -38,22 +38,25 @@ function montarCartao(f: FaixaPlaylist): Cartao {
 
 /**
  * Playlist do YouTube como vitrine de clipes (estilo página de playlist do
- * YouTube): painel com a capa do #1, título e "Tocar tudo"; ao lado/abaixo,
+ * YouTube): painel com a capa do #1, título e "Ver primeiro clipe"; ao lado/abaixo,
  * a lista de clipes com miniatura 16:9. Tocar um clipe abre o VideoPlayer
  * com os outros clipes da playlist na ordem. Faixa sem clipe mostra a capa
  * do material com o selo "Sem clipe" e toca o áudio (se houver).
  *
  * O vídeo aberto vive em estado local (não na lista): a atualização ao vivo
- * de 30 s da TelaPlaylist troca a lista sem fechar o vídeo.
+ * de 30 s da TelaPlaylist troca a lista sem fechar o vídeo. O cartão ativo é
+ * marcado pela `chave` da faixa (não pelo id do vídeo, que pode se repetir).
  */
 export function VitrineClipes({ id, playlist, erro, onTentarDeNovo, onFechar }: TelaProps) {
   const { currentTrack, playSong } = useEmpirePlayer();
   const [busca, setBusca] = useState("");
   const [videoAberto, setVideoAberto] = useState<PlayableVideo | null>(null);
+  const [chaveAberta, setChaveAberta] = useState<string | null>(null);
 
   useEffect(() => {
     setBusca("");
     setVideoAberto(null);
+    setChaveAberta(null);
   }, [id]);
 
   const faixas = playlist?.faixas ?? [];
@@ -69,6 +72,23 @@ export function VitrineClipes({ id, playlist, erro, onTentarDeNovo, onFechar }: 
     [cartoes],
   );
   const semClipe = cartoes.length - clipes.length;
+
+  const abrirClipe = (c: Cartao) => {
+    if (!c.video) return;
+    setVideoAberto(c.video);
+    setChaveAberta(c.faixa.chave);
+  };
+  // Vídeo escolhido na lateral do player: acha o cartão pelo mesmo objeto
+  // (vem de `clipes`); senão, o primeiro com o mesmo id.
+  const selecionarVideo = (v: PlayableVideo) => {
+    const c = cartoes.find((x) => x.video === v) ?? cartoes.find((x) => x.video?.id === v.id);
+    setVideoAberto(v);
+    setChaveAberta(c?.faixa.chave ?? null);
+  };
+  const fecharVideo = () => {
+    setVideoAberto(null);
+    setChaveAberta(null);
+  };
 
   const q = busca.toLowerCase().trim();
   const visiveis = q
@@ -151,13 +171,14 @@ export function VitrineClipes({ id, playlist, erro, onTentarDeNovo, onFechar }: 
               <button
                 type="button"
                 onClick={() => {
-                  if (clipes.length > 0) setVideoAberto(clipes[0]);
+                  const primeiro = cartoes.find((c) => c.video);
+                  if (primeiro) abrirClipe(primeiro);
                 }}
                 disabled={clipes.length === 0}
                 className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-black text-black hover:bg-white/90 disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition"
               >
                 <Play className="size-4 shrink-0 fill-black" />
-                <span className="truncate">Tocar tudo</span>
+                <span className="truncate">Ver primeiro clipe</span>
               </button>
               <div className="flex min-w-0 flex-1 basis-48 items-center gap-2 rounded-full bg-white/10 px-3 py-2.5">
                 <Search className="size-4 shrink-0 text-white/50" />
@@ -196,16 +217,16 @@ export function VitrineClipes({ id, playlist, erro, onTentarDeNovo, onFechar }: 
           ) : (
             <ol className="flex flex-col gap-1">
               {visiveis.map((c) => (
-                <li key={c.faixa.chave}>
+                <li key={`${c.faixa.chave}:${c.faixa.pos}`}>
                   <CartaoClipe
                     cartao={c}
                     ativo={
                       c.video
-                        ? !!videoAberto && videoAberto.id === c.video.id
+                        ? !!videoAberto && chaveAberta === c.faixa.chave
                         : !!c.track && !!currentTrack && currentTrack.id === c.track.id
                     }
                     onTocar={() => {
-                      if (c.video) setVideoAberto(c.video);
+                      if (c.video) abrirClipe(c);
                       else if (c.track) playSong(c.track, filaAudio);
                     }}
                   />
@@ -218,10 +239,10 @@ export function VitrineClipes({ id, playlist, erro, onTentarDeNovo, onFechar }: 
 
       <VideoPlayer
         video={videoAberto}
-        onClose={() => setVideoAberto(null)}
+        onClose={fecharVideo}
         relatedVideos={clipes}
         relatedTitulo="Nesta playlist"
-        onSelectVideo={setVideoAberto}
+        onSelectVideo={selecionarVideo}
       />
     </div>
   );
