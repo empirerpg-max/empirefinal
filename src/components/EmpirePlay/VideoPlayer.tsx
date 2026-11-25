@@ -48,9 +48,21 @@ interface VideoPlayerProps {
   // nada e a lateral some, em vez de quebrar.
   relatedVideos?: PlayableVideo[];
   onSelectVideo?: (video: PlayableVideo) => void;
+  /**
+   * Título da lateral quando `relatedVideos` é uma lista ordenada (ex.: os
+   * clipes de uma playlist). Com ele, a lateral mostra TODOS os outros
+   * vídeos da lista na ordem recebida, sem filtrar pelo artista.
+   */
+  relatedTitulo?: string;
 }
 
-export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo }: VideoPlayerProps) {
+export function VideoPlayer({
+  video,
+  onClose,
+  relatedVideos = [],
+  onSelectVideo,
+  relatedTitulo,
+}: VideoPlayerProps) {
   const [reporting, setReporting] = useState(false);
   // Otimista: assim que o report é aceito, já reflete no botão sem esperar
   // o próximo carregamento da lista (que traria reportPending do servidor).
@@ -115,7 +127,9 @@ export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo 
     }
   }
 
-  const outrosDoArtista = relatedVideos.filter((v) => v.id !== video.id && v.artista === video.artista);
+  const outrosDoArtista = relatedVideos.filter(
+    (v) => v.id !== video.id && (relatedTitulo != null || v.artista === video.artista),
+  );
 
   return (
     <div className="fixed inset-0 z-[130] bg-black/95 backdrop-blur-2xl flex flex-col justify-between animate-in fade-in duration-300 overflow-y-auto">
@@ -129,7 +143,9 @@ export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo 
             <span className="text-[10px] font-black uppercase tracking-widest text-red-500 block">
               {video.tipo_video || "Video Streaming"}
             </span>
-            <h2 className="text-sm sm:text-base font-black text-white truncate">{video.titulo}</h2>
+            <h2 className="text-sm sm:text-base font-black text-white leading-tight [overflow-wrap:anywhere]">
+              {video.titulo}
+            </h2>
           </div>
         </div>
 
@@ -208,17 +224,17 @@ export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo 
             {/* Detalhes do Vídeo */}
             <div className="w-full bg-neutral-900/60 border border-white/10 rounded-3xl p-6 backdrop-blur-md">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-4 mb-4">
-                <div>
-                  <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight">
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight [overflow-wrap:anywhere]">
                     {video.titulo}
                   </h1>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <p className="text-sm font-bold text-red-400">{video.artista}</p>
+                    <p className="text-sm font-bold text-red-400 [overflow-wrap:anywhere]">{video.artista}</p>
                     <ScoreBadge score={video.metacriticAvg} variant="likes" />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   {/* Sempre "Empire Play HD" — a fonte real (YouTube/Vimeo/Drive)
                       é um detalhe interno, o layout deve parecer o mesmo pro
                       jogador independente de onde o vídeo veio. */}
@@ -241,7 +257,7 @@ export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo 
           {outrosDoArtista.length > 0 && (
             <div className="flex-[1_1_300px] min-w-[260px] max-w-[380px] flex flex-col gap-3">
               <h3 className="px-0.5 text-[11px] font-black uppercase tracking-wider text-neutral-300">
-                Mais de {video.artista}
+                {relatedTitulo ?? `Mais de ${video.artista}`}
               </h3>
               {outrosDoArtista.map((v, idx) => (
                 <button
@@ -277,10 +293,10 @@ export function VideoPlayer({ video, onClose, relatedVideos = [], onSelectVideo 
                     </span>
                   </div>
                   <div className="min-w-0 flex flex-col gap-0.5 pt-0.5">
-                    <span className="text-xs font-bold text-neutral-100 group-hover:text-red-400 leading-snug line-clamp-2 transition-colors">
+                    <span className="text-xs font-bold text-neutral-100 group-hover:text-red-400 leading-snug [overflow-wrap:anywhere] transition-colors">
                       {v.titulo}
                     </span>
-                    <span className="text-[11px] text-neutral-500">{v.artista}</span>
+                    <span className="text-[11px] text-neutral-500 [overflow-wrap:anywhere]">{v.artista}</span>
                   </div>
                 </button>
               ))}

@@ -114,7 +114,8 @@ export interface ItemEmAlta {
 const PLATAFORMA_PESO: Record<PlataformaAoVivo, string> = { spotify: "SPOTIFY", apple: "APPLE MUSIC", youtube: "YOUTUBE" };
 const PLATAFORMAS_AO_VIVO = Object.keys(PLATAFORMA_PESO) as PlataformaAoVivo[];
 const GLOBAL_100 = "BILLBOARD HOT 100";
-const TTL_REFERENCIAS_MS = 5 * 60 * 1000;
+// 15 min: referências mudam pouco (pesos, nacionalidades, focos, config) e são lidas a cada recálculo do ao vivo.
+const TTL_REFERENCIAS_MS = 15 * 60 * 1000;
 
 /** ISO (YYYY-MM-DD) + 7 dias, em UTC: a data do próximo chart. */
 export function proximaDataChart(ultimaIso: string): string {

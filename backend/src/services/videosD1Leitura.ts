@@ -135,10 +135,14 @@ function montarAba(
   return out;
 }
 
-export async function linhasVideosD1(): Promise<string[][] | null> {
+/** `tipoVideo` opcional: só as linhas desse "Tipo de vídeo" (ex.: "Music Video"), filtradas no SQL sem diferença de caixa/espaços nas pontas. */
+export async function linhasVideosD1(tipoVideo?: string): Promise<string[][] | null> {
   const db = getCatalogoDb();
   if (!db) return null;
-  const rows = (await db.prepare("SELECT * FROM videos ORDER BY linha_planilha").all<Record<string, unknown>>()).results || [];
+  const consulta = tipoVideo
+    ? db.prepare("SELECT * FROM videos WHERE LOWER(TRIM(tipo_video)) = LOWER(?) ORDER BY linha_planilha").bind(tipoVideo)
+    : db.prepare("SELECT * FROM videos ORDER BY linha_planilha");
+  const rows = (await consulta.all<Record<string, unknown>>()).results || [];
   if (rows.length === 0) return null;
   return montarAba(
     VIDEOS_COLUNAS.map((c) => c.header),
