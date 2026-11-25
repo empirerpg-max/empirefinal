@@ -300,3 +300,16 @@ digitar; "Marcar todas como lidas" e "Configurar" nas notificações.
 Encontrado e registrado: página 404 em inglês. Não coberto ainda:
 **layout de computador/tablet** (o protótipo e o documento só tratam o
 celular) — ver próximos passos.
+
+## 7ª conferência: regras do tutorial do usuário (2026-11-25)
+Regras de uso que já existem e precisam continuar iguais (vieram do
+tutorial em Google Docs):
+| Regra hoje | Onde fica | |
+|---|---|---|
+| Vídeo: só a categoria **Music Video** conta para charts, **um por single** | Criar › Novo vídeo (tela atual) | D |
+| Vídeo: link de **Drive, YouTube ou Vimeo**, com compartilhamento público; upload direto possível (menos indicado) | Criar › Novo vídeo (tela atual) | D |
+| Vídeo: a música vinculada precisa já estar publicada | Criar › Novo vídeo (tela atual) | D |
+| Música: título só com nome e tags ([REMIX] etc.), featuring em campo próprio | Criar › Nova música (tela atual) | D |
+| Capa do artista com medidas diferentes para computador e celular, com explicação na tela | Página do artista › Gestão › Capa do perfil | P |
+| Retroativo pede data aproximada do lançamento real | Criar › Novo álbum › Retroativo (tela atual) | D |
+| Vincular artista: só moderação | Meu Império › Meus artistas › Gerenciar | P |

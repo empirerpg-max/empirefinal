@@ -99,10 +99,10 @@ E duas condições inegociáveis:
 | B | 4 abas por intenção (Ouvir, Charts, Social, Meu Império); Fórum só dentro de cada lançamento. | Mais enxuto, mas perde o feed de discussões. | Descartada: o Fórum precisa de lugar próprio. |
 | C | Manter os 10 itens, só reordenar e tirar duplicados. | Barato, pouco risco, mas não reduz caminhos. | Descartada: não atende o pedido. |
 
-**Como entregar (call meu):** em fases (seção 8), cada fase indo ao ar
-completa, com a lista de cobertura conferida. A navegação nova vai ao ar de
-uma vez (fase 1), não aos pedaços, para o jogador não conviver com dois
-menus.
+**Como entregar:** em fases (seção 8), sempre **dentro do Beta test**
+(6.11). A versão anterior continua funcionando até o admin ligar o Beta
+como obrigatório. Cada fase só entra no Beta com a lista de cobertura
+conferida.
 
 ---
 
@@ -866,6 +866,109 @@ vez (guardado no aparelho) e pode ser reaberta em Meu Império › Guia.
 - **Página 404** está em inglês ("Page not found", "Go home" em
   `__root.tsx`): passa a "Página não encontrada" e "Voltar ao Início".
 
+### 6.10 Computador e tablet
+
+A mesma estrutura, com a casca adaptada ao tamanho da tela (medida pela
+largura da área do app):
+
+| Largura | Navegação | Conteúdo | Player |
+|---|---|---|---|
+| até 699px (celular) | barra de baixo com 5 abas; topo com logo, BETA, ＋, lupa, sino, foto | 1 coluna | mini player acima da barra |
+| 700–999px (tablet) | **trilho lateral** com as 5 abas (ícone + nome); topo igual ao celular | grades com várias colunas (cartões de ~170px), prateleiras maiores | mini player flutuante embaixo |
+| 1000px ou mais (computador) | **barra lateral completa** (240px): logo, botão **Criar**, 5 abas, **Sua biblioteca** (Minhas playlists, Salvos), **Meu Império** (Perfil e economia, Meus lançamentos); topo com **campo de busca aberto**, sino e foto | conteúdo com largura máxima de ~1100px | **barra de player fixa** embaixo, de ponta a ponta (como no Spotify) |
+
+- Folhas (Criar, ⋯, Avaliar & Comentar) aparecem centralizadas, com
+  largura máxima de ~560px, no tablet e no computador.
+- Vídeos verticais (TikTok) ficam centralizados com no máximo 420px.
+- A capa do artista já tem versões para celular e computador; o
+  computador usa a de computador.
+- Regras de toque (U3) e de texto (R4) valem em todas as larguras.
+
+### 6.11 Beta test (convivência das duas versões)
+
+**Objetivo (pedido do usuário):** lançar a versão nova como **"Beta test"**,
+com um botão no topo para **voltar para a versão anterior** a qualquer
+momento. Assim, se algo der errado, o jogador volta e **reporta** o que
+aconteceu.
+
+**Quem vê o quê**
+- No lançamento, **todo jogador abre no Beta test** (call meu, lendo o
+  pedido: "liberar uma versão nova" com opção de voltar). O admin pode
+  mudar isso sem nova versão do app (ver "Chave do admin").
+- A escolha de cada jogador (**beta** ou **anterior**) fica salva **no
+  servidor**, no perfil dele, e também no aparelho para abrir rápido. Assim
+  ela vale no celular e no computador.
+
+**No Beta test**
+- Selo amarelo **BETA** no topo, ao lado do logo (no computador, ao lado da
+  busca). Tocar abre a folha **"Você está no Beta test"**:
+  - **Reportar um problema**;
+  - **Como usar** (tutorial, 6.12);
+  - **Voltar para a versão anterior**.
+- **Voltar:** confirmação com motivos opcionais (Não achei uma função · Algo
+  quebrou · Ficou lento · Prefiro o visual antigo · Outro) e texto livre.
+  "Voltar agora" salva a escolha, grava o motivo como um reporte (se houver)
+  e recarrega o app na versão anterior, **na tela equivalente** quando
+  existir (as URLs são as mesmas, 5.1).
+
+**Na versão anterior**
+- Uma faixa fina no topo: **"Versão anterior · Reportar · Ir para o Beta
+  test"**. É a única mudança visível na versão de hoje.
+
+**Reportar um problema** (nas duas versões)
+- Campos: **O que aconteceu?** (obrigatório), **Tela** (preenchida sozinha
+  com o nome da tela atual), **Anexar print** (opcional, mesmo upload de
+  imagem que o app já usa) e **Incluir dados técnicos** (ligado por padrão:
+  versão — beta ou anterior —, rota, aparelho e navegador, número da versão
+  do app (`__BUILD_ID__`) e os últimos erros que o app já captura em
+  `error-capture`).
+- Depois de enviar: "Recebido! A moderação vai olhar."
+- **Guardado no D1** (tabela nova, ex.: `beta_reporte`: id, jogador, versão,
+  tela, rota, texto, motivo, print, dados técnicos, status, data). Nada de
+  planilha.
+- O admin recebe uma **notificação** (mesmo sistema do sino/push).
+
+**Para o admin** (Meu Império › Admin)
+- **Reportes do Beta:** lista com filtro por status (Novo · Visto ·
+  Resolvido), tela e versão; abrir mostra tudo, inclusive o print.
+- **Chave do Beta test** (salva no servidor, efeito imediato para todos):
+  - **Ligado para todos** (padrão no lançamento): todos começam no Beta e
+    podem voltar.
+  - **Só convidados:** só quem o admin marcar vê o Beta (para testar com
+    poucos antes).
+  - **Desligado:** todo mundo volta para a versão anterior na próxima
+    abertura (botão de emergência se o Beta quebrar).
+  - **Obrigatório:** o Beta vira a única versão; o botão de voltar some.
+    É o passo antes de apagar o código antigo (fase 6).
+
+**Regras técnicas que não podem falhar**
+- **As duas versões usam o mesmo backend e os mesmos dados.** Toda mudança
+  de backend feita para o Beta precisa continuar funcionando para a versão
+  anterior enquanto ela existir (ex.: o Social no D1, 5.6.7, tem que servir
+  as duas telas).
+- As duas cascas convivem no mesmo app: a raiz decide qual barra, topo e
+  telas montar a partir da escolha do jogador. As URLs são as mesmas.
+- Trocar de versão nunca perde o que está tocando no player nem um texto
+  sendo digitado sem aviso (o app pergunta antes se houver rascunho).
+- Medir: quantos voltam para a anterior, por qual motivo e em qual tela.
+  É o termômetro do Beta.
+
+### 6.12 Tutorial "Como usar"
+
+- Duas versões do texto, mantidas no repositório e mostradas no app:
+  - `docs/tutorial/tutorial-beta-test.md` (versão nova);
+  - `docs/tutorial/tutorial-versao-anterior.md` (o tutorial do usuário,
+    revisado e completado).
+- **Onde aparece:** no Beta, em Meu Império › App › **Como usar** e na
+  folha do selo BETA; na versão anterior, no menu ☰ › Guia de
+  Sobrevivência. Uma alternância **Beta test | Versão anterior** no topo
+  deixa ler as duas.
+- Formato: um tema por bloco (abre e fecha), com avisos "Importante" em
+  destaque.
+- **As imagens do documento original** não vieram na leitura (só o texto):
+  precisam ser recolocadas, de preferência com capturas do app novo.
+- O aviso "O Empire Hub mudou de lugar" (6.8) tem um link para o tutorial.
+
 ---
 
 ## 7. Itens que mudam de texto (resquícios de Telegram)
@@ -897,7 +1000,7 @@ de 360px nos dois tamanhos de texto.
 | Fase | Conteúdo | Depende de |
 |---|---|---|
 | **0. Fundações** (nada visível muda) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query + cliente de API, tokens de cor com os valores atuais | — |
-| **1. Navegação** | topo (Criar, foto), barra de 5 abas, folha Criar, Meu Império, abas do Início, mapa de rota → aba, redirecionamentos, saída do ☰ e do Recarregar, textos de Telegram | 0 |
+| **1. Navegação (Beta test)** | casca nova inteira **atrás do Beta test** (6.11): topo, barra/trilho/barra lateral (6.10), Criar, Meu Império, abas do Início, aviso de mudança, tutorial; chave do admin, reportes e faixa na versão anterior | 0 |
 | **2. Charts** | Ao vivo = painel do Catálogo; `ChartPlaylist` (só tela). **Nenhuma mudança de backend nem de cálculo.** | 0, 1 |
 | **3. Catálogo e Fórum** | Catálogo Início novo, Buscar, Biblioteca, `PaginaLancamento` (tópico novo), Fórum na barra, `/meus-lancamentos` | 1, 2 (o painel sai do Catálogo na fase 2) |
 | **4. Social** | D1 do Social + migração, paginação, "Interagindo como", perfil único, configurar perfis, Repostar, Seguir, seguidores calculados, abas que não funcionavam, Compartilhar, saída do Mensagem | 0, 1 |
