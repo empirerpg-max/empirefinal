@@ -63,7 +63,7 @@ E duas condições inegociáveis:
 **Objetivos**
 - Barra de baixo com **5 abas que cabem na tela**: Início · Catálogo · Fórum · Charts · Social.
 - **Criar** sempre a 1 toque (＋ no topo). **Meu Império** (foto do jogador) a 1 toque.
-- Empire TV, Turnês e Acervo a **2 toques** (Início → aba).
+- Empire TV, Turnês e **Premiações** a **2 toques** (Início → aba); **Imprensa** (o antigo Acervo) a 2 toques (Social → aba).
 - Catálogo único (Início, Buscar, Biblioteca), Fórum com aba própria, ligados
   por uma página única de cada lançamento (o tópico, com comentários em
   destaque), aberta pelos dois lados.
@@ -159,7 +159,8 @@ redirecionamento o que deixou de ser tela própria.
 | `/` | Início › Para você | Início |
 | `/tv` | Início › Empire TV (mesma URL; a tela ganha a fileira de abas do Início em cima) | Início |
 | `/tours`, `/tours/$nome` | Início › Turnês (mesma URL) | Início |
-| `/acervo`, `/awards`, `/awards/$nome` | Início › Acervo (mesma URL) | Início |
+| `/acervo` | **Social › Imprensa** (mesma URL; a tela ganha a fileira de abas do Social) | Social |
+| `/awards`, `/awards/$nome` | **Início › Premiações › Resultados** (mesmas URLs) | Início |
 | `/empire-play` | Catálogo › Início (conteúdo novo, 5.3) | Catálogo |
 | `/empire-play/musicas` | **redireciona** → `/empire-play/buscar?tipo=musicas` | Catálogo |
 | `/empire-play/videos` | **redireciona** → `/empire-play/buscar?tipo=videos` | Catálogo |
@@ -216,8 +217,9 @@ nenhuma.
 ### 5.2 Início
 
 Fileira de abas no topo (rolável com seta, 6.1): **Para você · Empire TV ·
-Turnês · Acervo**. As três últimas são as telas atuais (`/tv`, `/tours`,
-`/acervo`) com essa fileira em cima.
+Turnês · Premiações** (decisão do usuário: o Acervo saiu do Início e virou
+Imprensa, no Social). Empire TV e Turnês são as telas atuais (`/tv`,
+`/tours`) com essa fileira em cima.
 
 **Para você** (de cima para baixo):
 
@@ -235,12 +237,23 @@ Turnês · Acervo**. As três últimas são as telas atuais (`/tv`, `/tours`,
 4. Seções que já existem hoje na home, na ordem de U8 e configuráveis por
    `homeFlags`: Meus Artistas, Lançamentos recentes, Global 100 #1, Top por
    plataforma, Próximos eventos, ticker de atividade, Últimas publicações do
-   Social, Revistas & Entrevistas.
+   Social, **Da Imprensa** (as edições novas de revistas e entrevistas; leva
+   ao Social › Imprensa).
 
-**Empire TV, Turnês, Acervo:** as telas de hoje, inteiras (Início/Grade/
-Arquivo/Red Carpet; Criar/Central/Em andamento/Finalizados/Mais Rentáveis;
-Revistas/Entrevistas/Forbes/Metacritic/Empirefork/Awards, **com esses nomes exatos**; o Empirefork mantém Best New Track, Top Artist do mês, curtir, comentar e Arquivo por mês). Mudanças só de
-casca: fileira de abas do Início em cima, fileiras roláveis com seta,
+**Premiações** *(aba nova, decisão do usuário)*: junta o que estava
+espalhado.
+- **Abertas agora:** Indicar (`/premiacoes/indicar`), Votação
+  (`/premiacoes/votacao`) e Inscrição em festival (`/festivais/inscricao`),
+  só quando o período estiver aberto (mesmas checagens dos popups diários).
+- **Resultados:** a lista de Awards e a página de cada award (o antigo
+  Acervo › Awards, `/awards` e `/awards/$nome`).
+- **Seus prêmios:** Prêmios já ganhos (retroativo, `/premiacoes`).
+- As telas de indicar, votar, retroativo e festival continuam as de hoje.
+  Meu Império mantém atalhos para elas.
+
+**Empire TV, Turnês:** as telas de hoje, inteiras (Início/Grade/
+Arquivo/Red Carpet; Criar/Central/Em andamento/Finalizados/Mais
+Rentáveis). Mudanças só de casca: fileira de abas do Início em cima, fileiras roláveis com seta,
 "Criar turnê" também disponível no Criar. Na grade da TV, o botão
 **Lembrar** *(NOVO)* avisa por notificação quando o programa começa (call
 meu; usa o push que já existe).
@@ -326,8 +339,8 @@ conferir item por item na página nova. A lista mínima está abaixo.
    > **Regra das notas (não mudar):** em **músicas e álbuns, a nota
    > (Metacritic) nunca aparece no Fórum**, nem a média, nem a nota de cada
    > comentário. O jogador dá a nota ao comentar, e ela só aparece no
-   > **Acervo › Metacritic** (ranking atualizado **semanalmente**, para
-   > ninguém inferir quem deu nota para quem) e no **Acervo › Empirefork**
+   > **Imprensa › Metacritic** (ranking atualizado **semanalmente**, para
+   > ninguém inferir quem deu nota para quem) e na **Imprensa › Empirefork**
    > (Best New Track usa a nota Metacritic). Em **vídeos**, a nota é de
    > Likes e aparece no Fórum (média e em cada comentário), como hoje.
 3. Ações (U5): **Tocar** (álbum: toca as faixas com áudio em ordem;
@@ -350,7 +363,7 @@ conferir item por item na página nova. A lista mínima está abaixo.
      "Em questão de Likes, qual o intervalo que você daria?". Os mesmos 4
      intervalos de hoje (45-60, 61-75, 76-90, 91-100);
    - em música/álbum, uma linha avisando que a nota vai para o Metacritic
-     do Acervo e não aparece no Fórum *(NOVO, só texto)*;
+     da Imprensa e não aparece no Fórum *(NOVO, só texto)*;
    - **Ver todos** (rola até a lista).
    - **Sem gráfico de notas** (ideia descartada: revelaria as notas).
 6. Conteúdo do tipo (abaixo).
@@ -471,7 +484,8 @@ leitura.
 ### 5.6 Social
 
 Mesma URL (`/social`, `?postId=&artist=`). Fileira de abas (rolável com
-seta): **Feed · Vídeos · Tá na Mídia · Perfis · News** (nomes de hoje). A aba **Config sai**
+seta): **Feed · Vídeos · Tá na Mídia · Imprensa · Perfis**. A aba **News**
+entra na **Imprensa** (decisão do usuário), e a aba **Config sai**
 e vira "Configurar meus perfis" (5.6.3).
 
 #### 5.6.1 "Interagindo como" sempre visível
@@ -548,8 +562,21 @@ em vermelho. Mantém o recorte de foto em círculo e o "Usar original".
 (o visualizador `setTiktokViewer` que já existe), com som/sem som.
 **Tá na Mídia:** grade dos perfis de mídia compartilhados (como hoje).
 **Perfis:** busca por nome ou @ + lista de artistas → página do perfil.
-**News:** matérias (como hoje), com "Publicar notícia" e ⋯ para quem tem
-permissão.
+**Imprensa** *(o antigo Acervo + a News, decisão do usuário)*: fileira
+**News · Revistas · Entrevistas · Forbes · Metacritic · Empirefork**, com
+os nomes e o conteúdo de hoje:
+- **News:** matérias, com "Publicar notícia" e ⋯ para quem tem permissão
+  (inclusive as notícias que vêm das ações de turnê, que continuam abrindo
+  os comentários da turnê);
+- **Revistas** e **Entrevistas:** edições, "Ler revista", editor por
+  páginas e perguntas, "Publicar" para quem tem permissão;
+- **Forbes**;
+- **Metacritic:** ranking semanal (Destaques, Ranking, Artistas, Recentes,
+  Estilo, Ano), "Ver música" e "Ver artista";
+- **Empirefork:** Best New Track, Top Artist do mês, curtir, comentar e
+  Arquivo por mês.
+**Tá na Mídia** continua separada: são os perfis de mídia que postam no
+feed. A Imprensa é o lugar de ler.
 
 #### 5.6.5 Repostar e Seguir (decisões do usuário)
 
@@ -703,7 +730,7 @@ Abre ao tocar na foto do jogador. Grupos, nesta ordem:
 4. **Estúdio:** Meus lançamentos · Meus Spotlight Banners · Performance
    Award (quando pendente).
 5. **Economia:** Ponto · Market · Leilão · Como ganhar prestígio.
-6. **Premiações e festivais:** Indicar · Votação · Prêmios já ganhos
+6. **Premiações e festivais:** **Abrir Premiações** (→ Início › Premiações) · Indicar · Votação · Prêmios já ganhos
    (retroativo) · Inscrição em festival.
 7. **Biblioteca:** Salvos · Minhas playlists (atalhos para o Catálogo).
 8. **Aparência:** Escuro · Claro · Sistema (5.10).
@@ -832,10 +859,10 @@ Aplicadas no protótipo (versão 12) e obrigatórias no app:
 | U5 | **Página do lançamento:** Tocar + 2º botão ocupam a linha; ♡ e ⋯ ficam no cabeçalho da tela; selos numa linha só que rola. |
 | U6 | **Social:** o filtro de rede é o botão "Redes ▾" ao lado de "Interagindo como" (uma folha com Todas/Instagram/Twitter/TikTok), não uma fileira a mais. |
 | U7 | **Fórum:** botão de filtros (artista, datas) dentro do campo de busca; "Não comentei" é a última opção da fileira Tudo/Músicas/Vídeos/Álbuns. |
-| U8 | **Início › Para você:** ordem = Ao vivo → **Pra fazer hoje** → banners → Meus artistas → Lançamentos → Global 100 #1 → Top por plataforma → Próximos eventos → ticker → Social → Acervo. A ordem continua configurável por `homeFlags`. |
+| U8 | **Início › Para você:** ordem = Ao vivo → **Pra fazer hoje** → banners → Meus artistas → Lançamentos → Global 100 #1 → Top por plataforma → Próximos eventos → ticker → Social → Da Imprensa. A ordem continua configurável por `homeFlags`. |
 | U9 | **Estados obrigatórios em toda tela nova:** carregando (esqueleto no formato do conteúdo), vazio (frase do que falta + ação) e erro (o que deu errado + "Tentar de novo"), reaproveitando o `LoadErrorState`. |
 | U10 | **Cada aba lembra onde parou** ao trocar de aba; tocar na aba ativa volta ao topo. |
-| U11 | **Deslizar para o lado** troca entre Para você, Empire TV, Turnês e Acervo (fora de fileiras roláveis). |
+| U11 | **Deslizar para o lado** troca entre Para você, Empire TV, Turnês e Premiações (fora de fileiras roláveis). |
 | U12 | **Puxar para atualizar** com indicador "Solte para atualizar" → "Atualizando…", em toda tela com lista. |
 | U13 | **Cor por papel** (**aprovada**, D3): roxo = ação e link; aba/opção ativa = branco no escuro e roxo no claro; verde = tocar, alta e "tocando"; vermelho = ao vivo e queda; dourado = coroa/prêmio. |
 
@@ -861,7 +888,7 @@ número calculado (5.6.6).
 ### 6.8 Mudança de lugar: aviso ao jogador *(NOVO)*
 
 Na primeira abertura do app novo, uma folha **"O Empire Hub mudou de
-lugar"** mostra onde ficou cada coisa (Empire TV/Turnês/Acervo → Início;
+lugar"** mostra onde ficou cada coisa (Empire TV/Turnês/Premiações → Início; Acervo → Social › Imprensa;
 Gestão e Pre-save → Criar; Perfil, Ponto, Market, Premiações → sua foto;
 Fórum → aba própria; playlists ao vivo → Charts › Ao vivo). Aparece uma
 vez (guardado no aparelho) e pode ser reaberta em Meu Império › Guia.

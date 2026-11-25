@@ -313,3 +313,12 @@ tutorial em Google Docs):
 | Capa do artista com medidas diferentes para computador e celular, com explicação na tela | Página do artista › Gestão › Capa do perfil | P |
 | Retroativo pede data aproximada do lançamento real | Criar › Novo álbum › Retroativo (tela atual) | D |
 | Vincular artista: só moderação | Meu Império › Meus artistas › Gerenciar | P |
+
+## Decisão do usuário: Acervo → Imprensa (Social) e Premiações (Início) (2026-11-25)
+| Ação hoje | Onde fica agora | |
+|---|---|---|
+| Acervo: Revistas, Entrevistas, Forbes, Metacritic, Empirefork (tudo o que já estava listado) | **Social › Imprensa** (mesmos nomes e conteúdo) | P |
+| Social › News (matérias, publicar, editar, excluir) | **Social › Imprensa › News** | P |
+| Acervo › Awards (lista e `/awards/$nome`) | **Início › Premiações › Resultados** | P |
+| Perfil › Premiações (Retroativo, Indicar, Votação) e Festivais (Inscrição) | **Início › Premiações** (Abertas agora, Seus prêmios) + atalhos em Meu Império | P |
+| Seção "Revistas & Entrevistas" da home | Início › Para você › **Da Imprensa** | P |

@@ -196,7 +196,7 @@ houver), faixas com a letra de cada uma, encarte e os **comentários**.
 
 - **Avaliar & Comentar:** em música e álbum, você dá uma **nota para o
   Metacritic** e escreve o comentário. **A nota não aparece no Fórum:** ela
-  entra no ranking do **Acervo › Metacritic**, atualizado toda semana. Em
+  entra no ranking da **Imprensa › Metacritic** (no Social), atualizado toda semana. Em
   vídeo, a nota é de **Likes**.
 - **Responder**, **reagir** com emoji e **editar** o seu comentário no ⋯.
 - **Filtros:** Tudo, Músicas, Vídeos, Álbuns e **Não comentei** (os que
@@ -223,8 +223,11 @@ houver), faixas com a letra de cada uma, encarte e os **comentários**.
   perfil de mídia) você curte, comenta, reposta, segue e posta.
 - **Feed:** posts das três redes; o botão **Redes** filtra uma só.
   **Vídeos:** os TikToks em tela cheia. **Tá na Mídia:** perfis de mídia
-  que qualquer jogador pode usar. **Perfis:** encontre artistas. **News:**
-  matérias.
+  que qualquer jogador pode usar. **Imprensa:** o lugar de ler (veja
+  abaixo). **Perfis:** encontre artistas.
+- **Imprensa** (o antigo Acervo): **News** (matérias), **Revistas**,
+  **Entrevistas**, **Forbes**, **Metacritic** (ranking semanal das notas)
+  e **Empirefork** (Best New Track e Top Artist do mês).
 - **Postar:** ＋ Criar › Post no Social. Escolha a rede, Feed ou Story,
   foto/vídeo ou música, com ou sem som. No modo **Blackout**, o post sai
   com outro nome.
@@ -238,7 +241,7 @@ houver), faixas com a letra de cada uma, encarte e os **comentários**.
 
 ---
 
-## 11. Empire TV, Turnês e Acervo (abas do Início)
+## 11. Empire TV, Turnês e Premiações (abas do Início)
 
 - **Empire TV:** quando há transmissão, o cartão **Ao vivo** aparece no
   topo do Início. **Entrar na sala** abre o vídeo com chat (GIFs,
@@ -247,13 +250,16 @@ houver), faixas com a letra de cada uma, encarte e os **comentários**.
 - **Turnês:** crie em ＋ Criar › Nova turnê (com simulação de lucro). Todo
   dia, faça a **ação do dia** (aparece em Pra fazer hoje). Acompanhe
   arrecadação, calendário e notícias.
-- **Acervo:** Revistas, Entrevistas, Forbes, **Metacritic** (ranking
-  semanal das notas), **Empirefork** (Best New Track e Top Artist do mês)
-  e Awards.
+- **Premiações:** tudo de prêmios num lugar só.
+  - **Abertas agora:** indicar seus lançamentos, votar (com termo de voto
+    e notas) e se inscrever em festivais, enquanto estiverem abertos.
+    Quando algo abre, um aviso aparece uma vez por dia.
+  - **Resultados:** os vencedores de cada award.
+  - **Seus prêmios:** registre prêmios já ganhos (retroativo).
 
 ---
 
-## 12. Economia, premiações e festivais (Meu Império)
+## 12. Economia (Meu Império)
 
 - **Ponto** (também em **Charts › Meu Ponto** e em **Pra fazer hoje**,
   quando há pontos para distribuir): distribua seus pontos (aleatório ou manual), aplique em
@@ -261,9 +267,8 @@ houver), faixas com a letra de cada uma, encarte e os **comentários**.
 - **Market:** produtos e **Spotlight Banner** (destaque do seu lançamento
   por até 4 dias), pagos com o saldo em eCoin do artista. **Leilão:** dê
   ou substitua seu lance.
-- **Premiações:** indique, vote (com termo de voto e notas) e registre
-  prêmios já ganhos (retroativo). **Festivais:** faça a inscrição.
-  Quando algo estiver aberto, um aviso aparece uma vez por dia.
+- **Premiações e festivais** também têm atalhos aqui, que abrem Início ›
+  Premiações.
 
 ---
 
