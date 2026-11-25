@@ -7,7 +7,7 @@ import {
 import { buildCleanItem } from "./empirePlayController";
 import { cachedRead } from "../services/shortCache";
 import { getCatalogoDb } from "../services/catalogoDbService";
-import { carregarArtistas, importacaoFeita } from "../services/artistasD1";
+import { carregarArtistas, importacaoFeitaEmCache } from "../services/artistasD1";
 
 // Fonte: mesma planilha "premiacoes" usada em Perfil > Premiações
 // (premiacoesController.ts), mas aqui é leitura pública/histórica pro botão
@@ -88,7 +88,7 @@ export async function buildFotoPorArtista(): Promise<Map<string, string>> {
   const mapa = new Map<string, string>();
   // Depois da importação única: foto do espelho D1 de artistas, sem planilha
   const db = getCatalogoDb();
-  if (db && (await importacaoFeita(db).catch(() => false))) {
+  if (db && (await importacaoFeitaEmCache(db).catch(() => false))) {
     for (const a of (await carregarArtistas(db)).values()) {
       const nome = normalizeComparison(a.nome);
       const foto = normalizeText(a.fotoUrl);

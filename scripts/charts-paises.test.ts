@@ -855,3 +855,28 @@ test("referenciasArtistasParaCharts: sem tabela artista_info nem espelho → lis
   limparCacheArtistas();
   expect(await referenciasArtistasParaCharts(db)).toEqual([]);
 });
+
+test("referenciasArtistasParaCharts: act só da INFOS ACTS (fora da ARTISTAS) mantém a nacionalidade depois da importação", async () => {
+  const db = await bancoDeTeste();
+  limparCacheArtistas();
+  const antes = await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map());
+  semearEspelho(db);
+  db.exec("DELETE FROM artistas WHERE nome = 'Carl'"); // Carl só existe em artista_info
+  limparCacheArtistas();
+  const ref = await referenciasArtistasParaCharts(db);
+  expect(ref.map((r) => r.nome_upper)).toEqual(["AMANDA", "BOB", "CARL"]);
+  expect(ref.find((r) => r.nome_upper === "CARL")!.nacionalidade).not.toBe("");
+  expect(await calcularSemanaPaises(db, "11/11/2026", new Map(), new Map())).toEqual(antes);
+});
+
+import { carregarFotos, carregarGenerosArtistas } from "../backend/src/services/chartsD1/repo";
+
+test("carregarFotos/carregarGenerosArtistas: foto e gênero do espelho chegam aos charts", async () => {
+  const db = await bancoDeTeste();
+  semearEspelho(db);
+  db.exec("UPDATE artistas SET foto_url = 'http://foto-bob', genero_principal = 'POP' WHERE nome = 'Bob'");
+  limparCacheArtistas();
+  expect((await carregarFotos(db)).get("BOB")).toBe("http://foto-bob");
+  expect((await carregarGenerosArtistas(db)).get("BOB")).toBe("POP");
+  expect((await carregarGenerosArtistas(db)).has("AMANDA")).toBe(false);
+});

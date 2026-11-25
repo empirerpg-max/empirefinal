@@ -13,7 +13,7 @@ import {
   buscarArtista,
   carregarArtistas,
   gravarPerfil,
-  importacaoFeita,
+  importacaoFeitaEmCache,
   registrarArtistaNovo,
   type CamposEditaveis,
 } from "../services/artistasD1";
@@ -23,7 +23,8 @@ import { copiaEmSegundoPlano, ERRO_SO_DONO, permissaoDeEdicao } from "./artistas
 type Ctx = { waitUntil: (promise: Promise<unknown>) => void };
 
 /**
- * Espelho D1 de artistas pronto (importação única já feita)? Só então os
+ * Espelho D1 de artistas pronto (importação única já feita; marca em cache
+ * de 5 min, sem CREATE TABLE por requisição)? Só então os
  * endpoints antigos de perfil passam por ele; antes disso (estreia, ou sem
  * D1 no ambiente) seguem o caminho anterior. Depois da importação, nada
  * aqui lê a INFOS ACTS.
@@ -32,7 +33,7 @@ async function espelhoPronto(): Promise<D1DatabaseLike | null> {
   const db = getCatalogoDb();
   if (!db) return null;
   try {
-    return (await importacaoFeita(db)) ? db : null;
+    return (await importacaoFeitaEmCache(db)) ? db : null;
   } catch (e) {
     console.warn("[artistasController] Não deu para conferir o espelho D1 de artistas:", e);
     return null;
@@ -57,7 +58,7 @@ async function gravarPeloEspelho(
   if (!permissao.ok) {
     return new Response(JSON.stringify({ success: false, error: ERRO_SO_DONO }), { status: 403, headers: JSON_UTF8 });
   }
-  const r = await gravarPerfil(db, artista.idUnico, campos, permissao.ehAdmin, copiaEmSegundoPlano(ctx));
+  const r = await gravarPerfil(db, artista.idUnico, campos, permissao.ehAdmin, copiaEmSegundoPlano(db, ctx));
   if (!r.ok) {
     return new Response(JSON.stringify({ success: false, error: r.erro }), { status: r.status, headers: JSON_UTF8 });
   }

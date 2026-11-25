@@ -676,18 +676,10 @@ export async function carregarFotos(db: D1DatabaseLike): Promise<Map<string, str
   return new Map(rows.filter((r) => r.foto).map((r) => [r.nome_upper, r.foto]));
 }
 
-/**
- * Gênero de cada artista (artista_info.genero, da INFOS ACTS) por nome_upper.
- * Banco anterior à coluna genero (migração ainda não rodou) → mapa vazio.
- */
+/** Gênero de cada artista (espelho; antes da importação, artista_info) por nome_upper. */
 export async function carregarGenerosArtistas(db: D1DatabaseLike): Promise<Map<string, string>> {
-  try {
-    const rows = await referenciasArtistasParaCharts(db);
-    return new Map(rows.filter((r) => r.genero).map((r) => [r.nome_upper, String(r.genero).trim()]));
-  } catch (e) {
-    if (/no such column/i.test(e instanceof Error ? e.message : String(e))) return new Map();
-    throw e;
-  }
+  const rows = await referenciasArtistasParaCharts(db);
+  return new Map(rows.filter((r) => r.genero).map((r) => [r.nome_upper, String(r.genero).trim()]));
 }
 
 /**

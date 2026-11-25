@@ -1,13 +1,14 @@
 // Perfil do artista lido do espelho D1 (tabela `artistas`) e editado pelo
 // dono/admin: GET/POST /api/artistas/perfil, GET /api/artistas/generos e as
 // rotas de admin (importar, atualizar a partir da planilha). Também o passo
-// do cron de 10 min (importação única / reconciliação de hora em hora).
+// do cron de 10 min (importação única, fila de cópia para a planilha e
+// reconciliação de hora em hora).
 import { getCatalogoDb, type D1DatabaseLike } from "../services/catalogoDbService";
 import {
   atualizarDaPlanilha,
   buscarArtista,
-  copiarCelulasArtistas,
-  copiarParaArtistas,
+  descarregarPendencias,
+  enfileirarPendencias,
   fontesDaPlanilha,
   gravarPerfil,
   importacaoFeita,
@@ -17,6 +18,7 @@ import {
   type Artista,
   type CamposEditaveis,
   type CelulaArtistas,
+  type ResultadoDescarga,
 } from "../services/artistasD1";
 import { googleSheetsService } from "../services/googleSheetsService";
 import { extractBearerToken, requestProvesAdmin, verifySessionToken } from "../services/sessionService";
@@ -26,6 +28,7 @@ type Ctx = { waitUntil: (promise: Promise<unknown>) => void };
 export const ERRO_SO_DONO = "Só o dono do artista pode editar.";
 const ABA_ARTISTAS = "ARTISTAS";
 const MARCA_RECONCILIADO = "artistas_d1_reconciliado_em";
+const MARCA_IMPORTACAO_TENTADA = "artistas_d1_importacao_tentada_em";
 const UMA_HORA_MS = 60 * 60 * 1000;
 
 function json(body: unknown, status = 200): Response {
@@ -52,39 +55,43 @@ export async function permissaoDeEdicao(
 }
 
 /**
- * `copiar` do gravarPerfil: a cópia para a aba ARTISTAS roda em segundo
- * plano (ctx.waitUntil) quando dá, com uma nova tentativa se o Google
- * recusar; falha só é logada (a edição no D1 já valeu).
+ * `copiar` do gravarPerfil: as células entram na fila de cópia
+ * (artistas_pendencias_planilha) antes de tudo e a cópia para a aba
+ * ARTISTAS roda em segundo plano (ctx.waitUntil) quando dá, com uma nova
+ * tentativa se o Google recusar. O que não for aceito fica na fila e o cron
+ * tenta de novo; a edição no D1 já valeu.
  */
-export function copiaEmSegundoPlano(ctx?: Ctx) {
-  return (celulas: { coluna: string; valor: string }[], linha: number): Promise<void> => {
-    const tarefa = copiarParaArtistas(celulas, linha)
-      .catch(() => copiarParaArtistas(celulas, linha))
-      .catch((e) => console.warn(`[artistasPerfil] Cópia para a ARTISTAS falhou (linha ${linha}):`, e));
+export function copiaEmSegundoPlano(db: D1DatabaseLike, ctx?: Ctx) {
+  return async (celulas: { coluna: string; valor: string }[], idUnico: string): Promise<void> => {
+    await enfileirarPendencias(db, celulas.map((c) => ({ ...c, idUnico })));
+    const tarefa = descarregarPendencias(db, [idUnico])
+      .then((r) => (r.restantes ? descarregarPendencias(db, [idUnico]) : r))
+      .then((r) => {
+        if (r.restantes) console.warn(`[artistasPerfil] Cópia para a ARTISTAS ficou na fila (${idUnico}):`, r.erro);
+      })
+      .catch((e) => console.warn(`[artistasPerfil] Cópia para a ARTISTAS falhou (${idUnico}):`, e));
     if (ctx?.waitUntil) {
       ctx.waitUntil(tarefa);
-      return Promise.resolve();
+      return;
     }
-    return tarefa;
+    await tarefa;
   };
 }
 
-/** Escreve na ARTISTAS as células que a importação completou a partir da INFOS ACTS. */
-async function copiarCelulasDaImportacao(celulas: CelulaArtistas[]): Promise<string> {
-  if (!celulas.length) return "nada a copiar";
-  try {
-    await copiarCelulasArtistas(celulas);
-    return "ok";
-  } catch (e1) {
-    try {
-      await copiarCelulasArtistas(celulas);
-      return "ok";
-    } catch (e2) {
-      console.warn("[artistasPerfil] Cópia das células da importação falhou:", e1, e2);
-      return `falhou: ${String((e2 as Error)?.message ?? e2)}`;
-    }
-  }
+/** Texto curto do resultado de uma descarga da fila (para o admin/cron). */
+function textoDescarga(r: ResultadoDescarga): string {
+  if (r.restantes) return `falhou: ${r.erro ?? "células ainda na fila"} (${r.restantes} na fila)`;
+  return r.escritas || r.descartadas ? "ok" : "nada a copiar";
 }
+
+/** Põe na fila as células que a importação trouxe da INFOS ACTS e tenta copiá-las já. */
+async function copiarCelulasDaImportacao(db: D1DatabaseLike, celulas: CelulaArtistas[]): Promise<string> {
+  if (!celulas.length) return "nada a copiar";
+  await enfileirarPendencias(db, celulas);
+  return textoDescarga(await descarregarPendencias(db));
+}
+
+export const ERRO_PENDENCIAS = "Há alterações aguardando cópia para a planilha. Tente de novo em alguns minutos.";
 
 /** Campos editáveis aceitos no corpo do POST (o resto é ignorado). */
 function camposDoCorpo(corpo: Record<string, unknown>): CamposEditaveis {
@@ -112,20 +119,25 @@ async function postPerfil(db: D1DatabaseLike, request: Request, ctx?: Ctx): Prom
   if (!artista) return json({ success: false, error: "Artista não encontrado." }, 404);
   const permissao = await permissaoDeEdicao(request, artista);
   if (!permissao.ok) return json({ success: false, error: ERRO_SO_DONO }, 403);
-  const r = await gravarPerfil(db, artista.idUnico, camposDoCorpo(corpo), permissao.ehAdmin, copiaEmSegundoPlano(ctx));
+  const r = await gravarPerfil(db, artista.idUnico, camposDoCorpo(corpo), permissao.ehAdmin, copiaEmSegundoPlano(db, ctx));
   if (!r.ok) return json({ success: false, error: r.erro }, r.status);
   return json({ success: true, data: r.artista });
 }
 
 async function postImportar(db: D1DatabaseLike): Promise<Response> {
   const r = await importarArtistas(db);
-  const copiaPlanilha = await copiarCelulasDaImportacao(r.celulas);
+  const copiaPlanilha = await copiarCelulasDaImportacao(db, r.celulas);
   return json({ success: true, data: { total: r.total, complementados: r.complementados, celulas: r.celulas.length, copiaPlanilha } });
 }
 
 async function postAtualizarDaPlanilha(db: D1DatabaseLike, request: Request): Promise<Response> {
   const corpo = (await request.json().catch(() => ({}))) as { idUnico?: unknown };
   const idUnico = typeof corpo.idUnico === "string" && corpo.idUnico.trim() ? corpo.idUnico.trim() : undefined;
+  // Antes de sobrescrever o app com a planilha, a planilha tem de ter as
+  // edições do app: descarrega a fila (do artista ou de todos); se ainda
+  // sobrar algo, recusa — senão dados velhos da planilha apagariam edições.
+  const fila = await descarregarPendencias(db, idUnico ? [idUnico] : undefined);
+  if (fila.restantes) return json({ success: false, error: ERRO_PENDENCIAS }, 409);
   // Leitura sem cache: o admin acabou de corrigir a planilha
   const linhas = await googleSheetsService.usuarios.readValuesFresh(ABA_ARTISTAS);
   const data = await atualizarDaPlanilha(db, linhas, idUnico);
@@ -164,36 +176,50 @@ export async function artistasPerfilController(request: Request, ctx?: Ctx): Pro
 }
 
 /**
- * Passo do cron de 10 min: sem a marca da importação, roda a importação
- * única (com a cópia das células completadas para a ARTISTAS); depois dela,
- * a reconciliação planilha -> D1 no máximo 1x por hora (hora da última
- * tentativa em chart_config). Devolve o que fez.
+ * Passo do cron de 10 min. Sem a marca da importação, roda a importação
+ * única (no máximo 1 tentativa por hora enquanto falhar — hora da última
+ * tentativa em chart_config), já com a cópia das células completadas para
+ * a ARTISTAS. Depois dela: a cada execução, tenta copiar a fila de
+ * pendências (uma leitura + uma gravação batch, só se houver fila) e a
+ * reconciliação planilha -> D1 roda no máximo 1x por hora. Devolve o que fez.
  */
 export async function rodarCronArtistas(
   db: D1DatabaseLike,
   agora: Date = new Date(),
   deps: {
     fontes?: ReturnType<typeof fontesDaPlanilha>;
-    copiarCelulas?: (celulas: CelulaArtistas[]) => Promise<string>;
+    descarregar?: (db: D1DatabaseLike) => Promise<ResultadoDescarga>;
   } = {},
-): Promise<{ acao: "importou"; total: number; copiaPlanilha: string } | { acao: "reconciliou"; mudancas: number } | { acao: "nada" }> {
+): Promise<
+  | { acao: "importou"; total: number; copiaPlanilha: string }
+  | { acao: "reconciliou"; mudancas: number; pendencias?: string }
+  | { acao: "nada"; pendencias?: string }
+> {
   const fontes = deps.fontes ?? fontesDaPlanilha();
+  const descarregar = deps.descarregar ?? ((d: D1DatabaseLike) => descarregarPendencias(d));
+  const recente = async (chave: string): Promise<boolean> => {
+    const { results } = await db.prepare("SELECT valor FROM chart_config WHERE chave = ?").bind(chave).all<{ valor: string }>();
+    const ultima = Date.parse(results[0]?.valor ?? "");
+    return Number.isFinite(ultima) && agora.getTime() - ultima < UMA_HORA_MS;
+  };
+  // Marca antes de ler: uma planilha fora do ar não vira leitura a cada 10 min
+  const marcar = (chave: string) =>
+    db.prepare("INSERT OR REPLACE INTO chart_config (chave, valor) VALUES (?, ?)").bind(chave, agora.toISOString()).run();
+
   if (!(await importacaoFeita(db))) {
+    if (await recente(MARCA_IMPORTACAO_TENTADA)) return { acao: "nada" };
+    await marcar(MARCA_IMPORTACAO_TENTADA);
     const r = await importarArtistas(db, fontes, agora);
-    const copiaPlanilha = await (deps.copiarCelulas ?? copiarCelulasDaImportacao)(r.celulas);
+    if (r.celulas.length) await enfileirarPendencias(db, r.celulas, agora);
+    const copiaPlanilha = r.celulas.length ? textoDescarga(await descarregar(db)) : "nada a copiar";
     return { acao: "importou", total: r.total, copiaPlanilha };
   }
-  const { results } = await db
-    .prepare("SELECT valor FROM chart_config WHERE chave = ?")
-    .bind(MARCA_RECONCILIADO)
-    .all<{ valor: string }>();
-  const ultima = Date.parse(results[0]?.valor ?? "");
-  if (Number.isFinite(ultima) && agora.getTime() - ultima < UMA_HORA_MS) return { acao: "nada" };
-  // Marca antes de ler: uma planilha fora do ar não vira leitura a cada 10 min
-  await db
-    .prepare("INSERT OR REPLACE INTO chart_config (chave, valor) VALUES (?, ?)")
-    .bind(MARCA_RECONCILIADO, agora.toISOString())
-    .run();
+
+  const fila = await descarregar(db);
+  const pendencias = fila.escritas || fila.descartadas || fila.restantes ? textoDescarga(fila) : undefined;
+  const extra = pendencias ? { pendencias } : {};
+  if (await recente(MARCA_RECONCILIADO)) return { acao: "nada", ...extra };
+  await marcar(MARCA_RECONCILIADO);
   const mudancas = await reconciliarArtistas(db, await fontes.artistas(), agora);
-  return { acao: "reconciliou", mudancas };
+  return { acao: "reconciliou", mudancas, ...extra };
 }

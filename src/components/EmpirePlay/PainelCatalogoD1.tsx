@@ -193,8 +193,7 @@ export function PainelCatalogoD1() {
                   acao("artistas", async () => {
                     const r = await atualizarArtistasDaPlanilha();
                     const n = r.filter((x) => x.campos.length > 0).length;
-                    if (!n) return `Nada mudou (${r.length} artistas conferidos).`;
-                    return `${n} ${n === 1 ? "artista atualizado" : "artistas atualizados"} (de ${r.length} conferidos).`;
+                    return n ? `${n} artistas atualizados` : "Nada mudou.";
                   });
                 }}
                 className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-[11px] font-bold disabled:opacity-50 min-w-0"

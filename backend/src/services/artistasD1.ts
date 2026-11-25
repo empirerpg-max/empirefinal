@@ -26,6 +26,16 @@ export const ARTISTAS_SCHEMA: string[] = [
     atualizado_em TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_artistas_nome_chave ON artistas (nome_chave)`,
+  // Fila de células a copiar para a aba ARTISTAS (edições do perfil e
+  // complementos da importação). Uma linha por artista+coluna: o valor mais
+  // novo substitui o anterior. Só sai daqui depois que o Google aceitar.
+  `CREATE TABLE IF NOT EXISTS artistas_pendencias_planilha (
+    id_unico TEXT NOT NULL,
+    coluna TEXT NOT NULL,
+    valor TEXT NOT NULL,
+    criado_em TEXT NOT NULL,
+    PRIMARY KEY (id_unico, coluna)
+  )`,
 ];
 
 export interface Artista {
@@ -147,6 +157,7 @@ let cache: { db: D1DatabaseLike; em: number; promessa: Promise<Map<string, Artis
 export function limparCacheArtistas(): void {
   cache = null;
   cacheFlagCharts = null;
+  cacheInfoCharts = null;
 }
 
 async function lerArtistas(db: D1DatabaseLike): Promise<Map<string, Artista>> {
@@ -193,9 +204,9 @@ const ABA_INFOS_ACTS = "INFOS ACTS";
 const MARCA_IMPORTADO = "artistas_d1_importado";
 const LOTE = 50;
 
-/** Célula a escrever na aba ARTISTAS (coluna pelo nome do cabeçalho). */
+/** Célula a escrever na aba ARTISTAS: artista (ID_unico) e coluna pelo nome do cabeçalho. */
 export interface CelulaArtistas {
-  linha: number;
+  idUnico: string;
   coluna: string;
   valor: string;
 }
@@ -233,6 +244,12 @@ function artistasDasLinhas(linhas: string[][]): Artista[] {
   return lista;
 }
 
+/** Cabeçalho tem as colunas de identidade (Nome e ID_unico)? Sem elas não dá para casar linhas. */
+function cabecalhoValido(cabecalho: string[]): boolean {
+  const chaves = new Set(cabecalho.map((c) => semAcentoMaiusculo(String(c ?? ""))));
+  return chaves.has(semAcentoMaiusculo("Nome")) && chaves.has(semAcentoMaiusculo("ID_unico"));
+}
+
 const SQL_UPSERT = `INSERT OR REPLACE INTO artistas (
   id_unico, nome, nome_chave, id_usuario, gravadora, foto_url, capa_perfil_url,
   capa_perfil_mobile_url, biografia, genero_principal, pais, pais_definido_em,
@@ -258,22 +275,48 @@ async function lerTodosPorId(db: D1DatabaseLike): Promise<Map<string, Artista>> 
   return new Map(results.map((r) => [r.id_unico, artistaDaLinhaD1(r)]));
 }
 
-/** Fontes reais da importação (a INFOS ACTS só é lida aqui, na estreia). */
+/**
+ * Fontes reais da importação (a INFOS ACTS só é lida aqui, na estreia).
+ * Leitura sem cache e sem fallback GViz (só a API v4): o resultado decide o
+ * que vai para o D1 e para quais linhas a cópia volta.
+ */
 export function fontesDaPlanilha(): { artistas(): Promise<string[][]>; infosActs(): Promise<string[][]> } {
   return {
-    artistas: () => googleSheetsService.usuarios.readValues(ABA_ARTISTAS),
-    infosActs: () => googleSheetsService.registrosCharts.readValues(ABA_INFOS_ACTS),
+    artistas: () => googleSheetsService.usuarios.readValuesFresh(ABA_ARTISTAS),
+    infosActs: () => googleSheetsService.registrosCharts.readValuesFresh(ABA_INFOS_ACTS),
   };
 }
 
+/** Cabeçalho normalizado como no EnvioD1.gs: minúsculo, sem acento, pontuação vira um espaço. */
+function cabecalhoNormalizado(s: string): string {
+  return String(s ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Coluna de gênero da INFOS ACTS (mesma busca do lerArtistas_ do EnvioD1.gs); -1 se não houver. */
+function colunaGeneroInfos(cabecalho: string[]): number {
+  const normalizados = cabecalho.map(cabecalhoNormalizado);
+  for (const nome of ["genero principal", "genero", "estilo", "genero musical"]) {
+    const i = normalizados.indexOf(nome);
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
 /**
- * Importação única ARTISTAS -> D1. Onde país/foto/biografia/capa estiverem
- * vazios na ARTISTAS e a INFOS ACTS tiver (casando o nome sem acento/caixa),
- * usa o da INFOS ACTS e devolve as células para completar a ARTISTAS.
- * INFOS ACTS: A nome | C foto exibida | E biografia | G upload do dono |
- * N nacionalidade | R capa | S capa mobile. Foto: C, senão G (mesma
- * prioridade de exibição do getArtistInfoController). Marca a importação em
- * chart_config, liberando a reconciliação.
+ * Importação única ARTISTAS -> D1. Os jogadores VEEM hoje os valores da
+ * INFOS ACTS (foto C, senão G; biografia E; capa R; capa mobile S;
+ * nacionalidade N — via artista_info); as colunas da ARTISTAS são cópias
+ * antigas. Por isso, casando o nome sem acento/caixa, o valor NÃO vazio da
+ * INFOS ACTS VENCE o da ARTISTAS nesses campos, e as células que mudaram
+ * voltam para a ARTISTAS (foto nas duas colunas, "FOTO" e "Foto"). O estilo
+ * (coluna "Gênero"/"Estilo" da INFOS ACTS) só preenche GÊNERO PRINCIPAL
+ * vazio. Recusa (lança, sem marcar) se a aba vier vazia ou sem as colunas
+ * Nome/ID_unico. Marca a importação em chart_config, liberando a reconciliação.
  */
 export async function importarArtistas(
   db: D1DatabaseLike,
@@ -283,7 +326,11 @@ export async function importarArtistas(
   await garantirSchemaArtistas(db);
   await garantirConfig(db);
   const [linhas, infos] = await Promise.all([fontes.artistas(), fontes.infosActs()]);
+  if (!cabecalhoValido((linhas[0] ?? []).map((c) => String(c ?? "").trim()))) {
+    throw new Error('Importação de artistas recusada: a aba ARTISTAS veio sem as colunas "Nome"/"ID_unico".');
+  }
   const artistas = artistasDasLinhas(linhas);
+  if (!artistas.length) throw new Error("Importação de artistas recusada: a aba ARTISTAS veio sem nenhum artista.");
 
   // INFOS ACTS por nome normalizado; nome repetido: vale a primeira linha
   const porNome = new Map<string, string[]>();
@@ -291,26 +338,30 @@ export async function importarArtistas(
     const k = semAcentoMaiusculo(String(l?.[0] ?? ""));
     if (k && !porNome.has(k)) porNome.set(k, l);
   }
-  const cel = (l: string[], i: number): string | null => String(l[i] ?? "").trim() || null;
+  const iGenero = colunaGeneroInfos((infos[0] ?? []).map((c) => String(c ?? "")));
+  const cel = (l: string[], i: number): string | null => (i < 0 ? null : String(l[i] ?? "").trim() || null);
 
   const hoje = dataDe(agora);
   const celulas: CelulaArtistas[] = [];
   let complementados = 0;
   for (const a of artistas) {
     const info = porNome.get(semAcentoMaiusculo(a.nome));
-    if (info && a.linhaPlanilha !== null) {
-      const linha = a.linhaPlanilha;
+    if (info) {
       const antes = celulas.length;
-      const completar = (atual: string | null, valor: string | null, colunas: string[]): string | null => {
-        if (atual || !valor) return atual;
-        for (const coluna of colunas) celulas.push({ linha, coluna, valor });
+      const idUnico = a.idUnico;
+      // INFOS ACTS vence quando tem valor; a célula só volta se mudou
+      const vencer = (atual: string | null, valor: string | null, colunas: string[]): string | null => {
+        if (!valor || valor === atual) return atual;
+        for (const coluna of colunas) celulas.push({ idUnico, coluna, valor });
         return valor;
       };
-      a.pais = completar(a.pais, cel(info, 13), ["PAÍS"]);
-      a.fotoUrl = completar(a.fotoUrl, cel(info, 2) ?? cel(info, 6), ["FOTO", "Foto"]);
-      a.biografia = completar(a.biografia, cel(info, 4), ["BIOGRAFIA"]);
-      a.capaPerfilUrl = completar(a.capaPerfilUrl, cel(info, 17), ["CAPA PERFIL"]);
-      a.capaPerfilMobileUrl = completar(a.capaPerfilMobileUrl, cel(info, 18), ["CAPA PERFIL MOBILE"]);
+      a.pais = vencer(a.pais, cel(info, 13), ["PAÍS"]);
+      a.fotoUrl = vencer(a.fotoUrl, cel(info, 2) ?? cel(info, 6), ["FOTO", "Foto"]);
+      a.biografia = vencer(a.biografia, cel(info, 4), ["BIOGRAFIA"]);
+      a.capaPerfilUrl = vencer(a.capaPerfilUrl, cel(info, 17), ["CAPA PERFIL"]);
+      a.capaPerfilMobileUrl = vencer(a.capaPerfilMobileUrl, cel(info, 18), ["CAPA PERFIL MOBILE"]);
+      // Estilo: só preenche o vazio
+      if (!a.generoPrincipal) a.generoPrincipal = vencer(null, cel(info, iGenero), ["GÊNERO PRINCIPAL"]);
       if (celulas.length > antes) complementados++;
     }
     a.paisDefinidoEm = a.pais ? hoje : null;
@@ -447,14 +498,15 @@ async function paisValido(db: D1DatabaseLike, pais: string): Promise<string | nu
  * Edição do perfil pelo dono/admin (a checagem de dono é da rota): grava
  * primeiro no D1, limpa os caches de artistas e de charts (a nacionalidade
  * muda o recorte por país) e manda a cópia para a ARTISTAS via `copiar`
- * (falha só é logada, não desfaz a edição). País já preenchido só o admin troca.
+ * (falha só é logada, não desfaz a edição). País já preenchido só o admin
+ * troca; estilo do jogador tem de estar na lista fechada (listarGeneros).
  */
 export async function gravarPerfil(
   db: D1DatabaseLike,
   idUnico: string,
   campos: CamposEditaveis,
   ehAdmin: boolean,
-  copiar: (celulas: { coluna: string; valor: string }[], linha: number) => Promise<void>,
+  copiar: (celulas: { coluna: string; valor: string }[], idUnico: string) => Promise<void>,
   agora: Date = new Date(),
 ): Promise<{ ok: true; artista: Artista } | { ok: false; status: 400 | 404 | 409; erro: string }> {
   await garantirSchemaArtistas(db);
@@ -473,6 +525,12 @@ export async function gravarPerfil(
     const bruto = campos[campo];
     if (bruto === undefined) continue;
     let valor: string | null = String(bruto).trim() || null;
+    if (campo === "generoPrincipal" && !ehAdmin) {
+      // Jogador: só estilos da lista fechada (grafia da lista); admin pode incluir novos
+      const lista = await listarGeneros(db);
+      valor = (valor && lista.find((g) => g === valor!.toUpperCase())) || null;
+      if (!valor) return { ok: false, status: 400, erro: "Estilo inválido." };
+    }
     if (campo === "pais") {
       if (atual.pais && !ehAdmin) {
         // Mesmo país já salvo (sem acento/caixa): nada a mudar nesse campo, sem 409
@@ -511,12 +569,10 @@ export async function gravarPerfil(
     console.warn("[gravarPerfil] Falha ao limpar cache de charts:", e);
   }
 
-  if (atual.linhaPlanilha !== null) {
-    try {
-      await copiar(celulas, atual.linhaPlanilha);
-    } catch (e) {
-      console.warn(`[gravarPerfil] Cópia para a ARTISTAS falhou (${idUnico}):`, e);
-    }
+  try {
+    await copiar(celulas, idUnico);
+  } catch (e) {
+    console.warn(`[gravarPerfil] Cópia para a ARTISTAS falhou (${idUnico}):`, e);
   }
   const artista = (await lerAtual()) as Artista;
   return { ok: true, artista };
@@ -529,17 +585,45 @@ function letraDaColuna(n: number): string {
 }
 
 /**
- * Escreve células na aba ARTISTAS casando a coluna pelo cabeçalho exato
- * (há "Foto" e "FOTO"), senão sem acento/caixa. Coluna inexistente (ex.:
- * "CAPA PERFIL MOBILE") ganha o cabeçalho no fim da linha 1, como no
- * fortunaChartsController. Uma chamada batch; lança se o Google recusar.
+ * Escreve células na aba ARTISTAS. Linha: NUNCA a guardada no D1 às cegas —
+ * lê a aba sem cache (API v4: cabeçalho e coluna ID_unico na mesma
+ * leitura), acha a linha pelo ID_unico (mesma regra da importação),
+ * atualiza `linha_planilha` no D1 se mudou e escreve lá. Artista que não
+ * está mais na aba: a gravação dele é abortada (log) e ele volta em
+ * `semLinha`. Coluna casada pelo cabeçalho exato (há "Foto" e "FOTO"),
+ * senão sem acento/caixa; coluna inexistente (ex.: "CAPA PERFIL MOBILE")
+ * ganha o cabeçalho no fim da linha 1. Uma chamada batch; lança se o
+ * Google recusar.
  */
-export async function copiarCelulasArtistas(celulas: CelulaArtistas[]): Promise<void> {
-  if (!celulas.length) return;
-  // Cabeçalho lido sem cache: coluna recém-criada por outra gravação não pode ser sobrescrita
-  const cabecalho = ((await googleSheetsService.usuarios.readValuesFresh(ABA_ARTISTAS, "1:1"))[0] ?? []).map((c) =>
-    String(c ?? "").trim(),
+export async function copiarCelulasArtistas(
+  db: D1DatabaseLike,
+  celulas: CelulaArtistas[],
+): Promise<{ escritas: number; semLinha: string[] }> {
+  if (!celulas.length) return { escritas: 0, semLinha: [] };
+  const linhas = await googleSheetsService.usuarios.readValuesFresh(ABA_ARTISTAS);
+  const cabecalho = (linhas[0] ?? []).map((c) => String(c ?? "").trim());
+  if (!cabecalhoValido(cabecalho)) throw new Error('A aba ARTISTAS veio sem as colunas "Nome"/"ID_unico".');
+  const linhaPorId = new Map<string, number>();
+  for (let i = 1; i < linhas.length; i++) {
+    const a = registroDaLinha(cabecalho, linhas[i] ?? [], i + 1);
+    if (a && !linhaPorId.has(a.idUnico)) linhaPorId.set(a.idUnico, i + 1);
+  }
+
+  const semLinha = [...new Set(celulas.map((c) => c.idUnico))].filter((id) => !linhaPorId.has(id));
+  for (const id of semLinha) console.warn(`[artistasD1] "${id}" não está na aba ARTISTAS; cópia abortada.`);
+  const alvo = celulas.filter((c) => linhaPorId.has(c.idUnico));
+  if (!alvo.length) return { escritas: 0, semLinha };
+
+  // Linha atual de cada artista no D1 (a planilha pode ter ganho/perdido linhas)
+  await rodarEmLotes(
+    db,
+    [...new Set(alvo.map((c) => c.idUnico))].map((id) =>
+      db
+        .prepare("UPDATE artistas SET linha_planilha = ? WHERE id_unico = ? AND linha_planilha IS NOT ?")
+        .bind(linhaPorId.get(id)!, id, linhaPorId.get(id)!),
+    ),
   );
+
   const indiceDe = async (coluna: string): Promise<number> => {
     let i = cabecalho.indexOf(coluna);
     if (i < 0) i = cabecalho.findIndex((c) => semAcentoMaiusculo(c) === semAcentoMaiusculo(coluna));
@@ -551,17 +635,74 @@ export async function copiarCelulasArtistas(celulas: CelulaArtistas[]): Promise<
     return i;
   };
   const entradas: { sheetName: string; range: string; values: string[][] }[] = [];
-  for (const c of celulas) {
+  for (const c of alvo) {
     const i = await indiceDe(c.coluna);
-    entradas.push({ sheetName: ABA_ARTISTAS, range: `${letraDaColuna(i + 1)}${c.linha}`, values: [[c.valor]] });
+    entradas.push({ sheetName: ABA_ARTISTAS, range: `${letraDaColuna(i + 1)}${linhaPorId.get(c.idUnico)}`, values: [[c.valor]] });
   }
   const ok = await googleSheetsService.updateValuesBatch("usuarios", entradas);
   if (!ok) throw new Error("O Google recusou a gravação na ARTISTAS.");
+  return { escritas: alvo.length, semLinha };
 }
 
-/** `copiar` padrão do gravarPerfil: escreve as células na linha do artista. */
-export function copiarParaArtistas(celulas: { coluna: string; valor: string }[], linha: number): Promise<void> {
-  return copiarCelulasArtistas(celulas.map((c) => ({ ...c, linha })));
+/** Põe células na fila de cópia para a ARTISTAS (mesmo artista+coluna: o valor novo substitui). */
+export async function enfileirarPendencias(db: D1DatabaseLike, celulas: CelulaArtistas[], agora: Date = new Date()): Promise<void> {
+  if (!celulas.length) return;
+  await garantirSchemaArtistas(db);
+  const criadoEm = agora.toISOString();
+  await rodarEmLotes(
+    db,
+    celulas.map((c) =>
+      db
+        .prepare("INSERT OR REPLACE INTO artistas_pendencias_planilha (id_unico, coluna, valor, criado_em) VALUES (?, ?, ?, ?)")
+        .bind(c.idUnico, c.coluna, c.valor, criadoEm),
+    ),
+  );
+}
+
+export interface ResultadoDescarga {
+  /** Células aceitas pelo Google. */
+  escritas: number;
+  /** Células descartadas (artista não está mais na aba ARTISTAS). */
+  descartadas: number;
+  /** Células que continuam na fila (Google fora do ar/recusou ou valor novo chegou no meio). */
+  restantes: number;
+  erro?: string;
+}
+
+/**
+ * Tenta copiar para a ARTISTAS as células pendentes (de alguns artistas ou
+ * de todos), numa leitura + uma gravação batch. Sem pendência, não toca na
+ * planilha. Só apaga da fila o que foi escrito/descartado e ainda tem o
+ * mesmo valor (uma edição mais nova no meio do caminho continua na fila).
+ */
+export async function descarregarPendencias(db: D1DatabaseLike, idsUnicos?: string[]): Promise<ResultadoDescarga> {
+  await garantirSchemaArtistas(db);
+  const filtro = idsUnicos ? ` WHERE id_unico IN (${idsUnicos.map(() => "?").join(", ") || "NULL"})` : "";
+  const ler = () =>
+    db
+      .prepare(`SELECT id_unico, coluna, valor FROM artistas_pendencias_planilha${filtro} ORDER BY criado_em`)
+      .bind(...(idsUnicos ?? []))
+      .all<{ id_unico: string; coluna: string; valor: string }>();
+  const { results } = await ler();
+  if (!results.length) return { escritas: 0, descartadas: 0, restantes: 0 };
+  const celulas = results.map((r) => ({ idUnico: r.id_unico, coluna: r.coluna, valor: r.valor }));
+  let r: { escritas: number; semLinha: string[] };
+  try {
+    r = await copiarCelulasArtistas(db, celulas);
+  } catch (e) {
+    return { escritas: 0, descartadas: 0, restantes: celulas.length, erro: String((e as Error)?.message ?? e) };
+  }
+  await rodarEmLotes(
+    db,
+    celulas.map((c) =>
+      db
+        .prepare("DELETE FROM artistas_pendencias_planilha WHERE id_unico = ? AND coluna = ? AND valor = ?")
+        .bind(c.idUnico, c.coluna, c.valor),
+    ),
+  );
+  const restantes = (await ler()).results.length;
+  const semLinha = new Set(r.semLinha);
+  return { escritas: r.escritas, descartadas: celulas.filter((c) => semLinha.has(c.idUnico)).length, restantes };
 }
 
 /**
@@ -624,7 +765,12 @@ export interface ReferenciaArtistaCharts {
 // requisição e não podem pagar uma leitura extra do D1 por vez.
 let cacheFlagCharts: { db: D1DatabaseLike; em: number; promessa: Promise<boolean> } | null = null;
 
-function importacaoFeitaEmCache(db: D1DatabaseLike): Promise<boolean> {
+/**
+ * Mesma pergunta de importacaoFeita, mas em cache (5 min) e só com SELECT —
+ * para os caminhos quentes (perfil, prêmios, charts), que não podem pagar
+ * CREATE TABLE + SELECT por requisição.
+ */
+export function importacaoFeitaEmCache(db: D1DatabaseLike): Promise<boolean> {
   const agora = Date.now();
   if (cacheFlagCharts && cacheFlagCharts.db === db && agora - cacheFlagCharts.em < TTL_MS) return cacheFlagCharts.promessa;
   // Só SELECT (sem CREATE TABLE): tabela ausente = importação não feita
@@ -670,15 +816,33 @@ async function referenciasDeArtistaInfo(db: D1DatabaseLike): Promise<ReferenciaA
   }));
 }
 
+// artista_info em cache (5 min) para completar o espelho nos charts
+let cacheInfoCharts: { db: D1DatabaseLike; em: number; promessa: Promise<ReferenciaArtistaCharts[]> } | null = null;
+
+function referenciasDeArtistaInfoEmCache(db: D1DatabaseLike): Promise<ReferenciaArtistaCharts[]> {
+  const agora = Date.now();
+  if (cacheInfoCharts && cacheInfoCharts.db === db && agora - cacheInfoCharts.em < TTL_MS) return cacheInfoCharts.promessa;
+  const promessa = referenciasDeArtistaInfo(db);
+  const entrada = { db, em: agora, promessa };
+  cacheInfoCharts = entrada;
+  promessa.catch(() => {
+    if (cacheInfoCharts === entrada) cacheInfoCharts = null;
+  });
+  return promessa;
+}
+
 /**
  * Única fonte dos leitores de charts/playlists: nacionalidade (pais), foto
  * (foto_url) e gênero (genero_principal) por nome_upper. Importação feita ->
- * espelho `artistas` (carregarArtistas, em cache); antes dela -> artista_info
- * (transição segura). Ordem do espelho = linha da planilha (determinístico).
+ * espelho `artistas` (carregarArtistas, em cache) e, para nomes que o
+ * espelho não tem (acts só da INFOS ACTS), a linha de artista_info — o
+ * espelho vence nos nomes que ele tem. Antes da importação -> só
+ * artista_info (transição segura). Ordem do espelho = linha da planilha
+ * (determinístico); os de artista_info vêm depois.
  */
 export async function referenciasArtistasParaCharts(db: D1DatabaseLike): Promise<ReferenciaArtistaCharts[]> {
   if (!(await importacaoFeitaEmCache(db))) return referenciasDeArtistaInfo(db);
-  const mapa = await carregarArtistas(db);
+  const [mapa, infos] = await Promise.all([carregarArtistas(db), referenciasDeArtistaInfoEmCache(db)]);
   const vistos = new Set<string>();
   const lista: ReferenciaArtistaCharts[] = [];
   for (const a of mapa.values()) {
@@ -691,6 +855,12 @@ export async function referenciasArtistasParaCharts(db: D1DatabaseLike): Promise
       foto: a.fotoUrl ?? "",
       genero: a.generoPrincipal ?? "",
     });
+  }
+  for (const r of infos) {
+    const nomeUpper = chaveNomeUpper(r.nome_upper);
+    if (!nomeUpper || vistos.has(nomeUpper)) continue;
+    vistos.add(nomeUpper);
+    lista.push({ ...r, nome_upper: nomeUpper });
   }
   return lista;
 }

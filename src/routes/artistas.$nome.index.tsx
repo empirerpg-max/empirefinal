@@ -39,7 +39,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useTelegramUser } from "@/lib/telegram";
-import { getStoredLogin } from "@/components/LoginScreen";
+import { isAdminLogin } from "@/components/LoginScreen";
 import { listarPaisesFoco } from "@/lib/focoMusica";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import {
@@ -117,10 +117,7 @@ function ArtistDashboard() {
   const [isOwner, setIsOwner] = useState(false);
   // Admin (mesma regra das outras telas: id histórico ou tipo_de_perfil = Admin)
   // também vê a aba Gestão — nacionalidade liberada e "Atualizar a partir da planilha".
-  const [isAdmin] = useState(() => {
-    const login = getStoredLogin();
-    return login?.id === "810141686" || login?.tipoPerfil === "Admin";
-  });
+  const [isAdmin] = useState(() => isAdminLogin());
   const podeGestao = isOwner || isAdmin;
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>(aba === "gestao" ? "gestao" : "geral");
@@ -301,10 +298,22 @@ function ArtistDashboard() {
       setActiveTab((t) => (t === "gestao" ? "geral" : t));
       return;
     }
-    // Gestão é a última aba: rola a fileira pra ela aparecer ativa.
+    // Gestão é a última aba: rola a fileira até o fim pra ela aparecer
+    // inteira. A seta da esquerda só surge depois da rolagem e alarga a
+    // fileira, então rola de novo nos quadros seguintes (o espaçador no fim
+    // da fileira impede a seta/gradiente da direita de cobrir a aba).
     const fileira = abasRef.current?.querySelector<HTMLElement>("[data-abas]");
-    if (fileira) fileira.scrollLeft = fileira.scrollWidth;
+    const rolarAteOFim = () => {
+      if (fileira) fileira.scrollLeft = fileira.scrollWidth;
+    };
+    rolarAteOFim();
+    const quadro = requestAnimationFrame(() => requestAnimationFrame(rolarAteOFim));
+    const tempo = window.setTimeout(rolarAteOFim, 250);
     abasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return () => {
+      cancelAnimationFrame(quadro);
+      window.clearTimeout(tempo);
+    };
   }, [loading, aba, podeGestao]);
 
   if (loading) {
@@ -522,11 +531,18 @@ function ArtistDashboard() {
                   {t.label}
                 </TabButton>
               ))}
+              {/* Folga no fim: rolada até o fim, a última aba (Gestão) fica
+                  inteira, sem a seta/gradiente da direita por cima. */}
+              <div aria-hidden="true" className="shrink-0 w-8" />
             </div>
             {/* Sinaliza que há mais abas pra rolar — sem isso não fica óbvio
                 que existe mais conteúdo além do que já está visível. */}
-            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 rounded-r-[1.5rem] bg-gradient-to-l from-card to-transparent" />
-            <ChevronRight className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/60" />
+            {abasScroll.canScrollRight && (
+              <>
+                <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 rounded-r-[1.5rem] bg-gradient-to-l from-card to-transparent" />
+                <ChevronRight className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/60" />
+              </>
+            )}
           </div>
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             {activeTab === "geral" && <GeralTab artist={artist} discografia={discografia} tourData={tourData} />}
@@ -1303,17 +1319,6 @@ function PerfilArtistaGestao({ nome, isAdmin }: { nome: string; isAdmin: boolean
     setGeneroSel(p?.generoPrincipal || "");
   };
 
-  const carregar = () =>
-    lerPerfilArtista(nome)
-      .then((p) => {
-        setErroCarga(null);
-        aplicar(p);
-      })
-      .catch((e) => {
-        setErroCarga((e as Error).message);
-        setPerfil(null);
-      });
-
   useEffect(() => {
     let ativo = true;
     setPerfil(undefined);
@@ -1358,7 +1363,10 @@ function PerfilArtistaGestao({ nome, isAdmin }: { nome: string; isAdmin: boolean
     setSalvando("pais");
     setAvisoPais(null);
     try {
-      aplicar(await salvarPerfilArtista(nome, { pais: paisSel }));
+      // Só o país: não mexe no estilo escolhido e ainda não salvo
+      const p = await salvarPerfilArtista(nome, { pais: paisSel });
+      setPerfil(p);
+      setPaisSel(p.pais || "");
       setAvisoPais({ tipo: "ok", texto: "Nacionalidade salva." });
     } catch (e) {
       setAvisoPais({ tipo: "erro", texto: (e as Error).message });
@@ -1390,10 +1398,19 @@ function PerfilArtistaGestao({ nome, isAdmin }: { nome: string; isAdmin: boolean
     try {
       const r = await atualizarArtistasDaPlanilha(perfil.idUnico);
       const campos = r.flatMap((x) => x.campos);
-      setAvisoPlanilha({ tipo: "ok", texto: campos.length ? `Atualizado: ${campos.join(", ")}` : "Nada mudou." });
+      const texto = campos.length ? `Atualizado: ${campos.join(", ")}` : "Nada mudou.";
+      setAvisoPlanilha({ tipo: "ok", texto });
       setAvisoPais(null);
       setAvisoGenero(null);
-      await carregar();
+      // Recarrega o perfil; se a releitura falhar, mantém os dados na tela
+      // (a atualização já valeu) e só avisa, sem trocar a seção por erro.
+      try {
+        const p = await lerPerfilArtista(nome);
+        if (!p) throw new Error("perfil vazio");
+        aplicar(p);
+      } catch {
+        setAvisoPlanilha({ tipo: "ok", texto: `${texto} Não deu para recarregar o perfil agora — abra a página de novo para ver os dados novos.` });
+      }
     } catch (e) {
       setAvisoPlanilha({ tipo: "erro", texto: (e as Error).message });
     } finally {

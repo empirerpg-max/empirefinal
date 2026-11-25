@@ -73,29 +73,62 @@ function linhaInfos(nome: string, v: { c?: string; e?: string; g?: string; n?: s
 
 const SEM_PAIS = (() => { const l = [...RAVEN]; l[0] = "Lúna"; l[15] = "Luna1"; l[20] = ""; l[17] = ""; l[18] = ""; l[1] = ""; return l; })();
 
-test("importação: país vazio vem da INFOS ACTS (com célula pra planilha); ARTISTAS preenchida vence", async () => {
+test("importação: INFOS ACTS com valor VENCE a ARTISTAS (células só do que mudou); estilo só preenche vazio", async () => {
   const db = dbComConfig();
+  const cabInfos = ["Nome", "", "", "", "", "", "", "", "", "", "Gênero"];
+  const comEstilo = (l: string[], g: string) => { const c = [...l]; c[10] = g; return c; };
   const r = await importarArtistas(db, {
     artistas: async () => [CAB, RAVEN, SEM_PAIS],
     infosActs: async () => [
-      ["Nome"],
-      linhaInfos("RAVEN", { n: "MÉXICO", e: "outra bio", c: "http://outra" }),
-      linhaInfos("luna", { n: "ESTADOS UNIDOS", c: "http://c", g: "http://g", e: "bio da luna" }),
+      cabInfos,
+      comEstilo(linhaInfos("RAVEN", { n: "MÉXICO", e: "outra bio", c: "http://outra", r: "http://capa" }), "R&B"),
+      comEstilo(linhaInfos("luna", { n: "ESTADOS UNIDOS", c: "http://c", g: "http://g", e: "bio da luna" }), "Funk"),
     ],
   }, HOJE);
   expect(r.total).toBe(2);
-  expect(r.complementados).toBe(1);
+  expect(r.complementados).toBe(2);
   const luna = await linhaD1(db, "Luna1");
-  expect(luna).toMatchObject({ pais: "ESTADOS UNIDOS", pais_definido_em: "2026-11-25", biografia: "bio da luna", foto_url: "http://c", nome_chave: "LUNA" });
-  expect(r.celulas).toContainEqual({ linha: 3, coluna: "PAÍS", valor: "ESTADOS UNIDOS" });
-  expect(r.celulas).toContainEqual({ linha: 3, coluna: "FOTO", valor: "http://c" });
-  expect(r.celulas).toContainEqual({ linha: 3, coluna: "Foto", valor: "http://c" });
-  expect(r.celulas).toContainEqual({ linha: 3, coluna: "BIOGRAFIA", valor: "bio da luna" });
-  expect(r.celulas.every((c) => c.linha === 3)).toBe(true);
+  // SEM_PAIS herdou GÊNERO PRINCIPAL "POP" da Raven: estilo da INFOS ACTS não entra
+  expect(luna).toMatchObject({ pais: "ESTADOS UNIDOS", pais_definido_em: "2026-11-25", biografia: "bio da luna", foto_url: "http://c", nome_chave: "LUNA", genero_principal: "POP" });
+  expect(r.celulas).toContainEqual({ idUnico: "Luna1", coluna: "PAÍS", valor: "ESTADOS UNIDOS" });
+  expect(r.celulas).toContainEqual({ idUnico: "Luna1", coluna: "FOTO", valor: "http://c" });
+  expect(r.celulas).toContainEqual({ idUnico: "Luna1", coluna: "Foto", valor: "http://c" });
+  expect(r.celulas).toContainEqual({ idUnico: "Luna1", coluna: "BIOGRAFIA", valor: "bio da luna" });
+  expect(r.celulas.some((c) => c.coluna === "GÊNERO PRINCIPAL")).toBe(false);
+  // Raven: a INFOS ACTS vence país, foto, bio e capa (mesmo com a ARTISTAS preenchida)
   const raven = await linhaD1(db, "Raven1198902945");
-  expect(raven).toMatchObject({ pais: "PORTO RICO", foto_url: FOTO, biografia: "Raven é uma das maiores popstars..." });
+  expect(raven).toMatchObject({ pais: "MÉXICO", foto_url: "http://outra", biografia: "outra bio", capa_perfil_url: "http://capa", genero_principal: "POP" });
+  expect(r.celulas.filter((c) => c.idUnico === "Raven1198902945")).toEqual([
+    { idUnico: "Raven1198902945", coluna: "PAÍS", valor: "MÉXICO" },
+    { idUnico: "Raven1198902945", coluna: "FOTO", valor: "http://outra" },
+    { idUnico: "Raven1198902945", coluna: "Foto", valor: "http://outra" },
+    { idUnico: "Raven1198902945", coluna: "BIOGRAFIA", valor: "outra bio" },
+    { idUnico: "Raven1198902945", coluna: "CAPA PERFIL", valor: "http://capa" },
+  ]);
   const flag = await db.prepare("SELECT valor FROM chart_config WHERE chave = 'artistas_d1_importado'").all<{ valor: string }>();
   expect(flag.results[0]?.valor).toBe("1");
+});
+
+test("importação: GÊNERO PRINCIPAL vazio vem da coluna Estilo da INFOS ACTS (com célula); valor igual não gera célula", async () => {
+  const db = dbComConfig();
+  const semEstilo = [...SEM_PAIS]; semEstilo[19] = ""; semEstilo[17] = "bio igual";
+  const info = linhaInfos("luna", { e: "bio igual" }); info[3] = "Pop";
+  const r = await importarArtistas(db, {
+    artistas: async () => [CAB, semEstilo],
+    infosActs: async () => [["Nome", "", "", "Estilo"], info],
+  }, HOJE);
+  expect((await linhaD1(db, "Luna1"))?.genero_principal).toBe("Pop");
+  expect(r.celulas).toEqual([{ idUnico: "Luna1", coluna: "GÊNERO PRINCIPAL", valor: "Pop" }]);
+});
+
+test("importação recusada (lança, sem marca): aba vazia ou sem Nome/ID_unico", async () => {
+  const db = dbComConfig();
+  const marca = async () => (await db.prepare("SELECT valor FROM chart_config WHERE chave = 'artistas_d1_importado'").all<{ valor: string }>()).results[0];
+  await expect(importarArtistas(db, { artistas: async () => [], infosActs: async () => [] }, HOJE)).rejects.toThrow();
+  await expect(importarArtistas(db, { artistas: async () => [CAB], infosActs: async () => [] }, HOJE)).rejects.toThrow();
+  const semId = CAB.map((c) => (c === "ID_unico" ? "Outro" : c));
+  await expect(importarArtistas(db, { artistas: async () => [semId, RAVEN], infosActs: async () => [] }, HOJE)).rejects.toThrow();
+  expect(await marca()).toBeUndefined();
 });
 
 test("reconciliação: só roda com a marca; não muda biografia editada no D1 mas muda gravadora; cria os que faltam", async () => {
@@ -136,13 +169,13 @@ test("atualizarDaPlanilha: sobrescreve tudo; PAÍS vazio libera o país e lista 
 test("gravarPerfil: dono define país vazio; segunda vez 409; admin troca; país inválido 400; copiar com erro não desfaz", async () => {
   const db = dbComConfig();
   await importarArtistas(db, { artistas: async () => [CAB, RAVEN, SEM_PAIS], infosActs: async () => [] }, HOJE);
-  const copias: { celulas: { coluna: string; valor: string }[]; linha: number }[] = [];
-  const copiar = async (celulas: { coluna: string; valor: string }[], linha: number) => { copias.push({ celulas, linha }); };
+  const copias: { celulas: { coluna: string; valor: string }[]; id: string }[] = [];
+  const copiar = async (celulas: { coluna: string; valor: string }[], id: string) => { copias.push({ celulas, id }); };
 
   const r1 = await gravarPerfil(db, "Luna1", { pais: "estados unidos" }, false, copiar);
   expect(r1.ok).toBe(true);
   if (r1.ok) expect(r1.artista.pais).toBe("ESTADOS UNIDOS");
-  expect(copias[0]).toEqual({ celulas: [{ coluna: "PAÍS", valor: "ESTADOS UNIDOS" }], linha: 3 });
+  expect(copias[0]).toEqual({ celulas: [{ coluna: "PAÍS", valor: "ESTADOS UNIDOS" }], id: "Luna1" });
   expect((await buscarArtista(db, "luna"))?.pais).toBe("ESTADOS UNIDOS");
 
   const r2 = await gravarPerfil(db, "Luna1", { pais: "MÉXICO" }, false, copiar);
@@ -195,6 +228,7 @@ async function comPlanilhas(db: unknown, abas: { artistas: string[][]; infos: st
   trocar(svc.usuarios, "readValues", ler("usuarios"));
   trocar(svc.usuarios, "readValuesFresh", ler("usuarios"));
   trocar(svc.registrosCharts, "readValues", ler("registrosCharts"));
+  trocar(svc.registrosCharts, "readValuesFresh", ler("registrosCharts"));
   trocar(svc.usuarios, "updateValues", async (aba: string, range: string) => { p.escritas.push(`usuarios:${aba}!${range}`); return true; });
   trocar(svc.usuarios, "appendRow", async (aba: string) => { p.escritas.push(`usuarios:${aba}:append`); return 9; });
   trocar(svc.registrosCharts, "updateValues", async (aba: string, range: string) => { p.escritas.push(`registrosCharts:${aba}!${range}`); return true; });
@@ -237,6 +271,7 @@ async function importado() {
 
 test("perfil: GET por nome (sem acento/caixa); 404; POST do dono, de outro usuário 403, sem sessão 403; admin troca país", async () => {
   const db = await importado();
+  await db.prepare("INSERT INTO musicas (chave, titulo, artista, genero) VALUES ('rb', 't', 'x', 'R&B')").run();
   await comPlanilhas(db, ABAS, async (p) => {
     const g = await artistasPerfilController(req("/api/artistas/perfil?nome=raven"));
     expect(g.status).toBe(200);
@@ -365,17 +400,20 @@ test("cron: sem marca importa (com cópia); depois reconcilia no máximo 1x por 
   const db = dbComConfig();
   let leiturasArtistas = 0;
   let leiturasInfos = 0;
-  const copiadas: number[] = [];
+  let descargas = 0;
   const deps = {
     fontes: {
       artistas: async () => { leiturasArtistas++; return ABAS.artistas; },
       infosActs: async () => { leiturasInfos++; return ABAS.infos; },
     },
-    copiarCelulas: async (c: { linha: number }[]) => { copiadas.push(c.length); return "ok"; },
+    descarregar: async () => { descargas++; return { escritas: 0, descartadas: 0, restantes: 0 }; },
   };
   const r1 = await rodarCronArtistas(db, HOJE, deps);
-  expect(r1).toMatchObject({ acao: "importou", total: 2, copiaPlanilha: "ok" });
-  expect(copiadas[0]).toBeGreaterThan(0);
+  expect(r1).toMatchObject({ acao: "importou", total: 2 });
+  expect(descargas).toBe(1);
+  // As células da importação ficaram na fila (a descarga falsa não apagou)
+  const fila = await db.prepare("SELECT * FROM artistas_pendencias_planilha").all();
+  expect(fila.results.length).toBeGreaterThan(0);
   const r2 = await rodarCronArtistas(db, new Date(HOJE.getTime() + 10 * 60_000), deps);
   expect(r2).toEqual({ acao: "reconciliou", mudancas: 0 });
   const r3 = await rodarCronArtistas(db, new Date(HOJE.getTime() + 30 * 60_000), deps);
@@ -384,4 +422,101 @@ test("cron: sem marca importa (com cópia); depois reconcilia no máximo 1x por 
   expect(r4.acao).toBe("reconciliou");
   expect(leiturasInfos).toBe(1);
   expect(leiturasArtistas).toBe(3);
+  // Fila tentada a cada execução depois da importação
+  expect(descargas).toBe(4);
+});
+
+test("cron: importação falhando tenta no máximo 1x por hora", async () => {
+  const db = dbComConfig();
+  let leituras = 0;
+  const deps = {
+    fontes: { artistas: async () => { leituras++; return [] as string[][]; }, infosActs: async () => [] as string[][] },
+    descarregar: async () => ({ escritas: 0, descartadas: 0, restantes: 0 }),
+  };
+  await expect(rodarCronArtistas(db, HOJE, deps)).rejects.toThrow();
+  expect(await rodarCronArtistas(db, new Date(HOJE.getTime() + 10 * 60_000), deps)).toEqual({ acao: "nada" });
+  expect(await rodarCronArtistas(db, new Date(HOJE.getTime() + 50 * 60_000), deps)).toEqual({ acao: "nada" });
+  expect(leituras).toBe(1);
+  await expect(rodarCronArtistas(db, new Date(HOJE.getTime() + 61 * 60_000), deps)).rejects.toThrow();
+  expect(leituras).toBe(2);
+  const flag = await db.prepare("SELECT valor FROM chart_config WHERE chave = 'artistas_d1_importado'").all();
+  expect(flag.results).toEqual([]);
+});
+
+// ---- Revisão final: linha pelo ID_unico, fila de pendências, estilo fechado ----
+
+import { copiarCelulasArtistas, descarregarPendencias, enfileirarPendencias } from "../backend/src/services/artistasD1";
+
+test("cópia: acha a linha pelo ID_unico na leitura sem cache (linha mudou), corrige linha_planilha; sem linha não escreve", async () => {
+  const db = await importado();
+  // Alguém inseriu uma linha acima da Raven na planilha: Raven foi para a linha 3
+  const outro = [...RAVEN]; outro[0] = "Novo"; outro[15] = "Novo1";
+  const abas = { artistas: [CAB, outro, RAVEN, SEM_PAIS], infos: [] };
+  await comPlanilhas(db, abas, async (p) => {
+    const r = await copiarCelulasArtistas(db, [
+      { idUnico: "Raven1198902945", coluna: "BIOGRAFIA", valor: "b" },
+      { idUnico: "Sumiu1", coluna: "BIOGRAFIA", valor: "x" },
+    ]);
+    expect(r).toEqual({ escritas: 1, semLinha: ["Sumiu1"] });
+    expect(p.lotes).toEqual([[{ range: "R3", valor: "b" }]]);
+    expect(p.lidas).toEqual(["usuarios:ARTISTAS"]);
+    expect((await linhaD1(db, "Raven1198902945"))?.linha_planilha).toBe(3);
+
+    p.lotes.length = 0;
+    expect(await copiarCelulasArtistas(db, [{ idUnico: "Sumiu1", coluna: "BIOGRAFIA", valor: "x" }])).toEqual({ escritas: 0, semLinha: ["Sumiu1"] });
+    expect(p.lotes).toEqual([]);
+  });
+});
+
+test("fila: Google recusando, a edição do perfil fica pendente; valor mais novo vence; cron copia e esvazia", async () => {
+  const db = await importado();
+  await comPlanilhas(db, ABAS, async (p) => {
+    const svc = googleSheetsService as any;
+    const original = svc.updateValuesBatch;
+    svc.updateValuesBatch = async () => false;
+    const dono = await issueSessionToken("raven", DONO_RAVEN);
+    const post = (biografia: string) =>
+      artistasPerfilController(req("/api/artistas/perfil", { method: "POST", token: dono, body: { nome: "Raven", biografia } }));
+    expect((await post("v1")).status).toBe(200);
+    expect((await post("v2")).status).toBe(200);
+    const fila = await db.prepare("SELECT id_unico, coluna, valor FROM artistas_pendencias_planilha").all();
+    expect(fila.results).toEqual([{ id_unico: "Raven1198902945", coluna: "BIOGRAFIA", valor: "v2" }]);
+
+    // Admin não sobrescreve o app com a planilha enquanto a fila não sai
+    const admin = await issueSessionToken("admin", ADMIN_TG_ID);
+    const at = await artistasPerfilController(req("/api/admin/artistas/atualizar-da-planilha", { method: "POST", token: admin, body: { idUnico: "Raven1198902945" } }));
+    expect(at.status).toBe(409);
+    expect(((await at.json()) as any).error).toBe("Há alterações aguardando cópia para a planilha. Tente de novo em alguns minutos.");
+    expect((await buscarArtista(db, "raven"))?.biografia).toBe("v2");
+
+    // Google volta: o cron copia a fila numa chamada batch e esvazia
+    svc.updateValuesBatch = original;
+    p.lotes.length = 0;
+    const r = await rodarCronArtistas(db, new Date(HOJE.getTime() + 10 * 60_000), { fontes: { artistas: async () => ABAS.artistas, infosActs: async () => [] } });
+    expect(r).toMatchObject({ pendencias: "ok" });
+    expect(p.lotes).toEqual([[{ range: "R2", valor: "v2" }]]);
+    expect((await db.prepare("SELECT * FROM artistas_pendencias_planilha").all()).results).toEqual([]);
+  });
+});
+
+test("atualizar-da-planilha descarrega a fila do artista antes de ler a planilha", async () => {
+  const db = await importado();
+  await enfileirarPendencias(db, [{ idUnico: "Raven1198902945", coluna: "BIOGRAFIA", valor: "do app" }]);
+  await comPlanilhas(db, ABAS, async (p) => {
+    const admin = await issueSessionToken("admin", ADMIN_TG_ID);
+    const at = await artistasPerfilController(req("/api/admin/artistas/atualizar-da-planilha", { method: "POST", token: admin, body: { idUnico: "Raven1198902945" } }));
+    expect(at.status).toBe(200);
+    expect(p.lotes).toEqual([[{ range: "R2", valor: "do app" }]]);
+  });
+  expect((await descarregarPendencias(db)).restantes).toBe(0);
+});
+
+test("gravarPerfil: estilo do jogador só da lista (400 Estilo inválido.); admin livre", async () => {
+  const db = await importado();
+  const nada = async () => {};
+  expect(await gravarPerfil(db, "Raven1198902945", { generoPrincipal: "Inventado" }, false, nada)).toEqual({ ok: false, status: 400, erro: "Estilo inválido." });
+  const ok = await gravarPerfil(db, "Raven1198902945", { generoPrincipal: "pop" }, false, nada);
+  expect(ok.ok && ok.artista.generoPrincipal).toBe("POP");
+  const adm = await gravarPerfil(db, "Raven1198902945", { generoPrincipal: "Inventado" }, true, nada);
+  expect(adm.ok && adm.artista.generoPrincipal).toBe("Inventado");
 });

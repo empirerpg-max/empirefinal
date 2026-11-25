@@ -206,3 +206,40 @@ passam a gravar no D1 (via API nova) e ganham:
 - Gênero principal = lista fechada.
 - Aviso de "complete o perfil" na Gestão.
 - `artista_info` deixa de ser usado; `EnvioD1.gs` não muda.
+
+## Rev. 3 — revisão final
+
+Decisões da revisão final (substituem o que estiver em conflito acima):
+
+1. **Precedência na importação.** Os jogadores veem hoje os valores da INFOS
+   ACTS (foto C, senão G; biografia E; capa R; capa mobile S; nacionalidade
+   N via `artista_info`); as colunas de foto/bio/capa da ARTISTAS são cópias
+   antigas. Na importação, para foto, biografia, capa, capa mobile e país,
+   o valor **não vazio da INFOS ACTS vence** o da ARTISTAS (não só quando
+   ela está vazia) e volta para a ARTISTAS (só essas células; foto em
+   "FOTO" e "Foto"). O estilo (coluna "Gênero"/"Estilo" da INFOS ACTS, mesma
+   busca do `lerArtistas_` do `EnvioD1.gs`) só preenche GÊNERO PRINCIPAL vazio.
+2. **Charts.** Depois da importação, os nomes que o espelho não tem (acts só
+   da INFOS ACTS) caem, nome a nome, na linha de `artista_info` (união; o
+   espelho vence nos nomes que tem) — ninguém perde a nacionalidade nos charts.
+3. **Linha da cópia.** Antes de escrever células na ARTISTAS (edição do
+   perfil, células da importação, novas tentativas), a aba é lida sem cache
+   (API v4: cabeçalho e coluna ID_unico na mesma leitura); a linha é achada
+   pelo ID_unico, `linha_planilha` é corrigida no D1 e a escrita vai lá. Sem
+   a linha, a escrita daquele artista é abortada (log) — nunca às cegas na
+   linha guardada.
+4. **Importação segura.** ARTISTAS e INFOS ACTS são lidas sem cache e sem
+   fallback GViz; a importação lança e **não marca** `artistas_d1_importado`
+   se vier 0 artistas ou faltar a coluna "Nome"/"ID_unico". No cron, no
+   máximo 1 tentativa por hora enquanto falhar.
+5. **Fila de cópia.** As células a copiar ficam em
+   `artistas_pendencias_planilha` (id_unico, coluna, valor, criado_em; o
+   valor mais novo por artista+coluna vence) até o Google aceitar; o cron
+   tenta a fila a cada execução (uma leitura + uma gravação batch). O botão
+   do admin "Atualizar a partir da planilha" (um/todos) descarrega antes a
+   fila dos artistas afetados e recusa com 409 ("Há alterações aguardando
+   cópia para a planilha. Tente de novo em alguns minutos.") se ela não
+   sair — dados velhos da planilha nunca apagam edições do app.
+
+Menores: estilo do jogador só da lista fechada (400 "Estilo inválido.";
+admin livre); caminhos quentes usam a marca da importação em cache.
