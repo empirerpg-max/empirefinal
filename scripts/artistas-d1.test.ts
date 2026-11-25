@@ -266,6 +266,8 @@ async function importado() {
   const db = dbComConfig();
   for (const s of MUSICAS_CREATE_STATEMENTS) db.exec(s);
   await importarArtistas(db, { artistas: async () => ABAS.artistas, infosActs: async () => ABAS.infos }, HOJE);
+  // Simula a cópia da importação já feita: fila vazia
+  await db.prepare("DELETE FROM artistas_pendencias_planilha").run();
   return db;
 }
 
@@ -384,6 +386,14 @@ test("admin: importar e atualizar-da-planilha exigem admin; importar copia as c�
     expect(imp.data.celulas).toBeGreaterThan(0);
     // Luna (linha 3): PAÍS é a coluna U (21ª)
     expect(p.lotes.flat()).toContainEqual({ range: "U3", valor: "ESTADOS UNIDOS" });
+    // Fila copiada: vazia
+    expect((await db.prepare("SELECT * FROM artistas_pendencias_planilha").all()).results).toEqual([]);
+    // Segunda importação: recusada (a INFOS ACTS venceria de novo as edições do app)
+    const lotesAntes = p.lotes.length;
+    const de_novo = await artistasPerfilController(req("/api/admin/artistas/importar", { method: "POST", token: admin }));
+    expect(de_novo.status).toBe(409);
+    expect(((await de_novo.json()) as any).error).toBe('A importação já foi feita. Use "Atualizar a partir da planilha".');
+    expect(p.lotes.length).toBe(lotesAntes);
 
     await db.prepare("UPDATE artistas SET biografia = 'editada' WHERE id_unico = 'Raven1198902945'").run();
     limparCacheArtistas();
@@ -519,4 +529,33 @@ test("gravarPerfil: estilo do jogador só da lista (400 Estilo inválido.); admi
   expect(ok.ok && ok.artista.generoPrincipal).toBe("POP");
   const adm = await gravarPerfil(db, "Raven1198902945", { generoPrincipal: "Inventado" }, true, nada);
   expect(adm.ok && adm.artista.generoPrincipal).toBe("Inventado");
+});
+
+test("importarArtistas: células da INFOS ACTS já ficam na fila junto com a marca (sem depender de quem chama)", async () => {
+  const db = dbComConfig();
+  const r = await importarArtistas(db, { artistas: async () => ABAS.artistas, infosActs: async () => ABAS.infos }, HOJE);
+  const fila = await db.prepare("SELECT id_unico, coluna, valor FROM artistas_pendencias_planilha ORDER BY coluna").all<Record<string, string>>();
+  expect(fila.results.length).toBe(r.celulas.length);
+  expect(fila.results).toContainEqual({ id_unico: "Luna1", coluna: "PAÍS", valor: "ESTADOS UNIDOS" });
+});
+
+test("atualizar-da-planilha (todos): 409 quando a fila não consegue sair; nada do app é sobrescrito", async () => {
+  const db = await importado();
+  await enfileirarPendencias(db, [{ idUnico: "Raven1198902945", coluna: "BIOGRAFIA", valor: "do app" }]);
+  await db.prepare("UPDATE artistas SET biografia = 'do app' WHERE id_unico = 'Raven1198902945'").run();
+  await comPlanilhas(db, ABAS, async () => {
+    const svc = googleSheetsService as any;
+    const original = svc.updateValuesBatch;
+    svc.updateValuesBatch = async () => false;
+    try {
+      const admin = await issueSessionToken("admin", ADMIN_TG_ID);
+      const at = await artistasPerfilController(req("/api/admin/artistas/atualizar-da-planilha", { method: "POST", token: admin, body: {} }));
+      expect(at.status).toBe(409);
+      expect(((await at.json()) as any).error).toBe("Há alterações aguardando cópia para a planilha. Tente de novo em alguns minutos.");
+      limparCacheArtistas();
+      expect((await buscarArtista(db, "raven"))?.biografia).toBe("do app");
+    } finally {
+      svc.updateValuesBatch = original;
+    }
+  });
 });

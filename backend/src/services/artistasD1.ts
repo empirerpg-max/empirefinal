@@ -316,7 +316,8 @@ function colunaGeneroInfos(cabecalho: string[]): number {
  * voltam para a ARTISTAS (foto nas duas colunas, "FOTO" e "Foto"). O estilo
  * (coluna "Gênero"/"Estilo" da INFOS ACTS) só preenche GÊNERO PRINCIPAL
  * vazio. Recusa (lança, sem marcar) se a aba vier vazia ou sem as colunas
- * Nome/ID_unico. Marca a importação em chart_config, liberando a reconciliação.
+ * Nome/ID_unico. As células já entram na fila artistas_pendencias_planilha
+ * (antes da marca). Marca a importação em chart_config, liberando a reconciliação.
  */
 export async function importarArtistas(
   db: D1DatabaseLike,
@@ -367,12 +368,15 @@ export async function importarArtistas(
     a.paisDefinidoEm = a.pais ? hoje : null;
   }
 
+  // Espelho, fila de cópia e marca na mesma sequência de lotes, com a marca
+  // por ÚLTIMO: se cair no meio, a importação roda de novo e nenhum valor
+  // que veio da INFOS ACTS fica sem ir para a fila (quem chama só descarrega).
   const atualizadoEm = agora.toISOString();
-  await rodarEmLotes(db, artistas.map((a) => upsert(db, a, atualizadoEm)));
-  await db
-    .prepare("INSERT OR REPLACE INTO chart_config (chave, valor) VALUES (?, '1')")
-    .bind(MARCA_IMPORTADO)
-    .run();
+  await rodarEmLotes(db, [
+    ...artistas.map((a) => upsert(db, a, atualizadoEm)),
+    ...celulas.map((c) => pendencia(db, c, atualizadoEm)),
+    db.prepare("INSERT OR REPLACE INTO chart_config (chave, valor) VALUES (?, '1')").bind(MARCA_IMPORTADO),
+  ]);
   limparCacheArtistas();
   return { total: artistas.length, complementados, celulas };
 }
@@ -649,14 +653,13 @@ export async function enfileirarPendencias(db: D1DatabaseLike, celulas: CelulaAr
   if (!celulas.length) return;
   await garantirSchemaArtistas(db);
   const criadoEm = agora.toISOString();
-  await rodarEmLotes(
-    db,
-    celulas.map((c) =>
-      db
-        .prepare("INSERT OR REPLACE INTO artistas_pendencias_planilha (id_unico, coluna, valor, criado_em) VALUES (?, ?, ?, ?)")
-        .bind(c.idUnico, c.coluna, c.valor, criadoEm),
-    ),
-  );
+  await rodarEmLotes(db, celulas.map((c) => pendencia(db, c, criadoEm)));
+}
+
+function pendencia(db: D1DatabaseLike, c: CelulaArtistas, criadoEm: string): D1PreparedStatement {
+  return db
+    .prepare("INSERT OR REPLACE INTO artistas_pendencias_planilha (id_unico, coluna, valor, criado_em) VALUES (?, ?, ?, ?)")
+    .bind(c.idUnico, c.coluna, c.valor, criadoEm);
 }
 
 export interface ResultadoDescarga {

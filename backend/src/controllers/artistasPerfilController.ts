@@ -84,13 +84,13 @@ function textoDescarga(r: ResultadoDescarga): string {
   return r.escritas || r.descartadas ? "ok" : "nada a copiar";
 }
 
-/** Põe na fila as células que a importação trouxe da INFOS ACTS e tenta copiá-las já. */
+/** Tenta copiar já as células da importação (elas entraram na fila dentro de importarArtistas). */
 async function copiarCelulasDaImportacao(db: D1DatabaseLike, celulas: CelulaArtistas[]): Promise<string> {
   if (!celulas.length) return "nada a copiar";
-  await enfileirarPendencias(db, celulas);
   return textoDescarga(await descarregarPendencias(db));
 }
 
+export const ERRO_JA_IMPORTADO = 'A importação já foi feita. Use "Atualizar a partir da planilha".';
 export const ERRO_PENDENCIAS = "Há alterações aguardando cópia para a planilha. Tente de novo em alguns minutos.";
 
 /** Campos editáveis aceitos no corpo do POST (o resto é ignorado). */
@@ -125,6 +125,8 @@ async function postPerfil(db: D1DatabaseLike, request: Request, ctx?: Ctx): Prom
 }
 
 async function postImportar(db: D1DatabaseLike): Promise<Response> {
+  // Reimportar faria a INFOS ACTS vencer de novo edições do app
+  if (await importacaoFeita(db)) return json({ success: false, error: ERRO_JA_IMPORTADO }, 409);
   const r = await importarArtistas(db);
   const copiaPlanilha = await copiarCelulasDaImportacao(db, r.celulas);
   return json({ success: true, data: { total: r.total, complementados: r.complementados, celulas: r.celulas.length, copiaPlanilha } });
@@ -210,7 +212,6 @@ export async function rodarCronArtistas(
     if (await recente(MARCA_IMPORTACAO_TENTADA)) return { acao: "nada" };
     await marcar(MARCA_IMPORTACAO_TENTADA);
     const r = await importarArtistas(db, fontes, agora);
-    if (r.celulas.length) await enfileirarPendencias(db, r.celulas, agora);
     const copiaPlanilha = r.celulas.length ? textoDescarga(await descarregar(db)) : "nada a copiar";
     return { acao: "importou", total: r.total, copiaPlanilha };
   }
