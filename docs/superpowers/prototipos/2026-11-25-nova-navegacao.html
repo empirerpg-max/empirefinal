@@ -1,0 +1,806 @@
+<title>Empire Hub — Nova navegação</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,800;1,900&display=swap">
+<style>
+/* Layout: página de apresentação (dark-first) com o celular à esquerda e as notas à direita; empilha no celular. */
+:root{
+  --bg:#05070f; --fg:#eef1f8; --muted:#8b93a7; --line:rgba(255,255,255,.09); --card:#0c1222; --brand:#957AF8;
+  --font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){ --bg:#f3f3f6; --fg:#121218; --muted:#5f6472; --line:rgba(0,0,0,.1); --card:#ffffff; --brand:#6C4CE8; color-scheme:light } }
+:root[data-theme="light"]{ --bg:#f3f3f6; --fg:#121218; --muted:#5f6472; --line:rgba(0,0,0,.1); --card:#ffffff; --brand:#6C4CE8; color-scheme:light }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.45;padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:auto minmax(0,1fr);gap:40px;align-items:start}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr);gap:28px}}
+.intro{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between}
+.intro h1{margin:0;font-size:clamp(24px,4vw,34px);font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:-.02em;text-wrap:balance}
+.intro h1 span{color:var(--brand)}
+.intro p{margin:4px 0 0;color:var(--muted);max-width:60ch}
+.modeSwitch{display:flex;gap:4px;padding:4px;border:1px solid var(--line);border-radius:999px;background:var(--card)}
+.modeSwitch button{padding:8px 14px;border-radius:999px;font-size:13px;font-weight:700;color:var(--muted)}
+.modeSwitch button[aria-pressed="true"]{background:var(--brand);color:#fff}
+
+/* ───────────── O CELULAR ───────────── */
+.phoneShell{position:sticky;top:16px}
+@media (max-width:900px){.phoneShell{position:static;display:flex;justify-content:center}}
+.phone{
+  /* modo escuro = identidade atual do app (fundo azul-marinho, pílula branca, roxo do logo) */
+  --p-bg:#020617; --p-bar:rgba(2,6,23,.82); --p-surface:#0f172a; --p-surface2:#1e293b; --p-fg:#f8fafc; --p-muted:#94a3b8; --p-line:rgba(255,255,255,.08);
+  --p-accent:#957AF8; --p-accent-fg:#0b0620; --p-pill:#f8fafc; --p-pill-fg:#020617; --p-play:#10b981; --p-live:#ef4444; --p-up:#34d399; --p-down:#f87171;
+  --p-title-style:italic; --p-title-case:uppercase; --p-title-weight:900; --p-title-track:-.02em; --p-radius:18px;
+  width:390px;height:800px;max-width:100%;border-radius:46px;padding:10px;background:#000;box-shadow:0 30px 80px -20px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08);position:relative;
+}
+.phone[data-mode="light"]{
+  /* modo claro = estrutura do Apple Music (branco, cinza agrupado, títulos grandes à esquerda) com a cor do Empire */
+  --p-bg:#ffffff; --p-bar:rgba(249,249,251,.86); --p-surface:#f2f2f7; --p-surface2:#e5e5ea; --p-fg:#0b0b0f; --p-muted:#6b6b73; --p-line:rgba(0,0,0,.1);
+  --p-accent:#6C4CE8; --p-accent-fg:#ffffff; --p-pill:#6C4CE8; --p-pill-fg:#ffffff; --p-play:#0a8f62; --p-live:#e5243b; --p-up:#0a8f62; --p-down:#d1323a;
+  --p-title-style:normal; --p-title-case:none; --p-title-weight:800; --p-title-track:-.03em; --p-radius:12px;
+  background:#d9d9de;
+}
+@media (max-width:900px){.phone{width:100%;max-width:420px;height:780px}}
+.screenBox{position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:var(--p-bg);color:var(--p-fg);font-size:14px}
+
+.topbar{position:absolute;inset:0 0 auto;z-index:20;height:58px;display:flex;align-items:center;gap:6px;padding:8px 12px 0 14px;background:var(--p-bar);backdrop-filter:blur(20px) saturate(170%);border-bottom:1px solid var(--p-line)}
+.brand{display:flex;align-items:center;gap:7px;flex:1;min-width:0}
+.brand img{width:22px;height:32px;object-fit:contain}
+.brand b{font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:-.03em;font-size:15px;white-space:nowrap}
+.brand b i{color:var(--p-accent);font-style:italic}
+.ic{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;position:relative}
+.ic:hover{background:var(--p-surface)}
+.ic svg{width:20px;height:20px}
+.ic .dot{position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--p-live);box-shadow:0 0 0 2px var(--p-bg)}
+.createBtn{height:32px;padding:0 12px 0 8px;border-radius:999px;background:var(--p-accent);color:var(--p-accent-fg);display:flex;align-items:center;gap:4px;font-weight:800;font-size:12.5px;flex-shrink:0}
+.createBtn svg{width:16px;height:16px}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#957AF8,#22d3ee);display:grid;place-items:center;font-weight:800;font-size:12px;color:#0b0620;flex-shrink:0;box-shadow:0 0 0 2px var(--p-bg),0 0 0 3.5px var(--p-accent)}
+
+.scroller{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:68px 0 150px;scrollbar-width:none}
+.scroller::-webkit-scrollbar{display:none}
+
+.tabbar{position:absolute;inset:auto 0 0;z-index:20;height:74px;display:grid;grid-template-columns:repeat(5,1fr);padding:6px 6px 16px;background:var(--p-bar);backdrop-filter:blur(20px) saturate(170%);border-top:1px solid var(--p-line)}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--p-muted);font-size:10.5px;font-weight:700;min-width:0;padding:0 2px}
+.tab svg{width:22px;height:22px;flex-shrink:0}
+.tab span{max-width:100%;white-space:nowrap}
+.tab[aria-current="page"]{color:var(--p-fg)}
+.phone:not([data-mode="light"]) .tab[aria-current="page"] svg{filter:drop-shadow(0 0 8px rgba(149,122,248,.55))}
+.phone[data-mode="light"] .tab[aria-current="page"]{color:var(--p-accent)}
+.tab .pip{width:4px;height:4px;border-radius:50%;background:var(--p-accent);opacity:0}
+.tab[aria-current="page"] .pip{opacity:1}
+
+.mini{position:absolute;left:8px;right:8px;bottom:80px;z-index:19;height:54px;border-radius:14px;background:var(--p-surface2);display:flex;align-items:center;gap:10px;padding:0 8px;box-shadow:0 8px 24px -8px rgba(0,0,0,.45);overflow:hidden}
+.mini .cv{width:38px;height:38px;border-radius:8px;flex-shrink:0}
+.mini .tt{flex:1;min-width:0}
+.mini .tt b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .tt small{color:var(--p-muted);font-size:11.5px}
+.mini .prog{position:absolute;left:10px;right:10px;bottom:3px;height:2px;border-radius:2px;background:var(--p-line)}
+.mini .prog i{display:block;width:38%;height:100%;background:var(--p-fg);border-radius:2px}
+
+/* páginas empilhadas (abrem por cima; voltar fecha só a de cima) */
+.stackPage{position:absolute;inset:0;z-index:30;background:var(--p-bg);transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column}
+.stackPage.in{transform:none}
+.stackHead{height:58px;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:8px 10px 0;border-bottom:1px solid var(--p-line);background:var(--p-bar)}
+.stackHead .t{flex:1;min-width:0;font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stackBody{flex:1;overflow-y:auto;padding-bottom:40px;scrollbar-width:none}
+.stackBody::-webkit-scrollbar{display:none}
+.back{display:flex;align-items:center;gap:2px;color:var(--p-accent);font-weight:700;font-size:14px;padding:6px 8px 6px 2px;border-radius:10px;flex-shrink:0}
+.back svg{width:22px;height:22px}
+
+.sheetScrim{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.45);opacity:0;transition:opacity .2s;pointer-events:none}
+.sheetScrim.in{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:41;background:var(--p-surface);border-radius:24px 24px 0 0;padding:10px 16px 28px;transform:translateY(105%);transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+.sheet.in{transform:none}
+.grab{width:38px;height:5px;border-radius:3px;background:var(--p-line);margin:0 auto 12px}
+
+/* ── peças de conteúdo ── */
+.pad{padding:0 16px}
+.ttl{margin:6px 16px 12px;font-size:30px;line-height:1.05;font-weight:var(--p-title-weight);font-style:var(--p-title-style);text-transform:var(--p-title-case);letter-spacing:var(--p-title-track)}
+.sub{margin:-8px 16px 14px;color:var(--p-muted);font-size:13px}
+.h2{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:22px 16px 10px}
+.h2 h3{margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em}
+.h2 button{color:var(--p-accent);font-size:13px;font-weight:700;flex-shrink:0}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 16px 4px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex-shrink:0;padding:8px 14px;border-radius:999px;background:var(--p-surface);font-weight:700;font-size:13px;white-space:nowrap;border:1px solid transparent}
+.chip[aria-pressed="true"]{background:var(--p-pill);color:var(--p-pill-fg)}
+.seg{display:flex;margin:0 16px 14px;padding:3px;border-radius:12px;background:var(--p-surface)}
+.seg button{flex:1;min-width:0;padding:8px 6px;border-radius:9px;font-weight:700;font-size:13px;color:var(--p-muted);white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--p-bg);color:var(--p-fg);box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.phone:not([data-mode="light"]) .seg button[aria-pressed="true"]{background:var(--p-surface2)}
+.row{display:flex;align-items:center;gap:12px;padding:10px 16px;width:100%;text-align:left}
+.row:hover{background:var(--p-surface)}
+.row .cv{width:48px;height:48px;border-radius:8px;flex-shrink:0}
+.row .meta{flex:1;min-width:0}
+.row .meta b{display:block;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .meta small{display:block;color:var(--p-muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .end{color:var(--p-muted);font-size:12px;flex-shrink:0;text-align:right}
+.row svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
+.group{margin:0 16px;border-radius:var(--p-radius);background:var(--p-surface);overflow:hidden}
+.group .row{padding:12px 14px}
+.group .row + .row{border-top:1px solid var(--p-line)}
+.group .row:hover{background:var(--p-surface2)}
+.gicon{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex-shrink:0;color:#fff}
+.gicon svg{width:17px;height:17px}
+.shelf{display:flex;gap:12px;overflow-x:auto;padding:0 16px 4px;scrollbar-width:none;scroll-snap-type:x mandatory}
+.shelf::-webkit-scrollbar{display:none}
+.tile{flex-shrink:0;width:140px;text-align:left;scroll-snap-align:start}
+.tile .cv{width:140px;height:140px;border-radius:var(--p-radius)}
+.tile b{display:block;margin-top:7px;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile small{display:block;color:var(--p-muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.wide{width:230px}.tile.wide .cv{width:230px;height:130px}
+.cv{position:relative;display:grid;place-items:end start;overflow:hidden;color:#fff;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:-.03em;line-height:.95;padding:10px;font-size:17px;text-shadow:0 1px 8px rgba(0,0,0,.35)}
+.cv.sm{font-size:0;padding:0}
+.cv .play{position:absolute;right:8px;bottom:8px;width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;backdrop-filter:blur(6px)}
+.cv .play svg{width:15px;height:15px}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.live{background:var(--p-live);color:#fff}
+.live::before{content:"";width:6px;height:6px;border-radius:50%;background:#fff;animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.live::before{animation:none}.stackPage,.sheet{transition:none}}
+.card{margin:0 16px;border-radius:calc(var(--p-radius) + 4px);background:var(--p-surface);padding:14px;overflow:hidden}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:40px;padding:0 16px;border-radius:999px;font-weight:800;font-size:13.5px;white-space:nowrap}
+.btn svg{width:16px;height:16px;flex-shrink:0}
+.btn.pri{background:var(--p-accent);color:var(--p-accent-fg)}
+.btn.sec{background:var(--p-surface2)}
+.btn.play{background:var(--p-play);color:#fff}
+.todo{display:flex;align-items:center;gap:12px;padding:12px 14px;width:100%;text-align:left}
+.todo + .todo{border-top:1px solid var(--p-line)}
+.todo .ring{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex-shrink:0}
+.todo .ring svg{width:17px;height:17px}
+svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
+.todo .meta b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.todo .meta small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chips,.shelf,.stories{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+.muted{color:var(--p-muted)}
+.small{font-size:12.5px}
+.post{padding:14px 16px;border-bottom:1px solid var(--p-line);display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px}
+.post .av{width:40px;height:40px;border-radius:50%}
+.post .hd{display:flex;gap:6px;align-items:baseline;min-width:0}
+.post .hd b{white-space:nowrap}
+.post .hd small{color:var(--p-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.post p{margin:3px 0 8px}
+.post .media{height:190px;border-radius:14px}
+.acts{display:flex;justify-content:space-between;max-width:280px;color:var(--p-muted);font-size:12.5px;margin-top:8px}
+.acts button{display:flex;align-items:center;gap:5px;padding:4px 2px}
+.acts svg{width:17px;height:17px}
+.acts .on{color:var(--p-live)}
+.stories{display:flex;gap:12px;overflow-x:auto;padding:4px 16px 12px;scrollbar-width:none;border-bottom:1px solid var(--p-line)}
+.stories::-webkit-scrollbar{display:none}
+.story{flex-shrink:0;width:64px;text-align:center;font-size:11px;font-weight:600}
+.story .av{width:60px;height:60px;border-radius:50%;margin:0 auto 4px;padding:2.5px;background:conic-gradient(var(--p-accent),#22d3ee,#f472b6,var(--p-accent))}
+.story .av i{display:block;width:100%;height:100%;border-radius:50%;border:2.5px solid var(--p-bg)}
+.story span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reel{position:relative;margin:0 16px 12px;height:520px;border-radius:22px;overflow:hidden;color:#fff}
+.reel .side{position:absolute;right:10px;bottom:90px;display:flex;flex-direction:column;gap:16px;align-items:center;font-size:11.5px;font-weight:700}
+.reel .side svg{width:26px;height:26px}
+.reel .cap{position:absolute;left:14px;right:70px;bottom:18px}
+.rank{width:26px;text-align:center;font-weight:900;font-size:17px;flex-shrink:0;font-variant-numeric:tabular-nums}
+.delta{font-size:11px;font-weight:800;width:34px;flex-shrink:0;text-align:center;font-variant-numeric:tabular-nums}
+.up{color:var(--p-up)}.down{color:var(--p-down)}.new{color:var(--p-accent)}
+.topic{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;padding:14px 16px;border-bottom:1px solid var(--p-line);width:100%;text-align:left}
+.topic .cv{width:64px;height:64px;border-radius:10px}
+.topic b{display:block;font-size:15px;line-height:1.25}
+.topic .ln{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:5px;color:var(--p-muted);font-size:12px}
+.type{padding:2px 7px;border-radius:6px;background:var(--p-surface2);color:var(--p-fg);font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.cmt{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;padding:12px 16px}
+.cmt .av{width:34px;height:34px;border-radius:50%}
+.cmt p{margin:2px 0 4px}
+.composer{position:sticky;bottom:0;display:flex;gap:8px;padding:10px 12px;background:var(--p-bar);backdrop-filter:blur(16px);border-top:1px solid var(--p-line)}
+.composer input,.search input{flex:1;min-width:0;height:40px;border-radius:999px;border:0;background:var(--p-surface);color:var(--p-fg);padding:0 14px;font:inherit;font-size:16px}
+.search{display:flex;align-items:center;gap:8px;margin:0 16px 12px;padding:0 0 0 12px;border-radius:12px;background:var(--p-surface)}
+.search svg{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
+.search input{background:transparent;padding:0 12px 0 0;border-radius:0}
+.genre{height:92px;border-radius:var(--p-radius);padding:10px;font-weight:900;font-size:16px;color:#fff;text-align:left;display:flex;align-items:flex-start;overflow:hidden}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px}
+.createGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 8px}
+.createGrid button{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11.5px;font-weight:700;text-align:center;min-width:0;padding:0 2px}
+.createGrid .gi{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:var(--p-surface2)}
+.createGrid .gi svg{width:23px;height:23px}
+.createGrid span{display:block;max-width:100%;line-height:1.2}
+.lvl{height:6px;border-radius:3px;background:var(--p-surface2);overflow:hidden;margin-top:8px}
+.lvl i{display:block;height:100%;width:62%;background:linear-gradient(90deg,var(--p-accent),#22d3ee)}
+.toast{position:absolute;left:50%;top:70px;z-index:60;transform:translate(-50%,-20px);opacity:0;background:var(--p-fg);color:var(--p-bg);padding:9px 14px;border-radius:12px;font-size:12.5px;font-weight:700;transition:.2s;pointer-events:none;max-width:88%;text-align:center}
+.toast.in{opacity:1;transform:translate(-50%,0)}
+.hero{position:relative;margin:0 16px;height:200px;border-radius:calc(var(--p-radius) + 6px);overflow:hidden;padding:16px;display:flex;flex-direction:column;justify-content:flex-end;color:#fff}
+.hero .badge{align-self:flex-start}
+.hero h4{margin:6px 0 2px;font-size:22px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:-.03em;line-height:1}
+.tvbox{height:210px;position:relative;display:grid;place-items:center;color:#fff}
+
+/* ───────────── NOTAS ───────────── */
+.notes{min-width:0;display:grid;gap:18px}
+.note{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px 20px}
+.note h2{margin:0 0 10px;font-size:17px;font-weight:800;letter-spacing:-.01em}
+.note p,.note li{color:var(--muted);max-width:68ch}
+.note p{margin:0 0 8px}
+.note ul{margin:0;padding-left:18px;display:grid;gap:6px}
+.note b{color:var(--fg)}
+.map{width:100%;border-collapse:collapse;font-size:13.5px}
+.map th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:0 10px 8px 0}
+.map td{padding:8px 10px 8px 0;border-top:1px solid var(--line);vertical-align:top}
+.map td:first-child{color:var(--muted)}
+.tblWrap{overflow-x:auto}
+.jump{color:var(--brand);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <div>
+      <h1>Empire <span>Hub</span> · nova navegação</h1>
+      <p>Protótipo clicável do caminho A, com conteúdo de exemplo. Toque em tudo: abas, capas, cartões, o botão Criar e a sua foto no canto.</p>
+    </div>
+    <div class="modeSwitch" role="group" aria-label="Modo do app">
+      <button id="mDark" aria-pressed="true">Escuro (atual)</button>
+      <button id="mLight" aria-pressed="false">Claro</button>
+    </div>
+  </div>
+
+  <div class="phoneShell">
+    <div class="phone" id="phone" data-mode="dark">
+      <div class="screenBox" id="box">
+        <header class="topbar">
+          <button class="brand" data-go="inicio" aria-label="Ir para o Início"><img alt="" src="data:image/png;base64,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"><b>Empire <i>Hub</i></b></button>
+          <button class="createBtn" id="openCreate" aria-label="Criar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Criar</button>
+          <button class="ic" id="openSearch" aria-label="Buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+          <button class="ic" id="openNotif" aria-label="Notificações"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="dot"></span></button>
+          <button class="avatar" id="openMe" aria-label="Meu Império">RV</button>
+        </header>
+        <main class="scroller" id="scroller"></main>
+        <div class="mini" id="mini" role="button" tabindex="0" aria-label="Abrir player"></div>
+        <nav class="tabbar" id="tabbar" aria-label="Navegação principal"></nav>
+        <div class="sheetScrim" id="scrim"></div>
+        <div class="sheet" id="sheet" role="dialog" aria-label="Criar"></div>
+        <div class="toast" id="toast" role="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <section class="note">
+      <h2>A barra de baixo agora tem 5 abas</h2>
+      <p><b>Início · Catálogo · Fórum · Charts · Social.</b> Todas cabem na tela, sem rolar a barra. O <b>Criar</b> sobe para o topo, sempre a um toque. A <b>sua foto</b> abre o "Meu Império", com Perfil, Meus artistas, Ponto, Market, Premiações e Aparência. O "Recarregar" sai do topo e vira o gesto de puxar a tela para baixo.</p>
+    </section>
+    <section class="note">
+      <h2>Onde ficam Acervo, Turnês e Empire TV</h2>
+      <ul>
+        <li><b>No Início, como abas no topo:</b> <button class="jump" data-jump="tv">Empire TV</button> · <button class="jump" data-jump="tours">Turnês</button> · <button class="jump" data-jump="acervo">Acervo</button>. Ficam a 1 toque de qualquer tela (Início → aba).</li>
+        <li><b>Empire TV ao vivo:</b> quando há transmissão, aparece um cartão "Ao vivo" no topo do Início e um ponto vermelho no sino. "Entrar na sala" abre o player com Chat, Participantes, Sobre e Enquete. Ao sair, o mini player continua.</li>
+        <li><b>Turnês:</b> a ação do dia aparece em "Pra fazer hoje", no Início. A aba Turnês mostra as suas, as em andamento e o ranking de arrecadação. Criar turnê fica no botão Criar.</li>
+        <li><b>Acervo:</b> Revistas, Entrevistas, Críticas (Metacritic e Pitchfork), Forbes e Awards, em uma só aba. As edições novas também aparecem no Início.</li>
+      </ul>
+    </section>
+    <section class="note">
+      <h2>Catálogo e Fórum</h2>
+      <p>O <b>Catálogo</b> passa a ter três seções: Início (as playlists de hoje), Buscar e Biblioteca. As abas Músicas, Vídeos e Álbuns viram <b>filtros dentro da Busca</b>. Cada álbum e cada faixa ganha o botão <b>"Discussão"</b>, que abre o mesmo tópico de hoje no Fórum.</p>
+      <p>O <b>Fórum</b> vira um feed de discussões com filtros (Músicas, Vídeos, Álbuns e "Não comentei"). Cada tópico tem o botão "Ouvir no Catálogo", então dá para ir e voltar entre os dois.</p>
+    </section>
+    <section class="note">
+      <h2>Editar lançamentos: 3 entradas</h2>
+      <ul>
+        <li><b>Criar › Editar meus lançamentos</b>, no topo da folha.</li>
+        <li><b>Meu Império › Estúdio › Meus lançamentos</b>, com abas Músicas, Vídeos, Álbuns e Pre-save.</li>
+        <li><b>Página do álbum ou da faixa › "Editar lançamento"</b>, que só aparece para o dono e para o admin. Experimente em Neon Catedral ou Prisma.</li>
+      </ul>
+      <p style="margin-top:8px">O editor tem tudo do "Editar meus materiais" de hoje: capa, mídia, título, tipo, foco, data, ordem da tracklist, publicar faixa pendente, encarte (adicionar, mover, remover), letra, sincronizar letra e material extra.</p>
+    </section>
+    <section class="note">
+      <h2>Cobertura: nada fica de fora</h2>
+      <p>Cada ação do app atual (rotas, botões e chamadas à API) foi listada e ganhou um lugar novo. A lista completa está no repositório, em <code>docs/superpowers/specs/2026-11-25-cobertura-funcionalidades.md</code>. Também estão no protótipo: Faixa de álbum, Performance Award, Cinema (em breve), Spotlight Banners, as ferramentas de admin, Editar artista e Rescisão, Meu perfil no Social, Publicar notícia e revista, Pitchfork, Ranking do Acervo, turnês finalizadas, central de notícias da turnê e o menu ⋯ de faixas, vídeos, posts, comentários e tópicos (salvar, playlist, reportar, editar, excluir).</p>
+    </section>
+    <section class="note">
+      <h2>De → para (nenhum link antigo quebra)</h2>
+      <div class="tblWrap"><table class="map">
+        <thead><tr><th>Hoje</th><th>No novo app</th></tr></thead>
+        <tbody>
+          <tr><td>Barra: Tour, Empire TV, Acervo</td><td>Início → abas Turnês / Empire TV / Acervo</td></tr>
+          <tr><td>Barra: Ponto, Perfil · Menu ☰: Market</td><td>Foto no topo → Meu Império</td></tr>
+          <tr><td>Barra: ＋ · Catálogo › Gestão e Gestão Pre save</td><td>Botão Criar (todas as ações de lançamento)</td></tr>
+          <tr><td>Catálogo › Músicas / Vídeos / Álbuns</td><td>Catálogo › Buscar (filtros)</td></tr>
+          <tr><td>Catálogo › Playlists · ☰ Playlists</td><td>Catálogo › Biblioteca</td></tr>
+          <tr><td>Catálogo › Fórum</td><td>Aba Fórum</td></tr>
+          <tr><td>☰ Acesso Rápido · Guia</td><td>Meu Império › Canais oficiais / Guia</td></tr>
+          <tr><td>Botão Recarregar</td><td>Puxar a tela para baixo</td></tr>
+        </tbody>
+      </table></div>
+      <p class="small" style="margin-top:10px">As URLs atuais (<code>/tv</code>, <code>/tours</code>, <code>/acervo</code>, <code>/empire-play/forum</code>...) continuam funcionando e passam a apontar para o lugar novo.</p>
+    </section>
+    <section class="note">
+      <h2>Modo claro</h2>
+      <p>Segue a estrutura do Apple Music: fundo branco, blocos em cinza agrupado, títulos grandes à esquerda e barras translúcidas. A cor de destaque continua o <b>roxo do Empire</b>, para não perder a identidade. No modo escuro, o roxo aparece mais claro; no claro, mais escuro, para manter o contraste. O app também pode seguir o modo do sistema: em Meu Império › Aparência.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+const $ = (s, r = document) => r.querySelector(s);
+const phone = $('#phone'), box = $('#box'), scroller = $('#scroller');
+
+/* ── ícones ── */
+const I = {
+  home:'<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+  disc:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/>',
+  forum:'<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14h4"/>',
+  chart:'<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>',
+  social:'<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1" fill="currentColor"/>',
+  play:'<path d="M7 4.5v15l13-7.5z" fill="currentColor"/>',
+  pause:'<path d="M8 5v14M16 5v14" stroke-width="3.2"/>',
+  chev:'<path d="m9 6 6 6-6 6"/>',
+  back:'<path d="m15 5-7 7 7 7"/>',
+  heart:'<path d="M12 20s-7-4.4-9.3-9A5.3 5.3 0 0 1 12 5.6 5.3 5.3 0 0 1 21.3 11C19 15.6 12 20 12 20z"/>',
+  reply:'<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/>',
+  repost:'<path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>',
+  share:'<path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="m16 6-4-4-4 4"/><path d="M12 2v14"/>',
+  more:'<circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/>',
+  shuffle:'<path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/>',
+  music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  video:'<rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3v10l-6-3z"/>',
+  album:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="4"/>',
+  rocket:'<path d="M5 15c-1.5 1.3-2 5-2 5s3.7-.5 5-2"/><path d="M9 12a15 15 0 0 1 9-9c2 0 3 1 3 3a15 15 0 0 1-9 9z"/><path d="M9 12 6 11l3-4h4M12 15l1 3 4-3v-4"/>',
+  pen:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z"/>',
+  ticket:'<path d="M3 8a2 2 0 0 0 0 4 2 2 0 0 1 0 4v2h18v-2a2 2 0 0 1 0-4 2 2 0 0 0 0-4V6H3z"/><path d="M13 6v12" stroke-dasharray="2 2"/>',
+  archive:'<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/>',
+  lyric:'<path d="M4 6h16M4 12h10M4 18h7"/><path d="M18 14v6"/><circle cx="16.5" cy="20" r="1.5"/>',
+  tv:'<rect x="2" y="7" width="20" height="14" rx="2"/><path d="m17 2-5 5-5-5"/>',
+  target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  bag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>',
+  gavel:'<path d="m14 13-7.5 7.5a2.1 2.1 0 0 1-3-3L11 10"/><path d="m16 16 6-6M8 8l6-6M9 7l8 8M21 11l-8-8"/>',
+  trophy:'<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8"/><path d="M18 2H6v7a6 6 0 0 0 12 0z"/>',
+  star:'<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
+  list:'<path d="M3 6h13M3 12h13M3 18h9"/><circle cx="19" cy="17" r="2"/><path d="M21 17V8"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  bell:'<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>',
+  send:'<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  mic:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/>',
+  flame:'<path d="M12 22c4 0 7-3 7-7 0-5-5-7-5-12-3 2-4 5-4 7-1-1-2-2-2-4-2 2-3 5-3 9 0 4 3 7 7 7z"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  users:'<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-5-6.7"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  image:'<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+};
+const svg = (n, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+
+/* ── conteúdo de exemplo ── */
+const G = [['#7c3aed','#22d3ee'],['#f43f5e','#7c2d12'],['#0ea5e9','#1e1b4b'],['#f59e0b','#be123c'],['#10b981','#064e3b'],['#ec4899','#4c1d95'],['#64748b','#0f172a'],['#eab308','#166534'],['#a855f7','#f97316'],['#14b8a6','#1e3a8a']];
+const cover = (i, label = '', cls = '') => `<div class="cv ${cls}" style="background:linear-gradient(140deg,${G[i%G.length][0]},${G[i%G.length][1]})">${label}</div>`;
+const ART = ['Nova Valente','Kai Moreau','Íris Sol','Dante Cruz','Lumi Ray','The Velvet Arc','Bia Kalli','Oruã'];
+const ALB = [
+  {t:'Neon Catedral',a:0,y:2026,n:12,c:48},{t:'Maré Alta',a:2,y:2026,n:9,c:31},{t:'Ruído Branco',a:3,y:2026,n:14,c:77},
+  {t:'Kingdom Come',a:1,y:2025,n:11,c:22},{t:'Prisma',a:4,y:2026,n:8,c:15},{t:'Velvet Hours',a:5,y:2025,n:10,c:9}];
+const SONG = [
+  {t:'Vidro Quebrado',a:0,al:0,d:'3:12',p:1,ch:'+2'},{t:'Febre de Maio',a:2,al:1,d:'2:58',p:2,ch:'0'},{t:'Coroa de Papel',a:1,al:3,d:'3:40',p:3,ch:'+5'},
+  {t:'Ruído Branco',a:3,al:2,d:'4:05',p:4,ch:'-1'},{t:'Luz Néon',a:4,al:4,d:'3:21',p:5,ch:'NEW'},{t:'Sal na Pele',a:2,al:1,d:'3:03',p:6,ch:'-3'},
+  {t:'Midnight Velvet',a:5,al:5,d:'3:55',p:7,ch:'+1'},{t:'Catedral',a:0,al:0,d:'4:20',p:8,ch:'-2'},{t:'Asfalto',a:6,al:2,d:'2:47',p:9,ch:'+4'},{t:'Rio Fundo',a:7,al:1,d:'3:30',p:10,ch:'NEW'}];
+const VID = [{t:'Vidro Quebrado (Music Video)',a:0,k:'Clipe'},{t:'Coroa de Papel — Live no VMA',a:1,k:'Performance'},{t:'Maré Alta (Visualizer)',a:2,k:'Visualizer'},{t:'Ruído Branco — Bastidores',a:3,k:'Bastidores'}];
+
+let state = { tab:'inicio', inicioTab:'voce', catTab:'inicio', searchFilter:'Tudo', forumFilter:'Tudo', chartTab:'Global 100', socialTab:'Feed', socialFeed:'Para você', acervoTab:'Revistas', playing:{s:0} };
+
+/* ── barra de baixo ── */
+const TABS = [['inicio','Início','home'],['catalogo','Catálogo','disc'],['forum','Fórum','forum'],['charts','Charts','chart'],['social','Social','social']];
+function renderTabbar(){
+  $('#tabbar').innerHTML = TABS.map(([id,l,ic]) => `<button class="tab" data-go="${id}" ${state.tab===id?'aria-current="page"':''}>${svg(ic)}<span>${l}</span><i class="pip"></i></button>`).join('');
+}
+function renderMini(){
+  const s = SONG[state.playing.s];
+  $('#mini').innerHTML = `${cover(s.al,'','sm')}<div class="tt"><b>${s.t}</b><small>${ART[s.a]}</small></div><button class="ic" aria-label="Pausar" data-toast="Pausado">${svg('pause')}</button><span class="ic" role="button" aria-label="Opções da faixa" data-actions="faixa" data-title="${s.t}">${svg('more')}</span><span class="prog"><i></i></span>`;
+}
+
+/* ── telas das abas ── */
+const chips = (items, cur, key) => `<div class="chips" role="tablist">${items.map(x => `<button class="chip" data-set="${key}" data-val="${x}" aria-pressed="${x===cur}">${x}</button>`).join('')}</div>`;
+const seg = (items, cur, key) => `<div class="seg">${items.map(([v,l]) => `<button data-set="${key}" data-val="${v}" aria-pressed="${v===cur}">${l}</button>`).join('')}</div>`;
+const h2 = (t, more, act) => `<div class="h2"><h3>${t}</h3>${more?`<button ${act||''}>${more}</button>`:''}</div>`;
+const albumTile = (i) => { const a = ALB[i]; return `<button class="tile" data-open="album" data-id="${i}">${cover(i, a.t)}<b>${a.t}</b><small>${ART[a.a]}</small></button>`; };
+const songRow = (s, i, opts = {}) => `<button class="row" data-open="album" data-id="${s.al}">${opts.rank?`<span class="rank">${s.p}</span><span class="delta ${s.ch==='NEW'?'new':s.ch.startsWith('+')&&s.ch!=='+0'?'up':s.ch.startsWith('-')?'down':'muted'}">${s.ch==='0'?'=':s.ch}</span>`:''}${cover(s.al,'','sm')}<span class="meta"><b>${s.t}</b><small>${opts.kind?opts.kind+' · ':''}${ART[s.a]}</small></span>${opts.end?`<span class="end">${opts.end}</span>`:''}<span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções da faixa" data-actions="faixa" data-title="${s.t}">${svg('more','chev')}</span></button>`;
+
+function liveCard(){
+  return `<div class="hero" style="background:radial-gradient(120% 90% at 85% 0%,#f43f5e 0%,transparent 55%),linear-gradient(160deg,#4c1d95,#0b1024)">
+    <span class="badge live">Ao vivo · Empire TV</span>
+    <h4>Red Carpet do VMA</h4>
+    <span class="small" style="opacity:.85">1,2 mil assistindo · chat aberto</span>
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn pri" data-open="tv">${svg('play')}Entrar na sala</button><button class="btn sec" style="background:rgba(255,255,255,.18);color:#fff" data-set="inicioTab" data-val="tv">Grade de hoje</button></div>
+  </div>`;
+}
+
+function inicio(){
+  const tabs = [['voce','Para você'],['tv','Empire TV'],['tours','Turnês'],['acervo','Acervo']];
+  let html = `<div style="margin:6px 0 14px">${chips(tabs.map(t=>t[1]), tabs.find(t=>t[0]===state.inicioTab)[1], 'inicioTabLabel')}</div>`;
+  if (state.inicioTab==='voce'){
+    html += liveCard();
+    html += h2('Pra fazer hoje');
+    html += `<div class="group">
+      <button class="todo" data-open="tour"><span class="ring" style="background:#10b98122;color:var(--p-play)">${svg('ticket')}</span><span class="meta" style="flex:1;min-width:0"><b>Ação do dia na turnê</b><small class="muted" style="display:block">Neon Tour · show 12 de 20 · São Paulo</small></span>${svg('chev','chev')}</button>
+      <button class="todo" data-open="presave"><span class="ring" style="background:#957AF822;color:var(--p-accent)">${svg('rocket')}</span><span class="meta" style="flex:1;min-width:0"><b>Missão do pre-save · dia 3</b><small class="muted" style="display:block">Revelar uma faixa de Prisma</small></span>${svg('chev','chev')}</button>
+      <button class="todo" data-toast="Abre o Performance Award pendente"><span class="ring" style="background:#ec489922;color:#ec4899">${svg('mic')}</span><span class="meta" style="flex:1;min-width:0"><b>Performance Award pendente</b><small class="muted" style="display:block">Responda até 27/11 · Vidro Quebrado</small></span>${svg('chev','chev')}</button>
+      <button class="todo" data-open="votacao"><span class="ring" style="background:#f59e0b22;color:#f59e0b">${svg('trophy')}</span><span class="meta" style="flex:1;min-width:0"><b>Votação do VMA aberta</b><small class="muted" style="display:block">Termina em 28/11 · 6 categorias</small></span>${svg('chev','chev')}</button>
+    </div>`;
+    html += h2('Lançamentos recentes','Ver tudo','data-go="catalogo"') + `<div class="shelf">${[2,0,1,4,3].map(albumTile).join('')}</div>`;
+    html += h2('Global 100 · #1','Charts','data-go="charts"') + `<div class="card" style="display:flex;gap:12px;align-items:center;padding:12px">${cover(0,'','sm" style="width:64px;height:64px;border-radius:10px;background:linear-gradient(140deg,#7c3aed,#22d3ee)')}<div style="flex:1;min-width:0"><b style="display:block">Vidro Quebrado</b><span class="muted small">Nova Valente · 3ª semana no topo</span></div><span class="badge" style="background:var(--p-surface2)">▲ 2</span></div>`;
+    html += h2('No Social agora','Abrir','data-go="social"') + `<div class="shelf">${[0,3,5].map((i,k)=>`<button class="tile wide" data-go="social">${cover(i+2, ['Bastidores do clipe','Setlist da turnê','Capa nova!'][k])}<b>@${ART[i].toLowerCase().replace(/[^a-z]/g,'')}</b><small>${['2,1 mil curtidas','840 curtidas','3,4 mil curtidas'][k]}</small></button>`).join('')}</div>`;
+    html += h2('Do Acervo','Abrir','data-set="inicioTab" data-val="acervo"') + `<div class="shelf">${['Rolling Empire · Nov','Entrevista: Íris Sol','Forbes · Top 10'].map((t,k)=>`<button class="tile" data-set="inicioTab" data-val="acervo">${cover(k+6,t)}<b>${t}</b><small>${['Revista','Entrevista','Forbes'][k]}</small></button>`).join('')}</div>`;
+  }
+  if (state.inicioTab==='tv'){
+    html += liveCard();
+    html += h2('Grade de hoje') + `<div class="group">${[['20:00','Red Carpet do VMA','Ao vivo agora',true],['21:30','VMA 2026 · Cerimônia','Em 1h 10min'],['23:00','Empire News','Em 2h 40min'],['00:00','Acústico: Oruã','Amanhã']].map(([h,t,s,l])=>`<div class="row"><span class="rank" style="width:auto;font-size:13px;min-width:44px">${h}</span><span class="meta"><b>${t}</b><small>${s}</small></span>${l?'<span class="badge live">Ao vivo</span>':`<button class="btn sec" style="height:32px;font-size:12px" data-toast="Você vai ser avisado quando começar">Lembrar</button>`}</div>`).join('')}</div>`;
+    html += h2('Red Carpet','Postar','data-toast="Escolha o artista e a foto do look"') + `<div class="shelf">${[0,2,5,1].map((a,k)=>`<button class="tile" data-toast="Abrindo o look de ${ART[a]}">${cover(a+3,'')}<b>${ART[a]}</b><small>${[412,388,201,177][k]} votos</small></button>`).join('')}</div>`;
+    html += h2('Arquivo') + `<div class="shelf">${['Acústico: Bia Kalli','Empire News #46','Entrevista: Kai Moreau'].map((t,k)=>`<button class="tile wide" data-open="tv">${cover(k+1,t)}<b>${t}</b><small>${['48 min','22 min','35 min'][k]}</small></button>`).join('')}</div>`;
+  }
+  if (state.inicioTab==='tours'){
+    html += h2('Minha turnê') + `<button class="card" data-open="tour" style="display:block;width:calc(100% - 32px);text-align:left">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b style="font-size:16px">Neon Tour</b><span class="badge" style="background:#10b98122;color:var(--p-play)">Em andamento</span></div>
+      <span class="muted small">Nova Valente · show 12 de 20 · próximo: São Paulo, 26/11</span>
+      <div class="lvl"><i style="width:60%"></i></div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px" class="small"><span>Arrecadado <b>$ 4,8 mi</b></span><span class="muted">3 sold out</span></div>
+      <div style="margin-top:12px;display:flex;gap:8px"><span class="btn pri">${svg('ticket')}Fazer a ação do dia</span></div></button>`;
+    html += h2('Em andamento') + ['Kingdom Tour · Kai Moreau','Maré World Tour · Íris Sol','Velvet Nights · The Velvet Arc'].map((t,k)=>`<button class="row" data-open="tour">${cover(k+1,'','sm')}<span class="meta"><b>${t.split(' · ')[0]}</b><small>${t.split(' · ')[1]} · ${[8,15,4][k]} de ${[18,24,12][k]} shows</small></span>${svg('chev','chev')}</button>`).join('');
+    html += h2('Finalizadas') + ['Coroa Tour · Kai Moreau','Summer Velvet · The Velvet Arc'].map((t,k)=>`<button class="row" data-open="tour">${cover(k+6,'','sm')}<span class="meta"><b>${t.split(' · ')[0]}</b><small>${t.split(' · ')[1]} · encerrada</small></span>${svg('chev','chev')}</button>`).join('');
+    html += `<div class="pad" style="margin-top:12px"><button class="btn sec" style="width:100%" data-toast="Abre: Nova turnê (com simulação)">${svg('ticket')}Nova turnê</button></div>`;
+    html += h2('Mais rentáveis') + `<div class="group">${['Maré World Tour','Neon Tour','Kingdom Tour'].map((t,k)=>`<div class="row"><span class="rank">${k+1}</span><span class="meta"><b>${t}</b><small>${['Íris Sol','Nova Valente','Kai Moreau'][k]}</small></span><span class="end"><b style="color:var(--p-fg)">$ ${['7,2','4,8','3,1'][k]} mi</b></span></div>`).join('')}</div>`;
+  }
+  if (state.inicioTab==='acervo'){
+    html += `<div style="margin:0 0 12px">${chips(['Revistas','Entrevistas','Críticas','Ranking','Forbes','Awards'], state.acervoTab, 'acervoTab')}</div>`;
+    if (['Revistas','Entrevistas'].includes(state.acervoTab)) html += `<div class="pad" style="margin-bottom:12px"><button class="btn sec" style="width:100%" data-toast="Nova edição (quem tem permissão)">${svg('pen')}Publicar ${state.acervoTab==='Revistas'?'revista':'entrevista'}</button></div>`;
+    const t = state.acervoTab;
+    if (t==='Ranking'){
+      html += chips(['Destaques','Ranking','Artistas','Recentes','Estilo','Ano'],'Ranking','noop') + `<div style="height:8px"></div>` + SONG.slice(0,6).map((s,i)=>songRow(s,i,{rank:true,end:'nota '+(9.4-i*0.3).toFixed(1)})).join('');
+    } else if (t==='Críticas'){
+      html += h2('Pitchfork · novembro','Edições anteriores','data-toast="Arquivo por mês"') + `<div class="card" style="margin-bottom:12px"><b>Neon Catedral · 8.7</b><p class="muted small" style="margin:4px 0 8px">“O pop mais ousado do ano no Empire.”</p><div class="acts" style="margin:0"><button data-like>${svg('heart')}<span>58</span></button><button data-toast="Comentários da crítica">${svg('reply')}12</button></div></div>` + h2('Metacritic') + `<div class="group">${ALB.slice(0,5).map((a,i)=>`<button class="row" data-open="album" data-id="${i}">${cover(i,'','sm')}<span class="meta"><b>${a.t}</b><small>${ART[a.a]} · Metacritic</small></span><span class="badge" style="background:${[88,74,91,62,80][i]>=80?'#10b981':'#f59e0b'};color:#fff;font-size:13px">${[88,74,91,62,80][i]}</span></button>`).join('')}</div>`;
+    } else if (t==='Awards'){
+      html += `<div class="group">${['VMA 2026','Empire Music Awards','Grammy Empire','Festival de Verão'].map((n,k)=>`<button class="row" data-toast="Abre o resultado de ${n}">${`<span class="gicon" style="background:${['#f59e0b','#7c3aed','#0ea5e9','#ec4899'][k]}">${svg('trophy')}</span>`}<span class="meta"><b>${n}</b><small>${['Votação aberta','Resultados','Indicações em dezembro','Inscrições abertas'][k]}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`;
+    } else {
+      const items = {Revistas:['Rolling Empire · Nov','Vogue Empire · Out','Billboard Empire · Out','NME Empire · Set'],Entrevistas:['Íris Sol: “Maré Alta é o meu diário”','Dante Cruz fala de Ruído Branco','Kai Moreau e a coroa','Lumi Ray estreia'],Forbes:['Top 10 artistas mais ricos','Turnês que mais faturaram','Gravadoras do ano','Revelações de 2026']}[t];
+      html += `<div class="grid2">${items.map((x,k)=>`<button style="text-align:left" data-toast="Abre: ${x}">${cover(k+(t==='Forbes'?7:t==='Entrevistas'?3:0),x,'" style="height:190px;border-radius:var(--p-radius);background:linear-gradient(160deg,'+G[(k+4)%G.length][0]+','+G[(k+4)%G.length][1]+')')}<b class="small" style="display:block;margin-top:6px">${x}</b></button>`).join('')}</div>`;
+    }
+  }
+  return html;
+}
+
+function catalogo(){
+  let html = `<h1 class="ttl">Catálogo</h1>` + seg([['inicio','Início'],['buscar','Buscar'],['biblioteca','Biblioteca']], state.catTab, 'catTab');
+  if (state.catTab==='inicio'){
+    html += `<button class="hero" style="width:calc(100% - 32px);text-align:left;background:radial-gradient(120% 100% at 100% 0%,#22d3ee 0%,transparent 50%),linear-gradient(160deg,#7c3aed,#1e1b4b)" data-open="playlist">
+      <span class="badge" style="background:rgba(0,0,0,.35);color:#fff">${svg('flame').replace('class=""','style="width:12px;height:12px"')}Mais quente agora</span>
+      <h4>Global 100 ao vivo</h4><span class="small" style="opacity:.85">Atualizada a cada hora · 100 faixas</span></button>`;
+    html += h2('Por plataforma') + `<div class="shelf">${['Spotify Global','Apple Music Top','YouTube em alta'].map((t,k)=>`<button class="tile" data-open="playlist">${cover([4,1,3][k],t)}<b>${t}</b><small>50 faixas</small></button>`).join('')}</div>`;
+    html += h2('Paradas por país') + `<div class="shelf">${['Brasil','Estados Unidos','Coreia do Sul','México'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+5,t)}<b>Top ${t}</b><small>Paradas Oficiais</small></button>`).join('')}</div>`;
+    html += h2('Clipes','Ver todos','data-set="catTab" data-val="buscar" data-filter="Vídeos"') + `<div class="shelf">${VID.map((v,k)=>`<button class="tile wide" data-open="album" data-id="${v.a===0?0:k}">${cover(k+2,'')}<b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></button>`).join('')}</div>`;
+    html += h2('Por gênero') + `<div class="shelf">${['Pop','Hip-Hop','Latina','R&B','Rock'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+1,t)}<b>${t} em alta</b><small>Gerada dos charts</small></button>`).join('')}</div>`;
+  }
+  if (state.catTab==='buscar'){
+    html += `<label class="search">${svg('search')}<input id="q" placeholder="Músicas, vídeos, álbuns, artistas" autocomplete="off"></label>`;
+    html += chips(['Tudo','Músicas','Vídeos','Álbuns','Artistas'], state.searchFilter, 'searchFilter');
+    const f = state.searchFilter;
+    html += `<div style="margin-top:6px">`;
+    if (f==='Tudo'){
+      html += h2('Navegar por gênero') + `<div class="grid2">${['Pop','Hip-Hop','Latina','R&B','Rock','Sertanejo'].map((t,k)=>`<button class="genre" style="background:linear-gradient(140deg,${G[k+1][0]},${G[k+1][1]})" data-open="playlist">${t}</button>`).join('')}</div>`;
+    }
+    if (f==='Músicas') html += SONG.map((s,i)=>songRow(s,i,{end:s.d})).join('');
+    if (f==='Vídeos') html += VID.map((v,k)=>`<button class="row" data-open="album" data-id="${k}">${cover(k+2,'','sm" style="width:86px;height:50px;border-radius:8px;background:linear-gradient(140deg,'+G[k+2][0]+','+G[k+2][1]+')')}<span class="meta"><b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></span><span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções do vídeo" data-actions="video" data-title="${v.t}">${svg('more','chev')}</span></button>`).join('');
+    if (f==='Álbuns') html += `<div class="grid2">${ALB.map((a,i)=>`<button style="text-align:left" data-open="album" data-id="${i}">${cover(i,a.t,'" style="aspect-ratio:1;border-radius:var(--p-radius);background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<b class="small" style="display:block;margin-top:6px">${a.t}</b><span class="muted small">${ART[a.a]} · ${a.y}</span></button>`).join('')}</div>`;
+    if (f==='Artistas') html += ART.map((a,i)=>`<button class="row" data-open="artist" data-id="${i}"><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${['King & Queen','Crown','Independent'][i%3]}</small></span>${svg('chev','chev')}</button>`).join('');
+    html += `</div>`;
+  }
+  if (state.catTab==='biblioteca'){
+    html += `<div class="group">${[['list','Minhas playlists','4','#7c3aed'],['heart','Salvos','37 faixas','#e11d48'],['users','Artistas que sigo','12','#0ea5e9'],['album','Álbuns salvos','6','#f59e0b'],['video','Vídeos salvos','9','#10b981']].map(([ic,t,n,c])=>`<button class="row" data-toast="Abre ${t}"><span class="gicon" style="background:${c}">${svg(ic)}</span><span class="meta"><b>${t}</b></span><span class="end">${n}</span>${svg('chev','chev')}</button>`).join('')}</div>`;
+    html += h2('Tocadas recentemente') + `<div class="grid2">${[0,2,1,4].map(i=>`<button style="text-align:left" data-open="album" data-id="${i}">${cover(i,ALB[i].t,'" style="aspect-ratio:1;border-radius:var(--p-radius);background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<b class="small" style="display:block;margin-top:6px">${ALB[i].t}</b><span class="muted small">${ART[ALB[i].a]}</span></button>`).join('')}</div>`;
+    html += `<div class="pad" style="margin-top:16px"><button class="btn sec" style="width:100%" data-toast="Abre o editor de playlist">${svg('list')}Nova playlist</button></div>`;
+  }
+  return html;
+}
+
+function forum(){
+  let html = `<h1 class="ttl">Fórum</h1><p class="sub">Onde os jogadores discutem cada lançamento.</p>`;
+  html += chips(['Tudo','Músicas','Vídeos','Álbuns','Não comentei'], state.forumFilter, 'forumFilter');
+  const topics = [
+    {t:'Ruído Branco',k:'Álbum',a:3,c:77,last:'há 5 min',i:2},{t:'Vidro Quebrado',k:'Música',a:0,c:48,last:'há 12 min',i:0},
+    {t:'Coroa de Papel — Live no VMA',k:'Vídeo',a:1,c:36,last:'há 40 min',i:3},{t:'Maré Alta',k:'Álbum',a:2,c:31,last:'há 1 h',i:1},
+    {t:'Luz Néon',k:'Música',a:4,c:15,last:'há 2 h',i:4,novo:true},{t:'Maré Alta (Visualizer)',k:'Vídeo',a:2,c:6,last:'há 3 h',i:1,novo:true}];
+  const map = {Músicas:'Música',Vídeos:'Vídeo',Álbuns:'Álbum'};
+  const list = topics.filter(x => state.forumFilter==='Tudo' || (state.forumFilter==='Não comentei' ? x.novo : x.k===map[state.forumFilter]));
+  html += `<div style="margin-top:8px;border-top:1px solid var(--p-line)">` + list.map(x=>`<button class="topic" data-open="topic" data-id="${x.i}" data-title="${x.t}">${cover(x.i,'','sm')}<span style="min-width:0"><b>${x.t}</b><span class="ln"><span class="type">${x.k}</span><span>${ART[x.a]}</span><span>${svg('forum').replace('class=""','style="width:13px;height:13px;vertical-align:-2px"')} ${x.c}</span><span>${x.last}</span></span></span></button>`).join('') + `</div>`;
+  return html;
+}
+
+function charts(){
+  const tabs = ['Ao vivo','Global 100','Paradas','Spotify','Apple Music','YouTube','Álbuns','Sales'];
+  let html = `<h1 class="ttl">Charts</h1><p class="sub">Semana 47 · atualizado hoje, 09:00</p>`;
+  html += chips(tabs, state.chartTab, 'chartTab');
+  html += `<div style="display:flex;gap:8px;padding:10px 16px 6px"><button class="btn sec" style="height:32px;font-size:12px" data-toast="Filtro de estilo">${svg('music')}Todos os estilos</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Filtro de país">${svg('globe')}Global</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Escolher semana ou mês">Mês</button></div>`;
+  if (state.chartTab==='Ao vivo'){
+    html += `<div class="card" style="margin-bottom:8px"><span class="badge live">Ao vivo</span><p class="small muted" style="margin:6px 0 0">Streams da última hora em Spotify, Apple Music e YouTube.</p></div>`;
+  }
+  const isAlb = state.chartTab==='Álbuns';
+  html += (isAlb ? ALB.map((a,i)=>({t:a.t,a:a.a,al:i,p:i+1,ch:['+1','0','NEW','-2','+3','-1'][i]})) : SONG).map((s,i)=>songRow(s,i,{rank:true,end:isAlb?`${[182,140,121,98,77,51][i]} mil`:`${(9.8-i*0.7).toFixed(1)} mi`})).join('');
+  return html;
+}
+
+function social(){
+  let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin:6px 16px 10px;gap:8px"><h1 class="ttl" style="margin:0">Social</h1>
+    <div class="seg" style="margin:0;flex:0 0 auto;min-width:190px">${['Seguindo','Para você'].map(x=>`<button data-set="socialFeed" data-val="${x}" aria-pressed="${state.socialFeed===x}">${x}</button>`).join('')}</div></div>`;
+  html += chips(['Feed','Vídeos','Na Mídia','News','Perfis'], state.socialTab, 'socialTab');
+  html += `<div style="height:10px"></div>`;
+  if (state.socialTab==='Feed'){
+    html += `<div class="stories">${[`<div class="story"><div class="av" style="background:var(--p-surface2)"><i style="display:grid;place-items:center;font-size:24px;font-weight:300">+</i></div><span>Seu story</span></div>`].concat(ART.slice(0,6).map((a,i)=>`<button class="story" data-toast="Story de ${a}"><div class="av"><i style="background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></i></div><span>${a.split(' ')[0]}</span></button>`)).join('')}</div>`;
+    const posts = [
+      {a:0,h:'novavalente',t:'3 semanas no topo do Global 100. Obrigada, império 👑 Clipe novo sexta.',m:true,l:'2,1 mil',c:184,r:96,ago:'12 min'},
+      {a:3,h:'dantecruz',t:'Ruído Branco já está no Catálogo. Faixa 7 é a minha favorita, e a sua?',l:'842',c:77,r:31,ago:'1 h'},
+      {a:2,h:'irissol',t:'Bastidores da Maré World Tour em Lisboa 🌊',m:true,l:'3,4 mil',c:240,r:120,ago:'3 h'}];
+    html += posts.map((p,k)=>`<article class="post"><span class="av cv sm" style="background:linear-gradient(140deg,${G[p.a][0]},${G[p.a][1]})"></span><div style="min-width:0"><div class="hd"><b>${ART[p.a]}</b><small>@${p.h} · ${p.ago}</small></div><p>${p.t}</p>${p.m?`<div class="media cv" style="background:linear-gradient(160deg,${G[k+4][0]},${G[k+4][1]})"></div>`:''}<div class="acts"><button data-like>${svg('heart')}<span>${p.l}</span></button><button data-toast="Abre os comentários">${svg('reply')}${p.c}</button><button data-toast="Repostado">${svg('repost')}${p.r}</button><button data-toast="Link copiado">${svg('share')}</button><button aria-label="Opções do post" data-actions="post" data-title="Post de ${ART[p.a]}">${svg('more')}</button></div></div></article>`).join('');
+    html += `<p class="muted small" style="text-align:center;padding:16px">Carregando mais publicações…</p>`;
+  }
+  if (state.socialTab==='Vídeos'){
+    html += [0,1].map(k=>`<div class="reel" style="background:linear-gradient(170deg,${G[k*3+2][0]},${G[k*3+2][1]})"><div class="side"><button data-like style="display:grid;justify-items:center;gap:3px;color:#fff">${svg('heart')}<span>${['12,4 mil','3,9 mil'][k]}</span></button><span style="display:grid;justify-items:center;gap:3px">${svg('reply')}${['312','88'][k]}</span><span style="display:grid;justify-items:center;gap:3px">${svg('share')}Enviar</span></div><div class="cap"><b>@${['novavalente','kaimoreau'][k]}</b><p class="small" style="margin:4px 0">${['Coreografia de Vidro Quebrado, tenta aí 👀','Ensaio pro VMA hoje à noite'][k]}</p><span class="small" style="opacity:.85">${svg('music').replace('class=""','style="width:13px;height:13px;vertical-align:-2px"')} ${['Vidro Quebrado · Nova Valente','Coroa de Papel · Kai Moreau'][k]}</span></div></div>`).join('');
+  }
+  if (state.socialTab==='Na Mídia' || state.socialTab==='News'){
+    if (state.socialTab==='News') html += `<div class="pad" style="margin-bottom:8px"><button class="btn sec" style="width:100%" data-toast="Nova notícia (quem tem permissão) · editar e excluir no ⋯">${svg('pen')}Publicar notícia</button></div>`;
+    html += ['Íris Sol bate recorde de streams em 24h','Kai Moreau confirma turnê na Ásia','VMA 2026: veja os indicados','Dante Cruz assina com a Crown'].map((t,k)=>`<button class="row" style="align-items:flex-start" data-toast="Abre a matéria">${cover(k+4,'','sm" style="width:92px;height:64px;border-radius:10px;background:linear-gradient(140deg,'+G[k+4][0]+','+G[k+4][1]+')')}<span class="meta"><b style="white-space:normal">${t}</b><small>${['Empire News','Flash News','Empire News','Exclusivo'][k]} · há ${k+1} h</small></span></button>`).join('');
+  }
+  if (state.socialTab==='Perfis'){
+    html += `<div class="pad" style="margin-bottom:8px"><button class="btn pri" style="width:100%" data-open="meuPerfilSocial">${svg('user')}Meu perfil (configurações)</button></div>` + ART.map((a,i)=>`<div class="row"><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>@${a.toLowerCase().replace(/[^a-z]/g,'')} · ${[12,8,22,5,3,9,2,1][i]} mil seguidores</small></span><button class="btn ${i%3?'pri':'sec'}" style="height:32px;font-size:12px" data-follow>${i%3?'Seguir':'Seguindo'}</button></div>`).join('');
+  }
+  return html;
+}
+
+/* ── páginas empilhadas ── */
+const pages = {
+  album(id){
+    const a = ALB[+id||0];
+    const dono = a.a===0 || a.a===4;
+    return {title:a.t, actions:'album', body:`
+      ${dono?`<div class="pad" style="padding-top:12px"><button class="card" style="margin:0;width:100%;display:flex;gap:10px;align-items:center;text-align:left;border:1px dashed var(--p-accent)" data-open="editar" data-id="${+id||0}"><span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg('pen')}</span><span style="flex:1;min-width:0"><b style="display:block">Editar lançamento</b><span class="muted small">Você é dono deste artista</span></span>${svg('chev','chev')}</button></div>`:''}
+      <div style="padding:18px 16px 6px;display:grid;justify-items:center;text-align:center">
+        ${cover(+id||0,'','sm" style="width:220px;height:220px;border-radius:var(--p-radius);box-shadow:0 20px 40px -16px rgba(0,0,0,.5);background:linear-gradient(140deg,'+G[(+id||0)%G.length][0]+','+G[(+id||0)%G.length][1]+')')}
+        <h2 style="margin:14px 0 2px;font-size:22px;font-weight:800;letter-spacing:-.02em">${a.t}</h2>
+        <button class="small" style="color:var(--p-accent);font-weight:700" data-open="artist" data-id="${a.a}">${ART[a.a]}</button>
+        <span class="muted small">Álbum · ${a.y} · ${a.n} faixas</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 16px">
+        <button class="btn play" data-play="${a.a}">${svg('play')}Tocar</button><button class="btn sec" data-toast="Tocando no modo aleatório">${svg('shuffle')}Aleatório</button>
+      </div>
+      <div class="pad" style="margin:4px 0 8px"><button class="card" style="margin:0;width:100%;display:flex;align-items:center;gap:12px;text-align:left" data-open="topic" data-id="${+id||0}" data-title="${a.t}">
+        <span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg('forum')}</span><span style="flex:1;min-width:0"><b style="display:block">Discussão no Fórum</b><span class="muted small">${a.c} comentários · última há 5 min</span></span>${svg('chev','chev')}</button></div>
+      ${SONG.filter(s=>s.al===(+id||0)).concat(SONG.slice(0,4)).slice(0,6).map((s,i)=>`<button class="row" data-play-song="${SONG.indexOf(s)}"><span class="rank muted" style="font-size:14px;font-weight:600">${i+1}</span><span class="meta"><b>${s.t}</b><small>${ART[s.a]}</small></span><span class="end">${s.d}</span></button>`).join('')}
+      ${h2('Encarte e material extra')}<div class="shelf">${[1,2,3].map(k=>`<button class="tile" data-toast="Abre o encarte em tela cheia">${cover(k+5,'Encarte '+k)}</button>`).join('')}</div>
+      <p class="muted small pad" style="margin-top:12px">Lançado em 14 de novembro de ${a.y} · King &amp; Queen</p>`};
+  },
+  artist(id){
+    const i = +id||0;
+    return {title:ART[i], body:`
+      <div style="height:200px;position:relative;background:linear-gradient(160deg,${G[i][0]},${G[i][1]});display:flex;align-items:flex-end;padding:16px;color:#fff">
+        <div><h2 style="margin:0;font-size:30px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:-.03em">${ART[i]}</h2><span class="small" style="opacity:.85">${(12-i).toString()},4 mi ouvintes mensais · ${['King & Queen','Crown','Independent'][i%3]}</span></div>
+      </div>
+      <div style="display:flex;gap:8px;padding:14px 16px 8px;flex-wrap:wrap"><button class="btn play">${svg('play')}Tocar</button><button class="btn sec" data-follow>Seguir</button>${(i===0||i===4)?`<button class="btn pri" data-open="editarArtista" data-id="${i}">${svg('pen')}Editar artista</button>`:''}</div>
+      <div class="chips" style="margin:4px 0 0">${['Visão geral','Discografia','Músicas','Vídeos','Charts','Awards','Turnês e projetos','Social'].map((x,k)=>`<button class="chip" aria-pressed="${k===0}" data-scroll="ar-${k}">${x}</button>`).join('')}</div>
+      <div id="ar-0">${h2('Biografia')}<p class="pad muted" style="margin:0">Cantora e compositora da King &amp; Queen. Três semanas no topo do Global 100 com Vidro Quebrado.</p></div>
+      <div id="ar-2">${h2('Populares')}${SONG.slice(0,4).map((s,k)=>songRow(s,k,{end:s.d})).join('')}</div>
+      <div id="ar-1">${h2('Discografia')}<div class="shelf">${[0,1,2].map(albumTile).join('')}<button class="tile" data-open="album" data-id="5">${cover(9,'Álbum antigo')}<b>Primeiras Demos</b><small>Material antigo · 2019</small></button></div></div>
+      <div id="ar-3">${h2('Vídeos')}<div class="shelf">${VID.slice(0,2).map((v,k)=>`<button class="tile wide" data-open="album" data-id="${k}">${cover(k+2,'')}<b>${v.t}</b><small>${v.k}</small></button>`).join('')}</div></div>
+      <div id="ar-4">${h2('Charts')}<div class="group">${[['Global 100','#1 · 3 semanas'],['Spotify Global','#2'],['BB 200 (álbum)','#4'],['YouTube','#6']].map(([c,p])=>`<div class="row"><span class="meta"><b>${c}</b></span><span class="end"><b style="color:var(--p-fg)">${p}</b></span></div>`).join('')}</div></div>
+      <div id="ar-5">${h2('Awards')}<div class="group"><div class="row"><span class="gicon" style="background:#f59e0b">${svg('trophy')}</span><span class="meta"><b>VMA 2026</b><small>3 indicações</small></span></div></div></div>
+      <div id="ar-6">${h2('Turnês e projetos')}<button class="row" data-open="tour">${cover(4,'','sm')}<span class="meta"><b>Neon Tour</b><small>Show 12 de 20 · em andamento</small></span>${svg('chev','chev')}</button><button class="row" data-toast="Cinema: em breve">${cover(7,'','sm')}<span class="meta"><b>Cinema</b><small>Em breve</small></span>${svg('chev','chev')}</button></div>
+      <div id="ar-7">${h2('Social','Abrir','data-go-close="social"')}<div class="grid2" style="grid-template-columns:repeat(3,1fr);gap:4px">${[1,2,3,4,5,6].map(k=>cover(k,'','sm" style="aspect-ratio:1;border-radius:4px;background:linear-gradient(140deg,'+G[k][0]+','+G[k][1]+')')).join('')}</div></div>`};
+  },
+  editarArtista(id){
+    const i = +id||0;
+    return {title:'Editar artista', body:`
+      <div style="display:grid;justify-items:center;gap:8px;padding:18px 16px"><span class="cv sm" style="width:96px;height:96px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><button class="btn sec" style="height:32px;font-size:12px" data-toast="Escolher e recortar foto">Trocar foto</button></div>
+      <div class="group">
+        <button class="row" data-toast="Escolher e recortar capa"><span class="gicon" style="background:#0ea5e9">${svg('image')}</span><span class="meta"><b>Capa do perfil</b><small>Imagem do topo da página</small></span>${svg('chev','chev')}</button>
+        <button class="row" data-toast="Editar biografia"><span class="gicon" style="background:#7c3aed">${svg('pen')}</span><span class="meta"><b>Biografia</b><small>Texto da Visão geral</small></span>${svg('chev','chev')}</button>
+        <button class="row" data-toast="Abre a Gestão deste artista"><span class="gicon" style="background:#10b981">${svg('list')}</span><span class="meta"><b>Lançamentos deste artista</b><small>Editar músicas, vídeos e álbuns</small></span>${svg('chev','chev')}</button>
+      </div>
+      ${h2('Contrato')}<div class="group"><button class="row" data-toast="Confirmação de rescisão"><span class="gicon" style="background:#dc2626">${svg('logout')}</span><span class="meta"><b style="color:var(--p-down)">Rescisão de contrato</b><small>Desvincula o artista de você</small></span></button></div>`};
+  },
+  lancamentos(){
+    const tabs = ['Músicas','Vídeos','Álbuns','Pre-save'];
+    return {title:'Meus lançamentos', body:`
+      <p class="sub" style="margin:14px 16px 10px">Tudo que estava em "Editar meus materiais" e na Gestão Pre save.</p>
+      <div class="chips" style="margin-bottom:8px">${tabs.map((t,k)=>`<button class="chip" aria-pressed="${k===0}" data-local-tab="lt" data-val="${k}">${t}</button>`).join('')}</div>
+      <div data-lt="0">${SONG.filter(s=>s.a===0||s.a===4).map(s=>`<button class="row" data-open="editar" data-id="${s.al}">${cover(s.al,'','sm')}<span class="meta"><b>${s.t}</b><small>${ART[s.a]} · Single · publicado</small></span><span class="btn sec" style="height:30px;font-size:12px">Editar</span></button>`).join('')}<button class="row" data-open="editar" data-id="4">${cover(4,'','sm')}<span class="meta"><b>Faixa sem título</b><small>Lumi Ray · pendente (sem tópico)</small></span><span class="btn pri" style="height:30px;font-size:12px">Publicar</span></button></div>
+      <div data-lt="1" hidden>${VID.slice(0,1).map((v,k)=>`<button class="row" data-open="editar" data-id="0">${cover(2,'','sm')}<span class="meta"><b>${v.t}</b><small>${v.k}</small></span><span class="btn sec" style="height:30px;font-size:12px">Editar</span></button>`).join('')}</div>
+      <div data-lt="2" hidden>${[0,4].map(i=>`<button class="row" data-open="editar" data-id="${i}">${cover(i,'','sm')}<span class="meta"><b>${ALB[i].t}</b><small>${ART[ALB[i].a]} · ${ALB[i].n} faixas</small></span><span class="btn sec" style="height:30px;font-size:12px">Editar</span></button>`).join('')}</div>
+      <div data-lt="3" hidden><div class="card"><div style="display:flex;justify-content:space-between;gap:8px"><b>Prisma</b><span class="badge" style="background:#10b98122;color:var(--p-play)">Ativa</span></div><p class="muted small" style="margin:4px 0 12px">Lumi Ray · faltam 4 dias · contagem + missões</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec" data-toast="Editar faixas da campanha">${svg('pen')}Editar faixas</button><button class="btn sec" data-open="presave">${svg('rocket')}Missões</button><button class="btn sec" style="color:var(--p-down)" data-toast="Confirmar cancelamento da campanha">Cancelar campanha</button></div></div></div>`};
+  },
+  editar(id){
+    const i = +id||0, a = ALB[i];
+    const field = (l, v) => `<div class="row" style="cursor:default"><span class="meta"><small>${l}</small><b>${v}</b></span><span class="btn sec" style="height:30px;font-size:12px" role="button" data-toast="Editar ${l.toLowerCase()}">Editar</span></div>`;
+    return {title:'Editar · '+a.t, body:`
+      <div style="display:flex;gap:14px;align-items:center;padding:16px">${cover(i,'','sm" style="width:88px;height:88px;border-radius:12px;background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<div style="display:grid;gap:8px"><button class="btn sec" style="height:32px;font-size:12px" data-toast="Trocar e recortar capa">Trocar capa</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Trocar o arquivo de mídia">Trocar mídia</button></div></div>
+      <div class="group">${field('Título',a.t)}${field('Tipo do lançamento','Álbum · Pré-álbum')}${field('Foco do lançamento','Spotify · Brasil')}${field('Data de lançamento','14/11/2026')}</div>
+      ${h2('Tracklist','Reordenar','data-toast="Arraste ou use ▲▼ para mudar a ordem"')}<div class="group">${SONG.slice(0,4).map((s,k)=>`<div class="row"><span class="rank muted" style="font-size:14px">${k+1}</span><span class="meta"><b>${s.t}</b><small>${k===3?'Pendente · sem tópico':'Publicada'}</small></span><span style="display:flex;gap:4px">${k===3?`<span class="btn pri" style="height:28px;font-size:11.5px;padding:0 10px" role="button" data-toast="Faixa publicada (abre tópico no Fórum)">Publicar</span>`:''}<span class="btn sec" style="height:28px;width:28px;padding:0" role="button" aria-label="Subir" data-toast="Faixa movida para cima">▲</span><span class="btn sec" style="height:28px;width:28px;padding:0" role="button" aria-label="Descer" data-toast="Faixa movida para baixo">▼</span></span></div>`).join('')}</div>
+      ${h2('Encarte','Adicionar','data-toast="Adicionar imagens ao encarte"')}<div class="shelf">${[1,2,3].map(k=>`<div class="tile" style="width:110px">${cover(k+5,'','sm" style="width:110px;height:110px;border-radius:10px;background:linear-gradient(140deg,'+G[k+5][0]+','+G[k+5][1]+')')}<div style="display:flex;gap:4px;margin-top:6px"><span class="btn sec" style="height:26px;width:26px;padding:0" role="button" data-toast="Movido para trás">◀</span><span class="btn sec" style="height:26px;width:26px;padding:0" role="button" data-toast="Movido para frente">▶</span><span class="btn sec" style="height:26px;padding:0 8px;font-size:11px;color:var(--p-down)" role="button" data-toast="Imagem removida">Remover</span></div></div>`).join('')}</div>
+      ${h2('Letra e material extra')}<div class="group">
+        <button class="row" data-toast="Editar letra"><span class="gicon" style="background:#0ea5e9">${svg('lyric')}</span><span class="meta"><b>Letra</b><small>Texto simples</small></span>${svg('chev','chev')}</button>
+        <button class="row" data-toast="Abre o Estúdio de Sincronização"><span class="gicon" style="background:#7c3aed">${svg('music')}</span><span class="meta"><b>Sincronizar letra</b><small>Funciona mesmo sem tópico publicado</small></span>${svg('chev','chev')}</button>
+        <button class="row" data-toast="Editar material extra"><span class="gicon" style="background:#f59e0b">${svg('star')}</span><span class="meta"><b>Material extra</b><small>Visual, créditos, HTML</small></span>${svg('chev','chev')}</button>
+      </div>
+      <div class="pad" style="margin-top:18px"><button class="btn pri" style="width:100%" data-toast="Alterações salvas">Salvar alterações</button></div>`};
+  },
+  meuPerfilSocial(){
+    return {title:'Meu perfil no Social', body:`<p class="sub" style="margin:14px 16px 10px">O que hoje fica em Social › Config.</p><div class="chips" style="margin-bottom:10px">${['Nova Valente','Lumi Ray'].map((x,k)=>`<button class="chip" aria-pressed="${k===0}" data-local-tab="ps" data-val="${k}">${x}</button>`).join('')}</div>
+      <div class="group">${[['Foto do perfil','Recortar em círculo'],['@ do perfil','@novavalente'],['Bio','Cantora · King & Queen'],['Rede','Instagram · Twitter · TikTok']].map(([l,v])=>`<button class="row" data-toast="Editar ${l}"><span class="meta"><small>${l}</small><b>${v}</b></span>${svg('chev','chev')}</button>`).join('')}</div>
+      <div class="pad" style="margin-top:16px"><button class="btn pri" style="width:100%" data-toast="Perfil salvo">Salvar</button></div>`};
+  },
+  topic(id, title){
+    const i = +id||0;
+    return {title:title||'Tópico', actions:'topico', body:`
+      <div style="display:flex;gap:12px;padding:14px 16px;align-items:center;border-bottom:1px solid var(--p-line)">
+        ${cover(i,'','sm" style="width:72px;height:72px;border-radius:10px;background:linear-gradient(140deg,'+G[i%G.length][0]+','+G[i%G.length][1]+')')}
+        <div style="flex:1;min-width:0"><span class="type">${ALB.some(a=>a.t===title)?'Álbum':'Música'}</span><b style="display:block;margin-top:4px">${title||''}</b><span class="muted small">${ART[ALB[i%ALB.length].a]}</span></div>
+      </div>
+      <div style="display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap"><button class="btn play" data-play="${i}">${svg('play')}Ouvir</button><button class="btn sec" data-open="album" data-id="${i}">${svg('disc')}Ver no Catálogo</button><button class="btn sec" data-toast="Abre a letra">${svg('lyric')}Letra</button></div>
+      <div class="h2" style="margin-top:8px"><h3>Comentários</h3><button data-toast="Ordenado por mais recentes">Recentes</button></div>
+      ${[['Bia Kalli','A produção da faixa 3 é absurda. Melhor álbum do ano até agora.','5 min'],['Oruã','Concordo, mas a 7 é a que vai segurar no chart.','12 min'],['Lumi Ray','Esse encarte ficou lindo demais 😭','1 h'],['Kai Moreau','Parabéns pelo lançamento!','2 h']].map(([n,t,h],k)=>`<div class="cmt"><span class="av cv sm" style="background:linear-gradient(140deg,${G[k+5][0]},${G[k+5][1]})"></span><div style="min-width:0"><b>${n}</b> <span class="muted small">· ${h}</span><p>${t}</p><div class="acts" style="max-width:160px;margin:0"><button data-like>${svg('heart')}<span>${[24,9,31,6][k]}</span></button><button data-toast="Responder a ${n}">${svg('reply')}Responder</button><button aria-label="Opções do comentário" data-actions="comentario" data-title="Comentário de ${n}">${svg('more')}</button></div></div></div>`).join('')}
+      <div class="composer"><input placeholder="Comente como Revisor…" aria-label="Comentário"><button class="btn pri" style="height:40px;width:40px;padding:0" aria-label="Enviar" data-toast="Comentário publicado">${svg('send')}</button></div>`};
+  },
+  playlist(){
+    return {title:'Global 100 ao vivo', body:`
+      <div class="hero" style="margin:14px 16px;background:radial-gradient(120% 100% at 100% 0%,#22d3ee 0%,transparent 50%),linear-gradient(160deg,#7c3aed,#1e1b4b)"><span class="badge live">Ao vivo</span><h4>Global 100</h4><span class="small" style="opacity:.85">Gerada dos charts · atualizada às 09:00</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 8px"><button class="btn play" data-play="0">${svg('play')}Tocar</button><button class="btn sec" data-toast="Salva na sua Biblioteca">${svg('heart')}Salvar</button></div>
+      ${SONG.map((s,i)=>songRow(s,i,{rank:true,end:s.d})).join('')}`};
+  },
+  tv(){
+    return {title:'Empire TV', body:`
+      <div class="tvbox" style="background:radial-gradient(80% 80% at 70% 20%,#f43f5e,transparent 60%),linear-gradient(160deg,#4c1d95,#020617)"><div style="text-align:center"><span class="badge live">Ao vivo</span><h4 style="margin:8px 0 0;font-size:22px;font-weight:900;font-style:italic;text-transform:uppercase">Red Carpet do VMA</h4><span class="small" style="opacity:.8">1.214 assistindo</span></div></div>
+      ${seg([['chat','Chat'],['part','Participantes'],['sobre','Sobre']],'chat','noop')}
+      <div class="card" style="margin-bottom:8px"><b>Enquete: melhor look da noite?</b><div style="display:grid;gap:8px;margin-top:10px">${['Nova Valente','Íris Sol','The Velvet Arc'].map((n,k)=>`<button class="btn sec" style="justify-content:space-between;width:100%" data-toast="Voto registrado em ${n}"><span>${n}</span><span class="muted">${[46,38,16][k]}%</span></button>`).join('')}</div></div>
+      ${[['Oruã','o vestido da Nova tá surreal'],['Bia Kalli','KAI CHEGOU 😱'],['Lumi Ray','alguém sabe a ordem das apresentações?'],['Dante Cruz','tô no backstage, já já entro']].map(([n,t],k)=>`<div class="cmt" style="padding:8px 16px"><span class="av cv sm" style="background:linear-gradient(140deg,${G[k+2][0]},${G[k+2][1]})"></span><div><b class="small">${n}</b><p style="margin:0">${t}</p></div></div>`).join('')}
+      <div class="composer"><input placeholder="Mandar no chat…" aria-label="Mensagem do chat"><button class="btn sec" style="height:40px;padding:0 12px" data-toast="GIFs e stickers">GIF</button><button class="btn pri" style="height:40px;width:40px;padding:0" aria-label="Enviar" data-toast="Mensagem enviada">${svg('send')}</button></div>`};
+  },
+  tour(){
+    return {title:'Neon Tour', actions:'turne', body:`
+      <div class="hero" style="margin:14px 16px;background:linear-gradient(160deg,#10b981,#064e3b)"><span class="badge" style="background:rgba(0,0,0,.3);color:#fff">Show 12 de 20</span><h4>Neon Tour</h4><span class="small" style="opacity:.85">Nova Valente · próximo: São Paulo, 26/11</span></div>
+      ${h2('Ação de hoje')}<div class="grid2">${['Foto + resumo','Entrevista rápida','Live nas redes','Bastidores','Interação com fã','Sorteio VIP'].map((t,k)=>`<button class="card" style="margin:0;text-align:left;padding:12px" data-toast="Ação “${t}” escolhida">${svg(['image','mic','tv','video','users','ticket'][k]).replace('class=""','style="width:20px;height:20px;color:var(--p-accent)"')}<b class="small" style="display:block;margin-top:8px">${t}</b></button>`).join('')}</div>
+      ${h2('Calendário')}<div class="group">${['Rio de Janeiro · 22/11 · Sold out','Belo Horizonte · 24/11 · 92%','São Paulo · 26/11 · próximo','Curitiba · 29/11'].map((t,k)=>`<div class="row"><span class="meta"><b>${t.split(' · ')[0]}</b><small>${t.split(' · ').slice(1).join(' · ')}</small></span>${k===0?'<span class="badge" style="background:#10b981;color:#fff">Sold out</span>':''}</div>`).join('')}</div>
+      ${h2('Arrecadação')}<div class="card"><b style="font-size:22px">$ 4,8 mi</b><span class="muted small" style="display:block">em tempo real · 3 sold out</span></div>
+      ${h2('Central de notícias')}${[['Show no Rio esgota em 2 horas','Bastidores · há 2 dias'],['Entrevista rápida em BH','Entrevista · ontem']].map(([t,s],k)=>`<div class="post" style="grid-template-columns:minmax(0,1fr)"><div><b>${t}</b><small class="muted" style="display:block">${s}</small><div class="media cv" style="height:140px;margin-top:8px;background:linear-gradient(160deg,${G[k+3][0]},${G[k+3][1]})"></div><div class="acts"><button data-like>${svg('heart')}<span>${[320,110][k]}</span></button><button data-toast="Comentar na notícia">${svg('reply')}Comentar</button><button data-toast="Editar post da turnê">${svg('pen')}Editar</button></div></div></div>`).join('')}`};
+  },
+  presave(){
+    return {title:'Pre-save · Prisma', body:`<div class="hero" style="margin:14px 16px;background:linear-gradient(160deg,#a855f7,#f97316)"><span class="badge" style="background:rgba(0,0,0,.3);color:#fff">Faltam 4 dias</span><h4>Prisma</h4><span class="small" style="opacity:.85">Lumi Ray · 2.380 pre-saves</span></div>${h2('Missão de hoje')}<div class="card"><b>Revelar uma faixa</b><p class="muted small" style="margin:4px 0 12px">Publique o nome e um trecho de uma faixa inédita.</p><button class="btn pri" data-toast="Abre o compositor da missão">${svg('rocket')}Cumprir missão</button></div>`};
+  },
+  votacao(){
+    return {title:'Votação · VMA 2026', body:`<p class="sub" style="margin:14px 16px">6 categorias · termina em 28/11</p><div class="group">${['Álbum do Ano','Música do Ano','Clipe do Ano','Revelação','Performance','Colaboração'].map((c,k)=>`<button class="row" data-toast="Abre os indicados de ${c}"><span class="meta"><b>${c}</b><small>${k<2?'Votado ✓':'5 indicados'}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`};
+  },
+  notif(){
+    return {title:'Notificações', body:`<div class="card" style="margin-top:14px;display:flex;gap:10px;align-items:center"><span class="badge live">Ao vivo</span><span style="flex:1;min-width:0" class="small"><b>Red Carpet do VMA</b> começou na Empire TV</span><button class="btn pri" style="height:32px;font-size:12px" data-open="tv">Entrar</button></div>
+      ${[['Bia Kalli comentou em Ruído Branco','Fórum · 5 min','forum'],['Oruã curtiu sua publicação','Social · 20 min','heart'],['Sua turnê esgotou em Rio de Janeiro','Turnês · 1 h','ticket'],['Nova edição da Rolling Empire','Acervo · 3 h','archive']].map(([t,s,ic])=>`<div class="row"><span class="gicon" style="background:var(--p-surface2);color:var(--p-fg)">${svg(ic)}</span><span class="meta"><b style="white-space:normal">${t}</b><small>${s}</small></span></div>`).join('')}`};
+  },
+  me(){
+    const mode = phone.dataset.mode;
+    const grp = (title, rows) => `${h2(title)}<div class="group">${rows.map(([ic,c,t,s,act])=>`<button class="row" ${act||`data-toast="Abre ${t}"`}><span class="gicon" style="background:${c}">${svg(ic)}</span><span class="meta"><b>${t}</b>${s?`<small>${s}</small>`:''}</span>${svg('chev','chev')}</button>`).join('')}</div>`;
+    return {title:'Meu Império', body:`
+      <div style="display:flex;gap:14px;align-items:center;padding:18px 16px 4px"><span class="avatar" style="width:64px;height:64px;font-size:22px">RV</span><div style="min-width:0;flex:1"><b style="font-size:19px">Revisor</b><div class="muted small">@revisor · Jogador</div></div><button class="btn sec" style="height:32px;font-size:12px" data-toast="Editar perfil">Editar</button></div>
+      <div class="card" style="margin-top:12px"><div style="display:flex;justify-content:space-between;gap:8px" class="small"><b>Nível 7 · Estrela em ascensão</b><span class="muted">1.240 / 2.000</span></div><div class="lvl"><i></i></div><p class="muted small" style="margin:8px 0 0">Ganhe prestígio comentando, postando e lançando.</p></div>
+      ${h2('Meus artistas','Gerenciar','data-toast="Vincular ou criar artista"')}<div class="shelf">${[0,4].map(i=>`<button class="tile" data-open="artist" data-id="${i}" style="width:96px;text-align:center"><span class="cv sm" style="width:96px;height:96px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><b>${ART[i]}</b><small>$ ${[42,18][i?1:0]} mil eCoin</small></button>`).join('')}<button class="tile" style="width:96px;text-align:center" data-toast="Vincular ou criar artista"><span class="cv sm" style="width:96px;height:96px;border-radius:50%;background:var(--p-surface2);display:grid;place-items:center;font-size:30px;color:var(--p-muted)">+</span><b>Adicionar</b></button></div>
+      ${grp('Estúdio',[['pen','#7c3aed','Meus lançamentos','Editar músicas, vídeos, álbuns e pre-saves',`data-open="lancamentos"`],['image','#0ea5e9','Meus Spotlight Banners','Ver e excluir'],['mic','#ec4899','Performance Award','1 pendente']])}
+      ${grp('Economia',[['target','#0ea5e9','Ponto','Distribuir pontos, playlists e tabela de valores'],['bag','#10b981','Market','Produtos e Spotlight Banner'],['gavel','#f59e0b','Leilão','1 leilão em andamento'],['star','#a855f7','Como ganhar prestígio','']])}
+      ${grp('Premiações e festivais',[['trophy','#f59e0b','Indicar ao VMA','Aberto até 30/11'],['star','#e11d48','Votação','6 categorias',`data-open="votacao"`],['archive','#64748b','Prêmios já ganhos (retroativo)',''],['ticket','#ec4899','Inscrição em festival','Festival de Verão']])}
+      ${h2('Aparência')}<div class="seg">${[['dark','Escuro'],['light','Claro'],['system','Sistema']].map(([v,l])=>`<button data-mode-set="${v}" aria-pressed="${v===mode}">${l}</button>`).join('')}</div>
+      ${grp('Admin (só aparece pra admin)',[['users','#475569','Entrar como usuário',''],['image','#475569','Banners do Catálogo',''],['tv','#475569','Programação da Empire TV','Vídeos pendentes e publicar'],['list','#475569','Painel do catálogo','Fila de backup e D1']])}
+      ${grp('App',[['bell','#e11d48','Notificações','O que receber no celular'],['send','#0ea5e9','Canais oficiais',''],['help','#64748b','Guia de Sobrevivência',''],['logout','#475569','Sair','']])}`};
+  }
+};
+
+/* ── pilha de telas (voltar fecha só a de cima) ── */
+const stack = [];
+function openPage(name, id, title){
+  const p = pages[name](id, title);
+  const el = document.createElement('section');
+  el.className = 'stackPage';
+  el.setAttribute('aria-label', p.title);
+  el.innerHTML = `<div class="stackHead"><button class="back" data-back aria-label="Voltar">${svg('back')}${stack.length ? 'Voltar' : TABS.find(t=>t[0]===state.tab)[1]}</button><span class="t">${p.title}</span>${p.actions?`<button class="ic" aria-label="Mais opções" data-actions="${p.actions}" data-title="${p.title}">${svg('more')}</button>`:'<span style="width:36px"></span>'}</div><div class="stackBody">${p.body}</div>`;
+  box.appendChild(el);
+  stack.push(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+  setTimeout(() => el.querySelector('[data-back]').focus({preventScroll:true}), 300);
+}
+function closeTop(){
+  const el = stack.pop(); if (!el) return;
+  el.classList.remove('in');
+  setTimeout(() => el.remove(), 280);
+}
+function closeAll(){ while (stack.length) { const el = stack.pop(); el.remove(); } }
+
+/* ── folha "Criar" ── */
+function openCreate(){
+  $('#sheet').setAttribute('aria-label','Criar');
+  const items = [['music','Nova música'],['video','Novo vídeo'],['album','Novo álbum'],['disc','Faixa de álbum'],['rocket','Pre-save'],['pen','Post no Social'],['ticket','Nova turnê'],['archive','Material antigo'],['lyric','Sincronizar letra'],['mic','Performance Award'],['tv','Cinema (em breve)']];
+  const admin = [['image','Banners'],['tv','Programação da TV'],['list','Painel do catálogo']];
+  $('#sheet').innerHTML = `<div class="grab"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b style="font-size:18px">Criar</b><button class="btn sec" style="height:32px;font-size:12px" data-close-sheet>Fechar</button></div>
+    <button class="row" style="padding:12px;margin:0 0 14px;border-radius:14px;background:var(--p-surface2)" data-close-sheet data-open-after="lancamentos"><span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg('pen')}</span><span class="meta"><b>Editar meus lançamentos</b><small>Capa, foco, tracklist, encarte, letra, publicar faixa</small></span>${svg('chev','chev')}</button>
+    <div class="createGrid">${items.map(([ic,l])=>`<button data-toast="Abre: ${l}" data-close-sheet><span class="gi">${svg(ic)}</span><span>${l}</span></button>`).join('')}</div>
+    <p class="muted small" style="margin:16px 0 8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Só admin</p>
+    <div class="createGrid">${admin.map(([ic,l])=>`<button data-toast="Abre: ${l} (admin)" data-close-sheet><span class="gi">${svg(ic)}</span><span>${l}</span></button>`).join('')}</div>`;
+  $('#scrim').classList.add('in'); $('#sheet').classList.add('in');
+}
+/* ── menu ⋯ (ações de cada item) ── */
+const ACTIONS = {
+  faixa:[['list','Adicionar à playlist'],['heart','Salvar nos Salvos'],['forum','Abrir discussão no Fórum'],['share','Compartilhar'],['help','Reportar conteúdo errado']],
+  video:[['list','Adicionar à playlist'],['heart','Salvar'],['forum','Abrir discussão no Fórum'],['help','Reportar problema no vídeo'],['help','Reportar conteúdo errado']],
+  album:[['pen','Editar lançamento (dono)'],['heart','Salvar álbum'],['share','Compartilhar'],['help','Reportar conteúdo errado']],
+  comentario:[['pen','Editar comentário'],['heart','Reagir'],['reply','Responder'],['logout','Excluir (dono ou admin)']],
+  topico:[['share','Compartilhar tópico'],['logout','Excluir tópico (admin)']],
+  post:[['pen','Editar post (dono)'],['logout','Excluir post (dono ou admin)'],['share','Copiar link']],
+  turne:[['pen','Editar turnê'],['image','Trocar capa'],['share','Compartilhar']],
+};
+function openActions(key, title){
+  $('#sheet').setAttribute('aria-label', title||'Opções');
+  $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:8px">${title||'Opções'}</b><div class="group" style="margin:0">${ACTIONS[key].map(([ic,l])=>`<button class="row" data-close-sheet data-toast="${l}"><span class="gicon" style="background:var(--p-surface2);color:var(--p-fg)">${svg(ic)}</span><span class="meta"><b>${l}</b></span></button>`).join('')}</div><button class="btn sec" style="width:100%;margin-top:12px" data-close-sheet>Cancelar</button>`;
+  $('#scrim').classList.add('in'); $('#sheet').classList.add('in');
+}
+function closeSheet(){ $('#scrim').classList.remove('in'); $('#sheet').classList.remove('in'); }
+
+/* ── render ── */
+const RENDER = {inicio, catalogo, forum, charts, social};
+function render(keepScroll){
+  const y = scroller.scrollTop;
+  scroller.innerHTML = RENDER[state.tab]();
+  renderTabbar(); renderMini();
+  scroller.scrollTop = keepScroll ? y : 0;
+}
+let tt;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('in'); clearTimeout(tt); tt = setTimeout(()=>t.classList.remove('in'), 1600); }
+
+function setMode(m){
+  let real = m;
+  if (m==='system') real = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  phone.dataset.mode = real;
+  $('#mDark').setAttribute('aria-pressed', real==='dark');
+  $('#mLight').setAttribute('aria-pressed', real==='light');
+  document.querySelectorAll('[data-mode-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.modeSet===m));
+  try { localStorage.setItem('ehp-mode', m); } catch(e){}
+}
+
+/* ── eventos ── */
+const labelToKey = {'Para você':'voce','Empire TV':'tv','Turnês':'tours','Acervo':'acervo'};
+box.addEventListener('click', e => {
+  const act = e.target.closest('[data-actions]');
+  if (act){ e.stopPropagation(); return openActions(act.dataset.actions, act.dataset.title); }
+  const b = e.target.closest('button,[role="button"]'); if (!b) return;
+  if (b.id==='openCreate') return openCreate();
+  if (b.dataset.openAfter){ closeSheet(); return openPage(b.dataset.openAfter); }
+  if (b.id==='openSearch'){ closeAll(); state.tab='catalogo'; state.catTab='buscar'; render(); setTimeout(()=>{ const q=$('#q'); q && q.focus({preventScroll:true}); },50); return; }
+  if (b.id==='openNotif') return openPage('notif');
+  if (b.id==='openMe') return openPage('me');
+  if (b.id==='mini') return openPage('album', String(SONG[state.playing.s].al));
+  if (b.hasAttribute('data-close-sheet')){ closeSheet(); if (b.dataset.toast) toast(b.dataset.toast); return; }
+  if (b.hasAttribute('data-back')) return closeTop();
+  if (b.dataset.modeSet) return setMode(b.dataset.modeSet);
+  if (b.dataset.localTab){ const root=b.closest('.stackBody')||scroller; b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); root.querySelectorAll('[data-'+b.dataset.localTab+']').forEach(el=>el.hidden = el.getAttribute('data-'+b.dataset.localTab)!==b.dataset.val); return; }
+  if (b.dataset.scroll){ const root=b.closest('.stackBody'); b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); const t=root&&root.querySelector('#'+b.dataset.scroll); if(t) root.scrollTo({top:t.offsetTop-60,behavior:'smooth'}); return; }
+  if (b.dataset.goClose){ closeAll(); state.tab=b.dataset.goClose; return render(); }
+  if (b.dataset.go){ closeAll(); if (b.dataset.go===state.tab) { scroller.scrollTo({top:0,behavior:'smooth'}); return; } state.tab=b.dataset.go; return render(); }
+  if (b.dataset.open) return openPage(b.dataset.open, b.dataset.id, b.dataset.title);
+  if (b.dataset.set){
+    let k = b.dataset.set, v = b.dataset.val;
+    if (k==='noop') { b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===b)); return; }
+    if (k==='inicioTabLabel'){ k='inicioTab'; v=labelToKey[v]; }
+    if (k==='inicioTab' && state.tab!=='inicio'){ closeAll(); state.tab='inicio'; }
+    state[k]=v;
+    if (b.dataset.filter) state.searchFilter=b.dataset.filter;
+    closeAll(); return render(k!=='inicioTab' && k!=='catTab');
+  }
+  if (b.dataset.play!==undefined){ state.playing.s = SONG.findIndex(s=>s.al===+b.dataset.play); if (state.playing.s<0) state.playing.s=0; renderMini(); return toast('Tocando agora'); }
+  if (b.dataset.playSong!==undefined){ state.playing.s=+b.dataset.playSong; renderMini(); return toast('Tocando: '+SONG[state.playing.s].t); }
+  if (b.hasAttribute('data-like')){ b.classList.toggle('on'); return; }
+  if (b.hasAttribute('data-follow')){ const on=b.textContent.trim()==='Seguir'; b.textContent = on?'Seguindo':'Seguir'; b.classList.toggle('pri',!on); b.classList.toggle('sec',on); return; }
+  if (b.dataset.toast) return toast(b.dataset.toast);
+});
+$('#mini').addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' '){ e.preventDefault(); $('#mini').click(); } });
+$('#scrim').addEventListener('click', closeSheet);
+document.addEventListener('keydown', e => { if (e.key==='Escape'){ if ($('#sheet').classList.contains('in')) closeSheet(); else closeTop(); } });
+$('#mDark').addEventListener('click', ()=>setMode('dark'));
+$('#mLight').addEventListener('click', ()=>setMode('light'));
+document.querySelectorAll('[data-jump]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='inicio'; state.inicioTab=b.dataset.jump; render(); phone.scrollIntoView({behavior:'smooth',block:'center'}); }));
+
+let saved = 'dark'; try { saved = localStorage.getItem('ehp-mode') || 'dark'; } catch(e){}
+setMode(saved);
+render();
+})();
+</script>
