@@ -62,7 +62,7 @@ E duas condições inegociáveis:
 
 **Objetivos**
 - Barra de baixo com **5 abas que cabem na tela**: Início · Catálogo · Fórum · Charts · Social.
-- **Criar** sempre a 1 toque (botão flutuante ＋). **Meu Império** (foto do jogador) a 1 toque.
+- **Criar** sempre a 1 toque (＋ no topo). **Meu Império** (foto do jogador) a 1 toque.
 - Empire TV, Turnês e Acervo a **2 toques** (Início → aba).
 - Catálogo único (Início, Buscar, Biblioteca), Fórum com aba própria, ligados
   por uma página única de cada lançamento (o tópico, com comentários em
@@ -114,14 +114,14 @@ conferida.
 
 ```
 ┌──────────────────────────────────────────────┐
-│ [logo] EMPIRE HUB [beta]             [🔔] (RV) │  ← topo
+│ [logo] EMPIRE HUB [beta]        [＋] [🔔] (RV) │  ← topo
 ├──────────────────────────────────────────────┤
 │                                              │
 │                conteúdo                      │
 │                                              │
 │ ┌──────────────────────────────────────────┐ │
 │ │ ▣ Vidro Quebrado · Nova Valente   ⏸  ⋯  │ │  ← mini player (quando toca)
-│ └──────────────────────────────────────[＋]┘ │  ← ＋ Criar flutuante
+│ └──────────────────────────────────────────┘ │
 ├──────────────────────────────────────────────┤
 │  Início  Catálogo  Fórum  Charts  Social     │  ← barra de baixo (5)
 └──────────────────────────────────────────────┘
@@ -132,11 +132,10 @@ conferida.
   que abre a folha do Beta (6.11) · Notificações · **foto do jogador** em
   cinza neutro, sem degradê (→ Meu Império, 5.8). Nada de pílulas
   coloridas no topo.
-- **＋ Criar:** botão **flutuante** (52px, cantos arredondados) no canto
-  direito, acima do mini player, em branco no escuro e preto no claro (call
-  meu: neutro, para não competir com o conteúdo). Abre a folha Criar (5.7).
-  Fica escondido nas telas abertas por cima. No computador, o Criar é o
-  primeiro botão da barra lateral.
+- **＋ Criar (decisão do usuário):** no topo, **ao lado do sino**, no mesmo
+  molde dele: ícone ＋ simples, sem cor, num círculo com contorno fino.
+  Abre a folha Criar (5.7). No computador, o Criar é o primeiro botão da
+  barra lateral (e o ＋ do topo some, para não repetir).
 - **Busca:** no celular e no tablet, em **Catálogo › Buscar** (e nas buscas
   do Fórum, do Social e dos Charts); no computador, campo aberto no topo.
 - **Sai do topo:** o botão Recarregar. Vira **puxar para baixo para
@@ -882,7 +881,7 @@ largura da área do app):
 
 | Largura | Navegação | Conteúdo | Player |
 |---|---|---|---|
-| até 699px (celular) | barra de baixo com 5 abas; topo com logo + selo beta, sino e foto; ＋ Criar flutuante | 1 coluna | mini player acima da barra |
+| até 699px (celular) | barra de baixo com 5 abas; topo com logo + selo beta, ＋, sino e foto | 1 coluna | mini player acima da barra |
 | 700–999px (tablet) | **trilho lateral** com as 5 abas (ícone + nome); topo igual ao celular | grades com várias colunas (cartões de ~170px), prateleiras maiores | mini player flutuante embaixo |
 | 1000px ou mais (computador) | **barra lateral completa** (240px): logo, botão **Criar**, 5 abas, **Sua biblioteca** (Minhas playlists, Salvos), **Meu Império** (Perfil e economia, Meus lançamentos); topo com **campo de busca aberto**, sino e foto | conteúdo com largura máxima de ~1100px | **barra de player fixa** embaixo, de ponta a ponta (como no Spotify) |
 

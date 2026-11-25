@@ -19,10 +19,10 @@ acesso, o app pede para você trocar a senha por uma só sua.
 **Como o app está organizado:**
 - **Barra de baixo** (no computador, barra da esquerda): **Início ·
   Catálogo · Fórum · Charts · Social**.
-- **Topo:** o selo **beta**, o **sino** (notificações) e **sua foto** (Meu
-  Império: perfil, artistas, economia, premiações e ajustes).
-- **Botão ＋** (flutuante, no canto de baixo): **Criar**, todos os
-  lançamentos. No computador, fica no alto da barra lateral.
+- **Topo:** o selo **beta**, o **＋** (Criar: todos os lançamentos), o
+  **sino** (notificações) e **sua foto** (Meu Império: perfil, artistas,
+  economia, premiações e ajustes). No computador, o Criar fica no alto da
+  barra lateral.
 - **Busca:** em Catálogo › Buscar (no computador, no topo).
 - **Voltar** sempre leva para a tela anterior, uma de cada vez.
 - **Puxe a tela para baixo** para atualizar.
@@ -85,7 +85,7 @@ Toque no artista (no Início, em "Meus artistas", ou em Meu Império).
 
 ## 5. Lançar: o botão ＋ Criar
 
-O **＋ Criar** é o botão flutuante no canto de baixo de qualquer tela (no
+O **＋ Criar** fica no topo de qualquer tela, ao lado do sino (no
 computador, no alto da barra lateral). Ele reúne tudo que você lança.
 
 ### 5.1 Nova música
