@@ -187,6 +187,20 @@ redirecionamento o que deixou de ser tela própria.
 | `/acoes/tour` | **redireciona** → Criar › Nova turnê (`/tours?criar=1`) | — |
 | `/acoes/cinema` | mesma URL ("em breve"), aberta por Criar e pela página do artista | — |
 
+**Links diretos que não podem quebrar** (usados por notificações, home,
+player, Imprensa/Empirefork, Charts e banners):
+- `/empire-play/forum?tab=musicas|videos|albuns&id=…` → abre **direto a
+  página do lançamento** (5.3.4) daquele item;
+- `/social?postId=…` → abre o post; `/social?artist=…` → abre o perfil do
+  artista no Social;
+- `/charts?tab=…` (ex.: `hot100`) → abre aquele chart;
+- `/tours/$nome?id=…` → abre a turnê certa;
+- `/artistas?filter=all|mine`, `/empire-play/gestao?tab=…&nome=…`,
+  `/empire-play/gestao/album-antigo?id=…`, `/acoes/*?nome=…`;
+- links externos dos banners (`BannerCarousel`) continuam abrindo em nova
+  aba.
+Um teste abre cada um desses links e confere a tela certa (R2).
+
 **Rotas novas** (call meu nos nomes): `/empire-play/buscar`,
 `/empire-play/biblioteca`, `/empire-play/album/$id` (página de álbum
 única), `/meus-lancamentos`, `/social/perfil/$artista?rede=`.
@@ -221,20 +235,24 @@ Turnês · Premiações** (decisão do usuário: o Acervo saiu do Início e viro
 Imprensa, no Social). Empire TV e Turnês são as telas atuais (`/tv`,
 `/tours`) com essa fileira em cima.
 
-**Para você** (de cima para baixo):
+**Para você** (de cima para baixo, decisão do usuário):
 
-1. **Cartão "Ao vivo"** (só quando há transmissão na Empire TV ou canal da
-   Kick ao vivo): título, quantos assistem, **Entrar na sala** (→ sala da TV)
-   e **Grade de hoje** (→ aba Empire TV).
-2. **"Pra fazer hoje"** *(NOVO)*: lista do que o jogador tem pendente hoje,
+1. **Carrosséis de banner** que já existem, **no topo**: Spotlight Banner
+   (Patrocinado) e Pre-save.
+2. **Faixa "Ao vivo"** discreta, de uma linha (só quando há transmissão na
+   Empire TV ou canal da Kick ao vivo): ponto vermelho, nome do programa,
+   quantos assistem e **Entrar** (→ sala da TV). O cartão grande fica só na
+   aba Empire TV.
+3. **Cronômetro da semana** (6.14).
+4. **"Pra fazer hoje"** *(NOVO)*: lista do que o jogador tem pendente hoje,
    montada a partir de dados que já existem:
    - ação do dia da turnê (`/api/turnes/missoes`);
    - missão do pre-save (`/api/presave/minhas-campanhas`);
    - Performance Award pendente (`listarPendenciasPerformance`);
+   - pontos da semana ainda não distribuídos;
    - indicação/votação/festival abertos (mesmas checagens dos popups).
    Cada linha leva direto à tela. Some quando não há nada.
-3. **Carrosséis de banner** que já existem: Spotlight Banner e Pre-save.
-4. Seções que já existem hoje na home, na ordem de U8 e configuráveis por
+5. Seções que já existem hoje na home, na ordem de U8 e configuráveis por
    `homeFlags`: Meus Artistas, Lançamentos recentes, Global 100 #1, Top por
    plataforma, Próximos eventos, ticker de atividade, Últimas publicações do
    Social, **Da Imprensa** (as edições novas de revistas e entrevistas; leva
@@ -255,8 +273,7 @@ espalhado.
 Arquivo/Red Carpet; Criar/Central/Em andamento/Finalizados/Mais
 Rentáveis). Mudanças só de casca: fileira de abas do Início em cima, fileiras roláveis com seta,
 "Criar turnê" também disponível no Criar. Na grade da TV, o botão
-**Lembrar** *(NOVO)* avisa por notificação quando o programa começa (call
-meu; usa o push que já existe).
+**Lembrar** *(NOVO)* virou o sininho de 6.16.
 
 ---
 
@@ -859,7 +876,7 @@ Aplicadas no protótipo (versão 12) e obrigatórias no app:
 | U5 | **Página do lançamento:** Tocar + 2º botão ocupam a linha; ♡ e ⋯ ficam no cabeçalho da tela; selos numa linha só que rola. |
 | U6 | **Social:** o filtro de rede é o botão "Redes ▾" ao lado de "Interagindo como" (uma folha com Todas/Instagram/Twitter/TikTok), não uma fileira a mais. |
 | U7 | **Fórum:** botão de filtros (artista, datas) dentro do campo de busca; "Não comentei" é a última opção da fileira Tudo/Músicas/Vídeos/Álbuns. |
-| U8 | **Início › Para você:** ordem = Ao vivo → **Pra fazer hoje** → banners → Meus artistas → Lançamentos → Global 100 #1 → Top por plataforma → Próximos eventos → ticker → Social → Da Imprensa. A ordem continua configurável por `homeFlags`. |
+| U8 | **Início › Para você:** ordem = **banners (Patrocinado, Pre-save)** → faixa Ao vivo → cronômetro → **Pra fazer hoje** → Meus artistas → Lançamentos → Global 100 #1 → Top por plataforma → Próximos eventos → ticker → Social → Da Imprensa. A ordem continua configurável por `homeFlags`. |
 | U9 | **Estados obrigatórios em toda tela nova:** carregando (esqueleto no formato do conteúdo), vazio (frase do que falta + ação) e erro (o que deu errado + "Tentar de novo"), reaproveitando o `LoadErrorState`. |
 | U10 | **Cada aba lembra onde parou** ao trocar de aba; tocar na aba ativa volta ao topo. |
 | U11 | **Deslizar para o lado** troca entre Para você, Empire TV, Turnês e Premiações (fora de fileiras roláveis). |
@@ -1102,6 +1119,43 @@ distintos por dia". Os dados ficam guardados por 90 dias.
   decidir mudanças. Perguntas para a revisão: quais telas ninguém usa;
   quantos toques até publicar, comentar e distribuir pontos; onde o Beta
   perde jogadores.
+
+### 6.16 Sininho "Lembrar" nos eventos *(NOVO, pedido do usuário)*
+
+- **Onde:** um sininho em cada evento com hora marcada: programas da
+  **Grade** da Empire TV e itens de **Próximos eventos** no Início (shows
+  de turnê e programas). O sininho fica preenchido quando há lembrete.
+- **Tocar abre a folha "Me avise antes de começar":** Quando começar · 10
+  minutos antes · 30 minutos antes · 1 hora antes · 1 dia antes. Com
+  lembrete ativo, aparece também "Não avisar mais".
+- **Como avisa:** no **sino** do app e, se o jogador ativou, como
+  **notificação no celular** (o push que já existe, `webPushService`).
+- **Custo zero:** uma tabela D1 pequena, `lembrete (jogador, tipo_evento,
+  id_evento, avisar_em, enviado)`. O **agendamento que já roda a cada 10
+  minutos** (`triggers.crons` no `wrangler.jsonc`) envia os avisos
+  vencidos. Por isso as opções são múltiplos de 10 minutos, e o aviso
+  pode chegar até 10 minutos depois da hora escolhida (dito na folha
+  como "por volta de").
+- Se o evento mudar de horário, o lembrete acompanha (recalculado pelo
+  `id_evento`); se o evento for cancelado, o lembrete some.
+
+### 6.17 Fontes
+
+As mesmas de hoje (conferido em `__root.tsx` e nos componentes):
+- **Inter:** texto e títulos do app inteiro.
+- **Fjalla One** (estreita, maiúsculas): títulos dos **Charts** e do
+  painel de playlists (`PlaylistsInicio`, que vira Charts › Ao vivo).
+  Continua exatamente onde está.
+- **Poppins:** texto das capas dinâmicas de playlist (`DynamicCoverCard`).
+- **Press Start 2P:** é carregada em `__root.tsx`, mas nenhuma tela usa.
+  Sai do carregamento na fase de limpeza (página mais leve).
+
+### 6.18 Admin "vendo como" outro jogador
+
+Hoje o aviso "Vendo como … — Voltar a ser admin" só aparece dentro do
+Perfil. No Beta, quando o admin entra como outro jogador, uma **faixa fina
+fixa no topo** de todas as telas mostra "Vendo como @usuario · Voltar a ser
+admin", para o admin não esquecer em qual conta está.
 
 ---
 

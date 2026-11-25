@@ -322,3 +322,13 @@ tutorial em Google Docs):
 | Acervo › Awards (lista e `/awards/$nome`) | **Início › Premiações › Resultados** | P |
 | Perfil › Premiações (Retroativo, Indicar, Votação) e Festivais (Inscrição) | **Início › Premiações** (Abertas agora, Seus prêmios) + atalhos em Meu Império | P |
 | Seção "Revistas & Entrevistas" da home | Início › Para você › **Da Imprensa** | P |
+
+## 8ª conferência: links diretos, fontes e estados visíveis (2026-11-25)
+| Achado | Onde fica |
+|---|---|
+| Links `?tab=&id=` do Fórum usados por notificações, home, player, Imprensa e banners | abrem direto a página do lançamento (design 5.1) |
+| `/social?postId`, `/social?artist`, `/charts?tab`, `/tours/$nome?id`, `/artistas?filter`, `gestao?tab&nome`, `album-antigo?id`, `/acoes/*?nome` | listados no design 5.1, com teste |
+| Banners com link externo (abrem em nova aba) | iguais |
+| Fontes Fjalla One (Charts e painel) e Poppins (capas dinâmicas) | mantidas (design 6.17); protótipo corrigido |
+| Aviso "Vendo como … — Voltar a ser admin" | faixa fixa em todas as telas no Beta (design 6.18) |
+| Press Start 2P carregada sem uso | sai na limpeza |

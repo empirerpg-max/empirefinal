@@ -243,9 +243,11 @@ houver), faixas com a letra de cada uma, encarte e os **comentários**.
 
 ## 11. Empire TV, Turnês e Premiações (abas do Início)
 
-- **Empire TV:** quando há transmissão, o cartão **Ao vivo** aparece no
-  topo do Início. **Entrar na sala** abre o vídeo com chat (GIFs,
-  responder), participantes e enquete. A **Grade** mostra o dia. No **Red
+- **Empire TV:** quando há transmissão, uma faixa **Ao vivo** aparece no
+  Início. **Entrar** abre o vídeo com chat (GIFs, responder), participantes
+  e enquete. A **Grade** mostra o dia: toque no **sininho** de um programa
+  para ser avisado quando ele começar, ou 10 min, 30 min, 1 hora ou 1 dia
+  antes. No **Red
   Carpet**, poste o look do seu artista e vote nos outros.
 - **Turnês:** crie em ＋ Criar › Nova turnê (com simulação de lucro). Todo
   dia, faça a **ação do dia** (aparece em Pra fazer hoje). Acompanhe
