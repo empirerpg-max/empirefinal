@@ -140,6 +140,30 @@ passam a gravar no D1 (via API nova) e ganham:
 - Rotas `adminDiag*`/`adminFix*` de INFOS ACTS: ficam (são ferramentas
   manuais), sem uso pelo app.
 
+### Respostas da revisão
+
+- **Chave:** a coluna ID_unico está preenchida em todas as ~136 linhas e é
+  única; os nomes também são únicos. PK = `id_unico`; a API usa o nome (busca
+  por `nome_upper`). Atenção: há linha com nome e ID_unico de nomes
+  diferentes (ex.: "Sebastian" / "Tyler Strand…", artista renomeado) — o
+  ID_unico é a identidade, o nome é o atual.
+- **Ordem:** a reconciliação só roda depois que a importação única terminar
+  (marca em `chart_config`/config, como `charts_d1_ativo`). Valores da INFOS
+  ACTS entram **uma vez só**, na importação.
+- **Charts e histórico:** os charts por país já leem a nacionalidade atual na
+  hora da leitura (decidido no design dos charts); como a nacionalidade fica
+  travada depois de salva, o histórico só muda quando um país vazio é
+  preenchido ou o admin corrige — aceito.
+- **Fortuna/contrato:** **fora do espelho.** Quem lê/escreve fortuna e
+  contrato continua na planilha como hoje. O espelho guarda só identidade e
+  perfil (nome, dono, gravadora, foto, capa, bio, gênero principal, país,
+  ano, sexo, artista base).
+- **Outros leitores:** Apps Script e ferramentas manuais seguem lendo a aba
+  ARTISTAS, que continua atualizada pela cópia das edições. O teste "ninguém
+  lê INFOS ACTS" ignora `adminDiag*`/`adminFix*`/`adminBackfill*`.
+- **Foto:** o `FotoModal` atual já usa o upload para o Drive que existe
+  (`/api/gestao/upload`); só muda onde grava o link.
+
 ## Custo
 
 - Leituras: perfil, prêmios, votação, charts passam a ler do D1 (cache curto
