@@ -94,8 +94,8 @@
 | Ação hoje | Onde fica | |
 |---|---|---|
 | TV: início, grade, arquivo | Início › Empire TV | P |
-| TV ao vivo: chat, GIFs, participantes, sobre, enquete | sala da TV | P |
-| Red Carpet: postar, curtir, ranking, excluir | Início › Empire TV › Red Carpet | P |
+| TV ao vivo: chat, GIFs, participantes, sobre, enquete (nota secreta) | sala nova da TV (6.19): chat embaixo do vídeo; Participantes, Enquete e Sobre em folhas; enquete fixada no topo do chat | P |
+| Red Carpet: postar (várias fotos), curtir, ranking, excluir o seu, pílula "chegou ao Red Carpet" no chat | sala da TV › folha Red Carpet (só nos tipos de evento que têm, como hoje) | P |
 | Turnês: criar (com simulação) | Criar › Nova turnê | P |
 | Turnês: central, em andamento, finalizadas, mais rentáveis | Início › Turnês | P |
 | Turnê: ação do dia, calendário, arrecadação, notícias, comentar, editar post, editar turnê, capa | página da turnê | P |
@@ -136,8 +136,8 @@ Criar. Nenhuma URL atual deixa de abrir.
 | Turnês: missões (`/api/turnes/missoes`) | Início › Turnês + "Pra fazer hoje" | D |
 | Nova turnê: simulação de lucro (mínimo e máximo), escolha de locais | Criar › Nova turnê (tela atual) | D |
 | Empire TV: canais ao vivo da Kick | Início › Empire TV (cartão "Ao vivo") | D |
-| Empire TV: presença (tempo assistido vira prestígio) | automático na sala | D |
-| Empire TV: subir GIF, responder mensagem no chat | sala da TV › Chat | P |
+| Empire TV: presença (tempo assistido vira prestígio) | automático na sala **e no mini player**; soma das sessões no D1 (6.19.1); faixas, regra do chat, REGISTRO e prestígio iguais | D (fase 0b) |
+| Empire TV: subir GIF, responder mensagem no chat, negrito/itálico | sala da TV › caixa de mensagem (GIF, Aa) e arrastar/segurar a mensagem | P |
 | Social: postar como artista **ou como fã anônimo** (nome aleatório) | Criar › Post no Social (tela atual) | D |
 | Social: escolher rede (Instagram, TikTok, Twitter), anexar música, modo de publicação, texto rico com emoji | Criar › Post no Social (tela atual) | D |
 | Social: seguir perfis, ver stories | Social › Perfis e Feed | P |
@@ -332,3 +332,28 @@ tutorial em Google Docs):
 | Fontes Fjalla One (Charts e painel) e Poppins (capas dinâmicas) | mantidas (design 6.17); protótipo corrigido |
 | Aviso "Vendo como … — Voltar a ser admin" | faixa fixa em todas as telas no Beta (design 6.18) |
 | Press Start 2P carregada sem uso | sai na limpeza |
+
+## 9ª conferência — sala da Empire TV (2026-11-25)
+
+Conferido contra `src/routes/tv.tsx` (`WatchView`, `ChatPanel`,
+`EnqueteBanner`, `RedCarpetPanel`, `RedCarpetComposer`,
+`ParticipantesPanel`, `SobrePanel`) e `backend/src/controllers/tvController.ts`.
+
+| Função de hoje | Na sala nova | Status |
+|---|---|---|
+| Voltar, minimizar (continua tocando) | ⌄ no canto do vídeo; voltar do celular fecha folha → sala → tela anterior | P |
+| Ativar som | "Toque para assistir com som" (D5, teste em `/tv-teste-som`) | pendente do teste |
+| Abas Chat · Red Carpet · Participantes · Sobre | chat fixo + fileira rolável que abre folhas | P |
+| Enquete por nota (notaMin–notaMax, voto secreto, "Você votou N", atualiza a cada 20 s) | enquete fixada no topo do chat + folha com as notas | P |
+| Carregar mensagens mais antigas | carrega sozinho ao rolar para o topo | P (muda o gatilho) |
+| Responder, cancelar resposta, citação | arrastar para a esquerda ou segurar › Responder; barra "Respondendo a…" com ✕ | P |
+| Negrito `*texto*`, itálico `_texto_` | botão Aa | P |
+| GIFs: escolher, enviar, subir novo (fica para todos) | botão GIF › folha | P |
+| Pílula "Fulano chegou ao Red Carpet" que abre o look | igual, no meio do chat | P |
+| Mensagens pendentes (meia opacidade até confirmar) | igual | D |
+| Red Carpet: postar com várias fotos, carrossel de fotos, curtir, ranking, excluir o seu | folha Red Carpet | P |
+| Participantes | folha, com a **mesma %** que será creditada | P (número muda: 6.19.1) |
+| Sobre | folha (toque no nome do programa) | P |
+| Presença a cada 30 s | batida por minuto no D1, conta também no mini player | D (fase 0b) |
+| — | reações com emoji, "↓ N novas", celular deitado com chat lateral, círculo da sua participação | **NOVO** |
+

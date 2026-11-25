@@ -116,6 +116,62 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 .sheet.in{transform:none}
 .grab{width:38px;height:5px;border-radius:3px;background:var(--p-line);margin:0 auto 12px}
 
+/* ── sala da Empire TV (nova) ── */
+.stackPage.tvroom .stackBody{display:flex;flex-direction:column;overflow:hidden;padding-bottom:0;position:relative}
+.tvVideo{position:relative;flex-shrink:0;aspect-ratio:16/9;color:#fff;display:grid;place-items:center}
+.tvVidTop{position:absolute;top:8px;left:8px;right:8px;display:flex;align-items:center;gap:8px;z-index:2}
+.tvIc{width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;display:grid;place-items:center;flex-shrink:0;font-size:16px}
+.tvTap{display:flex;flex-direction:column;align-items:center;gap:6px;color:#fff;text-align:center;padding:0 24px}
+.tvTap small{opacity:.75;font-size:11px;max-width:260px}
+.tvTapIc{width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.2);backdrop-filter:blur(6px);display:grid;place-items:center}
+.tvTapIc svg{width:24px;height:24px}
+.tvVideo.tocando .tvTap{display:none}
+.tvStrip{display:flex;align-items:center;gap:10px;padding:8px 12px 6px;flex-shrink:0;border-bottom:1px solid var(--p-line)}
+.tvStripT{flex:1;min-width:0;text-align:left;padding:2px 4px}
+.tvStripT b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tvStripT small{display:block;font-size:11.5px;color:var(--p-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tvPart{display:flex;align-items:center;gap:6px;flex-shrink:0;padding:4px 10px 4px 4px;border-radius:999px;background:var(--p-surface);font-weight:800;font-size:12.5px}
+.tvRing{width:24px;height:24px;border-radius:50%;flex-shrink:0;background:conic-gradient(#10b981 calc(var(--v)*1%),var(--p-line) 0);-webkit-mask:radial-gradient(circle,transparent 7px,#000 8px);mask:radial-gradient(circle,transparent 7px,#000 8px)}
+.tvChips{flex-shrink:0;padding-top:6px;padding-bottom:6px}
+.tvChips .chip{white-space:nowrap;flex-shrink:0}
+.tvChatWrap{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
+.tvPin{display:flex;align-items:center;gap:10px;padding:6px 12px;text-align:left;flex-shrink:0;background:var(--p-bar);border-bottom:1px solid var(--p-line)}
+.tvPinBar{width:3px;align-self:stretch;border-radius:2px;background:var(--p-accent);flex-shrink:0}
+.tvPinT{display:block;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--p-muted)}
+.tvChat{flex:1;min-height:0;overflow-y:auto;padding:4px 0 10px;scrollbar-width:none;overscroll-behavior:contain}
+.tvChat::-webkit-scrollbar{display:none}
+.tvOld{text-align:center;font-size:11px;color:var(--p-muted);margin:6px 16px}
+.tvDay{text-align:center;margin:6px 0}.tvDay span{font-size:11px;padding:3px 10px;border-radius:999px;background:var(--p-surface);color:var(--p-muted)}
+.tvMsg{display:flex;gap:8px;align-items:flex-start;width:100%;text-align:left;padding:4px 12px;font-size:14px;line-height:1.35;transition:transform .15s}
+.tvMsg:active{background:var(--p-surface)}
+.tvMsg .av{width:24px;height:24px;border-radius:50%;flex-shrink:0;margin-top:1px}
+.tvMsgB{min-width:0;flex:1;overflow-wrap:anywhere}
+.tvMsgB b{font-weight:800;margin-right:2px}
+.tvRole{font-style:normal;font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px;background:#f59e0b;color:#111;vertical-align:1px}
+.tvQuote{display:block;font-size:12px;color:var(--p-muted);border-left:2px solid var(--p-accent);padding-left:8px;margin:0 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tvReacts{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}.tvReacts span{font-size:11.5px;padding:1px 7px;border-radius:999px;background:var(--p-surface)}
+.tvNovas{position:absolute;right:12px;bottom:10px;padding:7px 12px;border-radius:999px;background:var(--p-accent);color:var(--p-accent-fg);font-weight:800;font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.tvReplyBar{display:flex;align-items:center;gap:10px;padding:6px 12px;background:var(--p-bar);border-top:1px solid var(--p-line);flex-shrink:0}
+.tvComposer{position:static;flex-shrink:0;align-items:center}
+.tvEmoji{width:36px;height:40px;font-size:20px;flex-shrink:0}
+.tvArr{font-size:11.5px;padding:4px 12px;border-radius:999px;background:rgba(217,70,239,.12);border:1px solid rgba(217,70,239,.35);color:#f0abfc}
+.tvArr b{color:var(--p-fg)}
+.tvAviso{position:absolute;left:12px;right:12px;bottom:72px;z-index:5;font-size:12px;padding:8px 12px;border-radius:12px;background:var(--p-surface2);box-shadow:0 6px 18px rgba(0,0,0,.25)}
+/* celular deitado: vídeo em tela cheia e o chat semitransparente na lateral */
+.stackPage.tvroom.land .stackHead{display:none}
+.stackPage.tvroom.land{background:#000}
+.stackPage.tvroom.land .stackBody{display:block;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(90deg);overflow:hidden}
+.stackPage.tvroom.land .tvOld{display:none}
+.stackPage.tvroom.land .tvVideo{position:absolute;inset:0;aspect-ratio:auto}
+.stackPage.tvroom.land .tvStrip,.stackPage.tvroom.land .tvChips,.stackPage.tvroom.land .tvPin{display:none}
+.stackPage.tvroom.land .tvChatWrap{position:absolute;right:0;top:48px;bottom:56px;width:38%;background:linear-gradient(90deg,transparent,rgba(0,0,0,.55) 18%);color:#fff;z-index:3}
+.stackPage.tvroom.land .tvMsg{font-size:12.5px}.stackPage.tvroom.land .tvMsg .av{display:none}
+.stackPage.tvroom.land .tvComposer{position:absolute;right:0;bottom:0;width:38%;background:rgba(0,0,0,.55);border:0;z-index:3}
+.stackPage.tvroom.land .tvComposer .tvEmoji,.stackPage.tvroom.land .tvComposer .btn.sec{display:none}
+.stackPage.tvroom.land .tvLandTag{display:block}
+.tvWrap .meta small{white-space:normal}
+.tvLandTag{display:none;position:absolute;left:12px;bottom:12px;z-index:4;font-size:11px;padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff}
+
 /* ── peças de conteúdo ── */
 .pad{padding:0 16px}
 .ttl{margin:6px 16px 12px;font-size:30px;line-height:1.05;font-weight:var(--p-title-weight);font-style:var(--p-title-style);text-transform:var(--p-title-case);letter-spacing:var(--p-title-track)}
@@ -475,7 +531,7 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
       <h2>Onde ficam Empire TV, Turnês, Premiações e Imprensa</h2>
       <ul>
         <li><b>No Início, como abas no topo:</b> <button class="jump" data-jump="tv">Empire TV</button> · <button class="jump" data-jump="tours">Turnês</button> · <button class="jump" data-jump="premiacoes">Premiações</button>. Ficam a 2 toques de qualquer tela (Início → aba).</li>
-        <li><b>Empire TV ao vivo:</b> quando há transmissão, aparece uma faixa discreta "Ao vivo" no Início (os banners Patrocinado e Pre-save ficam no topo) e um ponto vermelho no sino. "Entrar na sala" abre o player com Chat, Participantes, Sobre e Enquete. Ao sair, o mini player continua.</li>
+        <li><b>Empire TV ao vivo:</b> quando há transmissão, aparece uma faixa discreta "Ao vivo" no Início (os banners Patrocinado e Pre-save ficam no topo) e um ponto vermelho no sino. "Entrar na sala" abre a sala nova: vídeo sempre no topo, chat compacto embaixo (o teclado não cobre o vídeo), Red Carpet, Participantes, Enquete e Sobre abrem como folhas por cima. O círculo mostra a sua participação, o mesmo número creditado. Ao minimizar, o mini player continua e continua contando.</li>
         <li><b>Turnês:</b> a ação do dia aparece em "Pra fazer hoje", no Início. A aba Turnês mostra as suas, as em andamento e o ranking de arrecadação. Criar turnê fica no botão Criar.</li>
         <li><b>Premiações</b> (aba nova do Início): Abertas agora (indicar, votar, festival), <b>Resultados</b> (os Awards que estavam no Acervo) e seus prêmios. Meu Império continua com atalhos.</li>
         <li><b>Imprensa</b> (o antigo Acervo, agora dentro do Social): News, Revistas, Entrevistas, Forbes, Metacritic e <button class="jump" data-jump-acervo="Empirefork">Empirefork</button>. A aba News do Social entrou aqui. As edições novas também aparecem no Início, em "Da Imprensa".</li>
@@ -1127,20 +1183,32 @@ const pages = {
       ${SONG.map((s,i)=>songRow(s,i,{rank:true,end:s.d})).join('')}`};
   },
   tv(){
-    return {title:'Empire TV', body:`<div class="pad" style="padding-top:10px;display:flex;gap:8px"><button class="btn sec" style="height:32px;font-size:12px" data-back data-toast2="min">Minimizar (continua tocando)</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Som ativado">Ativar som</button></div>
-      <div class="tvbox" style="background:radial-gradient(80% 80% at 70% 20%,#f43f5e,transparent 60%),linear-gradient(160deg,#4c1d95,#020617)"><div style="text-align:center"><span class="badge live">Ao vivo</span><h4 style="margin:8px 0 0;font-size:22px;font-weight:900;font-style:italic;text-transform:uppercase">Red Carpet do VMA</h4><span class="small" style="opacity:.8">1.214 assistindo</span></div></div>
-      <div class="chips" style="margin:6px 0 10px">${[['0','Chat'],['1','Red Carpet'],['2','Participantes'],['3','Sobre']].map(([v,l])=>`<button class="chip" data-local-tab="sala" data-val="${v}" aria-pressed="${v==='0'}">${l}</button>`).join('')}</div>
-      <div data-sala="0">
-      <div class="card" style="margin-bottom:8px"><b>Enquete: melhor look da noite?</b><div style="display:grid;gap:8px;margin-top:10px">${['Nova Valente','Íris Sol','The Velvet Arc'].map((n,k)=>`<button class="btn sec" style="justify-content:space-between;width:100%" data-toast="Voto registrado em ${n}"><span>${n}</span><span class="muted">${[46,38,16][k]}%</span></button>`).join('')}</div></div>
-      ${[['Oruã','o vestido da Nova tá surreal'],['Bia Kalli','KAI CHEGOU 😱'],['Lumi Ray','alguém sabe a ordem das apresentações?'],['Dante Cruz','tô no backstage, já já entro']].map(([n,t],k)=>`<div class="cmt" style="padding:8px 16px"><span class="av cv sm" style="background:linear-gradient(140deg,${G[k+2][0]},${G[k+2][1]})"></span><div style="min-width:0;flex:1"><b class="small">${n}</b><p style="margin:0">${t}</p><button class="small muted" style="font-weight:700;padding:2px 0" data-toast="Respondendo a ${n}">Responder</button></div></div>`).join('')}
-</div>
-      <div data-sala="1" hidden><p class="muted small pad" style="margin:0 0 10px">Looks postados nesta sala. O ranking dos mais curtidos é a base do prêmio da noite.</p>
-        <div class="pad" style="margin-bottom:10px;display:flex;gap:8px"><button class="btn pri" style="flex:1" data-toast="Escolha o artista e as fotos do look">${svg('image')}Postar look</button><button class="btn sec" data-toast="Ranking dos looks mais curtidos nesta sala">🏆 Ranking</button></div>
-        <div class="grid2">${[0,2,5,1].map((a,k)=>`<div><div class="cv sm" style="aspect-ratio:3/4;border-radius:var(--p-radius);background:linear-gradient(160deg,${G[a+3][0]},${G[a+3][1]})"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><b class="small">${ART[a]}</b><button class="small" data-like style="display:flex;gap:4px;align-items:center">${svg('heart').replace('class=""','style="width:15px;height:15px"')}${[412,388,201,177][k]}</button></div></div>`).join('')}</div></div>
-      <div data-sala="2" hidden>${ART.slice(0,6).map((a,k)=>`<div class="row" style="cursor:default"><span class="cv sm" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(140deg,${G[k][0]},${G[k][1]})"></span><span class="meta"><b>${a}</b><small>${[42,35,28,20,12,5][k]} min assistidos</small></span></div>`).join('')}</div>
-      <div data-sala="3" hidden><div class="card"><b>Red Carpet do VMA</b><p class="muted small" style="margin:6px 0 0">Programa ao vivo da Empire TV. Hoje, 20:00. Assistir conta prestígio.</p></div></div>
-      <div data-sala-chatonly></div>
-      <div class="composer"><input placeholder="Mandar no chat…" aria-label="Mensagem do chat"><button class="btn sec" style="height:40px;padding:0 12px" data-toast="GIFs e stickers">GIF</button><button class="btn pri" style="height:40px;width:40px;padding:0" aria-label="Enviar" data-toast="Mensagem enviada">${svg('send')}</button></div>`};
+    const MSG=[['Oruã','fã','o vestido da Nova tá surreal',null,['❤️ 12']],['Bia Kalli','artista','KAI CHEGOU 😱',null,['😱 8','🔥 5']],['Empire TV','equipe','Enquete aberta: que nota vocês dão pro look da Nova? Vote no fixado lá em cima ☝️',null,[]],['Lumi Ray','artista','alguém sabe a ordem das apresentações?',null,[]],['Dante Cruz','fã','primeiro a Nova, depois o The Velvet Arc','Lumi Ray: alguém sabe a ordem das apresentações?',['👏 3']],['Íris Sol','artista','tô no backstage, já já entro',null,['❤️ 21']],['Kai Monroe','artista','obrigado pelo carinho de vocês 🖤',null,['❤️ 40','🔥 9']]];
+    const COR={fã:'var(--p-fg)',artista:'#c084fc',equipe:'#f59e0b'};
+    const msgs=MSG.map(([n,r,t,q,re],k)=>`<button class="tvMsg" data-tvmsg="${n}"><span class="av cv sm" style="background:linear-gradient(140deg,${G[(k+2)%10][0]},${G[(k+2)%10][1]})"></span><span class="tvMsgB">${q?`<span class="tvQuote">${q}</span>`:''}<b style="color:${COR[r]}">${n}${r==='equipe'?' <i class="tvRole">equipe</i>':''}</b> ${t}${re.length?`<span class="tvReacts">${re.map(x=>`<span>${x}</span>`).join('')}</span>`:''}</span></button>`).join('');
+    const chegada=`<p class="tvDay"><button class="tvArr" data-tvsheet="carpet">✨ <b>Íris Sol</b> chegou ao Red Carpet do VMA</button></p>`;
+    const ms=msgs.split('</button><button class="tvMsg"'); 
+    return {title:'Empire TV', cls:'tvroom', body:`
+      <div class="tvVideo" style="background:radial-gradient(80% 80% at 70% 20%,#f43f5e,transparent 60%),linear-gradient(160deg,#4c1d95,#020617)">
+        <div class="tvVidTop"><button class="tvIc" data-back data-toast2="min" aria-label="Minimizar (continua tocando)">${svg('chev').replace('class=""','style="width:18px;height:18px;transform:rotate(90deg)"')}</button><span class="badge live">Ao vivo</span><span style="flex:1"></span><button class="tvIc" data-tvland aria-label="Celular deitado (tela cheia)">⤢</button></div>
+        <span class="tvLandTag">Simulação: celular deitado · toque em ⤢ para voltar</span><button class="tvTap" data-tvsom><span class="tvTapIc">${svg('play')}</span><b>Toque para assistir com som</b><small>O primeiro toque é no play do próprio player da Kick · aguardando o teste no celular</small></button>
+      </div>
+      <div class="tvStrip">
+        <button class="tvStripT" data-tvsheet="sobre"><b>Red Carpet do VMA</b><small>${svg('users').replace('class=""','style="width:12px;height:12px;vertical-align:-1px"')} 1.214 assistindo · Sobre</small></button>
+        <button class="tvPart" data-tvsheet="minha" aria-label="Sua participação: 62%"><span class="tvRing" style="--v:62"></span><span>62%</span></button>
+      </div>
+      <div class="chips tvChips"><button class="chip" data-tvsheet="carpet">📸 Red Carpet</button><button class="chip" data-tvsheet="part">${svg('users').replace('class=""','style="width:13px;height:13px;flex-shrink:0;vertical-align:-2px"')} Participantes</button><button class="chip" data-tvsheet="enquete">⭐ Enquete</button><button class="chip" data-tvsheet="sobre">Sobre</button></div>
+      <div class="tvChatWrap">
+        <button class="tvPin" data-tvsheet="enquete"><span class="tvPinBar"></span><span style="min-width:0;flex:1"><b class="small" style="color:var(--p-accent)">⭐ Enquete fixada</b><span class="tvPinT">Que nota você dá para o look de Nova Valente?</span></span><span class="small muted" style="flex-shrink:0">Votar</span></button>
+        <div class="tvChat" data-tvchat>
+          <p class="tvOld">↑ Role para cima para ver as mensagens anteriores (carregam sozinhas)</p>
+          <p class="tvDay"><span>Hoje · 20:02</span></p>
+          ${ms.slice(0,4).join('</button><button class="tvMsg"')}</button>${chegada}<button class="tvMsg"${ms.slice(4).join('</button><button class="tvMsg"')}
+        </div>
+        <button class="tvNovas" data-tvnovas>↓ 3 novas</button>
+      </div>
+      <div class="tvReplyBar" data-tvreply hidden><span class="tvPinBar"></span><span style="min-width:0;flex:1"><b class="small" style="color:var(--p-accent)" data-tvreply-n>Respondendo</b><span class="tvPinT" data-tvreply-t></span></span><button class="tvIc" style="background:transparent;color:var(--p-fg)" data-tvreply-x aria-label="Cancelar resposta">✕</button></div>
+      <div class="composer tvComposer"><button class="tvEmoji" data-tvsheet="formato" aria-label="Negrito e itálico" style="font-weight:900;font-size:15px">Aa</button><input placeholder="Mensagem" aria-label="Mensagem do chat" data-tvinput><button class="btn sec" style="height:40px;padding:0 12px;flex-shrink:0" data-tvsheet="gif">GIF</button><button class="btn pri" style="height:40px;width:40px;padding:0;flex-shrink:0" aria-label="Enviar" data-tvsend>${svg('send')}</button></div>`};
   },
   tour(){
     return {title:'Neon Tour', actions:'turne', body:`
@@ -1182,13 +1250,14 @@ const stack = [];
 function openPage(name, id, title, kind){
   const p = pages[name](id, title, kind);
   const el = document.createElement('section');
-  el.className = 'stackPage';
+  el.className = 'stackPage' + (p.cls ? ' '+p.cls : '');
   el.dataset.pid = id || ''; el.dataset.pname = name; el.dataset.ptitle = title || ''; el.dataset.pkind = kind || '';
   el.setAttribute('aria-label', p.title);
   el.innerHTML = `<div class="stackHead"><button class="back" data-back aria-label="Voltar">${svg('back')}${stack.length ? 'Voltar' : TABS.find(t=>t[0]===state.tab)[1]}</button><span class="t">${p.title}</span>${p.save?`<button class="ic" aria-label="Salvar" data-toast="Salvo na Biblioteca">${svg('heart')}</button>`:''}${p.actions?`<button class="ic" aria-label="Mais opções" data-actions="${p.actions}" data-title="${p.title}">${svg('more')}</button>`:'<span style="width:36px"></span>'}</div><div class="stackBody">${p.body}</div>`;
   box.appendChild(el);
   stack.push(el);
   initArrows(el);
+  const tvc = el.querySelector('[data-tvchat]'); if (tvc) setTimeout(()=>{ tvc.scrollTop = tvc.scrollHeight - tvc.clientHeight - 70; }, 30);
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
   setTimeout(() => el.querySelector('[data-back]').focus({preventScroll:true}), 300);
 }
@@ -1232,6 +1301,23 @@ function openActions(key, title){
   $('#sheet').setAttribute('aria-label', title||'Opções');
   $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:8px">${title||'Opções'}</b><div class="group" style="margin:0">${ACTIONS[key].map(([ic,l,at])=>`<button class="row" ${at?at:`data-close-sheet data-toast="${l}"`}><span class="gicon" style="background:var(--p-surface2);color:var(--p-fg)">${svg(ic)}</span><span class="meta"><b>${l}</b></span></button>`).join('')}</div><button class="btn sec" style="width:100%;margin-top:12px" data-close-sheet>Cancelar</button>`;
   $('#scrim').classList.add('in'); $('#sheet').classList.add('in');
+}
+/* ── folhas da sala da TV ── */
+function openTvSheet(k){
+  const head=(t,sub)=>`<div class="grab"></div><b style="display:block;font-size:17px">${t}</b>${sub?`<p class="muted small" style="margin:4px 0 12px">${sub}</p>`:''}`;
+  const PART=[['Bia Kalli',100,'2h00 assistidas'],['Íris Sol',96,'1h55'],['Oruã',88,'1h46'],['Kai Monroe',75,'1h30'],['Você (Nova Valente)',62,'1h14'],['Dante Cruz',40,'chat: 4 de 10 mensagens'],['Lumi Ray',25,'30 min']];
+  let h='';
+  if (k==='minha') h = head('Sua participação: 62%','O mesmo número que vai para a planilha REGISTRO no fim da transmissão.<i class="novo">novo</i>')+`
+    <div class="group tvWrap" style="margin:0 0 12px"><div class="row" style="cursor:default"><span class="meta"><b>Assistindo: 62%</b><small>1h14 de 2h00 · soma de todas as vezes que você entrou, inclusive com o mini player</small></span></div><div class="row" style="cursor:default"><span class="meta"><b>Chat: 60%</b><small>6 de 10 mensagens (10 = 100%)</small></span></div><div class="row" style="cursor:default"><span class="meta"><b>Vale o maior: 62%</b><small>Comparado às faixas da aba "Regras", como hoje</small></span></div></div>
+    <div class="card" style="margin:0"><b class="small">Faltam 28% para o prestígio "Assistir TV"</b><p class="muted small" style="margin:4px 0 0">Quem chega a 90% de presença ganha o prestígio, como hoje. Fique até 21:50 com a sala ou o mini player aberto.</p></div>`;
+  if (k==='part') h = head('Participantes','1.214 assistindo agora · % igual à que será creditada')+`<div class="group" style="margin:0;max-height:52vh;overflow:auto">${PART.map(([n,v,d],i)=>`<div class="row" style="cursor:default"><span class="cv sm" style="width:34px;height:34px;border-radius:50%;flex-shrink:0;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${n}</b><small>${d}</small></span><b style="flex-shrink:0;color:${v>=90?'#10b981':'var(--p-fg)'}">${v}%</b></div>`).join('')}</div>`;
+  if (k==='sobre') h = head('Red Carpet do VMA','Hoje · 20:00 às 22:00 · Empire TV')+`<p class="small" style="margin:0 0 12px">Programa ao vivo da Empire TV. Assistir conta para a participação e para o prestígio "Assistir TV".</p><button class="btn sec" style="width:100%" data-close-sheet data-toast="Você vai receber um aviso antes do próximo programa">🔔 Lembrar do próximo programa</button>`;
+  if (k==='enquete') h = head('⭐ Enquete','Que nota você dá para o look de Nova Valente? · voto secreto, como hoje')+`<div style="display:flex;flex-wrap:wrap;gap:8px">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="btn sec" style="width:44px;height:44px;padding:0;font-weight:900" data-close-sheet data-toast="Você votou ${n} · voto secreto, obrigado por participar!">${n}</button>`).join('')}</div><p class="muted small" style="margin:10px 0 0">A faixa de notas e o alvo vêm da planilha, como hoje. Fica fixada no topo do chat enquanto estiver aberta.</p>`;
+  if (k==='carpet') h = head('Red Carpet','Looks postados nesta sala (várias fotos por look, curtir, excluir o seu). O ranking dos mais curtidos é a base do prêmio da noite. O vídeo continua tocando atrás.')+`<div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn pri" style="flex:1" data-toast="Escolha o artista e as fotos do look">${svg('image')}Postar look</button><button class="btn sec" data-toast="Ranking dos looks mais curtidos nesta sala">🏆 Ranking</button></div><div class="grid2" style="padding:0;max-height:44vh;overflow:auto">${[0,2,5,1].map((a,j)=>`<div><div class="cv sm" style="aspect-ratio:3/4;border-radius:var(--p-radius);background:linear-gradient(160deg,${G[a+3][0]},${G[a+3][1]})"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><b class="small">${ART[a]}</b><button class="small" data-like style="display:flex;gap:4px;align-items:center">${svg('heart').replace('class=""','style="width:15px;height:15px"')}${[412,388,201,177][j]}</button></div></div>`).join('')}</div>`;
+  if (k==='gif') h = head('GIFs e stickers','Os mesmos de hoje · o vídeo continua no topo')+`<div class="grid2" style="padding:0;grid-template-columns:repeat(3,1fr)">${[0,1,2,3,4,5].map(j=>`<button class="cv sm" style="aspect-ratio:1;border-radius:12px;background:linear-gradient(140deg,${G[j+2][0]},${G[j+2][1]})" data-close-sheet data-toast="GIF enviado no chat" aria-label="GIF ${j+1}"></button>`).join('')}</div><button class="btn sec" style="width:100%;margin-top:10px" data-close-sheet data-toast="Escolha o arquivo: o GIF fica disponível para todo mundo">${svg('image')}Enviar novo GIF/sticker</button>`;
+  if (k==='formato') h = head('Formatar mensagem','Como hoje: *negrito* e _itálico_')+`<div style="display:flex;gap:8px"><button class="btn sec" style="flex:1;font-weight:900" data-close-sheet data-toast="Negrito: *texto*">B Negrito</button><button class="btn sec" style="flex:1;font-style:italic" data-close-sheet data-toast="Itálico: _texto_">I Itálico</button></div>`;
+  $('#sheet').setAttribute('aria-label','Sala da TV');
+  $('#sheet').innerHTML=h; $('#scrim').classList.add('in'); $('#sheet').classList.add('in');
 }
 function closeSheet(){ $('#scrim').classList.remove('in'); $('#sheet').classList.remove('in'); $('#sheet').style.zIndex=''; }
 
@@ -1293,6 +1379,16 @@ box.addEventListener('click', e => {
   if (b.hasAttribute('data-ir-antiga')){ closeSheet(); $('#oldApp').hidden=false; return; }
   if (b.id==='voltarBeta'){ $('#oldApp').hidden=true; return toast('Bem-vindo de volta ao Beta test'); }
   if (b.hasAttribute('data-go-close-prem')){ closeAll(); state.tab='inicio'; state.inicioTab='premiacoes'; return render(); }
+  if (b.hasAttribute('data-tvsom')){ b.closest('.tvVideo').classList.add('tocando'); return toast('Tocando com som: o toque foi dentro do player da Kick'); }
+  if (b.hasAttribute('data-tvland')){ const pg=b.closest('.stackPage'), bd=pg.querySelector('.stackBody'); const on=pg.classList.toggle('land'); bd.style.width=on?pg.clientHeight+'px':''; bd.style.height=on?pg.clientWidth+'px':''; return; }
+  if (b.hasAttribute('data-tvnovas')){ const c=b.parentElement.querySelector('[data-tvchat]'); c.scrollTo({top:c.scrollHeight,behavior:'smooth'}); b.hidden=true; return; }
+  if (b.hasAttribute('data-tvreply-x')){ b.closest('.stackBody').querySelector('[data-tvreply]').hidden=true; return; }
+  if (b.hasAttribute('data-tvsend')){ const body=b.closest('.stackBody'); const i=body.querySelector('[data-tvinput]'); const t=(i.value||'').trim()||'🔥🔥🔥'; const c=body.querySelector('[data-tvchat]'); const rb=body.querySelector('[data-tvreply]'); const q=rb.hidden?'':`<span class="tvQuote">${rb.querySelector('[data-tvreply-t]').textContent}</span>`; c.insertAdjacentHTML('beforeend',`<button class="tvMsg" data-tvmsg="Você"><span class="av cv sm" style="background:linear-gradient(140deg,${G[0][0]},${G[0][1]})"></span><span class="tvMsgB">${q}<b style="color:#c084fc">Nova Valente</b> ${t.replace(/</g,'&lt;')}</span></button>`); i.value=''; rb.hidden=true; c.scrollTo({top:c.scrollHeight,behavior:'smooth'}); return; }
+  if (b.dataset.tvmsg && b.dataset.swiped){ delete b.dataset.swiped; return; }
+  if (b.dataset.tvmsg){ const n=b.dataset.tvmsg; const t=b.querySelector('.tvMsgB').lastChild; const txt=(b.querySelector('.tvMsgB').textContent||'').replace(n,'').trim(); $('#sheet').setAttribute('aria-label','Mensagem'); $('#sheet').innerHTML=`<div class="grab"></div><div style="display:flex;justify-content:space-around;font-size:28px;margin:4px 0 14px">${['❤️','🔥','😂','😱','👏','🖤'].map(x=>`<button data-tvreact="${x}" aria-label="Reagir ${x}">${x}</button>`).join('')}</div><div class="group" style="margin:0"><button class="row" data-tvreply-go="${n}" data-tvreply-txt="${txt.replace(/"/g,'&quot;').slice(0,80)}"><span class="meta"><b>Responder</b><small>No chat: arraste a mensagem para a esquerda</small></span></button><button class="row" data-close-sheet data-toast="Texto copiado"><span class="meta"><b>Copiar texto</b></span></button>${n!=='Você'?`<button class="row" data-close-sheet data-toast="Mensagem denunciada para a moderação"><span class="meta"><b>Denunciar</b></span></button>`:''}</div><p class="muted small" style="margin:10px 0 0">No celular: segure a mensagem para abrir este menu. Reagir com emoji é novo<i class="novo">novo</i>; responder já existe.</p>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
+  if (b.dataset.tvreact){ closeSheet(); return toast('Reação '+b.dataset.tvreact+' enviada'); }
+  if (b.dataset.tvreplyGo){ closeSheet(); const pg=stack[stack.length-1]; const rb=pg.querySelector('[data-tvreply]'); rb.hidden=false; rb.querySelector('[data-tvreply-n]').textContent='Respondendo a '+b.dataset.tvreplyGo; rb.querySelector('[data-tvreply-t]').textContent=b.dataset.tvreplyGo+': '+b.dataset.tvreplyTxt; pg.querySelector('[data-tvinput]').focus({preventScroll:true}); return; }
+  if (b.dataset.tvsheet){ openTvSheet(b.dataset.tvsheet); return; }
   if (b.dataset.imprensa){ closeAll(); state.tab='social'; state.socialTab='Imprensa'; state.acervoTab=b.dataset.imprensa; return render(); }
   if (b.dataset.estado){ state.demoEstado=b.dataset.estado; return render(true); }
   if (b.hasAttribute('data-open-rede')){ $('#sheet').setAttribute('aria-label','Filtrar por rede'); $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:10px">Mostrar posts de <i class="novo">novo</i></b><div class="group" style="margin:0">${['Todas','Instagram','Twitter','TikTok'].map(x=>`<button class="row" data-pick-rede="${x}"><span class="meta"><b>${x==='Todas'?'Todas as redes':x}</b></span>${(state.socialNet||'Todas')===x?'<b style="color:var(--p-accent)">✓</b>':''}</button>`).join('')}</div>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
@@ -1360,6 +1456,15 @@ box.addEventListener('input', e => {
   res.innerHTML = grupos.length ? grupos.map(([t,l])=>h2(t)+l.slice(0,4).join('')).join('') : `<div class="card" style="margin-top:12px;text-align:center"><b>Nada encontrado para “${q.replace(/[<>&"]/g,'')}”</b><p class="muted small" style="margin:6px 0 0">Confira a grafia ou tente o nome do artista.</p></div>`;
 });
 $('#mini').addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' '){ e.preventDefault(); $('#mini').click(); } });
+/* sala da TV: arrastar a mensagem para a esquerda = responder; rolar até o fim some o "↓ novas" */
+(function(){
+  let m=null,x0=0,dx=0;
+  box.addEventListener('pointerdown',e=>{ const t=e.target.closest('.tvMsg'); if(!t) return; m=t; x0=e.clientX; dx=0; });
+  box.addEventListener('pointermove',e=>{ if(!m) return; dx=Math.min(0,Math.max(-70,e.clientX-x0)); m.style.transform=`translateX(${dx}px)`; });
+  const fim=()=>{ if(!m) return; const t=m; m.style.transform=''; if(dx<-50){ t.dataset.swiped='1'; const n=t.dataset.tvmsg; const txt=(t.querySelector('.tvMsgB').textContent||'').replace(n,'').trim().slice(0,80); const pg=t.closest('.stackPage'); const rb=pg.querySelector('[data-tvreply]'); rb.hidden=false; rb.querySelector('[data-tvreply-n]').textContent='Respondendo a '+n; rb.querySelector('[data-tvreply-t]').textContent=n+': '+txt; } m=null; };
+  box.addEventListener('pointerup',fim); box.addEventListener('pointercancel',fim);
+  box.addEventListener('scroll',e=>{ const c=e.target; if(!c.matches||!c.matches('[data-tvchat]')) return; const nv=c.parentElement.querySelector('[data-tvnovas]'); if(nv && c.scrollHeight-c.scrollTop-c.clientHeight<8) nv.hidden=true; },true);
+})();
 $('#scrim').addEventListener('click', closeSheet);
 /* deslizar entre as abas do Início e puxar para atualizar */
 const ptr = document.createElement('div'); ptr.className='ptr'; ptr.textContent='Solte para atualizar'; box.appendChild(ptr);

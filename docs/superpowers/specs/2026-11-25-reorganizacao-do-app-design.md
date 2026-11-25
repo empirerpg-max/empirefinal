@@ -1179,6 +1179,134 @@ Perfil. No Beta, quando o admin entra como outro jogador, uma **faixa fina
 fixa no topo** de todas as telas mostra "Vendo como @usuario · Voltar a ser
 admin", para o admin não esquecer em qual conta está.
 
+
+### 6.19 Sala da Empire TV no celular *(NOVO, pedido do usuário — caminho A)*
+
+**Problema de hoje (lido em `src/routes/tv.tsx`, `WatchView`/`ChatPanel`):**
+no celular o vídeo, os botões e a fileira de abas ocupam metade da tela e
+espremem o chat; o chat sempre puxa para o fim (quem está lendo algo antigo
+perde o lugar) e não tem aviso de "mensagens novas"; mensagens antigas só
+carregam apertando um botão.
+
+**Sala nova** (protótipo: Início › Empire TV › Entrar na sala), inspirada
+no chat do Telegram, sem perder o vídeo, que é o foco:
+
+1. **Vídeo sempre no topo** (16:9, largura toda), com só dois botões por
+   cima: **⌄ minimizar** (continua tocando no mini player) e **⤢ tela
+   cheia**. O selo "Ao vivo" fica no canto.
+2. **Faixa fina** logo abaixo: nome do programa e "N assistindo · Sobre"
+   (toca e abre Sobre) e, à direita, o **círculo da sua participação**
+   (ex.: 62%), que abre o detalhe (6.19.1).
+3. **Fileira rolável** (seta + arrastar, regra do CLAUDE.md) com Red Carpet
+   (só quando o tipo de evento tem, como hoje), Participantes, Enquete e
+   Sobre. Cada uma abre como **folha por cima** (o vídeo continua tocando
+   atrás; voltar fecha só a folha — regra "voltar = tela anterior").
+4. **Enquete fixada** no topo do chat (como mensagem fixada do Telegram)
+   enquanto estiver aberta. É a enquete de hoje: **nota secreta** de
+   `notaMin` a `notaMax` sobre o alvo da planilha, "Você votou N".
+5. **Chat compacto:** foto pequena, **nome e texto na mesma linha**, nome na
+   cor do papel (U13; equipe com selo). Separador de horário. O aviso
+   "✨ Fulano chegou ao Red Carpet" continua como pílula que abre o look.
+   Mensagem citada aparece em cima da resposta.
+6. **Rolagem como no Telegram:** se a pessoa está no fim, novas mensagens
+   descem sozinhas; se rolou para cima, o chat **não puxa** e aparece
+   **"↓ N novas"**. Rolar até o topo **carrega as anteriores sozinho**
+   (substitui o botão "Carregar mensagens mais antigas").
+7. **Arrastar a mensagem para a esquerda = responder** (o botão Responder
+   de hoje continua no menu). **Segurar a mensagem** abre: reações (❤️ 🔥
+   😂 😱 👏 🖤 — **NOVO**, precisa de coluna/tabela de reações no Supabase),
+   Responder, Copiar texto, Denunciar.
+8. **Caixa de mensagem** com **Aa** (negrito `*texto*` e itálico `_texto_`,
+   que já existem), campo, **GIF** (a mesma galeria de hoje, inclusive
+   "Enviar novo GIF/sticker") e enviar.
+9. **O teclado não cobre o vídeo** (o usuário já tinha implementado isso e
+   continua valendo): ao digitar, quem encolhe é a área do chat, usando a
+   altura visível (`visualViewport`); o vídeo fica fixo no topo.
+10. **Celular deitado:** vídeo em tela cheia e o chat **semitransparente na
+    lateral direita** (~38% da largura), com a caixa de mensagem embaixo
+    dele. Deitar de volta volta para a sala normal.
+11. **Computador e tablet (6.10):** vídeo à esquerda, chat como coluna fixa
+    à direita, sem folhas (abas ao lado do chat).
+
+Nada sai: Chat, GIFs (escolher e subir), responder, negrito/itálico,
+Enquete, Red Carpet (postar com várias fotos, curtir, ranking, excluir o
+seu, pílula de chegada), Participantes, Sobre, minimizar, mini player,
+carrossel "Assistir agora" e grade continuam.
+
+#### 6.19.1 Porcentagem de participação (caminho A)
+
+**Problema de hoje** (`registrarPresencaTVController` e
+`somarPresencaPorTransmissao` em `backend/src/controllers/tvController.ts`):
+
+- o app conta os segundos **da entrada atual** e grava uma linha nova na
+  planilha Presenca_TV a cada 30 s;
+- o processamento pega o **maior** valor por pessoa em cada segmento. Quem
+  sai e volta **recomeça do zero** e só a maior sessão vale (ex.: 40 min +
+  sai + 50 min = **50 min**, não 90);
+- **minimizar desmonta a sala** e para a contagem, mesmo com o mini player
+  tocando;
+- a aba Participantes mostra o tempo de um segmento, mas o crédito usa a
+  transmissão inteira: **o número que a pessoa vê não é o que ela ganha**;
+- uma linha a cada 30 s por pessoa pesa na cota do Google Sheets.
+
+**Como fica:**
+
+1. **Batida por minuto:** enquanto a sala **ou o mini player** estiver
+   aberto e a aba do navegador visível, o app avisa o servidor uma vez por
+   minuto (`POST /api/tv/presenca` com `programa_id`; o jogador vem do
+   login). Ao voltar para a aba, avisa na hora.
+2. **D1, tabela `tv_presenca_minuto`** (`programa_id`, `jogador_id`,
+   `minuto` = minuto Unix; chave primária nos três; `INSERT OR IGNORE`).
+   Cada minuto conta **uma vez só**, mesmo com duas abas ou dois aparelhos
+   abertos: as sessões se **somam** sem contar em dobro.
+3. **Só vale dentro do horário real da transmissão** (a mesma janela
+   `inicioTs..fimTs` que já é usada para o chat).
+4. **Processamento** (`processarParticipacaoTV`, no cron de hoje): tempo
+   assistido = minutos distintos × 60, somando os segmentos da
+   transmissão. **Todo o resto continua igual:** porcentagem de presença,
+   regra do chat (10 mensagens = 100%), vale o maior dos dois, faixas da
+   aba "Regras", gravação na REGISTRO, prestígio `assistir_tv` com 90% ou
+   mais, a marca de "já processado".
+5. **Participantes e o círculo** mostram a **mesma conta** do
+   processamento (endpoint de leitura que usa a mesma função), então o
+   número da tela é o que será creditado.
+6. **Presenca_TV na planilha:** deixa de receber uma linha a cada 30 s. No
+   processamento, grava **uma linha por pessoa** com o total (a planilha
+   continua servindo para consulta do admin).
+7. **Transição:** transmissões que começaram antes da troca continuam sendo
+   processadas pelo jeito antigo (lendo Presenca_TV); as novas usam o D1. O
+   corte é pela data/hora de início.
+8. **Custo:** 200 pessoas × 120 min = 24 mil linhas gravadas por evento no
+   D1 (dentro do plano; apagar as linhas com mais de 30 dias no próprio
+   cron).
+
+**Vale para as duas versões** (anterior e Beta), porque é o mesmo servidor:
+por isso entra numa fase própria (0b, seção 8), antes do Beta.
+
+#### 6.19.2 Som da Kick no celular
+
+**Hoje:** o player da Kick abre com `autoplay=true&muted=false`. O
+navegador do celular não deixa vídeo **começar sozinho com som**, então
+força o mudo. O botão "Ativar som" fica fora do player da Kick e, no
+iPhone, um toque fora do player não libera o som: o jogador precisa
+expandir o vídeo e tocar no ícone de som da própria Kick.
+
+**Limite da Kick:** o player embutido só aceita `autoplay` e `muted` no
+endereço; não existe API para controlar som/play de fora (pedido aberto:
+KickDevDocs #445).
+
+**Opções:**
+
+| # | Opção | Custo | Situação |
+|---|---|---|---|
+| 1 | Abrir o player **parado** (`autoplay=false&muted=false`) com "Toque para assistir com som": o primeiro toque é no play da própria Kick, e o vídeo já começa com som | zero | **Recomendada; em teste.** Página escondida só para admin: `/tv-teste-som` (opções A hoje, B parado, C mudo) |
+| 2 | Player nosso tocando o vídeo da Kick por dentro (endereço interno com senha que expira) | zero | Não recomendada: não oficial, a Kick bloqueia o servidor, pode quebrar |
+| 3 | Transmissor próprio (ex.: Cloudflare Stream Live) com repasse para a Kick; nosso player no app | ~US$ 1 por mil minutos assistidos (~US$ 24 por evento de 200 pessoas × 2 h) | Projeto à parte, se o usuário quiser |
+
+**Decisão pendente (D5):** resultado do teste da opção 1 no iPhone e no
+Android. Se B funcionar, a sala nova abre parada com "Toque para assistir
+com som"; o mini player e o YouTube/Vimeo continuam como hoje.
+
 ---
 
 ## 7. Itens que mudam de texto (resquícios de Telegram)
@@ -1210,8 +1338,10 @@ de 360px nos dois tamanhos de texto.
 | Fase | Conteúdo | Depende de |
 |---|---|---|
 | **0a. Medição de uso** (na versão de hoje) | 6.15: envio em lote, tabelas `uso_diario` e `uso_jogador_dia`, chave em `homeFlags`, tela Admin › Uso do app. **Vai ao ar primeiro**, para medir a base por ~4 semanas antes do Beta | — |
+| **0b. Participação na TV** (nas duas versões) | 6.19.1: batida por minuto, tabela `tv_presenca_minuto`, processamento lendo o D1 (resto da regra igual), Participantes com o mesmo número, mini player contando | — |
 | **0. Fundações** (nada visível muda) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query + cliente de API, tokens de cor com os valores atuais | — |
 | **1. Navegação (Beta test)** | casca nova inteira **atrás do Beta test** (6.11): topo, barra/trilho/barra lateral (6.10), Criar, Meu Império, abas do Início, aviso de mudança, tutorial; chave do admin, reportes e faixa na versão anterior | 0 |
+| **1b. Sala da Empire TV** (Beta) | 6.19: vídeo no topo, faixa fina, folhas, chat compacto, "↓ novas", arrastar para responder, reações, celular deitado; som conforme D5 | 0b, 1 |
 | **2. Charts** | Ao vivo = painel do Catálogo; `ChartPlaylist` (só tela). **Nenhuma mudança de backend nem de cálculo.** | 0, 1 |
 | **3. Catálogo e Fórum** | Catálogo Início novo, Buscar, Biblioteca, `PaginaLancamento` (tópico novo), Fórum na barra, `/meus-lancamentos` | 1, 2 (o painel sai do Catálogo na fase 2) |
 | **4. Social** | D1 do Social + migração, paginação, "Interagindo como", perfil único, configurar perfis, Repostar, Seguir, seguidores calculados, abas que não funcionavam, Compartilhar, saída do Mensagem | 0, 1 |
@@ -1245,6 +1375,7 @@ fase 3 deve vir logo em seguida (call meu: entregar 2 e 3 juntas se der).
 | ~~D2~~ | ~~Seguidores antigos~~ **Decidido:** só a fórmula para artistas; perfis de mídia mantêm o número da planilha; seguindo = digitado + real. | — | — |
 | ~~D3~~ | **Decidido:** cor por papel (U13). | — | — |
 | D4 | Lista dos controllers `adminDiag*` que podem ser apagados na fase 6 | usuário (na fase 6) | só limpeza |
+| D5 | Som da Kick: resultado do teste da opção 1 (`/tv-teste-som`) no iPhone e no Android; se não funcionar, avaliar a opção 3 | usuário (teste no celular) | sala da TV |
 
 ---
 
