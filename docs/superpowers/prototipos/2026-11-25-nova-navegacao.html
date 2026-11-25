@@ -699,7 +699,7 @@ function inicio(){
   const tabs = [['voce','Para você'],['tv','Empire TV'],['tours','Turnês'],['premiacoes','Premiações']];
   let html = `<div style="margin:6px 0 14px">${chips(tabs.map(t=>t[1]), tabs.find(t=>t[0]===state.inicioTab)[1], 'inicioTabLabel')}</div>`;
   if (state.inicioTab==='voce'){
-    html += `<div style="height:2px"></div>` + banners('inicio');
+    html += `<p style="margin:0 16px 10px;font-size:15px;font-weight:800">Olá, Revisor</p>` + banners('inicio');
     html += `<div class="liveMini"><span class="ponto" aria-hidden="true"></span><span><b>Ao vivo:</b> Red Carpet do VMA · <span class="muted">1,2 mil</span></span><button class="btn pri" style="height:32px;font-size:12px;padding:0 12px" data-open="tv">Entrar</button></div>`;
     html += semanaBar();
     html += h2('Pra fazer hoje <i class="novo">novo</i>');
@@ -720,9 +720,8 @@ function inicio(){
     html += h2('Da Imprensa','Abrir','data-imprensa="Revistas"') + `<div class="shelf">${['Rolling Empire · Nov','Entrevista: Íris Sol','Forbes · Top 10'].map((t,k)=>`<button class="tile" data-imprensa="${['Revistas','Entrevistas','Forbes'][k]}">${cover(k+6,t)}<b>${t}</b><small>${['Revista','Entrevista','Forbes'][k]}</small></button>`).join('')}</div>`;
   }
   if (state.inicioTab==='tv'){
-    html += liveCard();
+    html += liveCard().replace('<span class="badge live">Ao vivo · Empire TV</span>','<div style="display:flex;justify-content:space-between;align-items:center"><span class="badge live">Ao vivo · Empire TV</span><span style="display:flex;gap:6px"><button class="ic" style="width:30px;height:30px;background:rgba(0,0,0,.35);color:#fff" aria-label="Programa anterior" data-toast="Programa anterior">'+svg('back')+'</button><button class="ic" style="width:30px;height:30px;background:rgba(0,0,0,.35);color:#fff" aria-label="Próximo programa" data-toast="Próximo programa">'+svg('chev')+'</button></span></div>');
     html += h2('Grade de hoje') + `<div class="group">${[['20:00','Red Carpet do VMA','Ao vivo agora',true],['21:30','VMA 2026 · Cerimônia','Em 1h 10min'],['23:00','Empire News','Em 2h 40min'],['00:00','Acústico: Oruã','Amanhã']].map(([h,t,s,l])=>`<div class="row"><span class="rank" style="width:auto;font-size:13px;min-width:44px">${h}</span><span class="meta"><b>${t}</b><small>${s}</small></span>${l?'<span class="badge live">Ao vivo</span>':`<button class="bellBtn" data-lembrar="${t}" data-quando="hoje ${h}" aria-pressed="${!!(state.lembretes||{})[t]}" aria-label="Lembrar: ${t}">${svg('bell')}</button>`}</div>`).join('')}</div>`;
-    html += h2('Red Carpet','Ranking','data-toast="Ranking de looks da noite"') + `<div class="pad" style="margin:-4px 0 10px"><button class="btn sec" style="width:100%" data-toast="Escolha o artista e as fotos do look">${svg('image')}Postar look</button></div>`; html += '' + `<div class="shelf">${[0,2,5,1].map((a,k)=>`<button class="tile" data-toast="Abrindo o look de ${ART[a]}">${cover(a+3,'')}<b>${ART[a]}</b><small>${[412,388,201,177][k]} votos</small></button>`).join('')}</div>`;
     html += h2('Arquivo') + `<div class="shelf">${['Acústico: Bia Kalli','Empire News #46','Entrevista: Kai Moreau'].map((t,k)=>`<button class="tile wide" data-open="tv">${cover(k+1,t)}<b>${t}</b><small>${['48 min','22 min','35 min'][k]}</small></button>`).join('')}</div>`;
   }
   if (state.inicioTab==='tours'){
@@ -1130,9 +1129,17 @@ const pages = {
   tv(){
     return {title:'Empire TV', body:`<div class="pad" style="padding-top:10px;display:flex;gap:8px"><button class="btn sec" style="height:32px;font-size:12px" data-back data-toast2="min">Minimizar (continua tocando)</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Som ativado">Ativar som</button></div>
       <div class="tvbox" style="background:radial-gradient(80% 80% at 70% 20%,#f43f5e,transparent 60%),linear-gradient(160deg,#4c1d95,#020617)"><div style="text-align:center"><span class="badge live">Ao vivo</span><h4 style="margin:8px 0 0;font-size:22px;font-weight:900;font-style:italic;text-transform:uppercase">Red Carpet do VMA</h4><span class="small" style="opacity:.8">1.214 assistindo</span></div></div>
-      ${seg([['chat','Chat'],['part','Participantes'],['sobre','Sobre']],'chat','noop')}
+      <div class="chips" style="margin:6px 0 10px">${[['0','Chat'],['1','Red Carpet'],['2','Participantes'],['3','Sobre']].map(([v,l])=>`<button class="chip" data-local-tab="sala" data-val="${v}" aria-pressed="${v==='0'}">${l}</button>`).join('')}</div>
+      <div data-sala="0">
       <div class="card" style="margin-bottom:8px"><b>Enquete: melhor look da noite?</b><div style="display:grid;gap:8px;margin-top:10px">${['Nova Valente','Íris Sol','The Velvet Arc'].map((n,k)=>`<button class="btn sec" style="justify-content:space-between;width:100%" data-toast="Voto registrado em ${n}"><span>${n}</span><span class="muted">${[46,38,16][k]}%</span></button>`).join('')}</div></div>
       ${[['Oruã','o vestido da Nova tá surreal'],['Bia Kalli','KAI CHEGOU 😱'],['Lumi Ray','alguém sabe a ordem das apresentações?'],['Dante Cruz','tô no backstage, já já entro']].map(([n,t],k)=>`<div class="cmt" style="padding:8px 16px"><span class="av cv sm" style="background:linear-gradient(140deg,${G[k+2][0]},${G[k+2][1]})"></span><div style="min-width:0;flex:1"><b class="small">${n}</b><p style="margin:0">${t}</p><button class="small muted" style="font-weight:700;padding:2px 0" data-toast="Respondendo a ${n}">Responder</button></div></div>`).join('')}
+</div>
+      <div data-sala="1" hidden><p class="muted small pad" style="margin:0 0 10px">Looks postados nesta sala. O ranking dos mais curtidos é a base do prêmio da noite.</p>
+        <div class="pad" style="margin-bottom:10px;display:flex;gap:8px"><button class="btn pri" style="flex:1" data-toast="Escolha o artista e as fotos do look">${svg('image')}Postar look</button><button class="btn sec" data-toast="Ranking dos looks mais curtidos nesta sala">🏆 Ranking</button></div>
+        <div class="grid2">${[0,2,5,1].map((a,k)=>`<div><div class="cv sm" style="aspect-ratio:3/4;border-radius:var(--p-radius);background:linear-gradient(160deg,${G[a+3][0]},${G[a+3][1]})"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><b class="small">${ART[a]}</b><button class="small" data-like style="display:flex;gap:4px;align-items:center">${svg('heart').replace('class=""','style="width:15px;height:15px"')}${[412,388,201,177][k]}</button></div></div>`).join('')}</div></div>
+      <div data-sala="2" hidden>${ART.slice(0,6).map((a,k)=>`<div class="row" style="cursor:default"><span class="cv sm" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(140deg,${G[k][0]},${G[k][1]})"></span><span class="meta"><b>${a}</b><small>${[42,35,28,20,12,5][k]} min assistidos</small></span></div>`).join('')}</div>
+      <div data-sala="3" hidden><div class="card"><b>Red Carpet do VMA</b><p class="muted small" style="margin:6px 0 0">Programa ao vivo da Empire TV. Hoje, 20:00. Assistir conta prestígio.</p></div></div>
+      <div data-sala-chatonly></div>
       <div class="composer"><input placeholder="Mandar no chat…" aria-label="Mensagem do chat"><button class="btn sec" style="height:40px;padding:0 12px" data-toast="GIFs e stickers">GIF</button><button class="btn pri" style="height:40px;width:40px;padding:0" aria-label="Enviar" data-toast="Mensagem enviada">${svg('send')}</button></div>`};
   },
   tour(){
