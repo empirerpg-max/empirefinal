@@ -42,9 +42,9 @@
 ## Catálogo, players, playlists
 | Ação hoje | Onde fica | |
 |---|---|---|
-| Início do Catálogo (playlists dos charts) | Catálogo › Início | P |
+| Início do Catálogo (painel de playlists dos charts) | **Charts › Ao vivo** (sem mudança); Catálogo › Início ganha conteúdo próprio | P |
 | Listas de Músicas / Vídeos / Álbuns | Catálogo › Buscar (filtros) | P |
-| Álbuns antigos (lista e detalhe) | discografia do artista + mesma página de álbum | P |
+| Álbuns antigos (lista e detalhe) | Catálogo › Buscar › **Material antigo** + discografia do artista + página do lançamento | P |
 | Minhas playlists: criar, editar, excluir | Catálogo › Biblioteca | P |
 | Salvos / adicionar à playlist (`AddToPlaylistSheet`) | ⋯ de cada faixa + Biblioteca › Salvos | P |
 | Player de música e vídeo persistentes, mini player da TV | mini player acima da barra | P |
@@ -56,7 +56,7 @@
 |---|---|---|
 | Categorias Músicas/Vídeos/Álbuns, busca, filtros | aba Fórum (filtros) | P |
 | "Só tópicos que não comentei" | filtro "Não comentei" | P |
-| Tópico: ouvir, letra, encarte, faixas | tópico + "Ver no Catálogo" | P |
+| Tópico: ouvir, letra, encarte, faixas | página única do lançamento (é o tópico), aberta pelo Fórum e pelo Catálogo | P |
 | Comentar, responder | tópico | P |
 | Editar comentário, reações | tópico (⋯ do comentário) | P |
 | Excluir tópico (admin) | ⋯ do tópico | P |
@@ -78,7 +78,7 @@
 |---|---|---|
 | Ao vivo, Global 100, Paradas, Spotify, Apple, YouTube, Álbuns, Sales | aba Charts | P |
 | Filtros de estilo e país | aba Charts | P |
-| Filtro de mês, foco por país | aba Charts | P (mês) / D (foco) |
+| Artistas do mês: seletor de ano e mês, perfil do artista do mês com números | Charts › Spotify/Apple/YouTube › Artistas do mês | P |
 
 ## Social
 | Ação hoje | Onde fica | |
@@ -101,8 +101,8 @@
 | Turnê: ação do dia, calendário, arrecadação, notícias, comentar, editar post, editar turnê, capa | página da turnê | P |
 | Acervo: revistas, entrevistas, Forbes, Metacritic, awards | Início › Acervo | P |
 | Acervo: criar/editar revista e entrevista | Início › Acervo › Publicar (quem tem permissão) | P |
-| Pitchfork: edições por mês, curtir, comentar | Início › Acervo › Críticas | P |
-| Ranking (destaques, ranking, artistas, recentes, estilo, ano) | Início › Acervo › Ranking | P |
+| **Empirefork**: Best New Track, Top Artist, edições por mês (Arquivo), curtir, comentar | Início › Acervo › **Empirefork** (nome e aba de hoje) | P |
+| Metacritic: ranking semanal com Destaques, Ranking, Artistas, Recentes, Estilo, Ano | Início › Acervo › **Metacritic** | P |
 
 ## Economia e premiações
 | Ação hoje | Onde fica | |
@@ -120,14 +120,14 @@ Criar. Nenhuma URL atual deixa de abrir.
 ## Encontrados na 2ª conferência (chamadas montadas com variável e componentes)
 | Ação hoje | Onde fica | |
 |---|---|---|
-| Home: carrossel de Spotlight Banners e de Pre-save | Início › Para você (topo, abaixo do "Ao vivo") | D |
-| Home: ticker de atividade recente | Início › Para você | D |
-| Home: "Top por plataforma" e Global 100 #1 (liga/desliga por `homeFlags`) | Início › Para você | P (#1) / D (top) |
-| Catálogo: carrossel de banners do Social (`BannerCarousel`) | Catálogo › Início (topo) | D |
+| Home: carrossel de Spotlight Banners e de Pre-save | Início › Para você (topo, abaixo do "Ao vivo") | P |
+| Home: ticker de atividade recente | Início › Para você | P |
+| Home: Meus Artistas, "Top por plataforma", Global 100 #1, Próximos eventos (liga/desliga por `homeFlags`) | Início › Para você | P |
+| Catálogo: carrossel de banners do Social (`BannerCarousel`) | Catálogo › Início (topo) | P |
 | Catálogo: trocar plataforma das playlists (Spotify / Apple / YouTube) | Catálogo › Início › Por plataforma | P |
-| Tela da playlist: buscar dentro da lista, salvar / adicionar à playlist | página da playlist | D |
-| Vitrine de clipes do YouTube (por cima da playlist) | página da playlist › Clipes | D |
-| Player de música: expandir, ver letra, "Ver no Fórum" | player expandido (mini player → toque) | D |
+| Tela da playlist: buscar dentro da lista, salvar / adicionar à playlist | página da playlist | P |
+| Vitrine de clipes do YouTube (por cima da playlist) | página da playlist › Playlist de clipes | P |
+| Player de música: expandir, ver letra, "Ver no Fórum" | player expandido (mini player → toque) | P |
 | Player de vídeo: mini player (popup), vídeos relacionados, "Ver no Fórum" | player de vídeo | D |
 | Comentários e reações direto na mídia (`CommentModal`, `ReactionBar`) | player e tópico | D |
 | Nota/score dos vídeos (`ScoreBadge`), selo verificado, selo de award | onde aparecem hoje (capas, nomes) | D |
@@ -137,7 +137,7 @@ Criar. Nenhuma URL atual deixa de abrir.
 | Nova turnê: simulação de lucro (mínimo e máximo), escolha de locais | Criar › Nova turnê (tela atual) | D |
 | Empire TV: canais ao vivo da Kick | Início › Empire TV (cartão "Ao vivo") | D |
 | Empire TV: presença (tempo assistido vira prestígio) | automático na sala | D |
-| Empire TV: subir GIF, responder mensagem no chat | sala da TV › Chat | P (GIF) / D (responder) |
+| Empire TV: subir GIF, responder mensagem no chat | sala da TV › Chat | P |
 | Social: postar como artista **ou como fã anônimo** (nome aleatório) | Criar › Post no Social (tela atual) | D |
 | Social: escolher rede (Instagram, TikTok, Twitter), anexar música, modo de publicação, texto rico com emoji | Criar › Post no Social (tela atual) | D |
 | Social: seguir perfis, ver stories | Social › Perfis e Feed | P |
@@ -161,7 +161,7 @@ todas as telas e componentes. Cada um foi cruzado com esta lista.
 | Editor de lançamento: adicionar faixa ao álbum (existente ou nova, com upload), trocar áudio, nova descrição, categoria, trocar thumb/capa, botões do tópico | Meus lançamentos › Editar | P |
 | Material extra: abas Shop (adicionar produto, comprar), Info e Visual; blocos de imagem, texto e HTML | editor de lançamento + página do álbum | D |
 | Sync Studio: marcar linha, adiantar/atrasar 0,2s, desfazer, adicionar/remover linha, pré-visualizar | Criar › Sincronizar letra e editor | D |
-| Pre-save: "Contador em 0? Verificar/corrigir", Top (ranking), calendário de missões (aleatório), missão com perguntas e respostas, Post TikTok, vídeo real (Fórum), publicar por um perfil de "Tá na Mídia" | Meus lançamentos › Pre-save + missão | D |
+| Pre-save: "Contador em 0? Verificar/corrigir", Top (ranking), calendário de missões (aleatório), missão com perguntas e respostas, Post TikTok, vídeo real (Fórum), publicar por um perfil de "Tá na Mídia" | Meus lançamentos › Pre-save + missão | P (Top, contador) / D |
 | Fórum: **marcar como pendente** (admin), filtros por artista e por data (de/até), "só tópicos que eu ainda não comentei", capa em tela cheia | aba Fórum › Filtros e tópico | P |
 | "Avaliar & Comentar": comentário com o **nome do jogador logado (fixo, não editável)** + nota em faixa (Metacritic: 45-60, 61-75, 76-90, 91-100; ou intervalo de Likes) | tópico do Fórum | D |
 | Admin › Painel do catálogo: ligar/desligar D1, enviar fila agora, conferir backup | Meu Império › Admin | P |
@@ -277,3 +277,15 @@ reaproveitar.
   Fórum. **Errado.** O rótulo do campo é "Nome do Jogador / OFF", mas o
   campo é somente leitura e sempre mostra o jogador logado. **Não existe
   comentário anônimo no Fórum**, nem vai existir no projeto novo.
+
+## 5ª conferência (2026-11-25, protótipo versão 11)
+Cruzamento das linhas marcadas **P** com o protótipo. Faltavam e foram
+desenhados: carrosséis de banner (Início e Catálogo), ticker, Meus
+artistas, Top por plataforma e Próximos eventos no Início; filtro
+**Material antigo** e alternância **Todos / Meus artistas** em Buscar;
+ano/mês em Artistas do mês; busca, salvar e **Playlist de clipes** na tela
+de playlist; grupo **Biblioteca** no Meu Império; **Top** e **Contador em
+0?** no Pre-save; **player expandido** (letra, Ver no Fórum, ⋯); Responder
+no chat da TV; nome **"Tá na Mídia"** (era "Na Mídia" no protótipo).
+Linhas desatualizadas pelas decisões (Ao vivo, Empirefork, Metacritic,
+página única do lançamento) foram reescritas acima.

@@ -484,6 +484,10 @@ const h2 = (t, more, act) => `<div class="h2"><h3>${t}</h3>${more?`<button ${act
 const albumTile = (i) => { const a = ALB[i]; return `<button class="tile" data-open="album" data-id="${i}">${cover(i, a.t)}<b>${a.t}</b><small>${ART[a.a]}</small></button>`; };
 const songRow = (s, i, opts = {}) => `<button class="row" data-open="album" data-id="${s.al}">${opts.rank?`<span class="rank">${s.p}</span><span class="delta ${s.ch==='NEW'?'new':s.ch.startsWith('+')&&s.ch!=='+0'?'up':s.ch.startsWith('-')?'down':'muted'}">${s.ch==='0'?'=':s.ch}</span>`:''}${cover(s.al,'','sm')}<span class="meta"><b>${s.t}</b><small>${opts.kind?opts.kind+' · ':''}${ART[s.a]}${opts.rank&&opts.end?' · '+opts.end:''}</small></span>${opts.end&&!opts.rank?`<span class="end">${opts.end}</span>`:''}<span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções da faixa" data-actions="faixa" data-title="${s.t}">${svg('more','chev')}</span></button>`;
 
+function banners(tipo){
+  const itens = tipo==='catalogo' ? [['Spotlight','Vidro Quebrado · Nova Valente',0],['Spotlight','Maré Alta · Íris Sol',1]] : [['Patrocinado · toque para ver o tópico','Vidro Quebrado · Nova Valente',0],['Pre-save · faltam 4 dias · 2.380 fãs','Prisma · Lumi Ray',4]];
+  return `<div class="shelf" style="margin-bottom:6px">${itens.map(([tag,t,i])=>`<button class="tile wide" style="width:300px" data-open="${tag.startsWith('Pre-save')?'presave':'topic'}" data-id="${i}" data-title="${t.split(' · ')[0]}" data-kind="musica">${cover(i,'','sm" style="width:300px;height:120px;border-radius:var(--p-radius);background:linear-gradient(120deg,'+G[i][0]+','+G[i][1]+')')}<b>${t}</b><small>${tag}</small></button>`).join('')}</div>`;
+}
 function liveCard(){
   return `<div class="hero" style="background:radial-gradient(120% 90% at 85% 0%,#f43f5e 0%,transparent 55%),linear-gradient(160deg,#4c1d95,#0b1024)">
     <span class="badge live">Ao vivo · Empire TV</span>
@@ -498,6 +502,8 @@ function inicio(){
   let html = `<div style="margin:6px 0 14px">${chips(tabs.map(t=>t[1]), tabs.find(t=>t[0]===state.inicioTab)[1], 'inicioTabLabel')}</div>`;
   if (state.inicioTab==='voce'){
     html += liveCard();
+    html += `<div style="height:12px"></div>` + banners('inicio');
+    html += `<div class="small muted" style="margin:6px 16px 0;padding:8px 12px;border-radius:10px;background:var(--p-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🔔 Bia Kalli comentou em Ruído Branco · Oruã postou no Social · Kai Moreau esgotou o Rio</div>`;
     html += h2('Pra fazer hoje <i class="novo">novo</i>');
     html += `<div class="group">
       <button class="todo" data-open="tour"><span class="ring" style="background:#10b98122;color:var(--p-play)">${svg('ticket')}</span><span class="meta" style="flex:1;min-width:0"><b>Ação do dia na turnê</b><small class="muted" style="display:block">Neon Tour · show 12 de 20 · São Paulo</small></span>${svg('chev','chev')}</button>
@@ -505,8 +511,11 @@ function inicio(){
       <button class="todo" data-toast="Abre o Performance Award pendente"><span class="ring" style="background:#ec489922;color:#ec4899">${svg('mic')}</span><span class="meta" style="flex:1;min-width:0"><b>Performance Award pendente</b><small class="muted" style="display:block">Responda até 27/11 · Vidro Quebrado</small></span>${svg('chev','chev')}</button>
       <button class="todo" data-open="votacao"><span class="ring" style="background:#f59e0b22;color:#f59e0b">${svg('trophy')}</span><span class="meta" style="flex:1;min-width:0"><b>Votação do VMA aberta</b><small class="muted" style="display:block">Termina em 28/11 · 6 categorias</small></span>${svg('chev','chev')}</button>
     </div>`;
+    html += h2('Meus artistas','Gerenciar','data-open="me"') + `<div class="shelf">${[0,4].map(i=>`<button class="tile" data-open="artist" data-id="${i}" style="width:96px;text-align:center"><span class="cv sm" style="width:96px;height:96px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><b>${ART[i]}</b></button>`).join('')}</div>`;
     html += h2('Lançamentos recentes','Ver tudo','data-go="catalogo"') + `<div class="shelf">${[2,0,1,4,3].map(albumTile).join('')}</div>`;
     html += h2('Global 100 · #1','Charts','data-go="charts"') + `<div class="card" style="display:flex;gap:12px;align-items:center;padding:12px">${cover(0,'','sm" style="width:64px;height:64px;border-radius:10px;background:linear-gradient(140deg,#7c3aed,#22d3ee)')}<div style="flex:1;min-width:0"><b style="display:block">Vidro Quebrado</b><span class="muted small">Nova Valente · 3ª semana no topo</span></div><span class="badge" style="background:var(--p-surface2)">▲ 2</span></div>`;
+    html += h2('Top por plataforma','Charts','data-go="charts"') + `<div class="group">${[['Spotify','#1db954'],['Apple Music','#fc3c44'],['YouTube','#ff0000'],['Billboard 200','#957AF8'],['Digital Sales','#3b82f6']].map(([pl,c],k)=>`<button class="row" data-go="charts"><span class="gicon" style="background:${c}">${svg('music')}</span><span class="meta"><b>${pl}</b><small>#1 ${SONG[k].t} · ${ART[SONG[k].a]}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`;
+    html += h2('Próximos eventos') + `<div class="group">${[['tv','Red Carpet do VMA','Empire TV · hoje 20:00'],['ticket','Neon Tour · São Paulo','Show 12 · 26/11']].map(([ic,t,st])=>`<button class="row" ${ic==='tv'?'data-open="tv"':'data-open="tour"'}><span class="gicon" style="background:var(--p-surface2);color:var(--p-fg)">${svg(ic)}</span><span class="meta"><b>${t}</b><small>${st}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`;
     html += h2('No Social agora','Abrir','data-go="social"') + `<div class="shelf">${[0,3,5].map((i,k)=>`<button class="tile wide" data-go="social">${cover(i+2, ['Bastidores do clipe','Setlist da turnê','Capa nova!'][k])}<b>@${ART[i].toLowerCase().replace(/[^a-z]/g,'')}</b><small>${['2,1 mil curtidas','840 curtidas','3,4 mil curtidas'][k]}</small></button>`).join('')}</div>`;
     html += h2('Do Acervo','Abrir','data-set="inicioTab" data-val="acervo"') + `<div class="shelf">${['Rolling Empire · Nov','Entrevista: Íris Sol','Forbes · Top 10'].map((t,k)=>`<button class="tile" data-set="inicioTab" data-val="acervo">${cover(k+6,t)}<b>${t}</b><small>${['Revista','Entrevista','Forbes'][k]}</small></button>`).join('')}</div>`;
   }
@@ -560,7 +569,8 @@ function inicio(){
 function catalogo(){
   let html = `<h1 class="ttl">Catálogo</h1>` + seg([['inicio','Início'],['buscar','Buscar'],['biblioteca','Biblioteca']], state.catTab, 'catTab');
   if (state.catTab==='inicio'){
-    html += `<p class="sub" style="margin:0 16px 12px">O painel de playlists dos charts foi para Charts › Ao vivo. Aqui fica o que é seu e o que é novo no catálogo.<i class="novo">novo</i></p>`;
+    html += banners('catalogo');
+    html += `<p class="sub" style="margin:8px 16px 12px">O painel de playlists dos charts foi para Charts › Ao vivo. Aqui fica o que é seu e o que é novo no catálogo.<i class="novo">novo</i></p>`;
     html += h2('Continue ouvindo') + `<div class="grid2">${[0,2,1,4].map(i=>`<button class="card" style="margin:0;padding:6px;display:flex;gap:8px;align-items:center;text-align:left" data-open="album" data-id="${i}">${cover(i,'','sm" style="width:44px;height:44px;border-radius:8px;flex-shrink:0;background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<b class="small" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ALB[i].t}</b></button>`).join('')}</div>`;
     html += h2('Lançamentos da semana','Ver todos','data-set="catTab" data-val="buscar" data-filter="Álbuns"') + `<div class="shelf">${[2,0,1,4,3].map(albumTile).join('')}</div>`;
     html += h2('Mais comentados no Fórum','Fórum','data-go="forum"') + `<div class="shelf">${[2,0,3].map((i,k)=>`<button class="tile" data-open="topic" data-id="${i}" data-title="${ALB[i].t}">${cover(i,ALB[i].t)}<b>${ALB[i].t}</b><small>${[77,48,22][k]} comentários</small></button>`).join('')}</div>`;
@@ -570,7 +580,7 @@ function catalogo(){
   }
   if (state.catTab==='buscar'){
     html += `<label class="search">${svg('search')}<input id="q" placeholder="Músicas, vídeos, álbuns, artistas" autocomplete="off"></label>`;
-    html += chips(['Tudo','Músicas','Vídeos','Álbuns','Artistas'], state.searchFilter, 'searchFilter');
+    html += chips(['Tudo','Músicas','Vídeos','Álbuns','Artistas','Material antigo'], state.searchFilter, 'searchFilter');
     const f = state.searchFilter;
     html += `<div style="margin-top:6px">`;
     if (f==='Tudo'){
@@ -579,7 +589,8 @@ function catalogo(){
     if (f==='Músicas') html += SONG.map((s,i)=>songRow(s,i,{end:s.d})).join('');
     if (f==='Vídeos') html += VID.map((v,k)=>`<button class="row" data-open="album" data-id="${k}">${cover(k+2,'','sm" style="width:86px;height:50px;border-radius:8px;background:linear-gradient(140deg,'+G[k+2][0]+','+G[k+2][1]+')')}<span class="meta"><b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></span><span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções do vídeo" data-actions="video" data-title="${v.t}">${svg('more','chev')}</span></button>`).join('');
     if (f==='Álbuns') html += `<div class="grid2">${ALB.map((a,i)=>`<button style="text-align:left" data-open="album" data-id="${i}">${cover(i,a.t,'" style="aspect-ratio:1;border-radius:var(--p-radius);background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<b class="small" style="display:block;margin-top:6px">${a.t}</b><span class="muted small">${ART[a.a]} · ${a.y}</span></button>`).join('')}</div>`;
-    if (f==='Artistas') html += ART.map((a,i)=>`<button class="row" data-open="artist" data-id="${i}"><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${['King & Queen','Crown','Independent'][i%3]}</small></span>${svg('chev','chev')}</button>`).join('');
+    if (f==='Material antigo') html += `<div class="grid2">${['Primeiras Demos','Sessões 2019','Ao Vivo no Porão','Lado B'].map((t,i)=>`<button style="text-align:left" data-open="album" data-id="${i}">${cover(i+6,t,'" style="aspect-ratio:1;border-radius:var(--p-radius);background:linear-gradient(140deg,'+G[(i+6)%G.length][0]+','+G[(i+6)%G.length][1]+')')}<b class="small" style="display:block;margin-top:6px">${t}</b><span class="muted small">${ART[i]} · material antigo</span></button>`).join('')}</div>`;
+    if (f==='Artistas') html += `<div style="margin:6px 0 8px">${seg([['todos','Todos os artistas'],['meus','Meus artistas']], state.artFiltro||'todos', 'artFiltro')}</div>` + ART.map((a,i)=>[a,i]).filter(([a,i])=>state.artFiltro!=='meus'||i===0||i===4).map(([a,i])=>`<button class="row" data-open="artist" data-id="${i}"><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${['King & Queen','Crown','Independent'][i%3]}</small></span>${svg('chev','chev')}</button>`).join('');
     html += `</div>`;
   }
   if (state.catTab==='biblioteca'){
@@ -643,8 +654,9 @@ function chartPlaylist(tab){
   html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 16px 10px"><button class="btn play" data-play="0">${svg('play')}Tocar</button><button class="btn sec" data-toast="Tocando no modo aleatório">${svg('shuffle')}Aleatório</button></div>`;
   if (temVisao) html += `<div style="margin-bottom:10px">${seg([['global','Global'],['pais','Por país'],['mes','Artistas do mês']], view, 'chartView')}</div>`;
   if (view==='mes'){
-    html += `<div class="hero" style="margin:0 16px 10px;background:linear-gradient(160deg,${G[0][0]},${G[0][1]})"><span class="badge" style="background:rgba(0,0,0,.35);color:#fff">Artista do mês</span><h4>Nova Valente</h4><span class="small" style="opacity:.9">Editorial do mês, como hoje</span></div>`;
-    return html + ART.slice(0,6).map((a,i)=>`<button class="row" data-open="artist" data-id="${i}"><span class="rank">${i+1}</span><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${(42-i*5)} mi · ${tab}</small></span>${svg('chev','chev')}</button>`).join('');
+    html += `<div style="display:flex;gap:8px;padding:0 16px 10px"><button class="btn sec" style="height:36px;font-size:12.5px" data-toast="Mesmo seletor de ano de hoje">2026 ▾</button><button class="btn sec" style="height:36px;font-size:12.5px" data-toast="Mesmo seletor de mês de hoje">Novembro ▾</button></div>`;
+    html += `<div class="hero" style="margin:0 16px 10px;background:linear-gradient(160deg,${G[0][0]},${G[0][1]})"><span class="badge" style="background:rgba(0,0,0,.35);color:#fff">Artista do mês</span><h4>Nova Valente</h4><span class="small" style="opacity:.9">Editorial do mês, como hoje · toque num artista para ver os números do mês</span></div>`;
+    return html + ART.slice(0,6).map((a,i)=>`<button class="row" data-toast="Abre os números de ${a} no mês (perfil do artista do mês, como hoje)"><span class="rank">${i+1}</span><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${(42-i*5)} mi · ${tab}</small></span>${svg('chev','chev')}</button>`).join('');
   }
   if (view==='pais' || isParada) html += `<div style="margin-bottom:8px">${chips(['Brasil','Estados Unidos','Reino Unido','Coreia do Sul','México','Japão','França'], state.chartPais||'Brasil', 'chartPais')}</div>`;
   html += `<div style="display:flex;gap:8px;padding:4px 16px 10px"><button class="btn sec" style="height:40px;font-size:12.5px;flex-shrink:0" data-toast="Mesmo seletor de data de hoje">${svg('globe').replace('class=""','style="width:15px;height:15px"')}Semana 47 ▾</button>${(tab==='Global 100'||isAlb)?`<button class="btn sec" style="height:40px;font-size:12.5px;flex-shrink:0" data-toast="Mesmo filtro de estilo de hoje">${svg('music')}Estilo ▾</button>`:''}<label class="search" style="margin:0;flex:1;min-width:0">${svg('search')}<input placeholder="Buscar" aria-label="Buscar neste chart"></label></div>`;
@@ -662,7 +674,7 @@ function social(){
   const me = state.socialAs || 0;
   let html = `<h1 class="ttl">Social</h1>
     <button class="idchip" data-open-as aria-label="Trocar quem está interagindo"><span class="av cv sm" style="background:linear-gradient(140deg,${G[[0,4,8][me]][0]},${G[[0,4,8][me]][1]})"></span><span class="muted">Interagindo como</span><span>${['Nova Valente','Lumi Ray','Empire News'][me]}</span>${svg('chev')}</button>`;
-  html += chips(['Feed','Vídeos','Na Mídia','Perfis','News'], state.socialTab, 'socialTab');
+  html += chips(['Feed','Vídeos','Tá na Mídia','Perfis','News'], state.socialTab, 'socialTab');
   html += `<div style="height:8px"></div>`;
   if (state.socialTab==='Feed'){
     html += `<p class="muted" style="margin:0 16px 6px;font-size:11.5px;font-weight:700">Filtrar por rede<i class="novo">novo</i></p><div class="chips" style="padding-bottom:10px">${['Todas','Instagram','Twitter','TikTok'].map(x=>`<button class="chip" style="padding:6px 12px;font-size:12px" data-set="socialNet" data-val="${x}" aria-pressed="${(state.socialNet||'Todas')===x}">${x}</button>`).join('')}</div>`;
@@ -688,7 +700,7 @@ function social(){
   if (state.socialTab==='Vídeos'){
     html += `<p class="sub" style="margin:0 16px 10px">Vídeos do TikTok, um por tela. Deslize para cima.</p>` + [0,1].map(k=>`<div class="reel" style="background:linear-gradient(170deg,${G[k*3+2][0]},${G[k*3+2][1]})"><div class="side"><button data-like style="display:grid;justify-items:center;gap:3px;color:#fff">${svg('heart')}<span>${['12,4 mil','3,9 mil'][k]}</span></button><button style="display:grid;justify-items:center;gap:3px;color:#fff" data-toast="Abre os comentários">${svg('reply')}${['312','88'][k]}</button><button style="display:grid;justify-items:center;gap:3px;color:#fff" data-toast="Compartilhar: proposta nova">${svg('share')}<i class="novo" style="margin:0">novo</i></button></div><div class="cap"><b>@${['novavalente','kaimoreau'][k]}</b><p class="small" style="margin:4px 0">${['Coreografia de Vidro Quebrado, tenta aí 👀','Ensaio pro VMA hoje à noite'][k]}</p><span class="small" style="opacity:.85">♪ ${['Vidro Quebrado · Nova Valente','Coroa de Papel · Kai Moreau'][k]} · com som</span></div></div>`).join('');
   }
-  if (state.socialTab==='Na Mídia'){
+  if (state.socialTab==='Tá na Mídia'){
     html += `<p class="sub" style="margin:0 16px 12px">Perfis de mídia compartilhados: qualquer jogador pode postar e interagir como eles.</p><div class="grid2">${['Empire News','Flash Pop','Rádio Coroa','Vogue Empire','Fofoca Real','Billboard Empire'].map((n,k)=>`<button class="card" style="margin:0;display:grid;justify-items:center;gap:8px;text-align:center" data-open="socialPerfil" data-id="${8+k}" data-title="Twitter"><span class="cv sm" style="width:64px;height:64px;border-radius:50%;background:linear-gradient(140deg,${G[(k+6)%G.length][0]},${G[(k+6)%G.length][1]})"></span><b class="small">${n}</b><span class="muted" style="font-size:11px">Interagir como</span></button>`).join('')}</div>`;
   }
   if (state.socialTab==='News'){
@@ -788,7 +800,7 @@ const pages = {
       <div data-lt="0">${SONG.filter(s=>s.a===0||s.a===4).map(s=>`<button class="row" data-open="editar" data-id="${s.al}">${cover(s.al,'','sm')}<span class="meta"><b>${s.t}</b><small>${ART[s.a]} · Single · publicado</small></span><span class="btn sec" style="height:30px;font-size:12px">Editar</span></button>`).join('')}<button class="row" data-open="editar" data-id="4">${cover(4,'','sm')}<span class="meta"><b>Faixa sem título</b><small>Lumi Ray · pendente (sem tópico)</small></span><span class="btn pri" style="height:30px;font-size:12px">Publicar</span></button></div>
       <div data-lt="1" hidden>${VID.slice(0,1).map((v,k)=>`<button class="row" data-open="editar" data-id="0">${cover(2,'','sm')}<span class="meta"><b>${v.t}</b><small>${v.k}</small></span><span class="btn sec" style="height:30px;font-size:12px">Editar</span></button>`).join('')}</div>
       <div data-lt="2" hidden>${[0,4].map(i=>`<button class="row" data-open="editar" data-id="${i}">${cover(i,'','sm')}<span class="meta"><b>${ALB[i].t}</b><small>${ART[ALB[i].a]} · ${ALB[i].n} faixas</small></span><span class="btn sec" style="height:30px;font-size:12px">Editar</span></button>`).join('')}</div>
-      <div data-lt="3" hidden><div class="card"><div style="display:flex;justify-content:space-between;gap:8px"><b>Prisma</b><span class="badge" style="background:#10b98122;color:var(--p-play)">Ativa</span></div><p class="muted small" style="margin:4px 0 12px">Lumi Ray · faltam 4 dias · contagem + missões</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec" data-toast="Editar faixas da campanha">${svg('pen')}Editar faixas</button><button class="btn sec" data-open="presave">${svg('rocket')}Missões</button><button class="btn sec" style="color:var(--p-down)" data-toast="Confirmar cancelamento da campanha">Cancelar campanha</button></div></div></div>`};
+      <div data-lt="3" hidden><div class="card"><div style="display:flex;justify-content:space-between;gap:8px"><b>Prisma</b><span class="badge" style="background:#10b98122;color:var(--p-play)">Ativa</span></div><p class="muted small" style="margin:4px 0 12px">Lumi Ray · faltam 4 dias · contagem + missões</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec" data-toast="Editar faixas da campanha">${svg('pen')}Editar faixas</button><button class="btn sec" data-open="presave">${svg('rocket')}Missões</button><button class="btn sec" data-toast="Top fãs da campanha (ranking)">${svg('trophy')}Top</button><button class="btn sec" data-toast="Verificando o contador…">Contador em 0? Verificar/corrigir</button><button class="btn sec" style="color:var(--p-down)" data-toast="Confirmar cancelamento da campanha">Cancelar campanha</button></div></div></div>`};
   },
   editar(id){
     const i = +id||0, a = ALB[i];
@@ -829,6 +841,18 @@ const pages = {
       <div class="pad" style="margin-top:16px"><button class="btn pri" style="width:100%" data-toast="Perfil salvo">Salvar</button></div>`};
   },
   topic(id, title, kind){ return pages.lancamento(id, title, kind || (ALB.some(a=>a.t===title)?'album':VID.some(v=>v.t===title)?'video':'musica')); },
+  player(){
+    const sg = SONG[state.playing.s], c = G[sg.al%G.length];
+    return {title:'Tocando agora', body:`
+      <div style="padding:20px 24px;display:grid;justify-items:center;text-align:center;background:linear-gradient(180deg,${c[0]}66,transparent 70%)">
+        ${cover(sg.al,'','sm" style="width:260px;height:260px;border-radius:var(--p-radius);box-shadow:0 24px 50px -18px rgba(0,0,0,.6);background:linear-gradient(140deg,'+c[0]+','+c[1]+')')}
+        <h2 style="margin:18px 0 2px;font-size:22px;font-weight:800">${sg.t}</h2><span class="muted">${ART[sg.a]}</span>
+        <div style="width:100%;height:4px;border-radius:2px;background:var(--p-surface2);margin:18px 0 6px"><i style="display:block;width:38%;height:100%;border-radius:2px;background:var(--p-fg)"></i></div>
+        <div class="muted small" style="width:100%;display:flex;justify-content:space-between"><span>1:13</span><span>${sg.d}</span></div>
+        <div style="display:flex;gap:26px;align-items:center;margin:10px 0"><button class="ic" aria-label="Anterior" data-toast="Faixa anterior">${svg('back')}</button><button class="btn play" style="width:64px;height:64px;border-radius:50%;padding:0" aria-label="Pausar" data-toast="Pausado">${svg('pause')}</button><button class="ic" aria-label="Próxima" data-toast="Próxima faixa">${svg('chev')}</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn sec" style="height:34px;font-size:12.5px" data-toast="Letra (sincronizada quando houver)">${svg('lyric')}Letra</button><button class="btn sec" style="height:34px;font-size:12.5px" data-open="topic" data-id="${sg.al}" data-title="${sg.t}" data-kind="musica">${svg('forum')}Ver no Fórum</button><button class="btn sec" style="height:34px;font-size:12.5px" data-actions="faixa" data-title="${sg.t}">${svg('more')}</button></div>
+      </div>`};
+  },
   genero(id, title){
     const g = title || 'Pop', i = +id||1, c = G[i%G.length];
     const temTop = ['Pop','Hip-Hop','Latina','R&B'].includes(g);
@@ -845,7 +869,9 @@ const pages = {
     const tt = title || 'Global 100 ao vivo';
     return {title:tt, body:`
       <div class="hero" style="margin:14px 16px;background:radial-gradient(120% 100% at 100% 0%,#22d3ee 0%,transparent 50%),linear-gradient(160deg,#7c3aed,#1e1b4b)"><span class="badge ${/^Top 100|^Top 50|ao vivo/i.test(tt)?'live':''}" style="${/^Top 100|^Top 50|ao vivo/i.test(tt)?'':'background:rgba(0,0,0,.35);color:#fff'}">${/^Top 100|^Top 50|ao vivo/i.test(tt)?'Ao vivo':'Da semana'}</span><h4>${tt}</h4><span class="small" style="opacity:.85">Gerada dos charts · mesma playlist de hoje</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 8px"><button class="btn play" data-play="0">${svg('play')}Tocar</button><button class="btn sec" data-toast="Salva na sua Biblioteca">${svg('heart')}Salvar</button></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 8px"><button class="btn play" data-play="0">${svg('play')}Tocar</button><button class="btn sec" data-toast="Salvar / adicionar à playlist">${svg('heart')}Salvar</button></div>
+      <button class="card" style="margin:4px 16px 10px;width:calc(100% - 32px);display:flex;gap:12px;align-items:center;text-align:left" data-toast="Abre a vitrine de clipes do YouTube por cima (voltar fecha só ela)">${svg('video').replace('class=""','style="width:22px;height:22px;color:#ff4d4d;flex-shrink:0"')}<span style="flex:1;min-width:0"><b class="small" style="display:block">Playlist de clipes</b><span class="muted small">Ver primeiro clipe</span></span>${svg('chev','chev')}</button>
+      <label class="search">${svg('search')}<input placeholder="Pesquisar nesta lista" aria-label="Pesquisar nesta lista"></label>
       ${SONG.map((s,i)=>songRow(s,i,{rank:true,end:s.d})).join('')}`};
   },
   tv(){
@@ -853,7 +879,7 @@ const pages = {
       <div class="tvbox" style="background:radial-gradient(80% 80% at 70% 20%,#f43f5e,transparent 60%),linear-gradient(160deg,#4c1d95,#020617)"><div style="text-align:center"><span class="badge live">Ao vivo</span><h4 style="margin:8px 0 0;font-size:22px;font-weight:900;font-style:italic;text-transform:uppercase">Red Carpet do VMA</h4><span class="small" style="opacity:.8">1.214 assistindo</span></div></div>
       ${seg([['chat','Chat'],['part','Participantes'],['sobre','Sobre']],'chat','noop')}
       <div class="card" style="margin-bottom:8px"><b>Enquete: melhor look da noite?</b><div style="display:grid;gap:8px;margin-top:10px">${['Nova Valente','Íris Sol','The Velvet Arc'].map((n,k)=>`<button class="btn sec" style="justify-content:space-between;width:100%" data-toast="Voto registrado em ${n}"><span>${n}</span><span class="muted">${[46,38,16][k]}%</span></button>`).join('')}</div></div>
-      ${[['Oruã','o vestido da Nova tá surreal'],['Bia Kalli','KAI CHEGOU 😱'],['Lumi Ray','alguém sabe a ordem das apresentações?'],['Dante Cruz','tô no backstage, já já entro']].map(([n,t],k)=>`<div class="cmt" style="padding:8px 16px"><span class="av cv sm" style="background:linear-gradient(140deg,${G[k+2][0]},${G[k+2][1]})"></span><div><b class="small">${n}</b><p style="margin:0">${t}</p></div></div>`).join('')}
+      ${[['Oruã','o vestido da Nova tá surreal'],['Bia Kalli','KAI CHEGOU 😱'],['Lumi Ray','alguém sabe a ordem das apresentações?'],['Dante Cruz','tô no backstage, já já entro']].map(([n,t],k)=>`<div class="cmt" style="padding:8px 16px"><span class="av cv sm" style="background:linear-gradient(140deg,${G[k+2][0]},${G[k+2][1]})"></span><div style="min-width:0;flex:1"><b class="small">${n}</b><p style="margin:0">${t}</p><button class="small muted" style="font-weight:700;padding:2px 0" data-toast="Respondendo a ${n}">Responder</button></div></div>`).join('')}
       <div class="composer"><input placeholder="Mandar no chat…" aria-label="Mensagem do chat"><button class="btn sec" style="height:40px;padding:0 12px" data-toast="GIFs e stickers">GIF</button><button class="btn pri" style="height:40px;width:40px;padding:0" aria-label="Enviar" data-toast="Mensagem enviada">${svg('send')}</button></div>`};
   },
   tour(){
@@ -883,6 +909,7 @@ const pages = {
       ${h2('Meus artistas','Gerenciar','data-toast="Vincular ou criar artista"')}<div class="shelf">${[0,4].map(i=>`<button class="tile" data-open="artist" data-id="${i}" style="width:96px;text-align:center"><span class="cv sm" style="width:96px;height:96px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><b>${ART[i]}</b><small>$ ${[42,18][i?1:0]} mil eCoin</small></button>`).join('')}<button class="tile" style="width:96px;text-align:center" data-toast="Vincular ou criar artista"><span class="cv sm" style="width:96px;height:96px;border-radius:50%;background:var(--p-surface2);display:grid;place-items:center;font-size:30px;color:var(--p-muted)">+</span><b>Adicionar</b></button></div>
       ${grp('Estúdio',[['pen','#7c3aed','Meus lançamentos','Editar músicas, vídeos, álbuns e pre-saves',`data-open="lancamentos"`],['image','#0ea5e9','Meus Spotlight Banners','Ver e excluir'],['mic','#ec4899','Performance Award','1 pendente']])}
       ${grp('Economia',[['target','#0ea5e9','Ponto','Distribuir pontos, playlists e tabela de valores'],['bag','#10b981','Market','Produtos e Spotlight Banner'],['gavel','#f59e0b','Leilão','1 leilão em andamento'],['star','#a855f7','Como ganhar prestígio','']])}
+      ${grp('Biblioteca',[['heart','#e11d48','Salvos','37 faixas',`data-go-close="catalogo"`],['list','#7c3aed','Minhas playlists','4',`data-go-close="catalogo"`]])}
       ${grp('Premiações e festivais',[['trophy','#f59e0b','Indicar ao VMA','Aberto até 30/11'],['star','#e11d48','Votação','6 categorias',`data-open="votacao"`],['archive','#64748b','Prêmios já ganhos (retroativo)',''],['ticket','#ec4899','Inscrição em festival','Festival de Verão']])}
       ${h2('Aparência')}<div class="seg">${[['dark','Escuro'],['light','Claro'],['system','Sistema']].map(([v,l])=>`<button data-mode-set="${v}" aria-pressed="${v===mode}">${l}</button>`).join('')}</div>
       ${grp('Admin (só aparece pra admin)',[['users','#475569','Entrar como usuário',''],['image','#475569','Banners do Catálogo',''],['tv','#475569','Programação da Empire TV','Vídeos pendentes e publicar'],['list','#475569','Painel do catálogo','Fila de backup e D1']])}
@@ -1008,7 +1035,7 @@ box.addEventListener('click', e => {
   if (b.id==='openSearch'){ closeAll(); state.tab='catalogo'; state.catTab='buscar'; render(); setTimeout(()=>{ const q=$('#q'); q && q.focus({preventScroll:true}); },50); return; }
   if (b.id==='openNotif') return openPage('notif');
   if (b.id==='openMe') return openPage('me');
-  if (b.id==='mini') return openPage('album', String(SONG[state.playing.s].al));
+  if (b.id==='mini') return openPage('player');
   if (b.hasAttribute('data-close-sheet')){ closeSheet(); if (b.dataset.toast) toast(b.dataset.toast); return; }
   if (b.hasAttribute('data-back')) return closeTop();
   if (b.dataset.modeSet) return setMode(b.dataset.modeSet);
