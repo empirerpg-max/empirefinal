@@ -212,6 +212,7 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
 .topic{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;padding:14px 16px;border-bottom:1px solid var(--p-line);width:100%;text-align:left}
 .topic .cv{width:64px;height:64px;border-radius:10px}
 .topic b{display:block;font-size:15px;line-height:1.25}
+.topic .prev b{display:inline;font-size:12.5px}
 .topic .ln{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:5px;color:var(--p-muted);font-size:12px}
 .type{padding:2px 7px;border-radius:6px;background:var(--p-surface2);color:var(--p-fg);font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
 .cmt{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;padding:12px 16px}
@@ -302,8 +303,8 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
     </section>
     <section class="note">
       <h2>Catálogo e Fórum</h2>
-      <p>O <b>Catálogo</b> passa a ter três seções: Início (as playlists de hoje), Buscar e Biblioteca. As abas Músicas, Vídeos e Álbuns viram <b>filtros dentro da Busca</b>. Cada álbum e cada faixa ganha o botão <b>"Discussão"</b>, que abre o mesmo tópico de hoje no Fórum.</p>
-      <p>O <b>Fórum</b> vira um feed de discussões com filtros (Músicas, Vídeos, Álbuns e "Não comentei"). Cada tópico tem o botão "Ouvir no Catálogo", então dá para ir e voltar entre os dois.</p>
+      <p>O <b>Catálogo</b> tem três seções: Início (conteúdo novo), Buscar e Biblioteca. As abas Músicas, Vídeos e Álbuns viram <b>filtros dentro da Busca</b>. O painel de playlists dos charts foi para Charts › Ao vivo.</p>
+      <p>Cada lançamento tem <b>uma página só</b>, que é o tópico do Fórum, aberta tanto pelo Catálogo quanto pelo Fórum. Os comentários ficam em destaque na própria página, sem precisar trocar de aba.</p>
     </section>
     <section class="note">
       <h2>O que é o selo <span style="display:inline-block;padding:2px 6px;border-radius:6px;background:#f59e0b;color:#1a1200;font-size:11px;font-weight:900">NOVO</span></h2>
@@ -314,10 +315,21 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
       <p>Quando as opções não cabem, a fileira rola para o lado, como no YouTube e no Spotify. A seta fica numa faixa própria, com fundo, e nunca cobre o texto. Cada toque na seta avança uma "página" e para no começo de uma opção, nunca no meio da palavra. A opção selecionada é sempre levada para dentro da tela, e a seta some quando chega ao fim.</p>
     </section>
     <section class="note">
+      <h2>Fórum e página do lançamento</h2>
+      <ul>
+        <li><b>Uma página só</b> para cada lançamento, aberta pelo Fórum ou pelo Catálogo. É o tópico de hoje, com tudo o que ele faz, no visual Spotify/Apple Music.</li>
+        <li><b>Álbum:</b> capa grande, nota (Likes), selo de prêmio, contador de pre-save, Tocar, Aleatório, Salvar e ⋯. Logo abaixo, os <b>botões do tópico (Shop, Info, Visual)</b>. A tracklist mostra cabeçalho de disco, "Sem áudio no catálogo" e, em cada faixa, o botão de <b>letra</b>, que abre embaixo, acompanha a música tocando e tem "Ver tópico". Depois vem o encarte.</li>
+        <li><b>Música:</b> a letra em destaque (sincronizada quando toca), "Do álbum" e os botões do tópico. <b>Vídeo:</b> player no topo, tipo, "Mais vídeos" e o filtro por tipo na lista.</li>
+        <li><b>Comentários em destaque:</b> um cartão logo abaixo dos botões com o total, a distribuição das notas (NOVO), o comentário mais recente, <b>Avaliar &amp; Comentar</b> e "Ver todos". O botão Avaliar &amp; Comentar também fica fixo no rodapé. Cada comentário tem nota, reações, respostas e ⋯ (editar, excluir).</li>
+        <li><b>Lista do Fórum:</b> cada tópico mostra a nota, o selo de prêmio, o pre-save, o último comentário e se você ainda não comentou.</li>
+        <li><b>Admin:</b> no ⋯ do tópico ficam Editar tópico, Marcar como pendente e Excluir.</li>
+      </ul>
+    </section>
+    <section class="note">
       <h2>Charts</h2>
       <ul>
         <li><b>Ao vivo</b> passa a ser o painel que hoje é o Início do Catálogo, do jeito que foi construído: "Mais quente agora", Top 100 ao vivo por plataforma, Top 50 por país e as playlists da semana. O "Mundo" e o "Por país" do Ao vivo atual estão dentro dele, com os mesmos dados e atualizando a cada 30 s.</li>
-        <li><b>Os outros charts</b> (Global 100, Paradas, Spotify, Apple Music, YouTube, Álbuns, Sales) viram uma <b>tela de playlist com o que só um chart tem</b>: Tocar, Aleatório e Salvar; semana anterior e próxima com setas; Global / Por país / Artistas do mês; filtros de estreias, maiores altas, quedas e reentradas; busca e estilo; e, em cada faixa, a semana atual, o pico e as semanas no chart. Toque numa faixa para ver a evolução das últimas 8 semanas, os números por plataforma e os atalhos para Ouvir, Fórum e Álbum.</li>
+        <li><b>Os outros charts</b> (Global 100, Paradas, Spotify, Apple Music, YouTube, Álbuns, Sales): <b>mesmos dados, mesmo cálculo, mesma API de hoje. Nenhuma lógica muda.</b> Só a aparência vira playlist: capa no topo, Tocar e Aleatório, e cada linha com posição, movimento (▲ ▼ = NEW, como hoje), capa, título, artista e valor. Tocar na linha toca a música. Seletor de semana, estilo, busca, Global / Por país / Artistas do mês (só onde existem hoje) e a lista por país das Paradas continuam iguais.</li>
         <li><b>Catálogo › Início</b> ganha conteúdo próprio <span class="novo">novo</span>: Continue ouvindo, Lançamentos da semana, Mais comentados no Fórum, Playlists da comunidade, Clipes novos e um atalho para os Charts ao vivo.</li>
       </ul>
     </section>
@@ -553,17 +565,23 @@ function catalogo(){
 function forum(){
   let html = `<h1 class="ttl">Fórum</h1><p class="sub">Onde os jogadores discutem cada lançamento.</p>`;
   html += chips(['Tudo','Músicas','Vídeos','Álbuns'], state.forumFilter, 'forumFilter');
-  html += `<div class="switchRow"><button class="btn sec" style="height:32px;font-size:12px" data-open-filters>${svg('list')}Filtros</button><button class="sw" data-toggle-nc aria-pressed="${!!state.naoComentei}"><i></i><span>Só os que não comentei</span></button></div>`;
+  if (state.forumFilter==='Vídeos') html += `<div style="margin-top:8px">${chips(['Todos','Music Video','Performance','Lyric Video','Visualizer','Behind the Scenes','Live'], state.videoTag||'Todos', 'videoTag')}</div>`;
+  html += `<div class="switchRow"><label class="search" style="margin:0;flex:1 1 100%;min-width:0">${svg('search')}<input placeholder="Pesquisar tópicos" aria-label="Pesquisar tópicos"></label><button class="btn sec" style="height:32px;font-size:12px" data-open-filters>${svg('list')}Filtros</button><button class="sw" data-toggle-nc aria-pressed="${!!state.naoComentei}"><i></i><span>Só os que não comentei</span></button></div>`;
   const topics = [
-    {t:'Ruído Branco',k:'Álbum',a:3,c:77,last:'há 5 min',i:2},{t:'Vidro Quebrado',k:'Música',a:0,c:48,last:'há 12 min',i:0},
-    {t:'Coroa de Papel — Live no VMA',k:'Vídeo',a:1,c:36,last:'há 40 min',i:3},{t:'Maré Alta',k:'Álbum',a:2,c:31,last:'há 1 h',i:1},
-    {t:'Luz Néon',k:'Música',a:4,c:15,last:'há 2 h',i:4,novo:true},{t:'Maré Alta (Visualizer)',k:'Vídeo',a:2,c:6,last:'há 3 h',i:1,novo:true}];
+    {t:'Ruído Branco',k:'Álbum',kind:'album',a:3,c:77,last:'há 5 min',i:2,quem:'Bia Kalli',txt:'A produção da faixa 3 é absurda.',nota:'76 - 90',award:true,ps:false},
+    {t:'Vidro Quebrado',k:'Música',kind:'musica',a:0,c:48,last:'há 12 min',i:0,quem:'Oruã',txt:'Refrão grudento demais, vai ficar no topo.',nota:'91 - 100',award:true},
+    {t:'Coroa de Papel — Live no VMA',k:'Vídeo',kind:'video',a:1,c:36,last:'há 40 min',i:3,quem:'Lumi Ray',txt:'Essa performance foi histórica.',nota:'76 - 90',tag:'Performance'},
+    {t:'Prisma',k:'Álbum',kind:'album',a:4,c:31,last:'há 1 h',i:4,quem:'Dante Cruz',txt:'Contando os dias pro lançamento!',ps:true},
+    {t:'Luz Néon',k:'Música',kind:'musica',a:4,c:15,last:'há 2 h',i:4,novo:true,quem:'Kai Moreau',txt:'Sintetizador lindo.',nota:'61 - 75'},
+    {t:'Maré Alta (Visualizer)',k:'Vídeo',kind:'video',a:2,c:6,last:'há 3 h',i:1,novo:true,quem:'Bia Kalli',txt:'O visual combinou muito.',tag:'Visualizer'}];
   const map = {Músicas:'Música',Vídeos:'Vídeo',Álbuns:'Álbum'};
-  const list = topics.filter(x => (state.forumFilter==='Tudo' || x.k===map[state.forumFilter]) && (!state.naoComentei || x.novo));
-  html += `<div style="margin-top:8px;border-top:1px solid var(--p-line)">` + list.map(x=>`<button class="topic" data-open="topic" data-id="${x.i}" data-title="${x.t}">${cover(x.i,'','sm')}<span style="min-width:0"><b>${x.t}</b><span class="ln"><span class="type">${x.k}</span><span>${ART[x.a]}</span><span>${svg('forum').replace('class=""','style="width:13px;height:13px;vertical-align:-2px"')} ${x.c}</span><span>${x.last}</span></span></span></button>`).join('') + `</div>`;
+  const list = topics.filter(x => (state.forumFilter==='Tudo' || x.k===map[state.forumFilter]) && (!state.naoComentei || x.novo) && (!state.videoTag || state.videoTag==='Todos' || state.forumFilter!=='Vídeos' || x.tag===state.videoTag));
+  html += `<div style="margin-top:8px;border-top:1px solid var(--p-line)">` + (list.map(x=>`<button class="topic" data-open="topic" data-id="${x.i}" data-title="${x.t}" data-kind="${x.kind}">${cover(x.i,'','sm" style="width:64px;height:'+(x.kind==='video'?'40':'64')+'px;border-radius:10px;background:linear-gradient(140deg,'+G[x.i][0]+','+G[x.i][1]+')')}<span style="min-width:0"><b>${x.t}</b>
+      <span class="ln"><span class="type">${x.k}</span><span>${ART[x.a]} <span style="color:#38bdf8">✓</span></span>${x.nota?`<span>♥ ${x.nota}</span>`:''}${x.award?'<span>🏆</span>':''}${x.ps?'<span style="color:var(--p-accent)">🚀 pre-save</span>':''}</span>
+      <span class="small prev" style="display:block;margin-top:6px;padding:6px 8px;border-radius:8px;background:var(--p-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b>${x.quem}:</b> <span class="muted">${x.txt}</span></span>
+      <span class="ln">${svg('forum').replace('class=""','style="width:13px;height:13px"')} ${x.c} comentários · ${x.last}${x.novo?' · <b style="color:var(--p-accent)">você ainda não comentou</b>':''}</span></span></button>`).join('') || `<p class="muted pad" style="padding-top:16px">Nenhum tópico com esse filtro.</p>`) + `</div>`;
   return html;
 }
-
 function charts(){
   const tabs = ['Ao vivo','Global 100','Paradas','Spotify','Apple Music','YouTube','Álbuns','Sales'];
   let html = `<h1 class="ttl">Charts</h1>`;
@@ -581,48 +599,34 @@ function aoVivo(){
   html += h2('Charts globais ao vivo') + `<div class="shelf">${['Top 100 Spotify','Top 100 Apple Music','Top 100 YouTube'].map((t,k)=>`<button class="tile" data-open="playlist">${cover([4,1,3][k],t)}<b>${t}</b><small><span class="badge live" style="font-size:9px;padding:1px 6px">ao vivo</span></small></button>`).join('')}</div>`;
   html += h2('Top 50 por país') + `<div style="margin-bottom:10px">${seg([['Spotify','Spotify'],['Apple Music','Apple Music'],['YouTube','YouTube']], plat, 'aoVivoPlat')}</div><div class="shelf">${['Brasil','Estados Unidos','Reino Unido','Coreia do Sul','México'].map((t,k)=>`<button class="tile" data-open="playlist">${cover(k+5,'Top 50 '+t)}<b>Top 50 ${t}</b><small>${plat} · ao vivo</small></button>`).join('')}</div>`;
   html += h2('Da semana') + `<div class="shelf">${[['Global 100','Semana 47'],['Parada · Reino Unido','Paradas oficiais'],['Parada · Japão','Paradas oficiais'],['Top Pop','Por gênero'],['Top Hip-Hop','Por gênero'],['Hot','30 lançamentos recentes']].map(([t,st],k)=>`<button class="tile" data-open="playlist">${cover(k+1,t)}<b>${t}</b><small>${st}</small></button>`).join('')}</div>`;
-  html += `<div class="card" style="margin-top:16px"><b class="small">O que acontece com o "Ao vivo" de hoje</b><p class="muted small" style="margin:4px 0 0">"Mundo" vira os Top 100 ao vivo por plataforma, e "Por país" vira os Top 50 por país. São os mesmos dados, atualizados a cada 30 s, só que agora tocáveis.</p></div>`;
+  html += `<div class="card" style="margin-top:16px"><b class="small">Nenhuma lógica muda</b><p class="muted small" style="margin:4px 0 0">Este é o painel de hoje do Catálogo, inteiro, só em outro lugar.</p></div><div class="card" style="margin-top:8px"><b class="small">O que acontece com o "Ao vivo" de hoje</b><p class="muted small" style="margin:4px 0 0">"Mundo" vira os Top 100 ao vivo por plataforma, e "Por país" vira os Top 50 por país. São os mesmos dados, atualizados a cada 30 s, só que agora tocáveis.</p></div>`;
   return html;
 }
-/* Demais charts = formato de playlist + o que só um chart tem (posição, movimento, pico, semanas, semana anterior) */
+/* Demais charts: mesmos dados e mesmo cálculo de hoje; só a apresentação vira playlist */
 function chartPlaylist(tab){
   const isAlb = tab==='Álbuns', isSales = tab==='Sales', isParada = tab==='Paradas';
-  const view = state.chartView || 'global';
-  const semana = state.chartWeek || 47;
+  const temVisao = ['Spotify','Apple Music','YouTube'].includes(tab);
+  const view = temVisao ? (state.chartView || 'global') : 'global';
   let html = `<div style="display:flex;gap:14px;align-items:flex-end;padding:14px 16px 6px">
-    ${cover(isAlb?2:0,'','sm" style="width:112px;height:112px;border-radius:var(--p-radius);flex-shrink:0;background:linear-gradient(140deg,'+G[isAlb?2:0][0]+','+G[isAlb?2:0][1]+')')}
-    <div style="min-width:0"><span class="muted" style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em">Chart semanal</span>
-    <h2 style="margin:2px 0 4px;font-size:24px;font-weight:900;letter-spacing:-.02em;line-height:1.05">${isParada?'Parada · Reino Unido':tab}</h2>
-    <span class="muted small">${isAlb?'200 álbuns':'100 faixas'} · atualiza toda quinta</span></div></div>`;
-  html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 16px">
-    <button class="ic" style="background:var(--p-surface)" data-week="-1" aria-label="Semana anterior">${svg('back')}</button>
-    <button class="btn sec" style="flex:1;height:36px" data-toast="Escolher semana ou mês no calendário">Semana ${semana} · ${semana===47?'20 a 26 nov':'semana anterior'}</button>
-    <button class="ic" style="background:var(--p-surface)" data-week="1" aria-label="Próxima semana" ${semana>=47?'disabled style="opacity:.35;background:var(--p-surface)"':''}>${svg('chev')}</button></div>`;
-  html += `<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;padding:4px 16px 12px"><button class="btn play" data-play="0">${svg('play')}Tocar</button><button class="btn sec" data-toast="Tocando no modo aleatório">${svg('shuffle')}Aleatório</button><button class="btn sec" style="width:40px;padding:0" aria-label="Salvar na Biblioteca" data-toast="Salvo na Biblioteca">${svg('heart')}</button></div>`;
-  if (!isSales && !isAlb) html += `<div style="margin-bottom:10px">${seg([['global',isParada?'Parada':'Global'],['pais','Por país'],['mes','Artistas do mês']], view, 'chartView')}</div>`;
-  if (view==='mes' && !isSales && !isAlb){
-    html += `<div class="hero" style="margin:0 16px 10px;background:linear-gradient(160deg,${G[0][0]},${G[0][1]})"><span class="badge" style="background:rgba(0,0,0,.35);color:#fff">Artista do mês · novembro</span><h4>Nova Valente</h4><span class="small" style="opacity:.9">“O mês em que o Império cantou junto” · editorial por Rolling Empire</span></div>`;
-    return html + ART.slice(0,6).map((a,i)=>`<button class="row" data-open="artist" data-id="${i}"><span class="rank">${i+1}</span><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${(42-i*5)} mi streams · ${tab}</small></span>${svg('chev','chev')}</button>`).join('');
+    ${cover(isAlb?2:0,'','sm" style="width:104px;height:104px;border-radius:var(--p-radius);flex-shrink:0;background:linear-gradient(140deg,'+G[isAlb?2:0][0]+','+G[isAlb?2:0][1]+')')}
+    <div style="min-width:0"><span class="muted" style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em">Chart</span>
+    <h2 style="margin:2px 0 4px;font-size:24px;font-weight:900;letter-spacing:-.02em;line-height:1.05">${tab==='Spotify'?'Spotify Global':tab}</h2>
+    <span class="muted small">Atualiza toda quinta</span></div></div>`;
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 16px 10px"><button class="btn play" data-play="0">${svg('play')}Tocar</button><button class="btn sec" data-toast="Tocando no modo aleatório">${svg('shuffle')}Aleatório</button></div>`;
+  if (temVisao) html += `<div style="margin-bottom:10px">${seg([['global','Global'],['pais','Por país'],['mes','Artistas do mês']], view, 'chartView')}</div>`;
+  if (view==='mes'){
+    html += `<div class="hero" style="margin:0 16px 10px;background:linear-gradient(160deg,${G[0][0]},${G[0][1]})"><span class="badge" style="background:rgba(0,0,0,.35);color:#fff">Artista do mês</span><h4>Nova Valente</h4><span class="small" style="opacity:.9">Editorial do mês, como hoje</span></div>`;
+    return html + ART.slice(0,6).map((a,i)=>`<button class="row" data-open="artist" data-id="${i}"><span class="rank">${i+1}</span><span class="cv sm" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,${G[i][0]},${G[i][1]})"></span><span class="meta"><b>${a}</b><small>${(42-i*5)} mi · ${tab}</small></span>${svg('chev','chev')}</button>`).join('');
   }
-  if (view==='pais') html += `<div style="margin-bottom:6px">${chips(['Brasil','Estados Unidos','Reino Unido','Coreia do Sul','México','Japão','França'], state.chartPais||'Brasil', 'chartPais')}</div>`;
-  html += `<div style="margin:4px 0 6px">${chips(['Todas','Estreias','Maiores altas','Quedas','Reentradas'], state.chartMov||'Todas', 'chartMov')}</div>`;
-  html += `<div style="display:flex;gap:8px;padding:4px 16px 8px"><label class="search" style="margin:0;flex:1;min-width:0">${svg('search')}<input placeholder="Buscar neste chart" aria-label="Buscar neste chart"></label>${!isSales?`<button class="btn sec" style="height:40px;font-size:12px" data-toast="Filtrar por estilo">${svg('music')}Estilo</button>`:''}</div>`;
-  html += `<div class="card" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:10px">${[['5','estreias'],['+23','maior alta'],['3 sem','#1 seguido']].map(([v,l])=>`<div><b style="font-size:17px;display:block">${v}</b><span class="muted" style="font-size:11px">${l}</span></div>`).join('')}</div>`;
-  let rows = (isAlb ? ALB.map((a,i)=>({t:a.t,a:a.a,al:i,p:i+1,ch:['+1','0','NEW','-2','+3','RE'][i]})) : SONG);
-  const mov = state.chartMov||'Todas';
-  rows = rows.filter(r => mov==='Todas' || (mov==='Estreias'&&r.ch==='NEW') || (mov==='Maiores altas'&&r.ch.startsWith('+')) || (mov==='Quedas'&&r.ch.startsWith('-')) || (mov==='Reentradas'&&r.ch==='RE'));
-  const open = state.chartOpen;
+  if (view==='pais' || isParada) html += `<div style="margin-bottom:8px">${chips(['Brasil','Estados Unidos','Reino Unido','Coreia do Sul','México','Japão','França'], state.chartPais||'Brasil', 'chartPais')}</div>`;
+  html += `<div style="display:flex;gap:8px;padding:4px 16px 10px"><button class="btn sec" style="height:40px;font-size:12.5px;flex-shrink:0" data-toast="Mesmo seletor de data de hoje">${svg('globe').replace('class=""','style="width:15px;height:15px"')}Semana 47 ▾</button>${(tab==='Global 100'||isAlb)?`<button class="btn sec" style="height:40px;font-size:12.5px;flex-shrink:0" data-toast="Mesmo filtro de estilo de hoje">${svg('music')}Estilo ▾</button>`:''}<label class="search" style="margin:0;flex:1;min-width:0">${svg('search')}<input placeholder="Buscar" aria-label="Buscar neste chart"></label></div>`;
+  const rows = isAlb ? ALB.map((a,i)=>({t:a.t,a:a.a,al:i,p:i+1,ch:['+1','0','NEW','-2','+3','-1'][i]})) : SONG;
   html += rows.map((r,i)=>{
-    const cls = r.ch==='NEW'||r.ch==='RE'?'new':r.ch.startsWith('+')?'up':r.ch.startsWith('-')?'down':'muted';
-    const lbl = r.ch==='NEW'?'NOVA':r.ch==='RE'?'VOLTA':r.ch==='0'?'=':(r.ch.startsWith('+')?'▲':'▼')+r.ch.slice(1);
-    const val = isSales?`${(48-i*4)} mil vendas`:isAlb?`${[182,140,121,98,77,51][i]||40} mil unid.`:`${(9.8-i*0.7).toFixed(1)} mi`;
-    const det = open===i ? `<div class="card" style="margin:0 16px 10px"><div style="display:flex;justify-content:space-between" class="small"><b>Últimas 8 semanas</b><span class="muted">pico #${Math.max(1,r.p-2)}</span></div>
-      <div style="display:flex;align-items:flex-end;gap:5px;height:56px;margin:10px 0 6px">${[18,9,7,5,4,3,2,r.p].map((v,k)=>`<span title="#${v}" style="flex:1;border-radius:4px 4px 0 0;height:${Math.round(15+(20-Math.min(v,20))/19*85)}%;background:${k===7?'var(--p-accent)':'var(--p-surface2)'}"></span>`).join('')}</div>
-      <div class="muted" style="font-size:11px;display:flex;justify-content:space-between"><span>sem 40</span><span>sem 47</span></div>
-      ${isSales||isAlb?'':`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px;text-align:center">${[['Spotify','4,1 mi'],['Apple','2,9 mi'],['YouTube','2,8 mi']].map(([n,v])=>`<div><b class="small" style="display:block">${v}</b><span class="muted" style="font-size:11px">${n}</span></div>`).join('')}</div>`}
-      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn play" style="height:34px;font-size:12px" data-play="${r.al}">${svg('play')}Ouvir</button><button class="btn sec" style="height:34px;font-size:12px" data-open="topic" data-id="${r.al}" data-title="${r.t}">${svg('forum')}Fórum</button><button class="btn sec" style="height:34px;font-size:12px" data-open="album" data-id="${r.al}">${svg('disc')}Álbum</button></div></div>` : '';
-    return `<button class="row" data-chart-open="${i}" aria-expanded="${open===i}"><span class="rank">${r.p}</span><span class="delta ${cls}">${lbl}</span>${cover(r.al,'','sm')}<span class="meta"><b>${r.t}</b><small>${ART[r.a]}</small><small style="color:var(--p-muted)">${val} · pico #${Math.max(1,r.p-2)} · ${r.p+2} sem</small></span><span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções" data-actions="faixa" data-title="${r.t}">${svg('more','chev')}</span></button>${det}`;
-  }).join('') || `<p class="muted pad">Nenhuma faixa nesse filtro.</p>`;
+    const cls = r.ch==='NEW'?'new':r.ch.startsWith('+')?'up':r.ch.startsWith('-')?'down':'muted';
+    const lbl = r.ch==='NEW'?'NEW':r.ch==='0'?'=':(r.ch.startsWith('+')?'▲':'▼')+r.ch.slice(1);
+    const val = isSales?`${(48-i*4)} mil`:isAlb?`${[182,140,121,98,77,51][i]} mil`:`${(9.8-i*0.7).toFixed(1).replace('.',',')} mi`;
+    return `<button class="row" ${isAlb?`data-open="album" data-id="${r.al}"`:`data-play-song="${i%SONG.length}"`}><span class="rank">${r.p}</span><span class="delta ${cls}">${lbl}</span>${cover(r.al,'','sm')}<span class="meta"><b>${r.t}</b><small>${ART[r.a]} · ${val}</small></span><span class="ic" style="width:30px;height:30px" role="button" aria-label="Opções" data-actions="faixa" data-title="${r.t}">${svg('more','chev')}</span></button>`;
+  }).join('');
   return html;
 }
 
@@ -672,25 +676,55 @@ function social(){
 
 /* ── páginas empilhadas ── */
 const pages = {
-  album(id){
-    const a = ALB[+id||0];
-    const dono = a.a===0 || a.a===4;
-    return {title:a.t, actions:'album', body:`
-      ${dono?`<div class="pad" style="padding-top:12px"><button class="card" style="margin:0;width:100%;display:flex;gap:10px;align-items:center;text-align:left;border:1px dashed var(--p-accent)" data-open="editar" data-id="${+id||0}"><span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg('pen')}</span><span style="flex:1;min-width:0"><b style="display:block">Editar lançamento</b><span class="muted small">Você é dono deste artista</span></span>${svg('chev','chev')}</button></div>`:''}
-      <div style="padding:18px 16px 6px;display:grid;justify-items:center;text-align:center">
-        ${cover(+id||0,'','sm" style="width:220px;height:220px;border-radius:var(--p-radius);box-shadow:0 20px 40px -16px rgba(0,0,0,.5);background:linear-gradient(140deg,'+G[(+id||0)%G.length][0]+','+G[(+id||0)%G.length][1]+')')}
-        <h2 style="margin:14px 0 2px;font-size:22px;font-weight:800;letter-spacing:-.02em">${a.t}</h2>
-        <button class="small" style="color:var(--p-accent);font-weight:700" data-open="artist" data-id="${a.a}">${ART[a.a]}</button>
-        <span class="muted small">Álbum · ${a.y} · ${a.n} faixas</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 16px">
-        <button class="btn play" data-play="${a.a}">${svg('play')}Tocar</button><button class="btn sec" data-toast="Tocando no modo aleatório">${svg('shuffle')}Aleatório</button>
-      </div>
-      <div class="pad" style="margin:4px 0 8px"><button class="card" style="margin:0;width:100%;display:flex;align-items:center;gap:12px;text-align:left" data-open="topic" data-id="${+id||0}" data-title="${a.t}">
-        <span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg('forum')}</span><span style="flex:1;min-width:0"><b style="display:block">Discussão no Fórum</b><span class="muted small">${a.c} comentários · última há 5 min</span></span>${svg('chev','chev')}</button></div>
-      ${SONG.filter(s=>s.al===(+id||0)).concat(SONG.slice(0,4)).slice(0,6).map((s,i)=>`<button class="row" data-play-song="${SONG.indexOf(s)}"><span class="rank muted" style="font-size:14px;font-weight:600">${i+1}</span><span class="meta"><b>${s.t}</b><small>${ART[s.a]}</small></span><span class="end">${s.d}</span></button>`).join('')}
-      ${h2('Encarte e material extra')}<div class="shelf">${[1,2,3].map(k=>`<button class="tile" data-toast="Abre o encarte em tela cheia">${cover(k+5,'Encarte '+k)}</button>`).join('')}</div>
-      <p class="muted small pad" style="margin-top:12px">Lançado em 14 de novembro de ${a.y} · King &amp; Queen</p>`};
+  album(id){ return pages.lancamento(id, ALB[+id||0].t, 'album'); },
+  lancamento(id, title, kind){
+    const i = +id||0;
+    const isVid = kind==='video', isMus = kind==='musica';
+    const a = ALB[i%ALB.length];
+    const t = title || a.t, artista = ART[isMus?SONG.find(s=>s.t===t)?.a ?? a.a : a.a];
+    const dono = !isVid && (a.a===0 || a.a===4);
+    const g = G[i%G.length];
+    const novo = '<i class="novo">novo</i>';
+    const comentarios = [['Bia Kalli','76 - 90','A produção da faixa 3 é absurda. Melhor álbum do ano até agora.','5 min',[['🔥',12],['❤️',8]],[['Oruã','Concordo, mas a 7 é a que vai segurar no chart.','2 min']]],['Lumi Ray','91 - 100','Esse encarte ficou lindo demais 😭','1 h',[['😍',5]],[]],['Kai Moreau','61 - 75','Parabéns pelo lançamento!','2 h',[],[]]];
+    const cmt = ([n,nota,tx,h,re,resp],k,nested) => `<div class="cmt" style="${nested?'padding-left:56px':''}"><span class="av cv sm" style="background:linear-gradient(140deg,${G[(k+5)%G.length][0]},${G[(k+5)%G.length][1]})"></span><div style="min-width:0"><b>${n}</b> <span style="color:#38bdf8">✓</span> <span class="muted small">· ${h}</span>${nota?` <span class="type" style="margin-left:4px">♥ ${nota}</span>`:''}<p>${tx}</p><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${(re||[]).map(([e,c])=>`<button class="chip" style="padding:3px 9px;font-size:12px" data-toast="Reação ${e}">${e} ${c}</button>`).join('')}<button class="chip" style="padding:3px 9px;font-size:12px" aria-label="Reagir" data-toast="Escolha uma reação: ❤️ 🔥 👍 👎 😂 😮 😢 😡 🎉 👏 🙏 💯">☺+</button>${nested?'':`<button class="small muted" style="font-weight:700;padding:4px" data-toast="Responder a ${n}">Responder</button>`}<button class="small muted" aria-label="Opções do comentário" data-actions="comentario" data-title="Comentário de ${n}">${svg('more').replace('class=""','style="width:16px;height:16px"')}</button></div></div></div>${(resp||[]).map(r=>cmt([r[0],'',r[1],r[2],[],[]],k+3,true)).join('')}`;
+    const header = isVid
+      ? `<div class="tvbox" style="height:206px;background:linear-gradient(160deg,${g[0]},${g[1]})" role="button" aria-label="Tocar vídeo" data-toast="Tocando o vídeo aqui mesmo"><span class="cv sm" style="width:58px;height:58px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center">${svg('play')}</span></div>
+         <div class="pad" style="padding-top:12px"><span class="type">Music Video</span><h2 style="margin:8px 0 2px;font-size:21px;font-weight:800;letter-spacing:-.02em">${t}</h2><button class="small" style="color:var(--p-accent);font-weight:700" data-open="artist" data-id="0">${artista}</button> <span class="muted small">· Lançamento: 14/11/2026</span></div>`
+      : `<div style="position:relative;padding:22px 16px 6px;display:grid;justify-items:center;text-align:center;background:linear-gradient(180deg,${g[0]}55,transparent 85%)">
+          <button style="border-radius:var(--p-radius)" data-toast="Capa em tela cheia" aria-label="Ver capa em tela cheia">${cover(i,'','sm" style="width:210px;height:210px;border-radius:var(--p-radius);box-shadow:0 24px 44px -18px rgba(0,0,0,.6);background:linear-gradient(140deg,'+g[0]+','+g[1]+')')}</button>
+          <h2 style="margin:14px 0 2px;font-size:22px;font-weight:800;letter-spacing:-.02em">${t}</h2>
+          <button class="small" style="color:var(--p-accent);font-weight:700" data-open="artist" data-id="${a.a}">${artista} <span style="color:#38bdf8">✓</span></button>
+          <span class="muted small">${isMus?'Single · Pré-álbum':'Álbum'} · Lançamento: 14/11/2026${isMus?'':` · ${a.n} faixas`}</span></div>`;
+    const badges = `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:${isVid?'flex-start':'center'};padding:8px 16px 4px"><span class="badge" style="background:var(--p-surface2)">♥ Likes 76 - 90</span><span class="badge" style="background:#f59e0b22;color:#f59e0b">🏆 Indicado · VMA 2026</span>${kind==='album'?'<span class="badge" style="background:#957AF822;color:var(--p-accent)">🚀 2.380 pre-saves</span>':''}</div>`;
+    const acoes = `<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;padding:10px 16px">
+        <button class="btn play" data-play="${i}">${svg('play')}${isVid?'Assistir':'Tocar'}</button><button class="btn sec" data-toast="${isVid?'Abre em mini player':isMus?'Escolha a playlist':'Tocando no modo aleatório'}">${svg(isVid?'tv':isMus?'list':'shuffle')}${isVid?'Mini player':isMus?'Playlist':'Aleatório'}</button>
+        <button class="btn sec" style="width:40px;padding:0" aria-label="Salvar" data-toast="Salvo na Biblioteca">${svg('heart')}</button>
+        <button class="btn sec" style="width:40px;padding:0" aria-label="Mais opções" data-actions="${dono?'albumDono':'album'}" data-title="${t}">${svg('more')}</button></div>`;
+    const botoes = isVid ? '' : `<div style="display:flex;gap:8px;padding:2px 16px 10px;flex-wrap:wrap">${[['bag','Shop'],['help','Info'],['image','Visual']].map(([ic,l])=>`<button class="btn sec" style="height:34px;font-size:12.5px" data-toast="${l}: botão do tópico">${svg(ic)}${l}</button>`).join('')}</div>`;
+    const destaque = `<div class="card" style="margin-top:6px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:16px">Comentários · 77</b><span class="muted small">maioria: ♥ 76 - 90</span></div>
+        <div style="display:flex;gap:4px;align-items:flex-end;height:34px;margin:10px 0 4px">${[['45-60',8],['61-75',22],['76-90',51],['91-100',19]].map(([l,v])=>`<div style="flex:1;display:grid;gap:3px;justify-items:center"><span style="width:100%;height:${Math.max(4,v*0.6)}px;border-radius:4px;background:${v===51?'var(--p-accent)':'var(--p-surface2)'}"></span></div>`).join('')}</div>
+        <div class="muted" style="display:flex;justify-content:space-between;font-size:10.5px"><span>45-60</span><span>61-75</span><span>76-90</span><span>91-100</span></div>
+        <div style="margin-top:10px;border-top:1px solid var(--p-line);padding-top:8px" class="small"><b>Bia Kalli</b> <span class="muted">· há 5 min</span><div>A produção da faixa 3 é absurda. Melhor álbum do ano até agora.</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn pri" data-avaliar>${svg('star')}Avaliar &amp; Comentar</button><button class="btn sec" data-scroll-to="cmts">Ver todos</button></div>
+        <p class="muted" style="font-size:11px;margin:8px 0 0">Gráfico da distribuição das notas ${novo}</p></div>`;
+    let corpo = '';
+    if (kind==='album'){
+      const faixas = [['Vidro Quebrado','3:12',1,true],['Catedral','4:20',1,true],['Febre de Maio','2:58',1,true],['Interlúdio','1:10',1,false],['Ruído Branco','4:05',2,true],['Sal na Pele','3:03',2,true]];
+      corpo += h2('Faixas do álbum') + faixas.map(([ft,d,disco,aud],k)=>`${k===0||faixas[k-1][2]!==disco?`<p class="muted" style="margin:8px 16px 4px;font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase">Disco ${disco}</p>`:''}
+        <div class="row" style="cursor:default;${aud?'':'opacity:.55'}"><button class="rank muted" style="font-size:14px;font-weight:600" ${aud?`data-play-song="${k%SONG.length}" aria-label="Tocar ${ft}"`:'disabled'}>${k+1}</button><button class="meta" style="text-align:left" ${aud?`data-play-song="${k%SONG.length}"`:''}><b>${ft}</b><small>${aud?artista:'Sem áudio no catálogo'}</small></button><span class="end">${d}</span><button class="ic" style="width:32px;height:32px" aria-label="Ver letra de ${ft}" aria-expanded="${state.letraAberta===k}" data-letra="${k}">${svg('lyric')}</button></div>
+        ${state.letraAberta===k?`<div class="card" style="margin:0 16px 8px"><div style="display:flex;justify-content:space-between;gap:8px"><b class="small">Letra ${k===0?'(acompanhando)':''}</b><button class="small" style="color:var(--p-accent);font-weight:700" data-open="topic" data-id="${k}" data-title="${ft}" data-kind="musica">Ver tópico ↗</button></div><p class="small" style="margin:8px 0 0;line-height:1.7">${k===0?'<span class="muted">Eu juntei os cacos do chão</span><br><b style="font-size:15px">e fiz um vitral da nossa canção</b><br><span class="muted">vidro quebrado também reflete a luz</span>':'Letra oficial em processamento no acervo do Empire Hub.'}</p></div>`:''}`).join('');
+      corpo += h2('Encarte') + `<div class="shelf">${[1,2,3,4].map(k=>`<button class="tile" style="width:120px" data-toast="Encarte · página ${k} (anterior/próxima)">${cover(k+5,'','sm" style="width:120px;height:120px;border-radius:10px;background:linear-gradient(140deg,'+G[k+5][0]+','+G[k+5][1]+')')}</button>`).join('')}</div>`;
+    }
+    if (isMus){
+      corpo += h2('Letra') + `<div class="card" style="background:linear-gradient(160deg,${g[0]}33,var(--p-surface))"><span class="muted" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em">Letra sincronizada · acompanhando</span><p style="margin:10px 0 0;font-size:19px;font-weight:800;line-height:1.45;letter-spacing:-.01em"><span class="muted">Eu juntei os cacos do chão</span><br>e fiz um vitral da nossa canção<br><span class="muted" style="opacity:.6">vidro quebrado também reflete a luz</span></p></div>`;
+      corpo += h2('Do álbum') + `<button class="row" data-open="album" data-id="0">${cover(0,'','sm')}<span class="meta"><b>Neon Catedral</b><small>Álbum · 12 faixas</small></span>${svg('chev','chev')}</button>`;
+    }
+    if (isVid){
+      corpo += h2('Mais vídeos') + VID.map((v,k)=>`<button class="row" data-open="topic" data-id="${k}" data-title="${v.t}" data-kind="video">${cover(k+2,'','sm" style="width:96px;height:54px;border-radius:8px;background:linear-gradient(140deg,'+G[k+2][0]+','+G[k+2][1]+')')}<span class="meta"><b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></span></button>`).join('');
+    }
+    corpo += `<div id="cmts">${h2('Comentários · 77','Recentes','data-toast="Ordenar por: recentes, mais reações"')}</div>` + comentarios.map((c,k)=>cmt(c,k,false)).join('');
+    return {title:t, actions:'topico', body: header + badges + acoes + botoes + `<div class="pad" style="padding:0">${destaque}</div>` + corpo + `<div style="height:70px"></div><div class="composer" style="position:sticky"><button class="btn pri" style="flex:1" data-avaliar>${svg('star')}Avaliar &amp; Comentar</button></div>`};
   },
   artist(id){
     const i = +id||0;
@@ -768,18 +802,7 @@ const pages = {
       ${['Instagram','Twitter','TikTok'].map((r,k)=>`${h2(r)}<div class="group">${[['@ do perfil',['@novavalente','@novavalente','@nova.valente'][k]],['Foto e bio',k===2?'Não configurado':'Iguais às outras redes']].map(([l,v])=>`<button class="row" data-toast="Editar ${l} no ${r}"><span class="meta"><small>${l}</small><b style="${v==='Não configurado'?'color:var(--p-down)':''}">${v}</b></span>${svg('chev','chev')}</button>`).join('')}</div>`).join('')}
       <div class="pad" style="margin-top:16px"><button class="btn pri" style="width:100%" data-toast="Perfil salvo">Salvar</button></div>`};
   },
-  topic(id, title){
-    const i = +id||0;
-    return {title:title||'Tópico', actions:'topico', body:`
-      <div style="display:flex;gap:12px;padding:14px 16px;align-items:center;border-bottom:1px solid var(--p-line)">
-        ${cover(i,'','sm" style="width:72px;height:72px;border-radius:10px;background:linear-gradient(140deg,'+G[i%G.length][0]+','+G[i%G.length][1]+')')}
-        <div style="flex:1;min-width:0"><span class="type">${ALB.some(a=>a.t===title)?'Álbum':'Música'}</span><b style="display:block;margin-top:4px">${title||''}</b><span class="muted small">${ART[ALB[i%ALB.length].a]}</span></div>
-      </div>
-      <div style="display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap"><button class="btn play" data-play="${i}">${svg('play')}Ouvir</button><button class="btn sec" data-open="album" data-id="${i}">${svg('disc')}Ver no Catálogo</button><button class="btn sec" data-toast="Abre a letra">${svg('lyric')}Letra</button></div>
-      <div class="h2" style="margin-top:8px"><h3>Comentários</h3><button data-toast="Ordenado por mais recentes">Recentes</button></div>
-      ${[['Bia Kalli','A produção da faixa 3 é absurda. Melhor álbum do ano até agora.','5 min'],['Oruã','Concordo, mas a 7 é a que vai segurar no chart.','12 min'],['Lumi Ray','Esse encarte ficou lindo demais 😭','1 h'],['Kai Moreau','Parabéns pelo lançamento!','2 h']].map(([n,t,h],k)=>`<div class="cmt"><span class="av cv sm" style="background:linear-gradient(140deg,${G[k+5][0]},${G[k+5][1]})"></span><div style="min-width:0"><b>${n}</b> <span class="muted small">· ${h}</span><p>${t}</p><div class="acts" style="max-width:160px;margin:0"><button data-like>${svg('heart')}<span>${[24,9,31,6][k]}</span></button><button data-toast="Responder a ${n}">${svg('reply')}Responder</button><button aria-label="Opções do comentário" data-actions="comentario" data-title="Comentário de ${n}">${svg('more')}</button></div></div></div>`).join('')}
-      <div class="composer"><input placeholder="Comente como Revisor…" aria-label="Comentário"><button class="btn pri" style="height:40px;width:40px;padding:0" aria-label="Enviar" data-toast="Comentário publicado">${svg('send')}</button></div>`};
-  },
+  topic(id, title, kind){ return pages.lancamento(id, title, kind || (ALB.some(a=>a.t===title)?'album':VID.some(v=>v.t===title)?'video':'musica')); },
   playlist(){
     return {title:'Global 100 ao vivo', body:`
       <div class="hero" style="margin:14px 16px;background:radial-gradient(120% 100% at 100% 0%,#22d3ee 0%,transparent 50%),linear-gradient(160deg,#7c3aed,#1e1b4b)"><span class="badge live">Ao vivo</span><h4>Global 100</h4><span class="small" style="opacity:.85">Gerada dos charts · atualizada às 09:00</span></div>
@@ -830,11 +853,11 @@ const pages = {
 
 /* ── pilha de telas (voltar fecha só a de cima) ── */
 const stack = [];
-function openPage(name, id, title){
-  const p = pages[name](id, title);
+function openPage(name, id, title, kind){
+  const p = pages[name](id, title, kind);
   const el = document.createElement('section');
   el.className = 'stackPage';
-  el.dataset.pid = id || '';
+  el.dataset.pid = id || ''; el.dataset.pname = name; el.dataset.ptitle = title || ''; el.dataset.pkind = kind || '';
   el.setAttribute('aria-label', p.title);
   el.innerHTML = `<div class="stackHead"><button class="back" data-back aria-label="Voltar">${svg('back')}${stack.length ? 'Voltar' : TABS.find(t=>t[0]===state.tab)[1]}</button><span class="t">${p.title}</span>${p.actions?`<button class="ic" aria-label="Mais opções" data-actions="${p.actions}" data-title="${p.title}">${svg('more')}</button>`:'<span style="width:36px"></span>'}</div><div class="stackBody">${p.body}</div>`;
   box.appendChild(el);
@@ -842,6 +865,12 @@ function openPage(name, id, title){
   initArrows(el);
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
   setTimeout(() => el.querySelector('[data-back]').focus({preventScroll:true}), 300);
+}
+function refreshTop(){
+  const el = stack[stack.length-1]; if (!el) return;
+  const body = el.querySelector('.stackBody'), y = body.scrollTop;
+  body.innerHTML = pages[el.dataset.pname](el.dataset.pid, el.dataset.ptitle || undefined, el.dataset.pkind || undefined).body;
+  body.scrollTop = y; initArrows(el);
 }
 function closeTop(){
   const el = stack.pop(); if (!el) return;
@@ -868,13 +897,14 @@ const ACTIONS = {
   video:[['list','Adicionar à playlist'],['heart','Salvar'],['forum','Abrir discussão no Fórum'],['help','Reportar problema no vídeo'],['help','Reportar conteúdo errado']],
   album:[['pen','Editar lançamento (dono)'],['heart','Salvar álbum'],['share','Compartilhar'],['help','Reportar conteúdo errado']],
   comentario:[['pen','Editar comentário'],['heart','Reagir'],['reply','Responder'],['logout','Excluir (dono ou admin)']],
-  topico:[['share','Compartilhar tópico'],['logout','Excluir tópico (admin)']],
+  topico:[['share','Compartilhar'],['pen','Editar tópico (admin)'],['archive','Marcar como pendente (admin)'],['logout','Excluir tópico (admin)']],
+  albumDono:[['pen','Editar lançamento (você é dono)','data-open-after="editar" data-after-id="0"'],['heart','Salvar'],['share','Compartilhar'],['help','Reportar conteúdo errado'],['logout','Excluir tópico (admin)']],
   post:[['pen','Editar post (dono)'],['logout','Excluir post (dono ou admin)'],['share','Copiar link']],
   turne:[['pen','Editar turnê'],['image','Trocar capa'],['share','Compartilhar']],
 };
 function openActions(key, title){
   $('#sheet').setAttribute('aria-label', title||'Opções');
-  $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:8px">${title||'Opções'}</b><div class="group" style="margin:0">${ACTIONS[key].map(([ic,l])=>`<button class="row" data-close-sheet data-toast="${l}"><span class="gicon" style="background:var(--p-surface2);color:var(--p-fg)">${svg(ic)}</span><span class="meta"><b>${l}</b></span></button>`).join('')}</div><button class="btn sec" style="width:100%;margin-top:12px" data-close-sheet>Cancelar</button>`;
+  $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:8px">${title||'Opções'}</b><div class="group" style="margin:0">${ACTIONS[key].map(([ic,l,at])=>`<button class="row" ${at?at:`data-close-sheet data-toast="${l}"`}><span class="gicon" style="background:var(--p-surface2);color:var(--p-fg)">${svg(ic)}</span><span class="meta"><b>${l}</b></span></button>`).join('')}</div><button class="btn sec" style="width:100%;margin-top:12px" data-close-sheet>Cancelar</button>`;
   $('#scrim').classList.add('in'); $('#sheet').classList.add('in');
 }
 function closeSheet(){ $('#scrim').classList.remove('in'); $('#sheet').classList.remove('in'); }
@@ -924,10 +954,18 @@ box.addEventListener('click', e => {
   if (b.dataset.repost!==undefined){ const a=+b.dataset.repost; state.reposted = state.reposted===a ? null : a; render(false); return toast(state.reposted===a?'Repostado: o post subiu para o topo do feed':'Repost desfeito'); }
   if (b.dataset.chartOpen!==undefined){ state.chartOpen = state.chartOpen===+b.dataset.chartOpen ? null : +b.dataset.chartOpen; return render(true); }
   if (b.dataset.week){ state.chartWeek = Math.min(47,(state.chartWeek||47)+ +b.dataset.week); return render(true); }
+  if (b.dataset.letra!==undefined){ state.letraAberta = state.letraAberta===+b.dataset.letra ? null : +b.dataset.letra; return refreshTop(); }
+  if (b.dataset.scrollTo){ const body=b.closest('.stackBody'); const t=body&&body.querySelector('#'+b.dataset.scrollTo); if(t) body.scrollTo({top:t.offsetTop-10,behavior:'smooth'}); return; }
+  if (b.hasAttribute('data-avaliar')){ $('#sheet').setAttribute('aria-label','Avaliar e comentar'); $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:17px;margin-bottom:12px">Avaliar &amp; Comentar</b>
+      <p class="muted small" style="margin:0 0 4px;font-weight:700">Nome do jogador</p><div class="card" style="margin:0 0 12px;padding:10px 12px" aria-readonly="true">Revisor <span class="muted small">(sempre o jogador logado)</span></div>
+      <p class="small" style="margin:0 0 8px;font-weight:700">Em questão de Likes, qual o intervalo que você daria?</p>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">${['45 - 60','61 - 75','76 - 90','91 - 100'].map((o,k)=>`<button class="chip" style="padding:8px 4px;font-size:12px;text-align:center" aria-pressed="${k===2}" data-local-tab="nota" data-val="${k}">${o}</button>`).join('')}</div>
+      <div class="card" style="margin:0 0 12px;min-height:70px" class="muted"><span class="muted small">Seu comentário… (negrito, itálico, emoji)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn sec" data-close-sheet>Cancelar</button><button class="btn pri" data-close-sheet data-toast="Comentário publicado">Publicar comentário</button></div>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
   if (b.hasAttribute('data-toggle-nc')){ state.naoComentei=!state.naoComentei; return render(true); }
   if (b.hasAttribute('data-open-filters')){ $('#sheet').setAttribute('aria-label','Filtros'); $('#sheet').innerHTML = `<div class="grab"></div><b style="display:block;font-size:16px;margin-bottom:10px">Filtros do Fórum</b><div class="group" style="margin:0">${[['Artista','Todos'],['Lançado de','—'],['Até','—']].map(([l,v])=>`<button class="row" data-toast="Escolher ${l.toLowerCase()}"><span class="meta"><small>${l}</small><b>${v}</b></span>${svg('chev','chev')}</button>`).join('')}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn sec" data-close-sheet data-toast="Filtros limpos">Limpar filtros</button><button class="btn pri" data-close-sheet data-toast="Filtros aplicados">Aplicar</button></div>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
   if (b.id==='openCreate') return openCreate();
-  if (b.dataset.openAfter){ closeSheet(); return openPage(b.dataset.openAfter); }
+  if (b.dataset.openAfter){ closeSheet(); return openPage(b.dataset.openAfter, b.dataset.afterId); }
   if (b.id==='openSearch'){ closeAll(); state.tab='catalogo'; state.catTab='buscar'; render(); setTimeout(()=>{ const q=$('#q'); q && q.focus({preventScroll:true}); },50); return; }
   if (b.id==='openNotif') return openPage('notif');
   if (b.id==='openMe') return openPage('me');
@@ -935,11 +973,11 @@ box.addEventListener('click', e => {
   if (b.hasAttribute('data-close-sheet')){ closeSheet(); if (b.dataset.toast) toast(b.dataset.toast); return; }
   if (b.hasAttribute('data-back')) return closeTop();
   if (b.dataset.modeSet) return setMode(b.dataset.modeSet);
-  if (b.dataset.localTab){ const root=b.closest('.stackBody')||scroller; b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); root.querySelectorAll('[data-'+b.dataset.localTab+']').forEach(el=>el.hidden = el.getAttribute('data-'+b.dataset.localTab)!==b.dataset.val); return; }
+  if (b.dataset.localTab){ const root=b.closest('.stackBody')||b.closest('.sheet')||scroller; b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); root.querySelectorAll('[data-'+b.dataset.localTab+']').forEach(el=>el.hidden = el.getAttribute('data-'+b.dataset.localTab)!==b.dataset.val); return; }
   if (b.dataset.scroll){ const root=b.closest('.stackBody'); b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); const t=root&&root.querySelector('#'+b.dataset.scroll); if(t) root.scrollTo({top:t.offsetTop-60,behavior:'smooth'}); return; }
   if (b.dataset.goClose){ closeAll(); state.tab=b.dataset.goClose; return render(); }
   if (b.dataset.go){ closeAll(); if (b.dataset.go===state.tab) { scroller.scrollTo({top:0,behavior:'smooth'}); return; } state.tab=b.dataset.go; return render(); }
-  if (b.dataset.open) return openPage(b.dataset.open, b.dataset.id, b.dataset.title);
+  if (b.dataset.open) return openPage(b.dataset.open, b.dataset.id, b.dataset.title, b.dataset.kind);
   if (b.dataset.set){
     let k = b.dataset.set, v = b.dataset.val;
     if (k==='noop') { b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===b)); return; }

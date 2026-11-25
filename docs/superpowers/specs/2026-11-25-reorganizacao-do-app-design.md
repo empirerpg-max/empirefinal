@@ -65,7 +65,8 @@ E duas condições inegociáveis:
 - **Criar** sempre a 1 toque (topo). **Meu Império** (foto do jogador) a 1 toque.
 - Empire TV, Turnês e Acervo a **2 toques** (Início → aba).
 - Catálogo único (Início, Buscar, Biblioteca), Fórum com aba própria, ligados
-  pelos botões "Discussão" e "Ver no Catálogo".
+  por uma página única de cada lançamento (o tópico, com comentários em
+  destaque), aberta pelos dois lados.
 - Charts › Ao vivo = painel de playlists atual do Catálogo; demais charts em
   formato de playlist com recursos de chart.
 - Social com perfil único por artista (3 redes), feed paginado, Repostar,
@@ -275,47 +276,89 @@ curtidas, `/api/salvos`) · Artistas · Álbuns · Vídeos, + "Nova playlist"
 (editor atual, com faixa por Catálogo, upload ou link). "Tocadas
 recentemente" usa o mesmo histórico do Continue ouvindo.
 
-#### 5.3.4 Página de álbum única
+#### 5.3.4 Página do lançamento (álbum, música, vídeo) = tópico do Fórum
 
-Hoje um álbum abre de 3 jeitos (Fórum, Álbuns antigos, rota antiga). Passa
-a existir **uma** página, `/empire-play/album/$id`, que serve álbum
-atual, material antigo e as rotas antigas redirecionadas:
+**Uma página só por lançamento**, aberta tanto pelo Fórum quanto pelo
+Catálogo (e pelas rotas antigas redirecionadas). Ela **é o tópico do Fórum
+de hoje**, com tudo o que ele faz, no visual Spotify/Apple Music e com os
+comentários em destaque. Isso elimina os 3 jeitos de abrir um álbum e a
+necessidade de um botão "Discussão" separado: a discussão está na própria
+página.
 
-- Capa, título, artista (→ página do artista), tipo, ano, nº de faixas.
-- **Tocar** e **Aleatório**.
-- **Editar lançamento**: só para o dono do artista e para admin (→ 5.7.2).
-- **Discussão no Fórum · N comentários** *(NOVO, é só um link)* → o tópico
-  do álbum no Fórum.
-- Tracklist: tocar a faixa; ⋯ por faixa = Adicionar à playlist · Salvar ·
-  Abrir discussão · Compartilhar · Reportar conteúdo errado.
-- Encarte (visualizador atual), letra, material extra (Shop/Info/Visual).
-- Selo de pre-save, nota e selos (verificado, award) onde existem hoje.
+**Regra:** antes de construir, listar tudo o que o tópico de hoje faz
+(`src/components/EmpirePlay/Forum.tsx`, vista do `selectedTopic`) e
+conferir item por item na página nova. A lista mínima está abaixo.
 
-Faixas e vídeos avulsos abrem no player (como hoje), e o player ganha o
-mesmo botão "Discussão" (o "Ver no Fórum" que já existe).
+**Comum aos 3 tipos (de cima para baixo):**
+1. Cabeçalho: capa grande (tocar = **capa em tela cheia**), título,
+   artista(s) com **selo de verificado**, tipo, "Lançamento: dd/mm/aaaa"
+   (`releaseDate`), nº de faixas (álbum). Fundo com degradê da cor da capa
+   (call meu).
+2. Selos, como hoje: **nota** (`ScoreBadge`, Likes), **prêmio**
+   (`AwardBadge`), **contador de pre-save** (`PreSaveCounterBadge`, álbum).
+3. Ações: **Tocar** (álbum: toca as faixas com áudio em ordem; música: a
+   faixa; vídeo: **Assistir**) · Aleatório (álbum) / Adicionar à playlist
+   (música) / Mini player (vídeo) · **Salvar** · **⋯** (Compartilhar,
+   Reportar conteúdo errado; **Editar lançamento** para dono e admin;
+   **Editar tópico**, **Marcar como pendente** e **Excluir tópico** para
+   admin, com a mesma confirmação de hoje).
+4. **Botões do tópico: Shop · Info · Visual** (`ExtraMaterialButtons`), só
+   os que existirem para aquele lançamento, como hoje. "Visual" troca a
+   página pela arte (`VisualBlocosView`) e tem "Voltar ao normal".
+5. **Cartão de comentários em destaque** (logo abaixo dos botões):
+   - total de comentários e a faixa de nota mais votada;
+   - **distribuição das notas** em 4 barras (45-60, 61-75, 76-90, 91-100)
+     *(NOVO; calculada no front a partir das notas dos comentários que já
+     vêm na resposta)*;
+   - o comentário mais recente;
+   - **Avaliar & Comentar** (abre a janela de hoje: nome do jogador fixo,
+     a pergunta de nota com os 4 intervalos e o texto) e **Ver todos** (rola
+     até a lista).
+6. Conteúdo do tipo (abaixo).
+7. **Lista de comentários**: avatar, nome, verificado, tempo, nota dada,
+   texto rico, **reações** (`ReactionBar`, os mesmos 12 emojis),
+   **Responder** (respostas aninhadas), ⋯ (editar o próprio, excluir). Ordem
+   como hoje.
+8. Botão **Avaliar & Comentar fixo no rodapé** da página *(NOVO na
+   posição; a ação já existe)*.
 
----
+**Álbum:** **Faixas do álbum** como hoje: cabeçalho **"Disco N"** quando o
+álbum tem mais de um disco; cada faixa com número, título, artista,
+**tocar** (desabilitado e "Sem áudio no catálogo" quando não há áudio) e o
+botão de **letra**, que abre a letra embaixo da faixa (**sincronizada,
+acompanhando**, quando aquela faixa está tocando e foi sincronizada) com
+**"Ver tópico"** da faixa. Depois, **Encarte** (miniaturas → visualizador
+com anterior/próxima).
 
-### 5.4 Fórum
+**Música:** **Letra** em destaque: sincronizada e acompanhando quando a
+música toca; senão a letra normal ("Letra oficial em processamento..."
+quando não há). Atalho **"Do álbum"** quando a faixa pertence a um álbum.
 
-Mesma tela e mesma URL de hoje (`/empire-play/forum`), agora com aba
-própria na barra.
+**Vídeo:** player no topo da página (como hoje, com controles nativos),
+tipo do vídeo, título, artistas, data. Lista **"Mais vídeos"** (os
+relacionados de hoje), que troca o vídeo no lugar.
+
+**Faixas e vídeos avulsos** abertos fora da página (Buscar, Charts, mini
+player) tocam no player como hoje, e o player mantém **"Ver no Fórum"**
+(abre esta página).
+
+### 5.4 Fórum (lista)
+
+Mesma URL de hoje (`/empire-play/forum`, `?tab=&id=`), agora com aba própria
+na barra. Abrir um tópico = abrir a página do lançamento (5.3.4).
 
 - Filtros: **Tudo · Músicas · Vídeos · Álbuns** (substituem as 3 abas
-  internas de hoje) + botão **Filtros** (artista, lançado de, até) + chave
-  **Só os que não comentei** (já existe hoje dentro de Filtros; vira chave
-  visível, call meu).
-- Lista de tópicos: capa, título, tipo, artista, nº de comentários, última
-  atividade.
-- Tópico: tudo o que existe hoje (player, letra e letra sincronizada,
-  encarte, faixas do álbum, **Avaliar & Comentar** com a nota de faixa,
-  responder, editar comentário, reações, marcar como pendente e editar
-  tópico para admin, excluir tópico para admin) + botão **Ver no
-  Catálogo** *(NOVO, só um link)* → página do álbum ou player.
+  internas). Em **Vídeos**, a fileira de **tipo de vídeo** que existe hoje
+  (Todos + os tipos presentes nos itens).
+- **Pesquisar tópicos** (como hoje), botão **Filtros** (artista, lançado de,
+  até, limpar filtros) e a chave **Só os que não comentei** (já existe
+  dentro de Filtros; vira chave visível, call meu).
+- Cada tópico mostra: capa, título, tipo, artista com verificado, **nota**,
+  **selo de prêmio**, **pre-save**, **último comentário** (autor + começo do
+  texto) *(NOVO)*, nº de comentários, última atividade e "você ainda não
+  comentou" quando for o caso *(NOVO, usa o mesmo dado do filtro)*.
 - **Não existe comentário anônimo.** O campo "Nome do Jogador / OFF" é
   somente leitura e mostra o jogador logado; continua assim.
-
----
 
 ### 5.5 Charts
 
@@ -348,76 +391,40 @@ Por país, 3 colunas de plataforma, "#1 agora"). Nada se perde:
 Antes de apagar o `ChartsRealTime`, conferir campo por campo que tudo o
 que ele mostra aparece no painel (R1).
 
-#### 5.5.2 Demais charts: playlist + recursos de chart
+#### 5.5.2 Demais charts: só a aparência muda
 
-**Uma tela só** (componente novo `ChartPlaylist`) para Global 100,
-Paradas, Spotify, Apple Music, YouTube, Álbuns e Sales. De cima para
-baixo:
+**Regra do usuário: nenhuma lógica de charts é mexida.** O cálculo, a
+ingestão, o D1, a planilha, as rotas e as respostas da API ficam
+**exatamente como estão** (o trabalho de charts foi concluído e validado em
+2026-11-25). A mudança é **só de tela**, no front, usando os mesmos dados
+que a tela de hoje já recebe.
 
-1. **Cabeçalho de playlist:** capa (capa da faixa #1), rótulo "Chart
-   semanal", título, "100 faixas · atualiza toda quinta" (Álbuns: "200
-   álbuns").
-2. **Semana:** `‹  Semana 47 · 20 a 26 nov  ›`. As setas andam uma semana
-   (a seta › some na semana atual). Tocar no meio abre o seletor de datas de
-   hoje (lista de `chart_datas`). Substitui o seletor de data atual.
-3. **Tocar · Aleatório · Salvar** (Salvar = vai para a Biblioteca).
-   Faixas sem áudio no catálogo ficam na lista, em cinza, e são puladas ao
-   tocar, como já acontece no painel.
-4. **Visão** (exatamente como hoje): só **Spotify, Apple Music e YouTube**
-   têm a fileira `Global | Por país | Artistas do mês`. Global 100, Álbuns e
-   Sales não têm fileira. **Paradas** abre direto na lista por país (fileira
-   de países, na ordem oficial), sem a fileira de visão.
-   - **Por país:** fileira de países (rolável com seta), mesma fonte de
-     hoje.
-   - **Artistas do mês:** cartão editorial no topo (`TopArtistCover`:
-     manchete, editorial, autor, mês, que já vêm da API) + ranking de
-     artistas, cada um levando à página do artista.
-   **Onde cada recurso de chart existe** (call meu, a partir dos dados):
+Para Global 100, Paradas, Spotify, Apple Music, YouTube, Álbuns e Sales:
 
-   | Recurso | Global 100, Spotify, Apple, YouTube, Sales (D1 `chart_semana`) | Por país e Paradas | Álbuns (ainda na planilha `DADOS ÁLBUNS`) |
-   |---|---|---|---|
-   | Formato de playlist (Tocar, Aleatório, Salvar, setas de semana) | sim | sim | sim |
-   | Movimento ▲▼ | sim | sim (`st` vs semana anterior) | o que a planilha já devolve hoje |
-   | Pico, semanas, semanas em #1, NOVA/VOLTA | sim | não | não |
-   | Filtros de movimento e resumo | sim | só Altas/Quedas | não |
-   | Detalhe com histórico de 8 semanas | sim | não | não |
+1. **Cabeçalho de playlist:** capa (a da posição 1), nome do chart,
+   "Atualiza toda quinta".
+2. **Tocar · Aleatório:** toca as músicas do chart que têm áudio no
+   catálogo, na ordem do chart, usando o mesmo cruzamento por título que o
+   painel do Ao vivo já usa para tocar (`buscarNoCatalogo`). Sem áudio: a
+   linha fica e é pulada ao tocar. *(Isso é tela, não cálculo: não muda
+   posição, valor nem nada do chart.)*
+3. **Visões, exatamente como hoje:** só Spotify, Apple Music e YouTube têm
+   `Global | Por país | Artistas do mês`. Global 100, Álbuns e Sales não
+   têm. Paradas abre direto na lista por país.
+4. **Filtros de hoje, sem mudança:** seletor de semana (as datas de hoje),
+   estilo (onde existe hoje) e busca.
+5. **Linhas:** posição · movimento como hoje (▲ ▼ = NEW, o `st` que a API
+   já devolve) · capa · título · artista · valor (o mesmo número de hoje).
+   Tocar na linha toca a música (Álbuns: abre a página do álbum). ⋯ =
+   Adicionar à playlist · Salvar · Abrir no Fórum · Compartilhar.
+6. **Artistas do mês:** o cartão editorial e o ranking de hoje, no mesmo
+   visual de lista.
 
-   Levar Álbuns para o D1 e calcular histórico por país **não faz parte**
-   deste projeto (vira projeto próprio, se o usuário quiser).
-5. **Filtros de movimento** *(NOVO)*, fileira rolável:
-   `Todas · Estreias · Maiores altas · Quedas · Reentradas`.
-   - Estreia = `status = 'NEW'` e `semanas = 1`.
-   - Reentrada = `status = 'NEW'` e `semanas > 1`.
-   - Alta = `status = '↑'`, ordenadas por `pos_anterior − pos` decrescente.
-   - Queda = `status = '↓'`.
-6. **Busca neste chart + Estilo** (já existem; Estilo só onde existe hoje).
-7. **Resumo da semana** *(NOVO)*: nº de estreias · maior alta (+N, com o
-   nome ao tocar) · semanas do #1 no topo (`semanas_n1` do #1).
-8. **Linhas:** posição · movimento (▲N verde, ▼N vermelho, `=` neutro,
-   **NOVA** e **VOLTA** no roxo de destaque) · capa · título · artista ·
-   linha de detalhe "valor · pico #N · N sem". O valor segue o chart:
-   streams (plataformas), pontos (Global 100), vendas (Sales), unidades
-   (Álbuns), no formato de hoje.
-   - Tocar na linha **abre o detalhe embaixo dela** (um aberto por vez):
-     - gráfico das últimas 8 semanas (posição por semana, mesma música e
-       chart, via índice `ix_chart_norm`);
-     - números por plataforma na mesma semana (Spotify, Apple, YouTube),
-       nos charts de música;
-     - **Ouvir** · **Fórum** · **Álbum**.
-   - ⋯ = Adicionar à playlist · Salvar · Abrir discussão · Compartilhar.
-
-**Dados:** os 5 charts do D1 já gravam tudo em `chart_semana` (`pos`,
-`pos_anterior`, `peak`, `semanas`, `semanas_n1`, `status`, `valor`,
-`genero`). Mas **a API de hoje não devolve** `pos_anterior`, `peak`,
-`semanas` nem `semanas_n1`: só `st`, `val` e `valTotal`
-(`backend/src/services/chartsD1/repo.ts`, ~linhas 803–821). Duas mudanças
-de backend:
-1. ampliar a resposta da semana com esses 4 campos;
-2. rota nova para o histórico de 8 semanas de uma música
-   (`GET /api/charts/historico?chart=&titulo_norm=`), chamada ao abrir o
-   detalhe, usando o índice `ix_chart_norm`. **Semanas passadas não mudam:** a resposta de
-uma semana que não é a atual pode ir para cache longo (dias); só a semana
-atual expira na quinta.
+Ideias que **ficaram fora** porque precisariam de dado novo da API
+(conversadas e descartadas para não mexer na lógica): pico, semanas no
+chart, filtros de estreias/altas/quedas, resumo da semana e histórico de 8
+semanas. Se um dia o usuário quiser, viram um projeto próprio, só de
+leitura.
 
 ---
 
@@ -521,16 +528,17 @@ permissão.
   jogador.
 - Perfis de mídia compartilhados **não seguem** ninguém (call meu: são
   usados por qualquer jogador e virariam ruído).
-- **"Seguindo"** no perfil = quantidade real de perfis que aquele artista
-  segue naquela rede.
+- **"Seguindo"** no perfil = número digitado pelo jogador + quantidade real
+  de perfis que aquele artista segue naquela rede (5.6.6).
 - Hoje o "Seguir" é só visual (`followingSet` em memória) e some ao
   recarregar; passa a ser salvo.
 
-#### 5.6.6 Seguidores calculados (decisão do usuário)
+#### 5.6.6 Seguidores e Seguindo (decisões do usuário)
 
-O número de **seguidores** deixa de vir fixo da planilha
-(`SOCIAL_PERFIS.seguidores`) e passa a ser **calculado a partir do uso
-real**, por perfil (artista + rede), **sempre crescendo**:
+**Seguidores = só a fórmula.** Calculado por perfil (artista + rede) a
+partir do uso real, **sempre crescendo**. A planilha **não tem** fórmula
+hoje (confirmado pelo usuário); o número antigo da coluna G **não é usado**
+para artistas.
 
 ```
 seguidores = P × posts_publicados
@@ -539,22 +547,28 @@ seguidores = P × posts_publicados
            + R × reposts_recebidos
 ```
 
-- **Conta "desde sempre":** na primeira carga, os contadores são montados
-  a partir de todo o histórico que já existe (posts, curtidas e
-  comentários em `SOCIAL_POSTS` e `SOCIAL_COMMENTS`).
-- **Só cresce:** os contadores são acumulados. Excluir um post, descurtir
-  ou apagar um comentário **não** diminui o número (call meu, para cumprir
-  o "sempre aumentando").
-- **Pesos iniciais (call meu, ajustáveis sem deploy** numa tabela de
+- **Desde sempre:** na primeira carga, os contadores são montados com todo
+  o histórico existente (posts, `analytics.likes`, comentários).
+- **Só cresce:** contadores acumulados; excluir post, descurtir ou apagar
+  comentário não diminui (call meu, para cumprir o "sempre aumentando").
+- **Pesos iniciais** (call meu, ajustáveis sem deploy numa tabela de
   configuração): `P = 120`, `C = 15`, `M = 40`, `R = 60`. Exemplo: 48
-  posts, 900 curtidas, 210 comentários e 30 reposts dão
-  `5.760 + 13.500 + 8.400 + 1.800 = 29.460` seguidores ("29,4 mil").
-- Seguidores reais (artistas que seguem) **não entram** na conta (o
-  usuário definiu a conta "em cima de postagens, corações e comentários").
-- Exibição no padrão de rede social: até 9.999 por extenso; depois "12,4
-  mil", "1,2 mi".
-- O número antigo da planilha **não é usado** (decisão implícita do
-  usuário: "um cálculo em cima da realidade"). Ver decisão aberta D2.
+  posts, 900 curtidas, 210 comentários, 30 reposts →
+  `5.760 + 13.500 + 8.400 + 1.800 = 29.460` ("29,4 mil").
+- Exibição: até 9.999 por extenso; depois "12,4 mil", "1,2 mi".
+
+**Perfis de mídia (uso geral: Pitchfork, TMZ, MTV...): não mudam.**
+Continuam com o número da planilha (ex.: 10.000.000), sem fórmula
+(decisão do usuário).
+
+**Seguindo = número digitado + contagem real.**
+- O número que o jogador digita no perfil continua existindo e vira o
+  **ponto de partida**. Ele é pedido **na criação do perfil** de cada rede
+  (e quem já tem perfil mantém o número digitado hoje, coluna H).
+- Exibido: `seguindo = número digitado + quantos artistas aquele perfil
+  segue de verdade` (5.6.5).
+- O campo continua editável em "Configurar meus perfis" (call meu: hoje ele
+  é editável sempre; manter evita tirar uma função que funciona).
 
 #### 5.6.7 Dados do Social
 
@@ -569,7 +583,8 @@ a planilha recebendo cópia pela fila de backup que já existe
 (`fila_backup_planilha`). Tabelas novas (nomes são do construtor):
 
 - `social_post` (todas as colunas de `SOCIAL_POSTS`, mais `ultima_atividade`);
-- `social_perfil` (de `SOCIAL_PERFIS`, sem a coluna de seguidores fixos);
+- `social_perfil` (de `SOCIAL_PERFIS`; mantém `seguindo_digitado` e, só para
+  perfis de mídia, `seguidores_fixo`);
 - `social_comentario`;
 - `social_curtida` (post, jogador, **artista + rede com que curtiu**,
   data); substitui o `likedBy` dentro do JSON. **Regra mantida: 1 curtida
@@ -667,7 +682,7 @@ Abre ao tocar na foto do jogador. Grupos, nesta ordem:
 | `ActionSheet` (menu ⋯) | menus soltos em cada tela | faixa, vídeo, álbum, post, comentário, tópico, turnê |
 | `PlaylistScreen` | `TelaPlaylist`, tela de playlist do jogador | Ao vivo, Biblioteca, comunidade |
 | `ChartPlaylist` | `ChartsCategoryView`/`GlobalView`/`CountryView`/`MonthlyView` | Charts (5.5.2) |
-| `AlbumPage` | `album.$id`, `albuns-antigos.$id`, álbum dentro do Fórum | 5.3.4 |
+| `PaginaLancamento` (álbum, música, vídeo) | tópico do Fórum, `album.$id`, `albuns-antigos.$id` | 5.3.4 |
 | `LembreteDiarioPopup` | `VmaNominationPopup`, `VotacaoReminderPopup`, `FestivalNominationPopup` | raiz |
 | `BannerCarousel` único | `BannerCarousel`, `SpotlightBannerCarousel`, `PreSaveBannerCarousel` | Início, Catálogo |
 | `useIsAdmin()` / `isAdmin()` | o id fixo `810141686` copiado em ~10 arquivos do front e 4 do back | todo lugar |
@@ -719,7 +734,7 @@ Sistema**, salva no aparelho (call meu: padrão continua escuro).
 | Problema hoje | Mudança |
 |---|---|
 | 118 chamadas `fetch("/api/...")` soltas em 38 arquivos, mais o `api.ts` (2,3 mil linhas) com cache manual em `sessionStorage` | **Um cliente de API** (o `api.ts`, organizado por domínio) + **React Query** para cache, deduplicação e recarregar ao voltar para a tela. O `QueryClient` e o Provider já estão montados (`router.tsx`, `__root.tsx`), só não há nenhum `useQuery`. |
-| Cada tela busca tudo de novo ao abrir | Cache com tempos por tipo: charts semanais passados = dias; semana atual = até quinta; ao vivo = 30 s; catálogo = 5 min; social = 30 s + puxar para atualizar. |
+| Cada tela busca tudo de novo ao abrir | Cache **no front** com tempos por tipo: ao vivo = 30 s; catálogo = 5 min; social = 30 s + puxar para atualizar; charts = o mesmo comportamento de hoje (nada muda no backend de charts). |
 | Social carrega todos os posts | Paginação por cursor (5.6.4). |
 | Social e curtidas leem a planilha inteira | D1 como fonte da verdade (5.6.7). |
 | Pacote principal de ~960 KB | Cada aba carrega só o seu código (divisão por rota). |
@@ -797,8 +812,8 @@ de 360px nos dois tamanhos de texto.
 |---|---|---|
 | **0. Fundações** (nada visível muda) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query + cliente de API, tokens de cor com os valores atuais | — |
 | **1. Navegação** | topo (Criar, foto), barra de 5 abas, folha Criar, Meu Império, abas do Início, mapa de rota → aba, redirecionamentos, saída do ☰ e do Recarregar, textos de Telegram | 0 |
-| **2. Charts** | Ao vivo = painel do Catálogo; `ChartPlaylist`; rota de histórico; cache de semanas | 0, 1 |
-| **3. Catálogo e Fórum** | Catálogo Início novo, Buscar, Biblioteca, `AlbumPage`, Discussão ↔ Ver no Catálogo, Fórum na barra, `/meus-lancamentos` | 1, 2 (o painel sai do Catálogo na fase 2) |
+| **2. Charts** | Ao vivo = painel do Catálogo; `ChartPlaylist` (só tela). **Nenhuma mudança de backend nem de cálculo.** | 0, 1 |
+| **3. Catálogo e Fórum** | Catálogo Início novo, Buscar, Biblioteca, `PaginaLancamento` (tópico novo), Fórum na barra, `/meus-lancamentos` | 1, 2 (o painel sai do Catálogo na fase 2) |
 | **4. Social** | D1 do Social + migração, paginação, "Interagindo como", perfil único, configurar perfis, Repostar, Seguir, seguidores calculados, abas que não funcionavam, Compartilhar, saída do Mensagem | 0, 1 |
 | **5. Modo claro** | migração das ~2.800 cores tela a tela, Aparência | 0 (pode correr em paralelo a 2–4, tela a tela) |
 | **6. Limpeza** | `ChartsRealTime` e telas antigas substituídas, rotas legadas só como redirecionamento, `src/services/api.ts`, `PlanilhaGrid`, componentes `ui/*` sem uso, Bolsa/Empresas no `api.ts`, controllers `adminDiag*` de investigações encerradas (listar e confirmar com o usuário antes de apagar) | 1–5 |
@@ -827,7 +842,7 @@ fase 3 deve vir logo em seguida (call meu: entregar 2 e 3 juntas se der).
 | # | Decisão | Quem | Impacto |
 |---|---|---|---|
 | D1 | Pesos da fórmula de seguidores (`P=120, C=15, M=40, R=60` propostos) | usuário pode ajustar a qualquer momento, sem deploy | baixo |
-| D2 | O número de seguidores que hoje vem da planilha é **descartado** (só a conta nova vale) ou **somado** à conta nova como ponto de partida? O documento assume "descartado". | usuário | os números visíveis vão mudar para todo mundo no dia da troca |
+| ~~D2~~ | ~~Seguidores antigos~~ **Decidido:** só a fórmula para artistas; perfis de mídia mantêm o número da planilha; seguindo = digitado + real. | — | — |
 | D3 | Cor de destaque no escuro: hoje convivem o roxo do logo, o verde do `primary`, o esmeralda do Catálogo e a pílula branca. O protótipo usa roxo para ação e branco para aba ativa, e verde só para "tocar". | usuário | define o visual de todos os botões |
 | D4 | Lista dos controllers `adminDiag*` que podem ser apagados na fase 6 | usuário (na fase 6) | só limpeza |
 
