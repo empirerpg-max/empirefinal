@@ -185,6 +185,55 @@ todas as telas e componentes. Cada um foi cruzado com esta lista.
 ação nenhuma (`src/routes/social.tsx`, perto das linhas 2373 e 2661).
 **!** Decidir: tirar o botão ou criar mensagens diretas (projeto novo).
 
+## 4ª conferência: janelas internas, listas de opções e botões mortos
+Método: (1) todo estado que abre janela, folha ou painel
+(`set…Open/Modal/Show/Viewer…`); (2) toda lista fixa de opções no código;
+(3) script que acha todo `<button>` sem ação nenhuma.
+
+### Itens que faltavam
+| Ação hoje | Onde fica | |
+|---|---|---|
+| Fórum: **Editar tópico (admin)** (`setShowAdminEditModal`) | ⋯ do tópico (admin) | D |
+| Fórum: capa em tela cheia (`setCoverExpanded`) | tópico | D |
+| Acervo: editor de **blocos de texto** da revista (`setTextoModal`) | Início › Acervo › editar revista | D |
+| Social: **visualizador de TikTok em tela cheia** (`setTiktokViewer`), com rolagem vertical | Social › Vídeos | P |
+| Social: perfil por rede com layout nativo: Instagram (grade), Twitter (lista), TikTok (grade de vídeos) + "Siga também" | Social › perfil do artista | P |
+| Composer: escolher faixa de álbum, anexar música/álbum, escolher áudio (`setAlbumTrackPicker`, `setIsMaterialPickerOpen`, `setIsAudioPickerOpen`) | Criar › Post no Social | D |
+| Composer Blackout: nome gerado de "fã, insider, leak, anônimo, ghost, fonte" + número | Criar › Post no Social | D |
+| Tipos de música: Solo, Parceria, Dueto, Conjunto | Criar › Nova música e editor | D |
+| Tipos de álbum: EP, Álbum, Deluxe, Edição Especial | Criar › Novo álbum | D |
+| Gravadoras: King & Queen, Crown, Independent | Meu Império › Meus artistas › Criar | D |
+| Ponto: categorias Geral, Extra, Featuring e as tabelas de % por plataforma | Meu Império › Ponto (tela atual) | D |
+| Reações com emoji (12) e seletor de emoji do texto rico | Fórum e Social | D |
+
+### Botões que aparecem mas não fazem nada hoje (todos no Social)
+| Botão | Onde (`src/routes/social.tsx`) |
+|---|---|
+| Compartilhar (feed e TikTok em tela cheia) | ~410, ~1965 |
+| Repostar (mostra sempre "0", não é botão) | ~2611 |
+| Mensagem (perfil Instagram e TikTok) | ~2373, ~2661 |
+| Abas do perfil Instagram: Reels, Marcados (só a grade funciona) | ~2438–2444 |
+| Abas do perfil Twitter: Respostas, Mídia, Curtidas (só Posts funciona) | ~2546 |
+| Abas do perfil TikTok: Curtidos; botão de perfil | ~2664, ~2686–2689 |
+
+**Seguir / Seguindo:** só muda na tela (estado local). Não salva e volta
+ao normal quando o app recarrega. O número de seguidores vem fixo da
+planilha (`SOCIAL_PERFIS.seguidores`).
+
+Como não funcionam hoje, nenhum desses entra na regra de "nada fica de
+fora". Mas são decisões: tirar, ou fazer funcionar. A proposta para cada
+um está na análise dos perfis do Social.
+
+### Correções no protótipo
+- Repostar e Compartilhar apareciam funcionando: agora estão marcados
+  **NOVO** (proposta).
+- "Na Mídia" aparecia como lista de matérias. O correto é a **grade de
+  perfis de mídia** (perfis compartilhados, `telegram_id = "Todos"`), que
+  qualquer jogador pode usar pra postar e interagir. As matérias são a aba
+  **News**.
+- "Seguindo / Para você", "Lembrar" (na grade da TV) e "Pra fazer hoje":
+  propostas novas, marcadas **NOVO**.
+
 ## Fora deste projeto
 **Bolsa e Empresas** (`historicoBolsa`, `listarEmpresas`, `minhasEmpresas`
 no `api.ts`): ainda não foram lançadas e entram depois, no projeto
