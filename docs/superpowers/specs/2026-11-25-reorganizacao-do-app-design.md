@@ -993,6 +993,28 @@ aconteceu.
   - **Obrigatório:** o Beta vira a única versão; o botão de voltar some.
     É o passo antes de apagar o código antigo (fase 6).
 
+**O que um jogador vê do outro (decisão confirmada com o usuário)**
+
+As duas versões leem e gravam **os mesmos dados**. Tudo o que alguém faz
+numa versão aparece para quem está na outra: posts, comentários,
+curtidas, lançamentos, playlists, pontos, votos, turnês, Red Carpet etc.
+
+Funções que só existem no Beta, e como aparecem na versão anterior:
+
+| Função do Beta | Quem está na versão anterior vê |
+|---|---|
+| **Repostar** | o post continua no feed normalmente; a versão anterior não mostra "Fulano repostou" nem reordena o feed (ela não tem esse recurso). O contador de reposts, hoje fixo em "0", passa a mostrar o número real |
+| **Seguir entre artistas** | o número de "seguindo" já soma os follows reais (mesma resposta da API); o botão Seguir da versão anterior também passa a salvar de verdade (call meu: é o mesmo dado) |
+| **Seguidores calculados** | o mesmo número calculado (a API devolve o mesmo valor para as duas) |
+| **Lembretes (sininho)** | os avisos chegam no sino e no celular, qualquer que seja a versão aberta |
+| **Abas Respostas/Mídia/Curtidas/Reels/Marcados** | só no Beta; na anterior continuam como hoje |
+| **Mensagem** | o botão sai também da versão anterior (decisão do usuário) |
+
+**Tempo para aparecer:** quem publica vê na hora. Para os outros, a
+versão de hoje guarda as respostas por até 2 minutos (`CACHE_FRESH` em
+`api.ts`) antes de buscar de novo, e o Beta faz o mesmo (30 s no
+Social, 5 min no catálogo). Puxar para atualizar busca na hora, nas duas.
+
 **Regras técnicas que não podem falhar**
 - **As duas versões usam o mesmo backend e os mesmos dados.** Toda mudança
   de backend feita para o Beta precisa continuar funcionando para a versão
