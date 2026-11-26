@@ -17,6 +17,7 @@ import { estaNoFim, pertoDoTopo, decidirAoChegar } from "@/lib/tvChatRolagem";
 import { useArrastarParaResponder } from "@/hooks/useArrastarParaResponder";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
+import { salaDaUrl } from "@/lib/salaAtiva";
 
 
 export const Route = createFileRoute("/tv")({
@@ -26,8 +27,35 @@ export const Route = createFileRoute("/tv")({
       { name: "description", content: "Empire TV — transmissões ao vivo do Empire." },
     ],
   }),
+  // `?sala={id}`: a sala aberta fica no endereço, então qualquer recarga
+  // (atualização ou o navegador esvaziando a aba por memória) volta direto
+  // pra mesma sala em vez de cair no menu. O roteador lê `?sala=123` como
+  // número (JSON), por isso aceita os dois.
+  validateSearch: (search: Record<string, unknown>): { sala?: string } => {
+    const v = search.sala;
+    if (typeof v === "number" && Number.isFinite(v)) return { sala: String(v) };
+    if (typeof v === "string" && v.trim()) return { sala: v.trim() };
+    return {};
+  },
   component: TvPage,
 });
+
+// Troca só o `?sala=` da entrada ATUAL do histórico, mantendo o `state` dela
+// (marcas como tvSalaDeitada/tvChatMenu e as chaves do roteador). O roteador
+// escuta replaceState, então useSearch acompanha. Não cria entrada nova.
+function trocarSalaNaUrl(id: string | null) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if ((salaDaUrl(url.search) ?? null) === id) return;
+  if (id) url.searchParams.set("sala", id);
+  else url.searchParams.delete("sala");
+  window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+}
+
+function entradaDeOverlayDaSala(): boolean {
+  const st = typeof window !== "undefined" ? window.history.state : null;
+  return !!(st?.tvSalaDeitada || st?.tvChatMenu);
+}
 
 
 
@@ -130,32 +158,53 @@ function colorFor(name: string) {
 const CHAT_HISTORY_LIMIT = 150;
 const MAX_LIVE_MESSAGES = 150;
 
-// Vídeo-GIF que só decodifica/toca quando está de fato visível na tela —
+// Vídeo-GIF que só decodifica/toca quando está perto/dentro da tela —
 // antes, TODO vídeo da lista tinha autoPlay+loop incondicional, então uma
 // sala com vários GIFs em vídeo mantinha dezenas deles tocando ao mesmo
-// tempo (inclusive os que já saíram de tela), sobrecarregando o aparelho.
-// Usa IntersectionObserver (gratuito, nativo do navegador) pra pausar fora
-// de vista e retomar só quando reaparece — sem precisar de nenhuma infra
-// nova, só disciplina de renderização.
+// tempo, sobrecarregando o aparelho. Fora da tela, além de pausar, SOLTA o
+// `src` (removeAttribute + load) pra liberar o vídeo decodificado da
+// memória — no iPhone a aba da transmissão era descartada pelo navegador
+// (tela cinza/preta) com o iframe da Kick + chat cheio de GIFs. A altura
+// atual fica travada enquanto está solto, pra lista não pular.
 function LazyGifVideo({ src }: { src: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      el.src = src;
+      el.play().catch(() => {});
+      return;
+    }
+    const aoCarregar = () => {
+      el.style.height = "";
+    };
+    el.addEventListener("loadeddata", aoCarregar);
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
+          if (el.getAttribute("src") !== src) el.src = src;
           el.play().catch(() => {});
-        } else {
+        } else if (el.getAttribute("src")) {
           el.pause();
+          const h = el.offsetHeight;
+          if (h > 0) el.style.height = `${h}px`;
+          el.removeAttribute("src");
+          el.load();
         }
       },
-      { threshold: 0.25 },
+      { rootMargin: "200px 0px" },
     );
     observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return <video ref={ref} src={src} muted loop playsInline preload="metadata" className="w-full h-auto block" />;
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("loadeddata", aoCarregar);
+      el.pause();
+      el.removeAttribute("src");
+      el.load();
+    };
+  }, [src]);
+  return <video ref={ref} muted loop playsInline preload="metadata" className="w-full h-auto block min-h-[96px]" />;
 }
 
 // "DD/MM/YYYY HH:mm" → Date
@@ -168,8 +217,12 @@ function parseProgramDate(p: Programa): Date | null {
 
 function TvPage() {
   const { watching, floating, open: setWatching, minimize, restore, close: stopWatching, updateWatching } = useTvPlayer();
+  const { sala } = Route.useSearch();
   const [programasRaw, setProgramasRaw] = useState<Programa[]>([]);
   const [loading, setLoading] = useState(true);
+  // true depois da primeira resposta OK da grade (falha de rede não conta:
+  // a sala pedida no endereço espera a próxima tentativa).
+  const [gradeCarregada, setGradeCarregada] = useState(false);
   const [liveChannels, setLiveChannels] = useState<Record<string, { viewers?: number; title?: string }>>({});
   const fetchKick = useServerFn(getKickStatus);
 
@@ -182,7 +235,11 @@ function TvPage() {
     let alive = true;
     const load = () => {
       api.listarProgramasTV()
-        .then((list) => alive && setProgramasRaw(list))
+        .then((list) => {
+          if (!alive) return;
+          setProgramasRaw(list);
+          setGradeCarregada(true);
+        })
         .catch(() => {})
         .finally(() => alive && setLoading(false));
     };
@@ -247,6 +304,49 @@ function TvPage() {
     if (watching && floating) restore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ---- Sala no endereço (?sala={id}) ----
+  // Pedido vindo do endereço ao abrir a tela (ex.: depois de uma recarga):
+  // entra direto nessa sala assim que a grade carrega; se não achar, fica no
+  // menu e tira o parâmetro.
+  const salaPedidaRef = useRef<string | null>(sala ?? null);
+  const salaNaTela = watching && !floating ? String(watching.id) : null;
+  useEffect(() => {
+    const pedida = salaPedidaRef.current;
+    if (!pedida || !gradeCarregada) return;
+    salaPedidaRef.current = null;
+    if (salaNaTela === pedida) return;
+    const p = programas.find((x) => String(x.id) === pedida);
+    if (!p) {
+      if (!salaNaTela) trocarSalaNaUrl(null);
+      return;
+    }
+    if (watching && String(watching.id) === pedida) restore();
+    else setWatching(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gradeCarregada, programas]);
+
+  // Sala em tela cheia → grava o id no endereço (replace, sem entrada nova).
+  // Layout effect: roda antes do WatchView empurrar a entrada do modo
+  // deitado, então o id fica na entrada da própria sala.
+  useLayoutEffect(() => {
+    if (salaNaTela && sala !== salaNaTela) trocarSalaNaUrl(salaNaTela);
+  }, [salaNaTela, sala]);
+
+  // Saiu da sala (voltar/fechar) ou minimizou pro mini player → tira o
+  // parâmetro. Se a entrada atual ainda é a do modo deitado/menu (o WatchView
+  // está fazendo history.back() dela), espera o popstate cair na da sala.
+  useEffect(() => {
+    if (salaNaTela) return;
+    const tirar = () => {
+      if (salaPedidaRef.current) return;
+      if (entradaDeOverlayDaSala()) return;
+      if (salaDaUrl(window.location.search)) trocarSalaNaUrl(null);
+    };
+    tirar();
+    window.addEventListener("popstate", tirar);
+    return () => window.removeEventListener("popstate", tirar);
+  }, [salaNaTela, sala]);
 
   return (
     <div
@@ -1180,6 +1280,9 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   // de propósito.
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  // Falha ao buscar as anteriores: o botão do topo vira "Tentar de novo" e o
+  // carregamento automático ao rolar para de insistir até a pessoa tocar.
+  const [erroAnteriores, setErroAnteriores] = useState(false);
   const OLDER_PAGE_SIZE = 60;
   const justLoadedOlderRef = useRef(false);
   const loadingOlderRef = useRef(false);
@@ -1344,16 +1447,18 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
     if (loadingOlder || loadingOlderRef.current || !hasMoreHistory || messages.length === 0) return;
     loadingOlderRef.current = true;
     setLoadingOlder(true);
+    setErroAnteriores(false);
     try {
       const oldestIso = new Date(messages[0].ts).toISOString();
       const { supabase } = await import("@/integrations/supabase/client");
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("tv_chat_messages")
         .select("id,user_name,user_id,user_photo,text,reply_to,created_at")
         .eq("programa_id", programaId)
         .lt("created_at", oldestIso)
         .order("created_at", { ascending: false })
         .limit(OLDER_PAGE_SIZE);
+      if (error) throw error;
 
       const mais = (data || []).map((r: any) => ({
         id: r.id,
@@ -1374,6 +1479,8 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
           return [...mais.reverse().filter((m) => !existentes.has(m.id)), ...prev];
         });
       }
+    } catch {
+      setErroAnteriores(true);
     } finally {
       loadingOlderRef.current = false;
       setLoadingOlder(false);
@@ -1410,8 +1517,13 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   }, [messages]);
 
   // Poda de memória só com a pessoa no fim (nunca tira conteúdo de quem lê).
-  const podar = () =>
+  // As que saem da memória continuam no servidor: volta a haver "anteriores"
+  // (botão do topo / rolar ao topo trazem de volta).
+  const podar = () => {
+    if (messagesRef.current.length <= MAX_LIVE_MESSAGES) return;
+    setHasMoreHistory(true);
     setMessages((prev) => (prev.length > MAX_LIVE_MESSAGES ? prev.slice(prev.length - MAX_LIVE_MESSAGES) : prev));
+  };
   useEffect(() => {
     if (noFimRef.current && messages.length > MAX_LIVE_MESSAGES && !loadingOlderRef.current) podar();
   }, [messages]);
@@ -1438,7 +1550,7 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
       setNovas((n) => (n === 0 ? n : 0));
       if (messagesRef.current.length > MAX_LIVE_MESSAGES && !loadingOlderRef.current) podar();
     }
-    if (pertoDoTopo(el.scrollTop) && hasMoreHistory && !loadingOlder) loadOlderMessages();
+    if (pertoDoTopo(el.scrollTop) && hasMoreHistory && !loadingOlder && !erroAnteriores) loadOlderMessages();
   };
 
   const irParaFim = () => {
@@ -1683,11 +1795,26 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
           </div>
         ) : (
           <>
-            {loadingOlder && (
+            {loadingOlder ? (
               <div className="flex justify-center pb-1 text-[11px] text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" />
               </div>
-            )}
+            ) : hasMoreHistory ? (
+              // Além do carregamento automático ao rolar: pra quem prefere
+              // tocar, sala com poucas mensagens (sem rolagem) e quando a
+              // busca falhou.
+              <div className="flex justify-center pb-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => loadOlderMessages()}
+                  className="min-h-[40px] px-3 max-w-full min-w-0 rounded-full text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 active:scale-95 transition"
+                >
+                  <span className="block truncate">
+                    {erroAnteriores ? "Tentar de novo" : "↑ Ver mensagens anteriores"}
+                  </span>
+                </button>
+              </div>
+            ) : null}
             {messages.map((m) => {
             // Aviso de chegada no Red Carpet — pill centralizada e clicável
             // que leva direto ao look publicado, em vez de bolha de chat comum.

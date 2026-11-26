@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { marcarSalaAtiva } from "@/lib/salaAtiva";
 import type { ProgramaTV } from "@/lib/api";
 import { PresencaTVTracker } from "./PresencaTVTracker";
 
@@ -27,6 +28,14 @@ const TvPlayerContext = createContext<TvPlayerContextValue | null>(null);
 export function TvPlayerProvider({ children }: { children: ReactNode }) {
   const [watching, setWatching] = useState<ProgramaTV | null>(null);
   const [floating, setFloating] = useState(false);
+
+  // Sala ativa (tela cheia ou mini player): nada recarrega a página sozinho
+  // no meio da transmissão — ver salaAtiva.ts. Sem cleanup de propósito: um
+  // false→true no remonte dispararia a recarga pendente.
+  const ativa = watching != null;
+  useEffect(() => {
+    marcarSalaAtiva(ativa);
+  }, [ativa]);
 
   return (
     <TvPlayerContext.Provider

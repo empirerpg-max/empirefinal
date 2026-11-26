@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { adiarAteSairDaSala, salaAtiva } from "./salaAtiva";
 
 export const BUILD_ID = __BUILD_ID__;
 
@@ -78,8 +80,18 @@ export function useServiceWorkerUpdate() {
         return;
       }
       if (reloading) return;
-      reloading = true;
-      window.location.reload();
+      const recarregar = () => {
+        if (reloading) return;
+        reloading = true;
+        window.location.reload();
+      };
+      // No meio de uma transmissão da Empire TV (sala ou mini player) não
+      // recarrega: avisa uma vez e recarrega quando a pessoa sair da sala.
+      if (salaAtiva()) {
+        adiarAteSairDaSala(recarregar, toast);
+        return;
+      }
+      recarregar();
     };
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
 
