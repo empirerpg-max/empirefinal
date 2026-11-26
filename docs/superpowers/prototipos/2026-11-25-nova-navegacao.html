@@ -605,6 +605,14 @@ button.rank{min-width:32px;min-height:40px}
 .phone[data-font="serif"] .ttl,.phone[data-font="serif"] .h2 h3,.phone[data-font="serif"] h2,.phone[data-font="serif"] h4,.phone[data-font="serif"] .awHeroIn h4{font-family:"Instrument Serif",Georgia,serif!important;font-weight:400!important;letter-spacing:-.01em!important}
 .phone[data-font="serif"] .ttl{font-size:36px}
 .phone[data-font="serif"] .h2 h3{font-size:24px}
+
+.tvPinWrap{flex-shrink:0;border-bottom:1px solid var(--p-line);background:var(--p-bar)}
+.tvPinWrap .tvPin{border-bottom:0;width:100%}
+.tvPin[aria-expanded="true"] .pinChev{transform:rotate(-90deg)}
+.pinChev{transform:rotate(90deg);width:16px;height:16px;flex-shrink:0;color:var(--p-muted)}
+.tvPinBody{max-height:42vh;overflow:auto}
+.tvPinBody .pCard{margin:0 12px 10px}
+.pollAv{max-width:calc(100% - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;padding:6px 12px}
 </style>
 
 <div class="wrap">
@@ -1396,11 +1404,11 @@ const pages = {
       <div class="tvAdmin"><span class="tvAdminTag">Só admin</span><span class="tvAdminSt" data-tvev-st>Não começou</span><button class="tvAdminBtn ini" data-tvevento="ini">▶ Início do evento</button><button class="tvAdminBtn fim" data-tvevento="fim" disabled>■ Término</button></div>
       <div class="chips tvChips"><button class="chip" data-tvsheet="carpet">📸 Red Carpet</button><button class="chip" data-tvsheet="part">${svg('users').replace('class=""','style="width:13px;height:13px;flex-shrink:0;vertical-align:-2px"')} Participantes</button><button class="chip" data-tvsheet="enquetes">📊 Enquetes</button><button class="chip" data-tvsheet="sobre">Sobre</button></div>
       <div class="tvChatWrap">
-        <button class="tvPin" data-tvpin><span class="tvPinBar"></span><span style="min-width:0;flex:1"><b class="small" style="color:var(--p-accent)">📊 Enquete fixada</b><span class="tvPinT" data-tvpin-t>${TVP.polls[0].q}</span></span><span class="small muted" style="flex-shrink:0">Votar</span></button>
+        <div class="tvPinWrap" data-pinwrap><button class="tvPin" data-tvpin aria-expanded="false"><span class="tvPinBar"></span><span style="min-width:0;flex:1"><b class="small" style="color:var(--p-accent)">📊 Enquete aberta</b><span class="tvPinT" data-tvpin-t>${TVP.polls[0].q}</span></span><span class="small" style="flex-shrink:0;font-weight:800;color:var(--p-accent)" data-pin-lbl>Votar</span>${svg('chev','chev pinChev')}</button><div class="tvPinBody" data-pinbody hidden>${pollCard(TVP.polls[0])}</div></div>
         <div class="tvChat" data-tvchat>
           <p class="tvOld">↑ Role para cima para ver as mensagens anteriores (carregam sozinhas)</p>
           <p class="tvDay"><span>Hoje · 20:02</span></p>
-          ${ms.slice(0,4).join('</button><button class="tvMsg"')}</button>${chegada}<button class="tvMsg"${ms.slice(4).join('</button><button class="tvMsg"')}${pollCard(TVP.polls[0])}
+          ${ms.slice(0,4).join('</button><button class="tvMsg"')}</button>${chegada}<button class="tvMsg"${ms.slice(4).join('</button><button class="tvMsg"')}${pollAviso(TVP.polls[0],'aberta')}
         </div>
         <button class="tvNovas" data-tvnovas>↓ 3 novas</button>
       </div>
@@ -1457,7 +1465,8 @@ function pollCard(p){
 function pollResultMsg(p){ return `<div class="pCard pRes"><div class="pHead"><b>🏁 Resultado da enquete</b><span>${p.tipo==='multipla'?'Múltipla escolha':'Escolha única'}</span></div><p class="pQ">${p.q}</p>${pollBars(p)}<div class="pFoot"><span>${p.votos.reduce((a,b)=>a+b,0)} votos · guardado em 📊 Enquetes</span></div></div>`; }
 function tvChatAdd(html){ const pg=stack[stack.length-1]; if(!pg) return; const c=pg.querySelector('[data-tvchat]'); if(!c) return; c.insertAdjacentHTML('beforeend',html); c.scrollTo({top:c.scrollHeight,behavior:'smooth'}); }
 function tvSys(t){ return `<p class="tvDay"><span class="tvSys">${t}</span></p>`; }
-function pollRefresh(p){ document.querySelectorAll('[data-poll="'+p.id+'"]').forEach(el=>el.outerHTML=pollCard(p)); const pin=document.querySelector('.stackPage [data-tvpin]'); const at=TVP.polls.find(x=>x.aberta); if(pin){ pin.hidden=!at; if(at) pin.querySelector('[data-tvpin-t]').textContent=at.q; } }
+function pollAviso(p,t){ const tot=p.votos.reduce((a,b)=>a+b,0); const mx=Math.max(...p.votos); const venc=p.ops.filter((o,i)=>tot&&p.votos[i]===mx); const txt = t==='aberta' ? `📊 Enquete aberta: <b>${p.q}</b> · Votar` : `🏁 Enquete encerrada: <b>${venc.length===1?venc[0]:venc.length?'empate':'sem votos'}</b> · Ver resultado`; return `<p class="tvDay"><button class="tvArr pollAv" data-tvsheet="enquetes">${txt}</button></p>`; }
+function pollRefresh(p){ document.querySelectorAll('[data-poll="'+p.id+'"]').forEach(el=>el.outerHTML=pollCard(p)); const wrap=document.querySelector('.stackPage [data-pinwrap]'); const at=TVP.polls.find(x=>x.aberta); if(wrap){ wrap.hidden=!at; if(at){ wrap.querySelector('[data-tvpin-t]').textContent=at.q; const body=wrap.querySelector('[data-pinbody]'); if(!body.querySelector('[data-poll="'+at.id+'"]')) body.innerHTML=pollCard(at); } } }
 /* ── vitrine de Awards (igual à de hoje: /awards e /awards/$nome) ── */
 const AWARDS=[['VMA',['#f59e0b','#7c2d12']],['Empire Music Awards',['#7c3aed','#1e1b4b']],['Grammy Empire',['#0ea5e9','#0f172a']],['BET Empire',['#ef4444','#450a0a']],['Latin Empire',['#10b981','#064e3b']],['Brit Empire',['#ec4899','#4c1d95']]];
 function awardPoster([n,c],k){ return `<button class="awPoster" data-open="award" data-id="${k}" data-title="${n}"><span class="awImg" style="background:radial-gradient(90% 70% at 70% 15%,${c[0]},transparent 70%),linear-gradient(170deg,${c[1]},#000)"></span><span class="awShade"></span><b>${n}</b></button>`; }
@@ -1647,21 +1656,21 @@ box.addEventListener('click', e => {
   if (b.hasAttribute('data-create-back')){ return openCreate(); }
   if (b.dataset.tvevento){ const pg=stack[stack.length-1]; const st=pg.querySelector('[data-tvev-st]'); const ini=pg.querySelector('[data-tvevento="ini"]'), fim=pg.querySelector('[data-tvevento="fim"]');
     if (b.dataset.tvevento==='ini'){ TVP.evento='ao vivo'; st.textContent='🔴 Desde 20:00'; ini.disabled=true; fim.disabled=false; tvChatAdd(tvSys('🔴 O evento começou · a participação está sendo contada')); }
-    else { TVP.evento='fim'; st.textContent='Encerrado 22:00'; fim.disabled=true; TVP.polls.filter(p=>p.aberta).forEach(p=>{ p.aberta=false; pollRefresh(p); tvChatAdd(pollResultMsg(p)); }); tvChatAdd(tvSys('🏁 Evento encerrado · participação calculada e enviada para a planilha')); }
+    else { TVP.evento='fim'; st.textContent='Encerrado 22:00'; fim.disabled=true; TVP.polls.filter(p=>p.aberta).forEach(p=>{ p.aberta=false; pollRefresh(p); tvChatAdd(pollAviso(p,'encerrada')); }); tvChatAdd(tvSys('🏁 Evento encerrado · participação calculada e enviada para a planilha')); }
     return; }
   if (b.dataset.pvote){ const p=TVP.polls.find(x=>x.id==b.dataset.pvote); const i=+b.dataset.pi; if(!p||!p.aberta) return;
     if (p.tipo==='unica'){ p.meu=[i]; p.votos[i]++; pollRefresh(p); return toast('Voto registrado'+(p.secreto?' · voto secreto':'')); }
     p.meu = p.meu.includes(i) ? p.meu.filter(x=>x!==i) : [...p.meu,i]; b.querySelector('.pChk').textContent=p.meu.includes(i)?'✓':''; return; }
   if (b.dataset.pconf){ const p=TVP.polls.find(x=>x.id==b.dataset.pconf); if(!p.meu.length) return toast('Escolha pelo menos uma opção'); p.meu.forEach(i=>p.votos[i]++); pollRefresh(p); return toast('Votos registrados: '+p.meu.length+' opções'); }
-  if (b.dataset.pclose){ const p=TVP.polls.find(x=>x.id==b.dataset.pclose); p.aberta=false; pollRefresh(p); closeSheet(); tvChatAdd(pollResultMsg(p)); return toast('Enquete encerrada · resultado publicado no chat'); }
-  if (b.hasAttribute('data-tvpin')){ const at=TVP.polls.find(x=>x.aberta); const el=at&&b.closest('.stackBody').querySelector('#poll'+at.id); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); return; }
+  if (b.dataset.pclose){ const p=TVP.polls.find(x=>x.id==b.dataset.pclose); p.aberta=false; pollRefresh(p); closeSheet(); tvChatAdd(pollAviso(p,'encerrada')); return toast('Enquete encerrada · resultado publicado no chat'); }
+  if (b.hasAttribute('data-tvpin')){ const w=b.closest('[data-pinwrap]'); const body=w.querySelector('[data-pinbody]'); body.hidden=!body.hidden; b.setAttribute('aria-expanded', !body.hidden); w.querySelector('[data-pin-lbl]').textContent = body.hidden ? 'Votar' : 'Recolher'; return; }
   if (b.dataset.ctipo){ b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); const o=$('#sheet [data-cops]'); o.hidden = b.dataset.ctipo==='nota'; return; }
   if (b.dataset.ctog){ b.setAttribute('aria-pressed', b.getAttribute('aria-pressed')!=='true'); return; }
   if (b.hasAttribute('data-cadd')){ const n=$('#sheet [data-cops]').querySelectorAll('.cOpt').length; if(n>=10) return toast('Máximo de 10 opções'); b.insertAdjacentHTML('beforebegin',`<div class="cOpt"><input placeholder="Opção ${n+1}" aria-label="Opção"></div>`); return; }
   if (b.hasAttribute('data-cpub')){ const sh=$('#sheet'); const q=sh.querySelector('[data-cq]').value.trim()||'Enquete'; const tipo=sh.querySelector('[data-ctipo][aria-pressed="true"]').dataset.ctipo; const tog=k=>sh.querySelector(`[data-ctog="${k}"]`).getAttribute('aria-pressed')==='true';
     let ops=[...sh.querySelectorAll('.cOpt input')].map(x=>x.value.trim()).filter(Boolean); if (tipo==='nota') ops=['1–3','4–6','7–8','9–10']; if (ops.length<2) return toast('Coloque pelo menos 2 opções');
-    TVP.polls.forEach(p=>{ if(p.aberta){ p.aberta=false; pollRefresh(p); tvChatAdd(pollResultMsg(p)); } });
-    const p={id:Date.now(), q, tipo:tipo==='multipla'?'multipla':'unica', secreto:tog('secreto'), soFim:tog('soFim'), ops, votos:ops.map(()=>0), meu:[], aberta:true, quando:'agora'}; TVP.polls.unshift(p); closeSheet(); tvChatAdd(pollCard(p)); pollRefresh(p);
+    TVP.polls.forEach(p=>{ if(p.aberta){ p.aberta=false; pollRefresh(p); tvChatAdd(pollAviso(p,'encerrada')); } });
+    const p={id:Date.now(), q, tipo:tipo==='multipla'?'multipla':'unica', secreto:tog('secreto'), soFim:tog('soFim'), ops, votos:ops.map(()=>0), meu:[], aberta:true, quando:'agora'}; TVP.polls.unshift(p); closeSheet(); tvChatAdd(pollAviso(p,'aberta')); pollRefresh(p);
     return toast('Enquete publicada no chat'+(tog('auto')?' · encerra sozinha em 5 min':'')+' · a anterior foi encerrada'); }
   if (b.dataset.tvsheetAfter){ closeSheet(); setTimeout(()=>openTvSheet(b.dataset.tvsheetAfter),250); return; }
   if (b.dataset.tvsheet){ openTvSheet(b.dataset.tvsheet); return; }
