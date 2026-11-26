@@ -243,7 +243,7 @@ test("codificar/ler ida e volta e união", () => {
 ### Task B5: Sala não recarrega sozinha e chat leve na memória
 
 **Files:**
-- Modify: `src/lib/staleChunk.ts`, `src/lib/pwa.ts` (adiar recarga enquanto a sala da TV ou o mini player estiver ativo), `src/routes/tv.tsx` (`ChatPanel`: limite de mensagens no DOM; `LazyGifVideo`: descarregar fora da tela)
+- Modify: `src/lib/staleChunk.ts`, `src/lib/pwa.ts` (adiar recarga enquanto a sala da TV ou o mini player estiver ativo), `src/routes/tv.tsx` (`ChatPanel`: limite de mensagens no DOM; `LazyGifVideo`: descarregar fora da tela; sala no endereço `?sala=`)
 - Create: `src/lib/salaAtiva.ts`
 - Test: `scripts/tv-sala-ativa.test.ts`
 
@@ -252,9 +252,10 @@ test("codificar/ler ida e volta e união", () => {
   - `marcarSalaAtiva(ativa: boolean): void` e `salaAtiva(): boolean` (estado de módulo; o `TvPlayerContext` marca `true` com `watching != null`).
   - `deveAdiarRecarga(digitando: boolean, sala: boolean): boolean` — adia se qualquer um for verdadeiro.
   - Em `reloadOnStaleChunk` e no `controllerchange` de `pwa.ts`: com a sala ativa, **não recarrega**; mostra uma vez o aviso "Nova versão disponível — atualiza quando você sair da sala" e recarrega quando `salaAtiva()` voltar a `false` (ou num toque em "Atualizar agora").
+  - **Sala no endereço** (relato do usuário: tela cinza/preta → volta ao menu da Empire TV → precisa entrar de novo; iPhone e Android): ao entrar na sala, a URL vira `/tv?sala={programa.id}` (`validateSearch` opcional, `replace` para não criar entrada extra no histórico); ao abrir `/tv` com `sala`, a tela entra direto nessa sala assim que a programação carrega. Qualquer recarga (atualização ou o navegador esvaziando a aba por memória) **volta para a mesma sala**. Sair da sala remove o parâmetro. Voltar = tela anterior continua valendo.
   - `ChatPanel` mantém no máximo **150** mensagens montadas (as mais novas); rolar ao topo traz as anteriores de volta (B2). `LazyGifVideo` pausa e solta o `src` quando sai da tela (`IntersectionObserver`), e recarrega ao voltar.
 
-- [ ] **Step 1: Write the failing tests** para `deveAdiarRecarga` (4 combinações) e para `marcarSalaAtiva`/`salaAtiva`.
+- [ ] **Step 1: Write the failing tests** para `deveAdiarRecarga` (4 combinações), `marcarSalaAtiva`/`salaAtiva` e `salaDaUrl(search: string): string | null` (lê `sala`, ignora vazio).
 - [ ] **Step 2: Run** `bun test scripts/tv-sala-ativa.test.ts` — Expected: FAIL.
 - [ ] **Step 3: Implement**.
 - [ ] **Step 4: Run** os testes + `npx tsc --noEmit -p .` + `npx vite build` — Expected: PASS / sem erros novos.
