@@ -365,7 +365,7 @@ export default {
     injectRuntimeEnv(env);
     // Cron próprio do pre-save (ver src/cronJobs.ts): roda SÓ o lançamento
     // em passos, com o limite de chamadas da execução inteiro para ele.
-    const { ehCronPresave } = await import("./cronJobs");
+    const { ehCronPresave, ehCicloDaHora } = await import("./cronJobs");
     if (ehCronPresave(event?.cron)) {
       ctx.waitUntil(
         (async () => {
@@ -458,18 +458,23 @@ export default {
     // compara "Music Videos"/"Comentarios_MV" com o D1 célula a célula e
     // ressincroniza se algo escapou do espelho em tempo real. Roda DEPOIS do
     // recálculo de likes acima (que escreve em Music Videos), pra não
-    // comparar no meio dessas escritas.
-    ctx.waitUntil(
-      likesVideos
-        .then(async () => {
-          const { reconciliarVideosD1 } = await import("../backend/src/services/videosD1Sync");
-          const r = await reconciliarVideosD1();
-          if (!r.videosOk || !r.comentariosOk) {
-            console.log("[scheduled] Reconciliação D1 de vídeos corrigiu divergência:", JSON.stringify(r).slice(0, 2000));
-          }
-        })
-        .catch((err) => console.error("[scheduled] Erro na reconciliação D1 de vídeos:", err)),
-    );
+    // comparar no meio dessas escritas. 1x/hora (não a cada 10 min): cada
+    // conferência lê ~2,3 mil linhas do D1, e o plano gratuito tem limite
+    // diário (spec 2026-11-26-d1-rows-read-reducao). O espelho em tempo real
+    // continua valendo; isto é só a rede de segurança.
+    if (ehCicloDaHora(new Date())) {
+      ctx.waitUntil(
+        likesVideos
+          .then(async () => {
+            const { reconciliarVideosD1 } = await import("../backend/src/services/videosD1Sync");
+            const r = await reconciliarVideosD1();
+            if (!r.videosOk || !r.comentariosOk) {
+              console.log("[scheduled] Reconciliação D1 de vídeos corrigiu divergência:", JSON.stringify(r).slice(0, 2000));
+            }
+          })
+          .catch((err) => console.error("[scheduled] Erro na reconciliação D1 de vídeos:", err)),
+      );
+    }
     // Catálogo "D1 primeiro" (2026-11-18): copia para a planilha real (backup)
     // as gravações feitas no D1 pelas abas ligadas. Depois do recálculo de
     // likes acima, que também grava em Music Videos.

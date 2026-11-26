@@ -9,3 +9,10 @@ test("ehCronPresave reconhece só o cron do pre-save", () => {
   expect(C.ehCronPresave("*/10 * * * *")).toBe(false);
   expect(C.ehCronPresave(undefined)).toBe(false);
 });
+
+test("ehCicloDaHora: só o primeiro ciclo de 10 min de cada hora", () => {
+  expect(C.ehCicloDaHora(new Date("2026-11-26T13:00:30Z"))).toBe(true);
+  expect(C.ehCicloDaHora(new Date("2026-11-26T13:09:59Z"))).toBe(true);
+  expect(C.ehCicloDaHora(new Date("2026-11-26T13:10:00Z"))).toBe(false);
+  expect(C.ehCicloDaHora(new Date("2026-11-26T13:50:00Z"))).toBe(false);
+});
