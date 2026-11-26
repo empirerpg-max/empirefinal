@@ -10,6 +10,7 @@ import {
   listarEnquetes,
   idsEnquetesAbertas,
   resultadoEnquete,
+  votantesEnquete,
 } from "../services/tvEnquetes";
 import {
   minutosDeIdades,
@@ -258,7 +259,8 @@ export async function registrarPresencaTVController(request: Request): Promise<R
         {
           programaId,
           jogadorId,
-          nome: (body.nome || sessao?.usuario || "Anônimo").trim() || "Anônimo",
+          // Com sessão vale o nome da conta (o corpo é só fallback); até 60.
+          nome: (sessao?.usuario || body.nome || "").trim().slice(0, 60) || "Anônimo",
           minutos: minutosDeIdades(agora, idades as number[]),
         },
         agora,
@@ -621,7 +623,8 @@ async function contarChatPorTransmissao(
     const rows = (await res.json()) as Array<{ user_id: string; user_name: string }>;
     for (const r of rows) {
       const userId = normalizeText(r.user_id);
-      if (!userId) continue;
+      // Avisos do bot (enquetes) não são participação de ninguém.
+      if (!userId || userId === "empire-tv") continue;
       const atual = resultado.get(userId);
       resultado.set(userId, {
         nome: atual?.nome || normalizeText(r.user_name) || "Anônimo",
@@ -838,8 +841,9 @@ export async function registrarEventoTransmissaoController(
  * Botões Início/Término do admin: reforça/corrige o horário real da
  * transmissão na MESMA chave KV usada pelo transmissao.py (chave do grupo).
  * body: { programa_id, acao: "inicio" | "fim" }. Exige sessão de admin
- * (401 sem token, 403 sem ser admin). "inicio" repetido sobrescreve com agora;
- * "fim" roda o processamento (dedup pela marca de processado).
+ * (401 sem token, 403 sem ser admin). "inicio" repetido sobrescreve com agora
+ * (409 se o "fim" já foi gravado); "fim" roda o processamento (dedup pela
+ * marca de processado).
  */
 export async function registrarEventoAdminController(
   request: Request,
@@ -869,6 +873,11 @@ export async function registrarEventoAdminController(
     const agora = Date.now();
     const mapa = await lerEventosReais(flags);
     const atual = mapa[grupo.chave] || {};
+    // Início depois de um Término já gravado colapsaria a janela (quase todo
+    // mundo com 0%): recusa em vez de sobrescrever.
+    if (acao === "inicio" && atual.fimTs) {
+      return resp({ ok: false, erro: "Término já marcado para essa transmissão — o Início não pode mais ser alterado." }, 409);
+    }
     if (acao === "inicio") atual.inicioTs = agora;
     else atual.fimTs = agora;
     mapa[grupo.chave] = atual;
@@ -900,6 +909,44 @@ export async function registrarEventoAdminController(
   } catch (error: any) {
     console.error("[registrarEventoAdminController] Erro:", error);
     return resp({ ok: false, erro: error.message || "Erro ao registrar evento." }, 500);
+  }
+}
+
+/**
+ * GET /api/tv/evento-admin?programa_id=
+ * Estado atual do Início/Término do grupo (mesma chave KV do POST), pra barra
+ * do admin mostrar o que já foi marcado depois de recarregar. Só admin.
+ */
+export async function lerEventoAdminController(
+  request: Request,
+  flagsParam?: FlagsKvLike,
+): Promise<Response> {
+  const flags = flagsParam || ((globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined);
+  const resp = (corpo: unknown, status: number) =>
+    new Response(JSON.stringify(corpo), {
+      status,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  try {
+    if (!extractBearerToken(request)) return resp({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return resp({ ok: false, erro: "Apenas admin." }, 403);
+    if (!flags) return resp({ ok: false, erro: "KV FLAGS indisponível neste ambiente." }, 503);
+    const programaId = String(new URL(request.url).searchParams.get("programa_id") ?? "").trim();
+    if (!programaId) return resp({ ok: false, erro: "programa_id é obrigatório." }, 400);
+    const grupo = agruparTransmissoes(await readProgramas()).find((g) => g.rowIds.includes(programaId));
+    if (!grupo) return resp({ ok: false, erro: "Transmissão não encontrada para esse programa." }, 400);
+    const atual = (await lerEventosReais(flags))[grupo.chave] || {};
+    return resp(
+      {
+        ok: true,
+        ...(atual.inicioTs ? { inicioTs: atual.inicioTs } : {}),
+        ...(atual.fimTs ? { fimTs: atual.fimTs } : {}),
+      },
+      200,
+    );
+  } catch (error: any) {
+    console.error("[lerEventoAdminController] Erro:", error);
+    return resp({ ok: false, erro: error.message || "Erro ao ler evento." }, 500);
   }
 }
 
@@ -996,7 +1043,8 @@ export async function criarEnqueteChatController(request: Request): Promise<Resp
           pergunta: String(b.pergunta ?? ""),
           tipo: b.tipo as "unica" | "multipla",
           opcoes: b.opcoes as string[],
-          secreto: b.secreto === true,
+          // Votos são sempre secretos (nenhuma rota mostra quem votou em quê).
+          secreto: b.secreto !== false,
           soFim: b.so_fim === true,
           encerraEmMs: encerraMin > 0 ? agora + encerraMin * 60_000 : null,
           criadaPor: sessao?.usuario || "admin",
@@ -1005,6 +1053,17 @@ export async function criarEnqueteChatController(request: Request): Promise<Resp
       );
     } catch (err: any) {
       return jsonEnquete({ ok: false, erro: err?.message || "Enquete inválida." }, 400);
+    }
+    // Publicar uma enquete nova encerra as anteriores ainda abertas da sala
+    // (mesmo caminho do "Encerrar": ENQRES no chat + Enquetes_TV), antes do
+    // aviso da nova. Feito depois de validar/gravar a nova, pra uma enquete
+    // inválida não fechar nada.
+    try {
+      for (const antiga of await idsEnquetesAbertas(db, programaId)) {
+        if (antiga !== id) await fecharEnqueteEAvisar(db, programaId, antiga, agora);
+      }
+    } catch (err) {
+      console.warn("[criarEnqueteChatController] Falha ao encerrar enquetes anteriores:", err);
     }
     await avisarNoChat(programaId, `ENQ::${id}`);
     return jsonEnquete({ ok: true, id }, 200);
@@ -1055,6 +1114,33 @@ export async function encerrarEnqueteChatController(request: Request): Promise<R
   } catch (error: any) {
     console.error("[encerrarEnqueteChatController] Erro:", error);
     return jsonEnquete({ ok: false, erro: error.message || "Erro ao encerrar enquete." }, 500);
+  }
+}
+
+/**
+ * GET /api/tv/enquetes/votantes?programa_id=&enquete_id= — nomes de quem votou
+ * em cada opção, só para enquete PÚBLICA e só sob demanda ("Ver quem votou").
+ * Mesmo acesso da lista (qualquer um na sala). Anônima → 403; "resultado só
+ * no fim" ainda aberta → 403; inexistente → 404.
+ */
+export async function votantesEnqueteChatController(request: Request): Promise<Response> {
+  try {
+    const q = new URL(request.url).searchParams;
+    const programaId = (q.get("programa_id") || "").trim();
+    const enqueteId = (q.get("enquete_id") || "").trim();
+    if (!programaId || !enqueteId) return jsonEnquete({ ok: false, erro: "programa_id e enquete_id são obrigatórios." }, 400);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const r = await votantesEnquete(db, programaId, enqueteId, Date.now());
+    if (r.status !== "ok") {
+      if (r.status === "inexistente") return jsonEnquete({ ok: false, erro: "Enquete não encontrada." }, 404);
+      if (r.status === "anonima") return jsonEnquete({ ok: false, erro: "Voto anônimo — só os totais aparecem." }, 403);
+      return jsonEnquete({ ok: false, erro: "Quem votou aparece quando a enquete encerrar." }, 403);
+    }
+    return jsonEnquete({ ok: true, votantes: r.votantes }, 200);
+  } catch (error: any) {
+    console.error("[votantesEnqueteChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao ler os votos." }, 500);
   }
 }
 
@@ -1342,6 +1428,13 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
         // Só o tempo presente conta; quem só conversou fica com 0%.
         const calc = calcularPresenca(d?.minutos ?? [], janelaD1.inicioMs, janelaD1.fimMs);
         presencaPct = calc.pct;
+        // Quem tem D1 E segundos antigos na Presenca_TV (assistiu parte no
+        // cliente antigo antes de atualizar): fica com a maior das duas %
+        // (só tempo) — nunca perde o que o caminho antigo daria.
+        const pctPlanilha =
+          p && grupo.totalDuracaoSeg > 0 ? Math.min(100, (p.watchedSeconds / grupo.totalDuracaoSeg) * 100) : 0;
+        const venceuPlanilha = pctPlanilha > presencaPct;
+        if (venceuPlanilha) presencaPct = pctPlanilha;
         nomeJogador = d?.nome || c?.nome || "Anônimo";
         resumoD1.push([
           agoraIso,
@@ -1351,11 +1444,11 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
           calc.minutosPresentes * 60,
           calc.minutosPresentes,
           calc.duracaoMin,
-          calc.pct,
+          venceuPlanilha ? Math.round(presencaPct) : calc.pct,
           c?.count || 0,
           isoOuVazio(calc.entrouMs),
           isoOuVazio(calc.saiuMs),
-          "d1",
+          venceuPlanilha ? "planilha" : "d1",
         ]);
       } else {
         presencaPct =

@@ -154,10 +154,12 @@ import {
   corrigirRegistroReprocessamentoTV,
   registrarEventoTransmissaoController,
   registrarEventoAdminController,
+  lerEventoAdminController,
   criarEnqueteChatController,
   votarEnqueteChatController,
   encerrarEnqueteChatController,
   listarEnquetesChatController,
+  votantesEnqueteChatController,
 } from "../controllers/tvController";
 import {
   getRedCarpetFeedController,
@@ -590,6 +592,7 @@ export async function handleEmpireApiRoutes(
     "/api/tv/enquetes",
     "/api/tv/enquetes/votar",
     "/api/tv/enquetes/encerrar",
+    "/api/tv/enquetes/votantes",
     "/api/tv/enquete/responder",
     "/api/artistas/vincular",
     "/api/artistas/criar",
@@ -1434,6 +1437,14 @@ export async function handleEmpireApiRoutes(
               JSON.stringify({ success: false, error: "Use GET ou POST para /api/tv/enquetes." }),
               { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
             );
+  } else if (url.pathname === "/api/tv/enquetes/votantes") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/tv/enquetes/votantes." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await votantesEnqueteChatController(request);
   } else if (url.pathname === "/api/tv/enquetes/votar" || url.pathname === "/api/tv/enquetes/encerrar") {
     if (request.method !== "POST") {
       return new Response(
@@ -1745,13 +1756,14 @@ export async function handleEmpireApiRoutes(
     }
     response = await registrarEventoTransmissaoController(request);
   } else if (url.pathname === "/api/tv/evento-admin") {
-    if (request.method !== "POST") {
+    if (request.method !== "POST" && request.method !== "GET") {
       return new Response(
-        JSON.stringify({ ok: false, erro: "Use POST para /api/tv/evento-admin." }),
+        JSON.stringify({ ok: false, erro: "Use GET ou POST para /api/tv/evento-admin." }),
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await registrarEventoAdminController(request);
+    response =
+      request.method === "GET" ? await lerEventoAdminController(request) : await registrarEventoAdminController(request);
   } else if (url.pathname === "/api/tv/processar-participacao") {
     // Aceita GET também, pra dar pra colar a URL direto no navegador sem
     // precisar de console/curl — mesma filosofia dos outros endpoints de

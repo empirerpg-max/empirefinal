@@ -208,7 +208,7 @@ test("grupo com D1: cliente antigo (só Presenca_TV) é creditado pelo tempo, se
   planilhaPresenca = [
     ["Timestamp", "Programa_ID", "Telegram_ID", "Nome", "Watched_Seconds"],
     ["t", g.rowIds[0], "old", "Velho", "1140"], // 1140/1200 = 95%
-    ["t", g.rowIds[0], "u70", "ana", "1200"], // ignorado: u70 tem D1
+    ["t", g.rowIds[0], "u70", "ana", "600"], // 50% < 70% do D1: D1 vence
     ["t", g.rowIds[0], "old2", "Leo", "120"], // 10% de tempo; chat 100% não conta
   ];
   chat = { old2: 10 };
@@ -221,11 +221,32 @@ test("grupo com D1: cliente antigo (só Presenca_TV) é creditado pelo tempo, se
   expect(prestigios).toEqual(["old"]);
   expect(resumos.length).toBe(1);
   const porId = new Map(resumos[0].linhas.map((l) => [l[2], l]));
-  expect(porId.get("u70")![11]).toBe("d1");
+  expect(porId.get("u70")!.slice(7)).toEqual([70, 0, new Date(inicio).toISOString(), new Date(inicio + 13 * MIN).toISOString(), "d1"]);
   expect(porId.get("old")!.slice(1)).toEqual([g.chave, "old", "Velho", 1140, 19, 20, 95, 0, "", "", "planilha"]);
   expect(porId.get("old2")!.slice(7)).toEqual([10, 10, "", "", "planilha"]);
   const log = flags.m.get("error-log") || "";
   expect(log).toContain("2 jogador(es)");
+});
+
+test("grupo com D1: quem tem D1 e segundos antigos fica com a maior % (só tempo); coluna L diz qual venceu", async () => {
+  const g = await grupo();
+  await gravarD1("misto", "Mia", minutosDe(10, 6)); // 6/20 = 30% no D1 (atualizou no meio)
+  await gravarD1("so1", "Rui", minutosDe(0, 2)); // 10% no D1
+  planilhaPresenca = [
+    ["Timestamp", "Programa_ID", "Telegram_ID", "Nome", "Watched_Seconds"],
+    ["t", g.rowIds[0], "misto", "Mia", "1140"], // cliente antigo: 1140/1200 = 95%
+  ];
+  chat = { so1: 10, "empire-tv": 5 }; // chat não conta; bot nem entra
+  const r = await C.processarParticipacaoTV(flagsFalsas());
+  expect(r.registrosGravados).toBe(2);
+  expect(registros).toContainEqual(["Mia", "", "Faixa alta"]);
+  expect(registros).toContainEqual(["Rui", "", "Faixa baixa"]);
+  expect(prestigios).toEqual(["misto"]);
+  const porId = new Map(resumos[0].linhas.map((l) => [l[2], l]));
+  expect(porId.has("empire-tv")).toBe(false);
+  expect(porId.get("misto")!.slice(4, 9)).toEqual([360, 6, 20, 95, 0]);
+  expect(porId.get("misto")![11]).toBe("planilha");
+  expect(porId.get("so1")!.slice(7)).toEqual([10, 10, new Date(inicio).toISOString(), new Date(inicio + MIN).toISOString(), "d1"]);
 });
 
 test("processamento: início real sem fim real e fim agendado já passou -> fim = fim agendado", async () => {

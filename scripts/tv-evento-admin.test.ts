@@ -148,3 +148,39 @@ test("fim sem inicio grava só o fim e processa com o início da grade", async (
   expect(JSON.parse(kv.puts[0])[g.chave]).toEqual({ fimTs: r.fimTs });
   expect(r.processamento.transmissoesProcessadas).toBe(1);
 });
+
+test("inicio depois do fim já gravado = 409 com erro, KV intacto", async () => {
+  const id = await idDoGrupo();
+  const g = C.agruparTransmissoes(await C.readProgramas())[0];
+  kv.m.set("tv-eventos-reais", JSON.stringify({ [g.chave]: { inicioTs: 10, fimTs: 20 } }));
+  const r = await post({ programa_id: id, acao: "inicio" });
+  expect(r.status).toBe(409);
+  const j = await r.json();
+  expect(j.ok).toBe(false);
+  expect(typeof j.erro).toBe("string");
+  expect(mapaKv()[g.chave]).toEqual({ inicioTs: 10, fimTs: 20 });
+});
+
+const get = (q: string) =>
+  C.lerEventoAdminController(new Request(`http://x/api/tv/evento-admin${q}`, { method: "GET" }));
+
+test("GET evento-admin: só admin; devolve inicioTs/fimTs do grupo", async () => {
+  const id = await idDoGrupo();
+  const g = C.agruparTransmissoes(await C.readProgramas())[0];
+  token = null;
+  expect((await get(`?programa_id=${id}`)).status).toBe(401);
+  token = "tok";
+  admin = false;
+  expect((await get(`?programa_id=${id}`)).status).toBe(403);
+  admin = true;
+  expect((await get("")).status).toBe(400);
+  expect((await get("?programa_id=inexistente")).status).toBe(400);
+  const vazio = await get(`?programa_id=${id}`);
+  expect(vazio.status).toBe(200);
+  expect(await vazio.json()).toEqual({ ok: true });
+  kv.m.set("tv-eventos-reais", JSON.stringify({ [g.chave]: { inicioTs: 10 } }));
+  expect(await (await get(`?programa_id=${id}`)).json()).toEqual({ ok: true, inicioTs: 10 });
+  kv.m.set("tv-eventos-reais", JSON.stringify({ [g.chave]: { inicioTs: 10, fimTs: 20 } }));
+  expect(await (await get(`?programa_id=${id}`)).json()).toEqual({ ok: true, inicioTs: 10, fimTs: 20 });
+  expect(kv.puts.length).toBe(0);
+});

@@ -804,6 +804,29 @@ export const api = {
       return { ok: false, status: 0, erro: "Sem conexão." };
     }
   },
+  /**
+   * Quem votou em cada opção (só enquete pública; anônima ou "resultado só no
+   * fim" aberta → erro). Só sob demanda ("Ver quem votou"), nunca no refresh.
+   */
+  async votantesEnqueteTV(
+    programaId: string,
+    enqueteId: string,
+  ): Promise<{ ok: true; votantes: string[][] } | { ok: false; erro: string }> {
+    try {
+      const qs = new URLSearchParams({ programa_id: programaId, enquete_id: enqueteId });
+      const res = await fetch(`/api/tv/enquetes/votantes?${qs.toString()}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok || !Array.isArray(json.votantes)) {
+        return { ok: false, erro: String(json?.erro || `Erro ${res.status}`) };
+      }
+      return {
+        ok: true,
+        votantes: (json.votantes as unknown[]).map((l) => (Array.isArray(l) ? l.map((x) => String(x)) : [])),
+      };
+    } catch {
+      return { ok: false, erro: "Sem conexão." };
+    }
+  },
   /** Admin encerra (o servidor avisa no chat e grava na planilha). */
   async encerrarEnqueteTV(programaId: string, enqueteId: string): Promise<{ ok: boolean; erro?: string }> {
     try {
@@ -876,6 +899,22 @@ export const api = {
       return { ok: true, acao: json.acao, inicioTs: json.inicioTs, fimTs: json.fimTs };
     } catch {
       return { ok: false, erro: "Sem conexão." };
+    }
+  },
+  /** Estado atual do Início/Término marcados pelo admin (pra barra depois de recarregar). */
+  async estadoEventoAdminTV(programaId: string): Promise<{ inicioTs?: number; fimTs?: number } | null> {
+    try {
+      const res = await fetch(`/api/tv/evento-admin?programa_id=${encodeURIComponent(programaId)}`, {
+        headers: { ...authHeaders() },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) return null;
+      return {
+        inicioTs: typeof json.inicioTs === "number" ? json.inicioTs : undefined,
+        fimTs: typeof json.fimTs === "number" ? json.fimTs : undefined,
+      };
+    } catch {
+      return null;
     }
   },
   async listarPresencaTV(

@@ -133,6 +133,7 @@ test("GET: exatamente 1 leitura de tv_enquete e nenhuma leitura de todos os voto
     db.prepare = prep;
   }
   expect(sqls.filter((s) => /^SELECT[\s\S]*FROM tv_enquete WHERE/.test(s)).length).toBe(1);
+  expect(sqls.filter((s) => /^UPDATE/.test(s)).length).toBe(0); // nada vencido: GET só lê
   const votos = sqls.filter((s) => s.includes("FROM tv_enquete_voto"));
   expect(votos.length).toBe(1);
   expect(votos[0]).toContain("jogador_id = ?");
@@ -151,22 +152,31 @@ test("meusVotos divide em blocos de 90 ids", async () => {
   expect(consultas).toBe(3);
 });
 
-test("migração: tabela antiga ganha colunas e contadores preenchidos dos votos", async () => {
-  const { Database } = await import("bun:sqlite");
-  const old = new Database(":memory:");
-  old.exec("CREATE TABLE tv_enquete (programa_id TEXT NOT NULL, id TEXT NOT NULL, pergunta TEXT NOT NULL, tipo TEXT NOT NULL, opcoes TEXT NOT NULL, secreto INTEGER NOT NULL, so_fim INTEGER NOT NULL, encerra_em INTEGER, aberta INTEGER NOT NULL, criada_em INTEGER NOT NULL, encerrada_em INTEGER, criada_por TEXT, PRIMARY KEY (programa_id, id))");
-  old.exec("CREATE TABLE tv_enquete_voto (enquete_id TEXT NOT NULL, jogador_id TEXT NOT NULL, nome TEXT, opcoes TEXT NOT NULL, votado_em INTEGER NOT NULL, PRIMARY KEY (enquete_id, jogador_id))");
-  old.exec("INSERT INTO tv_enquete VALUES ('p','e1','Q','multipla','[\"A\",\"B\"]',0,0,NULL,1,1,NULL,'a')");
-  old.exec("INSERT INTO tv_enquete_voto VALUES ('e1','j1','Ana','[0,1]',1), ('e1','j2','Bia','[1]',1)");
-  const d = {
-    prepare: (sql: string, b: unknown[] = []): any => ({
-      bind: (...v: unknown[]) => d.prepare(sql, v),
-      run: async () => ({ meta: { changes: old.query(sql).run(...(b as never[])).changes } }),
-      all: async () => ({ results: old.query(sql).all(...(b as never[])) }),
-    }),
-    batch: async () => [],
-  } as any;
-  await E.garantirTabelasEnquete(d);
-  await E.garantirTabelasEnquete(d);
-  expect(old.query("SELECT contagem, total FROM tv_enquete WHERE id = 'e1'").get()).toEqual({ contagem: "[1,2]", total: 2 });
+test("GET com aberta vencida: UPDATE roda, fecha uma vez só e a lista já vem fechada", async () => {
+  const id = await E.criarEnquete(db, { ...base, programaId: "pvx", encerraEmMs: 2000 }, 1000);
+  const nova = await E.criarEnquete(db, { ...base, programaId: "pvx", encerraEmMs: 9000 }, 1500);
+  const prep = db.prepare;
+  const sqls: string[] = [];
+  db.prepare = (s: string) => (sqls.push(s), prep(s));
+  const fechou: string[] = [];
+  let l: Awaited<ReturnType<typeof E.listarEnquetes>>;
+  try {
+    l = await E.listarEnquetes(db, "pvx", null, 2500, async (_p, x) => void fechou.push(x));
+  } finally {
+    db.prepare = prep;
+  }
+  expect(sqls.filter((s) => /^UPDATE/.test(s)).length).toBe(1);
+  expect(fechou).toEqual([id]);
+  expect(l.map((x) => [x.id, x.aberta])).toEqual([[nova, true], [id, false]]);
+  expect(l[1].encerradaEm).toBe(2500);
+  // 2º GET: já fechada no banco, ninguém avisa de novo e nem roda UPDATE
+  const sqls2: string[] = [];
+  db.prepare = (s: string) => (sqls2.push(s), prep(s));
+  try {
+    await E.listarEnquetes(db, "pvx", null, 2600, async (_p, x) => void fechou.push(x));
+  } finally {
+    db.prepare = prep;
+  }
+  expect(fechou).toEqual([id]);
+  expect(sqls2.filter((s) => /^UPDATE/.test(s)).length).toBe(0);
 });

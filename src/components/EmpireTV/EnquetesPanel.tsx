@@ -47,6 +47,9 @@ export function EnqueteCartao({
   const [enviando, setEnviando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const [encerrando, setEncerrando] = useState(false);
+  // "Ver quem votou" (só enquete pública): lido sob demanda, nunca no refresh.
+  const [votantes, setVotantes] = useState<{ lista: string[][]; total: number } | null>(null);
+  const [carregandoVotantes, setCarregandoVotantes] = useState(false);
 
   const votou = !!e.meuVoto && e.meuVoto.length > 0;
   const podeVotar = e.aberta && (!votou || mudando);
@@ -69,7 +72,7 @@ export function EnqueteCartao({
     try {
       const r = await api.votarEnqueteTV(programaId, e.id, opcoes);
       if (r.ok) {
-        toast.success(e.secreto ? "Voto registrado · voto secreto" : "Voto registrado");
+        toast.success(e.secreto ? "Voto registrado · voto anônimo" : "Voto registrado · voto público");
         setMudando(false);
         setSel([]);
         await onMudou();
@@ -109,6 +112,23 @@ export function EnqueteCartao({
       }
     } finally {
       setEncerrando(false);
+    }
+  };
+
+  // Nomes só em enquete pública, e com "resultado só no fim" só depois de encerrar.
+  const podeVerVotantes = !embutido && !e.secreto && !(e.soFim && e.aberta);
+  useEffect(() => {
+    if (!podeVerVotantes) setVotantes(null);
+  }, [podeVerVotantes]);
+  const verVotantes = async () => {
+    if (carregandoVotantes) return;
+    setCarregandoVotantes(true);
+    try {
+      const r = await api.votantesEnqueteTV(programaId, e.id);
+      if (r.ok) setVotantes({ lista: r.votantes, total: e.total });
+      else toast.error(r.erro || "Não deu pra ver quem votou. Tente de novo.");
+    } finally {
+      setCarregandoVotantes(false);
     }
   };
 
@@ -232,14 +252,78 @@ export function EnqueteCartao({
         )}
         <span className="min-w-0 truncate text-[11px] text-muted-foreground">
           {multipla ? "Múltipla escolha" : "Escolha única"}
-          {e.secreto ? " · voto secreto" : ""}
         </span>
       </div>
-      <p className="mt-1 mb-1 font-extrabold text-[14.5px] leading-snug break-words">{e.pergunta}</p>
+      <p className="mt-1 font-extrabold text-[14.5px] leading-snug break-words">{e.pergunta}</p>
+      <p className="mb-1 text-[11px] text-muted-foreground break-words">
+        {e.secreto ? "Voto anônimo — só os totais aparecem" : "Votos públicos"}
+      </p>
       {corpo}
-      <div className="flex items-center justify-between gap-2 mt-2 min-w-0 text-[11.5px] text-muted-foreground">
+      {podeVerVotantes && votantes && (
+        <div className="mt-2 p-2 rounded-xl bg-muted/40 min-w-0 space-y-1.5">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <b className="min-w-0 truncate text-[12px]">Quem votou</b>
+            <div className="flex items-center gap-1 shrink-0">
+              {votantes.total !== e.total && (
+                <button
+                  type="button"
+                  onClick={() => void verVotantes()}
+                  disabled={carregandoVotantes}
+                  className="px-1.5 py-0.5 rounded-md text-[11px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                >
+                  Atualizar
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setVotantes(null)}
+                className="px-1.5 py-0.5 rounded-md text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Ocultar
+              </button>
+            </div>
+          </div>
+          {e.opcoes.map((op, i) => {
+            const nomes = votantes.lista[i] ?? [];
+            return (
+              <div key={i} className="min-w-0">
+                <span className="block min-w-0 break-words text-[11.5px] font-semibold">
+                  {op} <span className="font-normal text-muted-foreground">({nomes.length})</span>
+                </span>
+                {nomes.length === 0 ? (
+                  <span className="block text-[11px] text-muted-foreground">ninguém</span>
+                ) : (
+                  <div className="flex flex-wrap gap-1 mt-0.5 min-w-0">
+                    {nomes.map((nome, k) => (
+                      <span
+                        key={k}
+                        title={nome}
+                        className="min-w-0 max-w-[10rem] truncate px-1.5 py-0.5 rounded-md bg-background/70 text-[11px]"
+                      >
+                        {nome}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mt-2 min-w-0 text-[11.5px] text-muted-foreground">
         <span className="min-w-0 truncate">{rodape.join(" · ")}</span>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-1 min-w-0 ml-auto">
+          {podeVerVotantes && !votantes && e.total > 0 && (
+            <button
+              type="button"
+              onClick={() => void verVotantes()}
+              disabled={carregandoVotantes}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md font-semibold hover:text-foreground disabled:opacity-50"
+            >
+              {carregandoVotantes && <Loader2 className="size-3 shrink-0 animate-spin" />}
+              <span>Ver quem votou</span>
+            </button>
+          )}
           {e.aberta && votou && !mudando && (
             <button
               type="button"
@@ -293,10 +377,21 @@ function celulaCsv(v: string | number): string {
   return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** Planilha (CSV, separador ";" para abrir direto no Excel em português) a partir da lista. */
-function baixarCsv(lista: EnqueteTV[], programaId: string) {
-  const linhas: (string | number)[][] = [["Pergunta", "Tipo", "Opção", "Votos", "%", "Criada", "Encerrada"]];
+/**
+ * Planilha (CSV, separador ";" para abrir direto no Excel em português) a partir
+ * da lista. Enquete pública ganha a coluna "Votantes" (lida só agora, no
+ * download); anônima fica só com os totais.
+ */
+async function baixarCsv(lista: EnqueteTV[], programaId: string) {
+  const votantesPorId = new Map<string, string[][]>();
   for (const e of lista) {
+    if (e.secreto || (e.soFim && e.aberta) || e.total === 0) continue;
+    const r = await api.votantesEnqueteTV(programaId, e.id);
+    if (r.ok) votantesPorId.set(e.id, r.votantes);
+  }
+  const linhas: (string | number)[][] = [["Pergunta", "Tipo", "Opção", "Votos", "%", "Criada", "Encerrada", "Votantes"]];
+  for (const e of lista) {
+    const vot = votantesPorId.get(e.id);
     e.opcoes.forEach((op, i) => {
       linhas.push([
         e.pergunta,
@@ -306,6 +401,7 @@ function baixarCsv(lista: EnqueteTV[], programaId: string) {
         e.pct ? (e.pct[i] ?? 0) : "",
         dataHora(e.criadaEm),
         e.aberta ? "aberta" : dataHora(e.encerradaEm),
+        vot ? (vot[i] ?? []).join(", ") : "",
       ]);
     });
   }
@@ -341,6 +437,16 @@ export function EnquetesPanel({
   onDestaqueConsumido: () => void;
 }) {
   const [realce, setRealce] = useState<string | null>(null);
+  const [baixando, setBaixando] = useState(false);
+  const baixar = async () => {
+    if (baixando) return;
+    setBaixando(true);
+    try {
+      await baixarCsv(lista, programaId);
+    } finally {
+      setBaixando(false);
+    }
+  };
 
   // Veio de um aviso do chat: rola até a enquete e realça por um instante.
   const achou = !!destaqueId && lista.some((e) => e.id === destaqueId);
@@ -375,11 +481,11 @@ export function EnquetesPanel({
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
-              onClick={() => baixarCsv(lista, programaId)}
-              disabled={lista.length === 0}
+              onClick={() => void baixar()}
+              disabled={lista.length === 0 || baixando}
               className="flex-1 min-w-0 h-9 px-3 rounded-xl border border-border bg-muted/40 text-[12.5px] font-semibold flex items-center justify-center gap-1.5 hover:bg-muted disabled:opacity-40 transition"
             >
-              <Download className="size-4 shrink-0" />
+              {baixando ? <Loader2 className="size-4 shrink-0 animate-spin" /> : <Download className="size-4 shrink-0" />}
               <span className="truncate">Baixar planilha (CSV)</span>
             </button>
             <button

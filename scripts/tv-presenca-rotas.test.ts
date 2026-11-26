@@ -58,6 +58,16 @@ test("(b) POST novo sem sessão usa telegram_id; sem nenhum dos dois = 400", asy
   expect((await post({ programa_id: "sala1", idades_ms: [0] })).status).toBe(400);
 });
 
+test("POST novo: nome da sessão vence o do corpo; nome do corpo limitado a 60", async () => {
+  sessao = { id: "sess2", usuario: "Ana" };
+  await post({ programa_id: "sala1", idades_ms: [0], nome: "Outro Nome" });
+  sessao = null;
+  await post({ programa_id: "sala1", idades_ms: [0], telegram_id: "tg7", nome: "  " + "z".repeat(90) });
+  const porId = new Map(linhasD1(sqlite).map((l: any) => [l.jogador_id, l.nome]));
+  expect(porId.get("sess2")).toBe("Ana");
+  expect(porId.get("tg7")).toBe("z".repeat(60));
+});
+
 test("idades_ms inválido = 400", async () => {
   sessao = { id: "s", usuario: "A" };
   expect((await post({ programa_id: "p", idades_ms: "x" })).status).toBe(400);

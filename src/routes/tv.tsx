@@ -1630,7 +1630,11 @@ function ChatPanel({
           { event: "INSERT", schema: "public", table: "tv_chat_messages", filter: `programa_id=eq.${programaId}` },
           (payload: any) => {
             const r = payload.new;
-            if (typeof r?.text === "string" && (r.text.startsWith(ENQ_PREFIX) || r.text.startsWith(ENQRES_PREFIX))) {
+            if (
+              r?.user_id === "empire-tv" &&
+              typeof r?.text === "string" &&
+              (r.text.startsWith(ENQ_PREFIX) || r.text.startsWith(ENQRES_PREFIX))
+            ) {
               void recarregarEnquetesRef.current();
             }
             // Decide ANTES de o DOM crescer com a mensagem nova.
@@ -1825,16 +1829,19 @@ function ChatPanel({
   // Menu da mensagem (toque longo / botão direito): Responder e Copiar texto.
   // Entra no histórico: voltar fecha só o menu (regra "voltar = tela anterior").
   const [menuMsg, setMenuMsg] = useState<{ m: ChatMessage; x: number; y: number } | null>(null);
-  const abrirMenu = (m: ChatMessage, pos: { x: number; y: number }) => setMenuMsg({ m, ...pos });
+  // Com o menu já aberto, um 2º disparo (ex.: timer + contextmenu nativo) é ignorado.
+  const abrirMenu = (m: ChatMessage, pos: { x: number; y: number }) =>
+    setMenuMsg((atual) => atual ?? { m, ...pos });
+  const menuAberto = !!menuMsg;
   useEffect(() => {
-    if (!menuMsg) return;
+    if (!menuAberto) return;
     window.history.pushState({ tvChatMenu: true }, "");
     const onPop = () => {
       if (!window.history.state?.tvChatMenu) setMenuMsg(null);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [menuMsg]);
+  }, [menuAberto]);
   const fecharMenu = () => {
     if (window.history.state?.tvChatMenu) window.history.back();
     else setMenuMsg(null);
@@ -2104,6 +2111,9 @@ function ChatPanel({
             // Avisos de enquete: uma linha só, toque abre a aba Enquetes com
             // ela em destaque. Enquete fora da lista (id desconhecido) some.
             if (m.text.startsWith(ENQ_PREFIX) || m.text.startsWith(ENQRES_PREFIX)) {
+              // Só o bot "empire-tv" publica avisos; o mesmo texto vindo de
+              // qualquer outra pessoa não aparece.
+              if (m.userId !== "empire-tv") return null;
               const fechou = m.text.startsWith(ENQRES_PREFIX);
               const enq = enquetePorId.get(m.text.slice(fechou ? ENQRES_PREFIX.length : ENQ_PREFIX.length).trim());
               if (!enq) return null;
@@ -3176,15 +3186,42 @@ function ParticipacaoCirculo({ pct, onClick }: { pct: number | null; onClick: ()
 function AdminEventoBar({ programaId }: { programaId: string }) {
   const [enviando, setEnviando] = useState<"inicio" | "fim" | null>(null);
   const [estado, setEstado] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
-  useEffect(() => {
-    setEstado(null);
-  }, [programaId]);
+  // Início/Término já gravados no servidor (carregado ao abrir, pra não
+  // perder o estado depois de recarregar).
+  const [marcados, setMarcados] = useState<{ inicioTs?: number; fimTs?: number }>({});
 
   const hora = (ts?: number) =>
     ts ? new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
 
+  useEffect(() => {
+    setEstado(null);
+    setMarcados({});
+    let vivo = true;
+    void api.estadoEventoAdminTV(programaId).then((r) => {
+      if (!vivo || !r) return;
+      setMarcados(r);
+      if (r.fimTs) setEstado({ tipo: "ok", texto: `Término marcado às ${hora(r.fimTs)}` });
+      else if (r.inicioTs) setEstado({ tipo: "ok", texto: `Início marcado às ${hora(r.inicioTs)}` });
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [programaId]);
+
   const disparar = async (acao: "inicio" | "fim") => {
     if (enviando) return;
+    if (
+      acao === "inicio" &&
+      !window.confirm(
+        marcados.fimTs
+          ? "O TÉRMINO já foi marcado. Marcar o INÍCIO agora mesmo assim?"
+          : marcados.inicioTs
+            ? `O início já foi marcado às ${hora(marcados.inicioTs)}. Marcar de novo com o horário de agora?`
+            : "Marcar o INÍCIO do evento agora?",
+      )
+    ) {
+      return;
+    }
     if (
       acao === "fim" &&
       !window.confirm("Marcar o TÉRMINO do evento agora? A participação de todos será calculada até este momento.")
@@ -3197,8 +3234,10 @@ function AdminEventoBar({ programaId }: { programaId: string }) {
     if (!r.ok) {
       setEstado({ tipo: "erro", texto: r.erro || "Não foi possível registrar." });
     } else if (acao === "inicio") {
+      setMarcados((m) => ({ ...m, inicioTs: r.inicioTs }));
       setEstado({ tipo: "ok", texto: `Início marcado às ${hora(r.inicioTs)}` });
     } else {
+      setMarcados((m) => ({ ...m, fimTs: r.fimTs }));
       // Crédito sai no próximo cron (até ~15 min) — processamento {0,0} aqui não é falha.
       setEstado({ tipo: "ok", texto: "Encerrado — a participação será creditada em alguns minutos" });
     }

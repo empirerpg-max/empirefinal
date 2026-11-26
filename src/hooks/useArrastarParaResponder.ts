@@ -23,6 +23,21 @@ export function decidirGesto(
   return "nada";
 }
 
+/**
+ * O menu abre no máximo uma vez por gesto: no Android o timer de 500 ms e o
+ * `contextmenu` nativo do toque longo disparam os dois (em qualquer ordem).
+ * Pura (testada em scripts/tv-chat-gestos.test.ts).
+ */
+export function deveAbrirMenu(
+  origem: "timer" | "contextmenu",
+  { jaAbriuNesteGesto, gesto }: { jaAbriuNesteGesto: boolean; gesto?: EntradaGesto | null },
+  limitePx = 50,
+): boolean {
+  if (jaAbriuNesteGesto) return false;
+  if (origem === "contextmenu") return true;
+  return !!gesto && decidirGesto(gesto, limitePx) === "menu";
+}
+
 /** Quanto a mensagem aparece deslocada: só para a esquerda, até 70 px. */
 export function deslocamentoVisivel(dx: number): number {
   if (!(dx < 0)) return 0;
@@ -44,6 +59,9 @@ export function useArrastarParaResponder(
   const [ativo, setAtivo] = useState(false);
   const est = useRef<{ id: number; x0: number; y0: number; t0: number; dx: number; dy: number; vert: boolean; menu: boolean } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // "Menu aberto por este gesto": sobrevive ao fim do gesto (o contextmenu
+  // nativo pode chegar depois do pointercancel/up) e zera no próximo pointerdown.
+  const menuDoGesto = useRef(false);
   const cbs = useRef({ onResponder, onMenu });
   cbs.current = { onResponder, onMenu };
 
@@ -60,6 +78,7 @@ export function useArrastarParaResponder(
   useEffect(() => limpaTimer, []);
 
   const onPointerDown = (e: React.PointerEvent) => {
+    menuDoGesto.current = false;
     if (e.pointerType === "mouse" || (e.target as HTMLElement).closest("button,a,video")) return;
     est.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: Date.now(), dx: 0, dy: 0, vert: false, menu: false };
     setAtivo(true);
@@ -68,8 +87,10 @@ export function useArrastarParaResponder(
     timer.current = setTimeout(() => {
       const s = est.current;
       if (!s) return;
-      if (decidirGesto({ dx: s.dx, dy: s.dy, ms: 500, moveuVertical: s.vert }, limitePx) === "menu") {
+      const gesto = { dx: s.dx, dy: s.dy, ms: 500, moveuVertical: s.vert };
+      if (deveAbrirMenu("timer", { jaAbriuNesteGesto: menuDoGesto.current, gesto }, limitePx)) {
         s.menu = true;
+        menuDoGesto.current = true;
         try { navigator.vibrate?.(10); } catch { /* sem vibração */ }
         cbs.current.onMenu({ x, y });
         setDx(0);
@@ -101,7 +122,14 @@ export function useArrastarParaResponder(
 
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault(); // evita o menu nativo (toque longo no Android / botão direito)
-    if (est.current?.menu) return;
+    if (!deveAbrirMenu("contextmenu", { jaAbriuNesteGesto: menuDoGesto.current || !!est.current?.menu })) return;
+    menuDoGesto.current = true;
+    if (est.current) {
+      // Toque longo em andamento: o timer não abre de novo.
+      est.current.menu = true;
+      limpaTimer();
+      setDx(0);
+    }
     cbs.current.onMenu({ x: e.clientX, y: e.clientY });
   };
 

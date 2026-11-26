@@ -186,9 +186,14 @@ export function NovaEnqueteSheet({
           <div>
             <span className="block text-[12px] font-bold text-muted-foreground mb-1">Configurações</span>
             <div className="flex flex-wrap gap-2">
-              <Chip ativo={secreto} onClick={() => setSecreto((v) => !v)}>Voto secreto</Chip>
+              <Chip ativo={secreto} onClick={() => setSecreto((v) => !v)}>Voto anônimo</Chip>
               <Chip ativo={soFim} onClick={() => setSoFim((v) => !v)}>Resultado só no fim</Chip>
             </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground break-words">
+              {secreto
+                ? "Voto anônimo — só os totais aparecem."
+                : "Votos públicos — todos na sala podem ver quem votou em cada opção."}
+            </p>
           </div>
 
           <div>

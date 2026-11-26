@@ -31,3 +31,15 @@ test("deslocamentoVisivel limita em [-70, 0]", () => {
   expect(G.deslocamentoVisivel(40)).toBe(0);
   expect(G.deslocamentoVisivel(0)).toBe(0);
 });
+test("menu abre uma vez por gesto: timer e contextmenu nativo, em qualquer ordem", () => {
+  const parado = { dx: 1, dy: 1, ms: 500, moveuVertical: false };
+  // timer primeiro, depois o contextmenu do Android
+  expect(G.deveAbrirMenu("timer", { jaAbriuNesteGesto: false, gesto: parado })).toBe(true);
+  expect(G.deveAbrirMenu("contextmenu", { jaAbriuNesteGesto: true })).toBe(false);
+  // contextmenu primeiro (~400 ms), depois o timer
+  expect(G.deveAbrirMenu("contextmenu", { jaAbriuNesteGesto: false })).toBe(true);
+  expect(G.deveAbrirMenu("timer", { jaAbriuNesteGesto: true, gesto: parado })).toBe(false);
+  // timer sozinho só abre com o dedo parado
+  expect(G.deveAbrirMenu("timer", { jaAbriuNesteGesto: false, gesto: { ...parado, dx: -30 } })).toBe(false);
+  expect(G.deveAbrirMenu("timer", { jaAbriuNesteGesto: false, gesto: null })).toBe(false);
+});

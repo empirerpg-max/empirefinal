@@ -16,39 +16,12 @@ function lerLista<T>(s: string | null | undefined): T[] {
   }
 }
 
-// Tabela criada antes dos contadores: acrescenta as colunas (idempotente) e
-// preenche contagem/total uma vez a partir dos votos já gravados.
-async function migrarContadores(db: D1DatabaseLike): Promise<void> {
-  for (const alter of [
-    "ALTER TABLE tv_enquete ADD COLUMN contagem TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE tv_enquete ADD COLUMN total INTEGER NOT NULL DEFAULT 0",
-  ]) {
-    try {
-      await db.prepare(alter).run();
-    } catch {
-      // coluna já existe
-    }
-  }
-  const r = await db
-    .prepare("SELECT programa_id, id, opcoes FROM tv_enquete WHERE contagem = ''")
-    .all<{ programa_id: string; id: string; opcoes: string }>();
-  for (const e of r.results) {
-    const v = await db.prepare("SELECT opcoes FROM tv_enquete_voto WHERE enquete_id = ?").bind(e.id).all<{ opcoes: string }>();
-    const ap = apurar(lerLista<string>(e.opcoes).length, v.results.map((x) => lerLista<number>(x.opcoes)));
-    await db
-      .prepare("UPDATE tv_enquete SET contagem = ?, total = ? WHERE programa_id = ? AND id = ?")
-      .bind(JSON.stringify(ap.contagem), ap.total, e.programa_id, e.id)
-      .run();
-  }
-}
-
 export function garantirTabelasEnquete(db: D1DatabaseLike): Promise<void> {
   let p = tabelasGarantidas.get(db);
   if (!p) {
     p = (async () => {
       await db.prepare(SQL_TABELA_ENQUETE).run();
       await db.prepare(SQL_TABELA_VOTO).run();
-      await migrarContadores(db);
     })();
     p.catch(() => tabelasGarantidas.delete(db)); // falhou: tenta de novo na próxima
     tabelasGarantidas.set(db, p);
@@ -133,6 +106,8 @@ export async function votar(
   const idx = [...new Set(opcoes)].sort((a, b) => a - b);
   if (idx.length < 1) return "invalida";
   if (row.tipo === "unica" && idx.length !== 1) return "invalida";
+  // Nome mostrado em "Ver quem votou" (enquete pública): limitado a 60.
+  nome = String(nome ?? "").trim().slice(0, 60) || "Anônimo";
   // Uma transação: o contador é ajustado pela diferença entre o voto novo e o
   // voto antigo lido DENTRO da transação (antes do upsert), então dois votos
   // simultâneos nunca contam duas vezes.
@@ -207,7 +182,8 @@ export async function meusVotos(db: D1DatabaseLike, enqueteIds: string[], jogado
 /**
  * Lista as enquetes da sala: 1 leitura de tv_enquete (contadores guardados na
  * própria linha) + o voto do jogador por chave primária. Enquetes vencidas são
- * fechadas aqui; `aoFechar` roda só para as que ESTA chamada fechou.
+ * fechadas aqui (o UPDATE só roda quando a leitura mostra alguma aberta já
+ * vencida); `aoFechar` roda só para as que ESTA chamada fechou.
  */
 export async function listarEnquetes(
   db: D1DatabaseLike,
@@ -217,13 +193,6 @@ export async function listarEnquetes(
   aoFechar?: (programaId: string, enqueteId: string) => Promise<void>,
 ): Promise<EnqueteView[]> {
   await garantirTabelasEnquete(db);
-  const fechadas = await db
-    .prepare(
-      "UPDATE tv_enquete SET aberta = 0, encerrada_em = ? WHERE programa_id = ? AND aberta = 1 AND encerra_em IS NOT NULL AND encerra_em <= ? RETURNING id",
-    )
-    .bind(agoraMs, programaId, agoraMs)
-    .all<{ id: string }>();
-  for (const f of fechadas.results ?? []) await aoFechar?.(programaId, f.id);
   const r = await db
     .prepare(
       "SELECT id, pergunta, tipo, opcoes, secreto, so_fim, encerra_em, aberta, criada_em, encerrada_em, contagem, total FROM tv_enquete WHERE programa_id = ? ORDER BY aberta DESC, criada_em DESC",
@@ -233,6 +202,27 @@ export async function listarEnquetes(
       id: string; pergunta: string; tipo: TipoEnquete; opcoes: string; secreto: number; so_fim: number;
       encerra_em: number | null; aberta: number; criada_em: number; encerrada_em: number | null; contagem: string; total: number;
     }>();
+  // Só escreve quando alguma aberta já venceu (a maioria dos GETs é só leitura).
+  // O UPDATE … RETURNING garante que só UM chamador avisa cada fechamento.
+  const vencida = (e: { aberta: number; encerra_em: number | null }) =>
+    e.aberta === 1 && e.encerra_em != null && e.encerra_em <= agoraMs;
+  if (r.results.some(vencida)) {
+    const fechadas = await db
+      .prepare(
+        "UPDATE tv_enquete SET aberta = 0, encerrada_em = ? WHERE programa_id = ? AND aberta = 1 AND encerra_em IS NOT NULL AND encerra_em <= ? RETURNING id",
+      )
+      .bind(agoraMs, programaId, agoraMs)
+      .all<{ id: string }>();
+    for (const f of fechadas.results ?? []) await aoFechar?.(programaId, f.id);
+    // Reflete o fechamento na lista já lida (fechada aqui ou por outro chamador).
+    for (const e of r.results) {
+      if (vencida(e)) {
+        e.aberta = 0;
+        e.encerrada_em = e.encerrada_em ?? agoraMs;
+      }
+    }
+    r.results.sort((a, b) => b.aberta - a.aberta || b.criada_em - a.criada_em);
+  }
   const meus = jogadorId ? await meusVotos(db, r.results.map((e) => e.id), jogadorId) : new Map<string, number[]>();
   return r.results.map((e) => {
     const opcoes = lerLista<string>(e.opcoes);
@@ -262,6 +252,42 @@ export async function listarEnquetes(
       meuVoto: meus.get(e.id) ?? null,
     };
   });
+}
+
+/**
+ * Quem votou em cada opção de uma enquete PÚBLICA (secreto = 0), só sob
+ * demanda ("Ver quem votou"): 1 leitura da enquete pela chave primária + os
+ * votos pelo prefixo da chave (enquete_id). Enquete anônima nunca devolve
+ * nomes; com "resultado só no fim", só depois de encerrada.
+ */
+export async function votantesEnquete(
+  db: D1DatabaseLike,
+  programaId: string,
+  enqueteId: string,
+  agoraMs: number,
+): Promise<{ status: "ok"; votantes: string[][] } | { status: "inexistente" | "anonima" | "so_fim" }> {
+  await garantirTabelasEnquete(db);
+  const r = await db
+    .prepare("SELECT opcoes, secreto, so_fim, aberta, encerra_em FROM tv_enquete WHERE programa_id = ? AND id = ?")
+    .bind(programaId, enqueteId)
+    .all<{ opcoes: string; secreto: number; so_fim: number; aberta: number; encerra_em: number | null }>();
+  const e = r.results[0];
+  if (!e) return { status: "inexistente" };
+  if (e.secreto !== 0) return { status: "anonima" };
+  const aberta = e.aberta === 1 && !(e.encerra_em != null && e.encerra_em <= agoraMs);
+  if (e.so_fim === 1 && aberta) return { status: "so_fim" };
+  const n = lerLista<string>(e.opcoes).length;
+  const votantes: string[][] = Array.from({ length: n }, () => []);
+  const v = await db
+    .prepare("SELECT nome, opcoes FROM tv_enquete_voto WHERE enquete_id = ?")
+    .bind(enqueteId)
+    .all<{ nome: string | null; opcoes: string }>();
+  for (const x of v.results) {
+    const nome = String(x.nome ?? "").trim().slice(0, 60) || "Anônimo";
+    for (const i of lerLista<number>(x.opcoes)) if (Number.isInteger(i) && i >= 0 && i < n) votantes[i].push(nome);
+  }
+  for (const l of votantes) l.sort((a, b) => a.localeCompare(b, "pt-BR"));
+  return { status: "ok", votantes };
 }
 
 /** Ids das enquetes ainda abertas de uma sala (programa_id). */

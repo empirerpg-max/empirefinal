@@ -261,3 +261,79 @@ test("evento-admin fim encerra enquetes abertas do grupo e avisa no chat", async
   expect(appends.length).toBe(1);
   expect((await E.listarEnquetes(db, rowId, null, Date.now()))[0].aberta).toBe(false);
 });
+
+test("criar enquete nova encerra as abertas da sala (ENQRES + planilha uma vez cada) antes do ENQ", async () => {
+  const a = (await (await criar({ pergunta: "A?" })).json()).id;
+  const b = (await (await criar({ pergunta: "B?" })).json()).id;
+  const outraSala = (await (await criar({ pergunta: "X?" }, "outra" + n)).json()).id;
+  inserts = [];
+  appends = [];
+  // inválida não fecha nada
+  expect((await criar({ opcoes: ["só"] })).status).toBe(400);
+  expect(inserts.length).toBe(0);
+  const c = (await (await criar({ pergunta: "C?" })).json()).id;
+  expect(inserts.map((i) => i.body.text)).toEqual([`ENQRES::${b}`, `ENQ::${c}`]);
+  expect(appends.length).toBe(1);
+  expect(appends[0].rows[0][2]).toBe("B?");
+  const db = (globalThis as any).__CATALOGO_DB__;
+  const lista = await E.listarEnquetes(db, "p" + n, null, Date.now());
+  expect(lista.filter((e) => e.aberta).map((e) => e.id)).toEqual([c]);
+  expect(lista.find((e) => e.id === a)!.aberta).toBe(false);
+  expect((await E.listarEnquetes(db, "outra" + n, null, Date.now()))[0]).toMatchObject({ id: outraSala, aberta: true });
+});
+
+const votantes = (prog: string, id: string) =>
+  C.votantesEnqueteChatController(req(`/api/tv/enquetes/votantes?programa_id=${prog}&enquete_id=${id}`, "GET"));
+const votarComo = async (prog: string, id: string, jogador: { id: string; usuario: string }, opcoes: number[]) => {
+  sessao = jogador;
+  return C.votarEnqueteChatController(req("/api/tv/enquetes/votar", "POST", { programa_id: prog, enquete_id: id, opcoes }));
+};
+
+test("votantes: enquete pública devolve nomes por opção (nome da sessão, até 60), sem sessão também", async () => {
+  const prog = "p" + n;
+  const id = (await (await criar({ secreto: false, tipo: "multipla", opcoes: ["A", "B", "C"] })).json()).id;
+  await votarComo(prog, id, { id: "j1", usuario: "Bia" }, [0, 1]);
+  await votarComo(prog, id, { id: "j2", usuario: "Ana" }, [1]);
+  await votarComo(prog, id, { id: "j3", usuario: "x".repeat(80) }, [1]);
+  sessao = null;
+  token = null;
+  sqls = [];
+  const r = await votantes(prog, id);
+  expect(r.status).toBe(200);
+  const j = await r.json();
+  expect(j).toEqual({ ok: true, votantes: [["Bia"], ["Ana", "Bia", "x".repeat(60)], []] });
+  // votos lidos pelo prefixo da chave primária (enquete_id)
+  expect(sqls.filter((s) => s.includes("FROM tv_enquete_voto"))).toEqual(["SELECT nome, opcoes FROM tv_enquete_voto WHERE enquete_id = ?"]);
+  // a lista (refresh de 5 s) nunca traz nomes
+  const lista = await (await C.listarEnquetesChatController(req("/api/tv/enquetes?programa_id=" + prog, "GET"))).json();
+  expect(JSON.stringify(lista)).not.toContain("Bia");
+});
+
+test("votantes: anônima recusa (403, sem ler votos); inexistente 404; sem secreto no corpo = anônima", async () => {
+  const prog = "p" + n;
+  const anon = (await (await criar({ secreto: true })).json()).id;
+  await votarComo(prog, anon, { id: "j1", usuario: "Bia" }, [0]);
+  sqls = [];
+  const r = await votantes(prog, anon);
+  expect(r.status).toBe(403);
+  const j = await r.json();
+  expect(j.ok).toBe(false);
+  expect(j.votantes).toBeUndefined();
+  expect(lerVotos()).toBe(0);
+  const padrao = (await (await criar({ pergunta: "Padrão?" })).json()).id;
+  expect((await votantes(prog, padrao)).status).toBe(403);
+  expect((await votantes(prog, "nao-existe")).status).toBe(404);
+  expect((await C.votantesEnqueteChatController(req("/api/tv/enquetes/votantes?programa_id=" + prog, "GET"))).status).toBe(400);
+});
+
+test("votantes: pública com 'resultado só no fim' esconde enquanto aberta e mostra depois de encerrar", async () => {
+  const prog = "p" + n;
+  const id = (await (await criar({ secreto: false, so_fim: true })).json()).id;
+  await votarComo(prog, id, { id: "j1", usuario: "Bia" }, [1]);
+  expect((await votantes(prog, id)).status).toBe(403);
+  sessao = { id: "adm", usuario: "Adm" };
+  await C.encerrarEnqueteChatController(req("/api/tv/enquetes/encerrar", "POST", { programa_id: prog, enquete_id: id }));
+  const r = await votantes(prog, id);
+  expect(r.status).toBe(200);
+  expect((await r.json()).votantes).toEqual([[], ["Bia"]]);
+});
