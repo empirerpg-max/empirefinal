@@ -131,9 +131,9 @@ test("grupo com D1: faixa pelo tempo (chat não conta), prestígio só >= 90, um
   expect(new Date(l70[0] as string).toISOString()).toBe(l70[0] as string);
   expect(l70.slice(1)).toEqual([
     g.chave, "u70", "ana", 14 * 60, 14, 20, 70, 10,
-    new Date(inicio).toISOString(), new Date(inicio + 13 * MIN).toISOString(),
+    new Date(inicio).toISOString(), new Date(inicio + 13 * MIN).toISOString(), "d1",
   ]);
-  expect(porId.get("soChat")!.slice(4)).toEqual([0, 0, 20, 0, 12, "", ""]);
+  expect(porId.get("soChat")!.slice(4)).toEqual([0, 0, 20, 0, 12, "", "", "d1"]);
 });
 
 test("grupo com D1: janela calculada antes do fim real sobrescrever o grupo (= rota GET)", async () => {
@@ -200,4 +200,72 @@ test("limpeza diária: apaga > 30 dias no máximo 1x por dia UTC e nunca lança"
   expect(await C.limparPresencaTVDiaria(quebrado, agora)).toBe(null);
   (globalThis as any).__CATALOGO_DB__ = undefined;
   expect(await C.limparPresencaTVDiaria(flagsFalsas(), agora)).toBe(null);
+});
+
+test("grupo com D1: cliente antigo (só Presenca_TV) é creditado pelo tempo, sem chat", async () => {
+  const g = await grupo();
+  await gravarD1("u70", "ana", minutosDe(0, 14)); // 70% no D1
+  planilhaPresenca = [
+    ["Timestamp", "Programa_ID", "Telegram_ID", "Nome", "Watched_Seconds"],
+    ["t", g.rowIds[0], "old", "Velho", "1140"], // 1140/1200 = 95%
+    ["t", g.rowIds[0], "u70", "ana", "1200"], // ignorado: u70 tem D1
+    ["t", g.rowIds[0], "old2", "Leo", "120"], // 10% de tempo; chat 100% não conta
+  ];
+  chat = { old2: 10 };
+  const flags = flagsFalsas();
+  const r = await C.processarParticipacaoTV(flags);
+  expect(r.registrosGravados).toBe(3);
+  expect(registros).toContainEqual(["Ana", "", "Faixa media"]);
+  expect(registros).toContainEqual(["Velho", "", "Faixa alta"]);
+  expect(registros).toContainEqual(["Leo", "", "Faixa baixa"]);
+  expect(prestigios).toEqual(["old"]);
+  expect(resumos.length).toBe(1);
+  const porId = new Map(resumos[0].linhas.map((l) => [l[2], l]));
+  expect(porId.get("u70")![11]).toBe("d1");
+  expect(porId.get("old")!.slice(1)).toEqual([g.chave, "old", "Velho", 1140, 19, 20, 95, 0, "", "", "planilha"]);
+  expect(porId.get("old2")!.slice(7)).toEqual([10, 10, "", "", "planilha"]);
+  const log = flags.m.get("error-log") || "";
+  expect(log).toContain("2 jogador(es)");
+});
+
+test("processamento: início real sem fim real e fim agendado já passou -> fim = fim agendado", async () => {
+  const g = await grupo();
+  const eventos = { [g.chave]: { inicioTs: inicio } };
+  // Rota GET (sem opção) continua usando "agora" como fim.
+  const agora = Date.now();
+  expect(C.janelaDoGrupo(g, eventos, agora).fimMs).toBe(agora);
+  const j = C.janelaDoGrupo(g, eventos, agora, { processamento: true });
+  expect(j).toEqual({ inicioMs: inicio, fimMs: g.endTs as number, aoVivo: false });
+  // Antes do fim agendado, mesmo no processamento, ainda é "agora".
+  expect(C.janelaDoGrupo(g, eventos, inicio + 5 * MIN, { processamento: true }).fimMs).toBe(inicio + 5 * MIN);
+
+  await gravarD1("u70", "ana", minutosDe(0, 14)); // 14/20 = 70% (com "agora": 14/60 = 23%)
+  await C.processarParticipacaoTV(flagsFalsas({ "tv-eventos-reais": JSON.stringify(eventos) }));
+  expect(registros).toEqual([["Ana", "", "Faixa media"]]);
+  expect(resumos[0].linhas[0][7]).toBe(70);
+});
+
+test("lerPresencaGrupo falha -> nada marcado, nada creditado; próxima execução processa", async () => {
+  await gravarD1("u95", "Bia", minutosDe(0, 19));
+  const real = (globalThis as any).__CATALOGO_DB__;
+  (globalThis as any).__CATALOGO_DB__ = {
+    prepare: (sql: string) => {
+      if (sql.includes("SELECT jogador_id")) throw new Error("D1 caiu");
+      return real.prepare(sql);
+    },
+  };
+  const flags = flagsFalsas();
+  const r1 = await C.processarParticipacaoTV(flags);
+  expect(r1).toEqual({ transmissoesProcessadas: 0, registrosGravados: 0 });
+  expect(marcas.length).toBe(0);
+  expect(registros.length).toBe(0);
+  expect(prestigios).toEqual([]);
+  expect(flags.m.get("error-log") || "").toContain("D1");
+
+  (globalThis as any).__CATALOGO_DB__ = real;
+  const r2 = await C.processarParticipacaoTV(flags);
+  expect(r2).toEqual({ transmissoesProcessadas: 1, registrosGravados: 1 });
+  expect(marcas.length).toBe(1);
+  expect(registros).toEqual([["Bia", "", "Faixa alta"]]);
+  expect(prestigios).toEqual(["u95"]);
 });

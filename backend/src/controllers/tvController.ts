@@ -707,11 +707,16 @@ export interface EventoRealTV {
 /**
  * Janela de uma transmissão para contar presença: início real > estimado
  * (endTs - duração); fim real > agora (se ainda ao vivo) > endTs.
+ * `processamento: true` (só o cron de participação): com início real mas sem
+ * fim real e o fim agendado (endTs) já passado, o fim é o endTs agendado em
+ * vez de "agora" — senão um aviso de fim perdido esticaria a janela até a
+ * hora do processamento e derrubaria o % de todo mundo. A rota GET não usa.
  */
 export function janelaDoGrupo(
   grupo: BroadcastGroup,
   eventosReais: Record<string, EventoRealTV>,
   agoraMs: number,
+  opcoes: { processamento?: boolean } = {},
 ): { inicioMs: number; fimMs: number; aoVivo: boolean } {
   const real = eventosReais[grupo.chave];
   const estimadoIni = (grupo.endTs ?? agoraMs) - grupo.totalDuracaoSeg * 1000;
@@ -720,6 +725,9 @@ export function janelaDoGrupo(
   let aoVivo: boolean;
   if (real?.fimTs) {
     fimMs = real.fimTs;
+    aoVivo = false;
+  } else if (opcoes.processamento && real?.inicioTs && grupo.endTs !== null && agoraMs >= grupo.endTs) {
+    fimMs = grupo.endTs;
     aoVivo = false;
   } else if (real?.inicioTs || grupo.endTs === null || agoraMs < grupo.endTs) {
     fimMs = agoraMs;
@@ -895,7 +903,7 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
   // mexer em endTs/totalDuracaoSeg — é a mesma conta da rota GET
   // (listarPresencaTVController), então o % mostrado é o % creditado.
   const janelasD1 = new Map<string, { inicioMs: number; fimMs: number }>();
-  for (const grupo of grupos) janelasD1.set(grupo.chave, janelaDoGrupo(grupo, eventosReais, now));
+  for (const grupo of grupos) janelasD1.set(grupo.chave, janelaDoGrupo(grupo, eventosReais, now, { processamento: true }));
   const db = getCatalogoDb();
   for (const grupo of grupos) {
     const real = eventosReais[grupo.chave];
@@ -1026,9 +1034,9 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
     const margemChatMs = 15 * 60 * 1000;
     const inicioEstimadoTs = grupo.endTs - grupo.totalDuracaoSeg * 1000;
     const [presenca, chat] = await Promise.all([
-      origem === "planilha"
-        ? somarPresencaPorTransmissao(grupo.rowIds)
-        : Promise.resolve(new Map<string, { nome: string; watchedSeconds: number }>()),
+      // Também em grupo "d1": quem ainda usa o cliente antigo (só
+      // watched_seconds na Presenca_TV) é creditado pelo tempo de lá.
+      somarPresencaPorTransmissao(grupo.rowIds),
       contarChatPorTransmissao(grupo.rowIds, inicioEstimadoTs - margemChatMs, grupo.endTs + margemChatMs),
     ]);
 
@@ -1036,6 +1044,7 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
     const janelaD1 = janelasD1.get(key)!;
     const resumoD1: (string | number)[][] = [];
     const agoraIso = new Date().toISOString();
+    let clientesAntigosNoD1 = 0;
     if (jogadores.size === 0) {
       // Transmissão bate TIPO_EVENTO e Regras, mas nenhum registro de
       // Presenca_TV/chat casou com os rowIds desse grupo — a transmissão é
@@ -1055,7 +1064,28 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
       const chatPct = Math.min(100, ((c?.count || 0) / CHAT_MSGS_PARA_100_PORCENTO) * 100);
       let presencaPct: number;
       let nomeJogador: string;
-      if (origem === "d1") {
+      if (origem === "d1" && !d && p) {
+        // Grupo "d1", mas essa pessoa só tem a presença antiga (planilha):
+        // % só pelo tempo de lá (chat não conta, igual à regra do D1).
+        presencaPct =
+          grupo.totalDuracaoSeg > 0 ? Math.min(100, (p.watchedSeconds / grupo.totalDuracaoSeg) * 100) : 0;
+        nomeJogador = p.nome || c?.nome || "Anônimo";
+        clientesAntigosNoD1++;
+        resumoD1.push([
+          agoraIso,
+          grupo.chave,
+          telegramId,
+          nomeJogador,
+          p.watchedSeconds,
+          Math.floor(p.watchedSeconds / 60),
+          Math.round(grupo.totalDuracaoSeg / 60),
+          Math.round(presencaPct),
+          c?.count || 0,
+          "",
+          "",
+          "planilha",
+        ]);
+      } else if (origem === "d1") {
         // Só o tempo presente conta; quem só conversou fica com 0%.
         const calc = calcularPresenca(d?.minutos ?? [], janelaD1.inicioMs, janelaD1.fimMs);
         presencaPct = calc.pct;
@@ -1072,6 +1102,7 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
           c?.count || 0,
           isoOuVazio(calc.entrouMs),
           isoOuVazio(calc.saiuMs),
+          "d1",
         ]);
       } else {
         presencaPct =
@@ -1098,11 +1129,18 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
       }
     }
 
+    if (clientesAntigosNoD1 > 0) {
+      await registrarDiagnosticoSkip(
+        flags,
+        `[processarParticipacaoTV] "${grupo.programa}" (${key}) tem presença no D1, mas ${clientesAntigosNoD1} jogador(es) só tinham a presença antiga (Presenca_TV, cliente antigo) — creditados só pelo tempo de lá.`,
+      );
+    }
+
     // Resumo por pessoa na Presenca_TV (só informação, depois de creditar):
     // uma chamada só por transmissão; se falhar, o crédito já está feito.
     if (origem === "d1" && resumoD1.length > 0) {
       try {
-        await appendRows("agendaTV", PRESENCA_SHEET, resumoD1, "A:K");
+        await appendRows("agendaTV", PRESENCA_SHEET, resumoD1, "A:L");
       } catch (err) {
         console.warn(`[processarParticipacaoTV] Falha ao gravar resumo em ${PRESENCA_SHEET}:`, err);
         await registrarDiagnosticoSkip(
