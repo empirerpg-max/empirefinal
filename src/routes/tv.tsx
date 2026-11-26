@@ -11,6 +11,7 @@ import { useTelegramUser } from "@/lib/telegram";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
 import { resolveStreamEmbed, kickChannelFromUrl, forceUnmuteIframe, hasUnmutedThisSession } from "@/lib/tvEmbed";
+import { estaNoFim, pertoDoTopo, decidirAoChegar } from "@/lib/tvChatRolagem";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
@@ -1010,6 +1011,18 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const OLDER_PAGE_SIZE = 60;
   const justLoadedOlderRef = useRef(false);
+  const loadingOlderRef = useRef(false);
+
+  // Rolagem do chat: quem está lendo mensagens antigas não é puxado pro fim.
+  // `noFimRef` é medido no onScroll (e de novo logo antes de aplicar uma
+  // mensagem nova), SEMPRE antes do DOM crescer. `rolarAoFimRef` é o recado
+  // pro efeito de auto-scroll: só rola quando alguém marcou isso.
+  const [novas, setNovas] = useState(0);
+  const noFimRef = useRef(true);
+  const rolarAoFimRef = useRef(false);
+  const primeiraCargaRef = useRef(true);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  messagesRef.current = messages;
 
   // Histórico inicial + subscrição realtime — celular em segundo plano
   // (troca de app, tela apagada) costuma derrubar o websocket em silêncio,
@@ -1021,6 +1034,9 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   useEffect(() => {
     let alive = true;
     let channel: any = null;
+    primeiraCargaRef.current = true;
+    noFimRef.current = true;
+    setNovas(0);
 
     const fetchHistory = async () => {
       const { supabase } = await import("@/integrations/supabase/client");
@@ -1044,6 +1060,14 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
         .limit(CHAT_HISTORY_LIMIT);
       if (!alive || !data) return;
       setHasMoreHistory(data.length === CHAT_HISTORY_LIMIT);
+      // Carregar a sala sempre leva ao fim; recarga em segundo plano (aba
+      // voltou a ficar visível) só rola se a pessoa já estava no fim.
+      const elH = scrollerRef.current;
+      if (primeiraCargaRef.current || noFimRef.current || (elH && estaNoFim(elH))) {
+        rolarAoFimRef.current = true;
+        setNovas(0);
+      }
+      primeiraCargaRef.current = false;
       setMessages(
         data
           .slice()
@@ -1075,6 +1099,19 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
           { event: "INSERT", schema: "public", table: "tv_chat_messages", filter: `programa_id=eq.${programaId}` },
           (payload: any) => {
             const r = payload.new;
+            // Decide ANTES de o DOM crescer com a mensagem nova.
+            if (!messagesRef.current.some((m) => m.id === r.id)) {
+              const elR = scrollerRef.current;
+              const noFim = elR ? estaNoFim(elR) : noFimRef.current;
+              const minha = myId ? r.user_id === myId : r.user_name === displayName;
+              const d = decidirAoChegar(noFim, minha, 0);
+              if (d.rolar) {
+                rolarAoFimRef.current = true;
+                setNovas(0);
+              } else {
+                setNovas((n) => decidirAoChegar(false, false, n).novas);
+              }
+            }
             setMessages((prev) => {
               if (prev.some((m) => m.id === r.id)) return prev;
               const next = [
@@ -1124,7 +1161,8 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   }, [programaId]);
 
   const loadOlderMessages = async () => {
-    if (loadingOlder || !hasMoreHistory || messages.length === 0) return;
+    if (loadingOlder || loadingOlderRef.current || !hasMoreHistory || messages.length === 0) return;
+    loadingOlderRef.current = true;
     setLoadingOlder(true);
     try {
       const el = scrollerRef.current;
@@ -1163,21 +1201,44 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
         });
       }
     } finally {
+      loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
   };
 
-  // auto-scroll — pulado quando a mudança em `messages` veio de "Carregar
-  // mais antigas" (loadOlderMessages já cuida da própria posição de scroll
-  // ali, senão esse efeito jogaria a pessoa de volta pro fundo do chat).
+  // auto-scroll — pulado quando a mudança em `messages` veio de mensagens
+  // antigas (loadOlderMessages cuida da própria posição de scroll, e antigas
+  // nunca contam como "novas"). Fora isso, só rola quando quem aplicou a
+  // mudança marcou `rolarAoFimRef` (estava no fim, mensagem própria, carga
+  // inicial) — quem está lendo mais acima não é puxado.
   useEffect(() => {
     if (justLoadedOlderRef.current) {
       justLoadedOlderRef.current = false;
       return;
     }
+    if (!rolarAoFimRef.current) return;
+    rolarAoFimRef.current = false;
     const el = scrollerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+      noFimRef.current = true;
+    }
   }, [messages]);
+
+  const onScrollChat = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const noFim = estaNoFim(el);
+    noFimRef.current = noFim;
+    if (noFim) setNovas((n) => (n === 0 ? n : 0));
+    if (pertoDoTopo(el.scrollTop) && hasMoreHistory && !loadingOlder) loadOlderMessages();
+  };
+
+  const irParaFim = () => {
+    const el = scrollerRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    setNovas(0);
+  };
 
   const startReply = (m: ChatMessage) => {
     setReplyTo(m);
@@ -1201,6 +1262,8 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
     // própria mensagem aparecer, achava que não tinha ido e digitava tudo
     // de novo (causa raiz do "mensagem sumiu"/"travou" relatado ontem).
     const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    rolarAoFimRef.current = true; // mensagem própria sempre leva ao fim
+    setNovas(0);
     setMessages((prev) => [
       ...prev,
       {
@@ -1378,7 +1441,7 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
         o navegador só consegue rolar internamente pra revelar o campo em
         vez de arrastar a tela inteira (e o vídeo) quando o campo focado
         fica fora de qualquer ancestral rolável. */}
-    <div ref={scrollerRef} className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+    <div ref={scrollerRef} onScroll={onScrollChat} className="flex-1 overflow-y-auto min-h-0 flex flex-col">
       <div className="flex-1 px-3 py-3 space-y-2 text-sm">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-xs text-center px-6">
@@ -1386,22 +1449,9 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
           </div>
         ) : (
           <>
-            {hasMoreHistory && (
-              <div className="flex justify-center pb-1">
-                <button
-                  type="button"
-                  onClick={loadOlderMessages}
-                  disabled={loadingOlder}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-muted/40 text-[11px] font-semibold text-muted-foreground hover:bg-muted active:scale-95 transition disabled:opacity-60"
-                >
-                  {loadingOlder ? (
-                    <>
-                      <Loader2 className="size-3 animate-spin" /> Carregando...
-                    </>
-                  ) : (
-                    "Carregar mensagens mais antigas"
-                  )}
-                </button>
+            {loadingOlder && (
+              <div className="flex justify-center pb-1 text-[11px] text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
               </div>
             )}
             {messages.map((m) => {
@@ -1506,6 +1556,15 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
           é isso que dá ao Safari um ancestral rolável válido pra revelar o
           campo sem precisar deslizar a página/vídeo inteiros. */}
       <div className="sticky bottom-0 bg-background">
+      {novas > 0 && (
+        <button
+          type="button"
+          onClick={irParaFim}
+          className="absolute bottom-full right-3 mb-2 min-h-[40px] px-3 max-w-[calc(100%-1.5rem)] rounded-full bg-primary text-primary-foreground text-xs font-bold shadow-lg active:scale-95 transition"
+        >
+          <span className="block truncate">↓ {novas} {novas === 1 ? "nova" : "novas"}</span>
+        </button>
+      )}
       {replyTo && (
         <div className="flex items-start gap-2 px-3 py-1.5 border-t border-border bg-muted/40 text-[11px]">
           <Reply className="size-3 mt-0.5 text-primary shrink-0" />
