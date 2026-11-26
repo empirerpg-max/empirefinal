@@ -1,6 +1,7 @@
 // Cálculo da semana inteira por país: camada 1 (regra C, recortes COUNTRIES)
 // das 4 plataformas e camada 2 (paradas oficiais), com a semana anterior para `st`.
 // Seções 7–11 do spec 2026-11-24-charts-paradas-nacionais-foco-design.
+import { referenciasArtistasParaCharts } from "../artistasD1";
 import type { D1DatabaseLike } from "../catalogoDbService";
 import { dataBrParaIso } from "./dados";
 import { buscarNoCatalogo, semAcentoMaiusculo, type MusicaCatalogo } from "./artistas";
@@ -152,10 +153,7 @@ export async function calcularSemanaPaises(
       ...datas,
     ),
     consultar<{ plataforma: string; pais: string; peso: number }>(db, "SELECT plataforma, pais, peso FROM pais_peso"),
-    consultar<{ nome_upper: string; nacionalidade: string }>(
-      db,
-      "SELECT nome_upper, nacionalidade FROM artista_info WHERE nacionalidade IS NOT NULL AND nacionalidade != ''",
-    ),
+    referenciasArtistasParaCharts(db).then((l) => l.filter((r) => r.nacionalidade)),
     carregarFocos(db),
     consultar<{ data: string; regras: string }>(
       db,

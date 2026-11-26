@@ -33,8 +33,9 @@ import { PerformanceAwardModal } from "./PerformanceAwardModal";
 import { BannersManager } from "./BannersManager";
 import { GestaoEmpireTv } from "./GestaoEmpireTv";
 import { PainelCatalogoD1 } from "./PainelCatalogoD1";
+import { AvisoPerfilArtistas } from "./AvisoPerfilArtistas";
 import { uploadVideoDireto, descartarVideoEnviado } from "@/lib/uploadVideoDireto";
-import { getStoredLogin } from "@/components/LoginScreen";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import {
   ExtraMaterialEditor,
@@ -469,7 +470,7 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const loginTgId =
     storedLogin?.id ||
     (telegramUser?.id && telegramUser.id !== "guest" ? String(telegramUser.id) : "");
-  const isAdminUser = loginTgId === "810141686" || storedLogin?.tipoPerfil === "Admin";
+  const isAdminUser = isAdminLogin(storedLogin, loginTgId);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab || "musica");
@@ -1676,6 +1677,9 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
               <span className="sm:hidden">Editar</span>
             </button>
           </div>
+
+          {/* Artistas do jogador sem nacionalidade/estilo no perfil */}
+          <AvisoPerfilArtistas artistas={profile?.associatedArtists || []} />
 
           {/* AÇÕES RÁPIDAS */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">

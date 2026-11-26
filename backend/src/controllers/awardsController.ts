@@ -6,6 +6,8 @@ import {
 } from "../services/googleSheetsService";
 import { buildCleanItem } from "./empirePlayController";
 import { cachedRead } from "../services/shortCache";
+import { getCatalogoDb } from "../services/catalogoDbService";
+import { carregarArtistas, importacaoFeitaEmCache } from "../services/artistasD1";
 
 // Fonte: mesma planilha "premiacoes" usada em Perfil > Premiações
 // (premiacoesController.ts), mas aqui é leitura pública/histórica pro botão
@@ -80,10 +82,21 @@ export async function buildCapaPorTitulo(): Promise<Map<string, string>> {
 }
 
 // Fallback: foto "oficial" do artista, mesma fonte usada no resto do app
-// (aba ARTISTAS, com fallback pra INFOS ACTS quando a própria aba estiver
-// sem foto) — ver getAllArtistasController em artistasController.ts.
+// (espelho D1 de artistas; antes da importação única, aba ARTISTAS com
+// fallback pra INFOS ACTS) — ver getAllArtistasController em artistasController.ts.
 export async function buildFotoPorArtista(): Promise<Map<string, string>> {
   const mapa = new Map<string, string>();
+  // Depois da importação única: foto do espelho D1 de artistas, sem planilha
+  const db = getCatalogoDb();
+  if (db && (await importacaoFeitaEmCache(db).catch(() => false))) {
+    for (const a of (await carregarArtistas(db)).values()) {
+      const nome = normalizeComparison(a.nome);
+      const foto = normalizeText(a.fotoUrl);
+      if (nome && foto && !/^[-—]+$/.test(foto) && !mapa.has(nome)) mapa.set(nome, foto);
+    }
+    return mapa;
+  }
+
   const rows = await googleSheetsService.usuarios.readValues(ARTISTAS_SHEET).catch(() => []);
   if (rows.length > 1) {
     const headers = rows[0].map((h) => normalizeText(h).toLowerCase());

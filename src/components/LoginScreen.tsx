@@ -28,6 +28,19 @@ export function getStoredLogin(): LoginResult | null {
   }
 }
 
+// Id histórico do admin (bypass usado em vários pontos do app).
+const ADMIN_LOGIN_ID = "810141686";
+
+/**
+ * Quem conta como admin na interface: o id histórico ou quem tem
+ * tipo_de_perfil = "Admin" na aba Usuários. `id` permite passar o id já
+ * resolvido pela tela (ex.: fallback do usuário legado); sem ele, usa o do
+ * login guardado. O backend confere de novo pela sessão.
+ */
+export function isAdminLogin(login: LoginResult | null = getStoredLogin(), id?: string): boolean {
+  return (id ?? login?.id) === ADMIN_LOGIN_ID || login?.tipoPerfil === "Admin";
+}
+
 export function clearStoredLogin() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(TOKEN_STORAGE_KEY);

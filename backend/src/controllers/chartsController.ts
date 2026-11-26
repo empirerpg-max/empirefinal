@@ -50,7 +50,7 @@ async function readSheet(spreadsheetKey: keyof typeof googleSheetsService, sheet
 interface ReferenciasD1 {
   cat: Map<string, MusicaCatalogo>;
   fotos: Map<string, string>;
-  /** artista_info.genero por nome_upper: gênero quando a música não tem um no catálogo. */
+  /** Gênero do artista (espelho de artistas) por nome_upper: gênero quando a música não tem um no catálogo. */
   generosArtistas: Map<string, string>;
 }
 const datasD1Cache = new Map<ChartId, { valor: Promise<string[]>; expiresAt: number }>();

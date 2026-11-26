@@ -1200,6 +1200,7 @@ export const googleSheetsService = {
   },
   usuarios: {
     readValues: (sheetName: string, range?: string) => readValues("usuarios", sheetName, range),
+    readValuesFresh: (sheetName: string, range?: string) => readValuesFresh("usuarios", sheetName, range),
     readSheetObjects: (sheetName: string, range?: string) =>
       readSheetObjects("usuarios", sheetName, range),
     findRows: (
