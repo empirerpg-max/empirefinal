@@ -65,3 +65,55 @@ export class ColetorMinutos {
     return [...this.marcas.values()].sort((a, b) => a - b);
   }
 }
+
+// ---------- Pendentes guardados, com dono ----------
+// Cada coletor guardado pertence ao jogador logado quando as marcas foram
+// feitas. Só é enviado com o login desse mesmo jogador — trocar de conta na
+// mesma aba nunca credita os minutos de um para o outro.
+
+export interface PendenteGuardado {
+  dono: string;
+  programaId: string;
+  coletor: ColetorMinutos;
+}
+
+export function chavePendente(dono: string, programaId: string): string {
+  return `${dono}\u0000${programaId}`;
+}
+
+/** Entradas que podem ir agora: só as do jogador logado. Sem login, nenhuma. */
+export function entradasParaEnviar(
+  mapa: Map<string, PendenteGuardado>,
+  donoAtual: string | null | undefined,
+): PendenteGuardado[] {
+  if (!donoAtual) return [];
+  return [...mapa.values()].filter((e) => e.dono === donoAtual);
+}
+
+/** Formato do armazenamento (JSON). */
+export function gravarPendentesGuardados(
+  mapa: Map<string, PendenteGuardado>,
+): Record<string, { dono: string; programaId: string; instantes: number[] }> {
+  const obj: Record<string, { dono: string; programaId: string; instantes: number[] }> = {};
+  for (const [chave, e] of mapa) {
+    if (!e.coletor.vazio()) obj[chave] = { dono: e.dono, programaId: e.programaId, instantes: e.coletor.exportar() };
+  }
+  return obj;
+}
+
+/** Lê o armazenamento mantendo só as entradas do jogador logado (as outras caem). */
+export function lerPendentesGuardados(
+  obj: unknown,
+  donoAtual: string | null | undefined,
+): Map<string, PendenteGuardado> {
+  const mapa = new Map<string, PendenteGuardado>();
+  if (!donoAtual || !obj || typeof obj !== "object" || Array.isArray(obj)) return mapa;
+  for (const v of Object.values(obj as Record<string, unknown>)) {
+    if (!v || typeof v !== "object") continue;
+    const { dono, programaId, instantes } = v as Record<string, unknown>;
+    if (dono !== donoAtual || typeof programaId !== "string" || !programaId) continue;
+    const coletor = ColetorMinutos.de(instantes);
+    if (!coletor.vazio()) mapa.set(chavePendente(dono, programaId), { dono, programaId, coletor });
+  }
+  return mapa;
+}

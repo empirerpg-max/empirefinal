@@ -111,3 +111,47 @@ test("marcas com mais de 6 h caem e o lote nunca passa de 400", () => {
   expect(Math.max(...p)).toBeLessThanOrEqual(6 * 3600_000);
   expect(Math.min(...p)).toBe(60_000);
 });
+
+// ---------- marcas guardadas têm dono (jogador logado quando marcou) ----------
+const { chavePendente, lerPendentesGuardados, gravarPendentesGuardados, entradasParaEnviar } = await import(
+  "../src/lib/tvPresencaCliente.ts"
+);
+
+test("entradas de outro jogador nunca são devolvidas para envio", () => {
+  const a = new ColetorMinutos();
+  a.marcar(M(20, 0));
+  const b = new ColetorMinutos();
+  b.marcar(M(20, 1));
+  const mapa = new Map([
+    [chavePendente("A", "p1"), { dono: "A", programaId: "p1", coletor: a }],
+    [chavePendente("B", "p1"), { dono: "B", programaId: "p1", coletor: b }],
+  ]);
+  expect(entradasParaEnviar(mapa, "B").map((e) => e.dono)).toEqual(["B"]);
+  expect(entradasParaEnviar(mapa, "A").map((e) => e.coletor)).toEqual([a]);
+  expect(entradasParaEnviar(mapa, null)).toEqual([]);
+  expect(entradasParaEnviar(mapa, "")).toEqual([]);
+});
+
+test("ao restaurar do armazenamento, entradas de outro dono (ou sem dono) caem", () => {
+  const a = new ColetorMinutos();
+  a.marcar(M(20, 0));
+  const b = new ColetorMinutos();
+  b.marcar(M(20, 1));
+  const guardado = JSON.parse(
+    JSON.stringify(
+      gravarPendentesGuardados(
+        new Map([
+          [chavePendente("A", "p1"), { dono: "A", programaId: "p1", coletor: a }],
+          [chavePendente("B", "p2"), { dono: "B", programaId: "p2", coletor: b }],
+        ]),
+      ),
+    ),
+  );
+  const soB = lerPendentesGuardados({ ...guardado, lixo: { programaId: "p3", instantes: [M(20, 2)] } }, "B");
+  expect([...soB.values()].map((e) => [e.dono, e.programaId])).toEqual([["B", "p2"]]);
+  expect(soB.get(chavePendente("B", "p2"))!.coletor.pendentes(M(20, 2)).idades).toEqual([60_000]);
+  expect(lerPendentesGuardados(guardado, null).size).toBe(0);
+  expect(lerPendentesGuardados("x", "A").size).toBe(0);
+  // formato antigo (sem dono) cai
+  expect(lerPendentesGuardados({ p1: [M(20, 0)] }, "A").size).toBe(0);
+});
