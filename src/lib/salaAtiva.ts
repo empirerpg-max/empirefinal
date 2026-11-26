@@ -45,13 +45,39 @@ export function deveAdiarRecarga(digitando: boolean, sala: boolean): boolean {
 
 // Uma recarga pendente por vez (deploys seguidos não empilham avisos).
 let pendente: { recarregar: () => void; sair: () => void } | null = null;
+const ouvintesPendente = new Set<() => void>();
+
+/** Quanto tempo o aviso fica na tela; depois disso a sala mostra um botão pequeno "Atualizar". */
+export const DURACAO_AVISO_MS = 15000;
+
+export function recargaPendente(): boolean {
+  return pendente != null;
+}
+
+/** Avisa quando passa a haver (ou deixa de haver) uma recarga pendente. */
+export function aoMudarRecargaPendente(fn: () => void): () => void {
+  ouvintesPendente.add(fn);
+  return () => {
+    ouvintesPendente.delete(fn);
+  };
+}
+
+function avisarPendente() {
+  for (const fn of Array.from(ouvintesPendente)) fn();
+}
 
 function executarPendente() {
   const p = pendente;
   if (!p) return;
   pendente = null;
+  avisarPendente();
   p.sair();
   p.recarregar();
+}
+
+/** "Atualizar agora": roda a recarga pendente (se houver). */
+export function atualizarAgora(): void {
+  executarPendente();
 }
 
 /**
@@ -61,8 +87,9 @@ function executarPendente() {
 export function adiarAteSairDaSala(recarregar: () => void, toastFn?: ToastFn): void {
   if (pendente) return;
   pendente = { recarregar, sair: aoSairDaSala(executarPendente) };
+  avisarPendente();
   toastFn?.("Nova versão disponível — atualiza quando você sair da sala", {
-    duration: 15000,
+    duration: DURACAO_AVISO_MS,
     action: { label: "Atualizar agora", onClick: executarPendente },
   });
 }

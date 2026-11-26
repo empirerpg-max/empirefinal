@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck, Copy } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, RefreshCw, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck, Copy } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost, type EnquetePayload } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
@@ -17,7 +17,7 @@ import { estaNoFim, pertoDoTopo, decidirAoChegar } from "@/lib/tvChatRolagem";
 import { useArrastarParaResponder } from "@/hooks/useArrastarParaResponder";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
-import { marcarSalaAtiva, salaDaUrl } from "@/lib/salaAtiva";
+import { marcarSalaAtiva, salaDaUrl, recargaPendente, aoMudarRecargaPendente, atualizarAgora, DURACAO_AVISO_MS } from "@/lib/salaAtiva";
 
 
 export const Route = createFileRoute("/tv")({
@@ -58,7 +58,10 @@ function empurrarEntradaDaSala(id: string) {
   const key = Math.random().toString(36).slice(2, 10);
   // Chaves do roteador junto: sem elas o TanStack reescreve o state numa
   // recarga e a marca `tvSala` se perderia.
-  window.history.pushState({ __TSR_index: idx, key, __TSR_key: key, tvSala: id }, "", urlComSala(id));
+  // `tvSalaEmpurrada`: só a entrada que a PRÓPRIA sala empurrou pode ser
+  // desfeita com history.back() (a substituída é a /tv de quem veio de outra
+  // tela — voltar dela sairia da Empire TV).
+  window.history.pushState({ __TSR_index: idx, key, __TSR_key: key, tvSala: id, tvSalaEmpurrada: true }, "", urlComSala(id));
 }
 
 // Troca só o `?sala=` (e a marca) da entrada ATUAL, mantendo o resto do
@@ -67,8 +70,19 @@ function trocarSalaNaUrl(id: string | null) {
   if (typeof window === "undefined") return;
   const st = { ...(window.history.state ?? {}) };
   if (id) st.tvSala = id;
-  else delete st.tvSala;
+  else {
+    delete st.tvSala;
+    delete st.tvSalaEmpurrada;
+  }
   window.history.replaceState(st, "", urlComSala(id));
+}
+
+function naRotaTv(): boolean {
+  return window.location.pathname.replace(/\/+$/, "") === "/tv";
+}
+
+function entradaEmpurradaPelaSala(): boolean {
+  return !!window.history.state?.tvSalaEmpurrada;
 }
 
 function entradaDeOverlayDaSala(): boolean {
@@ -78,15 +92,32 @@ function entradaDeOverlayDaSala(): boolean {
 
 // Tira as entradas do modo deitado / menu da mensagem que estejam por cima
 // da entrada da sala (cada uma fecha no próprio popstate) e só então segue.
+// Se o voltar não responder (~400 ms, ex.: marca no começo do histórico),
+// tira as marcas da entrada atual no lugar e segue sem voltar mais.
 function voltarAteEntradaDaSala(depois: () => void) {
   if (!entradaDeOverlayDaSala()) {
     depois();
     return;
   }
+  let feito = false;
   const onPop = () => {
+    if (feito) return;
+    feito = true;
+    window.clearTimeout(timer);
     window.removeEventListener("popstate", onPop);
     voltarAteEntradaDaSala(depois);
   };
+  const timer = window.setTimeout(() => {
+    if (feito) return;
+    feito = true;
+    window.removeEventListener("popstate", onPop);
+    const st = { ...(window.history.state ?? {}) };
+    delete st.tvSalaDeitada;
+    delete st.tvChatMenu;
+    delete st.tvSalaEmpurrada;
+    window.history.replaceState(st, "", window.location.pathname + window.location.search + window.location.hash);
+    depois();
+  }, 400);
   window.addEventListener("popstate", onPop);
   window.history.back();
 }
@@ -239,6 +270,37 @@ function LazyGifVideo({ src }: { src: string }) {
     };
   }, [src]);
   return <video ref={ref} muted loop playsInline preload="metadata" className="w-full h-auto block min-h-[96px]" />;
+}
+
+// Recarga adiada pela sala (salaAtiva.ts): depois que o aviso some, fica um
+// botão pequeno "Atualizar" na sala até a recarga acontecer.
+function BotaoAtualizarPendente({ sobreVideo = false }: { sobreVideo?: boolean }) {
+  const [pendente, setPendente] = useState(() => recargaPendente());
+  const [avisoSumiu, setAvisoSumiu] = useState(false);
+  useEffect(() => aoMudarRecargaPendente(() => setPendente(recargaPendente())), []);
+  useEffect(() => {
+    if (!pendente) {
+      setAvisoSumiu(false);
+      return;
+    }
+    const t = window.setTimeout(() => setAvisoSumiu(true), DURACAO_AVISO_MS);
+    return () => window.clearTimeout(t);
+  }, [pendente]);
+  if (!pendente || !avisoSumiu) return null;
+  return (
+    <button
+      type="button"
+      onClick={atualizarAgora}
+      className={`min-h-[40px] px-3 min-w-0 shrink-0 max-w-[45%] rounded-full border text-[12px] font-semibold flex items-center gap-1.5 active:scale-95 transition ${
+        sobreVideo ? "bg-black/60 backdrop-blur text-white border-white/20" : "bg-primary/15 border-primary/40 text-primary"
+      }`}
+      aria-label="Nova versão disponível — atualizar agora"
+      title="Nova versão disponível — atualizar agora"
+    >
+      <RefreshCw className="size-3.5 shrink-0" />
+      <span className="truncate">Atualizar</span>
+    </button>
+  );
 }
 
 // "DD/MM/YYYY HH:mm" → Date
@@ -403,7 +465,7 @@ function TvPage() {
   // então voltar delas não fecha nada aqui (cada uma cuida da sua).
   useEffect(() => {
     const onPop = () => {
-      if (window.location.pathname !== "/tv") return;
+      if (!naRotaTv()) return;
       if (entradaDeOverlayDaSala()) return;
       const naUrl = salaDaUrl(window.location.search);
       const naTela = salaNaTelaRef.current;
@@ -422,12 +484,13 @@ function TvPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Seta/X da própria sala: volta no histórico se a entrada é a da sala
-  // (igual ao voltar do celular); senão (ex.: link aberto direto) fecha e
-  // troca o endereço pra /tv sem criar entrada.
+  // Seta/X da própria sala: volta no histórico se a entrada foi empurrada
+  // pela sala (igual ao voltar do celular); senão (veio do mini player de
+  // outra tela, recarga de link sem a marca) fecha no lugar e troca o
+  // endereço pra /tv sem criar entrada.
   const sairDaSala = () => {
     voltarAteEntradaDaSala(() => {
-      if (window.history.state?.tvSala) {
+      if (entradaEmpurradaPelaSala()) {
         window.history.back();
       } else {
         salaNaTelaRef.current = null;
@@ -443,7 +506,7 @@ function TvPage() {
     voltarAteEntradaDaSala(() => {
       salaNaTelaRef.current = null;
       minimize();
-      if (window.history.state?.tvSala) window.history.back();
+      if (entradaEmpurradaPelaSala()) window.history.back();
       else trocarSalaNaUrl(null);
     });
   };
@@ -1152,6 +1215,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
           <Radio className="size-2.5 shrink-0 animate-pulse" /> LIVE
         </span>
       )}
+      {deitado && <BotaoAtualizarPendente sobreVideo />}
     </div>
   );
 
@@ -1174,6 +1238,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
           </span>
         </span>
       </button>
+      <BotaoAtualizarPendente />
       {myId && <ParticipacaoCirculo pct={meuPct} onClick={() => setTab("participantes")} />}
     </div>
   );

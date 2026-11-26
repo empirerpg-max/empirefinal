@@ -65,6 +65,25 @@ test("adiarAteSairDaSala: 'Atualizar agora' recarrega na hora", () => {
   expect(recargas).toBe(1);
 });
 
+test("recargaPendente / atualizarAgora: indicador persistente até recarregar", () => {
+  S.marcarSalaAtiva(true);
+  let mudancas = 0;
+  const sair = S.aoMudarRecargaPendente(() => mudancas++);
+  let recargas = 0;
+  expect(S.recargaPendente()).toBe(false);
+  S.adiarAteSairDaSala(() => recargas++);
+  expect(S.recargaPendente()).toBe(true);
+  expect(mudancas).toBe(1);
+  S.atualizarAgora();
+  expect(recargas).toBe(1);
+  expect(S.recargaPendente()).toBe(false);
+  expect(mudancas).toBe(2);
+  S.atualizarAgora(); // nada pendente: não recarrega de novo
+  expect(recargas).toBe(1);
+  sair();
+  S.marcarSalaAtiva(false);
+});
+
 test("salaDaUrl: lê o parâmetro sala, ignora vazio", () => {
   expect(S.salaDaUrl("?sala=abc")).toBe("abc");
   expect(S.salaDaUrl("sala=abc")).toBe("abc");
