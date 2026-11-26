@@ -269,3 +269,16 @@ test("lerPresencaGrupo falha -> nada marcado, nada creditado; próxima execuçã
   expect(registros).toEqual([["Bia", "", "Faixa alta"]]);
   expect(prestigios).toEqual(["u95"]);
 });
+
+test("processamento: início real ATRASADO sem fim real -> fim = início real + duração (não colapsa)", async () => {
+  const g = await grupo();
+  const inicioReal = inicio + 30 * MIN; // começou 30 min depois; fim agendado (inicio+20) já passou
+  const eventos = { [g.chave]: { inicioTs: inicioReal } };
+  const j = C.janelaDoGrupo(g, eventos, Date.now(), { processamento: true });
+  expect(j).toEqual({ inicioMs: inicioReal, fimMs: inicioReal + 20 * MIN, aoVivo: false });
+
+  await gravarD1("u70", "ana", minutosDe(30, 14)); // 14 dos 20 min reais = 70%
+  await C.processarParticipacaoTV(flagsFalsas({ "tv-eventos-reais": JSON.stringify(eventos) }));
+  expect(registros).toEqual([["Ana", "", "Faixa media"]]);
+  expect(resumos[0].linhas[0].slice(5, 8)).toEqual([14, 20, 70]);
+});

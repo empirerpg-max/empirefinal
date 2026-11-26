@@ -708,8 +708,8 @@ export interface EventoRealTV {
  * Janela de uma transmissão para contar presença: início real > estimado
  * (endTs - duração); fim real > agora (se ainda ao vivo) > endTs.
  * `processamento: true` (só o cron de participação): com início real mas sem
- * fim real e o fim agendado (endTs) já passado, o fim é o endTs agendado em
- * vez de "agora" — senão um aviso de fim perdido esticaria a janela até a
+ * fim real e o fim agendado (endTs) já passado, o fim é
+ * max(endTs, início real + duração agendada) em vez de "agora" — senão um aviso de fim perdido esticaria a janela até a
  * hora do processamento e derrubaria o % de todo mundo. A rota GET não usa.
  */
 export function janelaDoGrupo(
@@ -727,7 +727,9 @@ export function janelaDoGrupo(
     fimMs = real.fimTs;
     aoVivo = false;
   } else if (opcoes.processamento && real?.inicioTs && grupo.endTs !== null && agoraMs >= grupo.endTs) {
-    fimMs = grupo.endTs;
+    // Início real atrasado: conta a duração agendada a partir dele, pra
+    // janela nunca colapsar em 1 minuto (nem passar da duração agendada).
+    fimMs = Math.max(grupo.endTs, real.inicioTs + grupo.totalDuracaoSeg * 1000);
     aoVivo = false;
   } else if (real?.inicioTs || grupo.endTs === null || agoraMs < grupo.endTs) {
     fimMs = agoraMs;
