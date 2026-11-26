@@ -374,4 +374,4 @@ na branch do projeto. Conferido em `src/routes/artistas.$nome.index.tsx`,
 | Link `/artistas/$nome?aba=gestao` | tabela 5.1 | D |
 | `isAdminLogin` (critério único de admin) | base do `useIsAdmin` (fase 0) | D |
 | Perfil, prêmios, votação e charts lendo o espelho D1 `artistas` | sem mudança de tela | D |
-
+| — | **NOVO:** nacionalidade (bandeira) e estilo visíveis para todos abaixo do nome (tocáveis: charts do país, página do gênero) e "Ficha do artista" no começo da Visão Geral | página do artista | **NOVO** |

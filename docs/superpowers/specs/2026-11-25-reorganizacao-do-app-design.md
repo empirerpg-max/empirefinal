@@ -933,6 +933,26 @@ lógica:**
   artista.
 - **Admin › Painel do catálogo:** "Atualizar todos os artistas a partir da
   planilha" (com confirmar/cancelar), como na `main`.
+- **Perfil público mais completo (pedido do usuário; todo jogador vê):**
+  - **Abaixo do nome**, ao lado do status: dois selos tocáveis numa linha
+    (sem quebrar; rola para o lado se não couber): **bandeira + país**
+    (abre Charts › Ao vivo › Por país daquele país) e **🎵 estilo
+    principal** (abre a página do gênero no Catálogo). Se o artista ainda
+    não tem os dados, os selos não aparecem para os outros; **só o dono**
+    vê "＋ Adicionar nacionalidade e estilo", que abre a aba Gestão.
+  - **Visão Geral começa com a "Ficha do artista"**: cartões em 2 colunas com
+    Nacionalidade (bandeira + nome), Estilo principal, Gravadora, Na ativa
+    desde, Contrato e Awards (vitórias e indicações, os mesmos números da
+    aba Awards). Depois vêm Biografia e o resto da Visão Geral de hoje.
+  - **Acessível:** a bandeira nunca aparece sozinha (sempre com o nome do
+    país, e o emoji é escondido do leitor de tela); selos com altura mínima
+    de 32 px e texto que não sai do selo (regras do `CLAUDE.md`); "Não
+    informada" quando faltar, em vez de vazio.
+  - **Dados:** país, estilo e gravadora já vêm de `GET /api/artistas/perfil`.
+    "Na ativa desde" usa a coluna ANO EM QUE INICIOU A CARREIRA, que já está
+    no espelho (`ano_inicio`) mas **ainda não sai na API**: incluir
+    `anoInicio` na resposta (só leitura; nenhuma regra muda). Bandeira:
+    tabela país → emoji no front (mesma lista de países de `pais_peso`).
 - O critério de admin passa a ser um só: `isAdminLogin` (`LoginScreen.tsx`).
   O `useIsAdmin` da fase 0 usa essa função.
 

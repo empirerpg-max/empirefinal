@@ -203,6 +203,18 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 .awNom{display:flex;gap:8px;align-items:center;min-width:0;padding:6px;border-radius:12px;background:var(--p-surface2)}
 .awNom>span:first-child{width:36px;height:36px;border-radius:8px;flex-shrink:0}
 .awNom b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.awNom small{display:block;font-size:10.5px;color:var(--p-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.idChips{display:flex!important;flex-wrap:nowrap;gap:6px;margin-top:10px;overflow-x:auto;scrollbar-width:none}.idChips:empty{display:none!important}
+.idChips>.idChip{flex:0 0 auto;width:auto;margin:0!important}
+.idChip{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;padding:6px 12px;border-radius:999px;background:var(--p-surface2);border:1px solid var(--p-line);font-size:12.5px;font-weight:800;letter-spacing:.02em;color:var(--p-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:32px}
+.idChip>span{flex-shrink:0;font-size:14px}
+button.idChip:active{transform:scale(.97)}
+.idChip.st{font-weight:700;color:var(--p-muted)}
+.idFalta{display:block;margin-top:10px;font-size:12.5px;font-weight:800;color:#f59e0b;text-align:left;padding:4px 0}
+.ficha{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px}
+.fichaI{display:flex;gap:10px;align-items:center;min-width:0;padding:12px;border-radius:16px;background:var(--p-surface);border:1px solid var(--p-line)}
+.fichaE{width:34px;height:34px;border-radius:10px;background:var(--p-surface2);display:grid;place-items:center;font-size:17px;flex-shrink:0}
+.fichaI small{display:block;font-size:11px;color:var(--p-muted);font-weight:700}
+.fichaI b{display:block;font-size:13.5px;line-height:1.25;overflow-wrap:anywhere}
 .tvAviso{position:absolute;left:12px;right:12px;bottom:72px;z-index:5;font-size:12px;padding:8px 12px;border-radius:12px;background:var(--p-surface2);box-shadow:0 6px 18px rgba(0,0,0,.25)}
 /* celular deitado: vídeo em tela cheia e o chat semitransparente na lateral */
 .stackPage.tvroom.land .stackHead{display:none}
@@ -1085,10 +1097,12 @@ const pages = {
   },
   artist(id){
     const i = +id||0, dono = (i===0||i===4), g = G[i%G.length];
+    const ID=[['🇧🇷','Brasil','POP','2019'],['🇺🇸','Estados Unidos','R&B','2017'],['🇬🇧','Reino Unido','ALTERNATIVE/ROCK','2020'],['🇰🇷','Coreia do Sul','POP','2021'],[null,null,null,'2023'],['🇲🇽','México','LATINA','2018']][i%6];
+    const idChips = `<div class="idChips">${ID[0]?`<button class="idChip" data-toast="Abre Charts › Ao vivo › Por país: ${ID[1]}" aria-label="Nacionalidade: ${ID[1]}. Ver charts de ${ID[1]}"><span aria-hidden="true">${ID[0]}</span>${ID[1]}</button>`:''}${ID[2]?`<button class="idChip" data-open="genero" data-title="${ID[2]==='ALTERNATIVE/ROCK'?'Rock':ID[2][0]+ID[2].slice(1).toLowerCase()}" aria-label="Estilo principal: ${ID[2]}. Ver página do gênero"><span aria-hidden="true">🎵</span>${ID[2]}</button>`:''}</div>`;
     const abas = ['Visão Geral','Discografia','Músicas','Vídeos','Charts','Awards','Turnês & Projetos','Social'].concat(dono?['Gestão']:[]);
     const aba = state.artistTab && abas.includes(state.artistTab) ? state.artistTab : 'Visão Geral';
     let c = '';
-    if (aba==='Visão Geral') c = `${h2('Biografia')}<p class="pad" style="margin:0;line-height:1.6">Cantora e compositora da King &amp; Queen. Três semanas no topo do Global 100 com Vidro Quebrado.</p>
+    if (aba==='Visão Geral') c = `${h2('Ficha do artista')}<div class="ficha">${[['🌎','Nacionalidade',ID[0]?ID[0]+' '+ID[1]:'Não informada'],['🎵','Estilo principal',ID[2]||'Não informado'],['🏷️','Gravadora',['King & Queen','Crown','Independent'][i%3]],['📅','Na ativa desde',ID[3]],['📄','Contrato',i%2?'Sob contrato':'Livre'],['🏆','Awards','4 vitórias · 12 indicações']].map(([e,l,v])=>`<div class="fichaI"><span class="fichaE" aria-hidden="true">${e}</span><span style="min-width:0"><small>${l}</small><b>${v}</b></span></div>`).join('')}</div>${h2('Biografia')}<p class="pad" style="margin:0;line-height:1.6">Cantora e compositora da King &amp; Queen. Três semanas no topo do Global 100 com Vidro Quebrado.</p>
       <div class="grid2" style="margin-top:14px"><div class="card" style="margin:0"><span class="muted small">Álbuns</span><b class="num" style="display:block;font-size:26px">3</b></div><div class="card" style="margin:0"><span class="muted small">Seguidores</span><b class="num" style="display:block;font-size:26px">29,4 mil</b></div></div>
       <div class="card" style="margin-top:10px;display:flex;gap:12px;align-items:center"><span class="crown" style="font-size:26px">♛</span><div><b>4 #1s no Hall of Fame</b><div class="muted small">Veja o detalhe na aba Charts</div></div></div>
       <button class="card" style="margin-top:10px;width:calc(100% - 32px);display:flex;gap:12px;align-items:center;text-align:left" data-open="tour"><span class="badge" style="background:#10b98122;color:var(--p-play)">Turnê em andamento</span><b class="small">Neon Tour · show 12 de 20</b></button>`;
@@ -1109,7 +1123,7 @@ const pages = {
         <button class="cv sm" style="width:96px;height:96px;border-radius:50%;border:4px solid var(--p-bg);background:linear-gradient(140deg,${g[1]},${g[0]})" aria-label="Foto do artista" ${dono?'data-toast="Trocar foto do artista"':''}></button>
         <div style="padding-bottom:6px;min-width:0"><span class="muted small" style="font-weight:800;text-transform:uppercase;letter-spacing:.06em">${['King & Queen','Crown','Independent'][i%3]}</span></div></div>
       <div class="pad" style="padding-top:8px"><h2 style="margin:0;font-size:28px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:-.03em">${ART[i]} <span style="color:#38bdf8;font-size:18px">✓</span></h2>
-        <span class="badge" style="margin-top:6px;background:var(--p-surface2)"><span style="width:7px;height:7px;border-radius:50%;background:${i%2?'#eab308':'var(--p-play)'}"></span>${i%2?'Sob contrato':'Livre'}</span></div>
+        <span class="badge" style="margin-top:6px;background:var(--p-surface2)"><span style="width:7px;height:7px;border-radius:50%;background:${i%2?'#eab308':'var(--p-play)'}"></span>${i%2?'Sob contrato':'Livre'}</span>${idChips}${dono&&!ID[0]?`<button class="idFalta" data-artaba="Gestão" data-open="artist" data-id="${i}">＋ Adicionar nacionalidade e estilo <span class="muted">(só você vê este aviso)</span></button>`:''}</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px 16px 4px">${[['Fortuna Total','$ 12,4 mi'],['Fortuna Vendas','$ 7,6 mi'],['Fortuna Turnês','$ 4,8 mi']].map(([l,v])=>`<div class="card" style="margin:0;padding:10px"><span class="muted" style="font-size:10.5px;font-weight:700">${l}</span><b class="num" style="display:block;font-size:16px;margin-top:2px">${v}</b></div>`).join('')}</div>
       <div class="card" style="margin-top:8px;display:flex;gap:10px;align-items:center"><span class="gicon" style="background:#f59e0b">${svg('trophy')}</span><div style="flex:1;min-width:0"><span class="muted small">Responsável — Nível 7</span><b style="display:block">Estrela em ascensão</b></div><b class="num" style="color:#f59e0b">1.240 pts</b></div>
       ${dono?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 16px 0">${[['album','Álbum','Abre Criar › Novo álbum'],['ticket','Turnê','Abre Criar › Nova turnê'],['tv','Cinema','Cinema: em breve']].map(([ic,l,t])=>`<button class="card" style="margin:0;display:grid;justify-items:center;gap:6px;padding:12px" data-toast="${t}">${svg(ic).replace('class=""','style="width:22px;height:22px;color:var(--p-accent)"')}<b class="small">${l}</b></button>`).join('')}</div>`:''}
