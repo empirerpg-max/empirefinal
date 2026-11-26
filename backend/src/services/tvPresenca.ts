@@ -41,14 +41,18 @@ export function lerMinutos(s: string | null): number[] {
   return ordenarUnicos(out);
 }
 
-/** Presença dentro de [inicio, fim), preenchendo buracos de até 2 min. */
+/** Presença dentro de [inicio, fim) em minutos inteiros, preenchendo buracos de até 2 min. */
 export function calcularPresenca(
   minutos: number[],
   inicioMs: number,
   fimMs: number,
 ): { minutosPresentes: number; duracaoMin: number; pct: number; entrouMs: number | null; saiuMs: number | null } {
-  const duracaoMin = Math.max(1, Math.ceil((fimMs - inicioMs) / MIN_MS));
-  const dentro = ordenarUnicos(minutos).filter((m) => m * MIN_MS >= inicioMs && m * MIN_MS < fimMs);
+  // Janela em minutos inteiros: do minuto que contém o início até o minuto que
+  // contém fim-1ms (transmissões começam no meio do minuto).
+  const iniMin = Math.floor(inicioMs / MIN_MS);
+  const fimMin = Math.floor((fimMs - 1) / MIN_MS);
+  const duracaoMin = Math.max(1, fimMin - iniMin + 1);
+  const dentro = ordenarUnicos(minutos).filter((m) => m >= iniMin && m <= fimMin);
   if (dentro.length === 0) {
     return { minutosPresentes: 0, duracaoMin, pct: 0, entrouMs: null, saiuMs: null };
   }
