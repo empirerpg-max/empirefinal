@@ -7,11 +7,9 @@ import {
   criarEnquete,
   votar,
   encerrar as encerrarEnquete,
-  listarEnquetesAgregado,
-  meusVotos,
+  listarEnquetes,
   idsEnquetesAbertas,
   resultadoEnquete,
-  type EnqueteView,
 } from "../services/tvEnquetes";
 import {
   minutosDeIdades,
@@ -909,10 +907,6 @@ export async function registrarEventoAdminController(
 // Enquetes do chat da Empire TV
 // ---------------------------------------------------------------------------
 
-const CACHE_ENQUETES_MS = 10_000;
-// Cache por isolate da parte agregada (igual p/ todos); meuVoto é buscado à parte.
-const cacheEnquetes = new Map<string, { expiresAt: number; lista: EnqueteView[] }>();
-
 function jsonEnquete(corpo: unknown, status: number): Response {
   return new Response(JSON.stringify(corpo), {
     status,
@@ -949,8 +943,18 @@ async function fecharEnqueteEAvisar(
   agora: number,
 ): Promise<boolean> {
   const fechou = await encerrarEnquete(db, programaId, enqueteId, agora);
-  cacheEnquetes.delete(programaId);
   if (!fechou) return false;
+  await avisarFechamento(db, programaId, enqueteId, agora);
+  return true;
+}
+
+// Só o aviso do fechamento (chat + planilha), para quem acabou de fechar a enquete.
+async function avisarFechamento(
+  db: NonNullable<ReturnType<typeof getCatalogoDb>>,
+  programaId: string,
+  enqueteId: string,
+  agora: number,
+): Promise<void> {
   await avisarNoChat(programaId, `ENQRES::${enqueteId}`);
   try {
     const r = await resultadoEnquete(db, programaId, enqueteId);
@@ -962,7 +966,6 @@ async function fecharEnqueteEAvisar(
   } catch (err) {
     console.warn("[enquetes] Falha ao gravar na aba Enquetes_TV:", err);
   }
-  return true;
 }
 
 /** POST /api/tv/enquetes — admin cria enquete e avisa no chat. */
@@ -996,8 +999,7 @@ export async function criarEnqueteChatController(request: Request): Promise<Resp
     } catch (err: any) {
       return jsonEnquete({ ok: false, erro: err?.message || "Enquete inválida." }, 400);
     }
-    cacheEnquetes.delete(programaId);
-    await avisarNoChat(programaId, `ENQ::${id}`);
+      await avisarNoChat(programaId, `ENQ::${id}`);
     return jsonEnquete({ ok: true, id }, 200);
   } catch (error: any) {
     console.error("[criarEnqueteChatController] Erro:", error);
@@ -1018,8 +1020,9 @@ export async function votarEnqueteChatController(request: Request): Promise<Resp
     if (!programaId || !enqueteId || !Array.isArray(b.opcoes)) {
       return jsonEnquete({ ok: false, erro: "Voto inválido." }, 400);
     }
-    const r = await votar(db, programaId, enqueteId, sessao.id, sessao.usuario || "Anônimo", b.opcoes as number[], Date.now());
-    cacheEnquetes.delete(programaId);
+    const r = await votar(db, programaId, enqueteId, sessao.id, sessao.usuario || "Anônimo", b.opcoes as number[], Date.now(), (p, id) =>
+      avisarFechamento(db, p, id, Date.now()),
+    );
     if (r === "invalida") return jsonEnquete({ ok: false, erro: "Voto inválido." }, 400);
     if (r === "encerrada") return jsonEnquete({ ok: false, erro: "Enquete encerrada." }, 409);
     return jsonEnquete({ ok: true }, 200);
@@ -1048,25 +1051,17 @@ export async function encerrarEnqueteChatController(request: Request): Promise<R
   }
 }
 
-/** GET /api/tv/enquetes?programa_id= — lista (agregado em cache 10 s; meuVoto por chave primária). */
+/** GET /api/tv/enquetes?programa_id= — lista (contadores na própria linha; meuVoto por chave primária). */
 export async function listarEnquetesChatController(request: Request): Promise<Response> {
   try {
     const programaId = (new URL(request.url).searchParams.get("programa_id") || "").trim();
     if (!programaId) return jsonEnquete({ ok: false, erro: "programa_id é obrigatório." }, 400);
     const db = getCatalogoDb();
     if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
-    const agora = Date.now();
-    let c = cacheEnquetes.get(programaId);
-    if (!c || c.expiresAt <= agora) {
-      c = { expiresAt: agora + CACHE_ENQUETES_MS, lista: await listarEnquetesAgregado(db, programaId, agora) };
-      cacheEnquetes.set(programaId, c);
-    }
     const sessao = await verifySessionToken(extractBearerToken(request));
-    let lista = c.lista;
-    if (sessao?.id) {
-      const meus = await meusVotos(db, lista.map((e) => e.id), sessao.id);
-      lista = lista.map((e) => ({ ...e, meuVoto: meus.get(e.id) ?? null }));
-    }
+    const lista = await listarEnquetes(db, programaId, sessao?.id || null, Date.now(), (p, id) =>
+      avisarFechamento(db, p, id, Date.now()),
+    );
     return jsonEnquete({ ok: true, enquetes: lista }, 200);
   } catch (error: any) {
     console.error("[listarEnquetesChatController] Erro:", error);

@@ -177,23 +177,40 @@ test("GET: exige programa_id; sem sessão meuVoto null; com sessão traz o voto"
   expect(j.enquetes[0].meuVoto).toBeNull();
 });
 
-test("cache: 2º GET não relê votos; voto invalida o cache", async () => {
+test("GET repetido sempre lê contadores do banco (sem cache): voto aparece na hora", async () => {
   const id = (await (await criar()).json()).id;
   const get = async () =>
     (await (await C.listarEnquetesChatController(req("/api/tv/enquetes?programa_id=p" + n, "GET"))).json()).enquetes[0];
+  expect((await get()).total).toBe(0);
+  sqls = [];
   await get();
-  const antes = lerVotos();
-  expect(antes).toBeGreaterThan(0);
-  const e2 = await get();
-  // só a busca do meuVoto por chave primária (jogador_id = ?), nunca todos os votos
-  const novas = sqls.filter((s) => s.includes("FROM tv_enquete_voto")).slice(antes);
-  expect(novas.length).toBe(1);
-  expect(novas[0]).toContain("jogador_id = ?");
-  expect(e2.total).toBe(0);
+  expect(sqls.filter((x) => /^SELECT[\s\S]*FROM tv_enquete WHERE/.test(x)).length).toBe(1);
+  expect(sqls.filter((x) => x.includes("FROM tv_enquete_voto") && !x.includes("jogador_id = ?")).length).toBe(0);
   await C.votarEnqueteChatController(req("/api/tv/enquetes/votar", "POST", { programa_id: "p" + n, enquete_id: id, opcoes: [0] }));
   const e3 = await get();
   expect(e3.total).toBe(1);
   expect(e3.meuVoto).toEqual([0]);
+});
+
+test("expiração por GET ou por votar posta ENQRES e grava a planilha uma única vez", async () => {
+  const db = (globalThis as any).__CATALOGO_DB__;
+  const prog = "p" + n;
+  const mk = () => E.criarEnquete(db, { programaId: prog, pergunta: "Q?", tipo: "unica", opcoes: ["A", "B"], secreto: false, soFim: false, encerraEmMs: Date.now() + 40, criadaPor: "adm" }, Date.now());
+  const a = await mk();
+  const b = await mk();
+  await new Promise((r) => setTimeout(r, 80));
+  const get = () => C.listarEnquetesChatController(req("/api/tv/enquetes?programa_id=" + prog, "GET"));
+  // votar na vencida: 409 + aviso
+  const rv = await C.votarEnqueteChatController(req("/api/tv/enquetes/votar", "POST", { programa_id: prog, enquete_id: a, opcoes: [0] }));
+  expect(rv.status).toBe(409);
+  // GET fecha a outra, duas vezes seguidas
+  await Promise.all([get(), get()]);
+  await get();
+  expect(inserts.map((i) => i.body.text).sort()).toEqual([`ENQRES::${a}`, `ENQRES::${b}`].sort());
+  expect(appends.length).toBe(2);
+  // votar de novo na já fechada não repete
+  await C.votarEnqueteChatController(req("/api/tv/enquetes/votar", "POST", { programa_id: prog, enquete_id: a, opcoes: [0] }));
+  expect(inserts.length).toBe(2);
 });
 
 test("evento-admin fim encerra enquetes abertas do grupo e avisa no chat", async () => {

@@ -1432,7 +1432,7 @@ export async function handleEmpireApiRoutes(
           ? await criarEnqueteChatController(request)
           : new Response(
               JSON.stringify({ success: false, error: "Use GET ou POST para /api/tv/enquetes." }),
-              { status: 405, headers: { "Content-Type": "application/json" } },
+              { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
             );
   } else if (url.pathname === "/api/tv/enquetes/votar" || url.pathname === "/api/tv/enquetes/encerrar") {
     if (request.method !== "POST") {

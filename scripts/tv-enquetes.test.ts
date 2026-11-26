@@ -77,3 +77,96 @@ test("enquete de outro programa nunca é listada, votada nem encerrada", async (
   expect(sqlite.query("SELECT COUNT(*) c FROM tv_enquete_voto WHERE enquete_id = ?").get(id)).toEqual({ c: 0 });
   expect((await E.listarEnquetes(db, "px", "j1", 1100))[0]).toMatchObject({ id, aberta: true });
 });
+
+const cont = (id: string) => sqlite.query("SELECT contagem, total FROM tv_enquete WHERE id = ?").get(id) as { contagem: string; total: number };
+
+test("contadores: primeiro voto, troca (única e múltipla), voto repetido", async () => {
+  const u = await E.criarEnquete(db, { ...base, programaId: "pc" }, 1000);
+  expect(cont(u)).toEqual({ contagem: "[0,0,0]", total: 0 });
+  await E.votar(db, "pc", u, "j1", "Ana", [0], 1100);
+  expect(cont(u)).toEqual({ contagem: "[1,0,0]", total: 1 });
+  await E.votar(db, "pc", u, "j1", "Ana", [0], 1110); // repetido
+  expect(cont(u)).toEqual({ contagem: "[1,0,0]", total: 1 });
+  await E.votar(db, "pc", u, "j1", "Ana", [2], 1120); // troca
+  expect(cont(u)).toEqual({ contagem: "[0,0,1]", total: 1 });
+  await E.votar(db, "pc", u, "j2", "Bia", [2], 1130);
+  expect(cont(u)).toEqual({ contagem: "[0,0,2]", total: 2 });
+  const m = await E.criarEnquete(db, { ...base, programaId: "pc", tipo: "multipla" }, 1000);
+  await E.votar(db, "pc", m, "j1", "Ana", [0, 1], 1100);
+  await E.votar(db, "pc", m, "j2", "Bia", [1, 2], 1100);
+  expect(cont(m)).toEqual({ contagem: "[1,2,1]", total: 2 });
+  await E.votar(db, "pc", m, "j1", "Ana", [2], 1200); // troca [0,1] -> [2]
+  expect(cont(m)).toEqual({ contagem: "[0,1,2]", total: 2 });
+  expect((await E.listarEnquetes(db, "pc", "j1", 1300)).find((x) => x.id === m)).toMatchObject({ contagem: [0, 1, 2], total: 2, pct: [0, 50, 100], vencedores: [2] });
+});
+
+test("contadores: dois votos 'simultâneos' do mesmo jogador e de jogadores diferentes", async () => {
+  const id = await E.criarEnquete(db, { ...base, programaId: "pk" }, 1000);
+  await Promise.all([E.votar(db, "pk", id, "j1", "Ana", [0], 1100), E.votar(db, "pk", id, "j1", "Ana", [1], 1100)]);
+  const c = cont(id);
+  expect(c.total).toBe(1);
+  expect(JSON.parse(c.contagem).reduce((a: number, b: number) => a + b, 0)).toBe(1);
+  await Promise.all([E.votar(db, "pk", id, "j2", "Bia", [0], 1200), E.votar(db, "pk", id, "j3", "Cai", [0], 1200)]);
+  expect(cont(id).total).toBe(3);
+  const real = sqlite.query("SELECT opcoes FROM tv_enquete_voto WHERE enquete_id = ?").all(id) as { opcoes: string }[];
+  const soma = [0, 0, 0];
+  for (const v of real) for (const i of JSON.parse(v.opcoes)) soma[i]++;
+  expect(JSON.parse(cont(id).contagem)).toEqual(soma);
+});
+
+test("votar em enquete encerrada não mexe nos contadores nem grava voto", async () => {
+  const id = await E.criarEnquete(db, { ...base, programaId: "pz" }, 1000);
+  await E.encerrar(db, "pz", id, 1100);
+  expect(await E.votar(db, "pz", id, "j1", "Ana", [0], 1200)).toBe("encerrada");
+  expect(cont(id)).toEqual({ contagem: "[0,0,0]", total: 0 });
+});
+
+test("GET: exatamente 1 leitura de tv_enquete e nenhuma leitura de todos os votos", async () => {
+  const id = await E.criarEnquete(db, { ...base, programaId: "pg" }, 1000);
+  await E.votar(db, "pg", id, "j1", "Ana", [0], 1100);
+  const prep = db.prepare;
+  const sqls: string[] = [];
+  db.prepare = (s: string) => (sqls.push(s), prep(s));
+  try {
+    await E.listarEnquetes(db, "pg", "j1", 1200);
+  } finally {
+    db.prepare = prep;
+  }
+  expect(sqls.filter((s) => /^SELECT[\s\S]*FROM tv_enquete WHERE/.test(s)).length).toBe(1);
+  const votos = sqls.filter((s) => s.includes("FROM tv_enquete_voto"));
+  expect(votos.length).toBe(1);
+  expect(votos[0]).toContain("jogador_id = ?");
+});
+
+test("meusVotos divide em blocos de 90 ids", async () => {
+  const ids = Array.from({ length: 200 }, (_, i) => "x" + i);
+  const prep = db.prepare;
+  let consultas = 0;
+  db.prepare = (s: string) => (s.includes("FROM tv_enquete_voto") && consultas++, prep(s));
+  try {
+    await E.meusVotos(db, ids, "j1");
+  } finally {
+    db.prepare = prep;
+  }
+  expect(consultas).toBe(3);
+});
+
+test("migração: tabela antiga ganha colunas e contadores preenchidos dos votos", async () => {
+  const { Database } = await import("bun:sqlite");
+  const old = new Database(":memory:");
+  old.exec("CREATE TABLE tv_enquete (programa_id TEXT NOT NULL, id TEXT NOT NULL, pergunta TEXT NOT NULL, tipo TEXT NOT NULL, opcoes TEXT NOT NULL, secreto INTEGER NOT NULL, so_fim INTEGER NOT NULL, encerra_em INTEGER, aberta INTEGER NOT NULL, criada_em INTEGER NOT NULL, encerrada_em INTEGER, criada_por TEXT, PRIMARY KEY (programa_id, id))");
+  old.exec("CREATE TABLE tv_enquete_voto (enquete_id TEXT NOT NULL, jogador_id TEXT NOT NULL, nome TEXT, opcoes TEXT NOT NULL, votado_em INTEGER NOT NULL, PRIMARY KEY (enquete_id, jogador_id))");
+  old.exec("INSERT INTO tv_enquete VALUES ('p','e1','Q','multipla','[\"A\",\"B\"]',0,0,NULL,1,1,NULL,'a')");
+  old.exec("INSERT INTO tv_enquete_voto VALUES ('e1','j1','Ana','[0,1]',1), ('e1','j2','Bia','[1]',1)");
+  const d = {
+    prepare: (sql: string, b: unknown[] = []): any => ({
+      bind: (...v: unknown[]) => d.prepare(sql, v),
+      run: async () => ({ meta: { changes: old.query(sql).run(...(b as never[])).changes } }),
+      all: async () => ({ results: old.query(sql).all(...(b as never[])) }),
+    }),
+    batch: async () => [],
+  } as any;
+  await E.garantirTabelasEnquete(d);
+  await E.garantirTabelasEnquete(d);
+  expect(old.query("SELECT contagem, total FROM tv_enquete WHERE id = 'e1'").get()).toEqual({ contagem: "[1,2]", total: 2 });
+});
