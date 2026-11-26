@@ -85,7 +85,7 @@ export function useServiceWorkerUpdate() {
         reloading = true;
         window.location.reload();
       };
-      // No meio de uma transmissão da Empire TV (sala ou mini player) não
+      // Com a sala da Empire TV aberta em tela cheia (ver salaAtiva.ts) não
       // recarrega: avisa uma vez e recarrega quando a pessoa sair da sala.
       if (salaAtiva()) {
         adiarAteSairDaSala(recarregar, toast);

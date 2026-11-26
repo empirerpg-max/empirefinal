@@ -17,7 +17,7 @@ import { estaNoFim, pertoDoTopo, decidirAoChegar } from "@/lib/tvChatRolagem";
 import { useArrastarParaResponder } from "@/hooks/useArrastarParaResponder";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
-import { salaDaUrl } from "@/lib/salaAtiva";
+import { marcarSalaAtiva, salaDaUrl } from "@/lib/salaAtiva";
 
 
 export const Route = createFileRoute("/tv")({
@@ -40,21 +40,55 @@ export const Route = createFileRoute("/tv")({
   component: TvPage,
 });
 
-// Troca só o `?sala=` da entrada ATUAL do histórico, mantendo o `state` dela
-// (marcas como tvSalaDeitada/tvChatMenu e as chaves do roteador). O roteador
-// escuta replaceState, então useSearch acompanha. Não cria entrada nova.
-function trocarSalaNaUrl(id: string | null) {
-  if (typeof window === "undefined") return;
+// Entrada da sala no histórico: `?sala={id}` + a marca `tvSala` no state.
+// Entrar pelo menu EMPURRA essa entrada (voltar fecha a sala e mostra o
+// menu); vindo do mini player de outra tela, ela SUBSTITUI a entrada /tv
+// recém-aberta. As marcas do modo deitado (B4) e do menu da mensagem (B3)
+// são empurradas por cima dela com o mesmo endereço.
+function urlComSala(id: string | null): string {
   const url = new URL(window.location.href);
-  if ((salaDaUrl(url.search) ?? null) === id) return;
   if (id) url.searchParams.set("sala", id);
   else url.searchParams.delete("sala");
-  window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  return url.pathname + url.search + url.hash;
+}
+
+function empurrarEntradaDaSala(id: string) {
+  const atual = window.history.state ?? {};
+  const idx = typeof atual.__TSR_index === "number" ? atual.__TSR_index + 1 : 1;
+  const key = Math.random().toString(36).slice(2, 10);
+  // Chaves do roteador junto: sem elas o TanStack reescreve o state numa
+  // recarga e a marca `tvSala` se perderia.
+  window.history.pushState({ __TSR_index: idx, key, __TSR_key: key, tvSala: id }, "", urlComSala(id));
+}
+
+// Troca só o `?sala=` (e a marca) da entrada ATUAL, mantendo o resto do
+// state. O roteador escuta pushState/replaceState, então useSearch acompanha.
+function trocarSalaNaUrl(id: string | null) {
+  if (typeof window === "undefined") return;
+  const st = { ...(window.history.state ?? {}) };
+  if (id) st.tvSala = id;
+  else delete st.tvSala;
+  window.history.replaceState(st, "", urlComSala(id));
 }
 
 function entradaDeOverlayDaSala(): boolean {
   const st = typeof window !== "undefined" ? window.history.state : null;
   return !!(st?.tvSalaDeitada || st?.tvChatMenu);
+}
+
+// Tira as entradas do modo deitado / menu da mensagem que estejam por cima
+// da entrada da sala (cada uma fecha no próprio popstate) e só então segue.
+function voltarAteEntradaDaSala(depois: () => void) {
+  if (!entradaDeOverlayDaSala()) {
+    depois();
+    return;
+  }
+  const onPop = () => {
+    window.removeEventListener("popstate", onPop);
+    voltarAteEntradaDaSala(depois);
+  };
+  window.addEventListener("popstate", onPop);
+  window.history.back();
 }
 
 
@@ -306,47 +340,113 @@ function TvPage() {
   }, []);
 
   // ---- Sala no endereço (?sala={id}) ----
-  // Pedido vindo do endereço ao abrir a tela (ex.: depois de uma recarga):
-  // entra direto nessa sala assim que a grade carrega; se não achar, fica no
-  // menu e tira o parâmetro.
-  const salaPedidaRef = useRef<string | null>(sala ?? null);
   const salaNaTela = watching && !floating ? String(watching.id) : null;
+  const salaNaTelaRef = useRef(salaNaTela);
+  salaNaTelaRef.current = salaNaTela;
+
+  // Só a sala em tela cheia adia recargas automáticas (staleChunk/pwa). Com
+  // só o mini player em outra tela, a recarga segue normal — uma tela
+  // quebrada é pior que perder a miniatura.
+  const salaAberta = salaNaTela != null;
+  useEffect(() => {
+    marcarSalaAtiva(salaAberta);
+  }, [salaAberta]);
+  useEffect(() => () => marcarSalaAtiva(false), []);
+
+  // A sala apareceu e o endereço ainda não tem o id dela: entrou pelo menu
+  // (ou expandiu o mini player aqui mesmo) → EMPURRA a entrada da sala;
+  // chegou de outra tela com a sala já aberta (mini player expandido) →
+  // SUBSTITUI a entrada /tv que acabou de abrir. Layout effect: roda antes
+  // do WatchView empurrar a marca do modo deitado.
+  const modoEntradaRef = useRef<"push" | "replace">(watching ? "replace" : "push");
+  useLayoutEffect(() => {
+    if (!salaNaTela) return;
+    const modo = modoEntradaRef.current;
+    modoEntradaRef.current = "push";
+    if (salaDaUrl(window.location.search) === salaNaTela) return;
+    if (modo === "push") empurrarEntradaDaSala(salaNaTela);
+    else trocarSalaNaUrl(salaNaTela);
+  }, [salaNaTela]);
+
+  const abrirPeloId = (id: string): boolean => {
+    if (watching && String(watching.id) === id) {
+      restore();
+      return true;
+    }
+    const p = programas.find((x) => String(x.id) === id);
+    if (!p) return false;
+    setWatching(p);
+    return true;
+  };
+  const abrirPeloIdRef = useRef(abrirPeloId);
+  abrirPeloIdRef.current = abrirPeloId;
+
+  // Pedido vindo do endereço ao abrir a tela (ex.: depois de uma recarga):
+  // entra direto nessa sala assim que a grade carrega, sem entrada nova; se
+  // não achar, fica no menu e tira o parâmetro.
+  const salaPedidaRef = useRef<string | null>(sala ?? null);
   useEffect(() => {
     const pedida = salaPedidaRef.current;
     if (!pedida || !gradeCarregada) return;
     salaPedidaRef.current = null;
     if (salaNaTela === pedida) return;
-    const p = programas.find((x) => String(x.id) === pedida);
-    if (!p) {
-      if (!salaNaTela) trocarSalaNaUrl(null);
-      return;
-    }
-    if (watching && String(watching.id) === pedida) restore();
-    else setWatching(p);
+    if (!abrirPeloId(pedida) && !salaNaTela) trocarSalaNaUrl(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gradeCarregada, programas]);
 
-  // Sala em tela cheia → grava o id no endereço (replace, sem entrada nova).
-  // Layout effect: roda antes do WatchView empurrar a entrada do modo
-  // deitado, então o id fica na entrada da própria sala.
-  useLayoutEffect(() => {
-    if (salaNaTela && sala !== salaNaTela) trocarSalaNaUrl(salaNaTela);
-  }, [salaNaTela, sala]);
-
-  // Saiu da sala (voltar/fechar) ou minimizou pro mini player → tira o
-  // parâmetro. Se a entrada atual ainda é a do modo deitado/menu (o WatchView
-  // está fazendo history.back() dela), espera o popstate cair na da sala.
+  // Voltar/avançar do celular ou navegador:
+  // - saiu da entrada da sala (endereço sem o id dela) → fecha a sala e o
+  //   menu da Empire TV aparece;
+  // - avançou de volta pra entrada de uma sala → reabre essa sala (a
+  //   entrada já existe, nada é empurrado de novo).
+  // As marcas do modo deitado/menu da mensagem têm o mesmo endereço da sala,
+  // então voltar delas não fecha nada aqui (cada uma cuida da sua).
   useEffect(() => {
-    if (salaNaTela) return;
-    const tirar = () => {
-      if (salaPedidaRef.current) return;
+    const onPop = () => {
+      if (window.location.pathname !== "/tv") return;
       if (entradaDeOverlayDaSala()) return;
-      if (salaDaUrl(window.location.search)) trocarSalaNaUrl(null);
+      const naUrl = salaDaUrl(window.location.search);
+      const naTela = salaNaTelaRef.current;
+      if (naTela && naUrl !== naTela) {
+        salaNaTelaRef.current = null;
+        if (naUrl && abrirPeloIdRef.current(naUrl)) return;
+        stopWatching();
+        return;
+      }
+      if (!naTela && naUrl && !salaPedidaRef.current) {
+        if (!abrirPeloIdRef.current(naUrl)) trocarSalaNaUrl(null);
+      }
     };
-    tirar();
-    window.addEventListener("popstate", tirar);
-    return () => window.removeEventListener("popstate", tirar);
-  }, [salaNaTela, sala]);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Seta/X da própria sala: volta no histórico se a entrada é a da sala
+  // (igual ao voltar do celular); senão (ex.: link aberto direto) fecha e
+  // troca o endereço pra /tv sem criar entrada.
+  const sairDaSala = () => {
+    voltarAteEntradaDaSala(() => {
+      if (window.history.state?.tvSala) {
+        window.history.back();
+      } else {
+        salaNaTelaRef.current = null;
+        stopWatching();
+        trocarSalaNaUrl(null);
+      }
+    });
+  };
+
+  // Minimizar continua mostrando o menu com o mini player; a entrada da
+  // sala sai do histórico do mesmo jeito (voltar de novo não reabre nada).
+  const minimizarSala = () => {
+    voltarAteEntradaDaSala(() => {
+      salaNaTelaRef.current = null;
+      minimize();
+      if (window.history.state?.tvSala) window.history.back();
+      else trocarSalaNaUrl(null);
+    });
+  };
 
   return (
     <div
@@ -355,7 +455,7 @@ function TvPage() {
       }`}
     >
       {watching && !floating ? (
-        <WatchView programa={watching} onBack={stopWatching} onMinimize={minimize} />
+        <WatchView programa={watching} onBack={sairDaSala} onMinimize={minimizarSala} />
       ) : (
         <BrowseView programas={programas} loading={loading} onPlay={setWatching} />
       )}

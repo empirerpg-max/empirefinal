@@ -5,7 +5,7 @@
 // module script failed" / "dynamically imported module") e a tela quebra
 // sem motivo aparente pro usuário.
 //
-// Com a sala da Empire TV ativa (sala ou mini player — ver salaAtiva.ts),
+// Com a sala da Empire TV aberta em tela cheia (ver salaAtiva.ts),
 // não recarrega: avisa uma vez e recarrega quando a pessoa sair da sala.
 //
 // Compartilhado entre dois pontos de entrada diferentes:

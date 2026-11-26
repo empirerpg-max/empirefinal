@@ -3,14 +3,15 @@ import { test, expect } from "bun:test";
 // Uso: bun test scripts/tv-sala-ativa.test.ts
 const S = await import("../src/lib/salaAtiva.ts");
 
-test("deveAdiarRecarga: adia se digitando OU na sala", () => {
+test("deveAdiarRecarga: adia se digitando OU com a sala aberta em tela cheia", () => {
+  // `sala` = sala em tela cheia na rota /tv (só mini player não adia).
   expect(S.deveAdiarRecarga(false, false)).toBe(false);
   expect(S.deveAdiarRecarga(true, false)).toBe(true);
   expect(S.deveAdiarRecarga(false, true)).toBe(true);
   expect(S.deveAdiarRecarga(true, true)).toBe(true);
 });
 
-test("marcarSalaAtiva / salaAtiva guardam o estado", () => {
+test("marcarSalaAtiva / salaAtiva guardam o estado (sala em tela cheia)", () => {
   S.marcarSalaAtiva(false);
   expect(S.salaAtiva()).toBe(false);
   S.marcarSalaAtiva(true);
@@ -19,7 +20,7 @@ test("marcarSalaAtiva / salaAtiva guardam o estado", () => {
   expect(S.salaAtiva()).toBe(false);
 });
 
-test("aoSairDaSala: avisa só quando a sala passa de ativa para inativa", () => {
+test("aoSairDaSala: avisa só quando a sala sai da tela cheia (fechou, minimizou ou trocou de tela)", () => {
   S.marcarSalaAtiva(false);
   let chamadas = 0;
   const sair = S.aoSairDaSala(() => chamadas++);

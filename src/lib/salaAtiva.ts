@@ -1,10 +1,12 @@
-// "Sala ativa" da Empire TV: alguém está numa transmissão (sala em tela
-// cheia OU mini player). Enquanto isso, nada recarrega a página sozinho —
+// "Sala ativa" da Empire TV: a sala está aberta em TELA CHEIA na rota /tv
+// (o mini player sozinho em outra tela NÃO conta: lá uma tela quebrada por
+// chunk desatualizado é pior que perder a miniatura, e a presença pendente
+// fica guardada no sessionStorage). Enquanto isso, nada recarrega sozinho —
 // nem chunk desatualizado (staleChunk.ts) nem troca de service worker
 // (pwa.ts). Relato real: no meio da transmissão a tela ficava cinza/preta e
 // a pessoa caía no menu da Empire TV, tendo que entrar de novo na sala.
 //
-// Sem dependências (nem React, nem toast): o TvPlayerProvider marca o
+// Sem dependências (nem React, nem toast): o TvPage (routes/tv.tsx) marca o
 // estado e quem quer recarregar injeta o próprio `toastFn`.
 
 type ToastFn = (
