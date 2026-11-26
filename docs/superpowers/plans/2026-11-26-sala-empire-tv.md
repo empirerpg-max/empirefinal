@@ -234,10 +234,10 @@ test("codificar/ler ida e volta e união", () => {
 - Modify: `src/routes/tv.tsx` (`WatchView`, ~linhas 737–995)
 
 **Interfaces:**
-- Produces: no celular, vídeo 16:9 sempre no topo; abaixo, **faixa fina** (título truncado + "N assistindo" + círculo da A6) e a fileira de abas existente compacta (rolável, regras do `CLAUDE.md`); o chat ocupa o resto. A lógica de teclado de hoje (`useVisualViewport`) continua: ao digitar, encolhe o chat, nunca o vídeo. Com `(orientation: landscape) and (max-height: 500px)`: vídeo em tela cheia e o chat numa coluna à direita (38%, fundo `bg-black/55`), sem abas. Voltar do celular sai do modo deitado antes de sair da sala (padrão `history.pushState` do `CLAUDE.md`).
+- Produces: no celular, vídeo 16:9 sempre no topo; abaixo, **faixa fina** (título truncado + "N assistindo" + círculo da A6) e a fileira de abas existente compacta (rolável, regras do `CLAUDE.md`); o chat ocupa o resto. A lógica de teclado de hoje (`useVisualViewport`) continua: ao digitar, encolhe o chat, nunca o vídeo. Com `(orientation: landscape) and (max-height: 500px)`: vídeo em tela cheia e o chat numa coluna à direita (38%, fundo `bg-black/55`), sem abas. Voltar do celular sai do modo deitado antes de sair da sala (padrão `history.pushState` do `CLAUDE.md`). **Computador e tablet deitado (largura da área ≥ 760 px; pedido do usuário: "na versão anterior o chat ficava na lateral")**: vídeo, faixa e abas à esquerda; **chat fixo numa coluna à direita** (`clamp(320px, 34%, 400px)`), com a faixa da enquete, as mensagens e a caixa de mensagem nessa coluna, ocupando a altura toda; o vídeo nunca empurra o chat para fora da tela. Mantém o que a `WatchView` já faz hoje no computador (`useIsDesktop`) e só ajusta a largura e a ordem.
 
 - [ ] **Step 1:** Implement.
-- [ ] **Step 2: Verify** build + Playwright 390×844 e 844×390: vídeo visível em ambos; com o teclado simulado (`visualViewport` menor), o vídeo não some.
+- [ ] **Step 2: Verify** build + Playwright 390×844, 844×390 e 1366×768: vídeo visível em todos; no 1366×768 o chat aparece inteiro na coluna da direita e dá para ler as mensagens; com o teclado simulado (`visualViewport` menor), o vídeo não some.
 - [ ] **Step 3: Commit** `feat(tv): sala com vídeo fixo no topo e modo deitado`
 
 ### Task B5: Sala não recarrega sozinha e chat leve na memória

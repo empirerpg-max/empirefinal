@@ -613,6 +613,19 @@ button.rank{min-width:32px;min-height:40px}
 .tvPinBody{max-height:42vh;overflow:auto}
 .tvPinBody .pCard{margin:0 12px 10px}
 .pollAv{max-width:calc(100% - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;padding:6px 12px}
+
+/* Sala da TV no computador e tablet: vídeo à esquerda, chat fixo na lateral direita (como na versão anterior) */
+@container (min-width: 760px){
+  .stackPage.tvroom:not(.land) .stackBody{display:grid;grid-template-columns:minmax(0,1fr) clamp(320px,34%,400px);grid-template-rows:auto auto auto auto 1fr auto auto;overflow:hidden}
+  .stackPage.tvroom:not(.land) .tvVideo{grid-column:1;grid-row:1}
+  .stackPage.tvroom:not(.land) .tvStrip{grid-column:1;grid-row:2}
+  .stackPage.tvroom:not(.land) .tvAdmin{grid-column:1;grid-row:3}
+  .stackPage.tvroom:not(.land) .tvChips{grid-column:1;grid-row:4;align-self:start}
+  .stackPage.tvroom:not(.land) .tvChatWrap{grid-column:2;grid-row:1 / 6;border-left:1px solid var(--p-line);min-height:0}
+  .stackPage.tvroom:not(.land) .tvReplyBar{grid-column:2;grid-row:6;border-left:1px solid var(--p-line)}
+  .stackPage.tvroom:not(.land) .tvComposer{grid-column:2;grid-row:7;border-left:1px solid var(--p-line)}
+  .stackPage.tvroom:not(.land) .tvVideo{max-height:calc(100cqh - 200px)}
+}
 </style>
 
 <div class="wrap">
