@@ -44,7 +44,7 @@
 |---|---|---|
 | Início do Catálogo (painel de playlists dos charts) | **Charts › Ao vivo** (sem mudança); Catálogo › Início ganha conteúdo próprio | P |
 | Listas de Músicas / Vídeos / Álbuns | Catálogo › Buscar (filtros) | P |
-| Álbuns antigos (lista e detalhe) | Catálogo › Buscar › **Material antigo** + discografia do artista + página do lançamento | P |
+| Álbuns antigos (lista e detalhe) | Catálogo › Buscar › **Álbuns** (junto dos outros, ano real; faixas em Músicas) + discografia do artista + página do lançamento | P |
 | Minhas playlists: criar, editar, excluir | Catálogo › Biblioteca | P |
 | Salvos / adicionar à playlist (`AddToPlaylistSheet`) | ⋯ de cada faixa + Biblioteca › Salvos | P |
 | Player de música e vídeo persistentes, mini player da TV | mini player acima da barra | P |
@@ -282,7 +282,7 @@ reaproveitar.
 Cruzamento das linhas marcadas **P** com o protótipo. Faltavam e foram
 desenhados: carrosséis de banner (Início e Catálogo), ticker, Meus
 artistas, Top por plataforma e Próximos eventos no Início; filtro
-**Material antigo** e alternância **Todos / Meus artistas** em Buscar;
+alternância **Todos / Meus artistas** em Buscar (o filtro Material antigo saiu: catálogo único);
 ano/mês em Artistas do mês; busca, salvar e **Playlist de clipes** na tela
 de playlist; grupo **Biblioteca** no Meu Império; **Top** e **Contador em
 0?** no Pre-save; **player expandido** (letra, Ver no Fórum, ⋯); Responder
@@ -375,3 +375,5 @@ na branch do projeto. Conferido em `src/routes/artistas.$nome.index.tsx`,
 | `isAdminLogin` (critério único de admin) | base do `useIsAdmin` (fase 0) | D |
 | Perfil, prêmios, votação e charts lendo o espelho D1 `artistas` | sem mudança de tela | D |
 | — | **NOVO:** nacionalidade (bandeira) e estilo visíveis para todos abaixo do nome (tocáveis: charts do país, página do gênero) e "Ficha do artista" no começo da Visão Geral | página do artista | **NOVO** |
+| Chart Runs na aba Charts do artista (pico + semanas, top 10, só Global 100) | aba Charts do artista: sequência de posições de cada música, Peak, 4 charts | P (mais completo) |
+| — | **NOVO:** ouvintes mensais (Spotify) abaixo do nome e Ranking do mês (Spotify, Apple, YouTube) na Visão Geral, da planilha mensal | página do artista | **NOVO** |

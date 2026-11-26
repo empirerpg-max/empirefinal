@@ -168,7 +168,7 @@ redirecionamento o que deixou de ser tela própria.
 | `/empire-play/albuns` | **redireciona** → `/empire-play/buscar?tipo=albuns` | Catálogo |
 | `/empire-play/playlists` | **redireciona** → `/empire-play/biblioteca` | Catálogo |
 | `/empire-play/playlists/nova`, `/$id`, `/$id/editar` | mesmas URLs (editor e tela de playlist) | Catálogo |
-| `/empire-play/albuns-antigos`, `/$id` | página de álbum única (5.3.4); a lista vira filtro "Material antigo" em Buscar | Catálogo |
+| `/empire-play/albuns-antigos`, `/$id` | página de álbum única (5.3.4); a lista **redireciona** para Catálogo › Buscar › Álbuns (catálogo único, sem filtro separado) | Catálogo |
 | `/empire-play/forum` (`?tab=&id=`) | aba Fórum (mesma URL e parâmetros) | Fórum |
 | `/charts` (`?tab=`) | aba Charts (mesma URL; `tab=live` = Ao vivo novo) | Charts |
 | `/social` (`?postId=&artist=`) | aba Social (mesma URL e parâmetros) | Social |
@@ -311,9 +311,18 @@ O painel de playlists que está aqui hoje **vai para Charts › Ao vivo**
   (Artistas, Músicas, Vídeos, Álbuns, até 4 por grupo); sem resultado, diz
   "Nada encontrado para …" com uma dica.
 - Filtros (fileira rolável com seta): **Tudo · Músicas · Vídeos · Álbuns ·
-  Artistas · Material antigo**. Substituem as abas Músicas, Vídeos, Álbuns,
-  a lista de Artistas e a lista de Álbuns antigos. As listas são as mesmas
-  de hoje (mesmas APIs, mesma busca por texto).
+  Artistas**. Substituem as abas Músicas, Vídeos, Álbuns, a lista de
+  Artistas e a lista de Álbuns antigos. As listas são as mesmas de hoje
+  (mesmas APIs, mesma busca por texto).
+- **Catálogo único (decisão do usuário):** não existe filtro nem botão
+  separado de "Material antigo". Os álbuns lançados como material antigo
+  (retroativo, `/api/albuns-antigos`) entram em **Álbuns** junto dos
+  outros, com o **ano real** de lançamento; as faixas deles entram em
+  **Músicas**. Em Álbuns, um seletor **Mais recentes · Por ano de
+  lançamento**. Sem selo de "antigo": é tudo uma coisa só. Custo: a lista
+  de álbuns antigos já lê todas as faixas para contar (`getAlbunsAntigosController`);
+  devolver as faixas junto não faz leitura nova. Criar › Material antigo
+  (o formulário) continua igual.
 - Sem texto digitado em "Tudo": grade **"Navegar por gênero"**. Cada
   bloco abre a **página daquele gênero** *(NOVO)*, nunca uma lista geral:
   - **Top {gênero} da semana:** a playlist de gênero que o painel já monta
@@ -953,6 +962,41 @@ lógica:**
     no espelho (`ano_inicio`) mas **ainda não sai na API**: incluir
     `anoInicio` na resposta (só leitura; nenhuma regra muda). Bandeira:
     tabela país → emoji no front (mesma lista de países de `pais_peso`).
+- **Aba Charts do artista — chart run completo (pedido do usuário):**
+  - **Hoje** (`ChartsTab`): mostra só "#pico · título · N sem." das 10
+    melhores músicas do Global 100, e só o pico em Spotify/Apple/YouTube.
+    A sequência de posições **já chega** (campo `runs[].v`, ex.: "12 - 5 -
+    1 - 1"), só não é mostrada.
+  - **Novo:** fileira rolável **Global 100 · Spotify · Apple Music ·
+    YouTube**; números do topo (#1s, Top 10, semanas no chart); e um cartão
+    por música: **título** + selo **Peak #N** (dourado no #1, roxo no top
+    10) e embaixo a **sequência de posições** semana a semana ("12 – 5 –
+    **1** – **1** – 2 – 4 …"), com #1 em dourado, top 10 em destaque e o
+    resto mais apagado; rodapé com semanas, semanas no #1, estreia e última
+    posição. Legenda das cores. Todas as músicas, ordenadas por pico e
+    depois por semanas. Leitor de tela lê "posições 12, 5, 1…".
+  - **Leitura:** zero linha a mais. O Global 100 já vem do D1
+    (`chart_artista_musica`, lida pela chave do artista: uma linha por
+    música). Para Spotify/Apple/YouTube, a **mesma consulta** já traz a
+    coluna `run`; só falta devolvê-la em `perfilHOF` (hoje devolve só o
+    pico). Charts que ainda estão só na planilha (HALL_OF_FAME_DB) seguem
+    mostrando só o pico até migrarem. **Nenhuma regra/cálculo dos charts
+    muda.**
+- **Ouvintes mensais e ranking do mês (estilo Spotify):**
+  - Abaixo do nome: **"29.483.120 ouvintes mensais no Spotify"** (último mês
+    fechado).
+  - No começo da Visão Geral: **Ranking do mês · {mês}** com 3 cartões
+    (Spotify, Apple Music, YouTube): posição no ranking do mês e ouvintes.
+    Tocar abre Charts › {plataforma} › Artistas do mês.
+  - **Dados:** os mesmos de Charts › Artistas do mês: abas RESUMO MENSAL
+    (ouvintes, `ov`) e TOP 50 ARTISTAS (posição) da planilha mensal. **Não
+    usa o D1** (zero linha lida no plano gratuito do D1). As abas já ficam
+    em cache no servidor (cache de leitura do `googleSheetsService` e das
+    respostas de `/api/charts`), compartilhado por todos os jogadores. Nova
+    ação `getArtistMonth&artist=` devolvendo, para o mês mais recente de
+    cada plataforma, ouvintes e posição, lendo as **mesmas duas abas** já
+    lidas hoje. Artista fora do TOP 50 do mês: mostra só os ouvintes, sem
+    posição; sem dado no mês: o cartão não aparece.
 - O critério de admin passa a ser um só: `isAdminLogin` (`LoginScreen.tsx`).
   O `useIsAdmin` da fase 0 usa essa função.
 
