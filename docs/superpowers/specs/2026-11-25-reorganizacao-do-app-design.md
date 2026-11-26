@@ -1280,7 +1280,23 @@ distintos por dia". Os dados ficam guardados por 90 dias.
 
 ### 6.17 Fontes
 
-As mesmas de hoje (conferido em `__root.tsx` e nos componentes):
+**Decidido (2026-11-26): Geist no Beta inteiro.**
+
+- **Geist** (400, 500, 600, 700) em texto, títulos, números, Charts,
+  painel de playlists e capas dinâmicas. Substitui Inter, Fjalla One e
+  Poppins **no Beta**; a versão anterior continua com as fontes de hoje.
+- Títulos grandes: 600, sem itálico, sem caixa alta, espaçamento –0,045em.
+  Títulos de seção: 600–700. Corpo: 400–500. Números (fortuna, charts,
+  ouvintes): 600 com algarismos tabulares, sem itálico. Nada em 900.
+- Caixa alta fica só em rótulos pequenos (ex.: "DISCO 1", "SÓ ADMIN").
+- **Como carregar:** hospedar no próprio app (pacote `geist` da Vercel ou
+  `@fontsource-variable/geist`, licença OFL) em vez do Google Fonts, com
+  `font-display: swap` e pré-carregamento do peso 400/600 — menos uma ida a
+  outro servidor no celular. Press Start 2P sai.
+- **Charts:** só a aparência muda (a fonte); nenhuma lógica, cálculo ou
+  dado.
+
+Fontes de hoje, para referência (conferido em `__root.tsx` e nos componentes):
 - **Inter:** texto e títulos do app inteiro.
 - **Fjalla One** (estreita, maiúsculas): títulos dos **Charts** e do
   painel de playlists (`PlaylistsInicio`, que vira Charts › Ao vivo).
@@ -1304,7 +1320,7 @@ qualquer tela:
 
 Em todas as opções novas: sem itálico e sem peso 900; a identidade fica na
 cor roxa, no logo e nas capas. Os Charts seguem a fonte escolhida (só
-aparência; nenhuma lógica muda). Escolha pendente do usuário.
+aparência; nenhuma lógica muda). **Escolhida pelo usuário: Geist.**
 
 ### 6.18 Admin "vendo como" outro jogador
 
@@ -1663,7 +1679,7 @@ fase 3 deve vir logo em seguida (call meu: entregar 2 e 3 juntas se der).
 | ~~D3~~ | **Decidido:** cor por papel (U13). | — | — |
 | D4 | Lista dos controllers `adminDiag*` que podem ser apagados na fase 6 | usuário (na fase 6) | só limpeza |
 | D5 | Som da Kick: resultado do teste da opção 1 (`/tv-teste-som`) no iPhone e no Android; se não funcionar, avaliar a opção 3 | usuário (teste no celular) | sala da TV |
-| D7 | Fonte do Beta: atual, Inter fina, Geist (recomendada) ou Editorial (6.17) | usuário | aparência de todo o app |
+| ~~D7~~ | **Decidido:** Geist em todo o Beta (6.17). | — | — |
 | D6 | Participação na TV só pelo tempo presente (mensagem só prova presença no minuto), no lugar de "vale o maior entre presença e chat" | usuário | REGISTRO e prestígio |
 
 ---
