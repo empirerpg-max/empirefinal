@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck, Copy } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost, type EnquetePayload } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
@@ -12,6 +14,7 @@ import { useImageCrop } from "@/hooks/use-image-crop";
 import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
 import { resolveStreamEmbed, kickChannelFromUrl, forceUnmuteIframe, hasUnmutedThisSession } from "@/lib/tvEmbed";
 import { estaNoFim, pertoDoTopo, decidirAoChegar } from "@/lib/tvChatRolagem";
+import { useArrastarParaResponder } from "@/hooks/useArrastarParaResponder";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
 
@@ -984,6 +987,33 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
 }
 
 // ---------- Chat (realtime via Lovable Cloud) ----------
+// Linha de mensagem do chat: compacta, com gesto de arrastar (responder) e
+// toque longo (menu). Fica compacta para todos; as próprias ganham fundo sutil.
+function LinhaMensagem({ id, className, onResponder, onMenu, children }: {
+  id: string;
+  className?: string;
+  onResponder: () => void;
+  onMenu: (pos: { x: number; y: number }) => void;
+  children: React.ReactNode;
+}) {
+  const g = useArrastarParaResponder(onResponder, onMenu);
+  return (
+    <div
+      id={id}
+      {...g.handlers}
+      style={g.style}
+      className={`group flex items-start gap-2 rounded-lg px-1.5 py-1 -mx-1 ${className ?? ""}`}
+    >
+      <div
+        className="flex items-start gap-2 flex-1 min-w-0"
+        style={{ transform: g.deslocamento ? `translateX(${g.deslocamento}px)` : undefined, transition: g.ativo ? "none" : "transform 150ms ease-out" }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; onOpenRedCarpetPost: (postId: string) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
@@ -1281,6 +1311,33 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
+  // Menu da mensagem (toque longo / botão direito): Responder e Copiar texto.
+  // Entra no histórico: voltar fecha só o menu (regra "voltar = tela anterior").
+  const [menuMsg, setMenuMsg] = useState<{ m: ChatMessage; x: number; y: number } | null>(null);
+  const abrirMenu = (m: ChatMessage, pos: { x: number; y: number }) => setMenuMsg({ m, ...pos });
+  useEffect(() => {
+    if (!menuMsg) return;
+    window.history.pushState({ tvChatMenu: true }, "");
+    const onPop = () => {
+      if (!window.history.state?.tvChatMenu) setMenuMsg(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [menuMsg]);
+  const fecharMenu = () => {
+    if (window.history.state?.tvChatMenu) window.history.back();
+    else setMenuMsg(null);
+  };
+  const copiarMensagem = async (m: ChatMessage) => {
+    const texto = m.text.startsWith(GIF_PREFIX) || m.text.startsWith(VIDEO_GIF_PREFIX) ? m.text.replace(/^[A-Z_]+::/, "") : m.text;
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast.success("Texto copiado");
+    } catch {
+      toast.error("Não foi possível copiar");
+    }
+  };
+
   const sendRaw = async (rawText: string) => {
     const payload = {
       programa_id: programaId,
@@ -1510,83 +1567,112 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
               );
             }
             const own = myId ? m.userId === myId : m.user === displayName;
+            const ehMidia = m.text.startsWith(GIF_PREFIX) || m.text.startsWith(VIDEO_GIF_PREFIX);
             return (
-              <div
+              <LinhaMensagem
                 key={m.id}
                 id={`tvmsg-${m.id}`}
-                className={`group flex items-end gap-2 rounded-lg px-1 py-0.5 -mx-1 ${own ? "flex-row-reverse" : ""} ${m.pending ? "opacity-50" : ""}`}
+                className={`${own ? "bg-primary/5" : ""} ${m.pending ? "opacity-50" : ""}`}
+                onResponder={() => startReply(m)}
+                onMenu={(pos) => abrirMenu(m, pos)}
               >
-                {!own && (
-                  <div className="size-7 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mb-0.5">
-                    {m.userPhoto ? (
-                      <SmartImg
-                        src={m.userPhoto}
-                        alt=""
-                        className="w-full h-full object-cover"
-                        fallback={<span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>}
-                      />
-                    ) : (
-                      <span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>
-                    )}
-                  </div>
-                )}
+                <div className="size-6 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mt-0.5">
+                  {m.userPhoto ? (
+                    <SmartImg
+                      src={m.userPhoto}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      fallback={<span className={`text-[9px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>}
+                    />
+                  ) : (
+                    <span className={`text-[9px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>
+                  )}
+                </div>
 
-                <div className={`max-w-[78%] flex flex-col ${own ? "items-end" : "items-start"}`}>
+                <div className="flex-1 min-w-0 leading-snug break-words">
                   {m.reply_to && (
                     <button
                       type="button"
                       onClick={() => scrollToMsg(m.reply_to!.id)}
-                      className={`block w-full text-left mb-1 pl-2 py-1 border-l-2 border-primary/60 text-[11px] rounded-r bg-black/10 hover:bg-black/20 transition-colors ${own ? "text-right border-l-0 border-r-2 pr-2 pl-0" : ""}`}
+                      className="block w-full min-w-0 text-left mb-0.5 pl-2 py-0.5 border-l-2 border-primary/60 text-[11px] rounded-r bg-black/10 hover:bg-black/20 transition-colors truncate"
                     >
                       <span className="font-semibold text-primary/80">{m.reply_to.user}</span>
                       <span className="text-muted-foreground">: {m.reply_to.text.startsWith(GIF_PREFIX) || m.reply_to.text.startsWith(VIDEO_GIF_PREFIX) ? "GIF/figurinha" : m.reply_to.text}</span>
                     </button>
                   )}
-                  {m.text.startsWith(GIF_PREFIX) || m.text.startsWith(VIDEO_GIF_PREFIX) ? (
-                    <div className={`rounded-2xl overflow-hidden bg-muted/40 min-h-[96px] min-w-[96px] ${own ? "rounded-br-sm" : "rounded-bl-sm"} max-w-[180px]`}>
-                      {!own && (
-                        <span className={`block text-[11px] font-bold px-2 pt-1 bg-muted ${m.color}`}>{m.user}</span>
-                      )}
-                      {m.text.startsWith(VIDEO_GIF_PREFIX) ? (
-                        <LazyGifVideo src={m.text.slice(VIDEO_GIF_PREFIX.length)} />
-                      ) : (
-                        <img
-                          src={m.text.slice(GIF_PREFIX.length)}
-                          alt="GIF"
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          className="w-full h-auto block"
-                        />
-                      )}
-                    </div>
+                  {ehMidia ? (
+                    <>
+                      <span className={`block text-[13px] font-bold ${m.color}`}>{m.user}</span>
+                      <div className="rounded-2xl overflow-hidden bg-muted/40 min-h-[96px] min-w-[96px] max-w-[180px] mt-0.5">
+                        {m.text.startsWith(VIDEO_GIF_PREFIX) ? (
+                          <LazyGifVideo src={m.text.slice(VIDEO_GIF_PREFIX.length)} />
+                        ) : (
+                          <img
+                            src={m.text.slice(GIF_PREFIX.length)}
+                            alt="GIF"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-auto block"
+                          />
+                        )}
+                      </div>
+                    </>
                   ) : (
-                    <div
-                      className={`relative rounded-2xl px-3 py-1.5 leading-snug break-words ${
-                        own
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
-                          : "bg-muted text-foreground rounded-bl-sm"
-                      }`}
-                    >
-                      {!own && <span className={`block text-[11px] font-bold ${m.color}`}>{m.user}</span>}
-                      <span>{renderFormattedText(m.text)}</span>
-                    </div>
+                    <span className="text-[13px]">
+                      <span className={`font-bold ${m.color}`}>{m.user}</span>{" "}
+                      <span className="text-foreground">{renderFormattedText(m.text)}</span>
+                    </span>
                   )}
                 </div>
 
                 <button
                   type="button"
                   onClick={() => startReply(m)}
-                  className="mb-1 size-7 grid place-items-center rounded-full opacity-70 active:opacity-100 active:bg-muted lg:opacity-0 lg:group-hover:opacity-100 text-muted-foreground hover:text-primary transition shrink-0"
+                  className="hidden lg:grid size-6 place-items-center rounded-full opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-primary transition shrink-0"
                   aria-label="Responder"
                 >
                   <Reply className="inline size-3.5" />
                 </button>
-              </div>
+              </LinhaMensagem>
             );
           })}
           </>
         )}
       </div>
+
+      {menuMsg && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200]" onClick={fecharMenu} onContextMenu={(e) => { e.preventDefault(); fecharMenu(); }}>
+          <div
+            role="menu"
+            className="absolute w-44 rounded-xl border border-border bg-popover text-popover-foreground shadow-xl overflow-hidden"
+            style={{
+              left: Math.max(8, Math.min(menuMsg.x - 88, window.innerWidth - 184)),
+              top: Math.max(8, Math.min(menuMsg.y - 8, window.innerHeight - 100)),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full min-w-0 flex items-center gap-2 px-3 py-2.5 text-sm text-left active:bg-muted hover:bg-muted"
+              onClick={() => { const m = menuMsg.m; fecharMenu(); startReply(m); }}
+            >
+              <Reply className="size-4 shrink-0" />
+              <span className="truncate">Responder</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full min-w-0 flex items-center gap-2 px-3 py-2.5 text-sm text-left active:bg-muted hover:bg-muted"
+              onClick={() => { const m = menuMsg.m; fecharMenu(); void copiarMensagem(m); }}
+            >
+              <Copy className="size-4 shrink-0" />
+              <span className="truncate">Copiar texto</span>
+            </button>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {/* Grudado no fundo do MESMO scroller das mensagens (não fora dele) —
           é isso que dá ao Safari um ancestral rolável válido pra revelar o
