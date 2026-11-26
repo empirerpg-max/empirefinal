@@ -240,6 +240,26 @@ test("codificar/ler ida e volta e união", () => {
 - [ ] **Step 2: Verify** build + Playwright 390×844 e 844×390: vídeo visível em ambos; com o teclado simulado (`visualViewport` menor), o vídeo não some.
 - [ ] **Step 3: Commit** `feat(tv): sala com vídeo fixo no topo e modo deitado`
 
+### Task B5: Sala não recarrega sozinha e chat leve na memória
+
+**Files:**
+- Modify: `src/lib/staleChunk.ts`, `src/lib/pwa.ts` (adiar recarga enquanto a sala da TV ou o mini player estiver ativo), `src/routes/tv.tsx` (`ChatPanel`: limite de mensagens no DOM; `LazyGifVideo`: descarregar fora da tela)
+- Create: `src/lib/salaAtiva.ts`
+- Test: `scripts/tv-sala-ativa.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `marcarSalaAtiva(ativa: boolean): void` e `salaAtiva(): boolean` (estado de módulo; o `TvPlayerContext` marca `true` com `watching != null`).
+  - `deveAdiarRecarga(digitando: boolean, sala: boolean): boolean` — adia se qualquer um for verdadeiro.
+  - Em `reloadOnStaleChunk` e no `controllerchange` de `pwa.ts`: com a sala ativa, **não recarrega**; mostra uma vez o aviso "Nova versão disponível — atualiza quando você sair da sala" e recarrega quando `salaAtiva()` voltar a `false` (ou num toque em "Atualizar agora").
+  - `ChatPanel` mantém no máximo **150** mensagens montadas (as mais novas); rolar ao topo traz as anteriores de volta (B2). `LazyGifVideo` pausa e solta o `src` quando sai da tela (`IntersectionObserver`), e recarrega ao voltar.
+
+- [ ] **Step 1: Write the failing tests** para `deveAdiarRecarga` (4 combinações) e para `marcarSalaAtiva`/`salaAtiva`.
+- [ ] **Step 2: Run** `bun test scripts/tv-sala-ativa.test.ts` — Expected: FAIL.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run** os testes + `npx tsc --noEmit -p .` + `npx vite build` — Expected: PASS / sem erros novos.
+- [ ] **Step 5: Commit** `fix(tv): sala não recarrega sozinha no meio da transmissão; chat leve na memória`
+
 ---
 
 ## Parte C — Enquetes no chat
