@@ -176,6 +176,33 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 .cOpt{display:flex;gap:8px;margin-top:8px}.cOpt input,.cQ{flex:1;min-width:0;height:40px;border-radius:12px;border:1px solid var(--p-line);background:var(--p-surface2);color:var(--p-fg);padding:0 12px;font:inherit;font-size:15px}
 .cQ{width:100%}
 .cLbl{display:block;font-size:11.5px;font-weight:800;color:var(--p-muted);margin:12px 0 4px;text-transform:uppercase;letter-spacing:.03em}
+.awGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px}
+.awPoster{position:relative;aspect-ratio:4/5;border-radius:24px;overflow:hidden;border:1px solid rgba(255,255,255,.1);text-align:left;background:#111}
+.awImg,.awShade{position:absolute;inset:0}.awImg{opacity:.85}
+.awShade{background:linear-gradient(0deg,#000,rgba(0,0,0,.4) 45%,rgba(0,0,0,.1))}
+.awPoster b{position:absolute;left:12px;right:12px;bottom:12px;color:#fff;font-weight:900;text-transform:uppercase;font-size:14px;line-height:1.1;letter-spacing:-.01em}
+.awHero{position:relative;height:300px;color:#fff;display:flex;align-items:flex-end}
+.awHero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,.15) 35%,rgba(0,0,0,.95))}
+.awHeroIn{position:relative;z-index:1;padding:0 20px 34px;width:100%;min-width:0}
+.awHeroIn h4{margin:0;font-size:28px;font-weight:900;text-transform:uppercase;line-height:1}
+.awHeroIn>span{display:block;margin-top:6px;font-size:12px;opacity:.7}
+.awSegs{display:flex;gap:14px;overflow-x:auto;scrollbar-width:none;padding-top:16px;margin:0 -20px;padding-left:20px;padding-right:20px}
+.awSegs button{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:5px;color:#fff}
+.awSegs button>span{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);display:grid;place-items:center}
+.awSegs svg{width:17px;height:17px}.awSegs small{font-size:9px;font-weight:700;text-transform:uppercase;opacity:.8;max-width:56px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.awSheet{position:relative;margin-top:-24px;border-radius:32px 32px 0 0;background:var(--p-bg);padding:22px 20px 10px}
+.awSegT{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:var(--p-muted);margin:18px 0 10px}
+.awCat{border-radius:24px;border:1px solid var(--p-line);background:var(--p-surface);padding:16px;margin-bottom:14px}
+.awCatT{margin:0 0 12px;font-size:11px;font-weight:900;text-transform:uppercase;color:var(--p-muted)}
+.awWin{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+.awWinCv{position:relative;width:80px;height:80px;border-radius:16px;flex-shrink:0;box-shadow:0 0 0 3px #fbbf24}
+.awWinCv i{position:absolute;top:-10px;right:-10px;font-style:normal;font-size:26px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+.awWinL{display:block;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#fbbf24}
+.awWinN{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.awNoms{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.awNom{display:flex;gap:8px;align-items:center;min-width:0;padding:6px;border-radius:12px;background:var(--p-surface2)}
+.awNom>span:first-child{width:36px;height:36px;border-radius:8px;flex-shrink:0}
+.awNom b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.awNom small{display:block;font-size:10.5px;color:var(--p-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tvAviso{position:absolute;left:12px;right:12px;bottom:72px;z-index:5;font-size:12px;padding:8px 12px;border-radius:12px;background:var(--p-surface2);box-shadow:0 6px 18px rgba(0,0,0,.25)}
 /* celular deitado: vídeo em tela cheia e o chat semitransparente na lateral */
 .stackPage.tvroom.land .stackHead{display:none}
@@ -818,7 +845,7 @@ function inicio(){
       <button class="todo" data-open="votacao"><span class="ring" style="background:#e11d4822;color:#e11d48">${svg('star')}</span><span class="meta" style="flex:1;min-width:0"><b>Votação do Empire Music Awards</b><small class="muted" style="display:block">Termina em 28/11 · 6 categorias</small></span>${svg('chev','chev')}</button>
       <button class="todo" data-toast="Abre: Inscrição no festival (tela de hoje)"><span class="ring" style="background:#ec489922;color:#ec4899">${svg('ticket')}</span><span class="meta" style="flex:1;min-width:0"><b>Inscrição: Festival de Verão</b><small class="muted" style="display:block">Inscrições abertas até 05/12</small></span>${svg('chev','chev')}</button>
     </div>`;
-    html += h2('Resultados') + `<div class="group">${[['VMA 2025','Resultado completo · 14 categorias','#f59e0b'],['Empire Music Awards 2025','Resultado completo','#7c3aed'],['Grammy Empire 2025','Resultado completo','#0ea5e9']].map(([n,st,c])=>`<button class="row" data-toast="Abre o resultado de ${n} (página do award de hoje)"><span class="gicon" style="background:${c}">${svg('trophy')}</span><span class="meta"><b>${n}</b><small>${st}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`;
+    html += h2('Awards','Ver todos','data-open="awardsAll"') + `<p class="muted small pad" style="margin:-4px 0 10px">A vitrine de hoje: vencedores e indicados de cada premiação, todos os anos.</p><div class="awGrid">${AWARDS.slice(0,4).map(awardPoster).join('')}</div>`;
     html += h2('Seus prêmios') + `<div class="group"><button class="row" data-toast="Abre: Prêmios já ganhos (retroativo)"><span class="gicon" style="background:#64748b">${svg('archive')}</span><span class="meta"><b>Registrar prêmios já ganhos</b><small>Retroativo</small></span>${svg('chev','chev')}</button></div>`;
   }
   return html;
@@ -1202,6 +1229,20 @@ const pages = {
       <label class="search">${svg('search')}<input placeholder="Pesquisar nesta lista" aria-label="Pesquisar nesta lista"></label>
       ${SONG.map((s,i)=>songRow(s,i,{rank:true,end:s.d})).join('')}`};
   },
+  awardsAll(){
+    return {title:'Awards', body:`<p class="sub" style="margin:14px 16px 12px">Histórico completo de vencedores e indicados de cada premiação.</p><div class="awGrid">${AWARDS.map(awardPoster).join('')}</div>`};
+  },
+  award(id){
+    const [n,c]=AWARDS[+id||0]; const segs=['Geral','Pop','Hip-Hop','Latina','R&B','Rock','Clipes'];
+    const anos=['2026','2025','2024','2023','2022'];
+    const cats=[['Geral','Álbum do Ano',0],['Geral','Música do Ano',2],['Pop','Melhor Artista Pop',4],['Clipes','Clipe do Ano',1]];
+    return {title:n, body:`
+      <div class="awHero" style="background:radial-gradient(90% 70% at 70% 15%,${c[0]},transparent 70%),linear-gradient(170deg,${c[1]},#000)"><div class="awHeroIn"><h4>${n}</h4><span>${anos.length} edições · 32 categorias · ${anos[0]}</span>
+        <div class="awSegs">${segs.map(sg=>`<button data-toast="Pula para ${sg}"><span>${svg('trophy')}</span><small>${sg}</small></button>`).join('')}</div></div></div>
+      <div class="awSheet"><div class="chips" style="padding:0 0 14px;margin:0 -4px">${anos.map((a,k)=>`<button class="chip" data-local-tab="awano" data-val="${k}" aria-pressed="${k===0}">${a}</button>`).join('')}</div>
+      ${cats.map(([sg,ct,a],k)=>`${k===0||cats[k-1][0]!==sg?`<p class="awSegT">${sg}</p>`:''}<div class="awCat"><p class="awCatT">${ct}</p><div class="awWin"><span class="awWinCv" style="background:linear-gradient(140deg,${G[a+1][0]},${G[a+1][1]})"><i>🏆</i></span><span style="min-width:0;flex:1"><small class="awWinL">Vencedor</small><b class="awWinN">${['Prisma','Luz Neon','Nova Era','Céu Aberto'][k]}</b><small class="muted" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ART[a]}</small></span></div><div class="awNoms">${[1,2,3,4].map(j=>`<div class="awNom"><span style="background:linear-gradient(140deg,${G[(a+j+2)%10][0]},${G[(a+j+2)%10][1]})"></span><span style="min-width:0"><b>${['Velvet','Mar Alto','Ecos','Ouro'][j-1]}</b><small>${ART[(a+j)%ART.length]}</small></span></div>`).join('')}</div></div>`).join('')}
+      <p class="muted small" style="margin:14px 0 0">Mesma página de hoje (capa, segmentos, anos, vencedor com moldura dourada e indicados). Só a cor de fundo segue o modo claro/escuro.</p></div>`};
+  },
   tv(){
     const MSG=[['Oruã','fã','o vestido da Nova tá surreal',null,['❤️ 12']],['Bia Kalli','artista','KAI CHEGOU 😱',null,['😱 8','🔥 5']],['Empire TV','equipe','Já já abrimos a enquete da noite 👀',null,[]],['Lumi Ray','artista','alguém sabe a ordem das apresentações?',null,[]],['Dante Cruz','fã','primeiro a Nova, depois o The Velvet Arc','Lumi Ray: alguém sabe a ordem das apresentações?',['👏 3']],['Íris Sol','artista','tô no backstage, já já entro',null,['❤️ 21']],['Kai Monroe','artista','obrigado pelo carinho de vocês 🖤',null,['❤️ 40','🔥 9']]];
     const COR={fã:'var(--p-fg)',artista:'#c084fc',equipe:'#f59e0b'};
@@ -1282,6 +1323,9 @@ function pollResultMsg(p){ return `<div class="pCard pRes"><div class="pHead"><b
 function tvChatAdd(html){ const pg=stack[stack.length-1]; if(!pg) return; const c=pg.querySelector('[data-tvchat]'); if(!c) return; c.insertAdjacentHTML('beforeend',html); c.scrollTo({top:c.scrollHeight,behavior:'smooth'}); }
 function tvSys(t){ return `<p class="tvDay"><span class="tvSys">${t}</span></p>`; }
 function pollRefresh(p){ document.querySelectorAll('[data-poll="'+p.id+'"]').forEach(el=>el.outerHTML=pollCard(p)); const pin=document.querySelector('.stackPage [data-tvpin]'); const at=TVP.polls.find(x=>x.aberta); if(pin){ pin.hidden=!at; if(at) pin.querySelector('[data-tvpin-t]').textContent=at.q; } }
+/* ── vitrine de Awards (igual à de hoje: /awards e /awards/$nome) ── */
+const AWARDS=[['VMA',['#f59e0b','#7c2d12']],['Empire Music Awards',['#7c3aed','#1e1b4b']],['Grammy Empire',['#0ea5e9','#0f172a']],['BET Empire',['#ef4444','#450a0a']],['Latin Empire',['#10b981','#064e3b']],['Brit Empire',['#ec4899','#4c1d95']]];
+function awardPoster([n,c],k){ return `<button class="awPoster" data-open="award" data-id="${k}" data-title="${n}"><span class="awImg" style="background:radial-gradient(90% 70% at 70% 15%,${c[0]},transparent 70%),linear-gradient(170deg,${c[1]},#000)"></span><span class="awShade"></span><b>${n}</b></button>`; }
 /* ── pilha de telas (voltar fecha só a de cima) ── */
 const stack = [];
 function openPage(name, id, title, kind){
@@ -1562,7 +1606,7 @@ const TELAS = [
   ['tv','Início › Empire TV','Grade, Red Carpet, Arquivo', ()=>{state.tab='inicio';state.inicioTab='tv';}],
   ['tours','Início › Turnês','Minha turnê, em andamento, finalizadas, ranking', ()=>{state.tab='inicio';state.inicioTab='tours';}],
   ['imprensa','Social › Imprensa','News, Revistas, Entrevistas, Forbes, Metacritic, Empirefork', ()=>{state.tab='social';state.socialTab='Imprensa';state.acervoTab='News';}],
-  ['premiacoes','Início › Premiações','Abertas agora, Resultados (Awards), seus prêmios', ()=>{state.tab='inicio';state.inicioTab='premiacoes';}],
+  ['premiacoes','Início › Premiações','Abertas agora, vitrine de Awards, seus prêmios', ()=>{state.tab='inicio';state.inicioTab='premiacoes';}],
   ['empirefork','Imprensa › Empirefork','Best New Track, Top Artist, Arquivo', ()=>{state.tab='social';state.socialTab='Imprensa';state.acervoTab='Empirefork';}],
   ['catalogo','Catálogo › Início','Continue ouvindo, lançamentos, comunidade', ()=>{state.tab='catalogo';state.catTab='inicio';}],
   ['buscar','Catálogo › Buscar','Filtros e Navegar por gênero', ()=>{state.tab='catalogo';state.catTab='buscar';}],

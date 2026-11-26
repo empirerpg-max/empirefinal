@@ -141,7 +141,7 @@ Criar. Nenhuma URL atual deixa de abrir.
 | Social: postar como artista **ou como fã anônimo** (nome aleatório) | Criar › Post no Social (tela atual) | D |
 | Social: escolher rede (Instagram, TikTok, Twitter), anexar música, modo de publicação, texto rico com emoji | Criar › Post no Social (tela atual) | D |
 | Social: seguir perfis, ver stories | Social › Perfis e Feed | P |
-| Página de award (`/awards/$nome`) | Início › Acervo › Awards → página do award | D |
+| Página de award (`/awards/$nome`) | Início › Premiações › Awards → página do award (visual de hoje) | D |
 | Notificações: marcar como lidas | sino | D |
 | Instalar o app (aviso) | igual | D |
 | Registro de erros, heartbeat do login | automático (sem tela) | D |
@@ -319,7 +319,7 @@ tutorial em Google Docs):
 |---|---|---|
 | Acervo: Revistas, Entrevistas, Forbes, Metacritic, Empirefork (tudo o que já estava listado) | **Social › Imprensa** (mesmos nomes e conteúdo) | P |
 | Social › News (matérias, publicar, editar, excluir) | **Social › Imprensa › News** | P |
-| Acervo › Awards (lista e `/awards/$nome`) | **Início › Premiações › Resultados** | P |
+| Acervo › Awards (vitrine de pôsteres e `/awards/$nome` com capa, segmentos, anos, vencedor com moldura dourada e indicados) | **Início › Premiações › Awards**, mesma vitrine e mesma página | P |
 | Perfil › Premiações (Retroativo, Indicar, Votação) e Festivais (Inscrição) | **Início › Premiações** (Abertas agora, Seus prêmios) + atalhos em Meu Império | P |
 | Seção "Revistas & Entrevistas" da home | Início › Para você › **Da Imprensa** | P |
 

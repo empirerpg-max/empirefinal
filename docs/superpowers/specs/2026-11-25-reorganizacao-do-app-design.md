@@ -160,7 +160,7 @@ redirecionamento o que deixou de ser tela própria.
 | `/tv` | Início › Empire TV (mesma URL; a tela ganha a fileira de abas do Início em cima) | Início |
 | `/tours`, `/tours/$nome` | Início › Turnês (mesma URL) | Início |
 | `/acervo` | **Social › Imprensa** (mesma URL; a tela ganha a fileira de abas do Social) | Social |
-| `/awards`, `/awards/$nome` | **Início › Premiações › Resultados** (mesmas URLs) | Início |
+| `/awards`, `/awards/$nome` | **Início › Premiações › Awards** (vitrine; mesmas URLs) | Início |
 | `/empire-play` | Catálogo › Início (conteúdo novo, 5.3) | Catálogo |
 | `/empire-play/musicas` | **redireciona** → `/empire-play/buscar?tipo=musicas` | Catálogo |
 | `/empire-play/videos` | **redireciona** → `/empire-play/buscar?tipo=videos` | Catálogo |
@@ -263,8 +263,15 @@ espalhado.
 - **Abertas agora:** Indicar (`/premiacoes/indicar`), Votação
   (`/premiacoes/votacao`) e Inscrição em festival (`/festivais/inscricao`),
   só quando o período estiver aberto (mesmas checagens dos popups diários).
-- **Resultados:** a lista de Awards e a página de cada award (o antigo
-  Acervo › Awards, `/awards` e `/awards/$nome`).
+- **Awards (vitrine):** a **vitrine de hoje, sem mudar o visual**: grade
+  de pôsteres com a foto de cada premiação (2 por linha, nome em caixa
+  alta sobre a foto) e "Ver todos" para a vitrine completa (`/awards`).
+  Cada pôster abre a **página do award de hoje** (`/awards/$nome`): capa
+  grande, edições e categorias, fileira de ícones dos segmentos (pula para
+  o segmento), fileira de anos, e cada categoria com o **vencedor em
+  destaque** (capa com moldura dourada e troféu) e os indicados em grade.
+  Só as cores de fundo seguem o modo claro/escuro. (O antigo Acervo ›
+  Awards.)
 - **Seus prêmios:** Prêmios já ganhos (retroativo, `/premiacoes`).
 - As telas de indicar, votar, retroativo e festival continuam as de hoje.
   Meu Império mantém atalhos para elas.
