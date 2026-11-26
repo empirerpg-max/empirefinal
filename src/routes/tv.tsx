@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost, type EnquetePayload } from "@/lib/api";
@@ -1023,6 +1023,11 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   const primeiraCargaRef = useRef(true);
   const messagesRef = useRef<ChatMessage[]>([]);
   messagesRef.current = messages;
+  const restaurarAlturaRef = useRef<number | null>(null);
+  const listaRef = useRef<HTMLDivElement>(null);
+  // Identidade lida via ref no handler realtime (nunca fica velha).
+  const idRef = useRef({ myId, displayName });
+  idRef.current = { myId, displayName };
 
   // Histórico inicial + subscrição realtime — celular em segundo plano
   // (troca de app, tela apagada) costuma derrubar o websocket em silêncio,
@@ -1101,9 +1106,12 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
             const r = payload.new;
             // Decide ANTES de o DOM crescer com a mensagem nova.
             if (!messagesRef.current.some((m) => m.id === r.id)) {
-              const elR = scrollerRef.current;
-              const noFim = elR ? estaNoFim(elR) : noFimRef.current;
-              const minha = myId ? r.user_id === myId : r.user_name === displayName;
+              // Intenção do usuário (ref), não distância ao vivo: mídia que
+              // cresce depois de carregar não deve fazer quem acompanha ao
+              // vivo parecer "lendo".
+              const noFim = noFimRef.current;
+              const { myId: mid, displayName: dn } = idRef.current;
+              const minha = mid ? r.user_id === mid : r.user_name === dn;
               const d = decidirAoChegar(noFim, minha, 0);
               if (d.rolar) {
                 rolarAoFimRef.current = true;
@@ -1127,11 +1135,12 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                   reply_to: r.reply_to || undefined,
                 },
               ];
+              // Poda só acontece com a pessoa no fim (ver efeito `podar`).
               // Numa transmissão longa e movimentada, essa lista cresceria pra
               // sempre (nunca era podada) — cada mensagem nova virando mais um
               // nó no DOM (e, se for GIF-vídeo, mais um <video> decodificando)
               // até travar o app. Mantém só a janela mais recente.
-              return next.length > MAX_LIVE_MESSAGES ? next.slice(next.length - MAX_LIVE_MESSAGES) : next;
+              return noFimRef.current && next.length > MAX_LIVE_MESSAGES ? next.slice(next.length - MAX_LIVE_MESSAGES) : next;
             });
           }
         )
@@ -1165,8 +1174,6 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
     loadingOlderRef.current = true;
     setLoadingOlder(true);
     try {
-      const el = scrollerRef.current;
-      const alturaAntes = el?.scrollHeight || 0;
       const oldestIso = new Date(messages[0].ts).toISOString();
       const { supabase } = await import("@/integrations/supabase/client");
       const { data } = await supabase
@@ -1190,14 +1197,10 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
       setHasMoreHistory(mais.length === OLDER_PAGE_SIZE);
       if (mais.length > 0) {
         justLoadedOlderRef.current = true;
+        restaurarAlturaRef.current = scrollerRef.current?.scrollHeight ?? null;
         setMessages((prev) => {
           const existentes = new Set(prev.map((m) => m.id));
           return [...mais.reverse().filter((m) => !existentes.has(m.id)), ...prev];
-        });
-        // Mantém a posição de leitura — sem isso, prepender mensagens acima
-        // empurra tudo pra baixo e a pessoa "perde o lugar" onde estava lendo.
-        requestAnimationFrame(() => {
-          if (el) el.scrollTop = el.scrollHeight - alturaAntes;
         });
       }
     } finally {
@@ -1225,12 +1228,45 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
     }
   }, [messages]);
 
+  // Mantém a posição de leitura ao prepender antigas: ajusta no commit
+  // (antes da pintura), sem depender de timing de requestAnimationFrame.
+  useLayoutEffect(() => {
+    const antes = restaurarAlturaRef.current;
+    if (antes === null) return;
+    restaurarAlturaRef.current = null;
+    const el = scrollerRef.current;
+    if (el) el.scrollTop = el.scrollHeight - antes;
+  }, [messages]);
+
+  // Poda de memória só com a pessoa no fim (nunca tira conteúdo de quem lê).
+  const podar = () =>
+    setMessages((prev) => (prev.length > MAX_LIVE_MESSAGES ? prev.slice(prev.length - MAX_LIVE_MESSAGES) : prev));
+  useEffect(() => {
+    if (noFimRef.current && messages.length > MAX_LIVE_MESSAGES && !loadingOlderRef.current) podar();
+  }, [messages]);
+
+  // Mídia (GIF/vídeo) cresce depois de carregar, sem evento de scroll: se a
+  // pessoa estava no fim, reancora no fim.
+  useEffect(() => {
+    const lista = listaRef.current;
+    const el = scrollerRef.current;
+    if (!lista || !el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (noFimRef.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(lista);
+    return () => ro.disconnect();
+  }, []);
+
   const onScrollChat = () => {
     const el = scrollerRef.current;
     if (!el) return;
     const noFim = estaNoFim(el);
     noFimRef.current = noFim;
-    if (noFim) setNovas((n) => (n === 0 ? n : 0));
+    if (noFim) {
+      setNovas((n) => (n === 0 ? n : 0));
+      if (messagesRef.current.length > MAX_LIVE_MESSAGES && !loadingOlderRef.current) podar();
+    }
     if (pertoDoTopo(el.scrollTop) && hasMoreHistory && !loadingOlder) loadOlderMessages();
   };
 
@@ -1442,7 +1478,7 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
         vez de arrastar a tela inteira (e o vídeo) quando o campo focado
         fica fora de qualquer ancestral rolável. */}
     <div ref={scrollerRef} onScroll={onScrollChat} className="flex-1 overflow-y-auto min-h-0 flex flex-col">
-      <div className="flex-1 px-3 py-3 space-y-2 text-sm">
+      <div ref={listaRef} className="flex-1 px-3 py-3 space-y-2 text-sm">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-xs text-center px-6">
             Seja o primeiro a comentar.
@@ -1507,7 +1543,7 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                     </button>
                   )}
                   {m.text.startsWith(GIF_PREFIX) || m.text.startsWith(VIDEO_GIF_PREFIX) ? (
-                    <div className={`rounded-2xl overflow-hidden ${own ? "rounded-br-sm" : "rounded-bl-sm"} max-w-[180px]`}>
+                    <div className={`rounded-2xl overflow-hidden bg-muted/40 min-h-[96px] min-w-[96px] ${own ? "rounded-br-sm" : "rounded-bl-sm"} max-w-[180px]`}>
                       {!own && (
                         <span className={`block text-[11px] font-bold px-2 pt-1 bg-muted ${m.color}`}>{m.user}</span>
                       )}
