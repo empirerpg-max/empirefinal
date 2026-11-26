@@ -1992,7 +1992,9 @@ export const api = {
     });
     return res.json();
   },
-  async authHeartbeat(telegramId: string, usuario: string): Promise<LoginResult | null> {
+  // "revogado" = conta apagada da planilha ou acesso removido pelo admin —
+  // quem chama deve deslogar na hora (ver AuthGate em __root.tsx).
+  async authHeartbeat(telegramId: string, usuario: string): Promise<LoginResult | null | "revogado"> {
     try {
       const res = await fetch("/api/auth/heartbeat", {
         method: "POST",
@@ -2000,6 +2002,7 @@ export const api = {
         body: JSON.stringify({ telegramId, usuario }),
       });
       const json = await res.json().catch(() => null);
+      if (json?.acessoRevogado) return "revogado";
       if (json?.token) setStoredSessionToken(json.token);
       // Refresca a sessão salva (nome/foto/tipo/prestígio) com o que está
       // AGORA na planilha — antes disso só acontecia no login, então uma

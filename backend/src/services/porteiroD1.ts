@@ -24,6 +24,7 @@ import {
   lerIntervalo,
   limparIntervalo,
   parseA1,
+  ultimaLinha,
   removerLinhas,
 } from "./planilhaVirtualD1";
 
@@ -154,6 +155,20 @@ export async function definirEstadoAba(aba: string, estado: EstadoAba): Promise<
 export async function lerD1(spreadsheetId: string, aba: string, range = "A:ZZ"): Promise<string[][]> {
   await garantirTabelas();
   return lerIntervalo(spreadsheetId, aba, range);
+}
+
+/**
+ * Só as últimas `n` linhas de DADOS (sem cabeçalho) da aba, em ordem de
+ * planilha. Lê ~n+1 linhas do D1 em vez da aba inteira (economia de
+ * rows_read — spec 2026-11-26-d1-rows-read-reducao). Linha inexistente
+ * no meio da faixa volta como [].
+ */
+export async function lerUltimasD1(spreadsheetId: string, aba: string, n: number): Promise<string[][]> {
+  await garantirTabelas();
+  const ult = await ultimaLinha(spreadsheetId, aba);
+  if (ult < 2 || n <= 0) return [];
+  const ini = Math.max(2, ult - n + 1);
+  return lerIntervalo(spreadsheetId, aba, `A${ini}:ZZ${ult}`);
 }
 
 /** Repete a leitura+gravação quando outra gravação mexeu na mesma linha no meio (revisão C1). */

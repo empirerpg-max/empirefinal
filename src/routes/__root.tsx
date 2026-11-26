@@ -44,7 +44,15 @@ import { useImageCrop } from "@/hooks/use-image-crop";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationBell } from "@/components/NotificationBell";
 import { BuscaRapida } from "@/components/BuscaRapida";
-import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
+import {
+  LoginScreen,
+  getStoredLogin,
+  clearStoredLogin,
+  getStoredSessionToken,
+  isImpersonating,
+  stopImpersonating,
+  type LoginResult,
+} from "@/components/LoginScreen";
 import { VmaNominationPopup } from "@/components/VmaNominationPopup";
 import { FestivalNominationPopup } from "@/components/FestivalNominationPopup";
 import { VotacaoReminderPopup } from "@/components/VotacaoReminderPopup";
@@ -637,15 +645,55 @@ function AuthGate() {
   // disparava esse crédito de novo em dias seguintes. O heartbeat é
   // idempotente (no máximo 1x/dia por jogador), então é seguro chamar toda
   // vez que o app abre.
+  //
+  // Deslogar/bloquear pelo admin (tela Gestão de usuários): o app manda o
+  // token de sessão em TODA chamada pra /api/ e, se o servidor responder com
+  // X-Acesso-Revogado, apaga a sessão salva e volta pra tela de login. Sem
+  // nenhuma checagem periódica — só aproveita as chamadas que o app já faz.
   useEffect(() => {
+    const forcarLogout = () => {
+      // Admin simulando um jogador deslogado/bloqueado: volta pro admin.
+      if (isImpersonating() && stopImpersonating()) {
+        window.location.reload();
+        return;
+      }
+      clearStoredLogin();
+      try {
+        localStorage.removeItem("tg_user_cache");
+      } catch {
+        // ignora
+      }
+      setLoggedInUser(null);
+    };
+
+    const fetchOriginal = window.fetch;
+    const fetchComSessao: typeof window.fetch = async (input, init) => {
+      let novoInit = init;
+      const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : null;
+      const token = getStoredSessionToken();
+      if (token && url && url.startsWith("/api/")) {
+        const headers = new Headers(init?.headers);
+        if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+        novoInit = { ...init, headers };
+      }
+      const res = await fetchOriginal(input, novoInit);
+      if (res.headers.get("X-Acesso-Revogado") === "1" && getStoredLogin()) forcarLogout();
+      return res;
+    };
+    window.fetch = fetchComSessao;
+
     if (authUser) {
       api
         .authHeartbeat(authUser.id, authUser.usuario)
-        .then((atualizado) => {
-          if (atualizado) setLoggedInUser(atualizado);
+        .then((resultado) => {
+          if (resultado === "revogado") forcarLogout();
+          else if (resultado) setLoggedInUser(resultado);
         })
         .catch(() => {});
     }
+    return () => {
+      if (window.fetch === fetchComSessao) window.fetch = fetchOriginal;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

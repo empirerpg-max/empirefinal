@@ -31,10 +31,20 @@ export function ActivityTicker() {
         .catch(() => {});
     }
     load();
-    const interval = setInterval(load, 60_000);
+    // Só recarrega com a aba visível (cada chamada lê o D1, que tem limite
+    // diário no plano gratuito) e atualiza na hora ao voltar pra ela.
+    const visivel = () => document.visibilityState === "visible";
+    const interval = setInterval(() => {
+      if (visivel()) load();
+    }, 60_000);
+    const aoMudarVisibilidade = () => {
+      if (visivel()) load();
+    };
+    document.addEventListener("visibilitychange", aoMudarVisibilidade);
     return () => {
       alive = false;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", aoMudarVisibilidade);
     };
   }, []);
 

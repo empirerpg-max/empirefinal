@@ -15,6 +15,7 @@ import { Route as AcessoRapidoRouteImport } from './routes/acesso-rapido'
 import { Route as AlbunsRouteImport } from './routes/albuns'
 import { Route as ChartsRouteImport } from './routes/charts'
 import { Route as EmpirePlayRouteImport } from './routes/empire-play'
+import { Route as GestaoUsuariosRouteImport } from './routes/gestao-usuarios'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PremiacoesRouteImport } from './routes/premiacoes'
@@ -93,6 +94,11 @@ const ChartsRoute = ChartsRouteImport.update({
 const EmpirePlayRoute = EmpirePlayRouteImport.update({
   id: '/empire-play',
   path: '/empire-play',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GestaoUsuariosRoute = GestaoUsuariosRouteImport.update({
+  id: '/gestao-usuarios',
+  path: '/gestao-usuarios',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MarketRoute = MarketRouteImport.update({
@@ -353,6 +359,7 @@ export interface FileRoutesByFullPath {
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
+  '/gestao-usuarios': typeof GestaoUsuariosRoute
   '/market': typeof MarketRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
@@ -409,6 +416,7 @@ export interface FileRoutesByTo {
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
+  '/gestao-usuarios': typeof GestaoUsuariosRoute
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
   '/social': typeof SocialRoute
@@ -462,6 +470,7 @@ export interface FileRoutesById {
   '/albuns': typeof AlbunsRoute
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
+  '/gestao-usuarios': typeof GestaoUsuariosRoute
   '/market': typeof MarketRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/premiacoes': typeof PremiacoesRoute
@@ -521,6 +530,7 @@ export interface FileRouteTypes {
     | '/albuns'
     | '/charts'
     | '/empire-play'
+    | '/gestao-usuarios'
     | '/market'
     | '/perfil'
     | '/premiacoes'
@@ -577,6 +587,7 @@ export interface FileRouteTypes {
     | '/acesso-rapido'
     | '/albuns'
     | '/charts'
+    | '/gestao-usuarios'
     | '/perfil'
     | '/premiacoes'
     | '/social'
@@ -629,6 +640,7 @@ export interface FileRouteTypes {
     | '/albuns'
     | '/charts'
     | '/empire-play'
+    | '/gestao-usuarios'
     | '/market'
     | '/perfil'
     | '/premiacoes'
@@ -687,6 +699,7 @@ export interface RootRouteChildren {
   AlbunsRoute: typeof AlbunsRoute
   ChartsRoute: typeof ChartsRoute
   EmpirePlayRoute: typeof EmpirePlayRouteWithChildren
+  GestaoUsuariosRoute: typeof GestaoUsuariosRoute
   MarketRoute: typeof MarketRouteWithChildren
   PerfilRoute: typeof PerfilRoute
   PremiacoesRoute: typeof PremiacoesRoute
@@ -755,6 +768,13 @@ declare module '@tanstack/react-router' {
       path: '/empire-play'
       fullPath: '/empire-play'
       preLoaderRoute: typeof EmpirePlayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gestao-usuarios': {
+      id: '/gestao-usuarios'
+      path: '/gestao-usuarios'
+      fullPath: '/gestao-usuarios'
+      preLoaderRoute: typeof GestaoUsuariosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/market': {
@@ -1240,6 +1260,7 @@ const rootRouteChildren: RootRouteChildren = {
   AlbunsRoute: AlbunsRoute,
   ChartsRoute: ChartsRoute,
   EmpirePlayRoute: EmpirePlayRouteWithChildren,
+  GestaoUsuariosRoute: GestaoUsuariosRoute,
   MarketRoute: MarketRouteWithChildren,
   PerfilRoute: PerfilRoute,
   PremiacoesRoute: PremiacoesRoute,

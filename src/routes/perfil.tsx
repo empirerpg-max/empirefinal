@@ -17,6 +17,7 @@ import {
   Cake,
   UserCog,
   Ticket,
+  Users,
 } from "lucide-react";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import {
@@ -698,6 +699,17 @@ function Perfil() {
             </div>
             {impersonarErro && <p className="text-[11px] text-red-400">{impersonarErro}</p>}
           </div>
+        )}
+        {isAdminUser && !impersonando && (
+          <Link
+            to="/gestao-usuarios"
+            className="w-full flex items-center gap-3 min-w-0 px-4 py-3.5 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-primary/40 transition"
+          >
+            <Users className="size-5 text-primary shrink-0" />
+            <span className="flex-1 min-w-0 text-left font-black uppercase text-xs tracking-widest truncate">
+              Gestão de usuários (admin)
+            </span>
+          </Link>
         )}
         <button
           onClick={() => {

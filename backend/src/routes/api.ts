@@ -132,7 +132,10 @@ import {
   updateProfileController,
   trocarSenhaController,
   authHeartbeatController,
+  adminListarUsuariosController,
+  adminAcaoUsuarioController,
 } from "../controllers/authController";
+import { barrarSeBloqueado } from "../services/acessoRevogadoService";
 import {
   getMeusArtistasNomesController,
   getArtistasDisponiveisController,
@@ -560,6 +563,8 @@ export async function handleEmpireApiRoutes(
     "/api/auth/heartbeat",
     "/api/auth/perfil",
     "/api/auth/trocar-senha",
+    "/api/auth/admin/usuarios",
+    "/api/auth/admin/acao",
     "/api/artistas/meus-nomes",
     "/api/artistas/disponiveis",
     "/api/artistas/listar-todos",
@@ -786,6 +791,15 @@ export async function handleEmpireApiRoutes(
 
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
+  // Jogador bloqueado/deslogado pelo admin: recusa a chamada e o app desloga
+  // (ver acessoRevogadoService.ts). Só KV com cache — nunca lê a planilha.
+  const bloqueio = await barrarSeBloqueado(request, url.pathname);
+  if (bloqueio) {
+    const headers = new Headers(bloqueio.headers);
+    Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v as string));
+    return new Response(bloqueio.body, { status: bloqueio.status, headers });
   }
 
   let response: Response;
@@ -1856,6 +1870,16 @@ export async function handleEmpireApiRoutes(
     response = await chartsIngestController(request);
   } else if (url.pathname === "/api/charts/admin/debug-realtime-covers") {
     response = await debugRealtimeCoversController();
+  } else if (url.pathname === "/api/auth/admin/usuarios") {
+    response = await adminListarUsuariosController(request);
+  } else if (url.pathname === "/api/auth/admin/acao") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use POST para /api/auth/admin/acao." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await adminAcaoUsuarioController(request);
   } else if (url.pathname === "/api/auth/heartbeat") {
     if (request.method !== "POST") {
       return new Response(
