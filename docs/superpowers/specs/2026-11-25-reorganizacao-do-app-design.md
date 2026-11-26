@@ -714,24 +714,40 @@ partir da troca. A conferência da migração compara `analytics.likes`.
 #### 5.7.1 Folha "Criar" (botão no topo)
 
 ```
-Criar                                    [Fechar]
-┌─────────────────────────────────────────────┐
-│ ✎  Editar meus lançamentos               ›  │
-└─────────────────────────────────────────────┘
- Nova música   Novo vídeo   Novo álbum   Faixa de álbum
- Pre-save      Post Social  Nova turnê   Material antigo
- Sinc. letra   Performance  Cinema
-               Award        (em breve)
+Criar                                              [Fechar]
+┌──────────────────────────────────────────────────────────┐
+│ ✎  Editar meus lançamentos                            ›  │
+└──────────────────────────────────────────────────────────┘
+ LANÇAR MÚSICA E VÍDEO
+ Nova música   Novo vídeo   Novo álbum ›   Faixa de álbum
+ Material      Pre-save ›   Performance    Cinema
+ antigo                     Award          (em breve)
+ PUBLICAR
+ Post no       Notícia      Revista        Entrevista
+ Social        (News)
+ TURNÊ, PLAYLIST E ARTISTA
+ Nova turnê    Nova         Novo artista   Sincronizar
+               playlist                    letra
  SÓ ADMIN
- Banners       Programação  Painel do
-               da TV        catálogo
+ Banners       Grade da TV  Painel do catálogo
 ```
 
-Cada item abre **o formulário que existe hoje**, sem mudar o conteúdo dele
-(todas as opções da seção "3ª conferência" da cobertura: participantes,
-substituir música, registrar/substituir álbum, programa da TV, botões do
-tópico, foco, objetivo no chart etc.). Performance Award aparece só quando
-há pendência (como hoje). O bloco "Só admin" aparece só para admin.
+- **Novo álbum ›** abre as três opções que a Gestão tem hoje: **Registrar
+  novo**, **Substituir nos Charts** e **Retroativo**.
+- **Pre-save ›** abre **Nova campanha** (com ou sem missões diárias,
+  material extra) e **Minhas campanhas** (completar missão, editar faixas,
+  ranking, cancelar).
+- **Novos atalhos no Criar** (as ações já existem hoje em outras telas e
+  **continuam lá também**): Notícia (Social › News, qualquer jogador com
+  artista), Revista e Entrevista (Acervo/Imprensa, botão ＋, qualquer
+  jogador com artista), Nova playlist (Catálogo › Playlists), Novo artista
+  (Perfil › Gerenciar).
+- **Ficam só onde estão hoje** (dependem do contexto) e a folha lembra
+  disso no rodapé: look no Red Carpet (sala da TV), ação do dia da turnê
+  (Pra fazer hoje / página da turnê), indicar e votar (Início ›
+  Premiações), Spotlight Banner (Market), enquete na sala (admin).
+- Rótulos longos quebram em 2 linhas, nunca cortam nem escapam (regra do
+  `CLAUDE.md`); "Programação da TV" virou "Grade da TV" para caber.
 
 #### 5.7.2 Meus lançamentos (`/meus-lancamentos`)
 
@@ -746,7 +762,9 @@ e admin).
   título, descrição, categoria, tipo, foco do lançamento, data, tracklist
   com ▲▼ e adicionar faixa nova/existente com upload, publicar faixa,
   encarte com adicionar/mover/remover, letra, Sync Studio, material extra,
-  botões do tópico, thumb). Material antigo: editar e excluir.
+  botões do tópico, thumb). Material antigo: editar e excluir. No
+  protótipo, o álbum ganhou o botão **＋ Adicionar faixa** (inédita ou já
+  publicada sem álbum), que faltava desenhar.
 - Aba Pre-save: campanhas com editar faixas, missões, Top (ranking),
   "Contador em 0? Verificar/corrigir" e cancelar campanha.
 

@@ -418,7 +418,7 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
 .createGrid button{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11.5px;font-weight:700;text-align:center;min-width:0;padding:0 2px}
 .createGrid .gi{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:var(--p-surface2)}
 .createGrid .gi svg{width:23px;height:23px}
-.createGrid span{display:block;max-width:100%;line-height:1.2;overflow-wrap:anywhere;hyphens:auto}
+.createGrid span{display:block;max-width:100%;line-height:1.2;overflow-wrap:break-word;hyphens:auto}
 .lvl{height:6px;border-radius:3px;background:var(--p-surface2);overflow:hidden;margin-top:8px}
 .lvl i{display:block;height:100%;width:62%;background:linear-gradient(90deg,var(--p-accent),#22d3ee)}
 .toast{position:absolute;left:50%;top:70px;z-index:60;transform:translate(-50%,-20px);opacity:0;background:var(--p-fg);color:var(--p-bg);padding:9px 14px;border-radius:12px;font-size:12.5px;font-weight:700;transition:.2s;pointer-events:none;max-width:88%;text-align:center}
@@ -942,11 +942,11 @@ function imprensa(){
     html += `<div style="margin:0 0 12px">${chips(['News','Revistas','Entrevistas','Forbes','Metacritic','Empirefork'], state.acervoTab, 'acervoTab')}</div>`;
     const t = state.acervoTab;
     if (t==='News'){
-    html += `<div class="pad" style="margin-bottom:8px"><button class="btn sec" style="width:100%" data-toast="Nova notícia (quem tem permissão) · editar e excluir no ⋯">${svg('pen')}Publicar notícia</button></div>`;
+    html += `<div class="pad" style="margin-bottom:8px"><button class="btn sec" style="width:100%" data-toast="Nova notícia: precisa ter um artista (também no Criar) · editar e excluir no ⋯">${svg('pen')}Publicar notícia</button></div>`;
     html += ['Íris Sol bate recorde de streams em 24h','Kai Moreau confirma turnê na Ásia','VMA 2026: veja os indicados','Dante Cruz assina com a Crown'].map((t,k)=>`<button class="row" style="align-items:flex-start" data-toast="Abre a matéria">${cover(k+4,'','sm" style="width:92px;height:64px;border-radius:10px;background:linear-gradient(140deg,'+G[k+4][0]+','+G[k+4][1]+')')}<span class="meta"><b style="white-space:normal">${t}</b><small>${['Empire News','Flash News','Empire News','Exclusivo · leitura 2 min'][k]} · há ${k+1} h</small></span></button>`).join('');
       return html;
     }
-    if (['Revistas','Entrevistas'].includes(t)) html += `<div class="pad" style="margin-bottom:12px"><button class="btn sec" style="width:100%" data-toast="Nova edição (quem tem permissão)">${svg('pen')}Publicar ${t==='Revistas'?'revista':'entrevista'}</button></div>`;
+    if (['Revistas','Entrevistas'].includes(t)) html += `<div class="pad" style="margin-bottom:12px"><button class="btn sec" style="width:100%" data-toast="Nova ${t==='Revistas'?'revista':'entrevista'}: precisa ter um artista (também no Criar)">${svg('pen')}Publicar ${t==='Revistas'?'revista':'entrevista'}</button></div>`;
     if (t==='Metacritic'){
       html += `<p class="muted pad" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px">Ranking atualizado semanalmente · músicas e álbuns</p>`;
       html += `<div style="margin-bottom:10px">${chips(['Destaques','Ranking','Artistas','Recentes','Estilo','Ano'], state.metaTab||'Destaques', 'metaTab')}</div>`;
@@ -1236,6 +1236,7 @@ const pages = {
       <div style="display:flex;gap:14px;align-items:center;padding:16px">${cover(i,'','sm" style="width:88px;height:88px;border-radius:12px;background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<div style="display:grid;gap:8px"><button class="btn sec" style="height:32px;font-size:12px" data-toast="Trocar e recortar capa">Trocar capa</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Trocar o arquivo de mídia">Trocar mídia</button></div></div>
       <div class="group">${field('Título',a.t)}${field('Tipo do lançamento','Álbum · Pré-álbum')}${field('Foco do lançamento','Spotify · Brasil')}${field('Data de lançamento','14/11/2026')}</div>
       ${h2('Tracklist','Reordenar','data-toast="Arraste ou use ▲▼ para mudar a ordem"')}<div class="group">${SONG.slice(0,4).map((s,k)=>`<div class="row"><span class="rank muted" style="font-size:14px">${k+1}</span><span class="meta"><b>${s.t}</b><small>${k===3?'Pendente · sem tópico':'Publicada'}</small></span><span style="display:flex;gap:4px">${k===3?`<span class="btn pri" style="height:28px;font-size:11.5px;padding:0 10px" role="button" data-toast="Faixa publicada (abre tópico no Fórum)">Publicar</span>`:''}<span class="btn sec" style="height:28px;width:28px;padding:0" role="button" aria-label="Subir" data-toast="Faixa movida para cima">▲</span><span class="btn sec" style="height:28px;width:28px;padding:0" role="button" aria-label="Descer" data-toast="Faixa movida para baixo">▼</span></span></div>`).join('')}</div>
+      <div class="pad" style="margin:8px 0 4px"><button class="btn sec" style="width:100%" data-toast="Adicionar faixa: inédita (título, áudio, letra) ou já publicada sem álbum">＋ Adicionar faixa</button></div>
       ${h2('Encarte','Adicionar','data-toast="Adicionar imagens ao encarte"')}<div class="shelf">${[1,2,3].map(k=>`<div class="tile" style="width:110px">${cover(k+5,'','sm" style="width:110px;height:110px;border-radius:10px;background:linear-gradient(140deg,'+G[k+5][0]+','+G[k+5][1]+')')}<div style="display:flex;gap:8px;margin-top:6px"><span class="btn sec" style="height:36px;width:40px;padding:0" role="button" aria-label="Mover para trás" data-toast="Movido para trás">◀</span><span class="btn sec" style="height:36px;width:40px;padding:0" role="button" aria-label="Mover para frente" data-toast="Movido para frente">▶</span><span class="btn sec" style="height:26px;padding:0 8px;font-size:11px;color:var(--p-down)" role="button" data-toast="Imagem removida">Remover</span></div></div>`).join('')}</div>
       ${h2('Letra e material extra')}<div class="group">
         <button class="row" data-toast="Editar letra"><span class="gicon" style="background:#0ea5e9">${svg('lyric')}</span><span class="meta"><b>Letra</b><small>Texto simples</small></span>${svg('chev','chev')}</button>
@@ -1472,14 +1473,28 @@ function closeAll(){ let n=0; while (stack.length) { const el = stack.pop(); el.
 /* ── folha "Criar" ── */
 function openCreate(){
   $('#sheet').setAttribute('aria-label','Criar');
-  const items = [['music','Nova música'],['video','Novo vídeo'],['album','Novo álbum'],['disc','Faixa de álbum'],['rocket','Pre-save'],['pen','Post no Social'],['ticket','Nova turnê'],['archive','Material antigo'],['lyric','Sincronizar letra'],['mic','Performance Award'],['tv','Cinema (em breve)']];
-  const admin = [['image','Banners'],['tv','Programação da TV'],['list','Painel do catálogo']];
-  $('#sheet').innerHTML = `<div class="grab"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b style="font-size:18px">Criar</b><button class="btn sec" style="height:32px;font-size:12px" data-close-sheet>Fechar</button></div>
-    <button class="row" style="padding:12px;margin:0 0 14px;border-radius:14px;background:var(--p-surface2)" data-close-sheet data-open-after="lancamentos"><span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg('pen')}</span><span class="meta"><b>Editar meus lançamentos</b><small>Capa, foco, tracklist, encarte, letra, publicar faixa</small></span>${svg('chev','chev')}</button>
-    <div class="createGrid">${items.map(([ic,l])=>`<button data-toast="Abre: ${l}" data-close-sheet><span class="gi">${svg(ic)}</span><span>${l}</span></button>`).join('')}</div>
-    <p class="muted small" style="margin:16px 0 8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Só admin</p>
-    <div class="createGrid">${admin.map(([ic,l])=>`<button data-toast="Abre: ${l} (admin)" data-close-sheet><span class="gi">${svg(ic)}</span><span>${l}</span></button>`).join('')}</div>`;
+  const G1=[['music','Nova música','Abre: Nova música (formulário de hoje)'],['video','Novo vídeo','Abre: Novo vídeo (formulário de hoje)'],['album','Novo álbum','sub:album'],['disc','Faixa de álbum','Abre: Lançar faixa de álbum (faixas pendentes)'],['archive','Material antigo','Abre: Material antigo (álbum antigo, data aproximada)'],['rocket','Pre-save','sub:presave'],['mic','Performance Award','Abre: Performance Award pendente'],['tv','Cinema (em breve)','Cinema: em breve']];
+  const G2=[['pen','Post no Social','Abre: novo post (como artista ou como fã anônimo)'],['list','Notícia (News)','Abre: nova notícia no Empire News (precisa ter um artista)'],['image','Revista','Abre: nova revista (páginas com + Imagem e + Texto)'],['mic','Entrevista','Abre: nova entrevista (perguntas e respostas)']];
+  const G3=[['ticket','Nova turnê','Abre: Criar turnê (continente, local, datas)'],['list','Nova playlist','Abre: Nova playlist (Catálogo › Biblioteca)'],['users','Novo artista','Abre: Meus artistas › Gerenciar › Criar artista'],['lyric','Sincronizar letra','Abre: Estúdio de sincronização']];
+  const admin = [['image','Banners'],['tv','Grade da TV'],['list','Painel do catálogo']];
+  const grid=(arr)=>`<div class="createGrid">${arr.map(([ic,l,a])=>a.startsWith('sub:')?`<button data-create-sub="${a.slice(4)}"><span class="gi">${svg(ic)}</span><span>${l}</span></button>`:`<button data-toast="${a}" data-close-sheet><span class="gi">${svg(ic)}</span><span>${l}</span></button>`).join('')}</div>`;
+  const sec=(t)=>`<p class="muted small" style="margin:16px 0 8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em">${t}</p>`;
+  $('#sheet').innerHTML = `<div class="grab"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b style="font-size:18px">Criar</b><button class="btn sec" style="height:36px;font-size:12.5px" data-close-sheet>Fechar</button></div>
+    <div style="max-height:70vh;overflow:auto;margin:0 -4px;padding:0 4px">
+    <button class="row" style="padding:12px;margin:0 0 4px;border-radius:14px;background:var(--p-surface2)" data-close-sheet data-open-after="lancamentos"><span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg('pen')}</span><span class="meta"><b>Editar meus lançamentos</b><small>Título, capa, áudio, letra, foco, tracklist, encarte, publicar faixa, pre-saves</small></span>${svg('chev','chev')}</button>
+    ${sec('Lançar música e vídeo')}${grid(G1)}
+    ${sec('Publicar')}${grid(G2)}
+    ${sec('Turnê, playlist e artista')}${grid(G3)}
+    ${sec('Só admin')}<div class="createGrid">${admin.map(([ic,l])=>`<button data-toast="Abre: ${l} (admin)" data-close-sheet><span class="gi">${svg(ic)}</span><span>${l}</span></button>`).join('')}</div>
+    <p class="muted small" style="margin:14px 0 0">Também continuam onde estão hoje: look no Red Carpet (sala da TV), ação do dia da turnê (Pra fazer hoje), indicar e votar (Início › Premiações), Spotlight Banner (Market) e enquete na sala (admin).</p></div>`;
   $('#scrim').classList.add('in'); $('#sheet').classList.add('in');
+}
+function openCreateSub(k){
+  const back=`<button class="btn sec" style="height:36px;font-size:12.5px" data-create-back>‹ Criar</button>`;
+  const rows=(arr)=>`<div class="group tvWrap" style="margin:0">${arr.map(([t,st,a])=>`<button class="row" data-toast="${a}" data-close-sheet><span class="meta"><b>${t}</b><small>${st}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`;
+  const H={album:['Novo álbum', rows([['Registrar novo','Álbum do zero: tipo, nº de faixas, cada faixa, capa e encarte','Abre: Registrar novo álbum'],['Substituir nos Charts','Incluir faixas novas, trocar capa, novo encarte num álbum já lançado','Abre: Substituir nos Charts'],['Retroativo','Álbum antigo com data aproximada do lançamento real','Abre: Álbum retroativo']])],
+           presave:['Pre-save', rows([['Nova campanha','Contagem regressiva, com ou sem missões diárias, material extra','Abre: Nova campanha de pre-save'],['Minhas campanhas','Completar missão, editar faixas, ranking, cancelar','Abre: Minhas campanhas de pre-save']])]}[k];
+  $('#sheet').innerHTML=`<div class="grab"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px"><b style="font-size:18px;min-width:0">${H[0]}</b>${back}</div>${H[1]}`;
 }
 /* ── menu ⋯ (ações de cada item) ── */
 const ACTIONS = {
@@ -1591,6 +1606,8 @@ box.addEventListener('click', e => {
   if (b.dataset.tvreact){ closeSheet(); return toast('Reação '+b.dataset.tvreact+' enviada'); }
   if (b.dataset.tvreplyGo){ closeSheet(); const pg=stack[stack.length-1]; const rb=pg.querySelector('[data-tvreply]'); rb.hidden=false; rb.querySelector('[data-tvreply-n]').textContent='Respondendo a '+b.dataset.tvreplyGo; rb.querySelector('[data-tvreply-t]').textContent=b.dataset.tvreplyGo+': '+b.dataset.tvreplyTxt; pg.querySelector('[data-tvinput]').focus({preventScroll:true}); return; }
   if (b.dataset.run!==undefined){ state.runOpen = state.runOpen===+b.dataset.run ? null : +b.dataset.run; return refreshTop(); }
+  if (b.dataset.createSub){ return openCreateSub(b.dataset.createSub); }
+  if (b.hasAttribute('data-create-back')){ return openCreate(); }
   if (b.dataset.tvevento){ const pg=stack[stack.length-1]; const st=pg.querySelector('[data-tvev-st]'); const ini=pg.querySelector('[data-tvevento="ini"]'), fim=pg.querySelector('[data-tvevento="fim"]');
     if (b.dataset.tvevento==='ini'){ TVP.evento='ao vivo'; st.textContent='🔴 Desde 20:00'; ini.disabled=true; fim.disabled=false; tvChatAdd(tvSys('🔴 O evento começou · a participação está sendo contada')); }
     else { TVP.evento='fim'; st.textContent='Encerrado 22:00'; fim.disabled=true; TVP.polls.filter(p=>p.aberta).forEach(p=>{ p.aberta=false; pollRefresh(p); tvChatAdd(pollResultMsg(p)); }); tvChatAdd(tvSys('🏁 Evento encerrado · participação calculada e enviada para a planilha')); }

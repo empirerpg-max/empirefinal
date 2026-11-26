@@ -409,3 +409,49 @@ dentro das mesmas telas de hoje** (nenhuma lógica muda):
 | Conectar (modal do ID do Telegram) | `__root.tsx` | sai, como já decidido na seção 7 do design |
 | Salvando…/Salvar Alterações, Enviando…/Publicar Comentário | `EditModal.tsx`, `CommentModal.tsx` | iguais |
 
+## 12ª conferência — todas as ações de criar e editar (2026-11-26)
+
+Levantadas pelo código (`Gestao.tsx`, `EditModal.tsx`, `GestaoPreSave.tsx`,
+`ExtraMaterial.tsx`, `acervo.tsx`, `social.tsx`, `tours.$nome.tsx`,
+`CreateTourSheet.tsx`, `market.index.tsx`, playlists, premiações, perfil) e
+pelas rotas de gravação do servidor (`backend/src/routes/api.ts`).
+
+| Ação de hoje | Onde está hoje | No Beta | Status |
+|---|---|---|---|
+| Nova música | Gestão › Músicas | Criar › Nova música | P |
+| Novo vídeo (link ou upload) | Gestão › Vídeos | Criar › Novo vídeo | P |
+| Álbum: Registrar novo / Substituir nos Charts / Retroativo | Gestão › Álbuns | Criar › Novo álbum › 3 opções | P (era só um botão; corrigido) |
+| Material antigo | Gestão (topo) | Criar › Material antigo | P |
+| Lançar faixa de álbum (pendentes) | Gestão (topo) | Criar › Faixa de álbum | P |
+| Sincronizar letra | Gestão (topo) + EditModal | Criar › Sincronizar letra + Meus lançamentos | P |
+| Performance Award (pendente) | Gestão (topo) | Criar › Performance Award (só com pendência) | P |
+| Pre-save: nova campanha (com/sem missões, material extra) | Gestão Pre save | Criar › Pre-save › Nova campanha | P (sub-opções desenhadas) |
+| Pre-save: completar missão, editar faixa, ranking, cancelar | Gestão Pre save | Criar › Pre-save › Minhas campanhas + Meus lançamentos › Pre-save | P |
+| Editar meus materiais (título, capa/thumb, áudio, descrição, categoria, letra, feat, foco, tracklist ▲▼, adicionar faixa, encarte, publicar faixa, tipo ao publicar, material extra) | Gestão › Editar meus materiais | Criar › Editar meus lançamentos (e página do lançamento) | P (＋ Adicionar faixa desenhado agora) |
+| Material antigo: editar e excluir | EditModal | Meus lançamentos › Álbuns | D |
+| Post no Social (como artista ou fã anônimo, "Gerar nome aleatório"), editar, excluir | Social | Criar › Post no Social + ⋯ do post | P |
+| Comentar, editar comentário (Social) | Social | post | P |
+| Notícia (News): publicar, editar, excluir | Social › News (＋) | Social › Imprensa › News + **Criar › Notícia** | P (atalho novo) |
+| Revista (páginas + Imagem/+ Texto), editar a sua | Acervo (＋) | Social › Imprensa › Revistas + **Criar › Revista** | P (atalho novo) |
+| Entrevista (perguntas) | Acervo (＋) | Social › Imprensa › Entrevistas + **Criar › Entrevista** | P (atalho novo) |
+| Comentar e curtir no Empirefork | Acervo › Empirefork | Social › Imprensa › Empirefork | D |
+| Nova turnê (continente, local, simular, gerar automático, por espaçamento) | Tours › Criar | Criar › Nova turnê | P |
+| Editar turnê (nome, capa) e ação do dia; editar ação (título, capa, resumo, texto, foto); comentar | página da turnê | página da turnê + Pra fazer hoje | P |
+| Nova playlist, editar (adicionar faixa por catálogo/upload/link), excluir | Catálogo › Playlists | Catálogo › Biblioteca + **Criar › Nova playlist** | P (atalho novo) |
+| Salvar / adicionar à playlist | ⋯ da faixa | ⋯ da faixa + Biblioteca | P |
+| Criar artista, vincular (moderação) | Perfil › Gerenciar | Meu Império › Meus artistas + **Criar › Novo artista** | P (atalho novo) |
+| Artista: foto, capa, biografia, nacionalidade, estilo, rescindir | página do artista › Gestão | igual | P |
+| Editar perfil (nome em OFF, foto), trocar senha | Perfil / login | Meu Império › Perfil / login | P |
+| Social › Config (@, foto, bio por rede) | Social › Config | Meu Império › Perfil no Social | P |
+| Red Carpet: postar look (várias fotos), excluir o seu | sala da TV | sala da TV › Red Carpet | P |
+| Enviar GIF novo no chat | sala da TV | sala da TV › GIF | P |
+| Fórum: avaliar e comentar, editar comentário, reagir | tópico | página do lançamento | P |
+| Premiações: preencher retroativo, indicar (e **remover indicação** em "Suas indicações"), votar (nota, termo), inscrição em festival | Perfil › Premiações / Festivais | Início › Premiações (telas de hoje) | P (remover indicação: D, tela de hoje) |
+| Ponto: distribuir (aleatório/manual, limpar), playlists (iniciar, investir, limpar) | /ponto | Meu Império › Economia › Ponto (telas de hoje) | P |
+| Market: comprar, lance no leilão, **Spotlight Banner** (comprar com imagem) | Market | Meu Império › Market (telas de hoje) | P |
+| Reportar problema no player (vídeo/conteúdo errado) | players | players | D |
+| Admin: banners, programação/publicar vídeo da TV, painel do catálogo, atualizar artistas, excluir/restaurar tópico, marcar pendente, enquete e Início/Término na sala | vários | Criar › Só admin + Meu Império › Admin + sala da TV | P |
+
+**Sem tela hoje (só servidor), não entram:** `/api/presave/vincular-faixa-existente`,
+`/api/acervo/metacritic/atualizar`, rotas `admin/diag*`/`fix*`.
+
