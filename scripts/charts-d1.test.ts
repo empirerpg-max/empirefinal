@@ -196,7 +196,7 @@ test("artistas resolvidos do catálogo/título, artista_info e pais_peso com ups
   expect(info.results).toEqual([{ nome_upper: "AMANDA BROKNE", nome: "Amanda Brokne", nacionalidade: "AUSTRÁLIA", foto: "f.jpg" }]);
   const pesos = await db.prepare("SELECT plataforma, peso FROM pais_peso WHERE pais='BRASIL' ORDER BY plataforma").all<any>();
   expect(pesos.results.map((p: any) => [p.plataforma, p.peso])).toEqual([["APPLE MUSIC", 0.05], ["SPOTIFY", 0.072], ["YOUTUBE", 0.101]]);
-  const cfg = await db.prepare("SELECT chave, valor FROM chart_config ORDER BY chave").all<any>();
+  const cfg = await db.prepare("SELECT chave, valor FROM chart_config WHERE chave NOT LIKE 'datas:%' ORDER BY chave").all<any>();
   expect(cfg.results).toEqual([{ chave: "bonus_nacionalidade", valor: "0.20" }, { chave: "charts_d1_ativo", valor: "0" }, { chave: "top_pais", valor: "50" }]);
 });
 test("reenvio de semana antiga recalcula a semana seguinte", async () => {
@@ -725,6 +725,7 @@ test("gerar-parte: escolhe semanas pendentes mais antigas inteiras até o limite
   expect(sql).toContain("DELETE FROM chart_semana WHERE data = '2026-10-28'");
   expect(sql).not.toContain("2026-11-11");
   expect(sql).not.toMatch(/\b(BEGIN|COMMIT)\b/);
+  expect(sql).toContain("SELECT 'datas:' || chart"); // regrava a lista pronta de datas no fim da parte
   // carregadas são puladas
   expect((await gerarParte(db, { carregadas: new Set(["2026-10-28"]), ativoRemoto: "0", limite: 1200 })).datas).toEqual(["2026-11-04", "2026-11-11"]);
   // semana maior que o limite: nada, com motivo

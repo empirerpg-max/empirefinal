@@ -97,11 +97,35 @@ export const CHARTS_D1_SCHEMA: string[] = [
  * coluna nova em tabela existente). Cada uma roda sozinha, fora de batch,
  * e "duplicate column" (já aplicada) é ignorado.
  */
+// Lista de datas pronta por chart em chart_config ("datas:<CHART>"): a tela
+// lê 1 linha em vez de varrer chart_datas (spec 2026-11-26-d1-rows-read-reducao).
+// Os triggers a mantêm certa em QUALQUER mudança de chart_datas (ingestão,
+// ajuste manual). Fora de CHARTS_D1_SCHEMA porque o corpo usa BEGIN…END e
+// o SQL da carga via wrangler (charts-d1-gerar-parte.ts) não pode ter BEGIN.
+export const CHARTS_D1_TRIGGERS: string[] = [
+  `CREATE TRIGGER IF NOT EXISTS tr_chart_datas_ins AFTER INSERT ON chart_datas BEGIN
+    INSERT OR REPLACE INTO chart_config (chave, valor)
+    SELECT 'datas:' || NEW.chart,
+      (SELECT json_group_array(data) FROM (SELECT data FROM chart_datas WHERE chart = NEW.chart ORDER BY data DESC));
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS tr_chart_datas_del AFTER DELETE ON chart_datas BEGIN
+    INSERT OR REPLACE INTO chart_config (chave, valor)
+    SELECT 'datas:' || OLD.chart,
+      (SELECT json_group_array(data) FROM (SELECT data FROM chart_datas WHERE chart = OLD.chart ORDER BY data DESC));
+  END`,
+];
+
+/** Regrava a lista pronta de datas de todos os charts (sem BEGIN: serve também no SQL da carga). */
+export const SQL_REGRAVAR_DATAS_CHARTS = `INSERT OR REPLACE INTO chart_config (chave, valor)
+SELECT 'datas:' || chart, json_group_array(data)
+FROM (SELECT chart, data FROM chart_datas ORDER BY chart, data DESC)
+GROUP BY chart`;
+
 export const CHARTS_D1_MIGRACOES: string[] = ["ALTER TABLE artista_info ADD COLUMN genero TEXT"];
 
 /** Cria as tabelas (se faltarem) e aplica as migrações idempotentes. */
 export async function garantirSchemaCharts(db: D1DatabaseLike): Promise<void> {
-  await db.batch(CHARTS_D1_SCHEMA.map((sql) => db.prepare(sql)));
+  await db.batch([...CHARTS_D1_SCHEMA, ...CHARTS_D1_TRIGGERS].map((sql) => db.prepare(sql)));
   for (const sql of CHARTS_D1_MIGRACOES) {
     try {
       await db.prepare(sql).run();
@@ -712,14 +736,35 @@ export async function temPesosPais(db: D1DatabaseLike, plataforma: ChartId): Pro
   return (await consultar(db, "SELECT 1 FROM pais_peso WHERE plataforma = ? LIMIT 1", plataforma)).length > 0;
 }
 
+/**
+ * Regrava em chart_config ("datas:<CHART>") a lista de datas ISO de cada
+ * chart, mais recente primeiro. No dia a dia quem mantém a lista são os
+ * triggers de chart_datas (CHARTS_D1_TRIGGERS); isto só monta a lista no
+ * primeiro acesso, antes de existir.
+ */
+export function stmtRegravarDatasCharts(db: D1DatabaseLike): D1PreparedStatement {
+  return db.prepare(SQL_REGRAVAR_DATAS_CHARTS);
+}
+
+async function lerDatasProntas(db: D1DatabaseLike, chart: ChartId): Promise<string[] | null> {
+  const [r] = await consultar<{ valor: string }>(db, "SELECT valor FROM chart_config WHERE chave = ?", `datas:${chart}`);
+  return r ? (JSON.parse(r.valor) as string[]) : null;
+}
+
 /** Datas com dados no chart, `dd/mm/aaaa`, mais recente primeiro. Vazio → fallback pra planilha. */
 export async function datasDoChart(db: D1DatabaseLike, chart: ChartId): Promise<string[]> {
-  const rows = await consultar<{ data: string }>(
-    db,
-    "SELECT data FROM chart_datas WHERE chart = ? ORDER BY data DESC",
-    chart,
-  );
-  return rows.map((r) => dataIsoParaBr(r.data));
+  let datas = await lerDatasProntas(db, chart);
+  if (!datas) {
+    // Primeiro acesso depois do deploy (ou chart sem datas): monta a lista pronta.
+    try {
+      await stmtRegravarDatasCharts(db).run();
+    } catch (e) {
+      // Banco sem as tabelas dos charts (nenhuma ingestão ainda): sem datas.
+      if (!/no such table/i.test(e instanceof Error ? e.message : String(e))) throw e;
+    }
+    datas = (await lerDatasProntas(db, chart)) ?? [];
+  }
+  return datas.map(dataIsoParaBr);
 }
 
 /** Datas ISO distintas já gravadas (qualquer chart), mais antiga primeiro. Usado pela carga inicial pra pular semanas prontas. */

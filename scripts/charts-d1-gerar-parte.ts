@@ -20,7 +20,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { lerCsv } from "./charts-d1-carga-inicial";
 import { criarD1Sqlite, type D1Sqlite } from "./charts-d1-sqlite";
-import { CHARTS_D1_SCHEMA, ingerirSemana } from "../backend/src/services/chartsD1/repo";
+import { CHARTS_D1_SCHEMA, SQL_REGRAVAR_DATAS_CHARTS, ingerirSemana } from "../backend/src/services/chartsD1/repo";
 import { dataBrParaIso } from "../backend/src/services/chartsD1/dados";
 import { MUSICAS_CREATE_STATEMENTS } from "../backend/src/services/musicasDbService";
 
@@ -241,6 +241,8 @@ export async function gerarParte(
       );
       parte.datas.push(data);
     }
+    // Lista pronta de datas por chart (chart_config "datas:<CHART>", lida pela tela).
+    parte.statements.push(SQL_REGRAVAR_DATAS_CHARTS);
     parte.escritas = parte.linhas * 2 + nDatas + pesos.length; // chart_semana: linha + ix_chart_norm
     return parte;
   }
