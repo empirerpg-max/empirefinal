@@ -139,3 +139,5 @@ CREATE INDEX IF NOT EXISTS idx_fila_backup_aba ON fila_backup_planilha(planilha,
 CREATE TABLE IF NOT EXISTS planilha_virtual_guarda (falhou INTEGER NOT NULL CHECK (falhou = 0));
 CREATE TABLE IF NOT EXISTS catalogo_estado_aba (aba TEXT PRIMARY KEY, estado TEXT NOT NULL, atualizado_em_ms INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS despachante_lock (id INTEGER PRIMARY KEY CHECK (id = 1), ate_ms INTEGER NOT NULL);
+-- Empire TV: presença por minuto, uma linha por pessoa por segmento da transmissão.
+CREATE TABLE IF NOT EXISTS tv_presenca (programa_id TEXT NOT NULL, jogador_id TEXT NOT NULL, nome TEXT, minutos TEXT NOT NULL, atualizado_em INTEGER NOT NULL, PRIMARY KEY (programa_id, jogador_id)) WITHOUT ROWID;

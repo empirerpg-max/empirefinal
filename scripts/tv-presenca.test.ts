@@ -42,3 +42,41 @@ test("idade de exatamente 6 h é mantida; 6 h + 1 ms cai", () => {
 test("lerMinutos(null) devolve lista vazia", () => {
   expect(P.lerMinutos(null)).toEqual([]);
 });
+
+// ---- D1 (tv_presenca) ----
+import { instalarFakeD1 } from "./helpers/fakeD1";
+const sqlite = instalarFakeD1();
+const db = (globalThis as any).__CATALOGO_DB__;
+const linha = (prog: string, jog: string) =>
+  sqlite.query("SELECT * FROM tv_presenca WHERE programa_id = ? AND jogador_id = ?").get(prog, jog) as any;
+
+test("gravar une minutos, só escreve quando há minuto novo", async () => {
+  await P.garantirTabelaPresenca(db);
+  await P.garantirTabelaPresenca(db); // idempotente
+  const p = { programaId: "row_5", jogadorId: "j1", nome: "Ana", minutos: [1, 2] };
+  expect(await P.gravarMinutosPresenca(db, p, 1000)).toBe("gravado");
+  expect(await P.gravarMinutosPresenca(db, { ...p, minutos: [2, 3] }, 2000)).toBe("gravado");
+  expect(linha("row_5", "j1")).toMatchObject({ minutos: "1,2,3", atualizado_em: 2000, nome: "Ana" });
+  expect(await P.gravarMinutosPresenca(db, { ...p, minutos: [3] }, 3000)).toBe("sem-novidade");
+  expect(linha("row_5", "j1").atualizado_em).toBe(2000);
+});
+
+test("lerPresencaGrupo une a pessoa em todos os segmentos", async () => {
+  await P.garantirTabelaPresenca(db);
+  await P.gravarMinutosPresenca(db, { programaId: "row_5", jogadorId: "j2", nome: "Bia", minutos: [10, 11] }, 1);
+  await P.gravarMinutosPresenca(db, { programaId: "row_6", jogadorId: "j2", nome: "Bia", minutos: [11, 12] }, 1);
+  const m = await P.lerPresencaGrupo(db, ["row_5", "row_6"]);
+  expect(m.get("j2")).toEqual({ nome: "Bia", minutos: [10, 11, 12] });
+  expect(m.get("j1")?.minutos).toEqual([1, 2, 3]);
+  expect((await P.lerPresencaGrupo(db, [])).size).toBe(0);
+});
+
+test("apagarPresencaAntiga remove só as mais velhas", async () => {
+  await P.garantirTabelaPresenca(db);
+  await P.gravarMinutosPresenca(db, { programaId: "row_9", jogadorId: "velho", nome: "V", minutos: [1] }, 100);
+  await P.gravarMinutosPresenca(db, { programaId: "row_9", jogadorId: "novo", nome: "N", minutos: [1] }, 9000);
+  const n = await P.apagarPresencaAntiga(db, 5000);
+  expect(n).toBeGreaterThanOrEqual(1);
+  expect(linha("row_9", "velho")).toBeNull();
+  expect(linha("row_9", "novo")).not.toBeNull();
+});
