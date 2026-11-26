@@ -1,4 +1,4 @@
-import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeText, normalizeComparison, appendRows } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
 import { readRuntimeEnv } from "../google/service-account";
 import { verifySessionToken, extractBearerToken } from "../services/sessionService";
@@ -9,6 +9,7 @@ import {
   garantirTabelaPresenca,
   gravarMinutosPresenca,
   lerPresencaGrupo,
+  apagarPresencaAntiga,
 } from "../services/tvPresenca";
 
 // "Programacao_RPG" é uma aba antiga/duplicada que ficou sem manutenção —
@@ -814,6 +815,45 @@ export async function registrarEventoTransmissaoController(
   }
 }
 
+/**
+ * % que decide a faixa do jogador. "d1" (presença por minuto, relógio do
+ * servidor): só o tempo presente conta. "planilha" (corpo antigo,
+ * watched_seconds): regra de sempre, o maior entre tempo e chat.
+ */
+export function percentualDoJogador(origem: "d1" | "planilha", presencaPct: number, chatPct: number): number {
+  if (origem === "d1") return Math.round(presencaPct);
+  return Math.round(Math.max(presencaPct, chatPct));
+}
+
+const TV_PRESENCA_LIMPEZA_KV_KEY = "tv-presenca-limpeza-dia";
+const DIAS_GUARDAR_PRESENCA = 30;
+
+/**
+ * Apaga do D1 a presença com mais de 30 dias, no máximo 1x por dia UTC
+ * (último dia guardado no KV FLAGS). Devolve quantas linhas apagou, ou null
+ * se não rodou (já rodou hoje, sem D1/KV ou erro). Nunca lança.
+ */
+export async function limparPresencaTVDiaria(
+  flags: FlagsKvLike | undefined,
+  agoraMs: number = Date.now(),
+): Promise<number | null> {
+  try {
+    const db = getCatalogoDb();
+    if (!db || !flags) return null;
+    const dia = new Date(agoraMs).toISOString().slice(0, 10);
+    if ((await flags.get(TV_PRESENCA_LIMPEZA_KV_KEY)) === dia) return null;
+    await garantirTabelaPresenca(db);
+    const apagadas = await apagarPresencaAntiga(db, agoraMs - DIAS_GUARDAR_PRESENCA * 86400_000);
+    await flags.put(TV_PRESENCA_LIMPEZA_KV_KEY, dia);
+    return apagadas;
+  } catch (err) {
+    console.warn("[limparPresencaTVDiaria] Falhou:", err);
+    return null;
+  }
+}
+
+const isoOuVazio = (ms: number | null) => (ms === null ? "" : new Date(ms).toISOString());
+
 export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise<{
   transmissoesProcessadas: number;
   registrosGravados: number;
@@ -851,6 +891,12 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
   // corrige totalDuracaoSeg (usado no cálculo de % de presença) pra duração
   // de fato transmitida, em vez do intervalo entre Data/Horario da planilha.
   const eventosReais = await lerEventosReais(flags);
+  // Janela da presença por minuto (D1): calculada AQUI, antes do laço abaixo
+  // mexer em endTs/totalDuracaoSeg — é a mesma conta da rota GET
+  // (listarPresencaTVController), então o % mostrado é o % creditado.
+  const janelasD1 = new Map<string, { inicioMs: number; fimMs: number }>();
+  for (const grupo of grupos) janelasD1.set(grupo.chave, janelaDoGrupo(grupo, eventosReais, now));
+  const db = getCatalogoDb();
   for (const grupo of grupos) {
     const real = eventosReais[grupo.chave];
     if (real?.fimTs) {
@@ -942,6 +988,25 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
     // falhar, pula essa transmissão nessa execução (tenta de novo no
     // próximo ciclo, sem ter creditado ninguém ainda) em vez de creditar e
     // só then tentar marcar.
+    // Presença por minuto no D1: lida ANTES da marca de "processado" — se a
+    // leitura falhar, não marca nada e tenta de novo no próximo ciclo (senão
+    // quem tem presença só no D1 perderia o crédito pra sempre).
+    let presencaD1 = new Map<string, { nome: string; minutos: number[] }>();
+    if (db) {
+      try {
+        await garantirTabelaPresenca(db);
+        presencaD1 = await lerPresencaGrupo(db, grupo.rowIds);
+      } catch (err) {
+        console.warn(`[processarParticipacaoTV] Falha ao ler presença do D1 de "${key}":`, err);
+        await registrarDiagnosticoSkip(
+          flags,
+          `[processarParticipacaoTV] "${grupo.programa}" (${key}) NÃO processado nessa execução: falha ao ler a presença no D1 (tv_presenca). Tenta de novo no próximo ciclo do cron — ninguém foi creditado ainda.`,
+        );
+        continue;
+      }
+    }
+    const origem: "d1" | "planilha" = presencaD1.size > 0 ? "d1" : "planilha";
+
     const linhaMarcada = await googleSheetsService.agendaTV.appendRow(
       PROCESSADO_SHEET,
       [grupo.chave, grupo.programa, new Date().toISOString()],
@@ -961,11 +1026,16 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
     const margemChatMs = 15 * 60 * 1000;
     const inicioEstimadoTs = grupo.endTs - grupo.totalDuracaoSeg * 1000;
     const [presenca, chat] = await Promise.all([
-      somarPresencaPorTransmissao(grupo.rowIds),
+      origem === "planilha"
+        ? somarPresencaPorTransmissao(grupo.rowIds)
+        : Promise.resolve(new Map<string, { nome: string; watchedSeconds: number }>()),
       contarChatPorTransmissao(grupo.rowIds, inicioEstimadoTs - margemChatMs, grupo.endTs + margemChatMs),
     ]);
 
-    const jogadores = new Set([...presenca.keys(), ...chat.keys()]);
+    const jogadores = new Set([...presenca.keys(), ...presencaD1.keys(), ...chat.keys()]);
+    const janelaD1 = janelasD1.get(key)!;
+    const resumoD1: (string | number)[][] = [];
+    const agoraIso = new Date().toISOString();
     if (jogadores.size === 0) {
       // Transmissão bate TIPO_EVENTO e Regras, mas nenhum registro de
       // Presenca_TV/chat casou com os rowIds desse grupo — a transmissão é
@@ -980,16 +1050,39 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
     let registrosGravadosNesseGrupo = 0;
     for (const telegramId of jogadores) {
       const p = presenca.get(telegramId);
+      const d = presencaD1.get(telegramId);
       const c = chat.get(telegramId);
-      const presencaPct =
-        grupo.totalDuracaoSeg > 0 ? Math.min(100, ((p?.watchedSeconds || 0) / grupo.totalDuracaoSeg) * 100) : 0;
       const chatPct = Math.min(100, ((c?.count || 0) / CHAT_MSGS_PARA_100_PORCENTO) * 100);
-      const percentual = Math.round(Math.max(presencaPct, chatPct));
+      let presencaPct: number;
+      let nomeJogador: string;
+      if (origem === "d1") {
+        // Só o tempo presente conta; quem só conversou fica com 0%.
+        const calc = calcularPresenca(d?.minutos ?? [], janelaD1.inicioMs, janelaD1.fimMs);
+        presencaPct = calc.pct;
+        nomeJogador = d?.nome || c?.nome || "Anônimo";
+        resumoD1.push([
+          agoraIso,
+          grupo.chave,
+          telegramId,
+          nomeJogador,
+          calc.minutosPresentes * 60,
+          calc.minutosPresentes,
+          calc.duracaoMin,
+          calc.pct,
+          c?.count || 0,
+          isoOuVazio(calc.entrouMs),
+          isoOuVazio(calc.saiuMs),
+        ]);
+      } else {
+        presencaPct =
+          grupo.totalDuracaoSeg > 0 ? Math.min(100, ((p?.watchedSeconds || 0) / grupo.totalDuracaoSeg) * 100) : 0;
+        nomeJogador = p?.nome || c?.nome || "Anônimo";
+      }
+      const percentual = percentualDoJogador(origem, presencaPct, chatPct);
 
       const tier = escolherTier(tiers, percentual);
       if (!tier) continue;
 
-      const nomeJogador = p?.nome || c?.nome || "Anônimo";
       await gravarRegistroParticipacaoTV(nomeJogador, tier.label);
       registrosGravados++;
       registrosGravadosNesseGrupo++;
@@ -1002,6 +1095,20 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
       // pra controlar spam de comentário por comentário de forma justa.
       if (presencaPct >= 90) {
         await somarPrestigio({ telegramId }, "assistir_tv").catch(() => {});
+      }
+    }
+
+    // Resumo por pessoa na Presenca_TV (só informação, depois de creditar):
+    // uma chamada só por transmissão; se falhar, o crédito já está feito.
+    if (origem === "d1" && resumoD1.length > 0) {
+      try {
+        await appendRows("agendaTV", PRESENCA_SHEET, resumoD1, "A:K");
+      } catch (err) {
+        console.warn(`[processarParticipacaoTV] Falha ao gravar resumo em ${PRESENCA_SHEET}:`, err);
+        await registrarDiagnosticoSkip(
+          flags,
+          `[processarParticipacaoTV] "${grupo.programa}" (${key}) creditado, mas o resumo por pessoa NÃO foi gravado em ${PRESENCA_SHEET}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
