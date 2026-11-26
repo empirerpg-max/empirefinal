@@ -754,7 +754,7 @@ export const api = {
       return null;
     }
   },
-  /** Admin cria a enquete (o servidor avisa no chat). `encerraEm` = horário absoluto em ms. */
+  /** Admin cria a enquete (o servidor avisa no chat). `encerraEmMin` = 2/5/10/15 ou 0 (o servidor conta pelo relógio dele). */
   async criarEnqueteTV(e: {
     programaId: string;
     pergunta: string;
@@ -762,7 +762,7 @@ export const api = {
     opcoes: string[];
     secreto: boolean;
     soFim: boolean;
-    encerraEm: number | null;
+    encerraEmMin: 0 | 2 | 5 | 10 | 15;
   }): Promise<{ ok: boolean; id?: string; erro?: string }> {
     try {
       const res = await fetch("/api/tv/enquetes", {
@@ -775,7 +775,7 @@ export const api = {
           opcoes: e.opcoes,
           secreto: e.secreto,
           so_fim: e.soFim,
-          encerra_em: e.encerraEm,
+          ...(e.encerraEmMin > 0 ? { encerra_em_min: e.encerraEmMin } : {}),
         }),
       });
       const json = await res.json().catch(() => null);

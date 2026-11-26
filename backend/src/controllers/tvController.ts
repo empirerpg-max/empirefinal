@@ -979,7 +979,14 @@ export async function criarEnqueteChatController(request: Request): Promise<Resp
     const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const programaId = String(b.programa_id ?? "").trim();
     if (!programaId) return jsonEnquete({ ok: false, erro: "programa_id é obrigatório." }, 400);
-    const encerraEm = b.encerra_em == null || b.encerra_em === "" ? null : Number(b.encerra_em);
+    // Encerramento automático em minutos (2, 5, 10 ou 15), contado pelo
+    // relógio do SERVIDOR — o relógio do aparelho do admin não entra.
+    const minRaw = b.encerra_em_min;
+    const encerraMin = minRaw == null || minRaw === "" || minRaw === 0 ? 0 : Number(minRaw);
+    if (![0, 2, 5, 10, 15].includes(encerraMin)) {
+      return jsonEnquete({ ok: false, erro: "Encerramento automático inválido (use 2, 5, 10 ou 15 minutos)." }, 400);
+    }
+    const agora = Date.now();
     let id: string;
     try {
       id = await criarEnquete(
@@ -991,15 +998,15 @@ export async function criarEnqueteChatController(request: Request): Promise<Resp
           opcoes: b.opcoes as string[],
           secreto: b.secreto === true,
           soFim: b.so_fim === true,
-          encerraEmMs: encerraEm != null && Number.isFinite(encerraEm) ? encerraEm : null,
+          encerraEmMs: encerraMin > 0 ? agora + encerraMin * 60_000 : null,
           criadaPor: sessao?.usuario || "admin",
         },
-        Date.now(),
+        agora,
       );
     } catch (err: any) {
       return jsonEnquete({ ok: false, erro: err?.message || "Enquete inválida." }, 400);
     }
-      await avisarNoChat(programaId, `ENQ::${id}`);
+    await avisarNoChat(programaId, `ENQ::${id}`);
     return jsonEnquete({ ok: true, id }, 200);
   } catch (error: any) {
     console.error("[criarEnqueteChatController] Erro:", error);

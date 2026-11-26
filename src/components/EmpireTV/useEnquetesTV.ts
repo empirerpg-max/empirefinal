@@ -63,13 +63,20 @@ export function useEnquetesTV(programaId: string, ativo: boolean): EnquetesTV {
     (min, e) => (e.aberta && e.encerraEm != null && (min == null || e.encerraEm < min) ? e.encerraEm : min),
     null,
   );
+  // Se a busca vier com a enquete ainda aberta (relógio do servidor atrás
+  // do aparelho), tenta de novo a cada 3 s por até 1 min depois do horário.
+  const [rearme, setRearme] = useState(0);
   useEffect(() => {
     if (proximoFim == null) return;
-    const espera = Math.max(1_000, proximoFim - Date.now() + 1_500);
+    const falta = proximoFim - Date.now();
+    if (falta < -60_000) return;
+    const espera = falta + 1_500 > 0 ? Math.max(1_000, falta + 1_500) : 3_000;
     if (espera > 2 ** 31 - 1) return;
-    const t = setTimeout(() => void recarregar(), espera);
+    const t = setTimeout(() => {
+      void recarregar().then(() => setRearme((n) => n + 1));
+    }, espera);
     return () => clearTimeout(t);
-  }, [proximoFim, recarregar]);
+  }, [proximoFim, rearme, recarregar]);
 
   return { lista, carregado, recarregar };
 }

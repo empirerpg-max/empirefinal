@@ -1071,8 +1071,24 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
       // Saiu do modo deitado sem ser pelo voltar (girou o celular, minimizou,
       // fechou a sala): tira a entrada para não deixar entrada órfã.
       if (window.history.state?.tvSalaDeitada) window.history.back();
+      // Folha "Nova enquete" aberta por cima: a entrada do modo deitado fica
+      // embaixo dela; é tirada quando a folha fechar (efeito abaixo).
+      else if (window.history.state?.[MARCA_NOVA_ENQUETE]) deitadoOrfaoRef.current = true;
     };
   }, [deitado]);
+  const deitadoOrfaoRef = useRef(false);
+  const deitadoAtualRef = useRef(deitado);
+  deitadoAtualRef.current = deitado;
+  useEffect(() => {
+    const onPop = () => {
+      if (!deitadoOrfaoRef.current) return;
+      if (window.history.state?.[MARCA_NOVA_ENQUETE]) return;
+      deitadoOrfaoRef.current = false;
+      if (window.history.state?.tvSalaDeitada && !deitadoAtualRef.current) window.history.back();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   // A presença é contada pelo PresencaTVTracker (montado no TvPlayerProvider),
   // que vale tanto pra sala quanto pro mini player — nada de heartbeat aqui.

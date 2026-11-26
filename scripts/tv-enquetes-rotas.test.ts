@@ -109,6 +109,35 @@ test("criar: devolve id e insere ENQ:: no chat como Empire TV", async () => {
   expect(inserts[0].body).toEqual({ programa_id: "p" + n, user: "Empire TV", user_id: "empire-tv", text: `ENQ::${j.id}` });
 });
 
+test("criar: encerra_em_min vira horário do servidor; outros valores → 400", async () => {
+  const db = (globalThis as any).__CATALOGO_DB__;
+  const lerFim = async (id: string) =>
+    (await db.prepare("SELECT encerra_em FROM tv_enquete WHERE programa_id = ? AND id = ?").bind("p" + n, id).all()).results[0].encerra_em;
+  for (const min of [2, 5, 10, 15]) {
+    const antes = Date.now();
+    const r = await criar({ pergunta: "Qual " + min + "?", encerra_em_min: min });
+    const depois = Date.now();
+    expect(r.status).toBe(200);
+    const fim = await lerFim((await r.json()).id);
+    expect(fim).toBeGreaterThanOrEqual(antes + min * 60_000);
+    expect(fim).toBeLessThanOrEqual(depois + min * 60_000);
+  }
+  const sem = await criar({ pergunta: "Sem?" });
+  expect(await lerFim((await sem.json()).id)).toBeNull();
+  const zero = await criar({ pergunta: "Zero?", encerra_em_min: 0 });
+  expect(await lerFim((await zero.json()).id)).toBeNull();
+  // horário absoluto do aparelho não é mais aceito como encerramento
+  const abs = await criar({ pergunta: "Abs?", encerra_em: Date.now() + 120_000 });
+  expect(await lerFim((await abs.json()).id)).toBeNull();
+  const antes = inserts.length;
+  for (const ruim of [1, 3, 7, 30, -5, "5x", 2.5, true]) {
+    const r = await criar({ pergunta: "Ruim?", encerra_em_min: ruim });
+    expect(r.status).toBe(400);
+    expect((await r.json()).erro).toContain("Encerramento automático");
+  }
+  expect(inserts.length).toBe(antes);
+});
+
 test("falha do Supabase não impede a criação", async () => {
   supaFalha = true;
   const r = await criar();

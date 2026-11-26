@@ -85,7 +85,7 @@ export function NovaEnqueteSheet({
         opcoes: ops,
         secreto,
         soFim,
-        encerraEm: minutos > 0 ? Date.now() + minutos * 60_000 : null,
+        encerraEmMin: minutos,
       });
       if (!r.ok) {
         setErro(r.erro || "Não deu pra publicar. Tente de novo.");

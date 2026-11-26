@@ -287,7 +287,9 @@ export function EnqueteCartao({
 }
 
 function celulaCsv(v: string | number): string {
-  const s = String(v);
+  let s = String(v);
+  // Planilha não pode ler texto como fórmula (=, +, -, @, tab, CR no começo).
+  if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -307,7 +309,7 @@ function baixarCsv(lista: EnqueteTV[], programaId: string) {
       ]);
     });
   }
-  const csv = "﻿" + linhas.map((l) => l.map(celulaCsv).join(";")).join("\r\n");
+  const csv = "\uFEFF" + linhas.map((l) => l.map(celulaCsv).join(";")).join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
