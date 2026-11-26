@@ -100,20 +100,36 @@ B vem pré-preenchida e não indica quem comprou. Nunca ler nem escrever nela.
    - recusa se o saldo não cobre o custo.
    Se passar, `escreverBoostEmEcoinInvestimento` grava C, E, **F = `BOOST`** e
    G/I/K.
-4. **Custo usado na checagem de saldo.**
-   - Playlist manual: o preço da tabela `PRECOS_*`.
-   - Boost: o preço da **playlist mínima** da plataforma (`PRECO_PLAYLIST_MINIMA`),
-     porque é isso que a planilha de fato desconta via H/J/L.
-   - Saldo: `getSaldosEcoin` (`DADOS!AI`), lido de forma fresca. *(Decisão de
-     Claude; ver "Decisões para conferir".)*
+4. **Custo e cobrança (decidido pelo dono: o boost custa o preço do Market).**
+   - Playlist manual: custo = preço da tabela `PRECOS_*`, que a planilha já
+     desconta via H/J/L. Nada muda na cobrança, só entra a trava.
+   - Boost: custo = **`item.preco` do `MARKET_ITENS`** (hoje R$ 200.000 no Music
+     Boost e R$ 400.000 no Album Boost). A planilha já desconta sozinha a
+     playlist mínima da linha (`PRECO_PLAYLIST_MINIMA[plataforma]`). O Worker
+     cobra **a diferença** `item.preco − PRECO_PLAYLIST_MINIMA[plataforma]` com
+     `descontarSaldoArtista` (`DADOS!AD`), só se ela for > 0. Hoje: Spotify
+     +100.000, Apple +140.000, YouTube 0 (Music Boost); Album Boost +300.000 /
+     +340.000 / +200.000. Calcular sempre a partir dos valores vigentes, nunca fixar.
+   - Trava: `saldo atual (DADOS!AI, leitura fresca) − custo ≥ 0`. Para o boost, o
+     custo é o `item.preco` inteiro.
+   - A mensagem de erro mostra o preço que o Market exibe.
+   - Compras desta semana feitas antes da mudança **não** são cobradas
+     retroativamente (decisão de Claude, coerente com "não apagar excedentes").
 5. **Cliques em sequência.** A planilha é lenta e duas requisições podem passar
-   na checagem ao mesmo tempo. Depois de gravar, o Worker relê a aba. Se o
-   limite foi furado (2 linhas `BOOST` da mesma música e plataforma; ou o saldo
-   ficou negativo por causa desta gravação), desfaz a própria escrita: limpa a
-   linha do boost ou volta a célula da playlist manual ao valor anterior, e
-   responde com erro. Mantém a linha de menor número. É o mesmo padrão de
-   reconferência que `iniciarInvestimentoController` já usa. Só registra em
-   `Market_Compras` depois de passar.
+   na checagem ao mesmo tempo. Ordem do boost: checar → gravar a linha (C, E,
+   F=`BOOST`, G/I/K) → cobrar a diferença em `DADOS!AD` → reler.
+   - Se o limite foi furado (2 linhas `BOOST` da mesma música e plataforma), fica
+     a de menor número de linha. A outra requisição desfaz o que gravou: limpa a
+     linha e **devolve** a diferença em `DADOS!AD`.
+   - Se o saldo ficou negativo, quem acabou de gravar desfaz a própria
+     gravação. Na pior hipótese as duas desfazem, e nunca sobra saldo negativo.
+   - Manual: se o saldo ficou negativo, a célula da playlist volta ao valor anterior.
+   - Mesmo padrão de reconferência que `iniciarInvestimentoController` já usa.
+     `Market_Compras` só registra depois que tudo passou.
+   - Observação: `descontarSaldoArtista` faz ler-alterar-gravar em `DADOS!AD`. Se
+     duas cobranças do mesmo artista caírem juntas, uma pode sobrescrever a outra.
+     Quem implementar deve reduzir essa janela (reler logo antes de gravar e
+     conferir depois).
 6. **Front:**
    - `ponto.playlists.planilha.tsx` remove o aviso "Saldo estourado — pode
      continuar" e passa a mostrar o erro do backend no lugar.
@@ -130,6 +146,15 @@ B vem pré-preenchida e não indica quem comprou. Nunca ler nem escrever nela.
    - O número de linhas marcadas por par nunca passa do número de compras.
    - Rodar o diagnóstico, conferir e só depois aplicar.
 
+## Casos resolvidos na revisão
+- Na marcação retroativa, uma linha manual com só a playlist mínima escolhida
+  pode ficar igual a um boost. Por isso o modo diagnóstico roda primeiro, só
+  em leitura. A lista vai para o dono conferir, e só depois se aplica.
+- Música com 2 ou mais linhas manuais nesta semana (dados antigos): as extras
+  ficam como estão até o reset. "Nova" reaproveita a de menor número.
+- Se o reset semanal não limpar F: não atrapalha, porque os limites só contam
+  linhas com C preenchido e toda linha reivindicada grava F explicitamente.
+
 ## Deixado para quem implementar
 - Estrutura interna das funções, nomes e onde ficam os helpers compartilhados
   (preços e colunas estão hoje duplicados entre `playlistsInvestimentoController`,
@@ -139,7 +164,7 @@ B vem pré-preenchida e não indica quem comprou. Nunca ler nem escrever nela.
 
 ## Decisões para conferir (tomadas por Claude)
 - Album Boost segue a mesma regra de 1 por plataforma por álbum por semana.
-- A checagem de saldo do boost usa o valor que a planilha desconta (playlist
-  mínima), não o preço exibido no Market (R$ 200.000 / R$ 400.000).
-- Marca na coluna F com o texto `BOOST`.
+- Compras de boost desta semana feitas antes da mudança não são cobradas
+  pela diferença retroativamente.
+- Marca na coluna F com o texto `BOOST` (o dono confirmou que F está livre).
 - Boosts excedentes já pagos nesta semana não são apagados.
