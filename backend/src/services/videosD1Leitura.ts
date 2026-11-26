@@ -12,7 +12,7 @@
 //   - antes de ligar, /admin/comparar-leitura-videos-d1 prova em produção
 //     que os objetos montados das duas fontes são idênticos.
 import { getCatalogoDb } from "./catalogoDbService";
-import { googleSheetsService } from "./googleSheetsService";
+import { googleSheetsService, normalizeComparison, normalizeText } from "./googleSheetsService";
 import { VIDEOS_COLUNAS, videoD1ParaCelulas } from "./videosDbService";
 import { COMENTARIOS_VIDEOS_COLUNAS, comentarioVideoD1ParaCelulas } from "./comentariosVideosDbService";
 import { ABA_COMENTARIOS_VIDEOS, ABA_VIDEOS } from "./videosD1Sync";
@@ -220,4 +220,36 @@ export async function linhasDaAbaDeVideo(aba: string): Promise<string[][]> {
     }
   }
   return googleSheetsService.principal.readValues(aba);
+}
+
+/**
+ * Título de cada vídeo pelo ID do tópico, só dos `ids` pedidos (PK de
+ * `videos`): lê no máximo ids.length linhas, em vez da aba "Music Videos"
+ * inteira (spec 2026-11-26-d1-rows-read-reducao). Chave do mapa =
+ * normalizeComparison(id). null = sem D1 ou falha (quem chama cai pra
+ * leitura antiga).
+ */
+export async function titulosVideosPorTopico(ids: string[]): Promise<Map<string, string> | null> {
+  const db = getCatalogoDb();
+  if (!db) return null;
+  const unicos = [...new Set(ids.map((i) => String(i ?? "").trim()).filter(Boolean))];
+  const mapa = new Map<string, string>();
+  if (!unicos.length) return mapa;
+  try {
+    const rows =
+      (
+        await db
+          .prepare(`SELECT id_topico, titulo_topico FROM videos WHERE id_topico IN (${unicos.map(() => "?").join(", ")})`)
+          .bind(...unicos)
+          .all<{ id_topico: string; titulo_topico: string | null }>()
+      ).results || [];
+    for (const r of rows) {
+      const titulo = normalizeText(r.titulo_topico);
+      if (titulo) mapa.set(normalizeComparison(r.id_topico), titulo);
+    }
+    return mapa;
+  } catch (err) {
+    console.warn("[videosD1Leitura] títulos por tópico falharam, caindo pra planilha:", err);
+    return null;
+  }
 }

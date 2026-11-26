@@ -12,6 +12,7 @@ import { registrarNotificacaoComentario } from "./notificacoesController";
 import { processarComentarioParaBanner } from "./bannerController";
 import { getPreSaveLockParaTopico } from "./preSaveController";
 import { insertComentarioD1 } from "../services/catalogoDbService";
+import { titulosVideosPorTopico } from "../services/videosD1Leitura";
 import {
   getCatalogoDb,
   buildComentarioMusicaInsertStatement,
@@ -1304,14 +1305,18 @@ export async function toggleCommentReactionController(request: Request): Promise
  * (mesmas colunas já usadas em createCommentController).
  */
 export async function getAtividadeRecenteController(): Promise<Response> {
+  const POR_TIPO = 8;
   try {
-    const [musicaComments, mvComments, albumComments, musicasRows, mvRows, albunsRows] =
+    // Comentarios_MV está no D1 ("D1 primeiro"): lê só os últimos
+    // comentários e resolve o título só desses vídeos pela PK de `videos`,
+    // em vez de ler as duas abas inteiras a cada 60 s por tela aberta
+    // (~1.170 linhas por chamada — spec 2026-11-26-d1-rows-read-reducao).
+    const [musicaComments, mvUltimos, albumComments, musicasRows, albunsRows] =
       await Promise.all([
         googleSheetsService.principal.readValues("Comentarios_Musicas").catch(() => []),
-        googleSheetsService.principal.readValues("Comentarios_MV").catch(() => []),
+        googleSheetsService.principal.readUltimasLinhas("Comentarios_MV", POR_TIPO).catch(() => [] as string[][]),
         googleSheetsService.principal.readValues("Comentarios_Albuns").catch(() => []),
         googleSheetsService.principal.readValues("Musicas").catch(() => []),
-        googleSheetsService.principal.readValues("Music Videos").catch(() => []),
         googleSheetsService.principal.readValues("Albuns").catch(() => []),
       ]);
 
@@ -1327,18 +1332,21 @@ export async function getAtividadeRecenteController(): Promise<Response> {
       return mapa;
     };
     const titulosMusicas = mapaTitulos(musicasRows, 1, 7); // B ID do tópico, H Nome
-    const titulosVideos = mapaTitulos(mvRows, 5, 1); // F message_thread_id, B Título
+    // Sem D1 (ou falha), volta à leitura antiga da aba inteira.
+    const titulosVideos =
+      (await titulosVideosPorTopico(mvUltimos.map((r) => r?.[0] ?? ""))) ??
+      mapaTitulos(await googleSheetsService.principal.readValues("Music Videos").catch(() => []), 5, 1); // F message_thread_id, B Título
     const titulosAlbuns = mapaTitulos(albunsRows, 1, 6); // B ID do tópico, G Novo Nome
 
+    // `dados` = só linhas de dados (sem cabeçalho).
     const ultimos = (
-      rows: string[][],
+      dados: string[][],
       tipo: "musica" | "video" | "album",
       mapa: Map<string, string>,
       n: number,
     ) => {
-      if (!rows || rows.length <= 1) return [];
-      return rows
-        .slice(1)
+      if (!dados || dados.length === 0) return [];
+      return dados
         .slice(-n)
         .reverse()
         .map((r) => ({
@@ -1350,9 +1358,9 @@ export async function getAtividadeRecenteController(): Promise<Response> {
     };
 
     const atividades = [
-      ...ultimos(musicaComments, "musica", titulosMusicas, 8),
-      ...ultimos(mvComments, "video", titulosVideos, 8),
-      ...ultimos(albumComments, "album", titulosAlbuns, 8),
+      ...ultimos(musicaComments.slice(1), "musica", titulosMusicas, POR_TIPO),
+      ...ultimos(mvUltimos, "video", titulosVideos, POR_TIPO),
+      ...ultimos(albumComments.slice(1), "album", titulosAlbuns, POR_TIPO),
     ].slice(0, 20);
 
     return new Response(JSON.stringify({ success: true, data: atividades }), {
