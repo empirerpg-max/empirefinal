@@ -125,7 +125,14 @@ export const CHARTS_D1_MIGRACOES: string[] = ["ALTER TABLE artista_info ADD COLU
 
 /** Cria as tabelas (se faltarem) e aplica as migrações idempotentes. */
 export async function garantirSchemaCharts(db: D1DatabaseLike): Promise<void> {
-  await db.batch([...CHARTS_D1_SCHEMA, ...CHARTS_D1_TRIGGERS].map((sql) => db.prepare(sql)));
+  await db.batch(CHARTS_D1_SCHEMA.map((sql) => db.prepare(sql)));
+  // Triggers da lista pronta de datas à parte: se o D1 recusar, a ingestão
+  // segue (datasDoChart remonta a lista quando ela não existe).
+  try {
+    await db.batch(CHARTS_D1_TRIGGERS.map((sql) => db.prepare(sql)));
+  } catch (e) {
+    console.warn("[charts-d1] triggers da lista de datas não criados:", e);
+  }
   for (const sql of CHARTS_D1_MIGRACOES) {
     try {
       await db.prepare(sql).run();
@@ -755,6 +762,8 @@ async function lerDatasProntas(db: D1DatabaseLike, chart: ChartId): Promise<stri
 export async function datasDoChart(db: D1DatabaseLike, chart: ChartId): Promise<string[]> {
   let datas = await lerDatasProntas(db, chart);
   if (!datas) {
+    // Chart ainda sem datas também ganha a linha ("[]"): sem ela, cada chamada
+    // remontaria a lista varrendo chart_datas.
     // Primeiro acesso depois do deploy (ou chart sem datas): monta a lista pronta.
     try {
       await stmtRegravarDatasCharts(db).run();
@@ -762,9 +771,19 @@ export async function datasDoChart(db: D1DatabaseLike, chart: ChartId): Promise<
       // Banco sem as tabelas dos charts (nenhuma ingestão ainda): sem datas.
       if (!/no such table/i.test(e instanceof Error ? e.message : String(e))) throw e;
     }
-    datas = (await lerDatasProntas(db, chart)) ?? [];
+    datas = await lerDatasProntas(db, chart);
+    if (!datas) {
+      datas = [];
+      await db
+        .prepare("INSERT OR IGNORE INTO chart_config (chave, valor) VALUES (?, '[]')")
+        .bind(`datas:${chart}`)
+        .run()
+        .catch(() => {}); // banco sem tabelas: só devolve vazio
+    }
   }
-  return datas.map(dataIsoParaBr);
+  // Ordena aqui (ISO ordena como texto): não depende do SQLite manter a
+  // ordem da subconsulta dentro do json_group_array.
+  return [...datas].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0)).map(dataIsoParaBr);
 }
 
 /** Datas ISO distintas já gravadas (qualquer chart), mais antiga primeiro. Usado pela carga inicial pra pular semanas prontas. */

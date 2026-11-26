@@ -88,3 +88,13 @@ test("ticker: linha vazia no meio da faixa é ignorada", async () => {
   const videos = await videosDoTicker();
   expect(videos.map((x: any) => x.jogador)).toEqual(["j12", "j9", "j8", "j7", "j6", "j5"]);
 });
+
+test("ticker: espelho `videos` vazio cai pra leitura antiga da aba Music Videos", async () => {
+  const db = (globalThis as any).__CATALOGO_DB__;
+  await G.updateValues("principal", "Music Videos", "A1:F1", [["u", "Título", "", "", "", "message_thread_id"]]);
+  await G.appendRow("principal", "Music Videos", ["", "Clipe antigo t12", "", "", "", "t12"]);
+  await new Promise((r) => setTimeout(r, 50)); // espelho em tempo real termina antes de esvaziar
+  await db.prepare("DELETE FROM videos").run();
+  const videos = await videosDoTicker();
+  expect(videos[0]).toEqual({ jogador: "j12", titulo: "Clipe antigo t12", tipo: "video" });
+});

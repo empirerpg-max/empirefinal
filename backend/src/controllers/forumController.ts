@@ -1332,10 +1332,14 @@ export async function getAtividadeRecenteController(): Promise<Response> {
       return mapa;
     };
     const titulosMusicas = mapaTitulos(musicasRows, 1, 7); // B ID do tópico, H Nome
-    // Sem D1 (ou falha), volta à leitura antiga da aba inteira.
+    // Sem D1, falha ou espelho `videos` sem nenhum dos vídeos pedidos (ex.:
+    // tabela vazia): volta à leitura antiga da aba inteira.
+    const idsVideos = mvUltimos.map((r) => r?.[0] ?? "").filter((id) => String(id).trim());
+    const doEspelho = await titulosVideosPorTopico(idsVideos);
     const titulosVideos =
-      (await titulosVideosPorTopico(mvUltimos.map((r) => r?.[0] ?? ""))) ??
-      mapaTitulos(await googleSheetsService.principal.readValues("Music Videos").catch(() => []), 5, 1); // F message_thread_id, B Título
+      doEspelho && (doEspelho.size > 0 || idsVideos.length === 0)
+        ? doEspelho
+        : mapaTitulos(await googleSheetsService.principal.readValues("Music Videos").catch(() => []), 5, 1); // F message_thread_id, B Título
     const titulosAlbuns = mapaTitulos(albunsRows, 1, 6); // B ID do tópico, G Novo Nome
 
     // `dados` = só linhas de dados (sem cabeçalho).

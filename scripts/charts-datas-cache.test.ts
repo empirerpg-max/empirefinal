@@ -68,3 +68,34 @@ test("mudança direta em chart_datas (fora da ingestão) mantém a lista pronta 
 test("banco sem tabelas dos charts: devolve [] sem erro", async () => {
   expect(await datasDoChart(criarD1Sqlite(), "SPOTIFY")).toEqual([]);
 });
+
+test("chart sem datas grava lista vazia pronta: a 2ª chamada não varre chart_datas", async () => {
+  const log: string[] = [];
+  const db = await novoDb(log);
+  await db.prepare("INSERT INTO chart_datas (chart, data) VALUES ('SPOTIFY', '2026-11-18')").run();
+  expect(await datasDoChart(db, "DIGITAL SALES")).toEqual([]);
+  log.length = 0;
+  expect(await datasDoChart(db, "DIGITAL SALES")).toEqual([]);
+  expect(log.some((s) => s.includes("chart_datas"))).toBe(false);
+});
+
+test("lista pronta fora de ordem sai do mais recente pro mais antigo", async () => {
+  const db = await novoDb();
+  await db.prepare("INSERT OR REPLACE INTO chart_config (chave, valor) VALUES ('datas:SPOTIFY', ?)")
+    .bind(JSON.stringify(["2026-11-04", "2026-11-18", "2026-11-11"])).run();
+  expect(await datasDoChart(db, "SPOTIFY")).toEqual(["18/11/2026", "11/11/2026", "04/11/2026"]);
+});
+
+test("garantirSchemaCharts: D1 que recusa trigger não derruba o schema", async () => {
+  const base = criarD1Sqlite();
+  const db = {
+    ...base,
+    prepare: (sql: string) => {
+      if (/CREATE TRIGGER/i.test(sql)) throw new Error("trigger não suportado");
+      return base.prepare(sql);
+    },
+    batch: (st: any[]) => base.batch(st),
+  } as any;
+  await garantirSchemaCharts(db);
+  expect((await base.prepare("SELECT count(*) AS n FROM chart_config").all<{ n: number }>()).results[0].n).toBeGreaterThan(0);
+});
