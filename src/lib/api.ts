@@ -69,6 +69,27 @@ export interface EnquetePayload {
   minhaNota: number | null;
 }
 
+/** Enquete do chat da Empire TV (D1) — ver GET /api/tv/enquetes. */
+export interface EnqueteTV {
+  id: string;
+  pergunta: string;
+  tipo: "unica" | "multipla";
+  opcoes: string[];
+  secreto: boolean;
+  soFim: boolean;
+  aberta: boolean;
+  encerraEm: number | null;
+  criadaEm: number;
+  encerradaEm: number | null;
+  /** null enquanto aberta com "resultado só no fim". */
+  contagem: number[] | null;
+  pct: number[] | null;
+  /** Pessoas que votaram. */
+  total: number;
+  vencedores: number[];
+  meuVoto: number[] | null;
+}
+
 export interface NivelInfo {
   nivel: number;
   fase: string;
@@ -717,6 +738,86 @@ export const api = {
       body: JSON.stringify(payload),
     });
     return res.json();
+  },
+
+  // ---- Enquetes do chat da Empire TV (D1) ----
+  /** Lista as enquetes da sala (abertas primeiro). null = falhou (mantém a lista atual). */
+  async listarEnquetesTV(programaId: string): Promise<EnqueteTV[] | null> {
+    try {
+      const res = await fetch(`/api/tv/enquetes?programa_id=${encodeURIComponent(programaId)}`, {
+        headers: { ...authHeaders() },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok || !Array.isArray(json.enquetes)) return null;
+      return json.enquetes as EnqueteTV[];
+    } catch {
+      return null;
+    }
+  },
+  /** Admin cria a enquete (o servidor avisa no chat). `encerraEm` = horário absoluto em ms. */
+  async criarEnqueteTV(e: {
+    programaId: string;
+    pergunta: string;
+    tipo: "unica" | "multipla";
+    opcoes: string[];
+    secreto: boolean;
+    soFim: boolean;
+    encerraEm: number | null;
+  }): Promise<{ ok: boolean; id?: string; erro?: string }> {
+    try {
+      const res = await fetch("/api/tv/enquetes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          programa_id: e.programaId,
+          pergunta: e.pergunta,
+          tipo: e.tipo,
+          opcoes: e.opcoes,
+          secreto: e.secreto,
+          so_fim: e.soFim,
+          encerra_em: e.encerraEm,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) return { ok: false, erro: String(json?.erro || `Erro ${res.status}`) };
+      return { ok: true, id: json.id };
+    } catch {
+      return { ok: false, erro: "Sem conexão." };
+    }
+  },
+  /** Vota (troca o voto se já tinha). status: 200 ok, 401 sem sessão, 409 encerrada, 400 inválido, 0 sem conexão. */
+  async votarEnqueteTV(
+    programaId: string,
+    enqueteId: string,
+    opcoes: number[],
+  ): Promise<{ ok: boolean; status: number; erro?: string }> {
+    try {
+      const res = await fetch("/api/tv/enquetes/votar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ programa_id: programaId, enquete_id: enqueteId, opcoes }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) return { ok: false, status: res.status, erro: json?.erro ? String(json.erro) : undefined };
+      return { ok: true, status: res.status };
+    } catch {
+      return { ok: false, status: 0, erro: "Sem conexão." };
+    }
+  },
+  /** Admin encerra (o servidor avisa no chat e grava na planilha). */
+  async encerrarEnqueteTV(programaId: string, enqueteId: string): Promise<{ ok: boolean; erro?: string }> {
+    try {
+      const res = await fetch("/api/tv/enquetes/encerrar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ programa_id: programaId, enquete_id: enqueteId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) return { ok: false, erro: String(json?.erro || `Erro ${res.status}`) };
+      return { ok: true };
+    } catch {
+      return { ok: false, erro: "Sem conexão." };
+    }
   },
 
   /**

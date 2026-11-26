@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, RefreshCw, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck, Copy } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, RefreshCw, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck, Copy, BarChart3 } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost, type EnquetePayload } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
@@ -17,6 +17,10 @@ import { estaNoFim, pertoDoTopo, decidirAoChegar } from "@/lib/tvChatRolagem";
 import { useArrastarParaResponder } from "@/hooks/useArrastarParaResponder";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
+import { useEnquetesTV, ENQ_PREFIX, ENQRES_PREFIX, type EnquetesTV } from "@/components/EmpireTV/useEnquetesTV";
+import { EnquetesPanel, textoVencedor } from "@/components/EmpireTV/EnquetesPanel";
+import { EnqueteFaixa } from "@/components/EmpireTV/EnqueteFaixa";
+import { NovaEnqueteSheet, MARCA_NOVA_ENQUETE } from "@/components/EmpireTV/NovaEnqueteSheet";
 import { marcarSalaAtiva, salaDaUrl, recargaPendente, aoMudarRecargaPendente, atualizarAgora, DURACAO_AVISO_MS } from "@/lib/salaAtiva";
 
 
@@ -87,7 +91,7 @@ function entradaEmpurradaPelaSala(): boolean {
 
 function entradaDeOverlayDaSala(): boolean {
   const st = typeof window !== "undefined" ? window.history.state : null;
-  return !!(st?.tvSalaDeitada || st?.tvChatMenu);
+  return !!(st?.tvSalaDeitada || st?.tvChatMenu || st?.[MARCA_NOVA_ENQUETE]);
 }
 
 // Tira as entradas do modo deitado / menu da mensagem que estejam por cima
@@ -114,6 +118,7 @@ function voltarAteEntradaDaSala(depois: () => void) {
     const st = { ...(window.history.state ?? {}) };
     delete st.tvSalaDeitada;
     delete st.tvChatMenu;
+    delete st[MARCA_NOVA_ENQUETE];
     delete st.tvSalaEmpurrada;
     window.history.replaceState(st, "", window.location.pathname + window.location.search + window.location.hash);
     depois();
@@ -163,7 +168,7 @@ const GIF_PREFIX = "GIF::";
 const VIDEO_GIF_PREFIX = "VIDGIF::";
 
 type HomeTab = "home" | "arquivo" | "grade";
-type WatchTab = "chat" | "redcarpet" | "participantes" | "sobre";
+type WatchTab = "chat" | "redcarpet" | "enquetes" | "participantes" | "sobre";
 
 // TIPO_EVENTO (Agenda_TV) que habilita a aba Red Carpet na sala — o termo
 // usado na planilha é essa única string fixa (as 3 categorias juntas numa
@@ -1109,6 +1114,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   const tabs: { id: WatchTab; label: string; icon: typeof MessageSquare }[] = [
     { id: "chat", label: "Chat", icon: MessageSquare },
     ...(temRedCarpet(programa) ? [{ id: "redcarpet" as WatchTab, label: "Red Carpet", icon: Sparkles }] : []),
+    { id: "enquetes", label: "Enquetes", icon: BarChart3 },
     { id: "participantes", label: "Participantes", icon: Users },
     { id: "sobre", label: "Sobre", icon: Info },
   ];
@@ -1120,6 +1126,23 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     setHighlightPostId(postId);
     setTab("redcarpet");
   };
+
+  // Enquetes do chat: uma lista só para a aba, a faixa do topo do chat e os
+  // avisos. Atualiza a cada 5 s só com a aba Enquetes ou a faixa expandida
+  // na tela; fora disso, quando chega aviso ENQ::/ENQRES:: no chat.
+  const [faixaEnqExpandida, setFaixaEnqExpandida] = useState(false);
+  const chatNaTela = deitado || largo || tab === "chat";
+  const enquetes = useEnquetesTV(programa.id, (tab === "enquetes" && !deitado) || (faixaEnqExpandida && chatNaTela));
+  const [destaqueEnquete, setDestaqueEnquete] = useState<string | null>(null);
+  const [novaEnqueteAberta, setNovaEnqueteAberta] = useState(false);
+  // Aviso do chat tocado: abre a aba Enquetes com a enquete em destaque (no
+  // modo deitado não há abas, então sai dele primeiro).
+  const abrirEnquete = useCallback((id: string) => {
+    setDestaqueEnquete(id);
+    if (deitado) setDeitadoDispensado(true);
+    setTab("enquetes");
+  }, [deitado]);
+  const abrirNovaEnquete = useCallback(() => setNovaEnqueteAberta(true), []);
 
   // O navegador força o autoplay como mudo até haver uma interação real do
   // usuário — como o player é um iframe de outro domínio (Kick/YouTube),
@@ -1284,6 +1307,18 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
         {abaEsquerda === "redcarpet" && (
           <RedCarpetPanel programa={programa} highlightPostId={highlightPostId} onHighlightConsumed={() => setHighlightPostId(null)} />
         )}
+        {abaEsquerda === "enquetes" && (
+          <EnquetesPanel
+            programaId={programa.id}
+            lista={enquetes.lista}
+            carregado={enquetes.carregado}
+            isAdmin={isAdmin}
+            onMudou={enquetes.recarregar}
+            onNova={abrirNovaEnquete}
+            destaqueId={destaqueEnquete}
+            onDestaqueConsumido={() => setDestaqueEnquete(null)}
+          />
+        )}
         {abaEsquerda === "participantes" && <ParticipantesPanel rows={presencaRows} loading={presencaCarregando} />}
         {abaEsquerda === "sobre" && <SobrePanel programa={programa} />}
       </div>
@@ -1384,10 +1419,25 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
                   : "flex-1 min-h-0 flex flex-col"
             }
           >
-            <ChatPanel programaId={programa.id} onOpenRedCarpetPost={openRedCarpetPost} />
+            <ChatPanel
+              programaId={programa.id}
+              onOpenRedCarpetPost={openRedCarpetPost}
+              enquetes={enquetes}
+              isAdmin={isAdmin}
+              onAbrirEnquete={abrirEnquete}
+              onNovaEnquete={isAdmin ? abrirNovaEnquete : undefined}
+              onFaixaEnqueteExpandida={setFaixaEnqExpandida}
+            />
           </div>
         )}
       </div>
+      {novaEnqueteAberta && isAdmin && (
+        <NovaEnqueteSheet
+          programaId={programa.id}
+          onClose={() => setNovaEnqueteAberta(false)}
+          onPublicada={() => void enquetes.recarregar()}
+        />
+      )}
     </div>
   );
 }
@@ -1420,7 +1470,23 @@ function LinhaMensagem({ id, className, onResponder, onMenu, children }: {
   );
 }
 
-function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; onOpenRedCarpetPost: (postId: string) => void }) {
+function ChatPanel({
+  programaId,
+  onOpenRedCarpetPost,
+  enquetes,
+  isAdmin,
+  onAbrirEnquete,
+  onNovaEnquete,
+  onFaixaEnqueteExpandida,
+}: {
+  programaId: string;
+  onOpenRedCarpetPost: (postId: string) => void;
+  enquetes: EnquetesTV;
+  isAdmin: boolean;
+  onAbrirEnquete: (id: string) => void;
+  onNovaEnquete?: () => void;
+  onFaixaEnqueteExpandida: (expandida: boolean) => void;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -1467,6 +1533,11 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   // Identidade lida via ref no handler realtime (nunca fica velha).
   const idRef = useRef({ myId, displayName });
   idRef.current = { myId, displayName };
+  // Aviso de enquete (ENQ::/ENQRES::) chegando ao vivo: busca a lista de novo.
+  const recarregarEnquetesRef = useRef(enquetes.recarregar);
+  recarregarEnquetesRef.current = enquetes.recarregar;
+  const enquetePorId = useMemo(() => new Map(enquetes.lista.map((e) => [e.id, e])), [enquetes.lista]);
+  const enqueteAberta = enquetes.lista.find((e) => e.aberta) ?? null;
 
   // Histórico inicial + subscrição realtime — celular em segundo plano
   // (troca de app, tela apagada) costuma derrubar o websocket em silêncio,
@@ -1543,6 +1614,9 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
           { event: "INSERT", schema: "public", table: "tv_chat_messages", filter: `programa_id=eq.${programaId}` },
           (payload: any) => {
             const r = payload.new;
+            if (typeof r?.text === "string" && (r.text.startsWith(ENQ_PREFIX) || r.text.startsWith(ENQRES_PREFIX))) {
+              void recarregarEnquetesRef.current();
+            }
             // Decide ANTES de o DOM crescer com a mensagem nova.
             if (!messagesRef.current.some((m) => m.id === r.id)) {
               // Intenção do usuário (ref), não distância ao vivo: mídia que
@@ -1703,6 +1777,9 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
       if (noFimRef.current) el.scrollTop = el.scrollHeight;
     });
     ro.observe(lista);
+    // A faixa da enquete (fora da lista) expandindo/recolhendo muda a altura
+    // do próprio scroller: quem estava no fim continua no fim.
+    ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
@@ -1947,6 +2024,15 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   return (
     <>
       <EnqueteBanner programaId={programaId} />
+      {enqueteAberta && (
+        <EnqueteFaixa
+          enquete={enqueteAberta}
+          programaId={programaId}
+          isAdmin={isAdmin}
+          onMudou={enquetes.recarregar}
+          onExpandidaChange={onFaixaEnqueteExpandida}
+        />
+      )}
     {/* Tudo (mensagens + campo de digitar) vive dentro do MESMO container
         rolável. Isso é o que faz o teclado do celular se comportar direito:
         o navegador só consegue rolar internamente pra revelar o campo em
@@ -1995,6 +2081,38 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                   >
                     <Sparkles className="size-3" />
                     <span className="text-foreground">{nomeArtista}</span> chegou ao{nomePrograma ? ` ${nomePrograma}` : " Programa"}
+                  </button>
+                </div>
+              );
+            }
+            // Avisos de enquete: uma linha só, toque abre a aba Enquetes com
+            // ela em destaque. Enquete fora da lista (id desconhecido) some.
+            if (m.text.startsWith(ENQ_PREFIX) || m.text.startsWith(ENQRES_PREFIX)) {
+              const fechou = m.text.startsWith(ENQRES_PREFIX);
+              const enq = enquetePorId.get(m.text.slice(fechou ? ENQRES_PREFIX.length : ENQ_PREFIX.length).trim());
+              if (!enq) return null;
+              return (
+                <div key={m.id} className="flex justify-center py-1 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => onAbrirEnquete(enq.id)}
+                    className={`max-w-[calc(100%-1rem)] min-w-0 flex items-center px-3 py-1.5 rounded-full border text-[11.5px] font-semibold active:scale-95 transition ${
+                      fechou
+                        ? "bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20"
+                        : "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+                    }`}
+                  >
+                    <span className="block min-w-0 truncate">
+                      {fechou ? (
+                        enq.aberta ? (
+                          <>🏁 Enquete encerrada · Ver resultado</>
+                        ) : (
+                          <>🏁 Enquete encerrada: <b className="text-foreground">{textoVencedor(enq)}</b> · Ver resultado</>
+                        )
+                      ) : (
+                        <>📊 Enquete aberta: <b className="text-foreground">{enq.pergunta}</b> · Votar</>
+                      )}
+                    </span>
                   </button>
                 </div>
               );
@@ -2249,6 +2367,17 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
         >
           <ImagePlus className="size-4" />
         </button>
+        {onNovaEnquete && (
+          <button
+            type="button"
+            onClick={onNovaEnquete}
+            title="Nova enquete (admin)"
+            aria-label="Nova enquete"
+            className="size-8 shrink-0 rounded-md grid place-items-center text-[15px] hover:bg-muted transition"
+          >
+            📊
+          </button>
+        )}
         <input
           ref={inputRef}
           value={text}
