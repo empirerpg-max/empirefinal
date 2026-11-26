@@ -724,12 +724,22 @@ export const api = {
    * O jogador vem da sessão (Authorization); telegram_id é só o fallback.
    * keepalive: o envio sobrevive a fechar a aba (pagehide). true = gravado.
    */
-  async enviarMinutosPresenca(programaId: string, idadesMs: number[], nome: string): Promise<boolean> {
+  async enviarMinutosPresenca(
+    programaId: string,
+    idadesMs: number[],
+    nome: string,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<boolean> {
+    // Envio comum tem prazo (requisição pendurada não trava os próximos);
+    // envio de saída (pagehide) vai sem prazo, só com keepalive.
+    const ctrl = opts.timeoutMs && typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), opts.timeoutMs) : null;
     try {
       const login = getStoredLogin();
       const res = await fetch("/api/tv/presenca", {
         method: "POST",
         keepalive: true,
+        ...(ctrl ? { signal: ctrl.signal } : {}),
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           programa_id: programaId,
@@ -743,6 +753,8 @@ export const api = {
       return json?.ok === true;
     } catch {
       return false;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   },
   /** Admin marca o início/término real da transmissão (crédito no próximo cron após "fim"). */

@@ -748,26 +748,35 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   // A presença é contada pelo PresencaTVTracker (montado no TvPlayerProvider),
   // que vale tanto pra sala quanto pro mini player — nada de heartbeat aqui.
 
-  // Círculo "Sua participação": a linha do próprio jogador no mesmo GET da
-  // aba Participantes (é o % que vai ser creditado).
-  const [meuPct, setMeuPct] = useState<number | null>(null);
+  // Uma busca só de GET /api/tv/presenca alimenta o círculo "Sua
+  // participação" (linha do próprio jogador = o % que vai ser creditado) e a
+  // aba Participantes: a cada 30 s com a aba aberta, 60 s fora dela.
+  const [presencaRows, setPresencaRows] = useState<PresencaRow[]>([]);
+  const [presencaCarregando, setPresencaCarregando] = useState(true);
+  const participantesAberto = tab === "participantes";
+  const presencaAtiva = !!myId || participantesAberto;
   useEffect(() => {
-    setMeuPct(null);
-    if (!myId) return;
+    setPresencaRows([]);
+    setPresencaCarregando(true);
+  }, [programa.id]);
+  useEffect(() => {
+    if (!presencaAtiva) return;
     let alive = true;
     const load = () => {
       api.listarPresencaTV(programa.id)
-        .then((rows) => {
-          if (!alive) return;
-          const minha = rows.find((r) => r.telegram_id === String(myId));
-          setMeuPct(minha ? Math.max(0, Math.min(100, Math.round(minha.percentual))) : 0);
-        })
-        .catch(() => {});
+        .then((r) => { if (alive) setPresencaRows(r); })
+        .catch(() => {})
+        .finally(() => { if (alive) setPresencaCarregando(false); });
     };
     load();
-    const t = setInterval(load, 60_000);
+    const t = setInterval(load, participantesAberto ? 30_000 : 60_000);
     return () => { alive = false; clearInterval(t); };
-  }, [programa.id, myId]);
+  }, [programa.id, presencaAtiva, participantesAberto]);
+  const meuPct = useMemo(() => {
+    if (!myId || presencaCarregando) return null;
+    const minha = presencaRows.find((r) => r.telegram_id === String(myId));
+    return minha ? Math.max(0, Math.min(100, Math.round(minha.percentual))) : 0;
+  }, [presencaRows, presencaCarregando, myId]);
 
   const isAdmin = isAdminLogin(login);
 
@@ -912,7 +921,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
       {tab === "redcarpet" && (
         <RedCarpetPanel programa={programa} highlightPostId={highlightPostId} onHighlightConsumed={() => setHighlightPostId(null)} />
       )}
-      {tab === "participantes" && <ParticipantesPanel programa={programa} />}
+      {tab === "participantes" && <ParticipantesPanel rows={presencaRows} loading={presencaCarregando} />}
       {tab === "sobre" && <SobrePanel programa={programa} />}
     </div>
   );
@@ -2336,23 +2345,9 @@ function RedCarpetPanel({
 }
 
 // ---------- Participantes ----------
-function ParticipantesPanel({ programa }: { programa: Programa }) {
-  const [rows, setRows] = useState<Array<{ telegram_id: string; nome: string; watched_seconds: number; percentual: number }>>([]);
-  const [loading, setLoading] = useState(true);
+type PresencaRow = { telegram_id: string; nome: string; watched_seconds: number; percentual: number };
 
-  useEffect(() => {
-    let alive = true;
-    const load = () => {
-      api.listarPresencaTV(programa.id)
-        .then((r) => { if (alive) setRows(r); })
-        .catch(() => {})
-        .finally(() => { if (alive) setLoading(false); });
-    };
-    load();
-    const t = setInterval(load, 30_000);
-    return () => { alive = false; clearInterval(t); };
-  }, [programa.id]);
-
+function ParticipantesPanel({ rows, loading }: { rows: PresencaRow[]; loading: boolean }) {
   const sorted = useMemo(
     () => [...rows].sort((a, b) => b.percentual - a.percentual || b.watched_seconds - a.watched_seconds),
     [rows],
@@ -2368,10 +2363,11 @@ function ParticipantesPanel({ programa }: { programa: Programa }) {
         <ul className="space-y-1.5">
           {sorted.map((p) => (
             <li key={p.telegram_id} className="flex items-center justify-between text-sm">
-              <span className={`font-semibold truncate ${colorFor(p.nome)}`}>{p.nome}</span>
-              {/* % do servidor = o que vai ser creditado; minutos só enquanto ainda é 0%. */}
-              <span className="text-xs text-muted-foreground shrink-0 ml-2 tabular-nums">
-                {p.percentual > 0 ? `${Math.round(p.percentual)}%` : fmtMin(p.watched_seconds)}
+              <span className={`min-w-0 font-semibold truncate ${colorFor(p.nome)}`}>{p.nome}</span>
+              {/* % do servidor = o que vai ser creditado (0% também); minutos só como informação. */}
+              <span className="flex items-baseline gap-1.5 shrink-0 ml-2 tabular-nums">
+                <span className="text-[10px] text-muted-foreground/70">{fmtMin(p.watched_seconds)}</span>
+                <span className="text-xs font-semibold text-foreground">{`${Math.round(p.percentual)}%`}</span>
               </span>
             </li>
           ))}
