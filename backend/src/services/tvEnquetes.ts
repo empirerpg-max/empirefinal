@@ -1,7 +1,7 @@
 // Enquetes do chat da Empire TV: tabelas no D1 (só chave primária) + apuração.
 import type { D1DatabaseLike } from "./catalogoDbService";
 
-const SQL_TABELA_ENQUETE = `CREATE TABLE IF NOT EXISTS tv_enquete (id TEXT PRIMARY KEY, programa_id TEXT NOT NULL, pergunta TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('unica','multipla')), opcoes TEXT NOT NULL, secreto INTEGER NOT NULL, so_fim INTEGER NOT NULL, encerra_em INTEGER, aberta INTEGER NOT NULL, criada_em INTEGER NOT NULL, encerrada_em INTEGER, criada_por TEXT)`;
+const SQL_TABELA_ENQUETE = `CREATE TABLE IF NOT EXISTS tv_enquete (programa_id TEXT NOT NULL, id TEXT NOT NULL, pergunta TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('unica','multipla')), opcoes TEXT NOT NULL, secreto INTEGER NOT NULL, so_fim INTEGER NOT NULL, encerra_em INTEGER, aberta INTEGER NOT NULL, criada_em INTEGER NOT NULL, encerrada_em INTEGER, criada_por TEXT, PRIMARY KEY (programa_id, id)) WITHOUT ROWID`;
 const SQL_TABELA_VOTO = `CREATE TABLE IF NOT EXISTS tv_enquete_voto (enquete_id TEXT NOT NULL, jogador_id TEXT NOT NULL, nome TEXT, opcoes TEXT NOT NULL, votado_em INTEGER NOT NULL, PRIMARY KEY (enquete_id, jogador_id)) WITHOUT ROWID`;
 
 // Memo por isolate, chaveado no objeto db.
@@ -63,9 +63,9 @@ export async function criarEnquete(
   const id = crypto.randomUUID();
   await db
     .prepare(
-      "INSERT INTO tv_enquete (id, programa_id, pergunta, tipo, opcoes, secreto, so_fim, encerra_em, aberta, criada_em, encerrada_em, criada_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NULL, ?)",
+      "INSERT INTO tv_enquete (programa_id, id, pergunta, tipo, opcoes, secreto, so_fim, encerra_em, aberta, criada_em, encerrada_em, criada_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NULL, ?)",
     )
-    .bind(id, e.programaId, pergunta, e.tipo, JSON.stringify(opcoes), e.secreto ? 1 : 0, e.soFim ? 1 : 0, e.encerraEmMs ?? null, agoraMs, e.criadaPor ?? null)
+    .bind(e.programaId, id, pergunta, e.tipo, JSON.stringify(opcoes), e.secreto ? 1 : 0, e.soFim ? 1 : 0, e.encerraEmMs ?? null, agoraMs, e.criadaPor ?? null)
     .run();
   return id;
 }
@@ -81,6 +81,7 @@ function lerLista<T>(s: string | null | undefined): T[] {
 
 export async function votar(
   db: D1DatabaseLike,
+  programaId: string,
   enqueteId: string,
   jogadorId: string,
   nome: string,
@@ -89,14 +90,14 @@ export async function votar(
 ): Promise<"ok" | "encerrada" | "invalida"> {
   await garantirTabelasEnquete(db);
   const r = await db
-    .prepare("SELECT tipo, opcoes, aberta, encerra_em FROM tv_enquete WHERE id = ?")
-    .bind(enqueteId)
+    .prepare("SELECT tipo, opcoes, aberta, encerra_em FROM tv_enquete WHERE programa_id = ? AND id = ?")
+    .bind(programaId, enqueteId)
     .all<{ tipo: string; opcoes: string; aberta: number; encerra_em: number | null }>();
   const row = r.results[0];
   if (!row) return "invalida";
   if (row.aberta !== 1) return "encerrada";
   if (row.encerra_em != null && row.encerra_em <= agoraMs) {
-    await encerrar(db, enqueteId, agoraMs);
+    await encerrar(db, programaId, enqueteId, agoraMs);
     return "encerrada";
   }
   const n = lerLista<string>(row.opcoes).length;
@@ -114,11 +115,11 @@ export async function votar(
   return "ok";
 }
 
-export async function encerrar(db: D1DatabaseLike, enqueteId: string, agoraMs: number): Promise<boolean> {
+export async function encerrar(db: D1DatabaseLike, programaId: string, enqueteId: string, agoraMs: number): Promise<boolean> {
   await garantirTabelasEnquete(db);
   const r = await db
-    .prepare("UPDATE tv_enquete SET aberta = 0, encerrada_em = ? WHERE id = ? AND aberta = 1")
-    .bind(agoraMs, enqueteId)
+    .prepare("UPDATE tv_enquete SET aberta = 0, encerrada_em = ? WHERE programa_id = ? AND id = ? AND aberta = 1")
+    .bind(agoraMs, programaId, enqueteId)
     .run();
   return ((r as unknown as { meta?: { changes?: number } }).meta?.changes ?? 0) > 0;
 }

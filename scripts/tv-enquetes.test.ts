@@ -28,34 +28,34 @@ test("criarEnquete valida entradas", async () => {
 
 test("votar: única, múltipla, troca de voto, encerrada", async () => {
   const id = await E.criarEnquete(db, { ...base, programaId: "pv" }, 1000);
-  expect(await E.votar(db, id, "j1", "Ana", [0, 1], 1100)).toBe("invalida");
-  expect(await E.votar(db, id, "j1", "Ana", [], 1100)).toBe("invalida");
-  expect(await E.votar(db, id, "j1", "Ana", [5], 1100)).toBe("invalida");
-  expect(await E.votar(db, "nao-existe", "j1", "Ana", [0], 1100)).toBe("invalida");
-  expect(await E.votar(db, id, "j1", "Ana", [0], 1100)).toBe("ok");
-  expect(await E.votar(db, id, "j1", "Ana", [2], 1200)).toBe("ok");
+  expect(await E.votar(db, "pv", id, "j1", "Ana", [0, 1], 1100)).toBe("invalida");
+  expect(await E.votar(db, "pv", id, "j1", "Ana", [], 1100)).toBe("invalida");
+  expect(await E.votar(db, "pv", id, "j1", "Ana", [5], 1100)).toBe("invalida");
+  expect(await E.votar(db, "pv", "nao-existe", "j1", "Ana", [0], 1100)).toBe("invalida");
+  expect(await E.votar(db, "pv", id, "j1", "Ana", [0], 1100)).toBe("ok");
+  expect(await E.votar(db, "pv", id, "j1", "Ana", [2], 1200)).toBe("ok");
   const n = sqlite.query("SELECT COUNT(*) c FROM tv_enquete_voto WHERE enquete_id = ?").get(id) as any;
   expect(n.c).toBe(1);
   const m = await E.criarEnquete(db, { ...base, programaId: "pv", tipo: "multipla" }, 1000);
-  expect(await E.votar(db, m, "j1", "Ana", [2, 0, 2], 1100)).toBe("ok");
+  expect(await E.votar(db, "pv", m, "j1", "Ana", [2, 0, 2], 1100)).toBe("ok");
   expect((sqlite.query("SELECT opcoes FROM tv_enquete_voto WHERE enquete_id = ?").get(m) as any).opcoes).toBe("[0,2]");
-  expect(await E.encerrar(db, id, 1300)).toBe(true);
-  expect(await E.encerrar(db, id, 1400)).toBe(false);
-  expect(await E.encerrar(db, "nada", 1400)).toBe(false);
-  expect(await E.votar(db, id, "j2", "Bia", [0], 1500)).toBe("encerrada");
+  expect(await E.encerrar(db, "pv", id, 1300)).toBe(true);
+  expect(await E.encerrar(db, "pv", id, 1400)).toBe(false);
+  expect(await E.encerrar(db, "pv", "nada", 1400)).toBe(false);
+  expect(await E.votar(db, "pv", id, "j2", "Bia", [0], 1500)).toBe("encerrada");
 });
 
 test("votar em enquete vencida fecha e devolve encerrada", async () => {
   const id = await E.criarEnquete(db, { ...base, programaId: "pe", encerraEmMs: 2000 }, 1000);
-  expect(await E.votar(db, id, "j1", "Ana", [0], 2000)).toBe("encerrada");
+  expect(await E.votar(db, "pe", id, "j1", "Ana", [0], 2000)).toBe("encerrada");
   expect((sqlite.query("SELECT aberta, encerrada_em FROM tv_enquete WHERE id = ?").get(id) as any)).toEqual({ aberta: 0, encerrada_em: 2000 });
 });
 
 test("listarEnquetes: esconde contagem com soFim, fecha vencida, ordena", async () => {
   const a = await E.criarEnquete(db, { ...base, programaId: "pl", soFim: true }, 1000);
   const b = await E.criarEnquete(db, { ...base, programaId: "pl", encerraEmMs: 1500 }, 1100);
-  await E.votar(db, a, "j1", "Ana", [1], 1200);
-  await E.votar(db, b, "j1", "Ana", [0], 1200);
+  await E.votar(db, "pl", a, "j1", "Ana", [1], 1200);
+  await E.votar(db, "pl", b, "j1", "Ana", [0], 1200);
   let l = await E.listarEnquetes(db, "pl", "j1", 1300);
   expect(l.map((x) => x.id)).toEqual([b, a]);
   const la = l.find((x) => x.id === a)!;
@@ -64,7 +64,16 @@ test("listarEnquetes: esconde contagem com soFim, fecha vencida, ordena", async 
   const lb = l.find((x) => x.id === b)!;
   expect(lb).toMatchObject({ aberta: false, encerradaEm: 1600, contagem: [1, 0, 0], vencedores: [0], meuVoto: null });
   expect(l[0].id).toBe(a); // aberta primeiro
-  await E.encerrar(db, a, 1700);
+  await E.encerrar(db, "pl", a, 1700);
   l = await E.listarEnquetes(db, "pl", "j1", 1800);
   expect(l.find((x) => x.id === a)).toMatchObject({ contagem: [0, 1, 0], pct: [0, 100, 0], vencedores: [1] });
+});
+
+test("enquete de outro programa nunca é listada, votada nem encerrada", async () => {
+  const id = await E.criarEnquete(db, { ...base, programaId: "px" }, 1000);
+  expect((await E.listarEnquetes(db, "py", "j1", 1100)).map((x) => x.id)).not.toContain(id);
+  expect(await E.votar(db, "py", id, "j1", "Ana", [0], 1100)).toBe("invalida");
+  expect(await E.encerrar(db, "py", id, 1100)).toBe(false);
+  expect(sqlite.query("SELECT COUNT(*) c FROM tv_enquete_voto WHERE enquete_id = ?").get(id)).toEqual({ c: 0 });
+  expect((await E.listarEnquetes(db, "px", "j1", 1100))[0]).toMatchObject({ id, aberta: true });
 });
