@@ -153,6 +153,7 @@ import {
   processarParticipacaoTV,
   corrigirRegistroReprocessamentoTV,
   registrarEventoTransmissaoController,
+  registrarEventoAdminController,
 } from "../controllers/tvController";
 import {
   getRedCarpetFeedController,
@@ -576,6 +577,7 @@ export async function handleEmpireApiRoutes(
     "/api/tv/presenca",
     "/api/tv/processar-participacao",
     "/api/tv/evento-transmissao",
+    "/api/tv/evento-admin",
     "/api/tv/red-carpet",
     "/api/tv/red-carpet/curtir",
     "/api/tv/red-carpet/ranking",
@@ -1714,6 +1716,14 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await registrarEventoTransmissaoController(request);
+  } else if (url.pathname === "/api/tv/evento-admin") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ ok: false, erro: "Use POST para /api/tv/evento-admin." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await registrarEventoAdminController(request);
   } else if (url.pathname === "/api/tv/processar-participacao") {
     // Aceita GET também, pra dar pra colar a URL direto no navegador sem
     // precisar de console/curl — mesma filosofia dos outros endpoints de

@@ -1,7 +1,7 @@
 import { googleSheetsService, normalizeText, normalizeComparison, appendRows } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
 import { readRuntimeEnv } from "../google/service-account";
-import { verifySessionToken, extractBearerToken } from "../services/sessionService";
+import { verifySessionToken, extractBearerToken, requestProvesAdmin } from "../services/sessionService";
 import { getCatalogoDb } from "../services/catalogoDbService";
 import {
   minutosDeIdades,
@@ -751,7 +751,7 @@ export async function lerEventosReais(flags: FlagsKvLike | undefined): Promise<R
   }
 }
 
-async function gravarEventosReais(flags: FlagsKvLike, mapa: Record<string, EventoRealTV>): Promise<void> {
+export async function gravarEventosReais(flags: FlagsKvLike, mapa: Record<string, EventoRealTV>): Promise<void> {
   await flags.put(TV_EVENTOS_REAIS_KV_KEY, JSON.stringify(mapa));
 }
 
@@ -822,6 +822,63 @@ export async function registrarEventoTransmissaoController(
       status: 500,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
+  }
+}
+
+/**
+ * POST /api/tv/evento-admin
+ * Botões Início/Término do admin: reforça/corrige o horário real da
+ * transmissão na MESMA chave KV usada pelo transmissao.py (chave do grupo).
+ * body: { programa_id, acao: "inicio" | "fim" }. Exige sessão de admin
+ * (401 sem token, 403 sem ser admin). "inicio" repetido sobrescreve com agora;
+ * "fim" roda o processamento (dedup pela marca de processado).
+ */
+export async function registrarEventoAdminController(
+  request: Request,
+  flagsParam?: FlagsKvLike,
+): Promise<Response> {
+  const flags = flagsParam || ((globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined);
+  const resp = (corpo: unknown, status: number) =>
+    new Response(JSON.stringify(corpo), {
+      status,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  try {
+    if (!extractBearerToken(request)) return resp({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return resp({ ok: false, erro: "Apenas admin." }, 403);
+    if (!flags) return resp({ ok: false, erro: "KV FLAGS indisponível neste ambiente." }, 503);
+
+    const body = (await request.json().catch(() => ({}))) as { programa_id?: string; acao?: string };
+    const programaId = String(body.programa_id ?? "").trim();
+    const acao = String(body.acao ?? "").trim();
+    if (!programaId || (acao !== "inicio" && acao !== "fim")) {
+      return resp({ ok: false, erro: "programa_id e acao ('inicio' ou 'fim') são obrigatórios." }, 400);
+    }
+
+    const grupo = agruparTransmissoes(await readProgramas()).find((g) => g.rowIds.includes(programaId));
+    if (!grupo) return resp({ ok: false, erro: "Transmissão não encontrada para esse programa." }, 400);
+
+    const agora = Date.now();
+    const mapa = await lerEventosReais(flags);
+    const atual = mapa[grupo.chave] || {};
+    if (acao === "inicio") atual.inicioTs = agora;
+    else atual.fimTs = agora;
+    mapa[grupo.chave] = atual;
+    await gravarEventosReais(flags, mapa);
+
+    const processamento = acao === "fim" ? await processarParticipacaoTV(flags) : undefined;
+    return resp(
+      {
+        ok: true,
+        acao,
+        ...(acao === "inicio" ? { inicioTs: agora } : { fimTs: agora }),
+        ...(processamento ? { processamento } : {}),
+      },
+      200,
+    );
+  } catch (error: any) {
+    console.error("[registrarEventoAdminController] Erro:", error);
+    return resp({ ok: false, erro: error.message || "Erro ao registrar evento." }, 500);
   }
 }
 

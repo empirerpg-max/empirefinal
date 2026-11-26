@@ -21,6 +21,7 @@ let sessao: { id: string; usuario: string } | null = null;
 mock.module(R + "services/sessionService.ts", () => ({
   verifySessionToken: async () => sessao,
   extractBearerToken: () => "tok",
+  requestProvesAdmin: async () => false,
 }));
 
 const C = await import(R + "controllers/tvController.ts");
