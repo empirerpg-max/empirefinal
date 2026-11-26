@@ -183,3 +183,20 @@ test("aba fora da lista é sempre 'off', sem consultar nada", async () => {
   delete (globalThis as any).__CATALOGO_DB__;
   expect(await estadoAba("1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo", "Social")).toBe("off");
 });
+
+test("readUltimasLinhas: aba ligada lê só a faixa final, sem cabeçalho e sem Google", async () => {
+  await definirEstadoAba("Comentarios_MV", "on");
+  await G.updateValues("principal", "Comentarios_MV", "A1:C1", [["id", "x", "jogador"]]);
+  for (let i = 1; i <= 12; i++) await G.appendRow("principal", "Comentarios_MV", [`t${i}`, "", `j${i}`]);
+  const r = await G.readUltimasLinhas("principal", "Comentarios_MV", 8);
+  expect(r.map((l: string[]) => l[0])).toEqual(["t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12"]);
+  expect(googleCalls.filter((u) => u.includes("sheets.googleapis.com"))).toEqual([]);
+});
+
+test("readUltimasLinhas: aba com menos linhas que n e aba só com cabeçalho", async () => {
+  await definirEstadoAba("Comentarios_MV", "on");
+  await G.updateValues("principal", "Comentarios_MV", "A1:C1", [["id", "x", "jogador"]]);
+  expect(await G.readUltimasLinhas("principal", "Comentarios_MV", 8)).toEqual([]);
+  await G.appendRow("principal", "Comentarios_MV", ["t1", "", "j1"]);
+  expect(await G.readUltimasLinhas("principal", "Comentarios_MV", 8)).toEqual([["t1", "", "j1"]]);
+});

@@ -8,6 +8,7 @@ import {
   estadoAba,
   gravarD1,
   lerD1,
+  lerUltimasD1,
   limparD1,
   removerD1,
 } from "./porteiroD1";
@@ -922,6 +923,22 @@ export async function readValues(
   return readValuesGoogle(spreadsheetKeyOrId, sheetName, range, valueRenderOption);
 }
 
+/**
+ * Só as últimas `n` linhas de dados (sem cabeçalho), em ordem de planilha.
+ * Aba do porteiro lendo no D1: lê só a faixa final (não a aba inteira).
+ * Outras abas: mesma leitura de sempre (com o cache de 15 s), cortada.
+ */
+export async function readUltimasLinhas(
+  spreadsheetKeyOrId: SpreadsheetKey | string,
+  sheetName: string,
+  n: number,
+): Promise<string[][]> {
+  const id = resolveSpreadsheetId(spreadsheetKeyOrId);
+  if (leNoD1(await estadoAba(id, sheetName))) return lerUltimasD1(id, sheetName, n);
+  if (n <= 0) return [];
+  return (await readValuesGoogle(spreadsheetKeyOrId, sheetName)).slice(1).slice(-n);
+}
+
 export async function readValuesFresh(
   spreadsheetKeyOrId: SpreadsheetKey | string,
   sheetName: string,
@@ -1101,6 +1118,7 @@ export const googleDireto = {
 export const googleSheetsService = {
   SPREADSHEETS,
   readValues,
+  readUltimasLinhas,
   readSheetObjects,
   findRows,
   updateValues,
@@ -1109,6 +1127,7 @@ export const googleSheetsService = {
   deleteRows,
   principal: {
     readValues: (sheetName: string, range?: string) => readValues("principal", sheetName, range),
+    readUltimasLinhas: (sheetName: string, n: number) => readUltimasLinhas("principal", sheetName, n),
     // Lê o valor REAL da célula, sem aplicar formatação/locale (ver
     // comentário em cima de ValueRenderOption) — usar sempre que o número
     // lido vai ser usado em cálculo (nunca só exibido), pra nunca

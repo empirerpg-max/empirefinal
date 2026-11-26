@@ -203,12 +203,17 @@ export async function limparIntervalo(planilha: string, aba: string, range: stri
   return [...conferir, ...gravar];
 }
 
-export async function proximaLinhaAppend(planilha: string, aba: string): Promise<number> {
+/** Número da última linha gravada da aba (0 = vazia). MAX pela PK: lê 1 linha. */
+export async function ultimaLinha(planilha: string, aba: string): Promise<number> {
   const r = await db()
     .prepare("SELECT max(linha) AS m FROM planilha_virtual WHERE planilha = ? AND aba = ?")
     .bind(planilha, aba)
     .all<{ m: number | null }>();
-  return (r.results?.[0]?.m ?? 0) + 1;
+  return r.results?.[0]?.m ?? 0;
+}
+
+export async function proximaLinhaAppend(planilha: string, aba: string): Promise<number> {
+  return (await ultimaLinha(planilha, aba)) + 1;
 }
 
 /** Remove as linhas e desloca as de baixo (mesma semântica do deleteDimension do Sheets). */
