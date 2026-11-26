@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ProgramaTV } from "@/lib/api";
+import { PresencaTVTracker } from "./PresencaTVTracker";
 
 interface TvPlayerContextValue {
   watching: ProgramaTV | null;
@@ -45,6 +46,8 @@ export function TvPlayerProvider({ children }: { children: ReactNode }) {
         updateWatching: (programa) => setWatching(programa),
       }}
     >
+      {/* Conta a presença na sala E no mini player (os dois vivem neste provider). */}
+      <PresencaTVTracker programaId={watching?.id ? String(watching.id) : null} />
       {children}
     </TvPlayerContext.Provider>
   );

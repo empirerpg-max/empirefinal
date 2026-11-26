@@ -719,18 +719,51 @@ export const api = {
     return res.json();
   },
 
-  async registrarPresencaTV(p: {
-    programa_id: string;
-    telegram_id: string;
-    nome: string;
-    watched_seconds: number;
-  }): Promise<CommonResponse> {
-    const res = await fetch("/api/tv/presenca", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(p),
-    });
-    return res.json();
+  /**
+   * Envia as idades (ms) dos minutos marcados na sala/mini player da Empire TV.
+   * O jogador vem da sessão (Authorization); telegram_id é só o fallback.
+   * keepalive: o envio sobrevive a fechar a aba (pagehide). true = gravado.
+   */
+  async enviarMinutosPresenca(programaId: string, idadesMs: number[], nome: string): Promise<boolean> {
+    try {
+      const login = getStoredLogin();
+      const res = await fetch("/api/tv/presenca", {
+        method: "POST",
+        keepalive: true,
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          programa_id: programaId,
+          idades_ms: idadesMs,
+          nome,
+          ...(login?.id ? { telegram_id: String(login.id) } : {}),
+        }),
+      });
+      if (!res.ok) return false;
+      const json = await res.json().catch(() => null);
+      return json?.ok === true;
+    } catch {
+      return false;
+    }
+  },
+  /** Admin marca o início/término real da transmissão (crédito no próximo cron após "fim"). */
+  async eventoAdminTV(
+    programaId: string,
+    acao: "inicio" | "fim",
+  ): Promise<{ ok: boolean; acao?: string; inicioTs?: number; fimTs?: number; erro?: string }> {
+    try {
+      const res = await fetch("/api/tv/evento-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ programa_id: programaId, acao }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        return { ok: false, erro: String(json?.erro || `Erro ${res.status}`) };
+      }
+      return { ok: true, acao: json.acao, inicioTs: json.inicioTs, fimTs: json.fimTs };
+    } catch {
+      return { ok: false, erro: "Sem conexão." };
+    }
   },
   async listarPresencaTV(
     programa_id: string,

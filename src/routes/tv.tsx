@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2, Star } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost, type EnquetePayload } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { getKickStatus } from "@/lib/kick.functions";
-import { getStoredLogin } from "@/components/LoginScreen";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { useTelegramUser } from "@/lib/telegram";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
@@ -745,52 +745,31 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   const isDesktop = useIsDesktop();
   const tabBarScroll = useDragScroll<HTMLDivElement>();
 
-  // Heartbeat de presença
+  // A presença é contada pelo PresencaTVTracker (montado no TvPlayerProvider),
+  // que vale tanto pra sala quanto pro mini player — nada de heartbeat aqui.
+
+  // Círculo "Sua participação": a linha do próprio jogador no mesmo GET da
+  // aba Participantes (é o % que vai ser creditado).
+  const [meuPct, setMeuPct] = useState<number | null>(null);
   useEffect(() => {
+    setMeuPct(null);
     if (!myId) return;
-    const start = Date.now();
-    let accumulated = 0;
-    let lastTick = start;
-    let visible = !document.hidden;
-
-    const onVis = () => {
-      if (document.hidden) {
-        if (visible) accumulated += Math.floor((Date.now() - lastTick) / 1000);
-        visible = false;
-      } else {
-        visible = true;
-        lastTick = Date.now();
-      }
+    let alive = true;
+    const load = () => {
+      api.listarPresencaTV(programa.id)
+        .then((rows) => {
+          if (!alive) return;
+          const minha = rows.find((r) => r.telegram_id === String(myId));
+          setMeuPct(minha ? Math.max(0, Math.min(100, Math.round(minha.percentual))) : 0);
+        })
+        .catch(() => {});
     };
-    document.addEventListener("visibilitychange", onVis);
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(t); };
+  }, [programa.id, myId]);
 
-    const send = (extraSeconds = 0) => {
-      const total = accumulated + extraSeconds;
-      if (total < 5) return;
-      api.registrarPresencaTV({
-        programa_id: programa.id,
-        telegram_id: myId,
-        nome: myName || "Anônimo",
-        watched_seconds: total,
-      }).catch(() => {});
-    };
-
-    const interval = setInterval(() => {
-      if (visible) {
-        const now = Date.now();
-        accumulated += Math.floor((now - lastTick) / 1000);
-        lastTick = now;
-        send();
-      }
-    }, 30_000);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVis);
-      const extra = visible ? Math.floor((Date.now() - lastTick) / 1000) : 0;
-      send(extra);
-    };
-  }, [programa.id, myId, myName]);
+  const isAdmin = isAdminLogin(login);
 
   // Red Carpet sempre logo ao lado de Chat — só existe quando o TIPO_EVENTO
   // da sala está na lista (Eventos Oficiais/Premiações/Superbowl).
@@ -887,6 +866,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
         <ArrowLeft className="size-4" />
       </button>
       <div className="min-w-0 flex-1 truncate text-sm font-semibold">{programa.titulo}</div>
+      {myId && <ParticipacaoCirculo pct={meuPct} onClick={() => setTab("participantes")} />}
       {programa.ao_vivo && (
         <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
           <Radio className="size-2.5 animate-pulse" /> LIVE
@@ -968,6 +948,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
           <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
         </div>
         <div className="absolute inset-x-0 bottom-0 flex flex-col" style={{ top: videoHeight }}>
+          {isAdmin && <AdminEventoBar programaId={programa.id} />}
           {tabBar}
           {panel}
         </div>
@@ -984,6 +965,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
       </div>
 
       <div className="lg:w-[360px] border-l border-border flex flex-col min-h-0 bg-card/30">
+        {isAdmin && <AdminEventoBar programaId={programa.id} />}
         {tabBar}
         {panel}
       </div>
@@ -2371,7 +2353,10 @@ function ParticipantesPanel({ programa }: { programa: Programa }) {
     return () => { alive = false; clearInterval(t); };
   }, [programa.id]);
 
-  const sorted = useMemo(() => [...rows].sort((a, b) => b.watched_seconds - a.watched_seconds), [rows]);
+  const sorted = useMemo(
+    () => [...rows].sort((a, b) => b.percentual - a.percentual || b.watched_seconds - a.watched_seconds),
+    [rows],
+  );
 
   return (
     <div className="flex-1 overflow-y-auto p-3">
@@ -2384,12 +2369,118 @@ function ParticipantesPanel({ programa }: { programa: Programa }) {
           {sorted.map((p) => (
             <li key={p.telegram_id} className="flex items-center justify-between text-sm">
               <span className={`font-semibold truncate ${colorFor(p.nome)}`}>{p.nome}</span>
-              <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                {p.percentual > 0 ? `${p.percentual.toFixed(0)}%` : fmtMin(p.watched_seconds)}
+              {/* % do servidor = o que vai ser creditado; minutos só enquanto ainda é 0%. */}
+              <span className="text-xs text-muted-foreground shrink-0 ml-2 tabular-nums">
+                {p.percentual > 0 ? `${Math.round(p.percentual)}%` : fmtMin(p.watched_seconds)}
               </span>
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/** Círculo pequeno com a % de participação do próprio jogador; toque abre Participantes. */
+function ParticipacaoCirculo({ pct, onClick }: { pct: number | null; onClick: () => void }) {
+  const r = 13;
+  const c = 2 * Math.PI * r;
+  const v = pct ?? 0;
+  const cor = v >= 90 ? "text-emerald-400" : v >= 50 ? "text-amber-400" : "text-primary";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative size-8 min-w-0 shrink-0 px-1 rounded-full hover:bg-muted flex items-center justify-center active:scale-95 transition"
+      aria-label={pct == null ? "Sua participação" : `Sua participação: ${v}%`}
+      title={pct == null ? "Sua participação" : `Sua participação: ${v}%`}
+    >
+      <svg viewBox="0 0 32 32" className="absolute inset-0 size-8 -rotate-90 shrink-0" aria-hidden="true">
+        <circle cx="16" cy="16" r={r} fill="none" strokeWidth="2.5" className="stroke-muted" />
+        <circle
+          cx="16"
+          cy="16"
+          r={r}
+          fill="none"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          stroke="currentColor"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - v / 100)}
+          className={`${cor} transition-[stroke-dashoffset] duration-500`}
+        />
+      </svg>
+      <span className="relative truncate text-[9px] font-bold tabular-nums leading-none">
+        {pct == null ? "–" : `${v}%`}
+      </span>
+    </button>
+  );
+}
+
+/** Faixa só para admin: marca o início e o término reais da transmissão. */
+function AdminEventoBar({ programaId }: { programaId: string }) {
+  const [enviando, setEnviando] = useState<"inicio" | "fim" | null>(null);
+  const [estado, setEstado] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
+  useEffect(() => {
+    setEstado(null);
+  }, [programaId]);
+
+  const hora = (ts?: number) =>
+    ts ? new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+
+  const disparar = async (acao: "inicio" | "fim") => {
+    if (enviando) return;
+    if (
+      acao === "fim" &&
+      !window.confirm("Marcar o TÉRMINO do evento agora? A participação de todos será calculada até este momento.")
+    ) {
+      return;
+    }
+    setEnviando(acao);
+    const r = await api.eventoAdminTV(programaId, acao);
+    setEnviando(null);
+    if (!r.ok) {
+      setEstado({ tipo: "erro", texto: r.erro || "Não foi possível registrar." });
+    } else if (acao === "inicio") {
+      setEstado({ tipo: "ok", texto: `Início marcado às ${hora(r.inicioTs)}` });
+    } else {
+      // Crédito sai no próximo cron (até ~15 min) — processamento {0,0} aqui não é falha.
+      setEstado({ tipo: "ok", texto: "Encerrado — a participação será creditada em alguns minutos" });
+    }
+  };
+
+  const btn =
+    "min-w-0 shrink-0 h-7 px-2.5 rounded-md text-[11px] font-semibold flex items-center gap-1 border transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none";
+  return (
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 py-1 border-b border-border bg-amber-500/5 shrink-0 min-w-0">
+      <span className="flex items-center gap-1 shrink-0 text-[10px] font-bold uppercase tracking-wide text-amber-400">
+        <ShieldCheck className="size-3 shrink-0" /> Só admin
+      </span>
+      <button
+        type="button"
+        onClick={() => disparar("inicio")}
+        disabled={!!enviando}
+        className={`${btn} border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10`}
+      >
+        {enviando === "inicio" ? <Loader2 className="size-3 shrink-0 animate-spin" /> : <Play className="size-3 shrink-0" />}
+        <span className="truncate">Início do evento</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => disparar("fim")}
+        disabled={!!enviando}
+        className={`${btn} border-red-500/40 text-red-400 hover:bg-red-500/10`}
+      >
+        {enviando === "fim" ? <Loader2 className="size-3 shrink-0 animate-spin" /> : <Square className="size-3 shrink-0" />}
+        <span className="truncate">Término</span>
+      </button>
+      {estado && (
+        <span
+          role="status"
+          className={`basis-full min-w-0 text-[10px] leading-tight ${estado.tipo === "erro" ? "text-red-400" : "text-muted-foreground"}`}
+        >
+          {estado.texto}
+        </span>
       )}
     </div>
   );
