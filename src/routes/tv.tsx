@@ -771,12 +771,34 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   const largo = largoMq && !deitado;
   useEffect(() => {
     if (!deitado) return;
-    window.history.pushState({ tvSalaDeitada: true }, "");
+    let ativo = true;
+    let empurrado = false;
+    const empurrar = () => {
+      if (!ativo) return;
+      window.history.pushState({ tvSalaDeitada: true }, "");
+      empurrado = true;
+    };
+    // Girou com o menu de uma mensagem aberto: fecha o menu primeiro (tira a
+    // entrada dele) e só então empurra a do modo deitado — assim não fica
+    // entrada órfã do menu embaixo da nossa. O ChatPanel fecha o menu no
+    // mesmo popstate, porque a entrada atual deixa de ser a dele.
+    const depoisDoMenu = () => {
+      window.removeEventListener("popstate", depoisDoMenu);
+      empurrar();
+    };
+    if (window.history.state?.tvChatMenu) {
+      window.addEventListener("popstate", depoisDoMenu);
+      window.history.back();
+    } else {
+      empurrar();
+    }
     const onPop = () => {
-      if (!window.history.state?.tvSalaDeitada) setDeitadoDispensado(true);
+      if (empurrado && !window.history.state?.tvSalaDeitada) setDeitadoDispensado(true);
     };
     window.addEventListener("popstate", onPop);
     return () => {
+      ativo = false;
+      window.removeEventListener("popstate", depoisDoMenu);
       window.removeEventListener("popstate", onPop);
       // Saiu do modo deitado sem ser pelo voltar (girou o celular, minimizou,
       // fechou a sala): tira a entrada para não deixar entrada órfã.
@@ -881,8 +903,8 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
             onClick={handleUnmute}
             className={
               unmutedOnce || hasUnmutedThisSession()
-                ? "absolute top-2 right-2 z-10 size-8 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
-                : "absolute top-2 right-2 z-10 max-w-[60%] min-w-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
+                ? "absolute top-2 right-2 z-10 size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
+                : "absolute top-2 right-2 z-10 max-w-[60%] min-w-0 h-10 flex items-center gap-1.5 px-3 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
             }
             aria-label="Ativar som"
           >
@@ -918,11 +940,11 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   // Controles por cima do vídeo, só no canto de CIMA (a faixa de baixo é da
   // barra de controles da Kick — ver o botão de som acima).
   const videoTopo = (
-    <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 min-w-0">
-      <button onClick={onBack} className="size-8 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition" aria-label="Voltar">
+    <div className="absolute top-2 left-2 z-10 flex items-center gap-2 min-w-0">
+      <button onClick={onBack} className="size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition" aria-label="Voltar">
         <ArrowLeft className="size-4 shrink-0" />
       </button>
-      <button onClick={onMinimize} className="size-8 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition" aria-label="Minimizar (continua tocando)" title="Minimizar — continua tocando">
+      <button onClick={onMinimize} className="size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition" aria-label="Minimizar (continua tocando)" title="Minimizar — continua tocando">
         <Minimize2 className="size-4 shrink-0" />
       </button>
       {programa.ao_vivo && (
@@ -964,15 +986,15 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
       <StickyScrollArrowLeft show={tabBarScroll.canScrollLeft} onClick={() => tabBarScroll.scrollByAmount(-1)} />
       <StickyScrollArrowRight show={tabBarScroll.canScrollRight} onClick={() => tabBarScroll.scrollByAmount(1)} />
       {/* Na tela larga o chat já fica sempre na coluna da direita, então a
-          aba "Chat" sai da fileira: as outras abrem à esquerda e tocar na
-          aba já aberta fecha o painel. */}
+          aba "Chat" sai da fileira: as outras abrem à esquerda. Sem nenhuma
+          aberta, a esquerda mostra o "Sobre" (nada de área vazia). */}
       {tabs.filter((t) => !largo || t.id !== "chat").map((t) => {
         const Icon = t.icon;
-        const active = tab === t.id;
+        const active = tab === t.id || (largo && tab === "chat" && t.id === "sobre");
         return (
           <button
             key={t.id}
-            onClick={() => setTab(largo && active ? "chat" : t.id)}
+            onClick={() => setTab(t.id)}
             className={`relative shrink-0 h-7 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 ${
               active
                 ? "text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]"
@@ -989,14 +1011,16 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
 
   // Conteúdo das abas que não são o chat (no celular em pé substitui o chat;
   // na tela larga aparece à esquerda, com o chat continuando à direita).
+  // Na tela larga, sem aba aberta (tab "chat"), mostra o "Sobre".
+  const abaEsquerda: WatchTab = tab === "chat" && largo ? "sobre" : tab;
   const painelAba =
-    tab === "chat" ? null : (
+    abaEsquerda === "chat" ? null : (
       <div className="flex-1 min-h-0 flex flex-col">
-        {tab === "redcarpet" && (
+        {abaEsquerda === "redcarpet" && (
           <RedCarpetPanel programa={programa} highlightPostId={highlightPostId} onHighlightConsumed={() => setHighlightPostId(null)} />
         )}
-        {tab === "participantes" && <ParticipantesPanel rows={presencaRows} loading={presencaCarregando} />}
-        {tab === "sobre" && <SobrePanel programa={programa} />}
+        {abaEsquerda === "participantes" && <ParticipantesPanel rows={presencaRows} loading={presencaCarregando} />}
+        {abaEsquerda === "sobre" && <SobrePanel programa={programa} />}
       </div>
     );
   const mostraChat = deitado || largo || tab === "chat";
@@ -1036,6 +1060,10 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
           : {
               height: vv ? vv.height : "100%",
               transform: vv?.offsetTop ? `translateY(${vv.offsetTop}px)` : undefined,
+              // Celular deitado: controles e coluna do chat fora do entalhe.
+              ...(modo === "deitado"
+                ? { paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }
+                : {}),
             }
       }
     >
