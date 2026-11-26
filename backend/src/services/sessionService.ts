@@ -9,7 +9,7 @@ import { googleSheetsService, normalizeComparison } from "./googleSheetsService"
 // sem precisar de biblioteca externa nem de storage (fica tudo verificável
 // na hora, sem KV/D1). Nunca interfere na edição direta da planilha — é só
 // autenticação HTTP entre front e back.
-const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias — app casual, sem re-login chato
+export const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias — app casual, sem re-login chato
 
 // ID de admin histórico, hardcoded em vários controllers — centralizado
 // aqui só pra facilitar comparação junto da verificação de token.

@@ -48,6 +48,7 @@ import {
   LoginScreen,
   getStoredLogin,
   clearStoredLogin,
+  getStoredSessionToken,
   isImpersonating,
   stopImpersonating,
   type LoginResult,
@@ -645,13 +646,13 @@ function AuthGate() {
   // idempotente (no máximo 1x/dia por jogador), então é seguro chamar toda
   // vez que o app abre.
   //
-  // Também é o que derruba quem teve o acesso removido pelo admin (ou foi
-  // apagado da aba Usuários): o heartbeat responde "revogado" e a sessão
-  // salva é apagada. Roda ao abrir, a cada 3 min e sempre que o app volta
-  // pro primeiro plano — assim quem deixa o app aberto também é deslogado.
+  // Deslogar/bloquear pelo admin (tela Gestão de usuários): o app manda o
+  // token de sessão em TODA chamada pra /api/ e, se o servidor responder com
+  // X-Acesso-Revogado, apaga a sessão salva e volta pra tela de login. Sem
+  // nenhuma checagem periódica — só aproveita as chamadas que o app já faz.
   useEffect(() => {
     const forcarLogout = () => {
-      // Admin simulando um jogador bloqueado: volta pro admin, não desloga.
+      // Admin simulando um jogador deslogado/bloqueado: volta pro admin.
       if (isImpersonating() && stopImpersonating()) {
         window.location.reload();
         return;
@@ -665,38 +666,33 @@ function AuthGate() {
       setLoggedInUser(null);
     };
 
-    const verificar = () => {
-      const atual = getStoredLogin();
-      if (!atual) return;
+    const fetchOriginal = window.fetch;
+    const fetchComSessao: typeof window.fetch = async (input, init) => {
+      let novoInit = init;
+      const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : null;
+      const token = getStoredSessionToken();
+      if (token && url && url.startsWith("/api/")) {
+        const headers = new Headers(init?.headers);
+        if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+        novoInit = { ...init, headers };
+      }
+      const res = await fetchOriginal(input, novoInit);
+      if (res.headers.get("X-Acesso-Revogado") === "1" && getStoredLogin()) forcarLogout();
+      return res;
+    };
+    window.fetch = fetchComSessao;
+
+    if (authUser) {
       api
-        .authHeartbeat(atual.id, atual.usuario)
+        .authHeartbeat(authUser.id, authUser.usuario)
         .then((resultado) => {
           if (resultado === "revogado") forcarLogout();
           else if (resultado) setLoggedInUser(resultado);
         })
         .catch(() => {});
-    };
-
-    // Qualquer resposta da API marcada com X-Acesso-Revogado (escrita barrada
-    // no backend) também desloga na hora, sem esperar o próximo heartbeat.
-    const fetchOriginal = window.fetch;
-    const fetchComChecagem: typeof window.fetch = async (...args) => {
-      const res = await fetchOriginal(...args);
-      if (res.headers.get("X-Acesso-Revogado") === "1" && getStoredLogin()) forcarLogout();
-      return res;
-    };
-    window.fetch = fetchComChecagem;
-
-    verificar();
-    const intervalo = window.setInterval(verificar, 3 * 60 * 1000);
-    const aoVoltar = () => {
-      if (document.visibilityState === "visible") verificar();
-    };
-    document.addEventListener("visibilitychange", aoVoltar);
+    }
     return () => {
-      window.clearInterval(intervalo);
-      document.removeEventListener("visibilitychange", aoVoltar);
-      if (window.fetch === fetchComChecagem) window.fetch = fetchOriginal;
+      if (window.fetch === fetchComSessao) window.fetch = fetchOriginal;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

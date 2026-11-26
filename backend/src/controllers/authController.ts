@@ -15,9 +15,9 @@ import {
 } from "../services/sessionService";
 import {
   estaBloqueado,
-  listarBloqueados,
-  respostaRevogado,
-  salvarBloqueados,
+  lerControleAcesso,
+  mesmoJogador,
+  salvarControleAcesso,
 } from "../services/acessoRevogadoService";
 import { registrarLogSistema } from "../services/logSistemaService";
 
@@ -170,26 +170,8 @@ export async function authHeartbeatController(request: Request): Promise<Respons
       });
     }
 
-    // Acesso removido pelo admin → derruba a sessão salva no navegador (o
-    // front recebe 401 + acessoRevogado e volta pra tela de login).
-    if (await estaBloqueado({ id: telegramId, usuario })) {
-      return respostaRevogado(401);
-    }
-
     const rows = await readUsuariosWithRowIndex();
     const match = resolverLinhaUsuario(rows, { telegramId, usuario });
-
-    // Conta apagada da planilha (linha removida, ou nome de usuário apagado):
-    // antes o heartbeat reemitia o token mesmo assim e o jogador seguia
-    // logado pra sempre. Só conta como "apagada" se a aba foi lida de verdade
-    // (rows.length > 0) — falha momentânea do Sheets nunca desloga ninguém.
-    // O admin histórico nunca cai aqui.
-    if (rows.length > 0 && telegramId !== ADMIN_TG_ID) {
-      if (!match || !(match.rec["usuario"] || "").trim()) {
-        return respostaRevogado(401);
-      }
-    }
-
     if (match) {
       await concederPrestigioLoginDiario(match, usuario);
     }
@@ -280,7 +262,7 @@ export async function loginController(request: Request): Promise<Response> {
 
     if (await estaBloqueado({ id: match.rec["id"] || "", usuario: match.rec["usuario"] || usuario })) {
       return new Response(
-        JSON.stringify({ success: false, acessoRevogado: true, error: "O acesso dessa conta foi removido por um admin." }),
+        JSON.stringify({ success: false, acessoRevogado: true, error: "Essa conta foi bloqueada por um admin." }),
         { status: 403, headers: { "Content-Type": "application/json" } },
       );
     }
@@ -634,76 +616,114 @@ function jsonResp(body: unknown, status = 200): Response {
 }
 
 /**
- * GET /api/auth/admin/bloqueados — lista quem está com acesso removido.
- * POST /api/auth/admin/bloquear { usuario } — remove o acesso (aceita o nome
- *   de usuário OU o ID da aba Usuários; se a pessoa já foi apagada da
- *   planilha, dá pra bloquear só pelo ID/nome antigo mesmo).
- * POST /api/auth/admin/desbloquear { usuario } — devolve o acesso.
- * Todos exigem token de admin (requestProvesAdmin).
+ * GET /api/auth/admin/usuarios — tela "Gestão de usuários" (admin): lista
+ * todos os jogadores da aba Usuários com o status de acesso (1 leitura da
+ * planilha, só quando o admin abre a tela). Inclui também quem está
+ * bloqueado mas já não existe mais na planilha.
  */
-export async function adminBloqueiosController(request: Request, acao: "listar" | "bloquear" | "desbloquear"): Promise<Response> {
+export async function adminListarUsuariosController(request: Request): Promise<Response> {
   try {
     if (!(await requestProvesAdmin(request))) {
       return jsonResp({ success: false, error: "Acesso restrito ao admin." }, 403);
     }
-
-    if (acao === "listar") {
-      return jsonResp({ success: true, data: await listarBloqueados(true) });
+    const [rows, controle] = await Promise.all([readUsuariosWithRowIndex(), lerControleAcesso(true)]);
+    const vistos = new Set<string>();
+    const lista = rows
+      .filter((r) => (r.rec["usuario"] || "").trim() || (r.rec["id"] || "").trim())
+      .map((r) => {
+        const quem = { id: r.rec["id"] || "", usuario: r.rec["usuario"] || "" };
+        const chave = `${normalizeComparison(quem.id)}|${normalizeComparison(quem.usuario)}`;
+        if (vistos.has(chave)) return null;
+        vistos.add(chave);
+        const bloqueio = controle.bloqueados.find((b) => mesmoJogador(b, quem));
+        const logout = controle.logouts.find((l) => mesmoJogador(l, quem));
+        return {
+          ...quem,
+          tipoPerfil: r.rec["tipo_de_perfil"] || "Usuário",
+          fotoPerfil: r.rec["foto_do_perfil"] || "",
+          bloqueado: !!bloqueio,
+          bloqueadoEm: bloqueio?.em || "",
+          deslogadoEm: logout?.em || "",
+          naPlanilha: true,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x);
+    for (const b of controle.bloqueados) {
+      if (lista.some((u) => mesmoJogador(b, u))) continue;
+      lista.push({
+        id: b.id,
+        usuario: b.usuario,
+        tipoPerfil: "",
+        fotoPerfil: "",
+        bloqueado: true,
+        bloqueadoEm: b.em,
+        deslogadoEm: "",
+        naPlanilha: false,
+      });
     }
+    return jsonResp({ success: true, data: lista });
+  } catch (error: any) {
+    console.error("[adminListarUsuariosController] Erro:", error);
+    return jsonResp({ success: false, error: error.message || "Erro ao listar usuários." }, 500);
+  }
+}
 
-    const body = (await request.json().catch(() => ({}))) as { usuario?: string };
-    const alvo = (body.usuario || "").trim();
-    if (!alvo) return jsonResp({ success: false, error: "Informe o nome de usuário ou o ID do jogador." }, 400);
-    const normAlvo = normalizeComparison(alvo);
-    const lista = await listarBloqueados(true);
-
-    if (acao === "desbloquear") {
-      const nova = lista.filter(
-        (b) => normalizeComparison(b.usuario || "") !== normAlvo && normalizeComparison(b.id || "") !== normAlvo,
-      );
-      if (nova.length === lista.length) {
-        return jsonResp({ success: false, error: `"${alvo}" não está na lista de bloqueados.` }, 404);
+/**
+ * POST /api/auth/admin/acao { acao: "deslogar" | "bloquear" | "desbloquear", id, usuario }
+ * Não lê a planilha — o admin já manda id/usuário vindos da lista. Grava só
+ * no KV (ver acessoRevogadoService.ts).
+ */
+export async function adminAcaoUsuarioController(request: Request): Promise<Response> {
+  try {
+    if (!(await requestProvesAdmin(request))) {
+      return jsonResp({ success: false, error: "Acesso restrito ao admin." }, 403);
+    }
+    const body = (await request.json().catch(() => ({}))) as { acao?: string; id?: string; usuario?: string };
+    const acao = body.acao;
+    const id = (body.id || "").trim();
+    const usuario = (body.usuario || "").trim();
+    if (!id && !usuario) return jsonResp({ success: false, error: "Jogador não informado." }, 400);
+    if (acao !== "deslogar" && acao !== "bloquear" && acao !== "desbloquear") {
+      return jsonResp({ success: false, error: "Ação inválida." }, 400);
+    }
+    const quem = { id, usuario };
+    if (acao !== "desbloquear") {
+      if (id === ADMIN_TG_ID) return jsonResp({ success: false, error: "Não dá pra fazer isso com o admin principal." }, 400);
+      const payload = await verifySessionToken(extractBearerToken(request));
+      if (payload && mesmoJogador(quem, { id: payload.id, usuario: payload.usuario })) {
+        return jsonResp({ success: false, error: "Você não pode fazer isso com a sua própria conta." }, 400);
       }
-      await salvarBloqueados(nova);
-      registrarLogSistema({
-        categoria: "Ação concluída",
-        oQueAconteceu: `Admin devolveu o acesso de "${alvo}".`,
-        onde: "adminBloqueiosController",
-      }).catch(() => {});
-      return jsonResp({ success: true, data: nova });
     }
 
-    // bloquear
-    if (alvo === ADMIN_TG_ID) return jsonResp({ success: false, error: "Não dá pra bloquear o admin principal." }, 400);
-    const rows = await readUsuariosWithRowIndex();
-    const match = resolverLinhaUsuario(rows, { telegramId: alvo, usuario: alvo });
-    const id = match?.rec["id"] || (/^\d+$/.test(alvo) ? alvo : "");
-    const usuario = match?.rec["usuario"] || (id === alvo ? "" : alvo);
+    const controle = await lerControleAcesso(true);
+    const agora = new Date().toISOString();
+    const registro = { id, usuario, em: agora };
+    const semEle = (lista: typeof controle.bloqueados) => lista.filter((r) => !mesmoJogador(r, quem));
 
-    const payload = await verifySessionToken(extractBearerToken(request));
-    if (payload && ((id && payload.id === id) || (usuario && normalizeComparison(payload.usuario) === normalizeComparison(usuario)))) {
-      return jsonResp({ success: false, error: "Você não pode remover o seu próprio acesso." }, 400);
+    let novo = controle;
+    if (acao === "deslogar") {
+      novo = { ...controle, logouts: [...semEle(controle.logouts), registro] };
+    } else if (acao === "bloquear") {
+      // Bloquear também desloga na hora.
+      novo = {
+        bloqueados: [...semEle(controle.bloqueados), registro],
+        logouts: [...semEle(controle.logouts), registro],
+      };
+    } else {
+      novo = { ...controle, bloqueados: semEle(controle.bloqueados) };
     }
+    await salvarControleAcesso(novo);
 
-    const jaEsta = lista.some(
-      (b) =>
-        (!!id && normalizeComparison(b.id || "") === normalizeComparison(id)) ||
-        (!!usuario && normalizeComparison(b.usuario || "") === normalizeComparison(usuario)),
-    );
-    const nova = jaEsta
-      ? lista
-      : [...lista, { id, usuario, em: new Date().toISOString(), por: payload?.usuario || "" }];
-    if (!jaEsta) await salvarBloqueados(nova);
-
+    const textos = { deslogar: "deslogou", bloquear: "bloqueou", desbloquear: "desbloqueou" } as const;
     registrarLogSistema({
       categoria: "Ação concluída",
-      oQueAconteceu: `Admin removeu o acesso de "${usuario || id}" (logout forçado + bloqueio).`,
-      onde: "adminBloqueiosController",
+      oQueAconteceu: `Admin ${textos[acao]} o jogador "${usuario || id}".`,
+      onde: "adminAcaoUsuarioController",
     }).catch(() => {});
 
-    return jsonResp({ success: true, data: nova, encontradoNaPlanilha: !!match });
+    return jsonResp({ success: true });
   } catch (error: any) {
-    console.error("[adminBloqueiosController] Erro:", error);
-    return jsonResp({ success: false, error: error.message || "Erro ao gerenciar bloqueios." }, 500);
+    console.error("[adminAcaoUsuarioController] Erro:", error);
+    return jsonResp({ success: false, error: error.message || "Erro ao executar ação." }, 500);
   }
 }

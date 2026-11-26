@@ -132,7 +132,8 @@ import {
   updateProfileController,
   trocarSenhaController,
   authHeartbeatController,
-  adminBloqueiosController,
+  adminListarUsuariosController,
+  adminAcaoUsuarioController,
 } from "../controllers/authController";
 import { barrarSeBloqueado } from "../services/acessoRevogadoService";
 import {
@@ -555,9 +556,8 @@ export async function handleEmpireApiRoutes(
     "/api/auth/heartbeat",
     "/api/auth/perfil",
     "/api/auth/trocar-senha",
-    "/api/auth/admin/bloqueados",
-    "/api/auth/admin/bloquear",
-    "/api/auth/admin/desbloquear",
+    "/api/auth/admin/usuarios",
+    "/api/auth/admin/acao",
     "/api/artistas/meus-nomes",
     "/api/artistas/disponiveis",
     "/api/artistas/listar-todos",
@@ -781,8 +781,8 @@ export async function handleEmpireApiRoutes(
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
-  // Jogador com acesso removido pelo admin: recusa qualquer escrita em nome
-  // dele (ver acessoRevogadoService.ts).
+  // Jogador bloqueado/deslogado pelo admin: recusa a chamada e o app desloga
+  // (ver acessoRevogadoService.ts). Só KV com cache — nunca lê a planilha.
   const bloqueio = await barrarSeBloqueado(request, url.pathname);
   if (bloqueio) {
     const headers = new Headers(bloqueio.headers);
@@ -1820,19 +1820,16 @@ export async function handleEmpireApiRoutes(
     response = await chartsIngestController(request);
   } else if (url.pathname === "/api/charts/admin/debug-realtime-covers") {
     response = await debugRealtimeCoversController();
-  } else if (url.pathname === "/api/auth/admin/bloqueados") {
-    response = await adminBloqueiosController(request, "listar");
-  } else if (url.pathname === "/api/auth/admin/bloquear" || url.pathname === "/api/auth/admin/desbloquear") {
+  } else if (url.pathname === "/api/auth/admin/usuarios") {
+    response = await adminListarUsuariosController(request);
+  } else if (url.pathname === "/api/auth/admin/acao") {
     if (request.method !== "POST") {
       return new Response(
-        JSON.stringify({ success: false, error: `Use POST para ${url.pathname}.` }),
+        JSON.stringify({ success: false, error: "Use POST para /api/auth/admin/acao." }),
         { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
-    response = await adminBloqueiosController(
-      request,
-      url.pathname.endsWith("/bloquear") ? "bloquear" : "desbloquear",
-    );
+    response = await adminAcaoUsuarioController(request);
   } else if (url.pathname === "/api/auth/heartbeat") {
     if (request.method !== "POST") {
       return new Response(
