@@ -310,16 +310,20 @@ test("codificar/ler ida e volta e união", () => {
 ### Task C3: Telas das enquetes
 
 **Files:**
-- Create: `src/components/EmpireTV/EnqueteChat.tsx` (cartão), `src/components/EmpireTV/NovaEnqueteSheet.tsx`, `src/components/EmpireTV/ArquivoEnquetes.tsx`
-- Modify: `src/routes/tv.tsx` (`ChatPanel`: renderizar `ENQ::`/`ENQRES::` como cartão, como faz com `RC_ARRIVAL::`; botão 📊 no composer só para `isAdminLogin`; aba "📊 Enquetes" na fileira de abas), `src/lib/api.ts`
+- Create: `src/components/EmpireTV/EnquetesPanel.tsx` (aba: lista/arquivo com votar e resultados), `src/components/EmpireTV/EnqueteFaixa.tsx` (faixa fixa recolhível), `src/components/EmpireTV/NovaEnqueteSheet.tsx`
+- Modify: `src/routes/tv.tsx` (`ChatPanel`: renderizar `ENQ::`/`ENQRES::` como **aviso de uma linha**, como faz com `RC_ARRIVAL::`; faixa recolhível no topo do chat; botão 📊 no composer só para `isAdminLogin`; aba "📊 Enquetes" na fileira de abas), `src/lib/api.ts`
 
 **Interfaces:**
 - Consumes: C2.
-- Produces: cartão com pergunta, tipo, "voto secreto", opções (círculo = única, quadrado = múltipla + botão **Votar**), barras com % depois de votar (ou "resultado no fim"), "Encerrar" para admin; cartão de resultado com vencedor 🏆. Atualiza a cada 15 s **só enquanto o cartão está na tela** (`IntersectionObserver`). A folha de nova enquete e o arquivo abrem por cima com `history.pushState` (voltar fecha só eles). Enquete aberta fica fixada no topo do chat. A enquete de nota da planilha (`EnqueteBanner`) continua igual.
+- Produces (decisão do usuário: o cartão inteiro no chat ocupava espaço demais):
+  - **No chat, só avisos de uma linha:** `ENQ::{id}` → "📊 Enquete aberta: {pergunta} · Votar"; `ENQRES::{id}` → "🏁 Enquete encerrada: {vencedor ou 'empate'} · Ver resultado". Tocar abre a aba Enquetes já com a enquete em destaque. Texto com `truncate` + `min-w-0`, pílula com `px` real (`CLAUDE.md`).
+  - **Faixa fixa recolhível** no topo do chat enquanto houver enquete aberta: recolhida = uma linha ("📊 {pergunta} · Votar ⌄"); expandida = opções para votar ali (círculo = única, quadrado = múltipla + **Votar**). O estado recolhido fica salvo por enquete no aparelho (`localStorage` em try/catch). Some quando a enquete encerra.
+  - **Aba 📊 Enquetes:** todas as enquetes da sala (aberta primeiro), com votar, barras com % depois de votar (ou "resultado no fim"), vencedor 🏆 nas encerradas, **Encerrar** e **Baixar planilha (CSV)** para admin.
+  - Atualiza a cada 15 s só enquanto a aba ou a faixa expandida está visível. A folha de nova enquete abre por cima com `history.pushState` (voltar fecha só ela). A enquete de nota da planilha (`EnqueteBanner`) continua igual.
 
 - [ ] **Step 1:** Implement.
-- [ ] **Step 2: Verify** build + Playwright: admin cria enquete múltipla com 3 opções → cartão aparece; jogador vota 2 opções → barras; admin encerra → cartão de resultado; voltar do celular com a folha aberta fecha só a folha.
-- [ ] **Step 3: Commit** `feat(tv): enquetes no chat (criar, votar, resultado, arquivo)`
+- [ ] **Step 2: Verify** build + Playwright: admin cria enquete múltipla com 3 opções → aviso de uma linha no chat e faixa recolhida no topo; jogador expande a faixa e vota 2 opções → barras; recolhe → uma linha; admin encerra na aba → aviso "encerrada" no chat e resultado na aba; voltar do celular com a folha aberta fecha só a folha.
+- [ ] **Step 3: Commit** `feat(tv): enquetes na aba da sala com avisos compactos no chat`
 
 ---
 

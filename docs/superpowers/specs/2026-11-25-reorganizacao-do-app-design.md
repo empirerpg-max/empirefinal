@@ -1523,22 +1523,32 @@ funcionando** como hoje.
    preenche: pergunta; **tipo — Escolha única ou Múltipla escolha** (sempre
    uma das duas; a "Nota" de hoje fica como terceira opção); de 2 a 10
    opções; e as chaves **Voto secreto** (ligada por padrão), **Resultado só
-   no fim** e **Encerrar sozinha em N minutos**. **Publicar** põe a
-   enquete no chat na hora, para todos, e a **fixa no topo**.
-2. **Votar no chat:** escolha única = um toque. Múltipla = marcar as
+   no fim** e **Encerrar sozinha em N minutos**. **Publicar** abre a
+   enquete na aba **📊 Enquetes** e manda **só um aviso compacto** no chat
+   (decisão do usuário: o cartão inteiro ocupava espaço demais).
+2. **No chat, só avisos de uma linha** (como a pílula "chegou ao Red
+   Carpet"): **"📊 Enquete aberta: {pergunta} · Votar"** e **"🏁 Enquete
+   encerrada: {vencedor} · Ver resultado"**. Tocar abre a aba Enquetes já na
+   enquete. Enquanto houver enquete aberta, uma **faixa fixa recolhível**
+   no topo do chat ("📊 {pergunta} · Votar ⌄"): recolhida, ocupa uma linha;
+   expandida, mostra as opções para votar ali mesmo; a pessoa recolhe de
+   novo quando quiser (fica recolhida para ela até a próxima enquete).
+3. **Votar (aba Enquetes ou faixa expandida):** escolha única = um toque. Múltipla = marcar as
    opções e **Votar**. Cada pessoa vota uma vez por enquete (pode trocar o
    voto enquanto estiver aberta). Depois de votar, vê as porcentagens ao
    vivo (a não ser que esteja "Resultado só no fim").
-3. **Encerrar:** pelo botão **Encerrar** no cartão (admin), pelo tempo, ou
-   no **Término** do evento. Ao encerrar, o chat recebe a mensagem
-   **🏁 Resultado da enquete** com as barras, o total de votos e o
-   vencedor. Publicar uma enquete nova encerra a anterior.
-4. **Arquivo do chat:** a aba **📊 Enquetes** da sala lista todas as
+4. **Encerrar:** pelo botão **Encerrar** (admin, na aba Enquetes), pelo
+   tempo, ou no **Término** do evento. O chat recebe só o aviso "🏁 Enquete
+   encerrada"; as barras, o total e o vencedor ficam na aba Enquetes.
+   Publicar uma enquete nova encerra a anterior.
+5. **Arquivo do chat:** a aba **📊 Enquetes** da sala lista todas as
    enquetes daquela transmissão com os resultados (aberta ou encerrada).
    Fica guardado mesmo depois da transmissão; o admin pode **baixar a
    planilha** (enquete, tipo, opção, votos, %, horário).
-5. **Onde fica:** no **Supabase**, junto do chat (que já é em tempo real e
-   não usa a cota do D1): tabelas `tv_enquete` (sala, pergunta, tipo,
+6. **Onde fica (decidido no plano de implementação):** no **D1** (uma
+   linha por voto; leituras pela chave), com o aviso no chat mandado pelo
+   servidor no Supabase como mensagem com prefixo (`ENQ::`/`ENQRES::`), que
+   já chega em tempo real. Tabelas `tv_enquete` (sala, pergunta, tipo,
    opções, chaves, aberta/encerrada, horários, quem criou) e
    `tv_enquete_voto` (enquete, jogador, opções escolhidas; uma linha por
    pessoa por enquete). O voto secreto esconde quem votou em quê de todos,
