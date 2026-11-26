@@ -6,7 +6,19 @@ import {
   dedupeHeaders,
 } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
-import { issueSessionToken, requestProvesAdmin } from "../services/sessionService";
+import {
+  ADMIN_TG_ID,
+  extractBearerToken,
+  issueSessionToken,
+  requestProvesAdmin,
+  verifySessionToken,
+} from "../services/sessionService";
+import {
+  estaBloqueado,
+  listarBloqueados,
+  respostaRevogado,
+  salvarBloqueados,
+} from "../services/acessoRevogadoService";
 import { registrarLogSistema } from "../services/logSistemaService";
 
 const USUARIOS_SHEET = "Usuários";
@@ -158,8 +170,26 @@ export async function authHeartbeatController(request: Request): Promise<Respons
       });
     }
 
+    // Acesso removido pelo admin → derruba a sessão salva no navegador (o
+    // front recebe 401 + acessoRevogado e volta pra tela de login).
+    if (await estaBloqueado({ id: telegramId, usuario })) {
+      return respostaRevogado(401);
+    }
+
     const rows = await readUsuariosWithRowIndex();
     const match = resolverLinhaUsuario(rows, { telegramId, usuario });
+
+    // Conta apagada da planilha (linha removida, ou nome de usuário apagado):
+    // antes o heartbeat reemitia o token mesmo assim e o jogador seguia
+    // logado pra sempre. Só conta como "apagada" se a aba foi lida de verdade
+    // (rows.length > 0) — falha momentânea do Sheets nunca desloga ninguém.
+    // O admin histórico nunca cai aqui.
+    if (rows.length > 0 && telegramId !== ADMIN_TG_ID) {
+      if (!match || !(match.rec["usuario"] || "").trim()) {
+        return respostaRevogado(401);
+      }
+    }
+
     if (match) {
       await concederPrestigioLoginDiario(match, usuario);
     }
@@ -245,6 +275,13 @@ export async function loginController(request: Request): Promise<Response> {
       return new Response(
         JSON.stringify({ success: false, error: "Usuário não encontrado." }),
         { status: 404, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    if (await estaBloqueado({ id: match.rec["id"] || "", usuario: match.rec["usuario"] || usuario })) {
+      return new Response(
+        JSON.stringify({ success: false, acessoRevogado: true, error: "O acesso dessa conta foi removido por um admin." }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
       );
     }
 
@@ -589,5 +626,84 @@ export async function updateProfileController(request: Request): Promise<Respons
       JSON.stringify({ success: false, error: error.message || "Erro ao atualizar perfil." }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
+  }
+}
+
+function jsonResp(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+/**
+ * GET /api/auth/admin/bloqueados — lista quem está com acesso removido.
+ * POST /api/auth/admin/bloquear { usuario } — remove o acesso (aceita o nome
+ *   de usuário OU o ID da aba Usuários; se a pessoa já foi apagada da
+ *   planilha, dá pra bloquear só pelo ID/nome antigo mesmo).
+ * POST /api/auth/admin/desbloquear { usuario } — devolve o acesso.
+ * Todos exigem token de admin (requestProvesAdmin).
+ */
+export async function adminBloqueiosController(request: Request, acao: "listar" | "bloquear" | "desbloquear"): Promise<Response> {
+  try {
+    if (!(await requestProvesAdmin(request))) {
+      return jsonResp({ success: false, error: "Acesso restrito ao admin." }, 403);
+    }
+
+    if (acao === "listar") {
+      return jsonResp({ success: true, data: await listarBloqueados(true) });
+    }
+
+    const body = (await request.json().catch(() => ({}))) as { usuario?: string };
+    const alvo = (body.usuario || "").trim();
+    if (!alvo) return jsonResp({ success: false, error: "Informe o nome de usuário ou o ID do jogador." }, 400);
+    const normAlvo = normalizeComparison(alvo);
+    const lista = await listarBloqueados(true);
+
+    if (acao === "desbloquear") {
+      const nova = lista.filter(
+        (b) => normalizeComparison(b.usuario || "") !== normAlvo && normalizeComparison(b.id || "") !== normAlvo,
+      );
+      if (nova.length === lista.length) {
+        return jsonResp({ success: false, error: `"${alvo}" não está na lista de bloqueados.` }, 404);
+      }
+      await salvarBloqueados(nova);
+      registrarLogSistema({
+        categoria: "Ação concluída",
+        oQueAconteceu: `Admin devolveu o acesso de "${alvo}".`,
+        onde: "adminBloqueiosController",
+      }).catch(() => {});
+      return jsonResp({ success: true, data: nova });
+    }
+
+    // bloquear
+    if (alvo === ADMIN_TG_ID) return jsonResp({ success: false, error: "Não dá pra bloquear o admin principal." }, 400);
+    const rows = await readUsuariosWithRowIndex();
+    const match = resolverLinhaUsuario(rows, { telegramId: alvo, usuario: alvo });
+    const id = match?.rec["id"] || (/^\d+$/.test(alvo) ? alvo : "");
+    const usuario = match?.rec["usuario"] || (id === alvo ? "" : alvo);
+
+    const payload = await verifySessionToken(extractBearerToken(request));
+    if (payload && ((id && payload.id === id) || (usuario && normalizeComparison(payload.usuario) === normalizeComparison(usuario)))) {
+      return jsonResp({ success: false, error: "Você não pode remover o seu próprio acesso." }, 400);
+    }
+
+    const jaEsta = lista.some(
+      (b) =>
+        (!!id && normalizeComparison(b.id || "") === normalizeComparison(id)) ||
+        (!!usuario && normalizeComparison(b.usuario || "") === normalizeComparison(usuario)),
+    );
+    const nova = jaEsta
+      ? lista
+      : [...lista, { id, usuario, em: new Date().toISOString(), por: payload?.usuario || "" }];
+    if (!jaEsta) await salvarBloqueados(nova);
+
+    registrarLogSistema({
+      categoria: "Ação concluída",
+      oQueAconteceu: `Admin removeu o acesso de "${usuario || id}" (logout forçado + bloqueio).`,
+      onde: "adminBloqueiosController",
+    }).catch(() => {});
+
+    return jsonResp({ success: true, data: nova, encontradoNaPlanilha: !!match });
+  } catch (error: any) {
+    console.error("[adminBloqueiosController] Erro:", error);
+    return jsonResp({ success: false, error: error.message || "Erro ao gerenciar bloqueios." }, 500);
   }
 }

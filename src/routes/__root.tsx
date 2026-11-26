@@ -44,7 +44,14 @@ import { useImageCrop } from "@/hooks/use-image-crop";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationBell } from "@/components/NotificationBell";
 import { BuscaRapida } from "@/components/BuscaRapida";
-import { LoginScreen, getStoredLogin, clearStoredLogin, type LoginResult } from "@/components/LoginScreen";
+import {
+  LoginScreen,
+  getStoredLogin,
+  clearStoredLogin,
+  isImpersonating,
+  stopImpersonating,
+  type LoginResult,
+} from "@/components/LoginScreen";
 import { VmaNominationPopup } from "@/components/VmaNominationPopup";
 import { FestivalNominationPopup } from "@/components/FestivalNominationPopup";
 import { VotacaoReminderPopup } from "@/components/VotacaoReminderPopup";
@@ -637,15 +644,60 @@ function AuthGate() {
   // disparava esse crédito de novo em dias seguintes. O heartbeat é
   // idempotente (no máximo 1x/dia por jogador), então é seguro chamar toda
   // vez que o app abre.
+  //
+  // Também é o que derruba quem teve o acesso removido pelo admin (ou foi
+  // apagado da aba Usuários): o heartbeat responde "revogado" e a sessão
+  // salva é apagada. Roda ao abrir, a cada 3 min e sempre que o app volta
+  // pro primeiro plano — assim quem deixa o app aberto também é deslogado.
   useEffect(() => {
-    if (authUser) {
+    const forcarLogout = () => {
+      // Admin simulando um jogador bloqueado: volta pro admin, não desloga.
+      if (isImpersonating() && stopImpersonating()) {
+        window.location.reload();
+        return;
+      }
+      clearStoredLogin();
+      try {
+        localStorage.removeItem("tg_user_cache");
+      } catch {
+        // ignora
+      }
+      setLoggedInUser(null);
+    };
+
+    const verificar = () => {
+      const atual = getStoredLogin();
+      if (!atual) return;
       api
-        .authHeartbeat(authUser.id, authUser.usuario)
-        .then((atualizado) => {
-          if (atualizado) setLoggedInUser(atualizado);
+        .authHeartbeat(atual.id, atual.usuario)
+        .then((resultado) => {
+          if (resultado === "revogado") forcarLogout();
+          else if (resultado) setLoggedInUser(resultado);
         })
         .catch(() => {});
-    }
+    };
+
+    // Qualquer resposta da API marcada com X-Acesso-Revogado (escrita barrada
+    // no backend) também desloga na hora, sem esperar o próximo heartbeat.
+    const fetchOriginal = window.fetch;
+    const fetchComChecagem: typeof window.fetch = async (...args) => {
+      const res = await fetchOriginal(...args);
+      if (res.headers.get("X-Acesso-Revogado") === "1" && getStoredLogin()) forcarLogout();
+      return res;
+    };
+    window.fetch = fetchComChecagem;
+
+    verificar();
+    const intervalo = window.setInterval(verificar, 3 * 60 * 1000);
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") verificar();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+    return () => {
+      window.clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", aoVoltar);
+      if (window.fetch === fetchComChecagem) window.fetch = fetchOriginal;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

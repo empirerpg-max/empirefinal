@@ -132,7 +132,9 @@ import {
   updateProfileController,
   trocarSenhaController,
   authHeartbeatController,
+  adminBloqueiosController,
 } from "../controllers/authController";
+import { barrarSeBloqueado } from "../services/acessoRevogadoService";
 import {
   getMeusArtistasNomesController,
   getArtistasDisponiveisController,
@@ -553,6 +555,9 @@ export async function handleEmpireApiRoutes(
     "/api/auth/heartbeat",
     "/api/auth/perfil",
     "/api/auth/trocar-senha",
+    "/api/auth/admin/bloqueados",
+    "/api/auth/admin/bloquear",
+    "/api/auth/admin/desbloquear",
     "/api/artistas/meus-nomes",
     "/api/artistas/disponiveis",
     "/api/artistas/listar-todos",
@@ -774,6 +779,15 @@ export async function handleEmpireApiRoutes(
 
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
+  // Jogador com acesso removido pelo admin: recusa qualquer escrita em nome
+  // dele (ver acessoRevogadoService.ts).
+  const bloqueio = await barrarSeBloqueado(request, url.pathname);
+  if (bloqueio) {
+    const headers = new Headers(bloqueio.headers);
+    Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v as string));
+    return new Response(bloqueio.body, { status: bloqueio.status, headers });
   }
 
   let response: Response;
@@ -1806,6 +1820,19 @@ export async function handleEmpireApiRoutes(
     response = await chartsIngestController(request);
   } else if (url.pathname === "/api/charts/admin/debug-realtime-covers") {
     response = await debugRealtimeCoversController();
+  } else if (url.pathname === "/api/auth/admin/bloqueados") {
+    response = await adminBloqueiosController(request, "listar");
+  } else if (url.pathname === "/api/auth/admin/bloquear" || url.pathname === "/api/auth/admin/desbloquear") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: `Use POST para ${url.pathname}.` }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await adminBloqueiosController(
+      request,
+      url.pathname.endsWith("/bloquear") ? "bloquear" : "desbloquear",
+    );
   } else if (url.pathname === "/api/auth/heartbeat") {
     if (request.method !== "POST") {
       return new Response(

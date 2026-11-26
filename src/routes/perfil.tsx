@@ -40,6 +40,7 @@ import {
   type LoginResult,
 } from "@/components/LoginScreen";
 import { BUILD_ID } from "@/lib/pwa";
+import { AdminRemoverAcesso } from "@/components/AdminRemoverAcesso";
 import { toast } from "sonner";
 import { useImageCrop } from "@/hooks/use-image-crop";
 
@@ -699,6 +700,7 @@ function Perfil() {
             {impersonarErro && <p className="text-[11px] text-red-400">{impersonarErro}</p>}
           </div>
         )}
+        {isAdminUser && !impersonando && <AdminRemoverAcesso />}
         <button
           onClick={() => {
             clearStoredLogin();
