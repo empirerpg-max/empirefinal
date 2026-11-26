@@ -452,6 +452,14 @@ pelas rotas de gravação do servidor (`backend/src/routes/api.ts`).
 | Reportar problema no player (vídeo/conteúdo errado) | players | players | D |
 | Admin: banners, programação/publicar vídeo da TV, painel do catálogo, atualizar artistas, excluir/restaurar tópico, marcar pendente, enquete e Início/Término na sala | vários | Criar › Só admin + Meu Império › Admin + sala da TV | P |
 
-**Sem tela hoje (só servidor), não entram:** `/api/presave/vincular-faixa-existente`,
-`/api/acervo/metacritic/atualizar`, rotas `admin/diag*`/`fix*`.
-
+**Rotas de gravação sem botão no app hoje (conferido, não é perda):**
+- `/api/acervo/metacritic/atualizar`: força o ranking semanal do Metacritic
+  na hora. O ranking já é gerado **sozinho pelo cron toda semana**; a rota
+  é só para forçar. No Beta ganha um botão de admin: **Meu Império › Admin
+  › Metacritic: atualizar agora**.
+- `/api/presave/vincular-faixa-existente`: conserto pontual de um bug já
+  corrigido (faixa de pre-save cadastrada como inédita porque a busca de
+  "Música existente" falhava). O jeito normal de vincular música existente
+  continua no formulário do pre-save. Fica como ferramenta manual, igual às
+  rotas `admin/diag*`/`fix*`.
+| Destaque de comentários (cartão com o último comentário) na página do lançamento | removido a pedido do usuário; fica o botão fixo "Avaliar & Comentar" e a lista de comentários | P |

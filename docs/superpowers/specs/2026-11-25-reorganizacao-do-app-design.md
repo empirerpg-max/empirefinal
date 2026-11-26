@@ -713,41 +713,39 @@ partir da troca. A conferência da migração compara `analytics.likes`.
 
 #### 5.7.1 Folha "Criar" (botão no topo)
 
+**Revisão (pedido do usuário: "muito extenso e sem como fechar").** A
+folha mostra só o que mais se usa e esconde o resto (lei de Hick: menos
+escolhas na primeira vista = decisão mais rápida), sempre com ✕:
+
 ```
-Criar                                              [Fechar]
-┌──────────────────────────────────────────────────────────┐
-│ ✎  Editar meus lançamentos                            ›  │
-└──────────────────────────────────────────────────────────┘
- LANÇAR MÚSICA E VÍDEO
- Nova música   Novo vídeo   Novo álbum ›   Faixa de álbum
- Material      Pre-save ›   Performance    Cinema
- antigo                     Award          (em breve)
- PUBLICAR
- Post no       Notícia      Revista        Entrevista
- Social        (News)
- TURNÊ, PLAYLIST E ARTISTA
- Nova turnê    Nova         Novo artista   Sincronizar
-               playlist                    letra
- SÓ ADMIN
- Banners       Grade da TV  Painel do catálogo
+Criar                                                    (✕)
+┌──────────────┬──────────────┬──────────────┐
+│ Nova música  │ Novo vídeo   │ Novo álbum › │
+├──────────────┼──────────────┼──────────────┤
+│ Pre-save ›   │ Post Social  │ Faixa álbum  │
+└──────────────┴──────────────┴──────────────┘
+┌──────────────────────────────────────────────┐
+│ ✎ Editar meus lançamentos                  › │
+└──────────────────────────────────────────────┘
+ Mais opções (10)                            ⌄
+   Material antigo · Sincronizar letra · Performance Award ·
+   Notícia · Revista · Entrevista · Nova turnê · Nova playlist ·
+   Novo artista · Cinema (em breve)   [+ Só admin: Banners,
+   Grade da TV, Painel do catálogo]
 ```
 
-- **Novo álbum ›** abre as três opções que a Gestão tem hoje: **Registrar
-  novo**, **Substituir nos Charts** e **Retroativo**.
-- **Pre-save ›** abre **Nova campanha** (com ou sem missões diárias,
-  material extra) e **Minhas campanhas** (completar missão, editar faixas,
-  ranking, cancelar).
-- **Novos atalhos no Criar** (as ações já existem hoje em outras telas e
-  **continuam lá também**): Notícia (Social › News, qualquer jogador com
-  artista), Revista e Entrevista (Acervo/Imprensa, botão ＋, qualquer
-  jogador com artista), Nova playlist (Catálogo › Playlists), Novo artista
-  (Perfil › Gerenciar).
-- **Ficam só onde estão hoje** (dependem do contexto) e a folha lembra
-  disso no rodapé: look no Red Carpet (sala da TV), ação do dia da turnê
-  (Pra fazer hoje / página da turnê), indicar e votar (Início ›
-  Premiações), Spotlight Banner (Market), enquete na sala (admin).
-- Rótulos longos quebram em 2 linhas, nunca cortam nem escapam (regra do
-  `CLAUDE.md`); "Programação da TV" virou "Grade da TV" para caber.
+- Fecha pelo **✕**, tocando fora, arrastando para baixo ou com o voltar
+  do celular (6.20). Altura máxima ~62% da tela; "Mais opções" abre dentro
+  da própria folha, em lista de 2 colunas compacta (alvo de 44 px).
+- **Novo álbum ›**: Registrar novo · Substituir nos Charts · Retroativo.
+  **Pre-save ›**: Nova campanha · Minhas campanhas. As subfolhas têm
+  "‹ Criar" e ✕.
+- Os 6 primeiros são os lançamentos mais comuns; quando a medição de uso
+  (6.15) tiver um mês de dados, a ordem pode ser ajustada pelo uso real.
+- Atalhos novos (Notícia, Revista, Entrevista, Nova playlist, Novo
+  artista) continuam também no lugar de hoje. Ficam só no lugar de hoje:
+  look no Red Carpet, ação do dia da turnê, indicar/votar, Spotlight
+  Banner, enquete na sala.
 
 #### 5.7.2 Meus lançamentos (`/meus-lancamentos`)
 
@@ -1291,6 +1289,23 @@ As mesmas de hoje (conferido em `__root.tsx` e nos componentes):
 - **Press Start 2P:** é carregada em `__root.tsx`, mas nenhuma tela usa.
   Sai do carregamento na fase de limpeza (página mais leve).
 
+
+**Proposta de fonte mais "chique e minimalista" (pedido do usuário,
+2026-11-26) — decisão D7.** O protótipo tem um seletor fora do celular
+(**Fonte atual · Inter fina · Geist · Editorial**) para comparar em
+qualquer tela:
+
+| Opção | Como fica | Leitura |
+|---|---|---|
+| Fonte atual | Inter 900 itálico em caixa alta nos títulos, Fjalla One nos Charts, Poppins nas capas | forte, "esportivo"; pesado em telas cheias de texto |
+| **Inter fina** | Inter, títulos 700 sem itálico e sem caixa alta, espaçamento justo (–0,035em); números sem itálico | mais limpa, estilo Apple Music; troca mínima (a fonte já é carregada) |
+| **Geist** *(recomendada)* | Geist em tudo, títulos 600, espaçamento –0,045em | a mais minimalista e "premium" das três, números elegantes; uma fonte a mais para carregar |
+| Editorial | Inter no texto + **Instrument Serif** nos títulos | chique de revista; combina com Imprensa, mas destoa nos Charts e na TV |
+
+Em todas as opções novas: sem itálico e sem peso 900; a identidade fica na
+cor roxa, no logo e nas capas. Os Charts seguem a fonte escolhida (só
+aparência; nenhuma lógica muda). Escolha pendente do usuário.
+
 ### 6.18 Admin "vendo como" outro jogador
 
 Hoje o aviso "Vendo como … — Voltar a ser admin" só aparece dentro do
@@ -1648,6 +1663,7 @@ fase 3 deve vir logo em seguida (call meu: entregar 2 e 3 juntas se der).
 | ~~D3~~ | **Decidido:** cor por papel (U13). | — | — |
 | D4 | Lista dos controllers `adminDiag*` que podem ser apagados na fase 6 | usuário (na fase 6) | só limpeza |
 | D5 | Som da Kick: resultado do teste da opção 1 (`/tv-teste-som`) no iPhone e no Android; se não funcionar, avaliar a opção 3 | usuário (teste no celular) | sala da TV |
+| D7 | Fonte do Beta: atual, Inter fina, Geist (recomendada) ou Editorial (6.17) | usuário | aparência de todo o app |
 | D6 | Participação na TV só pelo tempo presente (mensagem só prova presença no minuto), no lugar de "vale o maior entre presença e chat" | usuário | REGISTRO e prestígio |
 
 ---

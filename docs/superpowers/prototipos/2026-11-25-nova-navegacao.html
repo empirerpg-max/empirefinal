@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,800;1,900&family=Fjalla+One&family=Poppins:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,800;1,900&family=Fjalla+One&family=Poppins:wght@600;700;800&family=Geist:wght@400;500;600;700&family=Instrument+Serif&family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
 /* Layout: página de apresentação (dark-first) com o celular à esquerda e as notas à direita; empilha no celular. */
 :root{
@@ -569,6 +569,42 @@ button.rank{min-width:32px;min-height:40px}
 .phone[data-mode="light"] [style*="color:#000"],.phone[data-mode="light"] [style*="color:#111"]{}
 [aria-label="Mover para trás"],[aria-label="Mover para frente"]{flex-shrink:0}
 .phone[data-mode="light"] [style*="color:#25F4EE"],.phone[data-mode="light"] [style*="color:#25f4ee"]{color:#0e7490!important}
+
+/* Criar enxuto: 6 ações mais usadas + "Mais opções" (lei de Hick), sempre com ✕ */
+.crHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.crHead b{font-size:18px}
+.crX{width:40px;height:40px;border-radius:50%;background:var(--p-surface2);display:grid;place-items:center;font-size:15px;font-weight:700;flex-shrink:0}
+.crBody{max-height:62vh;overflow:auto;margin:0 -4px;padding:0 4px 4px;overscroll-behavior:contain}
+.crGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.crT{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0;padding:14px 6px;border-radius:16px;background:var(--p-surface2);font-size:12.5px;font-weight:700;text-align:center;line-height:1.2}
+.crT .gi{width:36px;height:36px;display:grid;place-items:center;color:var(--p-accent)}
+.crT .gi svg{width:24px;height:24px}
+.crT span:last-child{overflow-wrap:break-word;max-width:100%}
+.crEdit{display:flex;align-items:center;gap:12px;width:100%;margin-top:10px;padding:12px 14px;border-radius:16px;background:var(--p-surface2);text-align:left}
+.crEdit>svg:first-child{width:20px;height:20px;color:var(--p-accent);flex-shrink:0}
+.crEdit span{flex:1;min-width:0}.crEdit b{display:block;font-size:14px}.crEdit small{display:block;font-size:12px;color:var(--p-muted)}
+.crMais{display:flex;align-items:center;gap:6px;width:100%;margin-top:6px;padding:12px 4px;font-weight:800;font-size:13.5px}
+.crMais .chev{margin-left:auto}
+.crList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.crL{display:flex;align-items:center;gap:10px;min-width:0;min-height:44px;padding:8px 12px;border-radius:12px;background:var(--p-surface);font-size:13px;font-weight:700;text-align:left}
+.crL svg{width:18px;height:18px;flex-shrink:0;color:var(--p-muted)}
+.crL span{min-width:0;overflow-wrap:break-word;line-height:1.2}
+.crSec{margin:12px 0 6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--p-muted)}
+
+/* ── propostas de fonte (seletor fora do celular) ── */
+.phone[data-font]:not([data-font="atual"]) .screenBox{--p-title-style:normal;--p-title-case:none}
+.phone[data-font]:not([data-font="atual"]) [style*="font-style:italic"]{font-style:normal!important}
+.phone[data-font]:not([data-font="atual"]) [style*="font-weight:900"]{font-weight:700!important}
+.phone[data-font]:not([data-font="atual"]) h2[style*="uppercase"],.phone[data-font]:not([data-font="atual"]) h4,.phone[data-font]:not([data-font="atual"]) .awHeroIn h4{text-transform:none!important}
+.phone[data-font]:not([data-font="atual"]) .num{font-style:normal;font-weight:700;letter-spacing:-.02em}
+.phone[data-font]:not([data-font="atual"]) .fj,.phone[data-font]:not([data-font="atual"]) .pop{font-family:inherit!important;text-transform:none!important;font-weight:700!important;letter-spacing:-.02em!important}
+.phone[data-font="inter"] .screenBox{font-family:"Inter",system-ui,sans-serif;--p-title-weight:700;--p-title-track:-.035em}
+.phone[data-font="geist"] .screenBox{font-family:"Geist","Inter",system-ui,sans-serif;--p-title-weight:600;--p-title-track:-.045em;letter-spacing:-.005em}
+.phone[data-font="geist"] .num{font-weight:600;letter-spacing:-.03em}
+.phone[data-font="serif"] .screenBox{font-family:"Inter",system-ui,sans-serif;--p-title-weight:400;--p-title-track:-.01em}
+.phone[data-font="serif"] .ttl,.phone[data-font="serif"] .h2 h3,.phone[data-font="serif"] h2,.phone[data-font="serif"] h4,.phone[data-font="serif"] .awHeroIn h4{font-family:"Instrument Serif",Georgia,serif!important;font-weight:400!important;letter-spacing:-.01em!important}
+.phone[data-font="serif"] .ttl{font-size:36px}
+.phone[data-font="serif"] .h2 h3{font-size:24px}
 </style>
 
 <div class="wrap">
@@ -582,6 +618,12 @@ button.rank{min-width:32px;min-height:40px}
         <button data-device="phone" aria-pressed="true">Celular</button>
         <button data-device="tablet" aria-pressed="false">Tablet</button>
         <button data-device="desktop" aria-pressed="false">Computador</button>
+      </div>
+      <div class="modeSwitch" role="group" aria-label="Fonte do app">
+        <button data-font="atual" aria-pressed="true">Fonte atual</button>
+        <button data-font="inter" aria-pressed="false">Inter fina</button>
+        <button data-font="geist" aria-pressed="false">Geist</button>
+        <button data-font="serif" aria-pressed="false">Editorial</button>
       </div>
       <div class="modeSwitch" role="group" aria-label="Modo do app">
         <button id="mDark" aria-pressed="true">Escuro (atual)</button>
@@ -1145,11 +1187,7 @@ const pages = {
         <button class="btn play" data-play="${i}">${svg('play')}${isVid?'Assistir':'Tocar'}</button><button class="btn sec" data-toast="${isVid?'Abre em mini player':isMus?'Escolha a playlist':'Tocando no modo aleatório'}">${svg(isVid?'tv':isMus?'list':'shuffle')}${isVid?'Mini player':isMus?'Playlist':'Aleatório'}</button>
 </div>`;
     const botoes = isVid ? '' : `<div style="display:flex;gap:8px;padding:2px 16px 10px;flex-wrap:wrap">${[['bag','Shop'],['help','Info'],['image','Visual']].map(([ic,l])=>`<button class="btn sec" style="height:34px;font-size:12.5px" data-toast="${l}: botão do tópico">${svg(ic)}${l}</button>`).join('')}</div>`;
-    const destaque = `<div class="card" style="margin-top:6px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:16px">Comentários · 77</b><span class="muted small">último há 5 min</span></div>
-        <div style="margin-top:10px;border-top:1px solid var(--p-line);padding-top:8px" class="small"><b>Bia Kalli</b> <span style="color:#38bdf8">✓</span> <span class="muted">· há 5 min</span><div>A produção da faixa 3 é absurda. Melhor álbum do ano até agora.</div></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn pri" data-avaliar="${isVid?'video':'metacritic'}">${svg('star')}${isVid?'Likes &amp; Comentário':'Avaliar &amp; Comentar'}</button><button class="btn sec" data-scroll-to="cmts">Ver todos</button></div>
-        ${isVid?'':`<p class="muted" style="font-size:11.5px;margin:10px 0 0">A nota que você dá aqui vai para o <b style="color:var(--p-fg)">Metacritic</b> da Imprensa (ranking semanal) e não aparece no Fórum.</p>`}</div>`;
+    const destaque = '';
     let corpo = '';
     if (kind==='album'){
       const faixas = [['Vidro Quebrado','3:12',1,true],['Catedral','4:20',1,true],['Febre de Maio','2:58',1,true],['Interlúdio','1:10',1,false],['Ruído Branco','4:05',2,true],['Sal na Pele','3:03',2,true]];
@@ -1165,7 +1203,7 @@ const pages = {
     if (isVid){
       corpo += h2('Mais vídeos') + VID.map((v,k)=>`<button class="row" data-open="topic" data-id="${k}" data-title="${v.t}" data-kind="video">${cover(k+2,'','sm" style="width:96px;height:54px;border-radius:8px;background:linear-gradient(140deg,'+G[k+2][0]+','+G[k+2][1]+')')}<span class="meta"><b>${v.t}</b><small>${v.k} · ${ART[v.a]}</small></span></button>`).join('');
     }
-    corpo += `<div id="cmts">${h2('Comentários · 77','Recentes','data-toast="Ordenar por: recentes, mais reações"')}</div>` + comentarios.map((c,k)=>cmt(c,k,false)).join('');
+    corpo += `<div id="cmts">${h2('Comentários · 77','Recentes','data-toast="Ordenar por: recentes, mais reações"')}${isVid?'':'<p class="muted pad" style="font-size:11.5px;margin:-4px 0 6px">Sua nota vai para o Metacritic da Imprensa e não aparece aqui.</p>'}</div>` + comentarios.map((c,k)=>cmt(c,k,false)).join('');
     return {title:t, actions: dono?'albumDono':'topico', save:true, body: header + badges + acoes + botoes + `<div class="pad" style="padding:0">${destaque}</div>` + corpo + `<div style="height:70px"></div><div class="composer" style="position:sticky"><button class="btn pri" style="flex:1" data-avaliar="${isVid?'video':'metacritic'}">${svg('star')}Avaliar &amp; Comentar</button></div>`};
   },
   artist(id){
@@ -1399,7 +1437,7 @@ const pages = {
       ${grp('Biblioteca',[['heart','#e11d48','Salvos','37 faixas',`data-go-close="catalogo"`],['list','#7c3aed','Minhas playlists','4',`data-go-close="catalogo"`]])}
       ${grp('Premiações e festivais',[['trophy','#f59e0b','Abrir Premiações','Abertas agora, resultados e seus prêmios',`data-go-close-prem`],['trophy','#f59e0b','Indicar ao VMA','Aberto até 30/11'],['star','#e11d48','Votação','6 categorias',`data-open="votacao"`],['archive','#64748b','Prêmios já ganhos (retroativo)',''],['ticket','#ec4899','Inscrição em festival','Festival de Verão']])}
       ${h2('Aparência')}<div class="seg">${[['dark','Escuro'],['light','Claro'],['system','Sistema']].map(([v,l])=>`<button data-mode-set="${v}" aria-pressed="${v===mode}">${l}</button>`).join('')}</div>
-      ${grp('Admin (só aparece pra admin)',[['rocket','#f59e0b','Beta test: ligado para todos','Trocar para: só convidados · desligado · obrigatório'],['help','#f59e0b','Reportes do Beta','3 novos · 12 resolvidos'],['chart','#0ea5e9','Uso do app','Telas e ações mais usadas na semana · anterior × Beta',`data-open="uso"`],['users','#475569','Entrar como usuário',''],['image','#475569','Banners do Catálogo',''],['tv','#475569','Programação da Empire TV','Vídeos pendentes e publicar'],['list','#475569','Painel do catálogo','Fila de backup e D1 · Atualizar todos os artistas a partir da planilha']])}
+      ${grp('Admin (só aparece pra admin)',[['rocket','#f59e0b','Beta test: ligado para todos','Trocar para: só convidados · desligado · obrigatório'],['help','#f59e0b','Reportes do Beta','3 novos · 12 resolvidos'],['chart','#0ea5e9','Uso do app','Telas e ações mais usadas na semana · anterior × Beta',`data-open="uso"`],['users','#475569','Entrar como usuário',''],['image','#475569','Banners do Catálogo',''],['tv','#475569','Programação da Empire TV','Vídeos pendentes e publicar'],['list','#475569','Painel do catálogo','Fila de backup e D1 · Atualizar todos os artistas a partir da planilha'],['chart','#0f766e','Metacritic: atualizar agora','O ranking semanal já é automático; isto força na hora']])}
       ${grp('App',[['bell','#e11d48','Notificações','O que receber no celular'],['send','#0ea5e9','Canais oficiais',''],['help','#64748b','Como usar (tutorial)','Beta test e versão anterior',`data-open="tutorial"`],['help','#f59e0b','Beta test','Reportar problema ou voltar para a versão anterior',`data-toast="Toque no selo BETA, no topo"`],['logout','#475569','Sair','']])}`};
   }
 };
@@ -1471,26 +1509,24 @@ function closeTop(){
 function closeAll(){ let n=0; while (stack.length) { const el = stack.pop(); el.remove(); n++; } if (n && !HIST.doPop){ let k=0; for(let i=HIST.pilha.length-1;i>=0 && n>0;i--){ k++; if(HIST.pilha[i]==='p') n--; } histTirar(k); } }
 
 /* ── folha "Criar" ── */
-function openCreate(){
+function openCreate(mais){
   $('#sheet').setAttribute('aria-label','Criar');
-  const G1=[['music','Nova música','Abre: Nova música (formulário de hoje)'],['video','Novo vídeo','Abre: Novo vídeo (formulário de hoje)'],['album','Novo álbum','sub:album'],['disc','Faixa de álbum','Abre: Lançar faixa de álbum (faixas pendentes)'],['archive','Material antigo','Abre: Material antigo (álbum antigo, data aproximada)'],['rocket','Pre-save','sub:presave'],['mic','Performance Award','Abre: Performance Award pendente'],['tv','Cinema (em breve)','Cinema: em breve']];
-  const G2=[['pen','Post no Social','Abre: novo post (como artista ou como fã anônimo)'],['list','Notícia (News)','Abre: nova notícia no Empire News (precisa ter um artista)'],['image','Revista','Abre: nova revista (páginas com + Imagem e + Texto)'],['mic','Entrevista','Abre: nova entrevista (perguntas e respostas)']];
-  const G3=[['ticket','Nova turnê','Abre: Criar turnê (continente, local, datas)'],['list','Nova playlist','Abre: Nova playlist (Catálogo › Biblioteca)'],['users','Novo artista','Abre: Meus artistas › Gerenciar › Criar artista'],['lyric','Sincronizar letra','Abre: Estúdio de sincronização']];
-  const admin = [['image','Banners'],['tv','Grade da TV'],['list','Painel do catálogo']];
-  const grid=(arr)=>`<div class="createGrid">${arr.map(([ic,l,a])=>a.startsWith('sub:')?`<button data-create-sub="${a.slice(4)}"><span class="gi">${svg(ic)}</span><span>${l}</span></button>`:`<button data-toast="${a}" data-close-sheet><span class="gi">${svg(ic)}</span><span>${l}</span></button>`).join('')}</div>`;
-  const sec=(t)=>`<p class="muted small" style="margin:16px 0 8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em">${t}</p>`;
-  $('#sheet').innerHTML = `<div class="grab"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b style="font-size:18px">Criar</b><button class="btn sec" style="height:36px;font-size:12.5px" data-close-sheet>Fechar</button></div>
-    <div style="max-height:70vh;overflow:auto;margin:0 -4px;padding:0 4px">
-    <button class="row" style="padding:12px;margin:0 0 4px;border-radius:14px;background:var(--p-surface2)" data-close-sheet data-open-after="lancamentos"><span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg('pen')}</span><span class="meta"><b>Editar meus lançamentos</b><small>Título, capa, áudio, letra, foco, tracklist, encarte, publicar faixa, pre-saves</small></span>${svg('chev','chev')}</button>
-    ${sec('Lançar música e vídeo')}${grid(G1)}
-    ${sec('Publicar')}${grid(G2)}
-    ${sec('Turnê, playlist e artista')}${grid(G3)}
-    ${sec('Só admin')}<div class="createGrid">${admin.map(([ic,l])=>`<button data-toast="Abre: ${l} (admin)" data-close-sheet><span class="gi">${svg(ic)}</span><span>${l}</span></button>`).join('')}</div>
-    <p class="muted small" style="margin:14px 0 0">Também continuam onde estão hoje: look no Red Carpet (sala da TV), ação do dia da turnê (Pra fazer hoje), indicar e votar (Início › Premiações), Spotlight Banner (Market) e enquete na sala (admin).</p></div>`;
+  const TOP=[['music','Nova música','Abre: Nova música (formulário de hoje)'],['video','Novo vídeo','Abre: Novo vídeo (formulário de hoje)'],['album','Novo álbum','sub:album'],['rocket','Pre-save','sub:presave'],['pen','Post no Social','Abre: novo post (como artista ou fã anônimo)'],['disc','Faixa de álbum','Abre: Lançar faixa de álbum (faixas pendentes)']];
+  const MAIS=[['archive','Material antigo'],['lyric','Sincronizar letra'],['mic','Performance Award'],['list','Notícia (News)'],['image','Revista'],['mic','Entrevista'],['ticket','Nova turnê'],['list','Nova playlist'],['users','Novo artista'],['tv','Cinema (em breve)']];
+  const ADM=[['image','Banners'],['tv','Grade da TV'],['list','Painel do catálogo']];
+  const tile=([ic,l,a])=>a.startsWith('sub:')?`<button class="crT" data-create-sub="${a.slice(4)}"><span class="gi">${svg(ic)}</span><span>${l}</span></button>`:`<button class="crT" data-toast="${a}" data-close-sheet><span class="gi">${svg(ic)}</span><span>${l}</span></button>`;
+  const lin=([ic,l],adm)=>`<button class="crL" data-toast="Abre: ${l}${adm?' (admin)':''}" data-close-sheet>${svg(ic)}<span>${l}</span></button>`;
+  $('#sheet').innerHTML = `<div class="grab"></div><div class="crHead"><b>Criar</b><button class="crX" data-close-sheet aria-label="Fechar">✕</button></div>
+    <div class="crBody">
+    <div class="crGrid">${TOP.map(tile).join('')}</div>
+    <button class="crEdit" data-close-sheet data-open-after="lancamentos">${svg('pen')}<span><b>Editar meus lançamentos</b><small>Capa, letra, tracklist, encarte, pre-saves</small></span>${svg('chev','chev')}</button>
+    <button class="crMais" data-create-mais aria-expanded="${!!mais}">${mais?'Menos opções':'Mais opções'} <span class="muted">(${MAIS.length})</span>${svg('chev','chev'+(mais?' rot':''))}</button>
+    ${mais?`<div class="crList">${MAIS.map(x=>lin(x)).join('')}</div><p class="crSec">Só admin</p><div class="crList">${ADM.map(x=>lin(x,true)).join('')}</div>`:''}
+    </div>`;
   $('#scrim').classList.add('in'); $('#sheet').classList.add('in');
 }
 function openCreateSub(k){
-  const back=`<button class="btn sec" style="height:36px;font-size:12.5px" data-create-back>‹ Criar</button>`;
+  const back=`<span style="display:flex;gap:8px"><button class="btn sec" style="height:40px;font-size:12.5px" data-create-back>‹ Criar</button><button class="crX" data-close-sheet aria-label="Fechar">✕</button></span>`;
   const rows=(arr)=>`<div class="group tvWrap" style="margin:0">${arr.map(([t,st,a])=>`<button class="row" data-toast="${a}" data-close-sheet><span class="meta"><b>${t}</b><small>${st}</small></span>${svg('chev','chev')}</button>`).join('')}</div>`;
   const H={album:['Novo álbum', rows([['Registrar novo','Álbum do zero: tipo, nº de faixas, cada faixa, capa e encarte','Abre: Registrar novo álbum'],['Substituir nos Charts','Incluir faixas novas, trocar capa, novo encarte num álbum já lançado','Abre: Substituir nos Charts'],['Retroativo','Álbum antigo com data aproximada do lançamento real','Abre: Álbum retroativo']])],
            presave:['Pre-save', rows([['Nova campanha','Contagem regressiva, com ou sem missões diárias, material extra','Abre: Nova campanha de pre-save'],['Minhas campanhas','Completar missão, editar faixas, ranking, cancelar','Abre: Minhas campanhas de pre-save']])]}[k];
@@ -1606,6 +1642,7 @@ box.addEventListener('click', e => {
   if (b.dataset.tvreact){ closeSheet(); return toast('Reação '+b.dataset.tvreact+' enviada'); }
   if (b.dataset.tvreplyGo){ closeSheet(); const pg=stack[stack.length-1]; const rb=pg.querySelector('[data-tvreply]'); rb.hidden=false; rb.querySelector('[data-tvreply-n]').textContent='Respondendo a '+b.dataset.tvreplyGo; rb.querySelector('[data-tvreply-t]').textContent=b.dataset.tvreplyGo+': '+b.dataset.tvreplyTxt; pg.querySelector('[data-tvinput]').focus({preventScroll:true}); return; }
   if (b.dataset.run!==undefined){ state.runOpen = state.runOpen===+b.dataset.run ? null : +b.dataset.run; return refreshTop(); }
+  if (b.hasAttribute('data-create-mais')){ return openCreate(b.getAttribute('aria-expanded')!=='true'); }
   if (b.dataset.createSub){ return openCreateSub(b.dataset.createSub); }
   if (b.hasAttribute('data-create-back')){ return openCreate(); }
   if (b.dataset.tvevento){ const pg=stack[stack.length-1]; const st=pg.querySelector('[data-tvev-st]'); const ini=pg.querySelector('[data-tvevento="ini"]'), fim=pg.querySelector('[data-tvevento="fim"]');
@@ -1734,6 +1771,9 @@ document.querySelectorAll('[data-device]').forEach(b => b.addEventListener('clic
   render(true); initArrows(document);
 }));
 $('#mLight').addEventListener('click', ()=>setMode('light'));
+document.querySelectorAll('[data-font]').forEach(b => b.addEventListener('click', () => { phone.dataset.font=b.dataset.font; document.querySelectorAll('[data-font]').forEach(x=>x.setAttribute('aria-pressed', x===b)); try{localStorage.setItem('ehp-fonte', b.dataset.font)}catch(e){} }));
+try{ const f=localStorage.getItem('ehp-fonte'); if(f){ const b=document.querySelector(`[data-font="${f}"]`); b && b.click(); } }catch(e){}
+
 document.querySelectorAll('[data-oque-ext]').forEach(b => b.addEventListener('click', () => { closeAll(); state.tab='inicio'; render(); const t=document.createElement('button'); t.setAttribute('data-oque-mudou',''); box.appendChild(t); t.click(); t.remove(); if (matchMedia('(max-width:900px)').matches) phone.scrollIntoView({behavior:'smooth',block:'start'}); }));
 document.querySelectorAll('[data-estado-ext]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='forum'; state.demoEstado=b.dataset.estadoExt; render(); marcarAtual(); if (matchMedia('(max-width:900px)').matches) phone.scrollIntoView({behavior:'smooth',block:'start'}); }));
 document.querySelectorAll('[data-jump-acervo]').forEach(b => b.addEventListener('click', () => { closeAll(); closeSheet(); state.tab='social'; state.socialTab='Imprensa'; state.acervoTab=b.dataset.jumpAcervo; render(); phone.scrollIntoView({behavior:'smooth',block:'center'}); }));
