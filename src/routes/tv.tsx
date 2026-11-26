@@ -698,17 +698,20 @@ function ArquivoFull({ finalizados, loading }: { finalizados: Programa[]; loadin
 // No iOS isso passava despercebido (o navegador geralmente pausa mídia de
 // iframe escondido), mas no Android os dois continuam tocando — daí o
 // áudio duplicado. Aqui a gente decide via JS qual bloco existe de fato,
-// garantindo um único player montado por vez.
-function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(false);
+// garantindo um único player montado por vez. Hoje a WatchView vai além:
+// é UMA árvore só nos três modos (celular em pé, celular deitado, tela larga)
+// e só as classes mudam — assim girar o celular não recria o iframe (a
+// transmissão não recarrega nem volta a ficar muda).
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    setIsDesktop(mq.matches);
-    const onChange = () => setIsDesktop(mq.matches);
+    const mq = window.matchMedia(query);
+    setMatches(mq.matches);
+    const onChange = () => setMatches(mq.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return isDesktop;
+  }, [query]);
+  return matches;
 }
 
 // Acompanha window.visualViewport (altura visível de verdade + quanto a
@@ -746,8 +749,40 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   const myName = login?.nome;
   const vv = useVisualViewport();
   const [tab, setTab] = useState<WatchTab>("chat");
-  const isDesktop = useIsDesktop();
   const tabBarScroll = useDragScroll<HTMLDivElement>();
+
+  // Três modos de layout, decididos por media query (nada de API de rotação):
+  // - "deitado": celular na horizontal — vídeo ocupa a tela e o chat vira uma
+  //   coluna à direita (38%), sem abas;
+  // - "largo": área com 760 px ou mais (tablet deitado, computador) — vídeo,
+  //   faixa e abas à esquerda; chat fixo numa coluna à direita;
+  // - celular em pé (padrão): vídeo 16:9 no topo, faixa fina, abas e chat.
+  const deitadoMq = useMediaQuery("(orientation: landscape) and (max-height: 500px)");
+  const largoMq = useMediaQuery("(min-width: 760px)");
+  // Voltar do celular sai do modo deitado antes de sair da sala (regra
+  // "voltar = tela anterior"): entrar nele empurra uma entrada própria no
+  // histórico; o voltar a tira e a sala passa a mostrar o layout normal
+  // mesmo com o celular ainda deitado, até ele ser girado de novo.
+  const [deitadoDispensado, setDeitadoDispensado] = useState(false);
+  useEffect(() => {
+    if (!deitadoMq) setDeitadoDispensado(false);
+  }, [deitadoMq]);
+  const deitado = deitadoMq && !deitadoDispensado;
+  const largo = largoMq && !deitado;
+  useEffect(() => {
+    if (!deitado) return;
+    window.history.pushState({ tvSalaDeitada: true }, "");
+    const onPop = () => {
+      if (!window.history.state?.tvSalaDeitada) setDeitadoDispensado(true);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      // Saiu do modo deitado sem ser pelo voltar (girou o celular, minimizou,
+      // fechou a sala): tira a entrada para não deixar entrada órfã.
+      if (window.history.state?.tvSalaDeitada) window.history.back();
+    };
+  }, [deitado]);
 
   // A presença é contada pelo PresencaTVTracker (montado no TvPlayerProvider),
   // que vale tanto pra sala quanto pro mini player — nada de heartbeat aqui.
@@ -834,7 +869,10 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
             allow="autoplay; camera; microphone; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
           />
-          {/* Depois do primeiro toque bem-sucedido nesta sessão, troca o aviso
+          {/* O botão de som fica no canto de CIMA: os ~56 px de baixo são a
+              barra de controles do próprio player da Kick (com o botão de
+              mudo) e nada nosso pode cobrir essa faixa.
+              Depois do primeiro toque bem-sucedido nesta sessão, troca o aviso
               grande por um ícone discreto — cada transmissão nova ainda exige
               um toque de verdade (é o navegador quem exige, não dá pra
               pular), mas não precisa mais do aviso chamativo repetido. */}
@@ -843,12 +881,19 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
             onClick={handleUnmute}
             className={
               unmutedOnce || hasUnmutedThisSession()
-                ? "absolute bottom-3 left-3 z-10 size-8 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
-                : "absolute bottom-3 left-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
+                ? "absolute top-2 right-2 z-10 size-8 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
+                : "absolute top-2 right-2 z-10 max-w-[60%] min-w-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
             }
             aria-label="Ativar som"
           >
-            {unmutedOnce ? <Volume2 className="size-3.5" /> : <><VolumeX className="size-3.5" /> {!hasUnmutedThisSession() && "Toque para ativar o som"}</>}
+            {unmutedOnce ? (
+              <Volume2 className="size-3.5 shrink-0" />
+            ) : (
+              <>
+                <VolumeX className="size-3.5 shrink-0" />
+                {!hasUnmutedThisSession() && <span className="truncate">Toque para ativar o som</span>}
+              </>
+            )}
           </button>
         </div>
       );
@@ -870,117 +915,185 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     );
   })();
 
-  const header = (
-    <div
-      className="flex items-center gap-2 px-3 shrink-0 bg-background/95 backdrop-blur border-b border-border/60"
-      style={{ paddingTop: "env(safe-area-inset-top)", height: "calc(3rem + env(safe-area-inset-top))" }}
-    >
-      <button onClick={onBack} className="size-8 rounded-full hover:bg-muted flex items-center justify-center shrink-0" aria-label="Voltar">
-        <ArrowLeft className="size-4" />
+  // Controles por cima do vídeo, só no canto de CIMA (a faixa de baixo é da
+  // barra de controles da Kick — ver o botão de som acima).
+  const videoTopo = (
+    <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 min-w-0">
+      <button onClick={onBack} className="size-8 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition" aria-label="Voltar">
+        <ArrowLeft className="size-4 shrink-0" />
       </button>
-      <div className="min-w-0 flex-1 truncate text-sm font-semibold">{programa.titulo}</div>
-      {myId && <ParticipacaoCirculo pct={meuPct} onClick={() => setTab("participantes")} />}
+      <button onClick={onMinimize} className="size-8 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition" aria-label="Minimizar (continua tocando)" title="Minimizar — continua tocando">
+        <Minimize2 className="size-4 shrink-0" />
+      </button>
       {programa.ao_vivo && (
         <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
-          <Radio className="size-2.5 animate-pulse" /> LIVE
+          <Radio className="size-2.5 shrink-0 animate-pulse" /> LIVE
         </span>
       )}
-      <button onClick={onMinimize} className="size-8 rounded-full hover:bg-muted flex items-center justify-center shrink-0" aria-label="Minimizar (continua tocando)" title="Minimizar — continua tocando">
-        <Minimize2 className="size-4" />
+    </div>
+  );
+
+  // Faixa fina logo abaixo do vídeo: título (toque = Sobre), quantos estão
+  // assistindo e o círculo da participação.
+  const espectadores = programa.ao_vivo && programa.espectadores > 0 ? programa.espectadores : null;
+  const faixa = (
+    <div className="flex items-center gap-2 px-2 py-1 shrink-0 min-w-0 border-b border-border/60">
+      <button
+        type="button"
+        onClick={() => setTab("sobre")}
+        className="flex-1 min-w-0 px-1 py-0.5 text-left rounded-md hover:bg-muted/50 transition"
+        title={programa.titulo}
+      >
+        <span className="block truncate text-sm font-semibold leading-tight">{programa.titulo}</span>
+        <span className="flex items-center gap-1 min-w-0 text-[11px] text-muted-foreground leading-tight">
+          <Users className="size-3 shrink-0" />
+          <span className="truncate">
+            {espectadores != null ? `${espectadores.toLocaleString("pt-BR")} assistindo · Sobre` : "Sobre a transmissão"}
+          </span>
+        </span>
       </button>
+      {myId && <ParticipacaoCirculo pct={meuPct} onClick={() => setTab("participantes")} />}
     </div>
   );
 
   const tabBar = (
     <div
       ref={tabBarScroll.ref}
-      className="flex items-center gap-1 px-2 h-10 border-b border-border shrink-0 overflow-x-auto cursor-grab active:cursor-grabbing select-none"
+      className="flex items-center gap-1 px-2 h-9 border-b border-border shrink-0 overflow-x-auto cursor-grab active:cursor-grabbing select-none"
     >
       <StickyScrollArrowLeft show={tabBarScroll.canScrollLeft} onClick={() => tabBarScroll.scrollByAmount(-1)} />
       <StickyScrollArrowRight show={tabBarScroll.canScrollRight} onClick={() => tabBarScroll.scrollByAmount(1)} />
-      {tabs.map((t) => {
+      {/* Na tela larga o chat já fica sempre na coluna da direita, então a
+          aba "Chat" sai da fileira: as outras abrem à esquerda e tocar na
+          aba já aberta fecha o painel. */}
+      {tabs.filter((t) => !largo || t.id !== "chat").map((t) => {
         const Icon = t.icon;
         const active = tab === t.id;
         return (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`relative shrink-0 h-8 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 ${
+            onClick={() => setTab(largo && active ? "chat" : t.id)}
+            className={`relative shrink-0 h-7 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 ${
               active
                 ? "text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]"
                 : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
             }`}
           >
             {active && <span className="absolute inset-0 rounded-md bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
-            <Icon className="relative z-10 size-3.5" /> <span className="relative z-10">{t.label}</span>
+            <Icon className="relative z-10 size-3.5 shrink-0" /> <span className="relative z-10 whitespace-nowrap">{t.label}</span>
           </button>
         );
       })}
     </div>
   );
 
-  const panel = (
-    <div className="flex-1 min-h-0 flex flex-col">
-      {tab === "chat" && <ChatPanel programaId={programa.id} onOpenRedCarpetPost={openRedCarpetPost} />}
-      {tab === "redcarpet" && (
-        <RedCarpetPanel programa={programa} highlightPostId={highlightPostId} onHighlightConsumed={() => setHighlightPostId(null)} />
-      )}
-      {tab === "participantes" && <ParticipantesPanel rows={presencaRows} loading={presencaCarregando} />}
-      {tab === "sobre" && <SobrePanel programa={programa} />}
-    </div>
-  );
-
-  // ---------- Mobile: vídeo em bloco fixo no topo (não tela cheia) + chat
-  // SEMPRE visível logo abaixo, sem gaveta que soma/sobrepõe o vídeo — vídeo
-  // e teclado nunca disputam o mesmo espaço, porque nenhum dos dois cobre o
-  // outro: cada um vive na sua própria faixa da tela o tempo todo. ----------
-  if (!isDesktop) {
-    // Vídeo + cabeçalho ficam em "position: absolute" (não itens normais de
-    // flex) e o painel de chat ocupa o resto via "position: absolute" com
-    // "top" calculado — de propósito, não é só estética. Como itens comuns
-    // de flex, quando o Safari rola pra revelar o campo de digitar acima do
-    // teclado, ele rola a COLUNA INTEIRA (arrastando vídeo e cabeçalho pra
-    // fora da tela junto, foi exatamente isso que aconteceu). "absolute"
-    // tira os dois de qualquer fluxo/scroll ancestral — só quem pode rolar
-    // é o scroller interno do próprio ChatPanel (ver comentário lá dentro).
-    const videoHeight = "calc(3rem + env(safe-area-inset-top) + 100vw * 9 / 16)";
-    return (
-      <div
-        className="relative bg-background overflow-hidden"
-        style={{
-          // window.visualViewport, quando disponível, é a área REALMENTE
-          // visível (já descontando o teclado) — mais confiável que h-full/
-          // 100dvh nesse cenário específico, porque o iOS às vezes pana a
-          // página em vez de encolher a viewport.
-          height: vv ? vv.height : "100%",
-          transform: vv?.offsetTop ? `translateY(${vv.offsetTop}px)` : undefined,
-        }}
-      >
-        <div className="absolute top-0 inset-x-0 z-20">
-          {header}
-          <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
-        </div>
-        <div className="absolute inset-x-0 bottom-0 flex flex-col" style={{ top: videoHeight }}>
-          {isAdmin && <AdminEventoBar programaId={programa.id} />}
-          {tabBar}
-          {panel}
-        </div>
+  // Conteúdo das abas que não são o chat (no celular em pé substitui o chat;
+  // na tela larga aparece à esquerda, com o chat continuando à direita).
+  const painelAba =
+    tab === "chat" ? null : (
+      <div className="flex-1 min-h-0 flex flex-col">
+        {tab === "redcarpet" && (
+          <RedCarpetPanel programa={programa} highlightPostId={highlightPostId} onHighlightConsumed={() => setHighlightPostId(null)} />
+        )}
+        {tab === "participantes" && <ParticipantesPanel rows={presencaRows} loading={presencaCarregando} />}
+        {tab === "sobre" && <SobrePanel programa={programa} />}
       </div>
     );
-  }
+  const mostraChat = deitado || largo || tab === "chat";
 
-  // ---------- Desktop: player + painel lateral fixo ----------
+  // Altura do vídeo no celular em pé: 16:9 da largura + a área do entalhe.
+  const alturaVideoMobile = "calc(env(safe-area-inset-top) + 100vw * 9 / 16)";
+  const modo = deitado ? "deitado" : largo ? "largo" : "mobile";
+
+  // UMA árvore só para os três modos (só classes/estilos mudam), para o
+  // iframe e o chat não serem recriados ao girar o celular.
+  //
+  // Celular em pé: vídeo e o resto ficam em "position: absolute" (não itens
+  // normais de flex) com "top" calculado — de propósito, não é só estética.
+  // Como itens comuns de flex, quando o Safari rola pra revelar o campo de
+  // digitar acima do teclado, ele rola a COLUNA INTEIRA (arrastando o vídeo
+  // pra fora da tela junto). "absolute" tira o vídeo de qualquer fluxo/scroll
+  // ancestral — só quem pode rolar é o scroller interno do ChatPanel. E a
+  // altura vem de window.visualViewport (área REALMENTE visível, já sem o
+  // teclado): ao digitar, encolhe o chat, nunca o vídeo.
+  //
+  // Tela larga: grade de duas colunas; a parte de baixo vira "display:
+  // contents" e os filhos dela entram direto na grade. O vídeo tem altura
+  // máxima para a faixa e as abas caberem; o chat ocupa a altura toda da
+  // coluna da direita e nunca é empurrado para fora da tela.
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex-1 flex flex-col min-w-0">
-        {header}
-        <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
+    <div
+      className={
+        modo === "largo"
+          ? "relative h-full min-h-0 overflow-hidden bg-background grid grid-cols-[minmax(0,1fr)_clamp(320px,34%,400px)] grid-rows-[auto_auto_auto_auto_minmax(0,1fr)]"
+          : modo === "deitado"
+            ? "relative overflow-hidden bg-black flex"
+            : "relative overflow-hidden bg-background"
+      }
+      style={
+        modo === "largo"
+          ? undefined
+          : {
+              height: vv ? vv.height : "100%",
+              transform: vv?.offsetTop ? `translateY(${vv.offsetTop}px)` : undefined,
+            }
+      }
+    >
+      <div
+        className={
+          modo === "largo"
+            ? "col-start-1 row-start-1 w-full bg-black"
+            : modo === "deitado"
+              ? "relative flex-1 min-w-0 h-full bg-black"
+              : "absolute top-0 inset-x-0 z-20 bg-black"
+        }
+        style={modo === "mobile" ? { paddingTop: "env(safe-area-inset-top)" } : undefined}
+      >
+        <div
+          className={modo === "deitado" ? "relative w-full h-full" : "relative w-full mx-auto"}
+          style={
+            modo === "deitado"
+              ? undefined
+              : modo === "largo"
+                ? { aspectRatio: "16 / 9", maxHeight: "calc(100dvh - 200px)" }
+                : { aspectRatio: "16 / 9" }
+          }
+        >
+          {player}
+          {videoTopo}
+        </div>
       </div>
-
-      <div className="lg:w-[360px] border-l border-border flex flex-col min-h-0 bg-card/30">
-        {isAdmin && <AdminEventoBar programaId={programa.id} />}
-        {tabBar}
-        {panel}
+      <div
+        className={
+          modo === "mobile" ? "absolute inset-x-0 bottom-0 flex flex-col" : "contents"
+        }
+        style={modo === "mobile" ? { top: alturaVideoMobile } : undefined}
+      >
+        {modo !== "deitado" && <div className={modo === "largo" ? "col-start-1 row-start-2 min-w-0" : "min-w-0"}>{faixa}</div>}
+        {modo !== "deitado" && isAdmin && (
+          <div className={modo === "largo" ? "col-start-1 row-start-3 min-w-0" : "min-w-0"}>
+            <AdminEventoBar programaId={programa.id} />
+          </div>
+        )}
+        {modo !== "deitado" && <div className={modo === "largo" ? "col-start-1 row-start-4 min-w-0" : "min-w-0"}>{tabBar}</div>}
+        {modo !== "deitado" && painelAba && (
+          <div className={modo === "largo" ? "col-start-1 row-start-5 min-h-0 min-w-0 flex flex-col overflow-hidden" : "flex-1 min-h-0 flex flex-col"}>
+            {painelAba}
+          </div>
+        )}
+        {mostraChat && (
+          <div
+            className={
+              modo === "largo"
+                ? "col-start-2 row-start-1 row-span-5 min-h-0 min-w-0 flex flex-col border-l border-border bg-card/30"
+                : modo === "deitado"
+                  ? "dark w-[38%] shrink-0 h-full min-h-0 flex flex-col bg-black/55 text-foreground border-l border-white/10"
+                  : "flex-1 min-h-0 flex flex-col"
+            }
+          >
+            <ChatPanel programaId={programa.id} onOpenRedCarpetPost={openRedCarpetPost} />
+          </div>
+        )}
       </div>
     </div>
   );
