@@ -40,8 +40,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 }
 .phone[data-mode="light"]{
   /* modo claro = estrutura do Apple Music (branco, cinza agrupado, títulos grandes à esquerda) com a cor do Empire */
-  --p-bg:#ffffff; --p-bar:rgba(249,249,251,.86); --p-surface:#f2f2f7; --p-surface2:#e5e5ea; --p-fg:#0b0b0f; --p-muted:#6b6b73; --p-line:rgba(0,0,0,.1);
-  --p-accent:#6C4CE8; --p-accent-fg:#ffffff; --p-pill:#6C4CE8; --p-pill-fg:#ffffff; --p-play:#0a8f62; --p-live:#e5243b; --p-up:#0a8f62; --p-down:#d1323a;
+  --p-bg:#ffffff; --p-bar:rgba(249,249,251,.86); --p-surface:#f2f2f7; --p-surface2:#e5e5ea; --p-fg:#0b0b0f; --p-muted:#55555c; --p-line:rgba(0,0,0,.1);
+  --p-accent:#6C4CE8; --p-accent-fg:#ffffff; --p-pill:#6C4CE8; --p-pill-fg:#ffffff; --p-play:#087a54; --p-live:#d61f35; --p-up:#087a54; --p-down:#d1323a;
   --p-title-style:normal; --p-title-case:none; --p-title-weight:800; --p-title-track:-.03em; --p-radius:12px;
   background:#d9d9de;
 }
@@ -55,9 +55,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 
 .screenBox{container-type:inline-size;position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:var(--p-bg);color:var(--p-fg);font-size:14px}
 
-.topbar{position:absolute;inset:0 0 auto;z-index:20;height:58px;display:flex;align-items:center;gap:6px;padding:8px 12px 0 14px;background:var(--p-bar);backdrop-filter:blur(20px) saturate(170%);border-bottom:1px solid var(--p-line)}
+.topbar{position:absolute;inset:0 0 auto;z-index:20;height:58px;display:flex;align-items:center;gap:10px;padding:8px 12px 0 14px;background:var(--p-bar);backdrop-filter:blur(20px) saturate(170%);border-bottom:1px solid var(--p-line)}
 .brand{display:flex;align-items:center;gap:7px;min-width:0}
-.betaTag{margin-right:auto;align-self:center;height:20px;padding:0 6px;border-radius:6px;border:1px solid var(--p-line);color:var(--p-muted);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.betaTag{margin-right:auto;align-self:center;height:28px;padding:0 9px;border-radius:6px;border:1px solid var(--p-line);color:var(--p-muted);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 .betaTag:hover{color:var(--p-fg);border-color:var(--p-muted)}
 .fab{position:absolute;right:14px;bottom:144px;z-index:21;width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:var(--p-fg);color:var(--p-bg);box-shadow:0 10px 24px -10px rgba(0,0,0,.7)}
 .fab svg{width:24px;height:24px}
@@ -81,7 +81,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 .tab svg{width:22px;height:22px;flex-shrink:0}
 .tab span{max-width:100%;white-space:nowrap;font-size:clamp(10px,2.9cqi,11.5px)}
 @container (max-width:379px){.createBtn{width:36px;padding:0;justify-content:center}.createBtn span{display:none}
-  .brand b{font-size:14px}.topbar{gap:2px;padding-left:10px;padding-right:8px}.ic{width:34px}
+  .brand b{font-size:14px}.topbar{gap:6px;padding-left:10px;padding-right:8px}.ic{width:36px}
   .idchip .muted{display:none}
   .row{gap:9px}.row .cv{width:42px;height:42px}.rank{width:20px;font-size:15px}.delta{width:26px}
   .row .ic[data-actions]{width:24px!important}
@@ -243,10 +243,17 @@ button.idChip:active{transform:scale(.97)}
 .runMeta{display:block;font-size:11.5px;color:var(--p-muted)}
 .runLeg{display:flex;gap:14px;padding:10px 16px 0;font-size:11px;color:var(--p-muted)}
 .runLeg span{display:flex;align-items:center;gap:5px}.runLeg i{width:10px;height:10px;border-radius:3px;background:var(--p-muted);opacity:.6}.runLeg i.n1{background:#fbbf24;opacity:1}.runLeg i.t10{background:var(--p-fg);opacity:1}
-.ouvL{margin:6px 0 0;font-size:14px;color:var(--p-muted)}.ouvL b{color:var(--p-fg);font-size:16px}
+.ouvRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:10px}
+.ouvI{min-width:0;padding:8px 10px;border-radius:14px;background:var(--p-surface);border:1px solid var(--p-line)}
+.ouvI b{display:block;font-size:17px;font-weight:900;line-height:1.1}
+.ouvI small{display:block;font-size:10.5px;color:var(--p-muted);line-height:1.25;margin-top:2px}
+.ouvI span{display:flex;align-items:flex-start;gap:5px;margin-bottom:4px;color:var(--p-muted);font-size:10.5px;font-weight:800;line-height:1.2}
+.ouvI span i{margin-top:3px}
+.ouvI span i{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:3px}
 .mesRank{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px}
 .mesRank>button{min-width:0;padding:12px 10px;border-radius:16px;background:var(--p-surface);border:1px solid var(--p-line);text-align:left}
-.mesRank .pl{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:var(--p-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mesRank .pl{display:flex;align-items:flex-start;gap:6px;font-size:11px;font-weight:800;color:var(--p-muted);line-height:1.2}
+.mesRank .pl i{margin-top:3px}
 .mesRank .pl i{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .mesRank .rk{display:block;font-size:22px;font-weight:900;margin-top:6px}
 .mesRank small{display:block;font-size:11px;color:var(--p-muted);line-height:1.3}
@@ -374,8 +381,8 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
 .post .hd small{color:var(--p-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .post p{margin:3px 0 8px}
 .post .media{height:190px;border-radius:14px}
-.acts{display:flex;justify-content:space-between;max-width:280px;color:var(--p-muted);font-size:12.5px;margin-top:8px}
-.acts button{display:flex;align-items:center;gap:5px;padding:4px 2px}
+.acts{display:flex;justify-content:space-between;gap:2px;max-width:300px;color:var(--p-muted);font-size:12.5px;margin-top:8px}
+.acts button{display:flex;align-items:center;justify-content:center;gap:5px;min-height:40px;min-width:40px;padding:4px 6px;white-space:nowrap}
 .acts svg{width:17px;height:17px}
 .acts .on{color:var(--p-live)}
 .stories{display:flex;gap:12px;overflow-x:auto;padding:4px 16px 12px;scrollbar-width:none;border-bottom:1px solid var(--p-line)}
@@ -411,7 +418,7 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
 .createGrid button{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11.5px;font-weight:700;text-align:center;min-width:0;padding:0 2px}
 .createGrid .gi{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:var(--p-surface2)}
 .createGrid .gi svg{width:23px;height:23px}
-.createGrid span{display:block;max-width:100%;line-height:1.2}
+.createGrid span{display:block;max-width:100%;line-height:1.2;overflow-wrap:anywhere;hyphens:auto}
 .lvl{height:6px;border-radius:3px;background:var(--p-surface2);overflow:hidden;margin-top:8px}
 .lvl i{display:block;height:100%;width:62%;background:linear-gradient(90deg,var(--p-accent),#22d3ee)}
 .toast{position:absolute;left:50%;top:70px;z-index:60;transform:translate(-50%,-20px);opacity:0;background:var(--p-fg);color:var(--p-bg);padding:9px 14px;border-radius:12px;font-size:12.5px;font-weight:700;transition:.2s;pointer-events:none;max-width:88%;text-align:center}
@@ -531,6 +538,37 @@ svg.chev{width:18px;height:18px;color:var(--p-muted);flex-shrink:0}
 .bellBtn svg{width:17px;height:17px}
 .bellBtn[aria-pressed="true"]{color:var(--p-fg);border-color:var(--p-fg)}
 @media (prefers-reduced-motion:reduce){.liveMini .ponto{animation:none}}
+/* ── acessibilidade: contraste e alvos de toque (auditoria) ── */
+.tapName{padding:8px 4px;margin:-8px -4px}
+.btn.play{color:#03140d}
+.phone[data-mode="light"] .btn.play{background:#087a54;color:#fff}
+.live{background:#dc2626}
+.pEnc{padding:10px 8px;margin:-10px -8px}
+.phone[data-mode="light"]{--p-gold:#a16207;--p-verif:#0369a1;--p-roleA:#7e22ce;--p-fuchsia:#a21caf}
+.phone[data-mode="light"] .crown{color:#a16207;filter:none}
+.phone[data-mode="light"] [style*="color:#38bdf8"]{color:#0369a1!important}
+.phone[data-mode="light"] [style*="color:#f59e0b"],.phone[data-mode="light"] [style*="color:#fbbf24"]{color:#92400e!important}
+.phone[data-mode="light"] [style*="color:#c084fc"]{color:#7e22ce!important}
+.phone[data-mode="light"] .awWinL,.phone[data-mode="light"] .idFalta{color:#92400e}
+.phone[data-mode="light"] .tvArr{color:#a21caf}
+.phone[data-mode="light"] .tvRole{background:#a16207;color:#fff}
+.phone[data-mode="light"] .badge[style*="#10b981"]{background:#047857!important}
+.badge[style*="background:#10b981"]{background:#047857!important;color:#fff!important}
+.phone[data-mode="light"] .tvAdminBtn.ini{background:#047857}
+.tvAdminBtn.ini{background:#047857}
+.tvAdminBtn{min-height:32px}
+.phone[data-mode="light"] .runPk.t10{background:rgba(108,76,232,.18)}
+.h2 a,.h2 button,.secHead button{padding:8px 0}
+button.rank{min-width:32px;min-height:40px}
+.h2>button{min-height:36px}
+.phone[data-mode="light"] [style*="color:#f472b6"]{color:#be185d!important}
+.phone[data-mode="light"] [style*="color:#22d3ee"],.phone[data-mode="light"] [style*="color:#38bdf8"]{color:#0369a1!important}
+.phone[data-mode="light"] [style*="color:#e5e5e5"],.phone[data-mode="light"] [style*="color:#fff;"]:not(.badge):not(.btn){}
+.phone[data-mode="light"] .pEnc{color:#b91c1c}
+.phone[data-mode="light"] [style*="color:#1d9bf0"]{color:#0369a1!important}
+.phone[data-mode="light"] [style*="color:#000"],.phone[data-mode="light"] [style*="color:#111"]{}
+[aria-label="Mover para trás"],[aria-label="Mover para frente"]{flex-shrink:0}
+.phone[data-mode="light"] [style*="color:#25F4EE"],.phone[data-mode="light"] [style*="color:#25f4ee"]{color:#0e7490!important}
 </style>
 
 <div class="wrap">
@@ -1022,7 +1060,7 @@ function chartPlaylist(tab){
     <h2 class="fj" style="margin:2px 0 4px;font-size:26px;line-height:1.05">${tab==='Spotify'?'Spotify Global':tab}</h2>
     <span class="muted small">Atualiza toda quinta</span></div></div>`;
   html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 16px 10px"><button class="btn play" data-play="0">${svg('play')}Tocar</button><button class="btn sec" data-toast="Tocando no modo aleatório">${svg('shuffle')}Aleatório</button></div>`;
-  if (temVisao) html += `<div style="margin-bottom:10px">${seg([['global','Global'],['pais','Por país'],['mes','Artistas do mês']], view, 'chartView')}</div>`;
+  if (temVisao) html += `<div style="margin-bottom:10px"><div class="chips" style="padding:0">${[['global','Global'],['pais','Por país'],['mes','Artistas do mês']].map(([v,l])=>`<button class="chip" data-set="chartView" data-val="${v}" aria-pressed="${v===view}">${l}</button>`).join('')}</div></div>`;
   if (view==='mes'){
     html += `<div style="display:flex;gap:8px;padding:0 16px 10px"><button class="btn sec" style="height:36px;font-size:12.5px" data-toast="Mesmo seletor de ano de hoje">2026 ▾</button><button class="btn sec" style="height:36px;font-size:12.5px" data-toast="Mesmo seletor de mês de hoje">Novembro ▾</button></div>`;
     html += `<div class="hero" style="margin:0 16px 10px;background:linear-gradient(160deg,${G[0][0]},${G[0][1]})"><span class="badge" style="background:rgba(0,0,0,.35);color:#fff">Artista do mês</span><h4>Nova Valente</h4><span class="small" style="opacity:.9">Editorial do mês, como hoje · toque num artista para ver os números do mês</span></div>`;
@@ -1057,7 +1095,7 @@ function social(){
     const netColor = {Instagram:'#f472b6',Twitter:'#1d9bf0',TikTok:'#25F4EE'};
     if (state.reposted){ const k=posts.findIndex(p=>p.a===state.reposted); if (k>0){ const [x]=posts.splice(k,1); x.rp=['Nova Valente','Lumi Ray','Empire News'][state.socialAs||0]+' repostou · agora'; posts.unshift(x); } }
     html += posts.filter(p => (state.socialNet||'Todas')==='Todas' || p.net===state.socialNet).map((p,k)=>{
-      const actions = `<div class="acts"><button data-like>${svg('heart')}<span>${p.l}</span></button><button data-toast="Abre os comentários">${svg('reply')}${p.c}</button><button data-repost="${p.a}" style="${state.reposted===p.a?'color:var(--p-up)':''}">${svg('repost')}<span>${state.reposted===p.a?'1':''}</span><i class="novo">novo</i></button><button data-toast="Compartilhar: proposta nova">${svg('share')}<i class="novo">novo</i></button><button aria-label="Opções do post" data-actions="post" data-title="Post de ${ART[p.a]}">${svg('more')}</button></div>`;
+      const actions = `<div class="acts"><button data-like>${svg('heart')}<span>${p.l}</span></button><button data-toast="Abre os comentários">${svg('reply')}${p.c}</button><button data-repost="${p.a}" style="${state.reposted===p.a?'color:var(--p-up)':''}">${svg('repost')}<span>${state.reposted===p.a?'1':''}</span><span class="ndot" aria-label="novo"></span></button><button data-toast="Compartilhar: proposta nova" aria-label="Compartilhar (novo)">${svg('share')}<span class="ndot" aria-label="novo"></span></button><button aria-label="Opções do post" data-actions="post" data-title="Post de ${ART[p.a]}">${svg('more')}</button></div>`;
       const head = `<div class="hd"><b>${ART[p.a]}</b><small>@${p.h} · ${p.ago} · <span style="color:${netColor[p.net]}">${p.net}</span></small></div>`;
       const av = `<button class="av cv sm" style="background:linear-gradient(140deg,${G[p.a][0]},${G[p.a][1]})" data-open="socialPerfil" data-id="${p.a}" data-title="${p.net}" aria-label="Perfil de ${ART[p.a]}"></button>`;
       const rpl = p.rp ? `<div class="muted" style="grid-column:1/-1;font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center;margin:-4px 0 -2px 30px">${svg('repost').replace('class=""','style="width:14px;height:14px"')}${p.rp}</div>` : '';
@@ -1096,11 +1134,11 @@ const pages = {
     const cmt = ([n,nota,tx,h,re,resp],k,nested) => `<div class="cmt" style="${nested?'padding-left:56px':''}"><span class="av cv sm" style="background:linear-gradient(140deg,${G[(k+5)%G.length][0]},${G[(k+5)%G.length][1]})"></span><div style="min-width:0"><b>${n}</b> <span style="color:#38bdf8">✓</span> <span class="muted small">· ${h}</span>${nota&&isVid?` <span class="type" style="margin-left:4px">👍 ${nota} likes</span>`:''}<p>${tx}</p><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${(re||[]).map(([e,c])=>`<button class="chip" style="padding:3px 9px;font-size:12px" data-toast="Reação ${e}">${e} ${c}</button>`).join('')}<button class="chip" style="padding:3px 9px;font-size:12px" aria-label="Reagir" data-toast="Escolha uma reação: ❤️ 🔥 👍 👎 😂 😮 😢 😡 🎉 👏 🙏 💯">☺+</button>${nested?'':`<button class="small muted" style="font-weight:700;padding:4px" data-toast="Responder a ${n}">Responder</button>`}<button class="small muted" aria-label="Opções do comentário" data-actions="comentario" data-title="Comentário de ${n}">${svg('more').replace('class=""','style="width:16px;height:16px"')}</button></div></div></div>${(resp||[]).map(r=>cmt([r[0],'',r[1],r[2],[],[]],k+3,true)).join('')}`;
     const header = isVid
       ? `<div class="tvbox" style="height:206px;background:linear-gradient(160deg,${g[0]},${g[1]})" role="button" aria-label="Tocar vídeo" data-toast="Tocando o vídeo aqui mesmo"><span class="cv sm" style="width:58px;height:58px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center">${svg('play')}</span></div>
-         <div class="pad" style="padding-top:12px"><span class="type">Music Video</span><h2 style="margin:8px 0 2px;font-size:21px;font-weight:800;letter-spacing:-.02em">${t}</h2><button class="small" style="color:var(--p-accent);font-weight:700" data-open="artist" data-id="0">${artista}</button> <span class="muted small">· Lançamento: 14/11/2026</span></div>`
+         <div class="pad" style="padding-top:12px"><span class="type">Music Video</span><h2 style="margin:8px 0 2px;font-size:21px;font-weight:800;letter-spacing:-.02em">${t}</h2><button class="small tapName" style="color:var(--p-accent);font-weight:700" data-open="artist" data-id="0">${artista}</button> <span class="muted small">· Lançamento: 14/11/2026</span></div>`
       : `<div style="position:relative;padding:22px 16px 6px;display:grid;justify-items:center;text-align:center;background:linear-gradient(180deg,${g[0]}55,transparent 85%)">
           <button style="border-radius:var(--p-radius)" data-toast="Capa em tela cheia" aria-label="Ver capa em tela cheia">${cover(i,'','sm" style="width:210px;height:210px;border-radius:var(--p-radius);box-shadow:0 24px 44px -18px rgba(0,0,0,.6);background:linear-gradient(140deg,'+g[0]+','+g[1]+')')}</button>
           <h2 style="margin:14px 0 2px;font-size:22px;font-weight:800;letter-spacing:-.02em">${t}</h2>
-          <button class="small" style="color:var(--p-accent);font-weight:700" data-open="artist" data-id="${a.a}">${artista} <span style="color:#38bdf8">✓</span></button>
+          <button class="small tapName" style="color:var(--p-accent);font-weight:700" data-open="artist" data-id="${a.a}">${artista} <span style="color:#38bdf8">✓</span></button>
           <span class="muted small">${isMus?'Single · Pré-álbum':'Álbum'} · Lançamento: 14/11/2026${isMus?'':` · ${a.n} faixas`}</span></div>`;
     const badges = `<div class="selos" style="justify-content:${isVid?'flex-start':'safe center'}">${isVid?'<span class="badge" style="background:var(--p-surface2)">👍 76 - 90 likes</span>':''}<span class="badge" style="background:#10b98122;color:var(--p-play)">📈 6 semanas no chart</span><span class="badge" style="background:#f59e0b22;color:#f59e0b">🏆 Indicado · VMA 2026</span>${kind==='album'?'<span class="badge" style="background:#957AF822;color:var(--p-accent)">🚀 2.380 pre-saves</span>':''}</div>`;
     const acoes = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 16px">
@@ -1137,7 +1175,7 @@ const pages = {
     const abas = ['Visão Geral','Discografia','Músicas','Vídeos','Charts','Awards','Turnês & Projetos','Social'].concat(dono?['Gestão']:[]);
     const aba = state.artistTab && abas.includes(state.artistTab) ? state.artistTab : 'Visão Geral';
     let c = '';
-    if (aba==='Visão Geral') c = `${h2('Ranking do mês · Outubro')}<div class="mesRank">${[['Spotify','#1DB954','#4','29,4 mi ouvintes'],['Apple Music','#FA243C','#7','12,1 mi ouvintes'],['YouTube','#FF0000','#2','48,0 mi ouvintes']].map(([pl,cor,rk,ov])=>`<button data-toast="Abre Charts › ${pl} › Artistas do mês (Outubro)" aria-label="${pl}: ${rk} no ranking do mês, ${ov}"><span class="pl"><i style="background:${cor}"></i>${pl}</span><b class="rk num">${rk}</b><small>${ov}</small></button>`).join('')}</div><p class="muted pad" style="font-size:11px;margin:6px 0 0">Último mês fechado na planilha mensal. Toque para ver o perfil do mês.</p>${h2('Ficha do artista')}<div class="ficha">${[['🌎','Nacionalidade',ID[0]?ID[0]+' '+ID[1]:'Não informada'],['🎵','Estilo principal',ID[2]||'Não informado'],['🏷️','Gravadora',['King & Queen','Crown','Independent'][i%3]],['📅','Na ativa desde',ID[3]],['📄','Contrato',i%2?'Sob contrato':'Livre'],['🏆','Awards','4 vitórias · 12 indicações']].map(([e,l,v])=>`<div class="fichaI"><span class="fichaE" aria-hidden="true">${e}</span><span style="min-width:0"><small>${l}</small><b>${v}</b></span></div>`).join('')}</div>${h2('Biografia')}<p class="pad" style="margin:0;line-height:1.6">Cantora e compositora da King &amp; Queen. Três semanas no topo do Global 100 com Vidro Quebrado.</p>
+    if (aba==='Visão Geral') c = `${h2('Ranking do mês · Outubro')}<div class="mesRank">${[['Spotify','#1DB954','#4','no ranking do mês'],['Apple Music','#FA243C','#7','no ranking do mês'],['YouTube','#FF0000','#2','no ranking do mês']].map(([pl,cor,rk,ov])=>`<button data-toast="Abre Charts › ${pl} › Artistas do mês (Outubro)" aria-label="${pl}: ${rk} no ranking do mês, ${ov}"><span class="pl"><i style="background:${cor}"></i>${pl}</span><b class="rk num">${rk}</b><small>${ov}</small></button>`).join('')}</div><p class="muted pad" style="font-size:11px;margin:6px 0 0">Último mês fechado na planilha mensal. Toque para ver o perfil do mês.</p>${h2('Ficha do artista')}<div class="ficha">${[['🌎','Nacionalidade',ID[0]?ID[0]+' '+ID[1]:'Não informada'],['🎵','Estilo principal',ID[2]||'Não informado'],['🏷️','Gravadora',['King & Queen','Crown','Independent'][i%3]],['📅','Na ativa desde',ID[3]],['📄','Contrato',i%2?'Sob contrato':'Livre'],['🏆','Awards','4 vitórias · 12 indicações']].map(([e,l,v])=>`<div class="fichaI"><span class="fichaE" aria-hidden="true">${e}</span><span style="min-width:0"><small>${l}</small><b>${v}</b></span></div>`).join('')}</div>${h2('Biografia')}<p class="pad" style="margin:0;line-height:1.6">Cantora e compositora da King &amp; Queen. Três semanas no topo do Global 100 com Vidro Quebrado.</p>
       <div class="grid2" style="margin-top:14px"><div class="card" style="margin:0"><span class="muted small">Álbuns</span><b class="num" style="display:block;font-size:26px">3</b></div><div class="card" style="margin:0"><span class="muted small">Seguidores</span><b class="num" style="display:block;font-size:26px">29,4 mil</b></div></div>
       <div class="card" style="margin-top:10px;display:flex;gap:12px;align-items:center"><span class="crown" style="font-size:26px">♛</span><div><b>4 #1s no Hall of Fame</b><div class="muted small">Veja o detalhe na aba Charts</div></div></div>
       <button class="card" style="margin-top:10px;width:calc(100% - 32px);display:flex;gap:12px;align-items:center;text-align:left" data-open="tour"><span class="badge" style="background:#10b98122;color:var(--p-play)">Turnê em andamento</span><b class="small">Neon Tour · show 12 de 20</b></button>`;
@@ -1163,7 +1201,7 @@ const pages = {
         <button class="cv sm" style="width:96px;height:96px;border-radius:50%;border:4px solid var(--p-bg);background:linear-gradient(140deg,${g[1]},${g[0]})" aria-label="Foto do artista" ${dono?'data-toast="Trocar foto do artista"':''}></button>
         <div style="padding-bottom:6px;min-width:0"><span class="muted small" style="font-weight:800;text-transform:uppercase;letter-spacing:.06em">${['King & Queen','Crown','Independent'][i%3]}</span></div></div>
       <div class="pad" style="padding-top:8px"><h2 style="margin:0;font-size:28px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:-.03em">${ART[i]} <span style="color:#38bdf8;font-size:18px">✓</span></h2>
-        <span class="badge" style="margin-top:6px;background:var(--p-surface2)"><span style="width:7px;height:7px;border-radius:50%;background:${i%2?'#eab308':'var(--p-play)'}"></span>${i%2?'Sob contrato':'Livre'}</span><p class="ouvL"><b class="num">${['29.483.120','12.904.551','8.112.307','5.660.010','1.204.880','3.551.902'][i%6]}</b> ouvintes mensais no Spotify</p>${idChips}${dono&&!ID[0]?`<button class="idFalta" data-artaba="Gestão" data-open="artist" data-id="${i}">＋ Adicionar nacionalidade e estilo <span class="muted">(só você vê este aviso)</span></button>`:''}</div>
+        <span class="badge" style="margin-top:6px;background:var(--p-surface2)"><span style="width:7px;height:7px;border-radius:50%;background:${i%2?'#eab308':'var(--p-play)'}"></span>${i%2?'Sob contrato':'Livre'}</span><div class="ouvRow" role="list" aria-label="Números do mês">${[['#1DB954','Spotify',['29,4 mi','12,9 mi','8,1 mi','5,6 mi','1,2 mi','3,5 mi'][i%6],'ouvintes mensais'],['#FA243C','Apple Music',['12,1 mi','6,0 mi','3,3 mi','2,4 mi','0,4 mi','1,1 mi'][i%6],'ouvintes mensais'],['#FF0000','YouTube',['48,0 mi','20,7 mi','9,9 mi','7,2 mi','2,0 mi','4,8 mi'][i%6],'visualizações mensais']].map(([c,pl,v,l])=>`<div class="ouvI" role="listitem"><span><i style="background:${c}"></i>${pl}</span><b class="num">${v}</b><small>${l}</small></div>`).join('')}</div>${idChips}${dono&&!ID[0]?`<button class="idFalta" data-artaba="Gestão" data-open="artist" data-id="${i}">＋ Adicionar nacionalidade e estilo <span class="muted">(só você vê este aviso)</span></button>`:''}</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px 16px 4px">${[['Fortuna Total','$ 12,4 mi'],['Fortuna Vendas','$ 7,6 mi'],['Fortuna Turnês','$ 4,8 mi']].map(([l,v])=>`<div class="card" style="margin:0;padding:10px"><span class="muted" style="font-size:10.5px;font-weight:700">${l}</span><b class="num" style="display:block;font-size:16px;margin-top:2px">${v}</b></div>`).join('')}</div>
       <div class="card" style="margin-top:8px;display:flex;gap:10px;align-items:center"><span class="gicon" style="background:#f59e0b">${svg('trophy')}</span><div style="flex:1;min-width:0"><span class="muted small">Responsável — Nível 7</span><b style="display:block">Estrela em ascensão</b></div><b class="num" style="color:#f59e0b">1.240 pts</b></div>
       ${dono?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 16px 0">${[['album','Álbum','Abre Criar › Novo álbum'],['ticket','Turnê','Abre Criar › Nova turnê'],['tv','Cinema','Cinema: em breve']].map(([ic,l,t])=>`<button class="card" style="margin:0;display:grid;justify-items:center;gap:6px;padding:12px" data-toast="${t}">${svg(ic).replace('class=""','style="width:22px;height:22px;color:var(--p-accent)"')}<b class="small">${l}</b></button>`).join('')}</div>`:''}
@@ -1198,7 +1236,7 @@ const pages = {
       <div style="display:flex;gap:14px;align-items:center;padding:16px">${cover(i,'','sm" style="width:88px;height:88px;border-radius:12px;background:linear-gradient(140deg,'+G[i][0]+','+G[i][1]+')')}<div style="display:grid;gap:8px"><button class="btn sec" style="height:32px;font-size:12px" data-toast="Trocar e recortar capa">Trocar capa</button><button class="btn sec" style="height:32px;font-size:12px" data-toast="Trocar o arquivo de mídia">Trocar mídia</button></div></div>
       <div class="group">${field('Título',a.t)}${field('Tipo do lançamento','Álbum · Pré-álbum')}${field('Foco do lançamento','Spotify · Brasil')}${field('Data de lançamento','14/11/2026')}</div>
       ${h2('Tracklist','Reordenar','data-toast="Arraste ou use ▲▼ para mudar a ordem"')}<div class="group">${SONG.slice(0,4).map((s,k)=>`<div class="row"><span class="rank muted" style="font-size:14px">${k+1}</span><span class="meta"><b>${s.t}</b><small>${k===3?'Pendente · sem tópico':'Publicada'}</small></span><span style="display:flex;gap:4px">${k===3?`<span class="btn pri" style="height:28px;font-size:11.5px;padding:0 10px" role="button" data-toast="Faixa publicada (abre tópico no Fórum)">Publicar</span>`:''}<span class="btn sec" style="height:28px;width:28px;padding:0" role="button" aria-label="Subir" data-toast="Faixa movida para cima">▲</span><span class="btn sec" style="height:28px;width:28px;padding:0" role="button" aria-label="Descer" data-toast="Faixa movida para baixo">▼</span></span></div>`).join('')}</div>
-      ${h2('Encarte','Adicionar','data-toast="Adicionar imagens ao encarte"')}<div class="shelf">${[1,2,3].map(k=>`<div class="tile" style="width:110px">${cover(k+5,'','sm" style="width:110px;height:110px;border-radius:10px;background:linear-gradient(140deg,'+G[k+5][0]+','+G[k+5][1]+')')}<div style="display:flex;gap:4px;margin-top:6px"><span class="btn sec" style="height:26px;width:26px;padding:0" role="button" data-toast="Movido para trás">◀</span><span class="btn sec" style="height:26px;width:26px;padding:0" role="button" data-toast="Movido para frente">▶</span><span class="btn sec" style="height:26px;padding:0 8px;font-size:11px;color:var(--p-down)" role="button" data-toast="Imagem removida">Remover</span></div></div>`).join('')}</div>
+      ${h2('Encarte','Adicionar','data-toast="Adicionar imagens ao encarte"')}<div class="shelf">${[1,2,3].map(k=>`<div class="tile" style="width:110px">${cover(k+5,'','sm" style="width:110px;height:110px;border-radius:10px;background:linear-gradient(140deg,'+G[k+5][0]+','+G[k+5][1]+')')}<div style="display:flex;gap:8px;margin-top:6px"><span class="btn sec" style="height:36px;width:40px;padding:0" role="button" aria-label="Mover para trás" data-toast="Movido para trás">◀</span><span class="btn sec" style="height:36px;width:40px;padding:0" role="button" aria-label="Mover para frente" data-toast="Movido para frente">▶</span><span class="btn sec" style="height:26px;padding:0 8px;font-size:11px;color:var(--p-down)" role="button" data-toast="Imagem removida">Remover</span></div></div>`).join('')}</div>
       ${h2('Letra e material extra')}<div class="group">
         <button class="row" data-toast="Editar letra"><span class="gicon" style="background:#0ea5e9">${svg('lyric')}</span><span class="meta"><b>Letra</b><small>Texto simples</small></span>${svg('chev','chev')}</button>
         <button class="row" data-toast="Abre o Estúdio de Sincronização"><span class="gicon" style="background:#7c3aed">${svg('music')}</span><span class="meta"><b>Sincronizar letra</b><small>Funciona mesmo sem tópico publicado</small></span>${svg('chev','chev')}</button>
@@ -1252,7 +1290,7 @@ const pages = {
     const telas=[['Catálogo › Início',3120,'#957AF8'],['Fórum (lista e tópicos)',2870,'#957AF8'],['Charts › Ao vivo',2410,'#957AF8'],['Social › Feed',1980,'#957AF8'],['Início › Para você',1730,'#957AF8'],['Ponto',640,'#957AF8']];
     const max=telas[0][1];
     return {title:'Uso do app', body:`<p class="sub" style="margin:14px 16px 10px">Exemplo de como a tela vai mostrar os dados (números fictícios).</p>
-      ${seg([['sem','Esta semana'],['ant','Anterior × Beta'],['apar','Por aparelho']],'sem','noop')}
+      ${chips(['Esta semana','Anterior × Beta','Por aparelho'],'Esta semana','noop')}
       <div class="grid2" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px">${[['412','jogadores'],['18,9 mil','telas abertas'],['2,1','toques até publicar']].map(([v,l])=>`<div class="card" style="margin:0;padding:10px"><b class="num" style="font-size:18px;display:block">${v}</b><span class="muted" style="font-size:11px">${l}</span></div>`).join('')}</div>
       ${h2('Telas mais abertas')}<div class="pad" style="display:grid;gap:10px">${telas.map(([t,v])=>`<div><div style="display:flex;justify-content:space-between" class="small"><b>${t}</b><span class="muted num">${v.toLocaleString('pt-BR')}</span></div><div style="height:8px;border-radius:4px;background:var(--p-surface);margin-top:4px"><i style="display:block;height:100%;width:${Math.round(v/max*100)}%;border-radius:4px;background:var(--p-accent)"></i></div></div>`).join('')}</div>
       ${h2('Ações principais')}<div class="group">${[['Tocar música','9.840'],['Comentar no Fórum','1.212'],['Distribuir pontos','388'],['Publicar lançamento','96']].map(([t,v])=>`<div class="row"><span class="meta"><b>${t}</b></span><span class="end num" style="color:var(--p-fg)">${v}</span></div>`).join('')}</div>
@@ -1384,6 +1422,22 @@ function pollRefresh(p){ document.querySelectorAll('[data-poll="'+p.id+'"]').for
 /* ── vitrine de Awards (igual à de hoje: /awards e /awards/$nome) ── */
 const AWARDS=[['VMA',['#f59e0b','#7c2d12']],['Empire Music Awards',['#7c3aed','#1e1b4b']],['Grammy Empire',['#0ea5e9','#0f172a']],['BET Empire',['#ef4444','#450a0a']],['Latin Empire',['#10b981','#064e3b']],['Brit Empire',['#ec4899','#4c1d95']]];
 function awardPoster([n,c],k){ return `<button class="awPoster" data-open="award" data-id="${k}" data-title="${n}"><span class="awImg" style="background:radial-gradient(90% 70% at 70% 15%,${c[0]},transparent 70%),linear-gradient(170deg,${c[1]},#000)"></span><span class="awShade"></span><b>${n}</b></button>`; }
+/* ── voltar do celular/navegador = tela anterior (regra do CLAUDE.md) ──
+   Cada página por cima, folha ou tela cheia empurra a sua entrada no histórico;
+   o voltar fecha só a de cima; fechar pela seta/X remove a entrada dela. */
+const HIST = { pilha:[], pular:0, fila:[], esperando:false, doPop:false };
+function histPush(tipo){ if (HIST.esperando){ HIST.fila.push(tipo); return; } HIST.pilha.push(tipo); try{ history.pushState({ehp:tipo, n:HIST.pilha.length}, ''); }catch(e){} }
+function histTirar(n){ if (HIST.doPop || n<=0) return; n=Math.min(n,HIST.pilha.length); if(!n) return; HIST.pilha.splice(-n,n); HIST.pular++; HIST.esperando=true; try{ history.go(-n); }catch(e){ HIST.pular--; HIST.esperando=false; } }
+window.addEventListener('popstate', () => {
+  if (HIST.pular>0){ HIST.pular--; if(!HIST.pular){ HIST.esperando=false; const f=HIST.fila.splice(0); f.forEach(histPush); } return; }
+  const tipo = HIST.pilha.pop(); if (!tipo) return;
+  HIST.doPop = true;
+  try {
+    if (tipo==='s') closeSheet();
+    else if (tipo==='l'){ const pg=document.querySelector('.stackPage.land'); if(pg){ pg.classList.remove('land'); const bd=pg.querySelector('.stackBody'); bd.style.width=''; bd.style.height=''; } }
+    else if (tipo==='p') closeTop();
+  } finally { HIST.doPop = false; }
+});
 /* ── pilha de telas (voltar fecha só a de cima) ── */
 const stack = [];
 function openPage(name, id, title, kind){
@@ -1395,6 +1449,7 @@ function openPage(name, id, title, kind){
   el.innerHTML = `<div class="stackHead"><button class="back" data-back aria-label="Voltar">${svg('back')}${stack.length ? 'Voltar' : TABS.find(t=>t[0]===state.tab)[1]}</button><span class="t">${p.title}</span>${p.save?`<button class="ic" aria-label="Salvar" data-toast="Salvo na Biblioteca">${svg('heart')}</button>`:''}${p.actions?`<button class="ic" aria-label="Mais opções" data-actions="${p.actions}" data-title="${p.title}">${svg('more')}</button>`:'<span style="width:36px"></span>'}</div><div class="stackBody">${p.body}</div>`;
   box.appendChild(el);
   stack.push(el);
+  histPush('p');
   initArrows(el);
   const tvc = el.querySelector('[data-tvchat]'); if (tvc) setTimeout(()=>{ tvc.scrollTop = tvc.scrollHeight - tvc.clientHeight - 70; }, 30);
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
@@ -1408,10 +1463,11 @@ function refreshTop(){
 }
 function closeTop(){
   const el = stack.pop(); if (!el) return;
+  if (!HIST.doPop && HIST.pilha[HIST.pilha.length-1]==='p') histTirar(1);
   el.classList.remove('in');
   setTimeout(() => el.remove(), 280);
 }
-function closeAll(){ while (stack.length) { const el = stack.pop(); el.remove(); } }
+function closeAll(){ let n=0; while (stack.length) { const el = stack.pop(); el.remove(); n++; } if (n && !HIST.doPop){ let k=0; for(let i=HIST.pilha.length-1;i>=0 && n>0;i--){ k++; if(HIST.pilha[i]==='p') n--; } histTirar(k); } }
 
 /* ── folha "Criar" ── */
 function openCreate(){
@@ -1526,7 +1582,7 @@ box.addEventListener('click', e => {
   if (b.id==='voltarBeta'){ $('#oldApp').hidden=true; return toast('Bem-vindo de volta ao Beta test'); }
   if (b.hasAttribute('data-go-close-prem')){ closeAll(); state.tab='inicio'; state.inicioTab='premiacoes'; return render(); }
   if (b.hasAttribute('data-tvsom')){ b.closest('.tvVideo').classList.add('tocando'); return toast('Tocando com som: o toque foi dentro do player da Kick'); }
-  if (b.hasAttribute('data-tvland')){ const pg=b.closest('.stackPage'), bd=pg.querySelector('.stackBody'); const on=pg.classList.toggle('land'); bd.style.width=on?pg.clientHeight+'px':''; bd.style.height=on?pg.clientWidth+'px':''; return; }
+  if (b.hasAttribute('data-tvland')){ const pg=b.closest('.stackPage'), bd=pg.querySelector('.stackBody'); const on=pg.classList.toggle('land'); bd.style.width=on?pg.clientHeight+'px':''; bd.style.height=on?pg.clientWidth+'px':''; if(on) histPush('l'); else if(HIST.pilha[HIST.pilha.length-1]==='l') histTirar(1); return; }
   if (b.hasAttribute('data-tvnovas')){ const c=b.parentElement.querySelector('[data-tvchat]'); c.scrollTo({top:c.scrollHeight,behavior:'smooth'}); b.hidden=true; return; }
   if (b.hasAttribute('data-tvreply-x')){ b.closest('.stackBody').querySelector('[data-tvreply]').hidden=true; return; }
   if (b.hasAttribute('data-tvsend')){ const body=b.closest('.stackBody'); const i=body.querySelector('[data-tvinput]'); const t=(i.value||'').trim()||'🔥🔥🔥'; const c=body.querySelector('[data-tvchat]'); const rb=body.querySelector('[data-tvreply]'); const q=rb.hidden?'':`<span class="tvQuote">${rb.querySelector('[data-tvreply-t]').textContent}</span>`; c.insertAdjacentHTML('beforeend',`<button class="tvMsg" data-tvmsg="Você"><span class="av cv sm" style="background:linear-gradient(140deg,${G[0][0]},${G[0][1]})"></span><span class="tvMsgB">${q}<b style="color:#c084fc">Nova Valente</b> ${t.replace(/</g,'&lt;')}</span></button>`); i.value=''; rb.hidden=true; c.scrollTo({top:c.scrollHeight,behavior:'smooth'}); return; }
@@ -1632,6 +1688,12 @@ $('#mini').addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' '){
   box.addEventListener('pointerup',fim); box.addEventListener('pointercancel',fim);
   box.addEventListener('scroll',e=>{ const c=e.target; if(!c.matches||!c.matches('[data-tvchat]')) return; const nv=c.parentElement.querySelector('[data-tvnovas]'); if(nv && c.scrollHeight-c.scrollTop-c.clientHeight<8) nv.hidden=true; },true);
 })();
+new MutationObserver(() => {
+  const aberto = $('#sheet').classList.contains('in');
+  const topoS = HIST.pilha[HIST.pilha.length-1]==='s';
+  if (aberto && !topoS && !HIST.fila.includes('s')) histPush('s');
+  if (!aberto && topoS && !HIST.doPop) histTirar(1);
+}).observe($('#sheet'), {attributes:true, attributeFilter:['class']});
 $('#scrim').addEventListener('click', closeSheet);
 /* deslizar entre as abas do Início e puxar para atualizar */
 const ptr = document.createElement('div'); ptr.className='ptr'; ptr.textContent='Solte para atualizar'; box.appendChild(ptr);

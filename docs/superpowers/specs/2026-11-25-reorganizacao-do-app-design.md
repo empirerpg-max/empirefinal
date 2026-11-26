@@ -983,8 +983,11 @@ lógica:**
     mostrando só o pico até migrarem. **Nenhuma regra/cálculo dos charts
     muda.**
 - **Ouvintes mensais e ranking do mês (estilo Spotify):**
-  - Abaixo do nome: **"29.483.120 ouvintes mensais no Spotify"** (último mês
-    fechado).
+  - Abaixo do nome (pedido do usuário: as três plataformas): fileira de 3
+    cartões iguais — **Spotify · ouvintes mensais**, **Apple Music ·
+    ouvintes mensais** e **YouTube · visualizações mensais** — do último mês
+    fechado. Nome da plataforma em cima (pode quebrar em 2 linhas em tela
+    estreita, nunca corta), número grande, rótulo embaixo.
   - No começo da Visão Geral: **Ranking do mês · {mês}** com 3 cartões
     (Spotify, Apple Music, YouTube): posição no ranking do mês e ouvintes.
     Tocar abre Charts › {plataforma} › Artistas do mês.
@@ -1519,6 +1522,44 @@ KickDevDocs #445).
 **Decisão pendente (D5):** resultado do teste da opção 1 no iPhone e no
 Android. Se B funcionar, a sala nova abre parada com "Toque para assistir
 com som"; o mini player e o YouTube/Vimeo continuam como hoje.
+
+
+### 6.20 Auditoria de acessibilidade, toque e telas estreitas (2026-11-26)
+
+Rodada automática no protótipo (47 telas × 320 px e 390 px, tablet e
+computador, modo claro e escuro), mais revisão das capturas. Vira regra
+para a implementação:
+
+1. **Voltar do celular/navegador** fecha só a camada de cima (folha, tela
+   cheia da TV, página empilhada); fechar pela seta/X remove a entrada
+   dela; trocar de aba da barra limpa as entradas das páginas fechadas.
+   Testado no protótipo: página › página › folha, folha por cima da sala da
+   TV, celular deitado, seta seguida do voltar (não pula tela).
+2. **Contraste (WCAG AA, 4,5:1 no texto normal)** — cores que mudam no
+   **modo claro**: dourado `#fbbf24/#f59e0b` → `#92400e`; azul do
+   verificado `#38bdf8`, Twitter `#1d9bf0` e ciano → `#0369a1`/`#0e7490`;
+   roxo dos nomes de artista no chat `#c084fc` → `#7e22ce`; rosa
+   `#f472b6` → `#be185d`; texto secundário `--p-muted` `#6b6b73` →
+   `#55555c`; verde de play/alta `#0a8f62` → `#087a54`. No **modo escuro**:
+   botão Tocar/Assistir verde com **texto escuro** (`#03140d`) em vez de
+   branco; selo "Ao vivo" em `#dc2626`; selos verdes com texto branco em
+   `#047857`. Bandeira/emoji nunca é a única informação.
+3. **Área de toque:** mínimo 44×44 px em tudo que se toca sozinho (ações do
+   post, ◀ ▶ do encarte, número da faixa, "Encerrar" da enquete, selo BETA
+   do topo com 28 px de altura + folga); nome de artista em linha ganha
+   área invisível de 8 px em volta. Nunca menos de 24×24 px.
+4. **Folga entre botões:** pelo menos 6–8 px entre ícones do topo (Criar,
+   sino, foto) e entre ações do post; controles segmentados (Início ·
+   Buscar · Biblioteca) contam como um bloco só.
+5. **Telas de 320 px:** nenhuma rolagem lateral da página. As ações do post
+   usam o ponto roxo de "novo" em vez do selo escrito (o selo empurrava o
+   "⋯" para fora). Rótulos da grade do Criar quebram em 2 linhas em vez de
+   escapar.
+6. **Fileira de 3+ opções com rótulos de tamanhos diferentes vira fileira
+   rolável** (regra do `CLAUDE.md`), não controle segmentado: Charts
+   (Global · Por país · Artistas do mês) e Uso do app (Esta semana ·
+   Anterior × Beta · Por aparelho) — antes cortavam o texto em 320 px.
+
 
 ---
 

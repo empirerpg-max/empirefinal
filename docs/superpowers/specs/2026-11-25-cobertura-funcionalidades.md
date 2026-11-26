@@ -377,3 +377,35 @@ na branch do projeto. Conferido em `src/routes/artistas.$nome.index.tsx`,
 | — | **NOVO:** nacionalidade (bandeira) e estilo visíveis para todos abaixo do nome (tocáveis: charts do país, página do gênero) e "Ficha do artista" no começo da Visão Geral | página do artista | **NOVO** |
 | Chart Runs na aba Charts do artista (pico + semanas, top 10, só Global 100) | aba Charts do artista: sequência de posições de cada música, Peak, 4 charts | P (mais completo) |
 | — | **NOVO:** ouvintes mensais (Spotify) abaixo do nome e Ranking do mês (Spotify, Apple, YouTube) na Visão Geral, da planilha mensal | página do artista | **NOVO** |
+
+## 11ª conferência — textos de botões do código × protótipo e documentos (2026-11-26)
+
+Varredura automática: 387 rótulos de botões, abas, links e `aria-label` em
+`src/routes` e `src/components` comparados com o protótipo e os documentos.
+47 não tinham correspondência escrita; conferidos um a um. **Todos ficam,
+dentro das mesmas telas de hoje** (nenhuma lógica muda):
+
+| Rótulo(s) no app de hoje | Onde está hoje | No Beta |
+|---|---|---|
+| Continente, Africano, Asiático, Europeu, Norte-Americano, Sul-Americano, Oceania, Arena, Estádio | `acoes.tour.tsx` (criar turnê) | Criar › Nova turnê (tela de hoje) |
+| Gerar automático, Por espaçamento | `CreateTourSheet.tsx` | Criar › Nova turnê (tela de hoje) |
+| Sold Outs, Sorteio de ingressos VIP, Colab surpresa | `tours.$nome.tsx`, `tours.index.tsx` | Início › Turnês › página da turnê |
+| Aumentar/Diminuir quantidade de faixas, Música Referenciada | `Gestao.tsx` | Criar › Novo álbum / Novo vídeo |
+| Contracapa (opcional) | `acoes.album.tsx`, `album.$id.editar.tsx` | Criar › Novo álbum e Meus lançamentos › Editar |
+| Gerar (data do material antigo) | `gestao.album-antigo.tsx` | Criar › Material antigo |
+| Desafio de som, Making of, Post de anúncio, Capa alternativa, status Cancelada | `GestaoPreSave.tsx` | Criar › Pre-save (missões, tela de hoje) |
+| Desfazer última marcação, Limpar marcação | `SyncStudioModal.tsx` | Criar › Sincronizar letra / Meus lançamentos |
+| Sublinhado (barra de formatação) | `RichTextToolbar.tsx` (comentário do Fórum) | página do lançamento › Avaliar & Comentar |
+| Rostos, Gestos, Corações, Música & Estrelas, Objetos & Comemoração | `EmojiPicker.tsx` (Fórum, reações) | página do lançamento e Social (mesmo seletor) |
+| Gerar nome aleatório | `SocialPostComposer.tsx` (post como fã) | Criar › Post no Social |
+| Selecionar artista | `charts.tsx` (Artistas do mês) | Charts › Artistas do mês |
+| Entenda os prestígios | `market.index.tsx` → `/market/regras` | Meu Império › Market › Entenda os prestígios (mesma URL) |
+| Desativar neste aparelho | `NotificationBell.tsx` (push) | Meu Império › Notificações |
+| Já indiquei, Já me inscrevi, Já votei | popups diários | iguais (encadeados) |
+| PRÓXIMA ATRAÇÃO | `tv.tsx` | Início › Empire TV (grade) |
+| Vincule seu primeiro artista (estado vazio) | `perfil.tsx` | Meu Império › Meus artistas (estado vazio) |
+| Tentar novamente | `LoadErrorState.tsx` | todas as telas com erro de carga |
+| Vamos lá! | `tutorial.tsx` | Meu Império › Como usar |
+| Conectar (modal do ID do Telegram) | `__root.tsx` | sai, como já decidido na seção 7 do design |
+| Salvando…/Salvar Alterações, Enviando…/Publicar Comentário | `EditModal.tsx`, `CommentModal.tsx` | iguais |
+
