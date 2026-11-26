@@ -1,6 +1,15 @@
 import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
 import { readRuntimeEnv } from "../google/service-account";
+import { verifySessionToken, extractBearerToken } from "../services/sessionService";
+import { getCatalogoDb } from "../services/catalogoDbService";
+import {
+  minutosDeIdades,
+  calcularPresenca,
+  garantirTabelaPresenca,
+  gravarMinutosPresenca,
+  lerPresencaGrupo,
+} from "../services/tvPresenca";
 
 // "Programacao_RPG" é uma aba antiga/duplicada que ficou sem manutenção —
 // as capas lá estão todas com o link quebrado (uc?export=view&id= sem
@@ -12,7 +21,7 @@ import { readRuntimeEnv } from "../google/service-account";
 const PROGRAMACAO_SHEET = "Agenda_TV";
 const PRESENCA_SHEET = "Presenca_TV";
 
-interface ProgramaRow {
+export interface ProgramaRow {
   id: string;
   rowIndex: number;
   titulo: string;
@@ -41,7 +50,7 @@ function parseDataHorario(data: string, horario: string): number | null {
   return Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh) + 3, Number(min));
 }
 
-async function readProgramas(): Promise<ProgramaRow[]> {
+export async function readProgramas(): Promise<ProgramaRow[]> {
   const rows = await googleSheetsService.agendaTV.readValues(PROGRAMACAO_SHEET).catch(() => []);
   if (!rows || rows.length < 2) return [];
   // Agenda_TV: Programa, Tipo, Material, Buff, Data, Horario, Capa_URL, Status, Topico_ID, Topico_URL, TIPO_EVENTO
@@ -193,6 +202,13 @@ export async function getProgramasTVController(): Promise<Response> {
   }
 }
 
+function jsonPresenca(corpo: unknown, status: number): Response {
+  return new Response(JSON.stringify(corpo), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
 /**
  * POST /api/tv/presenca
  * body: { programa_id, telegram_id, nome, watched_seconds }
@@ -204,8 +220,43 @@ export async function registrarPresencaTVController(request: Request): Promise<R
       telegram_id?: string;
       nome?: string;
       watched_seconds?: number;
+      idades_ms?: unknown;
     };
     const programaId = (body.programa_id || "").trim();
+
+    // Corpo novo: o cliente manda só "há quantos ms eu estava presente" e o
+    // relógio do servidor decide o minuto. Grava no D1, não na planilha.
+    if (body.idades_ms !== undefined) {
+      const idades = body.idades_ms;
+      if (
+        !Array.isArray(idades) ||
+        idades.length > 400 ||
+        !idades.every((n) => typeof n === "number" && Number.isFinite(n))
+      ) {
+        return jsonPresenca({ ok: false, erro: "idades_ms inválido." }, 400);
+      }
+      const sessao = await verifySessionToken(extractBearerToken(request));
+      const jogadorId = sessao?.id || (body.telegram_id || "").trim();
+      if (!programaId || !jogadorId) {
+        return jsonPresenca({ ok: false, erro: "programa_id e jogador são obrigatórios." }, 400);
+      }
+      const db = getCatalogoDb();
+      if (!db) return jsonPresenca({ ok: false, erro: "Banco indisponível." }, 503);
+      await garantirTabelaPresenca(db);
+      const agora = Date.now();
+      const resultado = await gravarMinutosPresenca(
+        db,
+        {
+          programaId,
+          jogadorId,
+          nome: (body.nome || sessao?.usuario || "Anônimo").trim() || "Anônimo",
+          minutos: minutosDeIdades(agora, idades as number[]),
+        },
+        agora,
+      );
+      return jsonPresenca({ ok: true, resultado }, 200);
+    }
+
     const telegramId = (body.telegram_id || "").trim();
     if (!programaId || !telegramId) {
       return new Response(JSON.stringify({ ok: false, erro: "programa_id e telegram_id são obrigatórios." }), {
@@ -246,6 +297,31 @@ export async function listarPresencaTVController(request: Request): Promise<Resp
         headers: { "Content-Type": "application/json; charset=utf-8" },
       });
     }
+    // Presença por minuto no D1: se alguém do grupo inteiro (todos os
+    // segmentos da transmissão) tem linha lá, calcula por calcularPresenca.
+    const db = getCatalogoDb();
+    if (db) {
+      try {
+        await garantirTabelaPresenca(db);
+        const grupo = agruparTransmissoes(await readProgramas()).find((g) => g.rowIds.includes(programaId));
+        if (grupo) {
+          const porJogador = await lerPresencaGrupo(db, grupo.rowIds);
+          if (porJogador.size > 0) {
+            const flags = (globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined;
+            const agora = Date.now();
+            const janela = janelaDoGrupo(grupo, await lerEventosReais(flags), agora);
+            const data = Array.from(porJogador.entries()).map(([id, v]) => {
+              const c = calcularPresenca(v.minutos, janela.inicioMs, janela.fimMs);
+              return { telegram_id: id, nome: v.nome || "Anônimo", watched_seconds: c.minutosPresentes * 60, percentual: c.pct };
+            });
+            return jsonPresenca({ success: true, data }, 200);
+          }
+        }
+      } catch (e) {
+        console.error("[listarPresencaTVController] D1 falhou, usando planilha:", e);
+      }
+    }
+
     const rows = await googleSheetsService.agendaTV.readValues(PRESENCA_SHEET).catch(() => []);
     const normId = normalizeComparison(programaId);
 
@@ -351,7 +427,7 @@ function escolherTier(tiers: RegraTier[] | undefined, percentual: number): Regra
   return percentual > maisAlta.max ? maisAlta : null;
 }
 
-interface BroadcastGroup {
+export interface BroadcastGroup {
   chave: string;
   data: string;
   programa: string;
@@ -371,7 +447,7 @@ interface BroadcastGroup {
 // último segmento contaria 0s e o total ficaria menor que o real.
 const MINUTOS_ESTIMATIVA_ULTIMO_SEGMENTO = 5;
 
-function agruparTransmissoes(programas: ProgramaRow[]): BroadcastGroup[] {
+export function agruparTransmissoes(programas: ProgramaRow[]): BroadcastGroup[] {
   const grupos = new Map<string, BroadcastGroup>();
   const startsPorGrupo = new Map<string, number[]>();
 
@@ -622,12 +698,39 @@ async function registrarDiagnosticoSkip(flags: FlagsKvLike | undefined, mensagem
 // processada (ver fim de processarParticipacaoTV), pra não crescer sem limite.
 const TV_EVENTOS_REAIS_KV_KEY = "tv-eventos-reais";
 
-interface EventoRealTV {
+export interface EventoRealTV {
   inicioTs?: number;
   fimTs?: number;
 }
 
-async function lerEventosReais(flags: FlagsKvLike | undefined): Promise<Record<string, EventoRealTV>> {
+/**
+ * Janela de uma transmissão para contar presença: início real > estimado
+ * (endTs - duração); fim real > agora (se ainda ao vivo) > endTs.
+ */
+export function janelaDoGrupo(
+  grupo: BroadcastGroup,
+  eventosReais: Record<string, EventoRealTV>,
+  agoraMs: number,
+): { inicioMs: number; fimMs: number; aoVivo: boolean } {
+  const real = eventosReais[grupo.chave];
+  const estimadoIni = (grupo.endTs ?? agoraMs) - grupo.totalDuracaoSeg * 1000;
+  const inicioMs = real?.inicioTs || estimadoIni;
+  let fimMs: number;
+  let aoVivo: boolean;
+  if (real?.fimTs) {
+    fimMs = real.fimTs;
+    aoVivo = false;
+  } else if (real?.inicioTs || grupo.endTs === null || agoraMs < grupo.endTs) {
+    fimMs = agoraMs;
+    aoVivo = true;
+  } else {
+    fimMs = grupo.endTs;
+    aoVivo = false;
+  }
+  return { inicioMs, fimMs: Math.max(fimMs, inicioMs + 1), aoVivo };
+}
+
+export async function lerEventosReais(flags: FlagsKvLike | undefined): Promise<Record<string, EventoRealTV>> {
   if (!flags) return {};
   try {
     const raw = await flags.get(TV_EVENTOS_REAIS_KV_KEY);
