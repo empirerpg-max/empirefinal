@@ -142,10 +142,10 @@ export interface EnqueteView {
   meuVoto: number[] | null;
 }
 
-export async function listarEnquetes(
+/** Parte agregada (igual para todos os jogadores): é o que o controller guarda em cache. */
+export async function listarEnquetesAgregado(
   db: D1DatabaseLike,
   programaId: string,
-  jogadorId: string | null,
   agoraMs: number,
 ): Promise<EnqueteView[]> {
   await garantirTabelasEnquete(db);
@@ -166,15 +166,13 @@ export async function listarEnquetes(
   for (const e of r.results) {
     const opcoes = lerLista<string>(e.opcoes);
     const v = await db
-      .prepare("SELECT jogador_id, opcoes FROM tv_enquete_voto WHERE enquete_id = ?")
+      .prepare("SELECT opcoes FROM tv_enquete_voto WHERE enquete_id = ?")
       .bind(e.id)
-      .all<{ jogador_id: string; opcoes: string }>();
-    const votos = v.results.map((x) => lerLista<number>(x.opcoes));
-    const ap = apurar(opcoes.length, votos);
+      .all<{ opcoes: string }>();
+    const ap = apurar(opcoes.length, v.results.map((x) => lerLista<number>(x.opcoes)));
     const aberta = e.aberta === 1;
     const soFim = e.so_fim === 1;
     const esconde = soFim && aberta;
-    const meu = jogadorId ? v.results.find((x) => x.jogador_id === jogadorId) : undefined;
     out.push({
       id: e.id,
       pergunta: e.pergunta,
@@ -190,8 +188,60 @@ export async function listarEnquetes(
       pct: esconde ? null : ap.pct,
       total: ap.total,
       vencedores: esconde ? [] : ap.vencedores,
-      meuVoto: meu ? lerLista<number>(meu.opcoes) : null,
+      meuVoto: null,
     });
   }
   return out;
+}
+
+/** Voto do jogador em cada enquete: só buscas pela chave primária (enquete_id, jogador_id). */
+export async function meusVotos(db: D1DatabaseLike, enqueteIds: string[], jogadorId: string): Promise<Map<string, number[]>> {
+  const out = new Map<string, number[]>();
+  if (enqueteIds.length === 0) return out;
+  const r = await db
+    .prepare(`SELECT enquete_id, opcoes FROM tv_enquete_voto WHERE enquete_id IN (${enqueteIds.map(() => "?").join(",")}) AND jogador_id = ?`)
+    .bind(...enqueteIds, jogadorId)
+    .all<{ enquete_id: string; opcoes: string }>();
+  for (const x of r.results) out.set(x.enquete_id, lerLista<number>(x.opcoes));
+  return out;
+}
+
+export async function listarEnquetes(
+  db: D1DatabaseLike,
+  programaId: string,
+  jogadorId: string | null,
+  agoraMs: number,
+): Promise<EnqueteView[]> {
+  const lista = await listarEnquetesAgregado(db, programaId, agoraMs);
+  if (!jogadorId) return lista;
+  const meus = await meusVotos(db, lista.map((e) => e.id), jogadorId);
+  return lista.map((e) => ({ ...e, meuVoto: meus.get(e.id) ?? null }));
+}
+
+/** Ids das enquetes ainda abertas de uma sala (programa_id). */
+export async function idsEnquetesAbertas(db: D1DatabaseLike, programaId: string): Promise<string[]> {
+  await garantirTabelasEnquete(db);
+  const r = await db
+    .prepare("SELECT id FROM tv_enquete WHERE programa_id = ? AND aberta = 1")
+    .bind(programaId)
+    .all<{ id: string }>();
+  return r.results.map((x) => x.id);
+}
+
+/** Resultado completo (sem esconder nada) de uma enquete, para a planilha. */
+export async function resultadoEnquete(
+  db: D1DatabaseLike,
+  programaId: string,
+  enqueteId: string,
+): Promise<{ pergunta: string; tipo: TipoEnquete; opcoes: string[]; contagem: number[]; pct: number[] } | null> {
+  const r = await db
+    .prepare("SELECT pergunta, tipo, opcoes FROM tv_enquete WHERE programa_id = ? AND id = ?")
+    .bind(programaId, enqueteId)
+    .all<{ pergunta: string; tipo: TipoEnquete; opcoes: string }>();
+  const e = r.results[0];
+  if (!e) return null;
+  const opcoes = lerLista<string>(e.opcoes);
+  const v = await db.prepare("SELECT opcoes FROM tv_enquete_voto WHERE enquete_id = ?").bind(enqueteId).all<{ opcoes: string }>();
+  const ap = apurar(opcoes.length, v.results.map((x) => lerLista<number>(x.opcoes)));
+  return { pergunta: e.pergunta, tipo: e.tipo, opcoes, contagem: ap.contagem, pct: ap.pct };
 }

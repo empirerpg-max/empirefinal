@@ -154,6 +154,10 @@ import {
   corrigirRegistroReprocessamentoTV,
   registrarEventoTransmissaoController,
   registrarEventoAdminController,
+  criarEnqueteChatController,
+  votarEnqueteChatController,
+  encerrarEnqueteChatController,
+  listarEnquetesChatController,
 } from "../controllers/tvController";
 import {
   getRedCarpetFeedController,
@@ -583,6 +587,9 @@ export async function handleEmpireApiRoutes(
     "/api/tv/red-carpet/ranking",
     "/api/tv/red-carpet/deletar",
     "/api/tv/enquete",
+    "/api/tv/enquetes",
+    "/api/tv/enquetes/votar",
+    "/api/tv/enquetes/encerrar",
     "/api/tv/enquete/responder",
     "/api/artistas/vincular",
     "/api/artistas/criar",
@@ -1417,6 +1424,27 @@ export async function handleEmpireApiRoutes(
     response = await deleteRedCarpetPostController(request);
   } else if (url.pathname === "/api/tv/enquete") {
     response = await getEnqueteController(request);
+  } else if (url.pathname === "/api/tv/enquetes") {
+    response =
+      request.method === "GET"
+        ? await listarEnquetesChatController(request)
+        : request.method === "POST"
+          ? await criarEnqueteChatController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/tv/enquetes." }),
+              { status: 405, headers: { "Content-Type": "application/json" } },
+            );
+  } else if (url.pathname === "/api/tv/enquetes/votar" || url.pathname === "/api/tv/enquetes/encerrar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: `Use POST para ${url.pathname}.` }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response =
+      url.pathname === "/api/tv/enquetes/votar"
+        ? await votarEnqueteChatController(request)
+        : await encerrarEnqueteChatController(request);
   } else if (url.pathname === "/api/tv/enquete/responder") {
     if (request.method !== "POST") {
       return new Response(

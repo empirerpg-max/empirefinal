@@ -4,6 +4,16 @@ import { readRuntimeEnv } from "../google/service-account";
 import { verifySessionToken, extractBearerToken, requestProvesAdmin } from "../services/sessionService";
 import { getCatalogoDb } from "../services/catalogoDbService";
 import {
+  criarEnquete,
+  votar,
+  encerrar as encerrarEnquete,
+  listarEnquetesAgregado,
+  meusVotos,
+  idsEnquetesAbertas,
+  resultadoEnquete,
+  type EnqueteView,
+} from "../services/tvEnquetes";
+import {
   minutosDeIdades,
   calcularPresenca,
   garantirTabelaPresenca,
@@ -866,6 +876,19 @@ export async function registrarEventoAdminController(
     mapa[grupo.chave] = atual;
     await gravarEventosReais(flags, mapa);
 
+    if (acao === "fim") {
+      try {
+        const db = getCatalogoDb();
+        if (db) {
+          for (const rowId of grupo.rowIds) {
+            for (const id of await idsEnquetesAbertas(db, rowId)) await fecharEnqueteEAvisar(db, rowId, id, agora);
+          }
+        }
+      } catch (err) {
+        console.warn("[registrarEventoAdminController] Falha ao encerrar enquetes:", err);
+      }
+    }
+
     const processamento = acao === "fim" ? await processarParticipacaoTV(flags) : undefined;
     return resp(
       {
@@ -879,6 +902,175 @@ export async function registrarEventoAdminController(
   } catch (error: any) {
     console.error("[registrarEventoAdminController] Erro:", error);
     return resp({ ok: false, erro: error.message || "Erro ao registrar evento." }, 500);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Enquetes do chat da Empire TV
+// ---------------------------------------------------------------------------
+
+const CACHE_ENQUETES_MS = 10_000;
+// Cache por isolate da parte agregada (igual p/ todos); meuVoto é buscado à parte.
+const cacheEnquetes = new Map<string, { expiresAt: number; lista: EnqueteView[] }>();
+
+function jsonEnquete(corpo: unknown, status: number): Response {
+  return new Response(JSON.stringify(corpo), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+// Aviso no chat (Supabase, service role). Falha só é registrada.
+async function avisarNoChat(programaId: string, texto: string): Promise<void> {
+  try {
+    const { url, key } = getSupabaseCreds();
+    if (!url || !key) return;
+    const res = await fetch(`${url}/rest/v1/tv_chat_messages`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ programa_id: programaId, user: "Empire TV", user_id: "empire-tv", text: texto }),
+    });
+    if (!res.ok) console.warn("[enquetes] Supabase recusou o aviso:", res.status);
+  } catch (err) {
+    console.warn("[enquetes] Falha ao avisar no chat:", err);
+  }
+}
+
+// Encerra, avisa no chat (ENQRES) e grava o resultado na planilha (best-effort).
+async function fecharEnqueteEAvisar(
+  db: NonNullable<ReturnType<typeof getCatalogoDb>>,
+  programaId: string,
+  enqueteId: string,
+  agora: number,
+): Promise<boolean> {
+  const fechou = await encerrarEnquete(db, programaId, enqueteId, agora);
+  cacheEnquetes.delete(programaId);
+  if (!fechou) return false;
+  await avisarNoChat(programaId, `ENQRES::${enqueteId}`);
+  try {
+    const r = await resultadoEnquete(db, programaId, enqueteId);
+    if (r) {
+      const data = new Date(agora).toISOString();
+      const linhas = r.opcoes.map((op, i) => [data, programaId, r.pergunta, r.tipo, op, r.contagem[i], r.pct[i]]);
+      await appendRows("agendaTV", "Enquetes_TV", linhas, "A:G");
+    }
+  } catch (err) {
+    console.warn("[enquetes] Falha ao gravar na aba Enquetes_TV:", err);
+  }
+  return true;
+}
+
+/** POST /api/tv/enquetes — admin cria enquete e avisa no chat. */
+export async function criarEnqueteChatController(request: Request): Promise<Response> {
+  try {
+    if (!extractBearerToken(request)) return jsonEnquete({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return jsonEnquete({ ok: false, erro: "Apenas admin." }, 403);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const sessao = await verifySessionToken(extractBearerToken(request));
+    const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const programaId = String(b.programa_id ?? "").trim();
+    if (!programaId) return jsonEnquete({ ok: false, erro: "programa_id é obrigatório." }, 400);
+    const encerraEm = b.encerra_em == null || b.encerra_em === "" ? null : Number(b.encerra_em);
+    let id: string;
+    try {
+      id = await criarEnquete(
+        db,
+        {
+          programaId,
+          pergunta: String(b.pergunta ?? ""),
+          tipo: b.tipo as "unica" | "multipla",
+          opcoes: b.opcoes as string[],
+          secreto: b.secreto === true,
+          soFim: b.so_fim === true,
+          encerraEmMs: encerraEm != null && Number.isFinite(encerraEm) ? encerraEm : null,
+          criadaPor: sessao?.usuario || "admin",
+        },
+        Date.now(),
+      );
+    } catch (err: any) {
+      return jsonEnquete({ ok: false, erro: err?.message || "Enquete inválida." }, 400);
+    }
+    cacheEnquetes.delete(programaId);
+    await avisarNoChat(programaId, `ENQ::${id}`);
+    return jsonEnquete({ ok: true, id }, 200);
+  } catch (error: any) {
+    console.error("[criarEnqueteChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao criar enquete." }, 500);
+  }
+}
+
+/** POST /api/tv/enquetes/votar — jogador com sessão vota. */
+export async function votarEnqueteChatController(request: Request): Promise<Response> {
+  try {
+    const sessao = await verifySessionToken(extractBearerToken(request));
+    if (!sessao?.id) return jsonEnquete({ ok: false, erro: "Não autenticado." }, 401);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const programaId = String(b.programa_id ?? "").trim();
+    const enqueteId = String(b.enquete_id ?? "").trim();
+    if (!programaId || !enqueteId || !Array.isArray(b.opcoes)) {
+      return jsonEnquete({ ok: false, erro: "Voto inválido." }, 400);
+    }
+    const r = await votar(db, programaId, enqueteId, sessao.id, sessao.usuario || "Anônimo", b.opcoes as number[], Date.now());
+    cacheEnquetes.delete(programaId);
+    if (r === "invalida") return jsonEnquete({ ok: false, erro: "Voto inválido." }, 400);
+    if (r === "encerrada") return jsonEnquete({ ok: false, erro: "Enquete encerrada." }, 409);
+    return jsonEnquete({ ok: true }, 200);
+  } catch (error: any) {
+    console.error("[votarEnqueteChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao votar." }, 500);
+  }
+}
+
+/** POST /api/tv/enquetes/encerrar — admin encerra, avisa no chat e grava na planilha. */
+export async function encerrarEnqueteChatController(request: Request): Promise<Response> {
+  try {
+    if (!extractBearerToken(request)) return jsonEnquete({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return jsonEnquete({ ok: false, erro: "Apenas admin." }, 403);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const programaId = String(b.programa_id ?? "").trim();
+    const enqueteId = String(b.enquete_id ?? "").trim();
+    if (!programaId || !enqueteId) return jsonEnquete({ ok: false, erro: "programa_id e enquete_id são obrigatórios." }, 400);
+    const fechou = await fecharEnqueteEAvisar(db, programaId, enqueteId, Date.now());
+    return jsonEnquete({ ok: true, encerrada: fechou }, 200);
+  } catch (error: any) {
+    console.error("[encerrarEnqueteChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao encerrar enquete." }, 500);
+  }
+}
+
+/** GET /api/tv/enquetes?programa_id= — lista (agregado em cache 10 s; meuVoto por chave primária). */
+export async function listarEnquetesChatController(request: Request): Promise<Response> {
+  try {
+    const programaId = (new URL(request.url).searchParams.get("programa_id") || "").trim();
+    if (!programaId) return jsonEnquete({ ok: false, erro: "programa_id é obrigatório." }, 400);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const agora = Date.now();
+    let c = cacheEnquetes.get(programaId);
+    if (!c || c.expiresAt <= agora) {
+      c = { expiresAt: agora + CACHE_ENQUETES_MS, lista: await listarEnquetesAgregado(db, programaId, agora) };
+      cacheEnquetes.set(programaId, c);
+    }
+    const sessao = await verifySessionToken(extractBearerToken(request));
+    let lista = c.lista;
+    if (sessao?.id) {
+      const meus = await meusVotos(db, lista.map((e) => e.id), sessao.id);
+      lista = lista.map((e) => ({ ...e, meuVoto: meus.get(e.id) ?? null }));
+    }
+    return jsonEnquete({ ok: true, enquetes: lista }, 200);
+  } catch (error: any) {
+    console.error("[listarEnquetesChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao listar enquetes." }, 500);
   }
 }
 
