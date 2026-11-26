@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { BackButton } from "@/components/BackButton";
-import { getStoredLogin } from "@/components/LoginScreen";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { useTelegramUser } from "@/lib/telegram";
 import { api } from "@/lib/api";
 import { kickChannelFromUrl } from "@/lib/tvEmbed";
@@ -45,8 +45,8 @@ function TesteSomPage() {
   const { user } = useTelegramUser();
   const login = getStoredLogin();
   const tgId = user?.id?.toString() || login?.id || "";
-  // Mesmo critério de admin usado em Gestao.tsx e perfil.tsx.
-  const isAdmin = tgId === "810141686" || login?.tipoPerfil === "Admin";
+  // Mesmo critério de admin do resto do app (LoginScreen.isAdminLogin).
+  const isAdmin = isAdminLogin(login, tgId);
 
   const [canal, setCanal] = useState("");
   const [variante, setVariante] = useState<string>("hoje");

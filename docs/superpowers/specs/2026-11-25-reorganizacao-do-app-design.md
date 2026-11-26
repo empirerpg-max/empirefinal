@@ -160,6 +160,7 @@ redirecionamento o que deixou de ser tela própria.
 | `/tv` | Início › Empire TV (mesma URL; a tela ganha a fileira de abas do Início em cima) | Início |
 | `/tours`, `/tours/$nome` | Início › Turnês (mesma URL) | Início |
 | `/acervo` | **Social › Imprensa** (mesma URL; a tela ganha a fileira de abas do Social) | Social |
+| `/artistas/$nome?aba=gestao` | página do artista já na aba Gestão (aviso "Complete o perfil") | — |
 | `/awards`, `/awards/$nome` | **Início › Premiações › Awards** (vitrine; mesmas URLs) | Início |
 | `/empire-play` | Catálogo › Início (conteúdo novo, 5.3) | Catálogo |
 | `/empire-play/musicas` | **redireciona** → `/empire-play/buscar?tipo=musicas` | Catálogo |
@@ -908,6 +909,32 @@ Charts (Global 100, Spotify, YouTube, BB 200 + Chart Runs), Awards, Turnês
 & Projetos, Social, Gestão (dono). Mudanças só de casca: fileira de abas
 rolável com seta e **presa no topo ao rolar**; seguidores passam a ser o
 número calculado (5.6.6).
+
+**Fonte única de artistas (já na `main`, 2026-11-25; ver
+`2026-11-25-artistas-fonte-unica-design.md`) — entra no Beta sem mudar a
+lógica:**
+
+- Aba **Gestão** do artista (dono): Trocar foto, Editar biografia, Capa do
+  perfil (como hoje) e o bloco **Perfil do artista**:
+  - **Nacionalidade:** escolhe da lista de países; depois de salva fica
+    travada ("Para alterar, fale com a administração."). Admin troca quando
+    quiser.
+  - **Estilo principal:** lista fechada (POP, R&B, ALTERNATIVE/ROCK, RAP,
+    FUNK…), pode trocar sempre.
+  - **Só admin:** "Atualizar a partir da planilha" (sobrescreve o perfil com
+    a aba ARTISTAS, mostra o que mudou, com confirmação).
+  - Administrativo: Rescindir (como hoje).
+- **Link direto** `/artistas/$nome?aba=gestao` abre já na aba Gestão (usado
+  pelo aviso abaixo) — entra na tabela 5.1.
+- **Aviso "Complete o perfil de {artista}: nacionalidade / estilo"**: hoje
+  aparece na Gestão (Catálogo › Gestão). No Beta continua lá (Criar ›
+  Gestão) **e** aparece em **Início › Pra fazer hoje** e em **Meu Império ›
+  Meus artistas** (selo "falta completar"), levando à aba Gestão do
+  artista.
+- **Admin › Painel do catálogo:** "Atualizar todos os artistas a partir da
+  planilha" (com confirmar/cancelar), como na `main`.
+- O critério de admin passa a ser um só: `isAdminLogin` (`LoginScreen.tsx`).
+  O `useIsAdmin` da fase 0 usa essa função.
 
 ### 6.8 Mudança de lugar: aviso ao jogador *(NOVO)*
 

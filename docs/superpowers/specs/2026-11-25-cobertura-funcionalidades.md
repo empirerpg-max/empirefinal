@@ -357,3 +357,21 @@ Conferido contra `src/routes/tv.tsx` (`WatchView`, `ChatPanel`,
 | Presença a cada 30 s | só tempo com a sala aberta ou o mini player entre Início e Término do admin; minutos enviados a cada 5 min (D1, uma linha por pessoa); mensagens não contam | D (fase 0b) |
 | — | enquetes criadas pelo admin no chat (única/múltipla), resultado no chat, arquivo 📊 Enquetes; botões Início/Término do evento (admin); reações com emoji, "↓ N novas", celular deitado com chat lateral, círculo da sua participação | **NOVO** |
 
+## 10ª conferência — o que entrou na `main` depois do início (2026-11-26)
+
+Merge de `origin/main` (fonte única de artistas, commits `9aa001d`…`56b6838`)
+na branch do projeto. Conferido em `src/routes/artistas.$nome.index.tsx`,
+`src/components/EmpirePlay/AvisoPerfilArtistas.tsx`, `Gestao.tsx`,
+`PainelCatalogoD1.tsx` e `LoginScreen.tsx`.
+
+| Função nova | No Beta | Status |
+|---|---|---|
+| Nacionalidade do artista (escolher uma vez; travada depois; admin troca) | página do artista › Gestão › Perfil do artista | D |
+| Estilo principal (lista fechada, troca quando quiser) | página do artista › Gestão › Perfil do artista | D |
+| Admin: "Atualizar a partir da planilha" (um artista) | página do artista › Gestão › Só admin | D |
+| Admin: "Atualizar todos os artistas a partir da planilha" | Meu Império › Admin › Painel do catálogo | D |
+| Aviso "Complete o perfil de {artista}" na Gestão | Criar › Gestão (igual) + Início › Pra fazer hoje + Meu Império › Meus artistas | P |
+| Link `/artistas/$nome?aba=gestao` | tabela 5.1 | D |
+| `isAdminLogin` (critério único de admin) | base do `useIsAdmin` (fase 0) | D |
+| Perfil, prêmios, votação e charts lendo o espelho D1 `artistas` | sem mudança de tela | D |
+
