@@ -1696,8 +1696,9 @@ escapando de botão e nenhum problema de contraste. Corrigido nesta rodada:
    capa", "Publicar" do editor): passam do mínimo do WCAG 2.2 (24 px), mas a
    meta do app é 40 px nos botões principais. Usar 40 px na implementação.
 3. **Tipo "Nota" na Nova enquete:** existe só no protótipo; o app de hoje
-   tem escolha única e múltipla. Implementar só se o usuário quiser (é função
-   nova).
+   tem escolha única e múltipla. **Decidido (2026-11-27): entra no Beta**
+   como função nova (votos de 1 a 10, resultado em faixas 1–3, 4–6, 7–8,
+   9–10 e a média).
 4. **Sala no tablet:** o app de hoje põe o chat ao lado a partir de 760 px
    de largura da janela. No tablet com a barra lateral do Beta, a área útil
    fica abaixo disso e o chat vai para baixo do vídeo, como no celular.
@@ -1718,7 +1719,7 @@ escapando de botão e nenhum problema de contraste. Corrigido nesta rodada:
 
 **Cartão (modelo próprio do Empire Hub, sem copiar marca de terceiros):**
 - capa do material em cima, com o nome do álbum;
-- selo "♛ EMPIRE HUB" e o nome do chart (ex.: GLOBAL 100);
+- selo "♛ EMPIRE CHARTS" (decisão do usuário; fora dos Charts, "♛ EMPIRE HUB") e o nome do chart (ex.: GLOBAL 100);
 - etiqueta do momento:
   - **Nº 1** (dourada);
   - **Estreia** (verde);

@@ -148,7 +148,27 @@ nova do Worker), e o cache da Cloudflare não funciona no domínio
 - **Nenhuma regra ou cálculo dos charts muda**: só de onde os mesmos dados
   são lidos. Precisa de aprovação, porque mexe no caminho dos Charts.
 
-## 6. Resumo das decisões pedidas ao usuário
+## 6. Medido no painel (2026-11-27) e decisões
+
+- **D1, linhas lidas:** 1,21 M em ~28 h (26/11 12h → 27/11 16h, horário de
+  Brasília). Dá **~1 M/dia, ~20% do limite**: a etapa 1 funcionou (era 76%).
+  Picos de ~50–60 mil por intervalo.
+- **D1, linhas gravadas:** 2,84 mil no período (~2% do limite). O pico de
+  ~1,3 mil no começo é de gravação em lote.
+- **Requisições:** o gráfico enviado é o de **arquivos (assets)**, que são
+  grátis e ilimitados (~4 mil em 25/11). O que conta no limite é o gráfico
+  **"Solicitações" do Worker** (Workers & Pages › tanstack-start-app ›
+  Métricas). Mesmo sem ele, o volume de arquivos indica uso moderado. Os
+  ajustes da seção 4 foram feitos assim mesmo, para dar folga nos dias de
+  evento.
+- **Feito (decisão do usuário, "a melhor decisão de economia"):** itens 1 a 4
+  da seção 4 (commit `c835e8d`): grade + Kick num pedido; 60 s dentro da
+  sala; enquete antiga da planilha desligada; placar a cada 10 s. **De ~14
+  para ~2 pedidos por minuto por pessoa** na sala.
+- **Pendente:** etapa 2 com KV (seção 5), aguardando o usuário entender e
+  aprovar.
+
+## 7. Resumo das decisões pedidas ao usuário (histórico)
 
 1. Conferir no painel da Cloudflare: linhas lidas do D1 (depois da etapa 1)
    e requisições do Worker num dia de transmissão.

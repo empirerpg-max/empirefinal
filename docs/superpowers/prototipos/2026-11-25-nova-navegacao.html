@@ -1654,7 +1654,7 @@ function shareCard(s, chart, fmt){
   const c=G[s.al%G.length]; const [bt,bk]=shareBadge(s);
   return `<div class="shCard ${fmt==='story'?'f916':'f45'}" role="img" aria-label="${chart?`${chart}: ${s.t}, de ${ART[s.a]}, posição ${s.p}, ${bt}`:`${s.t}, de ${ART[s.a]}`}">
     <div class="shArt" style="background:radial-gradient(70% 60% at 70% 25%,${c[0]},transparent 70%),linear-gradient(150deg,${c[0]},${c[1]})"><span class="shArtLbl">${ALB[s.al].t}</span></div>
-    <div class="shTop"><span class="shBrand">♛ EMPIRE <i>HUB</i></span>${chart?`<span class="shChart">${chart.toUpperCase()}</span>`:''}</div>
+    <div class="shTop"><span class="shBrand">♛ EMPIRE <i>${chart?'CHARTS':'HUB'}</i></span>${chart?`<span class="shChart">${chart.toUpperCase()}</span>`:''}</div>
     <div class="shPanel">
       ${chart?`<span class="shBadge ${bk}">${bt}</span>`:''}
       <div class="shRow">
