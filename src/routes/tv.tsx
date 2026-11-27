@@ -1202,15 +1202,32 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     <button
       type="button"
       onClick={() => trocarPlayer(modo)}
-      className="min-w-10 h-10 shrink-0 sm:shrink flex items-center justify-center gap-1.5 px-3 rounded-full bg-black/60 backdrop-blur text-white text-[11px] font-semibold shadow-lg active:scale-95 transition"
+      className="size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition"
       aria-label={modo === "kick" ? "Usar o player da Kick" : "Usar o player do app"}
       title={modo === "kick" ? "Usar o player da Kick" : "Usar o player do app"}
     >
-      <Repeat className="size-3.5 shrink-0" />
-      {/* Celular: só o ícone (o topo do vídeo é estreito). */}
-      <span className="hidden sm:inline truncate">{modo === "kick" ? "Player Kick" : "Player do app"}</span>
+      <Repeat className="size-[18px] shrink-0" />
     </button>
   );
+
+  // Controles do vídeo: aparecem ao entrar e a cada toque/movimento no vídeo
+  // e somem depois de 3,5 s, para o vídeo ficar limpo. Só no player do app:
+  // o toque no player da Kick (outro site) não chega ao app, então lá os
+  // poucos ícones ficam sempre à vista.
+  const [controlesTocados, setControlesTocados] = useState(true);
+  const timerControlesRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mostrarControles = useCallback(() => {
+    setControlesTocados(true);
+    if (timerControlesRef.current) clearTimeout(timerControlesRef.current);
+    timerControlesRef.current = setTimeout(() => setControlesTocados(false), 3_500);
+  }, []);
+  useEffect(() => {
+    mostrarControles();
+    return () => {
+      if (timerControlesRef.current) clearTimeout(timerControlesRef.current);
+    };
+  }, [programa.id, usarPlayerApp, mostrarControles]);
+  const controlesVisiveis = !usarPlayerApp || controlesTocados;
 
   const player = (() => {
     if (usarPlayerApp && hlsUrl) {
@@ -1224,6 +1241,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
             toast("O player do app falhou — voltando para o player da Kick.");
           }}
           acoes={botaoTrocarPlayer("kick")}
+          controlesVisiveis={controlesVisiveis}
         />
       );
     }
@@ -1246,25 +1264,27 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
               grande por um ícone discreto — cada transmissão nova ainda exige
               um toque de verdade (é o navegador quem exige, não dá pra
               pular), mas não precisa mais do aviso chamativo repetido. */}
-          <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 max-w-[70%] min-w-0">
+          <div className="absolute top-1 right-1 z-10 flex items-center max-w-[70%] min-w-0">
           {hlsUrl && programa.ao_vivo && botaoTrocarPlayer("app")}
           <button
             type="button"
             onClick={handleUnmute}
             className={
               unmutedOnce || hasUnmutedThisSession()
-                ? "size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
-                : "min-w-0 h-10 flex items-center gap-1.5 px-3 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
+                ? "size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition"
+                : "min-w-0 h-10 px-1 flex items-center active:scale-95 transition"
             }
             aria-label="Ativar som"
           >
             {unmutedOnce ? (
-              <Volume2 className="size-3.5 shrink-0" />
+              <Volume2 className="size-[18px] shrink-0" />
+            ) : hasUnmutedThisSession() ? (
+              <VolumeX className="size-[18px] shrink-0" />
             ) : (
-              <>
+              <span className="min-w-0 h-8 flex items-center gap-1.5 px-3 rounded-full bg-black/45 backdrop-blur-sm text-white text-xs font-semibold">
                 <VolumeX className="size-3.5 shrink-0" />
-                {!hasUnmutedThisSession() && <span className="truncate">Toque para ativar o som</span>}
-              </>
+                <span className="truncate">Toque para ativar o som</span>
+              </span>
             )}
           </button>
           </div>
@@ -1291,20 +1311,38 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   // Controles por cima do vídeo, só no canto de CIMA (a faixa de baixo é da
   // barra de controles da Kick — ver o botão de som acima).
   const videoTopo = (
-    <div className="absolute top-2 left-2 z-10 flex items-center gap-2 min-w-0">
-      <button onClick={onBack} className="size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition" aria-label="Voltar">
-        <ArrowLeft className="size-4 shrink-0" />
-      </button>
-      <button onClick={onMinimize} className="size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition" aria-label="Minimizar (continua tocando)" title="Minimizar — continua tocando">
-        <Minimize2 className="size-4 shrink-0" />
-      </button>
-      {programa.ao_vivo && (
-        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
-          <Radio className="size-2.5 shrink-0 animate-pulse" /> LIVE
-        </span>
+    <>
+      {/* Sombra suave no topo, só com os controles à vista (dá contraste aos
+          ícones sem círculos escuros por cima do vídeo). */}
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-x-0 top-0 h-16 z-[5] bg-gradient-to-b from-black/55 to-transparent transition-opacity duration-300 ${
+          controlesVisiveis ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      <div
+        className={`absolute top-1 left-1 z-10 flex items-center min-w-0 transition-opacity duration-300 ${
+          controlesVisiveis ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <button onClick={onBack} className="size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition" aria-label="Voltar" title="Voltar">
+          <ArrowLeft className="size-[18px] shrink-0" />
+        </button>
+        <button onClick={onMinimize} className="size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition" aria-label="Minimizar (continua tocando)" title="Minimizar — continua tocando">
+          <Minimize2 className="size-[18px] shrink-0" />
+        </button>
+        {programa.ao_vivo && (
+          <span className="ml-1 flex items-center gap-1 text-white text-[10px] font-bold tracking-wide shrink-0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            <span className="size-1.5 rounded-full bg-red-500 animate-pulse shrink-0" aria-hidden="true" /> AO VIVO
+          </span>
+        )}
+      </div>
+      {deitado && (
+        <div className="absolute top-1 left-[88px] z-10 min-w-0">
+          <BotaoAtualizarPendente sobreVideo />
+        </div>
       )}
-      {deitado && <BotaoAtualizarPendente sobreVideo />}
-    </div>
+    </>
   );
 
   // Faixa fina logo abaixo do vídeo: título (toque = Sobre), quantos estão
@@ -1452,8 +1490,17 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
                 : { aspectRatio: "16 / 9" }
           }
         >
-          {player}
-          {videoTopo}
+          <div
+            className="absolute inset-0"
+            onPointerDown={mostrarControles}
+            onFocusCapture={mostrarControles}
+            onPointerMove={(e) => {
+              if (e.pointerType === "mouse") mostrarControles();
+            }}
+          >
+            {player}
+            {videoTopo}
+          </div>
         </div>
       </div>
       <div

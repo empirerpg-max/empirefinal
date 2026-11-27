@@ -23,6 +23,7 @@ export function PlayerAppHls({
   onFalha,
   compacto = false,
   acoes,
+  controlesVisiveis = true,
 }: {
   src: string;
   titulo: string;
@@ -31,6 +32,11 @@ export function PlayerAppHls({
   compacto?: boolean;
   /** Botões extras ao lado do som (ex.: trocar para o player da Kick). */
   acoes?: React.ReactNode;
+  /**
+   * Controles à vista (a sala esconde depois de uns segundos sem toque, para
+   * o vídeo ficar limpo). O "Ativar som" fica sempre à vista enquanto mudo.
+   */
+  controlesVisiveis?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const caixaRef = useRef<HTMLDivElement>(null);
@@ -209,41 +215,50 @@ export function PlayerAppHls({
         aria-label={titulo}
       />
       {!compacto && (
-        // Canto de cima, como o botão de som de antes (o topo esquerdo é
-        // dos botões voltar/minimizar/LIVE).
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 max-w-[70%] min-w-0">
-          {acoes}
+        // Canto de cima à direita, só ícones (sem círculo escuro): a sombra
+        // em degradê do topo da sala dá o contraste. Tudo some junto com os
+        // controles, menos o "Ativar som" enquanto o vídeo está mudo.
+        <div className="absolute top-1 right-1 z-10 flex items-center min-w-0 max-w-[70%]">
+          <div
+            className={`flex items-center transition-opacity duration-300 ${
+              controlesVisiveis ? "opacity-100" : "opacity-0 pointer-events-none"
+            }`}
+          >
+            {acoes}
+            <button
+              type="button"
+              onClick={telaCheia}
+              aria-label="Tela cheia"
+              title="Tela cheia"
+              className="size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition"
+            >
+              <Maximize className="size-[18px] shrink-0" />
+            </button>
+          </div>
           <button
             type="button"
             onClick={alternarSom}
             disabled={!tocando}
             aria-label={mudo ? "Ativar som" : "Tirar o som"}
+            title={mudo ? "Ativar som" : "Tirar o som"}
             className={
               mudo
-                ? "min-w-0 h-10 flex items-center gap-1.5 px-3 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition disabled:opacity-60"
-                : "size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
+                ? "min-w-0 h-10 px-1 flex items-center active:scale-95 transition disabled:opacity-60"
+                : `size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition-opacity duration-300 ${
+                    controlesVisiveis ? "opacity-100" : "opacity-0 pointer-events-none"
+                  }`
             }
           >
             {mudo ? (
-              <>
+              <span className="min-w-0 h-8 flex items-center gap-1.5 px-3 rounded-full bg-black/45 backdrop-blur-sm text-white text-xs font-semibold">
                 <VolumeX className="size-3.5 shrink-0" />
                 <span className="truncate">Ativar som</span>
-              </>
+              </span>
             ) : (
-              <Volume2 className="size-4 shrink-0" />
+              <Volume2 className="size-[18px] shrink-0" />
             )}
           </button>
         </div>
-      )}
-      {!compacto && (
-        <button
-          type="button"
-          onClick={telaCheia}
-          aria-label="Tela cheia"
-          className="absolute bottom-2 right-2 z-10 size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
-        >
-          <Maximize className="size-4 shrink-0" />
-        </button>
       )}
     </div>
   );
