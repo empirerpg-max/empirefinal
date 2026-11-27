@@ -1,6 +1,6 @@
 # Reorganização do Empire Hub — design
 
-> Data: 2026-11-25 · Status: **aguardando aprovação do usuário**
+> Data: 2026-11-25 · Status: **aprovado pelo usuário em 2026-11-27** ("bora começar"). Construção em fases (seção 8); primeiro plano: `docs/superpowers/plans/2026-11-27-medicao-de-uso.md` (fase 0a).
 > Branch: `claude/nice-euler-1yslj3`
 >
 > Documentos que andam junto com este (leia antes de construir):
