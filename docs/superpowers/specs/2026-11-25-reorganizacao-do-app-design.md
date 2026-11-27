@@ -1,6 +1,6 @@
 # Reorganização do Empire Hub — design
 
-> Data: 2026-11-25 · Status: **aguardando aprovação do usuário**
+> Data: 2026-11-25 · Status: **aprovado pelo usuário em 2026-11-27** ("bora começar"). Construção em fases (seção 8); primeiro plano: `docs/superpowers/plans/2026-11-27-medicao-de-uso.md` (fase 0a).
 > Branch: `claude/nice-euler-1yslj3`
 >
 > Documentos que andam junto com este (leia antes de construir):
@@ -1786,7 +1786,7 @@ de 360px nos dois tamanhos de texto.
 
 | Fase | Conteúdo | Depende de |
 |---|---|---|
-| **0a. Medição de uso** (na versão de hoje) | 6.15: envio em lote, tabelas `uso_diario` e `uso_jogador_dia`, chave em `homeFlags`, tela Admin › Uso do app. **Vai ao ar primeiro**, para medir a base por ~4 semanas antes do Beta | — |
+| **0a. Medição de uso** (na versão de hoje) ✅ **feito** (branch `claude/nice-euler-1yslj3`, aguardando PR/merge; manual `docs/medicao-de-uso.md`) | 6.15: envio em lote, tabelas `uso_diario` e `uso_jogador_dia`, chave em `homeFlags`, tela Admin › Uso do app. **Vai ao ar primeiro**, para medir a base por ~4 semanas antes do Beta | — |
 | **0b. Sala da TV na versão de hoje** ✅ **feito** ([PR #956](https://github.com/empirerpg-max/empirefinal/pull/956), aguardando merge) | 6.19.1 participação pelo tempo (D1), Início/Término do admin, chat novo, enquetes no chat, player do app (6.19.2), economia de pedidos e de leituras (`2026-11-27-orcamento-d1-e-requisicoes.md`); GIFs "Mais usados/Recentes" já estavam na `main` | — |
 | **0. Fundações** (nada visível muda) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query + cliente de API, tokens de cor com os valores atuais | — |
 | **1. Navegação (Beta test)** | casca nova inteira **atrás do Beta test** (6.11): topo, barra/trilho/barra lateral (6.10), Criar, Meu Império, abas do Início, aviso de mudança, tutorial; chave do admin, reportes e faixa na versão anterior | 0 |

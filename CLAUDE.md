@@ -86,3 +86,11 @@ Antes de mexer na sala da TV (`src/routes/tv.tsx`, `src/components/EmpireTV/*`,
 player do app, a participação e as enquetes funcionam, limites do plano
 gratuito (nada por pessoa a cada poucos segundos pode ler a sala inteira no
 D1) e como testar pelo link de prévia sem publicar.
+
+## Medição de uso (referência)
+
+Antes de mexer na medição de uso (`src/lib/uso/*`, `backend/src/services/usoService.ts`,
+`/api/uso*`, tela `/uso-do-app`), ler `docs/medicao-de-uso.md`: o que é medido e o
+que não é, mapa dos arquivos, tabelas, liga/desliga no KV e custo. Todo novo POST
+automático em segundo plano precisa entrar em `IGNORADOS` (`src/lib/uso/coletor.ts`)
+e nenhum conteúdo de usuário pode entrar em `alvo`.

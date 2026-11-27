@@ -4,6 +4,11 @@
 # outros arquivos se todos rodassem juntos.
 set -u
 falhas=0
+# Sem argumentos: roda todos os testes que usam mock.module (antes, chamar
+# sem argumentos não rodava nada e saía com sucesso — falso "tudo ok").
+if [ "$#" -eq 0 ]; then
+  set -- $(grep -l "mock.module" "$(dirname "$0")"/*.test.ts)
+fi
 for f in "$@"; do
   if bun test "$f" > /tmp/bun-teste-saida.txt 2>&1; then
     echo "OK   $f $(grep -E '^ *[0-9]+ pass' /tmp/bun-teste-saida.txt | tr -s ' ')"

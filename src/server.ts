@@ -382,6 +382,7 @@ export default {
       return;
     }
     const { processarParticipacaoTV, limparPresencaTVDiaria } = await import("../backend/src/controllers/tvController");
+    const { limparUsoDiaria } = await import("../backend/src/controllers/usoController");
     const {
       limparStoriesExpiradosScheduled,
       limparLinhasOrfasSocialPosts,
@@ -416,6 +417,14 @@ export default {
       limparPresencaTVDiaria((env as { FLAGS?: FlagsKv }).FLAGS)
         .then((n) => {
           if (n) console.log(`[scheduled] Presença TV antiga apagada do D1: ${n} linha(s).`);
+        })
+        .catch(() => {}),
+    );
+    // Medição de uso (D1 uso_*): apaga o que tem mais de 90 dias, 1x por dia UTC.
+    ctx.waitUntil(
+      limparUsoDiaria((env as { FLAGS?: FlagsKv }).FLAGS)
+        .then((n) => {
+          if (n) console.log(`[scheduled] Uso antigo apagado do D1: ${n} linha(s).`);
         })
         .catch(() => {}),
     );

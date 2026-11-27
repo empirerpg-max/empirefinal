@@ -40,6 +40,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { useTelegramUser, haptic, useTelegramBackButton } from "@/lib/telegram";
 import { api, driveImg, driveRawImg, type Artist } from "@/lib/api";
 import { useServiceWorkerUpdate } from "@/lib/pwa";
+import { iniciarMedicaoUso, usoGlobal } from "@/lib/uso/envio";
+import { acaoDaRequisicao, telaDaRota } from "@/lib/uso/coletor";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -605,9 +607,56 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
+      <MedicaoTelaAtual />
       <AuthGate />
     </QueryClientProvider>
   );
+}
+
+// Medição de uso: conta a tela atual (id da rota mais funda + aba) sempre que
+// ela muda, logado ou não. Não renderiza nada. Só seleciona o nome da tela,
+// então só re-renderiza (sozinho) quando a tela muda.
+function MedicaoTelaAtual() {
+  const tela = useRouterState({
+    select: (s) => {
+      const ultima = s.matches[s.matches.length - 1];
+      return ultima
+        ? // Só a search validada pelas rotas (validateSearch): `match.search` e
+          // `location.search` trazem também chaves cruas da URL que nenhuma rota aceita.
+          telaDaRota(ultima.routeId, (ultima._strictSearch ?? {}) as Record<string, unknown>)
+        : "";
+    },
+  });
+  useEffect(() => {
+    if (!tela) return;
+    try {
+      iniciarMedicaoUso().tela(tela);
+    } catch {
+      // medição nunca quebra o app
+    }
+  }, [tela]);
+  return null;
+}
+
+// Medição de uso: conta a ação de uma requisição feita por `window.fetch`
+// (método + caminho, já normalizado pelo coletor). Nunca lê o corpo, nunca
+// lança erro. O próprio envio (`/api/uso`) é ignorado pelo coletor.
+function contarAcaoDeUso(input: RequestInfo | URL, init: RequestInit | undefined, ok: boolean) {
+  try {
+    const metodo = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.pathname + input.search
+          : input instanceof Request
+            ? input.url
+            : "";
+    const alvo = acaoDaRequisicao(metodo, url, ok);
+    if (alvo) usoGlobal()?.acao(alvo);
+  } catch {
+    // ignora
+  }
 }
 
 // Gate de login pra o app inteiro — o Empire Hub deixou de depender do
@@ -678,6 +727,7 @@ function AuthGate() {
       }
       const res = await fetchOriginal(input, novoInit);
       if (res.headers.get("X-Acesso-Revogado") === "1" && getStoredLogin()) forcarLogout();
+      contarAcaoDeUso(input, init, res.ok);
       return res;
     };
     window.fetch = fetchComSessao;

@@ -144,3 +144,7 @@ CREATE TABLE IF NOT EXISTS tv_presenca (programa_id TEXT NOT NULL, jogador_id TE
 -- Empire TV: enquetes do chat e votos (só chave primária).
 CREATE TABLE IF NOT EXISTS tv_enquete (programa_id TEXT NOT NULL, id TEXT NOT NULL, pergunta TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('unica','multipla')), opcoes TEXT NOT NULL, secreto INTEGER NOT NULL, so_fim INTEGER NOT NULL, encerra_em INTEGER, aberta INTEGER NOT NULL, criada_em INTEGER NOT NULL, encerrada_em INTEGER, criada_por TEXT, contagem TEXT NOT NULL DEFAULT '', total INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (programa_id, id)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS tv_enquete_voto (enquete_id TEXT NOT NULL, jogador_id TEXT NOT NULL, nome TEXT, opcoes TEXT NOT NULL, votado_em INTEGER NOT NULL, PRIMARY KEY (enquete_id, jogador_id)) WITHOUT ROWID;
+-- Medição de uso: contadores por dia (soma em lote) e jogadores distintos por dia / por tela por dia.
+CREATE TABLE IF NOT EXISTS uso_diario (dia TEXT NOT NULL, versao TEXT NOT NULL, aparelho TEXT NOT NULL, evento TEXT NOT NULL, alvo TEXT NOT NULL, contagem INTEGER NOT NULL, PRIMARY KEY (dia, versao, aparelho, evento, alvo)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS uso_jogador_dia (dia TEXT NOT NULL, jogador TEXT NOT NULL, versao TEXT NOT NULL, PRIMARY KEY (dia, jogador)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS uso_jogador_tela_dia (dia TEXT NOT NULL, tela TEXT NOT NULL, jogador TEXT NOT NULL, PRIMARY KEY (dia, tela, jogador)) WITHOUT ROWID;

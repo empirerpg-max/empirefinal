@@ -2,6 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { type PlayableTrack } from "./MusicPlayer";
 import { type PlayableVideo } from "./VideoPlayer";
 import { haptic } from "@/lib/telegram";
+import { usoGlobal } from "@/lib/uso/envio";
 
 interface EmpirePlayerContextValue {
   currentTrack: PlayableTrack | null;
@@ -44,6 +45,7 @@ export function EmpirePlayerProvider({ children }: { children: ReactNode }) {
 
   const playSong = (track: PlayableTrack, list: PlayableTrack[]) => {
     haptic.selection();
+    usoGlobal()?.acao("tocar_musica");
     setCurrentTrack(track);
     setActivePlaylist(list);
   };
