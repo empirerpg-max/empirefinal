@@ -10,6 +10,20 @@ em que o app rodava lá — hoje são só identificadores/utilitários internos.
 Nunca assumir ambiente, limitações ou comportamento do Telegram (WebView,
 safe-area do Telegram, mini app etc.) ao projetar, explicar ou testar algo.
 
+## EDIÇÃO CHARTS: o app só escreve de A até Q (regra permanente)
+
+Na aba **EDIÇÃO CHARTS** (planilha edicaoCharts), o app só pode gravar ou
+limpar células das colunas **A até Q**. Da R em diante são fórmulas da
+planilha — inclusive o **Código único** em BD
+(`=ARRAYFORMULA(IF(B2:B="";"";"EMP"&TEXT(ROW(B2:B)-1;"000")))`) — e
+qualquer escrita ali, até `""`, quebra a fórmula (na linha ou na coluna
+inteira). Também não apagar linhas dessa aba (desloca os códigos de todas
+as linhas abaixo): pra "remover", limpar A:Q com `clearValues`.
+
+Se BD estiver vazio numa linha, o código daquela linha é `"EMP" & (linha-1)`
+(ver `backend/src/services/codigoUnicoEdicaoCharts.ts`) — usar esse valor
+no app (Musicas!Z, D1), nunca gravá-lo em BD.
+
 ## Botões/pills/tabs com texto (regra permanente, não precisa repetir)
 
 Todo botão, pill ou tab que tem texto (label, nome, título) precisa:

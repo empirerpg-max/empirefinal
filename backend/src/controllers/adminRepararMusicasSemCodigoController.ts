@@ -130,6 +130,8 @@ export async function adminRepararMusicasSemCodigoController(request: Request): 
           success: true,
           confirmar,
           formulaBD,
+          // O que BD1:BD3 MOSTRA (ex.: "#REF!" = ARRAYFORMULA bloqueada).
+          bdTopoValores: ec.slice(0, 3).map((r) => r?.[55] ?? ""),
           ultimaLinhaComCodigoEdicaoCharts: ultimaComCodigo,
           pares,
           descartar: [...descartar],

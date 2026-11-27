@@ -1,25 +1,21 @@
 // Regras puras (sem rede) do "Código único" de música em EDIÇÃO CHARTS!BD.
 //
-// BUG REAL (produção, 26-27/11/2026, singles da Sparks "Alone" e
-// "Foolish"): a fórmula da planilha que preenche BD ("EMP" & linha-1) só
-// cobria até a linha 1064 — as músicas gravadas nas linhas 1065+ ficaram
-// com BD vazio. Sem código, a música não ganha Musicas!Z nem linha no D1,
-// então não aparece publicada nem entra nos charts, e o app ainda dizia
-// "publicado com sucesso". Daqui pra frente, quando a fórmula não preenche
-// a linha, o app grava o código ele mesmo — mas só quando isso é seguro
-// (ver analisarFormulaBD).
+// REGRA FIXA: o app só escreve de A até Q em EDIÇÃO CHARTS. Da R em diante
+// são fórmulas da planilha (Código único em BD, cálculos dos charts) —
+// qualquer escrita ali (até "" vazio) quebra a fórmula.
+//
+// BD = ARRAYFORMULA(IF(B2:B=""; ""; "EMP" & TEXT(ROW(B2:B)-1; "000"))): o
+// código depende só da linha. Caso Sparks (26-27/11/2026): a fórmula não
+// calculou da linha 1065 em diante e as músicas ficaram sem código (sem
+// Musicas!Z, sem D1 = não publicadas). O app usa o código que a fórmula
+// dá pra linha, sem escrever em BD.
 
 export type EstadoFormulaBD =
-  // ARRAYFORMULA de intervalo aberto (B2:B) — devia cobrir a linha; gravar
-  // um valor por cima bloquearia o "spill" e apagaria TODOS os códigos.
   | { tipo: "arrayformula-aberta"; formula: string }
-  // ARRAYFORMULA com fim fixo (B2:B1064) — linhas depois do fim estão
-  // fora dela, gravar valor ali é seguro.
   | { tipo: "arrayformula-limitada"; formula: string; ultimaLinha: number }
-  // Sem ARRAYFORMULA no topo da coluna (valores fixos ou fórmula por linha).
   | { tipo: "sem-arrayformula" };
 
-/** Recebe as células do topo de BD (renderização FORMULA, ex. BD1:BD3). */
+/** Diagnóstico: recebe as células do topo de BD (renderização FORMULA, ex. BD1:BD3). */
 export function analisarFormulaBD(celulasTopo: string[]): EstadoFormulaBD {
   const formula = celulasTopo.find((c) => /ARRAYFORMULA/i.test(c || ""));
   if (!formula) return { tipo: "sem-arrayformula" };
@@ -29,33 +25,13 @@ export function analisarFormulaBD(celulasTopo: string[]): EstadoFormulaBD {
   return { tipo: "arrayformula-limitada", formula, ultimaLinha: Number(m[4]) };
 }
 
-/** Pode gravar um código fixo em BD na `linha` sem quebrar a fórmula? */
-export function podeGravarCodigoNaLinha(estado: EstadoFormulaBD, linha: number): boolean {
-  if (estado.tipo === "sem-arrayformula") return true;
-  if (estado.tipo === "arrayformula-limitada") return linha > estado.ultimaLinha;
-  return false;
-}
-
 /** O que a fórmula da planilha ("EMP" & TEXT(linha-1; "000")) dá pra `linha`. */
 export function codigoDaFormulaParaLinha(linha: number): string {
   return `EMP${String(linha - 1).padStart(3, "0")}`;
 }
 
-/**
- * Código da música na `linha` de EDIÇÃO CHARTS — o mesmo padrão da fórmula
- * da planilha ("EMP" & TEXT(linha-1; "000")). Se esse código já estiver em
- * uso (nunca deveria, mas há colisão histórica), usa o maior + 1.
- */
-export function codigoMusicaParaLinha(linha: number, codigosExistentes: string[]): string {
-  const usados = new Set(
-    codigosExistentes.map((c) => (c || "").trim().toUpperCase()).filter(Boolean),
-  );
-  const preferido = codigoDaFormulaParaLinha(linha);
-  if (!usados.has(preferido)) return preferido;
-  let maior = 0;
-  for (const c of usados) {
-    const m = /^EMP(\d+)$/.exec(c);
-    if (m) maior = Math.max(maior, Number(m[1]));
-  }
-  return `EMP${String(maior + 1).padStart(3, "0")}`;
+/** Inverso: em que linha de EDIÇÃO CHARTS a fórmula gera esse código (null se não for "EMP<n>"). */
+export function linhaDoCodigoDaFormula(codigo: string): number | null {
+  const m = /^EMP(\d+)$/i.exec((codigo || "").trim());
+  return m ? Number(m[1]) + 1 : null;
 }
