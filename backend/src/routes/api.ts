@@ -165,6 +165,7 @@ import {
   listarEnquetesChatController,
   votantesEnqueteChatController,
 } from "../controllers/tvController";
+import { registrarUsoController, resumoUsoController } from "../controllers/usoController";
 import {
   getRedCarpetFeedController,
   createRedCarpetPostController,
@@ -590,6 +591,8 @@ export async function handleEmpireApiRoutes(
     "/api/tv/processar-participacao",
     "/api/tv/evento-transmissao",
     "/api/tv/evento-admin",
+    "/api/uso",
+    "/api/uso/resumo",
     "/api/tv/kick-hls",
     "/api/tv/red-carpet",
     "/api/tv/red-carpet/curtir",
@@ -1772,6 +1775,22 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await registrarEventoTransmissaoController(request);
+  } else if (url.pathname === "/api/uso") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ ok: false, erro: "Use POST para /api/uso." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await registrarUsoController(request);
+  } else if (url.pathname === "/api/uso/resumo") {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ ok: false, erro: "Use GET para /api/uso/resumo." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await resumoUsoController(request);
   } else if (url.pathname === "/api/tv/kick-hls") {
     response = await kickHlsTesteController(request);
   } else if (url.pathname === "/api/tv/evento-admin") {
