@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, RefreshCw, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck, Copy, BarChart3 } from "lucide-react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, RefreshCw, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck, Copy, BarChart3, Repeat } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost, type EnquetePayload } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
@@ -20,6 +20,8 @@ import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/Stic
 import { useEnquetesTV, ENQ_PREFIX, ENQRES_PREFIX, type EnquetesTV } from "@/components/EmpireTV/useEnquetesTV";
 import { EnquetesPanel, textoVencedor } from "@/components/EmpireTV/EnquetesPanel";
 import { EnqueteFaixa } from "@/components/EmpireTV/EnqueteFaixa";
+import { PlayerAppHls } from "@/components/EmpireTV/PlayerAppHls";
+import { lerPlayerModo, gravarPlayerModo, type TvPlayerModo } from "@/lib/tvPlayerModo";
 import { NovaEnqueteSheet, MARCA_NOVA_ENQUETE } from "@/components/EmpireTV/NovaEnqueteSheet";
 import { marcarSalaAtiva, salaDaUrl, recargaPendente, aoMudarRecargaPendente, atualizarAgora, DURACAO_AVISO_MS } from "@/lib/salaAtiva";
 
@@ -324,7 +326,7 @@ function TvPage() {
   // true depois da primeira resposta OK da grade (falha de rede não conta:
   // a sala pedida no endereço espera a próxima tentativa).
   const [gradeCarregada, setGradeCarregada] = useState(false);
-  const [liveChannels, setLiveChannels] = useState<Record<string, { viewers?: number; title?: string }>>({});
+  const [liveChannels, setLiveChannels] = useState<Record<string, { viewers?: number; title?: string; playbackUrl?: string }>>({});
   const fetchKick = useServerFn(getKickStatus);
 
   // Recarrega a grade periodicamente — antes buscava só uma vez ao abrir a
@@ -369,8 +371,9 @@ function TvPage() {
         })
       );
       if (!alive) return;
-      const next: Record<string, { viewers?: number; title?: string }> = {};
-      for (const [ch, r] of entries) if (r.live) next[ch] = { viewers: r.viewers, title: r.title };
+      const next: Record<string, { viewers?: number; title?: string; playbackUrl?: string }> = {};
+      for (const [ch, r] of entries)
+        if (r.live) next[ch] = { viewers: r.viewers, title: r.title, playbackUrl: r.playbackUrl || undefined };
       setLiveChannels(next);
     };
     tick();
@@ -384,7 +387,13 @@ function TvPage() {
       const slug = kickChannelFromUrl(p.stream_url);
       const live = slug ? liveChannels[slug] : undefined;
       if (!live) return p;
-      return { ...p, ao_vivo: true, finalizado: false, espectadores: live.viewers ?? p.espectadores };
+      return {
+        ...p,
+        ao_vivo: true,
+        finalizado: false,
+        espectadores: live.viewers ?? p.espectadores,
+        ...(live.playbackUrl ? { kick_hls: live.playbackUrl } : {}),
+      };
     });
   }, [programasRaw, liveChannels]);
 
@@ -392,7 +401,14 @@ function TvPage() {
   useEffect(() => {
     if (!watching) return;
     const updated = programas.find((p) => p.id === watching.id);
-    if (updated && (updated.ao_vivo !== watching.ao_vivo || updated.espectadores !== watching.espectadores)) {
+    if (
+      updated &&
+      (updated.ao_vivo !== watching.ao_vivo ||
+        updated.espectadores !== watching.espectadores ||
+        // Vídeo do player do app: só quando chega pela 1ª vez (o link muda a
+        // cada checagem e o player não precisa de cada versão).
+        (!!updated.kick_hls && !watching.kick_hls))
+    ) {
       updateWatching(updated);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1180,7 +1196,56 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     setUnmutedOnce(false);
   }, [programa.id]);
 
+  // Player do app (HLS da Kick, som com um toque) x player embutido da Kick.
+  // O link do vídeo fica guardado depois da 1ª checagem, pra uma checagem
+  // falha no meio não derrubar o player; falha do player do app nesta sala
+  // volta pra Kick sozinho (até trocar de sala ou tocar em "Player do app").
+  const [playerModo, setPlayerModo] = useState<TvPlayerModo>("app");
+  useEffect(() => setPlayerModo(lerPlayerModo()), []);
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null);
+  const [hlsFalhou, setHlsFalhou] = useState(false);
+  useEffect(() => {
+    setHlsUrl(null);
+    setHlsFalhou(false);
+  }, [programa.id]);
+  useEffect(() => {
+    if (programa.kick_hls) setHlsUrl(programa.kick_hls);
+  }, [programa.kick_hls]);
+  const usarPlayerApp = !!hlsUrl && !!programa.ao_vivo && playerModo === "app" && !hlsFalhou;
+  const trocarPlayer = (modo: TvPlayerModo) => {
+    gravarPlayerModo(modo);
+    setPlayerModo(modo);
+    setHlsFalhou(false);
+  };
+  const botaoTrocarPlayer = (modo: TvPlayerModo) => (
+    <button
+      type="button"
+      onClick={() => trocarPlayer(modo)}
+      className="min-w-10 h-10 shrink-0 sm:shrink flex items-center justify-center gap-1.5 px-3 rounded-full bg-black/60 backdrop-blur text-white text-[11px] font-semibold shadow-lg active:scale-95 transition"
+      aria-label={modo === "kick" ? "Usar o player da Kick" : "Usar o player do app"}
+      title={modo === "kick" ? "Usar o player da Kick" : "Usar o player do app"}
+    >
+      <Repeat className="size-3.5 shrink-0" />
+      {/* Celular: só o ícone (o topo do vídeo é estreito). */}
+      <span className="hidden sm:inline truncate">{modo === "kick" ? "Player Kick" : "Player do app"}</span>
+    </button>
+  );
+
   const player = (() => {
+    if (usarPlayerApp && hlsUrl) {
+      return (
+        <PlayerAppHls
+          src={hlsUrl}
+          titulo={programa.titulo}
+          onFalha={(motivo) => {
+            console.warn("[tv] player do app falhou:", motivo);
+            setHlsFalhou(true);
+            toast("O player do app falhou — voltando para o player da Kick.");
+          }}
+          acoes={botaoTrocarPlayer("kick")}
+        />
+      );
+    }
     const embed = resolveStreamEmbed(programa.stream_url, !!programa.ao_vivo);
     if (embed) {
       return (
@@ -1200,13 +1265,15 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
               grande por um ícone discreto — cada transmissão nova ainda exige
               um toque de verdade (é o navegador quem exige, não dá pra
               pular), mas não precisa mais do aviso chamativo repetido. */}
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 max-w-[70%] min-w-0">
+          {hlsUrl && programa.ao_vivo && botaoTrocarPlayer("app")}
           <button
             type="button"
             onClick={handleUnmute}
             className={
               unmutedOnce || hasUnmutedThisSession()
-                ? "absolute top-2 right-2 z-10 size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
-                : "absolute top-2 right-2 z-10 max-w-[60%] min-w-0 h-10 flex items-center gap-1.5 px-3 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
+                ? "size-10 shrink-0 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
+                : "min-w-0 h-10 flex items-center gap-1.5 px-3 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
             }
             aria-label="Ativar som"
           >
@@ -1219,6 +1286,7 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
               </>
             )}
           </button>
+          </div>
         </div>
       );
     }

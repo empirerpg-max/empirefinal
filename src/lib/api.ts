@@ -184,6 +184,8 @@ export interface ProgramaTV {
   espectadores: number;
   cover: string;
   stream_url: string;
+  /** Vídeo HLS da Kick (vem da checagem de "ao vivo"); usado pelo player do app. */
+  kick_hls?: string;
   data?: string; // DD/MM/YYYY
   horario?: string; // HH:mm
   data_inicio?: string;
