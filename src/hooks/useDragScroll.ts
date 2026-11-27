@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { bordas } from "@/lib/scrollRow";
 
 /**
  * Rolagem horizontal por clique-e-arraste com o mouse (desktop), além de
@@ -32,8 +33,9 @@ export function useDragScroll<T extends HTMLElement>(): {
     if (!el) return;
 
     const updateEdges = () => {
-      setCanScrollLeft(el.scrollLeft > 4);
-      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+      const { esquerda, direita } = bordas(el.scrollLeft, el.clientWidth, el.scrollWidth);
+      setCanScrollLeft(esquerda);
+      setCanScrollRight(direita);
     };
     updateEdges();
 
