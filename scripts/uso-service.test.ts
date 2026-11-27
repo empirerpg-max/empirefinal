@@ -24,12 +24,12 @@ test("dois lotes do mesmo dia somam a contagem", async () => {
   expect(linhas("uso_diario")).toEqual([{ dia: "2026-11-27", versao: "anterior", aparelho: "celular", evento: "tela", alvo: "/charts", contagem: 5 }]);
 });
 
-test("eventos repetidos no mesmo lote viram uma instrução só", async () => {
+test("eventos repetidos no mesmo lote viram uma linha só", async () => {
   limpar();
   const r = await U.gravarLoteUso(db, lote([
     { evento: "tela", alvo: "/a", n: 1 }, { evento: "tela", alvo: "/a", n: 4 }, { evento: "acao", alvo: "/a", n: 1 },
   ]), null, T);
-  expect(r.gravadas).toBe(2);
+  expect(r.gravadas).toBe(1) // 2 chaves distintas cabem numa instrução multi-linha;
   expect(linhas("uso_diario").map((l) => [l.evento, l.contagem])).toEqual([["acao", 1], ["tela", 5]]);
 });
 
@@ -38,7 +38,7 @@ test("jogador conta uma vez por dia e uma vez por tela por dia", async () => {
   const l = lote([{ evento: "tela", alvo: "/charts", n: 1 }], { telas: ["/charts", "/forum", "/charts"] });
   const r1 = await U.gravarLoteUso(db, l, "j1", T);
   await U.gravarLoteUso(db, l, "j1", T);
-  expect(r1.gravadas).toBe(1 + 1 + 2); // evento + jogador + 2 telas distintas
+  expect(r1.gravadas).toBe(3); // evento + jogador + 1 instrução com as 2 telas distintas
   expect(linhas("uso_jogador_dia")).toEqual([{ dia: "2026-11-27", jogador: "j1", versao: "anterior" }]);
   expect(linhas("uso_jogador_tela_dia")).toEqual([
     { dia: "2026-11-27", tela: "/charts", jogador: "j1" },
@@ -94,4 +94,35 @@ test("apagarUsoAntigo remove só dias anteriores ao corte", async () => {
   for (const t of ["uso_diario", "uso_jogador_dia", "uso_jogador_tela_dia"]) {
     expect(linhas(t).map((l) => l.dia)).toEqual(["2026-11-27", "2026-11-28"]);
   }
+});
+
+test("lote máximo cabe nos limites do D1 (instruções e parâmetros)", async () => {
+  limpar();
+  const aridades: number[] = [];
+  const dbEspia = {
+    prepare: (q: string) => {
+      const st = db.prepare(q);
+      return { ...st, bind: (...a: unknown[]) => { aridades.push(a.length); return st.bind(...a); } };
+    },
+    batch: (st: any[]) => db.batch(st),
+  };
+  const eventos = Array.from({ length: 200 }, (_, i) => ({ evento: "acao", alvo: `a${i}`, n: i + 1 }));
+  const telas = Array.from({ length: 50 }, (_, i) => `/t${i}`);
+  const r = await U.gravarLoteUso(dbEspia as any, lote(eventos, { telas }), "j1", T);
+  expect(r.gravadas).toBeLessThanOrEqual(20);
+  expect(aridades.length).toBe(r.gravadas);
+  expect(Math.max(...aridades)).toBeLessThanOrEqual(100);
+  const rows = linhas("uso_diario");
+  expect(rows.length).toBe(200);
+  expect(rows.every((x) => x.contagem === Number(x.alvo.slice(1)) + 1)).toBe(true);
+  expect(linhas("uso_jogador_tela_dia").length).toBe(50);
+  expect(linhas("uso_jogador_dia").length).toBe(1);
+});
+
+test("jogadorId em branco não grava nas tabelas de jogadores", async () => {
+  limpar();
+  const r = await U.gravarLoteUso(db, lote([{ evento: "tela", alvo: "/a", n: 1 }], { telas: ["/a"] }), "  ", T);
+  expect(r.gravadas).toBe(1);
+  expect(linhas("uso_jogador_dia")).toEqual([]);
+  expect(linhas("uso_jogador_tela_dia")).toEqual([]);
 });

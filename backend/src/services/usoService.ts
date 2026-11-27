@@ -21,6 +21,8 @@ const MAX_EVENTOS = 200;
 const MAX_TELAS = 50;
 const MAX_ALVO = 120;
 const MAX_N = 1000;
+const EVENTOS_POR_INSTRUCAO = 16; // 16 x 6 = 96 parâmetros
+const TELAS_POR_INSTRUCAO = 33; // 33 x 3 = 99 parâmetros
 const EVENTOS = ["tela", "acao", "caminho"];
 const VERSOES = ["anterior", "beta"];
 const APARELHOS = ["celular", "tablet", "computador"];
@@ -93,21 +95,34 @@ export async function gravarLoteUso(
     if (atual) atual.n += e.n;
     else somas.set(chave, { evento: e.evento, alvo: e.alvo, n: e.n });
   }
-  const stmts = [...somas.values()].map((s) =>
-    db
-      .prepare(
-        "INSERT INTO uso_diario (dia, versao, aparelho, evento, alvo, contagem) VALUES (?, ?, ?, ?, ?, ?) " +
-          "ON CONFLICT (dia, versao, aparelho, evento, alvo) DO UPDATE SET contagem = contagem + excluded.contagem",
-      )
-      .bind(dia, lote.versao, lote.aparelho, s.evento, s.alvo, s.n),
-  );
-  if (jogadorId !== null) {
+  // D1 limita 100 parâmetros por consulta e 50 consultas por invocação:
+  // várias linhas por instrução (6 parâmetros por evento, 3 por tela).
+  const stmts: ReturnType<D1DatabaseLike["prepare"]>[] = [];
+  const linhasEv = [...somas.values()];
+  for (let i = 0; i < linhasEv.length; i += EVENTOS_POR_INSTRUCAO) {
+    const grupo = linhasEv.slice(i, i + EVENTOS_POR_INSTRUCAO);
     stmts.push(
-      db.prepare("INSERT OR IGNORE INTO uso_jogador_dia (dia, jogador, versao) VALUES (?, ?, ?)").bind(dia, jogadorId, lote.versao),
+      db
+        .prepare(
+          "INSERT INTO uso_diario (dia, versao, aparelho, evento, alvo, contagem) VALUES " +
+            grupo.map(() => "(?, ?, ?, ?, ?, ?)").join(", ") +
+            " ON CONFLICT (dia, versao, aparelho, evento, alvo) DO UPDATE SET contagem = contagem + excluded.contagem",
+        )
+        .bind(...grupo.flatMap((g) => [dia, lote.versao, lote.aparelho, g.evento, g.alvo, g.n])),
     );
-    for (const tela of new Set(lote.telas ?? [])) {
+  }
+  const jogador = typeof jogadorId === "string" && jogadorId.trim() !== "" ? jogadorId : null;
+  if (jogador !== null) {
+    stmts.push(
+      db.prepare("INSERT OR IGNORE INTO uso_jogador_dia (dia, jogador, versao) VALUES (?, ?, ?)").bind(dia, jogador, lote.versao),
+    );
+    const telas = [...new Set(lote.telas ?? [])];
+    for (let i = 0; i < telas.length; i += TELAS_POR_INSTRUCAO) {
+      const grupo = telas.slice(i, i + TELAS_POR_INSTRUCAO);
       stmts.push(
-        db.prepare("INSERT OR IGNORE INTO uso_jogador_tela_dia (dia, tela, jogador) VALUES (?, ?, ?)").bind(dia, tela, jogadorId),
+        db
+          .prepare("INSERT OR IGNORE INTO uso_jogador_tela_dia (dia, tela, jogador) VALUES " + grupo.map(() => "(?, ?, ?)").join(", "))
+          .bind(...grupo.flatMap((t) => [dia, t, jogador])),
       );
     }
   }
