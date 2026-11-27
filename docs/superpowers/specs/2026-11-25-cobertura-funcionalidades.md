@@ -513,3 +513,8 @@ Também conferido nesta rodada:
 - **Enquete tipo Nota**: função nova do Beta, fase 1b.
 
 **Resultado:** nada do app de hoje fica sem lugar no Beta.
+
+**Adendo (merge da `main` em 2026-11-27, PRs #957 e #958):** correções de
+músicas sem "Código único" (`gestaoController.ts`, novo
+`adminRepararMusicasSemCodigoController.ts`, `codigoUnicoEdicaoCharts.ts`).
+Só servidor, sem tela nova: nada muda na cobertura do Beta.
