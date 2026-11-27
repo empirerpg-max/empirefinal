@@ -1656,6 +1656,53 @@ para a implementação:
 
 ---
 
+### 6.21 Revisão geral de UX (2026-11-27, protótipo v36)
+
+Rodada automática no protótipo inteiro (todas as telas da lista "Ver", mais
+páginas empilhadas: artista, sala da TV, Gestão de usuários etc.), em
+**320 px e 390 px, modo claro e escuro** (4 combinações), mais capturas de
+**tablet (768 px) e computador (1240 px)**. Critérios: texto saindo do
+botão, aba cortada com "…", rolagem horizontal da página, alvo de toque,
+botões colados (menos de 4 px), contraste WCAG AA e erros de JavaScript.
+
+**Resultado:** nenhum erro de JavaScript, nenhuma aba cortada, nenhum texto
+escapando de botão e nenhum problema de contraste. Corrigido nesta rodada:
+
+| Achado | Correção |
+|---|---|
+| Botões do vídeo da sala com 32 px (troca de player, som, tela cheia, deitar) | 40 px |
+| Fileira do topo do vídeo estourava em 320 px (rolagem horizontal de 6 px) | "Ativar som" vira só o ícone 🔇/🔊 em tela estreita |
+| "↑ Ver mensagens anteriores" com 27 px de altura, "↓ novas" com 32 px | altura mínima de 36 px |
+| Botões "Início do evento" e o círculo de participação com 32 px | altura mínima de 36 px |
+| "Bloquear"/"Bloqueado" com contraste 3,85:1 no modo claro | vermelho de "perigo" com cor própria em cada modo (`#f87171` escuro, `#b91c1c` claro) |
+| Campo "Mensagem" do chat cortando o texto na coluna do computador | espaços menores entre os botões do campo |
+| Título de seção ("Ver todos") colado na fileira de capas | mais espaço abaixo dos títulos de seção |
+
+**O que continua aparecendo e é de propósito:**
+- abas segmentadas coladas (Instagram/Twitter/TikTok, Posts/Reels, Beta
+  test/Versão anterior);
+- fileiras roláveis com seta por cima das abas;
+- comentários de fórum passando da borda dentro de fileiras roláveis.
+
+**Pendências para a implementação (pequenas, não bloqueiam):**
+
+1. **Folga entre botões vizinhos:** em vários lugares a folga entre dois
+   botões vizinhos fica entre 1 e 3 px. Na implementação, usar pelo menos 8 px:
+   - "Avaliar & Comentar" e a lista de faixas do álbum;
+   - "Ver todos" e "Abrir player" no Catálogo;
+   - curtir, comentar, compartilhar e ⋯ no post do Social em 320 px;
+   - tocar e ⋯ na linha do chart.
+2. **Alvos de toque de 32 a 34 px** (Voltar, "Visual", "Meu Ponto", "Trocar
+   capa", "Publicar" do editor): passam do mínimo do WCAG 2.2 (24 px), mas a
+   meta do app é 40 px nos botões principais. Usar 40 px na implementação.
+3. **Tipo "Nota" na Nova enquete:** existe só no protótipo; o app de hoje
+   tem escolha única e múltipla. Implementar só se o usuário quiser (é função
+   nova).
+4. **Sala no tablet:** o app de hoje põe o chat ao lado a partir de 760 px
+   de largura da janela. No tablet com a barra lateral do Beta, a área útil
+   fica abaixo disso e o chat vai para baixo do vídeo, como no celular.
+   Conferir no aparelho se é o que o usuário prefere.
+
 ## 7. Itens que mudam de texto (resquícios de Telegram)
 
 | Onde | Hoje | Novo |

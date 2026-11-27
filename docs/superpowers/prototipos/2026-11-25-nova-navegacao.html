@@ -631,6 +631,21 @@ button.rank{min-width:32px;min-height:40px}
   .stackPage.tvroom:not(.land) .tvComposer{grid-column:2;grid-row:7;border-left:1px solid var(--p-line)}
   .stackPage.tvroom:not(.land) .tvVideo{max-height:calc(100cqh - 200px)}
 }
+/* 2026-11-27 — revisão de UX (v36): alvos de toque de 40px no vídeo da sala,
+   botões do chat com altura mínima, folga entre botões vizinhos e o vermelho
+   de "perigo" com contraste nos dois modos. */
+.stackPage.tvroom .tvIc{width:40px;height:40px}
+.tvSom{height:40px;border-radius:20px;max-width:none;flex:0 1 auto;min-width:40px;justify-content:center}
+.tvVidTop{container-type:inline-size}
+@container (max-width:340px){ .tvSom span{display:none} .tvSom{padding:0;width:40px} }
+.tvOld .tvArr{min-height:36px;display:inline-flex;align-items:center}
+.tvNovas{min-height:36px}
+.txtPerigo{color:#f87171}
+[data-mode="light"] .txtPerigo{color:#b91c1c}
+.h2{margin-bottom:14px}
+.stackPage.tvroom .tvComposer{gap:6px}
+.stackPage.tvroom .tvComposer input{padding:0 12px;min-width:0}
+.tvAdminBtn,.tvPart{min-height:36px}
 </style>
 
 <div class="wrap">
@@ -1366,7 +1381,7 @@ const pages = {
     return {title:'Gestão de usuários', body:`<p class="sub" style="margin:14px 16px 10px">Só admin. Deslogar tira a pessoa de todos os aparelhos (ela entra de novo com a senha). Bloquear desloga e impede de entrar até desbloquear.</p>
       <label class="search" style="margin:0 16px 10px">${svg('search')}<input placeholder="Buscar por nome ou ID" aria-label="Buscar por nome ou ID"></label>
       ${chips(['Todos','Só bloqueados'],'Todos','noop')}
-      <div class="group">${U.map(([n,id,st])=>`<div class="row" style="flex-wrap:wrap;gap:8px"><span class="meta" style="min-width:0;flex:1 1 140px"><b>${n}</b><small>ID ${id}${st==='bloqueado'?' · <span style="color:#dc2626;font-weight:700">Bloqueado</span>':''}</small></span><span style="display:flex;gap:6px;flex-shrink:0">${st==='bloqueado'?`<button class="btn sec" style="height:36px;font-size:12px" data-toast="Desbloquear &quot;${n}&quot;? (confirma antes)">Desbloquear</button>`:`<button class="btn sec" style="height:36px;font-size:12px" data-toast="Deslogar &quot;${n}&quot; de todos os aparelhos? (confirma antes)">Deslogar</button><button class="btn sec" style="height:36px;font-size:12px;color:#dc2626" data-toast="Bloquear &quot;${n}&quot;? Ele será deslogado (confirma antes)">Bloquear</button>`}</span></div>`).join('')}</div>
+      <div class="group">${U.map(([n,id,st])=>`<div class="row" style="flex-wrap:wrap;gap:8px"><span class="meta" style="min-width:0;flex:1 1 140px"><b>${n}</b><small>ID ${id}${st==='bloqueado'?' · <span class="txtPerigo" style="font-weight:700">Bloqueado</span>':''}</small></span><span style="display:flex;gap:6px;flex-shrink:0">${st==='bloqueado'?`<button class="btn sec" style="height:36px;font-size:12px" data-toast="Desbloquear &quot;${n}&quot;? (confirma antes)">Desbloquear</button>`:`<button class="btn sec" style="height:36px;font-size:12px" data-toast="Deslogar &quot;${n}&quot; de todos os aparelhos? (confirma antes)">Deslogar</button><button class="btn sec txtPerigo" style="height:36px;font-size:12px" data-toast="Bloquear &quot;${n}&quot;? Ele será deslogado (confirma antes)">Bloquear</button>`}</span></div>`).join('')}</div>
       <p class="muted small pad" style="margin-top:14px">Sem checagem periódica: o app só confere nas chamadas que já faz. Quem for deslogado volta para a tela de login na próxima ação.</p>`};
   },
   ponto(){
@@ -1471,7 +1486,7 @@ const pages = {
       ${grp('Biblioteca',[['heart','#e11d48','Salvos','37 faixas',`data-go-close="catalogo"`],['list','#7c3aed','Minhas playlists','4',`data-go-close="catalogo"`]])}
       ${grp('Premiações e festivais',[['trophy','#f59e0b','Abrir Premiações','Abertas agora, resultados e seus prêmios',`data-go-close-prem`],['trophy','#f59e0b','Indicar ao VMA','Aberto até 30/11'],['star','#e11d48','Votação','6 categorias',`data-open="votacao"`],['archive','#64748b','Prêmios já ganhos (retroativo)',''],['ticket','#ec4899','Inscrição em festival','Festival de Verão']])}
       ${h2('Aparência')}<div class="seg">${[['dark','Escuro'],['light','Claro'],['system','Sistema']].map(([v,l])=>`<button data-mode-set="${v}" aria-pressed="${v===mode}">${l}</button>`).join('')}</div>
-      ${grp('Admin (só aparece pra admin)',[['rocket','#f59e0b','Beta test: ligado para todos','Trocar para: só convidados · desligado · obrigatório'],['help','#f59e0b','Reportes do Beta','3 novos · 12 resolvidos'],['chart','#0ea5e9','Uso do app','Telas e ações mais usadas na semana · anterior × Beta',`data-open="uso"`],['users','#475569','Entrar como usuário',''],['users','#dc2626','Gestão de usuários','Deslogar, bloquear e desbloquear jogadores',`data-open="usuarios"`],['image','#475569','Banners do Catálogo',''],['tv','#475569','Programação da Empire TV','Vídeos pendentes e publicar'],['list','#475569','Painel do catálogo','Fila de backup e D1 · Atualizar todos os artistas a partir da planilha'],['chart','#0f766e','Metacritic: atualizar agora','O ranking semanal já é automático; isto força na hora']])}
+      ${grp('Admin (só aparece pra admin)',[['rocket','#f59e0b','Beta test: ligado para todos','Trocar para: só convidados · desligado · obrigatório'],['help','#f59e0b','Reportes do Beta','3 novos · 12 resolvidos'],['chart','#0ea5e9','Uso do app','Telas e ações mais usadas na semana · anterior × Beta',`data-open="uso"`],['users','#475569','Entrar como usuário',''],['users','#b91c1c','Gestão de usuários','Deslogar, bloquear e desbloquear jogadores',`data-open="usuarios"`],['image','#475569','Banners do Catálogo',''],['tv','#475569','Programação da Empire TV','Vídeos pendentes e publicar'],['list','#475569','Painel do catálogo','Fila de backup e D1 · Atualizar todos os artistas a partir da planilha'],['chart','#0f766e','Metacritic: atualizar agora','O ranking semanal já é automático; isto força na hora']])}
       ${grp('App',[['bell','#e11d48','Notificações','O que receber no celular'],['send','#0ea5e9','Canais oficiais',''],['help','#64748b','Como usar (tutorial)','Beta test e versão anterior',`data-open="tutorial"`],['help','#f59e0b','Beta test','Reportar problema ou voltar para a versão anterior',`data-toast="Toque no selo BETA, no topo"`],['logout','#475569','Sair','']])}`};
   }
 };
