@@ -1575,12 +1575,43 @@ KickDevDocs #445).
 | # | Opção | Custo | Situação |
 |---|---|---|---|
 | 1 | Abrir o player **parado** (`autoplay=false&muted=false`) com "Toque para assistir com som": o primeiro toque é no play da própria Kick, e o vídeo já começa com som | zero | **Recomendada; em teste.** Página escondida só para admin: `/tv-teste-som` (opções A hoje, B parado, C mudo) |
-| 2 | Player nosso tocando o vídeo da Kick por dentro (endereço interno com senha que expira) | zero | Não recomendada: não oficial, a Kick bloqueia o servidor, pode quebrar |
+| 2 | Player nosso tocando o vídeo da Kick por dentro (endereço interno com senha que expira) | zero | **Escolhida** depois do teste (ver abaixo), com a Kick de reserva |
 | 3 | Transmissor próprio (ex.: Cloudflare Stream Live) com repasse para a Kick; nosso player no app | ~US$ 1 por mil minutos assistidos (~US$ 24 por evento de 200 pessoas × 2 h) | Projeto à parte, se o usuário quiser |
 
-**Decisão pendente (D5):** resultado do teste da opção 1 no iPhone e no
-Android. Se B funcionar, a sala nova abre parada com "Toque para assistir
-com som"; o mini player e o YouTube/Vimeo continuam como hoje.
+**Resultado dos testes (2026-11-27):**
+
+- Opção 1 (`/tv-teste-som`, B parado): **falhou** no aparelho real ("tocou,
+  mas mudo").
+- Opção 2 (`/tv-teste-hls`): **funcionou**. O vídeo da Kick tocou no
+  player do app e o som ligou com um toque no botão do app.
+
+**Decisão (D5): player do app, com a Kick de reserva.** Vale para o app de
+hoje (já implementado) e para o Beta:
+
+- O vídeo vem do `playback_url` que a checagem de "ao vivo" (a cada 12 s)
+  já recebe da Kick. Não há pedido novo ao servidor, não é preciso R2 e
+  não há custo.
+- O botão "Ativar som" é do app: um toque liga o som (iPhone e Android).
+  Botão de tela cheia no canto de baixo. O link novo a cada checagem não
+  reinicia o vídeo.
+- A qualidade vai até o tamanho do player na tela (no celular não baixa
+  1080p), com buffer curto, para usar menos internet e menos memória.
+- **Volta automática para a Kick** quando o vídeo não começa em 20 s,
+  quando dá erro sem conserto (antes: até 3 recomeços de rede e uma
+  recuperação de mídia) ou quando para por 25 s duas vezes. Aparece o
+  aviso "O player do app falhou — voltando para o player da Kick."
+- **Botão de troca** no topo do vídeo ("Player Kick" ⇄ "Player do app";
+  no celular, só o ícone). A escolha fica salva no aparelho.
+- O mini player usa o mesmo player e também tem a volta automática.
+- Risco aceito: o link não é oficial e a Kick pode bloquear ou mudar. Se
+  isso acontecer, todo mundo volta sozinho para o player da Kick (como era
+  antes). A cópia própria no R2 (opção 3, versão grátis) continua sendo o
+  plano B.
+
+**Beta:** a sala nova usa o mesmo `PlayerAppHls`
+(`src/components/EmpireTV/PlayerAppHls.tsx`), com os botões no lugar
+combinado no protótipo (som e troca de player no topo direito, tela cheia
+embaixo à direita).
 
 
 ### 6.20 Auditoria de acessibilidade, toque e telas estreitas (2026-11-26)
@@ -1688,7 +1719,7 @@ fase 3 deve vir logo em seguida (call meu: entregar 2 e 3 juntas se der).
 | ~~D2~~ | ~~Seguidores antigos~~ **Decidido:** só a fórmula para artistas; perfis de mídia mantêm o número da planilha; seguindo = digitado + real. | — | — |
 | ~~D3~~ | **Decidido:** cor por papel (U13). | — | — |
 | D4 | Lista dos controllers `adminDiag*` que podem ser apagados na fase 6 | usuário (na fase 6) | só limpeza |
-| D5 | Som da Kick: resultado do teste da opção 1 (`/tv-teste-som`) no iPhone e no Android; se não funcionar, avaliar a opção 3 | usuário (teste no celular) | sala da TV |
+| ~~D5~~ | ~~Som da Kick~~ **Decidida (2026-11-27):** player do app (HLS da Kick), com volta automática e botão para a Kick; ver 6.19.2 | — | sala da TV |
 | ~~D7~~ | **Decidido:** Geist em todo o Beta (6.17). | — | — |
 | D6 | Participação na TV só pelo tempo presente (mensagem só prova presença no minuto), no lugar de "vale o maior entre presença e chat" | usuário | REGISTRO e prestígio |
 
