@@ -9,6 +9,7 @@ import {
   resumoUso,
   apagarUsoAntigo,
   diaUTC,
+  type ResumoUso,
 } from "../services/usoService";
 
 interface FlagsKvLike {
@@ -51,8 +52,8 @@ export async function registrarUsoController(request: Request): Promise<Response
   } catch {
     return json({ ok: false }, 400);
   }
-  const lote = limparLote(corpo);
-  if (!lote) return json({ ok: false }, 400);
+  // Formato básico antes de olhar a sessão (corpo que nunca é lote → 400 já).
+  if (!limparLote(corpo)) return json({ ok: false }, 400);
 
   try {
     // Jogador: cabeçalho; o sendBeacon não manda cabeçalho, então aceita `token` no corpo.
@@ -66,6 +67,9 @@ export async function registrarUsoController(request: Request): Promise<Response
         jogadorId = (await verifySessionToken(tokenCorpo))?.id ?? null;
       }
     }
+    // Sem sessão válida o lote fica com teto menor (20 eventos, 10 telas).
+    const lote = limparLote(corpo, { comSessao: !!jogadorId });
+    if (!lote) return json({ ok: false }, 400);
     await garantirTabelasUso(db);
     const { gravadas } = await gravarLoteUso(db, lote, jogadorId, Date.now());
     return json({ ok: true, ativo: true, gravadas });
@@ -73,6 +77,17 @@ export async function registrarUsoController(request: Request): Promise<Response
     console.warn("[registrarUsoController] Falhou:", err);
     return json({ ok: false, erro: "Falha ao gravar." }, 500);
   }
+}
+
+// Cache do resumo por período, na memória do isolate: o admin trocando de
+// período (ou vários admins) não relê o D1 a cada vez. Até 5 min de atraso.
+const CACHE_RESUMO_MS = 5 * 60_000;
+const CACHE_RESUMO_MAX = 12;
+const cacheResumo = new Map<string, { expira: number; resumo: ResumoUso }>();
+
+/** Esvazia o cache do resumo (testes). */
+export function limparCacheResumoUso(): void {
+  cacheResumo.clear();
 }
 
 const DIA_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -89,8 +104,16 @@ export async function resumoUsoController(request: Request): Promise<Response> {
   const db = getCatalogoDb();
   if (!db) return json({ ok: false, erro: "Banco indisponível." }, 503);
   try {
+    const chave = `${de}|${ate}`;
+    const agora = Date.now();
+    const guardado = cacheResumo.get(chave);
+    if (guardado && guardado.expira > agora) return json({ ok: true, ...guardado.resumo });
     await garantirTabelasUso(db);
-    return json({ ok: true, ...(await resumoUso(db, de, ate)) });
+    const resumo = await resumoUso(db, de, ate);
+    for (const [k, v] of cacheResumo) if (v.expira <= agora) cacheResumo.delete(k);
+    if (cacheResumo.size >= CACHE_RESUMO_MAX) cacheResumo.delete(cacheResumo.keys().next().value as string);
+    cacheResumo.set(chave, { expira: agora + CACHE_RESUMO_MS, resumo });
+    return json({ ok: true, ...resumo });
   } catch (err) {
     console.warn("[resumoUsoController] Falhou:", err);
     return json({ ok: false, erro: "Falha ao ler." }, 500);

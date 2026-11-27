@@ -621,7 +621,9 @@ function MedicaoTelaAtual() {
     select: (s) => {
       const ultima = s.matches[s.matches.length - 1];
       return ultima
-        ? telaDaRota(ultima.routeId, (s.location.search ?? {}) as Record<string, unknown>)
+        ? // Só a search validada pelas rotas (validateSearch): `match.search` e
+          // `location.search` trazem também chaves cruas da URL que nenhuma rota aceita.
+          telaDaRota(ultima.routeId, (ultima._strictSearch ?? {}) as Record<string, unknown>)
         : "";
     },
   });

@@ -5,6 +5,7 @@ import {
   aparelhoPelaLargura,
   normalizarCaminhoApi,
   telaDaRota,
+  telasDoLote,
 } from "../src/lib/uso/coletor";
 
 describe("ColetorUso", () => {
@@ -138,4 +139,17 @@ test("aparelhoPelaLargura", () => {
   expect(aparelhoPelaLargura(768)).toBe("tablet");
   expect(aparelhoPelaLargura(1023)).toBe("tablet");
   expect(aparelhoPelaLargura(1024)).toBe("computador");
+});
+
+describe("telasDoLote", () => {
+  test("sem token: não manda telas nem marca nenhuma como enviada", () => {
+    expect(telasDoLote(["/a", "/b"], new Set(), false)).toEqual({ telas: undefined, aConfirmar: [] });
+  });
+  test("com token: só as novas, e são elas que ficam marcadas", () => {
+    expect(telasDoLote(["/a", "/b"], new Set(["/a"]), true)).toEqual({ telas: ["/b"], aConfirmar: ["/b"] });
+    expect(telasDoLote(["/a"], new Set(["/a"]), true)).toEqual({ telas: undefined, aConfirmar: [] });
+  });
+  test("com token e armazenamento indisponível: manda todas, sem marcar", () => {
+    expect(telasDoLote(["/a"], null, true)).toEqual({ telas: ["/a"], aConfirmar: [] });
+  });
 });

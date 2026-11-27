@@ -19,6 +19,9 @@ export type ResumoUso = {
 
 const MAX_EVENTOS = 200;
 const MAX_TELAS = 50;
+// Lote sem sessão válida (qualquer um pode mandar): teto bem menor.
+const MAX_EVENTOS_SEM_SESSAO = 20;
+const MAX_TELAS_SEM_SESSAO = 10;
 const MAX_ALVO = 120;
 const MAX_N = 1000;
 const EVENTOS_POR_INSTRUCAO = 16; // 16 x 6 = 96 parâmetros
@@ -51,29 +54,57 @@ export function garantirTabelasUso(db: D1DatabaseLike): Promise<void> {
   return p;
 }
 
-/** Valida e corta o corpo bruto de um lote; devolve null se não houver lote válido. */
-export function limparLote(bruto: unknown): LoteUso | null {
+// Formato dos alvos que o app manda (src/lib/uso/coletor.ts); o resto é descartado,
+// para ninguém pôr texto arbitrário na tela admin com um POST feito à mão.
+// Tela: id da rota (começa por "/") + " › aba" opcional; sem "←" (separador do caminho).
+const TELA_RE = /^\/[^\u0000-\u001f\u007f←]*$/;
+// Ação HTTP: "/api" + segmentos já normalizados (palavra de rota ou ":id").
+const ACAO_API_RE = /^\/api(\/([a-z]+(-[a-z]+){0,3}|:id)?)*$/;
+// Ações que não são HTTP (usoGlobal()?.acao(...)): toda nova precisa entrar aqui.
+const ACOES_ESPECIAIS = ["buscar", "tocar_musica"];
+const SEP_CAMINHO = " ← ";
+
+const telaValida = (t: string) => TELA_RE.test(t);
+const acaoValida = (a: string) => ACOES_ESPECIAIS.includes(a) || ACAO_API_RE.test(a);
+function alvoValido(evento: EventoUso["evento"], alvo: string): boolean {
+  if (evento === "tela") return telaValida(alvo);
+  if (evento === "acao") return acaoValida(alvo);
+  const i = alvo.indexOf(SEP_CAMINHO);
+  return i > 0 && acaoValida(alvo.slice(0, i)) && telaValida(alvo.slice(i + SEP_CAMINHO.length));
+}
+
+/**
+ * Valida e corta o corpo bruto de um lote; devolve null se não houver lote válido.
+ * `comSessao`: o lote veio com sessão válida (tetos 200/50); sem sessão, 20/10.
+ */
+export function limparLote(bruto: unknown, { comSessao = false }: { comSessao?: boolean } = {}): LoteUso | null {
   if (!bruto || typeof bruto !== "object") return null;
   const b = bruto as Record<string, unknown>;
   if (typeof b.versao !== "string" || !VERSOES.includes(b.versao)) return null;
   if (typeof b.aparelho !== "string" || !APARELHOS.includes(b.aparelho)) return null;
   if (!Array.isArray(b.eventos)) return null;
+  const maxEventos = comSessao ? MAX_EVENTOS : MAX_EVENTOS_SEM_SESSAO;
+  const maxTelas = comSessao ? MAX_TELAS : MAX_TELAS_SEM_SESSAO;
   const eventos: EventoUso[] = [];
   for (const e of b.eventos) {
-    if (eventos.length >= MAX_EVENTOS) break;
+    if (eventos.length >= maxEventos) break;
     if (!e || typeof e !== "object") continue;
     const { evento, alvo, n } = e as Record<string, unknown>;
     if (typeof evento !== "string" || !EVENTOS.includes(evento)) continue;
     if (typeof alvo !== "string" || alvo.length === 0) continue;
     if (typeof n !== "number" || !Number.isFinite(n) || n < 1) continue;
-    eventos.push({ evento: evento as EventoUso["evento"], alvo: alvo.slice(0, MAX_ALVO), n: Math.min(MAX_N, Math.floor(n)) });
+    const a = alvo.slice(0, MAX_ALVO);
+    if (!alvoValido(evento as EventoUso["evento"], a)) continue;
+    eventos.push({ evento: evento as EventoUso["evento"], alvo: a, n: Math.min(MAX_N, Math.floor(n)) });
   }
   const lote: LoteUso = { versao: b.versao as LoteUso["versao"], aparelho: b.aparelho as LoteUso["aparelho"], eventos };
   if (Array.isArray(b.telas)) {
     const telas = new Set<string>();
     for (const t of b.telas) {
-      if (telas.size >= MAX_TELAS) break;
-      if (typeof t === "string" && t.length > 0) telas.add(t.slice(0, MAX_ALVO));
+      if (telas.size >= maxTelas) break;
+      if (typeof t !== "string" || t.length === 0) continue;
+      const a = t.slice(0, MAX_ALVO);
+      if (telaValida(a)) telas.add(a);
     }
     lote.telas = [...telas];
   }
@@ -131,11 +162,17 @@ export async function gravarLoteUso(
   return { gravadas: stmts.length };
 }
 
-/** Resumo do período [deDia, ateDia] (inclusive); lê só pela chave que começa por dia. */
+/**
+ * Resumo do período [deDia, ateDia] (inclusive); lê só pela chave que começa por dia.
+ * 3 consultas: uma varredura de `uso_diario` (eventos e aparelho saem da mesma,
+ * somados aqui), jogadores distintos e jogadores distintos por tela.
+ */
 export async function resumoUso(db: D1DatabaseLike, deDia: string, ateDia: string): Promise<ResumoUso> {
-  const [eventos, jog, telaJog, aparelhos] = await Promise.all([
+  const [eventos, jog, telaJog] = await Promise.all([
     db
-      .prepare("SELECT evento, alvo, SUM(contagem) AS n FROM uso_diario WHERE dia BETWEEN ? AND ? GROUP BY evento, alvo ORDER BY n DESC")
+      .prepare(
+        "SELECT aparelho, evento, alvo, SUM(contagem) AS n FROM uso_diario WHERE dia BETWEEN ? AND ? GROUP BY aparelho, evento, alvo",
+      )
       .bind(deDia, ateDia)
       .all(),
     db.prepare("SELECT COUNT(DISTINCT jogador) AS n FROM uso_jogador_dia WHERE dia BETWEEN ? AND ?").bind(deDia, ateDia)
@@ -144,24 +181,25 @@ export async function resumoUso(db: D1DatabaseLike, deDia: string, ateDia: strin
       .prepare("SELECT tela, COUNT(DISTINCT jogador) AS n FROM uso_jogador_tela_dia WHERE dia BETWEEN ? AND ? GROUP BY tela")
       .bind(deDia, ateDia)
       .all(),
-    db
-      .prepare("SELECT aparelho, SUM(contagem) AS n FROM uso_diario WHERE dia BETWEEN ? AND ? GROUP BY aparelho ORDER BY n DESC")
-      .bind(deDia, ateDia)
-      .all(),
   ]);
   const jogadoresPorTela = new Map<string, number>();
   for (const r of (telaJog.results ?? []) as { tela: string; n: number }[]) jogadoresPorTela.set(r.tela, r.n);
+  const porEvento = { tela: new Map<string, number>(), acao: new Map<string, number>(), caminho: new Map<string, number>() };
+  const porAparelho = new Map<string, number>();
+  for (const r of (eventos.results ?? []) as { aparelho: string; evento: string; alvo: string; n: number }[]) {
+    const n = Number(r.n) || 0;
+    porAparelho.set(r.aparelho, (porAparelho.get(r.aparelho) ?? 0) + n);
+    const m = porEvento[r.evento as keyof typeof porEvento];
+    if (m) m.set(r.alvo, (m.get(r.alvo) ?? 0) + n);
+  }
   const porN = <T extends { n: number }>(xs: T[]) => xs.sort((a, b) => b.n - a.n);
-  const lista = (ev: string) =>
-    ((eventos.results ?? []) as { evento: string; alvo: string; n: number }[])
-      .filter((r) => r.evento === ev)
-      .map((r) => ({ alvo: r.alvo, n: r.n }));
+  const lista = (m: Map<string, number>) => porN([...m].map(([alvo, n]) => ({ alvo, n })));
   return {
     jogadores: ((jog.results ?? []) as { n: number }[])[0]?.n ?? 0,
-    telas: porN(lista("tela").map((t) => ({ ...t, jogadores: jogadoresPorTela.get(t.alvo) ?? 0 }))),
-    acoes: porN(lista("acao")),
-    caminhos: porN(lista("caminho")),
-    porAparelho: ((aparelhos.results ?? []) as { aparelho: string; n: number }[]).map((r) => ({ aparelho: r.aparelho, n: r.n })),
+    telas: lista(porEvento.tela).map((t) => ({ ...t, jogadores: jogadoresPorTela.get(t.alvo) ?? 0 })),
+    acoes: lista(porEvento.acao),
+    caminhos: lista(porEvento.caminho),
+    porAparelho: porN([...porAparelho].map(([aparelho, n]) => ({ aparelho, n }))),
   };
 }
 

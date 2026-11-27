@@ -14,8 +14,9 @@ mock.module(R + "services/sessionService.ts", () => ({
 
 const C = await import(R + "controllers/usoController.ts");
 const S = await import(R + "services/usoService.ts");
+const { ColetorUso } = await import("../src/lib/uso/coletor.ts");
 
-const lote = { versao: "anterior", aparelho: "celular", eventos: [{ evento: "tela", alvo: "home", n: 2 }], telas: ["home"] };
+const lote = { versao: "anterior", aparelho: "celular", eventos: [{ evento: "tela", alvo: "/home", n: 2 }], telas: ["/home"] };
 const post = (corpo: unknown, headers: Record<string, string> = {}) =>
   C.registrarUsoController(
     new Request("http://x/api/uso", {
@@ -32,6 +33,7 @@ beforeEach(() => {
   sessao = null;
   admin = false;
   (globalThis as any).__FLAGS_KV__ = undefined;
+  C.limparCacheResumoUso();
 });
 
 test("POST com sessão grava e conta o jogador", async () => {
@@ -87,7 +89,7 @@ test("resumo sem admin → 403; com admin devolve o ResumoUso", async () => {
   const r = await resumo(`de=${dia}&ate=${dia}`);
   expect(r.status).toBe(200);
   const j = await r.json();
-  expect(j.telas).toEqual([{ alvo: "home", n: 2, jogadores: 0 }]);
+  expect(j.telas).toEqual([{ alvo: "/home", n: 2, jogadores: 0 }]);
 });
 
 test("resumo valida datas, ordem e período máximo de 90 dias", async () => {
@@ -107,4 +109,66 @@ test("limparUsoDiaria apaga >90 dias, uma vez por dia", async () => {
   expect(await C.limparUsoDiaria(flags, agora)).toBe(1);
   expect(kv["uso-limpeza-dia"]).toBe("2026-11-27");
   expect(await C.limparUsoDiaria(flags, agora)).toBeNull();
+});
+
+test("POST sem sessão: alvo fora do formato é descartado e o lote fica em 20 eventos", async () => {
+  const eventos = [
+    { evento: "tela", alvo: "texto qualquer na tela admin", n: 1 },
+    ...Array.from({ length: 30 }, (_, i) => ({ evento: "tela", alvo: `/t${i}`, n: 1 })),
+  ];
+  await post({ versao: "anterior", aparelho: "celular", eventos });
+  const rows = sqlite.query("SELECT alvo FROM uso_diario").all() as { alvo: string }[];
+  expect(rows.length).toBe(20);
+  expect(rows.every((r) => r.alvo.startsWith("/t"))).toBe(true);
+});
+
+test("POST com sessão aceita até 200 eventos", async () => {
+  sessao = { id: "j1", usuario: "Ana" };
+  const eventos = Array.from({ length: 30 }, (_, i) => ({ evento: "tela", alvo: `/t${i}`, n: 1 }));
+  await post({ versao: "anterior", aparelho: "celular", eventos }, { authorization: "Bearer x" });
+  expect(sqlite.query("SELECT alvo FROM uso_diario").all().length).toBe(30);
+});
+
+test("resumo fica 5 min em cache por período no isolate", async () => {
+  admin = true;
+  await post(lote);
+  const dia = S.diaUTC(Date.now());
+  const q = `de=${dia}&ate=${dia}`;
+  expect((await (await resumo(q)).json()).telas[0].n).toBe(2);
+  await post(lote);
+  expect((await (await resumo(q)).json()).telas[0].n).toBe(2); // do cache
+  const agoraReal = Date.now;
+  try {
+    const t0 = agoraReal();
+    Date.now = () => t0 + 5 * 60_000 + 1;
+    expect((await (await resumo(q)).json()).telas[0].n).toBe(4); // expirou: relê
+  } finally {
+    Date.now = agoraReal;
+  }
+});
+
+test("ponta a ponta: lote do ColetorUso, JSON com token, gravado no D1", async () => {
+  const c = new ColetorUso(() => 1_000);
+  c.tela("/social › feed");
+  c.tela("/social › feed");
+  c.acao("/api/social/posts", "/social › feed");
+  c.acao("buscar", "/social › feed");
+  c.tela("/forum");
+  const l = c.retirarLote("anterior", "celular")!;
+  const r = await post(JSON.stringify({ ...l, token: "tok-beacon" }));
+  expect((await r.json()).ok).toBe(true);
+  const diario = sqlite.query("SELECT evento, alvo, contagem FROM uso_diario ORDER BY evento, alvo").all();
+  expect(diario).toEqual([
+    { evento: "acao", alvo: "/api/social/posts", contagem: 1 },
+    { evento: "acao", alvo: "buscar", contagem: 1 },
+    { evento: "caminho", alvo: "/api/social/posts ← /social › feed", contagem: 1 },
+    { evento: "caminho", alvo: "buscar ← /social › feed", contagem: 1 },
+    { evento: "tela", alvo: "/forum", contagem: 1 },
+    { evento: "tela", alvo: "/social › feed", contagem: 2 },
+  ]);
+  expect(sqlite.query("SELECT jogador FROM uso_jogador_dia").all()).toEqual([{ jogador: "beacon1" }]);
+  expect(sqlite.query("SELECT tela, jogador FROM uso_jogador_tela_dia ORDER BY tela").all()).toEqual([
+    { tela: "/forum", jogador: "beacon1" },
+    { tela: "/social › feed", jogador: "beacon1" },
+  ]);
 });

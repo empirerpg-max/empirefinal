@@ -55,16 +55,68 @@ test("sem jogador não grava nas tabelas de jogadores", async () => {
 });
 
 test("limparLote corta e descarta o inválido", () => {
-  expect(U.limparLote({ versao: "x" })).toBeNull();
-  expect(U.limparLote(null)).toBeNull();
+  expect(U.limparLote({ versao: "x" }, { comSessao: true })).toBeNull();
+  expect(U.limparLote(null, { comSessao: true })).toBeNull();
   const l = U.limparLote({ versao: "anterior", aparelho: "celular", eventos: [
     ...Array(250).fill({ evento: "tela", alvo: "/a", n: 1 }),
-    { evento: "hack", alvo: "/b", n: 1 }, { evento: "acao", alvo: "x".repeat(500), n: 1 }, { evento: "acao", alvo: "/c", n: 5000 }] });
+    { evento: "hack", alvo: "/b", n: 1 }, { evento: "acao", alvo: "/api/" + "x".repeat(500), n: 1 }, { evento: "acao", alvo: "/api/c", n: 5000 }] }, { comSessao: true });
   expect(l!.eventos.length).toBe(200);
   expect(l!.eventos.every((e) => e.alvo.length <= 120 && e.n >= 1 && e.n <= 1000)).toBe(true);
   const m = U.limparLote({ versao: "beta", aparelho: "tablet", eventos: [
-    { evento: "hack", alvo: "/b", n: 1 }, { evento: "acao", alvo: "x".repeat(500), n: 1 }, { evento: "acao", alvo: "/c", n: 5000 }, { evento: "acao", alvo: "/d", n: 0 }] });
-  expect(m!.eventos.map((e) => [e.alvo.length, e.n])).toEqual([[120, 1], [2, 1000]]);
+    { evento: "hack", alvo: "/b", n: 1 }, { evento: "acao", alvo: "/api/" + "x".repeat(500), n: 1 }, { evento: "acao", alvo: "/api/c", n: 5000 }, { evento: "acao", alvo: "/api/d", n: 0 }] }, { comSessao: true });
+  expect(m!.eventos.map((e) => [e.alvo.length, e.n])).toEqual([[120, 1], [6, 1000]]);
+});
+
+test("limparLote só aceita alvos no formato que o app manda", () => {
+  const eventos = [
+    { evento: "tela", alvo: "/social › feed", n: 1 },
+    { evento: "tela", alvo: "/", n: 1 },
+    { evento: "tela", alvo: "qualquer texto", n: 1 },
+    { evento: "tela", alvo: "/a ← /b", n: 1 },
+    { evento: "acao", alvo: "/api/social/posts/:id", n: 1 },
+    { evento: "acao", alvo: "buscar", n: 1 },
+    { evento: "acao", alvo: "tocar_musica", n: 1 },
+    { evento: "acao", alvo: "/api/Joao Silva", n: 1 },
+    { evento: "acao", alvo: "/apix", n: 1 },
+    { evento: "acao", alvo: "curtir", n: 1 },
+    { evento: "caminho", alvo: "/api/forum/comment ← /forum", n: 1 },
+    { evento: "caminho", alvo: "buscar ← /social › feed", n: 1 },
+    { evento: "caminho", alvo: "/charts>/forum", n: 1 },
+    { evento: "caminho", alvo: "oi ← /forum", n: 1 },
+    { evento: "caminho", alvo: "/api/x ← texto", n: 1 },
+  ];
+  const l = U.limparLote({ versao: "anterior", aparelho: "celular", eventos, telas: ["/social › feed", "lixo", "/forum"] }, { comSessao: true });
+  expect(l!.eventos.map((e) => e.alvo)).toEqual([
+    "/social › feed", "/", "/api/social/posts/:id", "buscar", "tocar_musica",
+    "/api/forum/comment ← /forum", "buscar ← /social › feed",
+  ]);
+  expect(l!.telas).toEqual(["/social › feed", "/forum"]);
+});
+
+test("limparLote sem sessão aceita no máximo 20 eventos e 10 telas", () => {
+  const bruto = {
+    versao: "anterior", aparelho: "celular",
+    eventos: Array.from({ length: 60 }, (_, i) => ({ evento: "tela", alvo: `/t${i}`, n: 1 })),
+    telas: Array.from({ length: 60 }, (_, i) => `/t${i}`),
+  };
+  const sem = U.limparLote(bruto, { comSessao: false });
+  expect(sem!.eventos.length).toBe(20);
+  expect(sem!.telas!.length).toBe(10);
+  const com = U.limparLote(bruto, { comSessao: true });
+  expect(com!.eventos.length).toBe(60);
+  expect(com!.telas!.length).toBe(50);
+});
+
+test("resumoUso lê uso_diario uma vez só e faz 3 consultas no total", async () => {
+  limpar();
+  await U.gravarLoteUso(db, lote([{ evento: "tela", alvo: "/charts", n: 2 }], { telas: ["/charts"] }), "j1", T);
+  const sqls: string[] = [];
+  const dbEspia = { prepare: (q: string) => { sqls.push(q); return db.prepare(q); }, batch: (st: any[]) => db.batch(st) };
+  const r = await U.resumoUso(dbEspia as any, "2026-11-27", "2026-11-27");
+  expect(r.porAparelho).toEqual([{ aparelho: "celular", n: 2 }]);
+  expect(sqls.length).toBe(3);
+  expect(sqls.filter((q) => q.includes("uso_diario")).length).toBe(1);
+  expect(sqls.filter((q) => q.includes("uso_jogador_tela_dia")).length).toBe(1);
 });
 
 test("resumoUso soma o período, conta jogadores distintos e ordena por n", async () => {

@@ -31,7 +31,7 @@ Regras de privacidade (valem para qualquer mudança futura):
 
 - **Query string descartada** (tudo depois de `?` ou `#`). Texto de busca, filtros e ids em query nunca saem do aparelho.
 - **Segmentos de caminho em lista de permissão**: só segmento que é palavra de rota (minúsculas ASCII, até 4 partes ligadas por hífen, até 32 caracteres; regex `SEGMENTO_DE_ROTA` em `src/lib/uso/coletor.ts`) é mantido. Qualquer outro (número, maiúscula, uuid, slug longo) vira `:id`.
-- **Valor de aba** só entra se for curto e sem sequência de 4+ dígitos (`telaDaRota`).
+- **Valor de aba** só entra se a rota o aceitar no `validateSearch` (o app passa a `_strictSearch` do match, não a query crua da URL) e se for curto e sem sequência de 4+ dígitos (`telaDaRota`). Ex.: `/charts?tab=hot100` vira `/charts › hot100`; `/social?tab=qualquer` vira só `/social`.
 - **Nunca se lê corpo de requisição ou resposta.** Conteúdo de comentários/posts, dados pessoais e texto de busca não entram.
 - **Nenhum conteúdo de usuário pode entrar em `alvo`.** Risco residual aceito: um slug todo minúsculo com até 4 palavras (ex.: `joao-silva`) passa na lista de permissão; por isso valores de usuário devem ir na query string, não no caminho.
 - **POSTs automáticos em segundo plano são ignorados** (não são ações do jogador), lista `IGNORADOS` em `coletor.ts`: `/api/uso`, `/api/log-error`, `/api/flags`, `/api/auth/heartbeat`, `/api/tv/presenca`, `/api/notificacoes/push/inscrever`.
@@ -55,7 +55,7 @@ Regras de privacidade (valem para qualquer mudança futura):
 | Rotas da API | `backend/src/routes/api.ts` (`POST /api/uso`, `GET /api/uso/resumo`) |
 | Limpeza no cron | `src/server.ts` (chama `limparUsoDiaria`) |
 | Tabelas do D1 | `d1/schema.sql` (`uso_diario`, `uso_jogador_dia`, `uso_jogador_tela_dia`) |
-| Testes | `scripts/uso-coletor.test.ts`, `uso-nomes.test.ts`, `uso-rotas.test.ts`, `uso-service.test.ts` |
+| Testes | `scripts/uso-coletor.test.ts`, `uso-nomes.test.ts`, `uso-rotas.test.ts` (inclui o teste ponta a ponta: lote real do `ColetorUso` → `registrarUsoController` → D1), `uso-service.test.ts` |
 
 ---
 
@@ -67,18 +67,20 @@ tela muda / fetch (POST...) ──► ColetorUso (memória do aparelho)
                                    │  ou ao esconder/fechar a página (sendBeacon, com `token` no corpo)
                                    ▼
                               POST /api/uso  (lote: versao, aparelho, eventos[], telas[])
-                                   │  limparLote() valida e corta; medicaoUsoLigada() confere o KV
+                                   │  medicaoUsoLigada() confere o KV; limparLote() valida o formato e corta
                                    ▼
                               D1: gravarLoteUso() — soma por dia UTC
 ```
 
 1. **Coletor** (`ColetorUso`): só soma contagens em memória; não usa DOM nem rede.
 2. **Envio** (`envio.ts`): um lote **a cada 5 min enquanto a aba está visível** (`INTERVALO_ENVIO_MS`) e outro em `pagehide`/`visibilitychange→hidden` via `navigator.sendBeacon` (que não passa pelo wrapper de `window.fetch` e não manda cabeçalho, por isso o token vai no corpo). Nunca uma requisição por clique. A versão enviada é sempre `"anterior"` nesta fase.
-3. **Telas do dia**: o aparelho lembra no `localStorage` (`uso-telas-AAAA-MM-DD`) as telas já mandadas hoje, para mandar só as novas (o servidor também deduplica). Dias velhos são apagados.
-4. **Servidor** (`registrarUsoController`): se desligado responde `{ ok:true, ativo:false }`; senão valida o lote, descobre o jogador e grava.
+3. **Telas do dia**: o aparelho lembra no `localStorage` (`uso-telas-AAAA-MM-DD`) as telas já mandadas hoje, para mandar só as novas (o servidor também deduplica). Dias velhos são apagados. **Sem token (não logado) o lote vai sem `telas` e nada é marcado como enviado** (`telasDoLote` em `coletor.ts`): o servidor não grava telas sem jogador, e assim uma tela vista antes do login ainda conta quando o jogador a abrir de novo logado.
+4. **Servidor** (`registrarUsoController`): se desligado responde `{ ok:true, ativo:false }`; senão descobre o jogador (sessão no cabeçalho ou `token` no corpo), valida o lote e grava.
+   - **Formato do `alvo` conferido no servidor** (`limparLote` em `usoService.ts`), para ninguém pôr texto arbitrário na tela admin com um POST feito à mão: `tela` começa com `/` (sem `←` nem caracteres de controle); `acao` é `/api` + segmentos já normalizados (palavra de rota ou `:id`, regex `ACAO_API_RE`) **ou** uma das `ACOES_ESPECIAIS` (`buscar`, `tocar_musica`); `caminho` é `<ação válida> ← <tela válida>`. O que não bate é descartado. O mesmo vale para a lista `telas`.
+   - **Lote sem sessão válida** (qualquer um pode mandar): no máximo **20 eventos e 10 telas**. Com sessão: 200 e 50.
 5. **Gravação** (`gravarLoteUso`): soma eventos repetidos do lote, e grava com **várias linhas por instrução** (UPSERT `contagem = contagem + excluded.contagem`) num único `db.batch`. Respeita os limites do D1: **≤ 100 parâmetros por instrução** (16 eventos × 6 = 96; 33 telas × 3 = 99) e **≤ 50 instruções por invocação** (200 eventos → 13 instruções + 1 jogador + até 2 de telas).
 
-Tetos por lote (coletor e servidor iguais): 200 eventos, 50 telas, `alvo` até 120 caracteres, `n` até 1000 por evento.
+Tetos por lote (coletor e servidor iguais): 200 eventos, 50 telas, `alvo` até 120 caracteres, `n` até 1000 por evento (sem sessão o servidor corta em 20 eventos e 10 telas).
 
 ---
 
@@ -120,8 +122,11 @@ A chave fica dentro do KV `home-config` (o mesmo valor das flags da Home), no ca
 ## 7. Custo (plano gratuito)
 
 - **Requisições**: 1 por envio, ou seja, **1 a cada 5 min por aba visível** (mais 1 ao fechar/esconder).
-- **Gravações no D1** ≈ chaves distintas do lote (cada instrução multi-linha grava várias chaves; o D1 conta por linha escrita). Meta: **≤ ~60 gravações por jogador ativo por dia**. Para isso: telas só novas do dia, `n` somado antes de enviar, ações/caminhos como contador (não evento a evento), nada de requisição por clique.
-- A leitura do resumo usa só a chave que começa por `dia` (`BETWEEN`), no máximo 90 dias por consulta, e só admin dispara.
+- **Gravações no D1** ≈ chaves distintas do lote (cada instrução multi-linha grava várias chaves; o D1 conta por linha escrita). Meta: **≤ ~60 gravações por jogador ativo por dia, em média** — é uma média: uma sessão longa (muitas telas e ações diferentes, vários envios de 5 min) pode passar de 150 num dia. Para isso: telas só novas do dia, `n` somado antes de enviar, ações/caminhos como contador (não evento a evento), nada de requisição por clique.
+- **Leituras do resumo (tela admin)**: o D1 conta **linhas lidas**, e cada resumo lê todas as linhas do período nas 3 tabelas (pela chave que começa por `dia`, `BETWEEN`, no máximo 90 dias). São 3 consultas: **uma só varredura de `uso_diario`** (telas, ações, caminhos e aparelho saem dela), `uso_jogador_dia` e `uso_jogador_tela_dia` (a maior: ~1 linha por jogador × tela × dia). Estimativa com ~500 jogadores ativos/dia: **~70 mil linhas** para "Esta semana" e **~300 mil** para "Últimos 30 dias" (o plano gratuito dá 5 milhões de linhas lidas por dia). Não é barato; por isso há cache:
+  - **no aparelho**: a tela guarda o resultado de cada período já buscado enquanto está aberta (trocar de pílula e voltar não busca de novo);
+  - **no servidor**: cache na memória do isolate por **5 min** por `(de, ate)` (`CACHE_RESUMO_MS` em `usoController.ts`). Os números podem atrasar até 5 min.
+  - Só admin dispara.
 
 ---
 
@@ -134,6 +139,7 @@ Caminho: **Perfil › "Uso do app (admin)"** (aparece só para admin) → `/uso-
 - Listas de **telas** (com quantos jogadores distintos abriram), **ações** e **caminhos**, com nomes amigáveis quando existem (`nomes.ts`); o resto mostra o próprio caminho.
 - **"Atividade por aparelho"** soma **telas + ações + caminhos** por aparelho. Serve para comparar a proporção entre celular/tablet/computador, **não** é número de sessões nem de pessoas.
 - A API `GET /api/uso/resumo?de=AAAA-MM-DD&ate=AAAA-MM-DD` exige admin (403 se não), período válido e no máximo 90 dias.
+- Os números podem estar **até 5 min atrasados** (cache do servidor) e não mudam enquanto a tela fica aberta no mesmo período (cache da tela); para ver o mais novo, saia e entre de novo depois de 5 min.
 
 ---
 
@@ -144,7 +150,8 @@ Caminho: **Perfil › "Uso do app (admin)"** (aparece só para admin) → `/uso-
 | Mudar o intervalo de envio | `INTERVALO_ENVIO_MS` em `src/lib/uso/envio.ts` (hoje 5 min). Mais curto = mais requisições e gravações; reconferir o orçamento |
 | Dar nome amigável a uma ação | Adicionar em `NOMES_DE_ACAO` em `src/lib/uso/nomes.ts` (chave = o `alvo`, ex.: `"/api/forum/comment"`) |
 | Ignorar um novo POST automático | Adicionar o caminho em `IGNORADOS` em `src/lib/uso/coletor.ts`. **Toda chamada nova em segundo plano (timer, check-in, presença, reinscrição) precisa entrar aí**, senão infla "Ações" |
-| Medir outra ação que não é HTTP (como `tocar_musica`) | `usoGlobal()?.acao("nome_curto")` no ponto do código; sem conteúdo de usuário no nome |
+| Medir outra ação que não é HTTP (como `tocar_musica`) | `usoGlobal()?.acao("nome_curto")` no ponto do código; sem conteúdo de usuário no nome. **E adicionar o nome em `ACOES_ESPECIAIS` em `backend/src/services/usoService.ts`**, senão o servidor descarta |
+| Medir uma tela com outro formato de nome | O servidor só aceita tela que começa com `/` (`TELA_RE` em `usoService.ts`); mude os dois lados juntos |
 | Mudar os limites do período da tela | `intervaloDoPeriodo` em `nomes.ts` |
 | Mudar a retenção | `DIAS_GUARDAR_USO` em `usoController.ts` (e o limite de 90 dias do resumo) |
 
@@ -160,6 +167,8 @@ Se mexer em `usoService.ts`, **respeite os limites do D1** (≤ 100 parâmetros 
 - **Em desenvolvimento, o React StrictMode conta a primeira tela duas vezes** (efeito roda 2x). Em produção não acontece.
 - Telas que ficam abertas sem trocar de rota contam 1 abertura; não há tempo de uso.
 - O dia é UTC (ver seção 8).
+- O resumo pode atrasar até 5 min (cache do servidor; ver seção 7).
+- Lote sem sessão: só 20 eventos e 10 telas por envio; o excesso de um visitante não logado muito ativo se perde.
 
 ---
 

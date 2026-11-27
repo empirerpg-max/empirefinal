@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
   CalendarDays,
@@ -56,11 +56,22 @@ function UsoDoAppPage() {
   const periodosScroll = useDragScroll<HTMLDivElement>();
   const intervalo = useMemo(() => intervaloDoPeriodo(periodo), [periodo]);
 
+  // Resultado de cada período já buscado, enquanto a tela está aberta: trocar
+  // de pílula e voltar não busca de novo (cada busca lê o D1; ver o manual).
+  const cache = useRef(new Map<string, ResumoUso>());
+
   useEffect(() => {
     if (!isAdmin) return;
+    const chave = `${intervalo.de}|${intervalo.ate}`;
+    const guardado = cache.current.get(chave);
+    if (guardado) {
+      setEstado({ tipo: "ok", resumo: guardado });
+      return;
+    }
     let vivo = true;
     setEstado({ tipo: "carregando" });
     api.resumoUso(intervalo.de, intervalo.ate).then((r) => {
+      if (r) cache.current.set(chave, r);
       // Ignora resposta de um período que já foi trocado.
       if (!vivo) return;
       setEstado(r ? { tipo: "ok", resumo: r } : { tipo: "erro" });

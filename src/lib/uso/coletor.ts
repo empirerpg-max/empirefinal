@@ -72,6 +72,23 @@ export function telaDaRota(routeId: string, search: Record<string, unknown>): st
   return routeId;
 }
 
+/**
+ * Telas que vão no lote e as que ficam marcadas como enviadas depois da entrega.
+ * Sem token o servidor não grava telas (não há jogador), então nada vai nem é
+ * marcado: senão telas vistas antes do login nunca contariam para o jogador.
+ * `enviadas` null = armazenamento indisponível: manda todas, sem marcar.
+ */
+export function telasDoLote(
+  telas: string[] | undefined,
+  enviadas: Set<string> | null,
+  comToken: boolean,
+): { telas: string[] | undefined; aConfirmar: string[] } {
+  if (!comToken || !telas?.length) return { telas: undefined, aConfirmar: [] };
+  if (!enviadas) return { telas, aConfirmar: [] };
+  const novas = telas.filter((t) => !enviadas.has(t));
+  return novas.length ? { telas: novas, aConfirmar: novas } : { telas: undefined, aConfirmar: [] };
+}
+
 export function aparelhoPelaLargura(px: number): "celular" | "tablet" | "computador" {
   return px < 768 ? "celular" : px < 1024 ? "tablet" : "computador";
 }

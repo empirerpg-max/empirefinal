@@ -6,7 +6,7 @@
 // Nada aqui pode quebrar o app: todo acesso a navegador/armazenamento é
 // protegido e erros são engolidos. Seguro no SSR (só age com `window`).
 
-import { ColetorUso, aparelhoPelaLargura, type LoteUso } from "./coletor";
+import { ColetorUso, aparelhoPelaLargura, telasDoLote, type LoteUso } from "./coletor";
 import { getStoredSessionToken } from "@/components/LoginScreen";
 
 export type MedicaoUso = {
@@ -70,7 +70,8 @@ export function iniciarMedicaoUso(): MedicaoUso {
   /**
    * Tira o lote do coletor, deixando em `telas` só as telas novas do dia.
    * `confirmar()` grava essas telas como enviadas — só depois de o envio ser
-   * aceito (beacon enfileirado / resposta ok), para não perder telas.
+   * aceito (beacon enfileirado / resposta ok), para não perder telas, e só se
+   * o lote foi com token (sem token o servidor não grava telas).
    */
   const montarLote = (): {
     lote: LoteUso & { token?: string };
@@ -78,26 +79,19 @@ export function iniciarMedicaoUso(): MedicaoUso {
   } | null => {
     const lote = coletor.retirarLote("anterior", aparelhoPelaLargura(window.innerWidth));
     if (!lote) return null;
-    let confirmar = () => {};
-    if (lote.telas?.length) {
-      const dia = diaUtc();
-      const enviadas = telasJaEnviadas(dia);
-      if (enviadas) {
-        const novas = lote.telas.filter((t) => !enviadas.has(t));
-        if (novas.length) {
-          lote.telas = novas;
-          confirmar = () => {
-            // Relê o armazenamento: outro envio pode ter gravado no meio tempo.
-            const atuais = telasJaEnviadas(dia) ?? enviadas;
-            for (const t of novas) atuais.add(t);
-            lembrarTelasEnviadas(dia, atuais);
-          };
-        } else {
-          delete lote.telas;
-        }
-      }
-    }
     const token = getStoredSessionToken();
+    const dia = diaUtc();
+    const enviadas = token && lote.telas?.length ? telasJaEnviadas(dia) : null;
+    const { telas, aConfirmar } = telasDoLote(lote.telas, enviadas, !!token);
+    if (telas) lote.telas = telas;
+    else delete lote.telas;
+    const confirmar = () => {
+      if (!aConfirmar.length) return;
+      // Relê o armazenamento: outro envio pode ter gravado no meio tempo.
+      const atuais = telasJaEnviadas(dia) ?? new Set(enviadas);
+      for (const t of aConfirmar) atuais.add(t);
+      lembrarTelasEnviadas(dia, atuais);
+    };
     return { lote: token ? { ...lote, token } : lote, confirmar };
   };
 
