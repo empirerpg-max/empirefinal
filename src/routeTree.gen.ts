@@ -24,6 +24,7 @@ import { Route as TutorialRouteImport } from './routes/tutorial'
 import { Route as TvRouteImport } from './routes/tv'
 import { Route as TvTesteHlsRouteImport } from './routes/tv-teste-hls'
 import { Route as TvTesteSomRouteImport } from './routes/tv-teste-som'
+import { Route as UsoDoAppRouteImport } from './routes/uso-do-app'
 import { Route as AcoesAlbumRouteImport } from './routes/acoes.album'
 import { Route as AcoesCinemaRouteImport } from './routes/acoes.cinema'
 import { Route as AcoesTourRouteImport } from './routes/acoes.tour'
@@ -140,6 +141,11 @@ const TvTesteHlsRoute = TvTesteHlsRouteImport.update({
 const TvTesteSomRoute = TvTesteSomRouteImport.update({
   id: '/tv-teste-som',
   path: '/tv-teste-som',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UsoDoAppRoute = UsoDoAppRouteImport.update({
+  id: '/uso-do-app',
+  path: '/uso-do-app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AcoesAlbumRoute = AcoesAlbumRouteImport.update({
@@ -374,6 +380,7 @@ export interface FileRoutesByFullPath {
   '/tv': typeof TvRoute
   '/tv-teste-hls': typeof TvTesteHlsRoute
   '/tv-teste-som': typeof TvTesteSomRoute
+  '/uso-do-app': typeof UsoDoAppRoute
   '/acoes/album': typeof AcoesAlbumRoute
   '/acoes/cinema': typeof AcoesCinemaRoute
   '/acoes/tour': typeof AcoesTourRoute
@@ -431,6 +438,7 @@ export interface FileRoutesByTo {
   '/tv': typeof TvRoute
   '/tv-teste-hls': typeof TvTesteHlsRoute
   '/tv-teste-som': typeof TvTesteSomRoute
+  '/uso-do-app': typeof UsoDoAppRoute
   '/acoes/album': typeof AcoesAlbumRoute
   '/acoes/cinema': typeof AcoesCinemaRoute
   '/acoes/tour': typeof AcoesTourRoute
@@ -487,6 +495,7 @@ export interface FileRoutesById {
   '/tv': typeof TvRoute
   '/tv-teste-hls': typeof TvTesteHlsRoute
   '/tv-teste-som': typeof TvTesteSomRoute
+  '/uso-do-app': typeof UsoDoAppRoute
   '/acoes/album': typeof AcoesAlbumRoute
   '/acoes/cinema': typeof AcoesCinemaRoute
   '/acoes/tour': typeof AcoesTourRoute
@@ -548,6 +557,7 @@ export interface FileRouteTypes {
     | '/tv'
     | '/tv-teste-hls'
     | '/tv-teste-som'
+    | '/uso-do-app'
     | '/acoes/album'
     | '/acoes/cinema'
     | '/acoes/tour'
@@ -605,6 +615,7 @@ export interface FileRouteTypes {
     | '/tv'
     | '/tv-teste-hls'
     | '/tv-teste-som'
+    | '/uso-do-app'
     | '/acoes/album'
     | '/acoes/cinema'
     | '/acoes/tour'
@@ -660,6 +671,7 @@ export interface FileRouteTypes {
     | '/tv'
     | '/tv-teste-hls'
     | '/tv-teste-som'
+    | '/uso-do-app'
     | '/acoes/album'
     | '/acoes/cinema'
     | '/acoes/tour'
@@ -720,6 +732,7 @@ export interface RootRouteChildren {
   TvRoute: typeof TvRoute
   TvTesteHlsRoute: typeof TvTesteHlsRoute
   TvTesteSomRoute: typeof TvTesteSomRoute
+  UsoDoAppRoute: typeof UsoDoAppRoute
   AcoesAlbumRoute: typeof AcoesAlbumRoute
   AcoesCinemaRoute: typeof AcoesCinemaRoute
   AcoesTourRoute: typeof AcoesTourRoute
@@ -844,6 +857,13 @@ declare module '@tanstack/react-router' {
       path: '/tv-teste-som'
       fullPath: '/tv-teste-som'
       preLoaderRoute: typeof TvTesteSomRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/uso-do-app': {
+      id: '/uso-do-app'
+      path: '/uso-do-app'
+      fullPath: '/uso-do-app'
+      preLoaderRoute: typeof UsoDoAppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/acoes/album': {
@@ -1289,6 +1309,7 @@ const rootRouteChildren: RootRouteChildren = {
   TvRoute: TvRoute,
   TvTesteHlsRoute: TvTesteHlsRoute,
   TvTesteSomRoute: TvTesteSomRoute,
+  UsoDoAppRoute: UsoDoAppRoute,
   AcoesAlbumRoute: AcoesAlbumRoute,
   AcoesCinemaRoute: AcoesCinemaRoute,
   AcoesTourRoute: AcoesTourRoute,

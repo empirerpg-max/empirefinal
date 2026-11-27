@@ -624,6 +624,30 @@ export const api = {
     return Array.isArray(r) ? r : [];
   },
 
+  // ---- Medição de uso (admin) ----
+  /**
+   * Admin: resumo da medição de uso entre dois dias UTC (AAAA-MM-DD, até 90
+   * dias). `null` = falhou (rede, 403, erro do servidor) — distinto de vazio.
+   */
+  async resumoUso(de: string, ate: string): Promise<ResumoUso | null> {
+    try {
+      const res = await fetch(`/api/uso/resumo?de=${encodeURIComponent(de)}&ate=${encodeURIComponent(ate)}`);
+      if (!res.ok) return null;
+      const j = await res.json();
+      if (!j?.ok) return null;
+      const lista = <T,>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : []);
+      return {
+        jogadores: Number(j.jogadores) || 0,
+        telas: lista<ResumoUso["telas"][number]>(j.telas),
+        acoes: lista<ResumoUso["acoes"][number]>(j.acoes),
+        caminhos: lista<ResumoUso["caminhos"][number]>(j.caminhos),
+        porAparelho: lista<ResumoUso["porAparelho"][number]>(j.porAparelho),
+      };
+    } catch {
+      return null;
+    }
+  },
+
   // ---- Empire TV ----
   // Migrado do Apps Script (TV_SCRIPT_URL) pro nosso backend — lê direto a
   // aba Programacao_RPG (planilha Agenda_TV) e já calcula "ao vivo agora"
@@ -2345,6 +2369,15 @@ export const api = {
     });
     return res.json();
   },
+};
+
+/** Resumo da medição de uso (espelha o ResumoUso do backend). */
+export type ResumoUso = {
+  jogadores: number;
+  telas: { alvo: string; n: number; jogadores: number }[];
+  acoes: { alvo: string; n: number }[];
+  caminhos: { alvo: string; n: number }[];
+  porAparelho: { aparelho: string; n: number }[];
 };
 
 export interface ChartData {
