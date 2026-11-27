@@ -17,7 +17,17 @@ const MAX_ALVO = 120;
 const MAX_N = 1000;
 const INTERVALO_BUSCA_MS = 10_000;
 
-const IGNORADOS = ["/api/uso", "/api/log-error", "/api/flags"];
+// Além do próprio envio e de chamadas internas, ignora POSTs automáticos em
+// segundo plano (não são ações do jogador): check-in diário ao abrir o app,
+// presença da Empire TV (a cada 5 min) e reinscrição automática do push.
+const IGNORADOS = [
+  "/api/uso",
+  "/api/log-error",
+  "/api/flags",
+  "/api/auth/heartbeat",
+  "/api/tv/presenca",
+  "/api/notificacoes/push/inscrever",
+];
 // Lista de permissão: só segmentos que são palavras de rota (minúsculas ASCII, até 4
 // partes ligadas por hífen, até 32 caracteres) são mantidos; o resto vira `:id`.
 // Risco residual aceito: um slug todo minúsculo com até 4 palavras (ex.: `joao-silva`)

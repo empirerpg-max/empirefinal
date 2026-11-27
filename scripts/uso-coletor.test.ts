@@ -100,6 +100,16 @@ describe("acaoDaRequisicao", () => {
     expect(acaoDaRequisicao("GET", "/api/busca?q=oi", true)).toBe("buscar");
     expect(acaoDaRequisicao("POST", "/api/uso", true)).toBeNull();
   });
+
+  test("POSTs automáticos em segundo plano não contam como ação", () => {
+    for (const url of [
+      "/api/auth/heartbeat",
+      "/api/tv/presenca",
+      "/api/notificacoes/push/inscrever",
+    ]) {
+      expect(acaoDaRequisicao("POST", url, true)).toBeNull();
+    }
+  });
 });
 
 describe("telaDaRota", () => {

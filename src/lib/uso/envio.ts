@@ -67,36 +67,49 @@ export function iniciarMedicaoUso(): MedicaoUso {
   let parado = false;
   let timer: ReturnType<typeof setInterval> | null = null;
 
-  /** Tira o lote do coletor, deixando em `telas` só as telas novas do dia. */
-  const montarLote = (): (LoteUso & { token?: string }) | null => {
+  /**
+   * Tira o lote do coletor, deixando em `telas` só as telas novas do dia.
+   * `confirmar()` grava essas telas como enviadas — só depois de o envio ser
+   * aceito (beacon enfileirado / resposta ok), para não perder telas.
+   */
+  const montarLote = (): {
+    lote: LoteUso & { token?: string };
+    confirmar: () => void;
+  } | null => {
     const lote = coletor.retirarLote("anterior", aparelhoPelaLargura(window.innerWidth));
     if (!lote) return null;
+    let confirmar = () => {};
     if (lote.telas?.length) {
       const dia = diaUtc();
       const enviadas = telasJaEnviadas(dia);
       if (enviadas) {
         const novas = lote.telas.filter((t) => !enviadas.has(t));
         if (novas.length) {
-          for (const t of novas) enviadas.add(t);
-          lembrarTelasEnviadas(dia, enviadas);
           lote.telas = novas;
+          confirmar = () => {
+            // Relê o armazenamento: outro envio pode ter gravado no meio tempo.
+            const atuais = telasJaEnviadas(dia) ?? enviadas;
+            for (const t of novas) atuais.add(t);
+            lembrarTelasEnviadas(dia, atuais);
+          };
         } else {
           delete lote.telas;
         }
       }
     }
     const token = getStoredSessionToken();
-    return token ? { ...lote, token } : lote;
+    return { lote: token ? { ...lote, token } : lote, confirmar };
   };
 
   const enviarComBeacon = () => {
     if (parado) return;
     try {
-      const lote = montarLote();
-      if (!lote) return;
-      const corpo = JSON.stringify(lote);
+      const pronto = montarLote();
+      if (!pronto) return;
+      const corpo = JSON.stringify(pronto.lote);
       if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
-        navigator.sendBeacon(ROTA_ENVIO, new Blob([corpo], { type: "text/plain" }));
+        const aceito = navigator.sendBeacon(ROTA_ENVIO, new Blob([corpo], { type: "text/plain" }));
+        if (aceito) pronto.confirmar();
       }
     } catch {
       // ignora
@@ -106,16 +119,19 @@ export function iniciarMedicaoUso(): MedicaoUso {
   const enviarComFetch = () => {
     if (parado) return;
     try {
-      const lote = montarLote();
-      if (!lote) return;
+      const pronto = montarLote();
+      if (!pronto) return;
       window
         .fetch(ROTA_ENVIO, {
           method: "POST",
           keepalive: true,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(lote),
+          body: JSON.stringify(pronto.lote),
         })
-        .then((res) => res.json())
+        .then((res) => {
+          if (res.ok) pronto.confirmar();
+          return res.json();
+        })
         .then((dados: unknown) => {
           if (dados && typeof dados === "object" && (dados as { ativo?: unknown }).ativo === false) {
             medicao.parar();
