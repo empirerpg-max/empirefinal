@@ -203,3 +203,52 @@ export function criarDesmontador(
     },
   };
 }
+
+/**
+ * Tempo máximo (ms) que uma ação "que muda de tela" espera a entrada da
+ * camada sair antes de rodar assim mesmo (a ação nunca se perde).
+ */
+export const LIMITE_ESPERA_SAIDA_MS = 500;
+
+/**
+ * Roda `depois` uma única vez, só quando a entrada da camada `marca` já saiu
+ * do histórico (a marca sumiu da pilha `__overlays` do state atual, conferida
+ * no popstate), ou ao estourar `limiteMs` se nenhum popstate chegar (ex.: a
+ * entrada foi reaproveitada por outra camada via replaceState, ou quem
+ * hospeda não fechou). `depois` roda fora do despacho do popstate
+ * (`emSeguida`), para os outros ouvintes (router, desmontador) verem o state
+ * pousado antes de a ação navegar. Se a entrada já não está na pilha ao
+ * começar, roda logo (em `emSeguida`).
+ *
+ * Por quê: navegar (pushState do router) enquanto o go() de fechamento ainda
+ * está em voo deixa a entrada da camada órfã por baixo da rota nova.
+ */
+export function esperarSaidaDaEntrada(opcoes: {
+  marca: string;
+  depois: () => void;
+  lerState: () => unknown;
+  ouvirPopstate: (f: () => void) => () => void;
+  esperar: (f: () => void, ms: number) => () => void;
+  emSeguida: (f: () => void) => void;
+  limiteMs?: number;
+}): void {
+  const { marca, depois, lerState, ouvirPopstate, esperar, emSeguida } = opcoes;
+  let feito = false;
+  let pararDeOuvir = () => {};
+  let cancelarLimite = () => {};
+  const concluir = () => {
+    if (feito) return;
+    feito = true;
+    pararDeOuvir();
+    cancelarLimite();
+    emSeguida(depois);
+  };
+  if (!pilhaDe(lerState()).includes(marca)) {
+    concluir();
+    return;
+  }
+  pararDeOuvir = ouvirPopstate(() => {
+    if (deveFecharNoPopstate(lerState(), marca)) concluir();
+  });
+  cancelarLimite = esperar(concluir, opcoes.limiteMs ?? LIMITE_ESPERA_SAIDA_MS);
+}

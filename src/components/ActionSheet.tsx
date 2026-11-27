@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useHistoryOverlay } from "@/hooks/useHistoryOverlay";
@@ -6,8 +6,15 @@ import { ordenarAcoes, type AcaoMenu } from "@/lib/acoesMenu";
 
 export type { AcaoMenu } from "@/lib/acoesMenu";
 
-// Trava a rolagem do body enquanto houver pelo menos uma folha aberta
-// (contador: folha por cima de folha não destrava cedo demais).
+// useLayoutEffect avisa no servidor; no SSR usa useEffect (que nem roda lá).
+const useEfeitoIsomorfico = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+// Põe overflow:hidden no body enquanto houver pelo menos uma folha aberta
+// (contador: folha por cima de folha não destrava cedo demais). Atenção: hoje
+// o app rola num container interno (src/routes/__root.tsx), não no body, então
+// isto NÃO impede a página de baixo de rolar; só evita a rolagem do body em
+// telas que rolem nele. A folha cobre a tela com o fundo escurecido, que
+// recebe os toques. Travar o container interno fica para quando for preciso.
 let travas = 0;
 let overflowAntes = "";
 function travarRolagem(): () => void {
@@ -22,7 +29,8 @@ function travarRolagem(): () => void {
   };
 }
 
-const FOCAVEIS = 'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+const FOCAVEIS =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Menu ⋯ como folha de baixo (spec 6.3), compartilhado pelas telas Beta.
@@ -34,13 +42,16 @@ const FOCAVEIS = 'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"]
  * - Foco vai para a folha ao abrir e volta para quem estava focado (o botão
  *   ⋯) ao fechar; Tab fica preso dentro da folha.
  *
- * Contrato do `aoEscolher`: escolher uma ação chama `fechar()` e, no MESMO
- * toque (síncrono, sem await/setTimeout no meio), `aoEscolher()`. Assim a
- * entrada desta folha sai do histórico antes de a ação navegar e, se a ação
- * abrir outra folha, a nova reaproveita a entrada desta (sem entrada órfã).
- * aoEscolher roda no mesmo toque; se abrir outra folha, abra de forma
- * síncrona (abrir depois de um await não é coordenado com o go() do
- * histórico ainda em voo).
+ * Contrato do `aoEscolher`:
+ * - Ação comum (abre outra folha, copia, alterna algo): `fechar()` e, no
+ *   MESMO toque (síncrono, sem await/setTimeout no meio), `aoEscolher()`.
+ *   aoEscolher roda no mesmo toque; se abrir outra folha, abra de forma
+ *   síncrona: a nova reaproveita a entrada desta (sem entrada órfã). Abrir
+ *   depois de um await não é coordenado com o go() do histórico em voo.
+ * - Ação que muda de tela: marque `navega: true`. A folha fecha e
+ *   `aoEscolher` só roda depois que a entrada dela saiu do histórico
+ *   (popstate pousado; tempo limite de segurança de ~500 ms), para o voltar
+ *   da tela nova levar à página de antes, sem entrada órfã no meio.
  *
  * SSR-safe: só renderiza (portal no document.body) depois de montar no cliente.
  */
@@ -59,9 +70,13 @@ export function ActionSheet({
   const [montado, setMontado] = useState(false);
   const folhaRef = useRef<HTMLDivElement>(null);
   // Durante a animação de saída o AnimatePresence mantém os filhos do último
-  // render (com aberto=true); o ref diz a verdade e ignora toques nessa hora.
+  // render (com aberto=true); o ref segue a prop REAL (atualizado a cada
+  // commit) e ignora toques nessa hora. Nunca é escrito à mão: se quem
+  // hospeda não fechar, ou reabrir no mesmo lote, a folha segue usável.
   const abertoRef = useRef(aberto);
-  abertoRef.current = aberto;
+  useEfeitoIsomorfico(() => {
+    abertoRef.current = aberto;
+  });
 
   useEffect(() => setMontado(true), []);
 
@@ -144,10 +159,14 @@ export function ActionSheet({
                       key={acao.id}
                       type="button"
                       onClick={() => {
-                        // Mesmo toque, nesta ordem: fecha (entrada do histórico
-                        // sai) e só então a ação. Nada assíncrono no meio.
                         if (!abertoRef.current) return;
-                        abertoRef.current = false;
+                        if (acao.navega) {
+                          // muda de tela: só depois que a entrada da folha saiu
+                          fechar(acao.aoEscolher);
+                          return;
+                        }
+                        // Mesmo toque, nesta ordem: fecha e só então a ação.
+                        // Nada assíncrono no meio.
                         fechar();
                         acao.aoEscolher();
                       }}

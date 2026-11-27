@@ -7,6 +7,8 @@ import {
   deveFecharNoPopstate,
   deveVoltarAoFecharPelaUi,
   entradaEhDaCamada,
+  esperarSaidaDaEntrada,
+  LIMITE_ESPERA_SAIDA_MS,
   type HistoricoLike,
 } from "../src/lib/historicoOverlay";
 
@@ -376,5 +378,105 @@ describe("historicoOverlay", () => {
     f.flush();
     expect(f.chamadasGo.reduce((x, y) => x + y, 0)).toBe(-2);
     expect(f.indice).toBe(0);
+  });
+});
+
+describe("esperarSaidaDaEntrada (ação que navega roda só depois que a entrada saiu)", () => {
+  function montar() {
+    const f = criarHistoricoFalso({ rota: "/pagina" });
+    const timers: Array<{ f: () => void; ms: number; ativo: boolean }> = [];
+    const agendados: Array<() => void> = [];
+    const opcoes = {
+      lerState: () => f.h.state,
+      ouvirPopstate: (cb: () => void) => {
+        f.ouvintes.push(cb);
+        return () => {
+          const i = f.ouvintes.indexOf(cb);
+          if (i >= 0) f.ouvintes.splice(i, 1);
+        };
+      },
+      esperar: (cb: () => void, ms: number) => {
+        const t = { f: cb, ms, ativo: true };
+        timers.push(t);
+        return () => {
+          t.ativo = false;
+        };
+      },
+      // o "depois" roda fora do despacho do popstate (setTimeout 0 no app)
+      emSeguida: (cb: () => void) => agendados.push(cb),
+    };
+    const rodarAgendados = () => agendados.splice(0).forEach((cb) => cb());
+    const estourar = () => timers.filter((t) => t.ativo).forEach((t) => ((t.ativo = false), t.f()));
+    return { f, opcoes, timers, rodarAgendados, estourar };
+  }
+
+  test("não roda antes do popstate; roda depois que a entrada da camada saiu", () => {
+    const { f, opcoes, rodarAgendados } = montar();
+    abrirCamada(f.h, "m1");
+    const chamadas: string[] = [];
+    esperarSaidaDaEntrada({ ...opcoes, marca: "m1", depois: () => chamadas.push(String((f.h.state as any)?.rota)) });
+    rodarAgendados();
+    expect(chamadas).toEqual([]);
+    f.h.back(); // o go() do fechamento pela UI
+    expect(chamadas).toEqual([]);
+    f.flush();
+    expect(chamadas).toEqual([]); // ainda dentro do despacho do popstate
+    rodarAgendados();
+    expect(chamadas).toEqual(["/pagina"]); // roda com a entrada já fora: navegar empurra por cima da página
+    expect(f.ouvintes.length).toBe(0); // ouvinte removido
+  });
+
+  test("popstate em que a marca ainda está na pilha (camada de cima fechou) não dispara", () => {
+    const { f, opcoes, rodarAgendados } = montar();
+    abrirCamada(f.h, "m1");
+    abrirCamada(f.h, "m2");
+    let n = 0;
+    esperarSaidaDaEntrada({ ...opcoes, marca: "m1", depois: () => n++ });
+    f.h.back();
+    f.flush();
+    rodarAgendados();
+    expect(n).toBe(0);
+    f.h.back();
+    f.flush();
+    rodarAgendados();
+    expect(n).toBe(1);
+  });
+
+  test("sem popstate (ex.: entrada reaproveitada por outra camada), o tempo limite roda uma vez", () => {
+    const { f, opcoes, timers, rodarAgendados, estourar } = montar();
+    abrirCamada(f.h, "m1");
+    let n = 0;
+    esperarSaidaDaEntrada({ ...opcoes, marca: "m1", depois: () => n++ });
+    expect(timers[0].ms).toBe(LIMITE_ESPERA_SAIDA_MS);
+    estourar();
+    rodarAgendados();
+    expect(n).toBe(1);
+    f.h.back();
+    f.flush();
+    rodarAgendados();
+    expect(n).toBe(1); // nunca duas vezes
+    expect(f.ouvintes.length).toBe(0);
+  });
+
+  test("depois do popstate, o tempo limite não roda de novo", () => {
+    const { f, opcoes, rodarAgendados, estourar } = montar();
+    abrirCamada(f.h, "m1");
+    let n = 0;
+    esperarSaidaDaEntrada({ ...opcoes, marca: "m1", depois: () => n++ });
+    f.h.back();
+    f.flush();
+    rodarAgendados();
+    estourar();
+    rodarAgendados();
+    expect(n).toBe(1);
+  });
+
+  test("se a entrada já saiu ao começar a esperar, roda logo (sem esperar popstate)", () => {
+    const { f, opcoes, rodarAgendados } = montar();
+    let n = 0;
+    esperarSaidaDaEntrada({ ...opcoes, marca: "m-que-nao-esta", depois: () => n++ });
+    rodarAgendados();
+    expect(n).toBe(1);
+    expect(f.ouvintes.length).toBe(0);
   });
 });
