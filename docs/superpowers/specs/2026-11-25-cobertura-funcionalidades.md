@@ -483,3 +483,33 @@ O que faltava foi colocado no protótipo (versão 36) e no documento de design.
 | Sala no endereço (`/tv?sala=`): recarregar volta para a mesma sala; com a sala aberta o app não recarrega sozinho (pílula "Atualizar") | documentos | comportamento da sala | D |
 | Participação pelo tempo com a sala ou o mini player aberto; botões de admin Início/Término | — | sala da TV › faixa "Só admin" e círculo de % | P |
 | Páginas escondidas de diagnóstico (`/tv-teste-som`, `/tv-teste-hls`) | — | só admin, sem lugar no menu (ficam como hoje) | D |
+
+## 14ª conferência — revisão final antes de começar a migração (2026-11-27)
+
+Varredura automática repetida: 735 rótulos de botões, abas, links e
+`aria-label` em `src/routes` e `src/components`, comparados com a 11ª
+conferência. **61 rótulos novos**, todos conferidos:
+
+| Rótulos novos | De onde vêm | No Beta |
+|---|---|---|
+| Completar (aviso "Complete o perfil"), Salvar estilo, Salvar nacionalidade, Confirmar, Atualizar a partir da planilha, Atualizar todos os artistas | fonte única de artistas (10ª) | página do artista › Gestão; Admin › Painel do catálogo (D) |
+| Gestão de usuários (admin), Todos/Bloqueados, Deslogar, Bloquear, Desbloquear | `gestao-usuarios.tsx`, `perfil.tsx` (13ª) | Meu Império › Admin › Gestão de usuários (P) |
+| Início do evento, Término, Nova enquete, Publicar no chat, Escolha única/Múltipla escolha, Voto anônimo, Resultado só no fim, Adicionar opção, Votar, **Mudar voto**, Encerrar, Ver quem votou/Ocultar, Baixar planilha (CSV), Atualizar | sala da TV (PR #956) | sala da TV (P). "Mudar voto" entrou no protótipo nesta conferência |
+| Ativar som, Tela cheia, Player Kick/Player do app | player do app (D5) | sala da TV › vídeo (P) |
+| Responder, Copiar texto, ↓ novas, ↑ Ver mensagens anteriores, Tentar de novo, Sobre a transmissão, avisos 📊/🏁 de enquete | chat da sala (PR #956) | sala da TV › chat (P) |
+| "Nova versão disponível — atualizar agora" (pílula Atualizar) | `tv.tsx` (sala não recarrega sozinha) | sala da TV (D: comportamento) |
+| Expandir transmissão | `TvMiniPlayer.tsx` | mini player (P) |
+| Canal da Kick, Carregar, Recarregar, Link .m3u8 | `/tv-teste-som`, `/tv-teste-hls` | páginas escondidas de diagnóstico, só admin, sem lugar no menu (ficam como hoje) |
+| Next/Previous slide, Toggle Sidebar | `ui/carousel.tsx`, `ui/sidebar.tsx` (biblioteca, inglês) | componentes de base; textos em português se aparecerem para o jogador |
+
+Também conferido nesta rodada:
+- **Story sem legenda:** o servidor recusava post sem texto (Story, Feed e
+  TikTok só com mídia). Corrigido no app de hoje (`81c9a97`). No Beta vale a
+  mesma regra: legenda, mídia OU material.
+- **Enquete antiga da planilha** (`EnqueteBanner`, aba ENQUETES): desligada
+  por decisão do usuário; as enquetes do chat a substituem. **Não é perda:**
+  a mesma função existe no chat, com mais opções.
+- **Compartilhar do chart** (6.22): função nova do Beta, fase 2.
+- **Enquete tipo Nota**: função nova do Beta, fase 1b.
+
+**Resultado:** nada do app de hoje fica sem lugar no Beta.

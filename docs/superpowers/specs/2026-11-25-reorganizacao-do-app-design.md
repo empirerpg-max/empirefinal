@@ -1773,11 +1773,11 @@ de 360px nos dois tamanhos de texto.
 | Fase | Conteúdo | Depende de |
 |---|---|---|
 | **0a. Medição de uso** (na versão de hoje) | 6.15: envio em lote, tabelas `uso_diario` e `uso_jogador_dia`, chave em `homeFlags`, tela Admin › Uso do app. **Vai ao ar primeiro**, para medir a base por ~4 semanas antes do Beta | — |
-| **0b. Participação na TV e GIFs** (nas duas versões) | 6.19.1: minutos presentes enviados a cada 5 min, tabela `tv_presenca` (uma linha por pessoa), processamento lendo o D1, Presenca_TV com uma linha por pessoa, Início/Término do admin, Participantes com o mesmo número; 6.19.3: GIFs ao vivo, Último uso, todos os GIFs | ~~D6~~ | **Decidido:** a porcentagem é só o tempo com a sala aberta ou o mini player, entre Início e Término marcados pelo admin; mensagens não contam. | — | — |
+| **0b. Sala da TV na versão de hoje** ✅ **feito** ([PR #956](https://github.com/empirerpg-max/empirefinal/pull/956), aguardando merge) | 6.19.1 participação pelo tempo (D1), Início/Término do admin, chat novo, enquetes no chat, player do app (6.19.2), economia de pedidos e de leituras (`2026-11-27-orcamento-d1-e-requisicoes.md`); GIFs "Mais usados/Recentes" já estavam na `main` | — |
 | **0. Fundações** (nada visível muda) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query + cliente de API, tokens de cor com os valores atuais | — |
 | **1. Navegação (Beta test)** | casca nova inteira **atrás do Beta test** (6.11): topo, barra/trilho/barra lateral (6.10), Criar, Meu Império, abas do Início, aviso de mudança, tutorial; chave do admin, reportes e faixa na versão anterior | 0 |
-| **1b. Sala da Empire TV** (Beta) | 6.19: enquetes no chat (6.19.4), vídeo no topo, faixa fina, folhas, chat compacto, "↓ novas", arrastar para responder, reações, celular deitado; som conforme D5 | 0b, 1 |
-| **2. Charts** | Ao vivo = painel do Catálogo; `ChartPlaylist` (só tela). **Nenhuma mudança de backend nem de cálculo.** | 0, 1 |
+| **1b. Sala da Empire TV** (Beta) | 6.19: enquetes no chat (6.19.4, + tipo **Nota**), vídeo no topo, faixa fina, folhas, chat compacto, "↓ novas", arrastar para responder, reações, celular deitado; player do app (D5) | 0b, 1 |
+| **2. Charts** | Ao vivo = painel do Catálogo; `ChartPlaylist` (só tela); **Compartilhar para o Feed/Stories** (6.22). **Nenhuma mudança de backend nem de cálculo.** | 0, 1 (o post usa o Social de hoje) |
 | **3. Catálogo e Fórum** | Catálogo Início novo, Buscar, Biblioteca, `PaginaLancamento` (tópico novo), Fórum na barra, `/meus-lancamentos` | 1, 2 (o painel sai do Catálogo na fase 2) |
 | **4. Social** | D1 do Social + migração, paginação, "Interagindo como", perfil único, configurar perfis, Repostar, Seguir, seguidores calculados, abas que não funcionavam, Compartilhar, saída do Mensagem | 0, 1 |
 | **5. Modo claro** | migração das ~2.800 cores tela a tela, Aparência | 0 (pode correr em paralelo a 2–4, tela a tela) |
@@ -1812,7 +1812,7 @@ fase 3 deve vir logo em seguida (call meu: entregar 2 e 3 juntas se der).
 | D4 | Lista dos controllers `adminDiag*` que podem ser apagados na fase 6 | usuário (na fase 6) | só limpeza |
 | ~~D5~~ | ~~Som da Kick~~ **Decidida (2026-11-27):** player do app (HLS da Kick), com volta automática e botão para a Kick; ver 6.19.2 | — | sala da TV |
 | ~~D7~~ | **Decidido:** Geist em todo o Beta (6.17). | — | — |
-| D6 | Participação na TV só pelo tempo presente (mensagem só prova presença no minuto), no lugar de "vale o maior entre presença e chat" | usuário | REGISTRO e prestígio |
+| ~~D6~~ | ~~Participação na TV~~ **Decidido:** só o tempo com a sala aberta ou o mini player, entre Início e Término do admin; mensagens não contam (feito na fase 0b). | — | — |
 
 ---
 
