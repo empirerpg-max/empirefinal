@@ -17,6 +17,7 @@ import { requestProvesAdmin, extractBearerToken, verifySessionToken } from "../s
 import { registrarLogSistema } from "../services/logSistemaService";
 import { getCatalogoDb } from "../services/catalogoDbService";
 import { mirrorMusicaRowParaD1 } from "./gestaoController";
+import { linhaDoCodigoDaFormula } from "../services/codigoUnicoEdicaoCharts";
 
 type TipoTopico = "musica" | "video" | "album";
 
@@ -301,49 +302,60 @@ export async function marcarPendenteController(request: Request): Promise<Respon
 // BD/55) ou EDIÇÃO CHARTS ÁLBUMS (álbum, código em R/17) — ver
 // lerCodigoUnicoGerado/registrarAlbumNaEdicaoChartsAlbuns em
 // gestaoController.ts.
-async function limparLinhaEdicaoCharts(tipo: TipoTopico, codigoUnico: string): Promise<boolean> {
+async function limparLinhaEdicaoCharts(
+  tipo: TipoTopico,
+  codigoUnico: string,
+  titulo: string,
+): Promise<boolean> {
   if (!codigoUnico) return false;
   if (tipo === "video") return false; // vídeo não tem linha própria em EDIÇÃO CHARTS — usa a da música vinculada, que não deve ser tocada aqui.
-  const sheet = tipo === "album" ? "EDIÇÃO CHARTS ÁLBUMS" : "EDIÇÃO CHARTS";
-  const colCodigo = tipo === "album" ? "R" : "BD";
-  // BUG REAL confirmado em produção (2026-11-12, álbum da Amanda Brokne
-  // "todo bugado" — todas as 18 linhas dela em EDIÇÃO CHARTS (música),
-  // antigas E novas, com "Código único" (coluna BD) vazio): BD em
-  // "EDIÇÃO CHARTS" NUNCA é escrita pelo app — é um ARRAYFORMULA que
-  // spilla a partir do topo da planilha (confirmado pelo admin). O
-  // `lastCol` de limpeza aqui incluía BD, e `updateValues` grava "" numa
-  // célula literal mesmo quando o valor é vazio — escrever ("" ou
-  // qualquer coisa) em QUALQUER célula dentro do range de spill de um
-  // ARRAYFORMULA quebra a fórmula a partir dali, truncando o cálculo pra
-  // ela mesma e pra TODAS as linhas abaixo (o motivo de linhas de 2013,
-  // não só as novas, também estarem sem código). O fix: limpar só até a
-  // coluna ANTERIOR (BC) pra música, nunca tocar em BD, e deixar a
-  // fórmula recalcular o código normalmente depois da linha "limpa"
-  // voltar a ter título preenchido de novo. Álbum é DIFERENTE: "EDIÇÃO
-  // CHARTS ÁLBUMS"!R é gerado pelo PRÓPRIO APP, não por fórmula (ver
-  // registrarAlbumNaEdicaoChartsAlbuns em gestaoController.ts), então
-  // continua sendo limpo normalmente junto (precisa mesmo resetar pra
-  // permitir gerar um código novo depois).
-  const lastColWrite = tipo === "album" ? "R" : "BC";
-  const rows = await googleSheetsService.edicaoCharts.readValues(sheet, `${colCodigo}:${colCodigo}`);
+  if (tipo === "musica") return limparLinhaEdicaoChartsMusica(codigoUnico, titulo);
+  // Álbum: "EDIÇÃO CHARTS ÁLBUMS"!R é gerado pelo PRÓPRIO APP, não por
+  // fórmula (ver registrarAlbumNaEdicaoChartsAlbuns em gestaoController.ts),
+  // então é limpo junto (precisa resetar pra permitir gerar um código novo).
+  const sheet = "EDIÇÃO CHARTS ÁLBUMS";
+  const rows = await googleSheetsService.edicaoCharts.readValues(sheet, "R:R");
   const codigoNorm = normalizeComparison(codigoUnico);
   const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeComparison(r?.[0] || "") === codigoNorm);
   if (rowIndex === -1) return false;
   const linha = rowIndex + 1;
-  // Prefere LIMPAR em vez de apagar a linha de verdade (ver CLAUDE.md desta
-  // task) — várias outras rotinas (cálculo de semanas, multiplicadores)
-  // assumem índice de linha estático aqui; apagar deslocaria tudo abaixo.
-  // updateValues com array vazio não limpa célula nenhuma no Sheets (não
-  // sobrescreve nada) — grava explicitamente uma linha de strings vazias
-  // do tamanho certo, mas SEM incluir a coluna do código único (ver
-  // comentário acima — nunca escrever em cima do ARRAYFORMULA).
-  const colStart = "A";
-  const width = colLetterToIndex(lastColWrite) - colLetterToIndex(colStart) + 1;
-  await googleSheetsService.edicaoCharts.updateValues(
-    sheet,
-    `${colStart}${linha}:${lastColWrite}${linha}`,
-    [new Array(width).fill("")],
-  );
+  // Prefere LIMPAR em vez de apagar a linha de verdade — várias rotinas
+  // (cálculo de semanas, multiplicadores) assumem índice de linha estático.
+  const width = colLetterToIndex("R") - colLetterToIndex("A") + 1;
+  await googleSheetsService.edicaoCharts.updateValues(sheet, `A${linha}:R${linha}`, [
+    new Array(width).fill(""),
+  ]);
+  return true;
+}
+
+// Música — REGRA FIXA: o app só escreve de A até Q em "EDIÇÃO CHARTS". Da
+// R em diante são fórmulas da planilha (Código único em BD, cálculos dos
+// charts); antes isto gravava "" até BC e apagava essas fórmulas na linha.
+// Agora limpa de verdade (values:clear) só A:Q — com B vazio, a própria
+// fórmula de BD devolve vazio pra linha.
+// A linha é achada pelo código em BD; se BD ainda estiver vazio (fórmula
+// não calculou — caso Sparks, 27/11), pela linha que a fórmula associa ao
+// código ("EMP" & linha-1), conferindo o título em B.
+async function limparLinhaEdicaoChartsMusica(codigoUnico: string, titulo: string): Promise<boolean> {
+  const sheet = "EDIÇÃO CHARTS";
+  const rows = await googleSheetsService.edicaoCharts.readValuesFresh(sheet, "A1:BD20000");
+  const codigoNorm = normalizeComparison(codigoUnico);
+  let idx = rows.findIndex((r, i) => i > 0 && normalizeComparison(r?.[55] || "") === codigoNorm);
+  if (idx === -1) {
+    const linhaPrevista = linhaDoCodigoDaFormula(codigoUnico);
+    const r = linhaPrevista ? rows[linhaPrevista - 1] : undefined;
+    if (
+      linhaPrevista &&
+      r &&
+      !(r[55] || "").trim() &&
+      normalizeComparison(r[1] || "") === normalizeComparison(titulo)
+    ) {
+      idx = linhaPrevista - 1;
+    }
+  }
+  if (idx === -1) return false;
+  const linha = idx + 1;
+  await googleSheetsService.edicaoCharts.clearValues(sheet, `A${linha}:Q${linha}`);
   return true;
 }
 
@@ -511,7 +523,7 @@ export async function excluirTopicoController(request: Request): Promise<Respons
 
     // 2. EDIÇÃO CHARTS / EDIÇÃO CHARTS ÁLBUMS — limpa a linha pelo código
     // único (vídeo não tem linha própria aqui, pula).
-    const edicaoChartsLimpa = await limparLinhaEdicaoCharts(tipo, codigoUnico).catch((err) => {
+    const edicaoChartsLimpa = await limparLinhaEdicaoCharts(tipo, codigoUnico, titulo).catch((err) => {
       console.warn("[excluirTopicoController] Erro ao limpar EDIÇÃO CHARTS:", err);
       return false;
     });
