@@ -1611,6 +1611,20 @@ hoje (já implementado) e para o Beta:
   antes). A cópia própria no R2 (opção 3, versão grátis) continua sendo o
   plano B.
 
+**Vídeo limpo (pedido do usuário, 2026-11-27):** o foco é ver e comentar;
+os controles não podem cobrir o vídeo.
+- Só ícones, sem círculos escuros: sombra no ícone e um degradê suave no
+  topo enquanto os controles estão à vista.
+- Ordem: voltar, minimizar e "• AO VIVO" à esquerda; troca de player, tela
+  cheia e som à direita. Nada embaixo: a barra de baixo é livre.
+- No player do app os controles **somem 3,5 s depois do último toque** e
+  voltam ao tocar (ou mexer o mouse) no vídeo. O "Ativar som" fica à vista
+  enquanto o vídeo está mudo; depois de ligar o som, nada fica sobre o
+  vídeo.
+- No player da Kick o toque não chega ao app, então os poucos ícones ficam
+  à vista, mas leves.
+- Já está no app de hoje (`ed2cdcf`) e no protótipo (v40).
+
 **Beta:** a sala nova usa o mesmo `PlayerAppHls`
 (`src/components/EmpireTV/PlayerAppHls.tsx`), com os botões no lugar
 combinado no protótipo (som e troca de player no topo direito, tela cheia

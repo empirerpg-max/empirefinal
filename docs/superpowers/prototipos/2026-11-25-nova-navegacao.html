@@ -129,7 +129,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 .tvSom{height:32px;padding:0 12px;border-radius:16px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;flex-shrink:0;max-width:45%;min-width:0;overflow:hidden;white-space:nowrap}
 .tvSom span{overflow:hidden;text-overflow:ellipsis}
 .tvSom.on span{display:none}
-.tvFs{position:absolute;right:8px;bottom:8px;z-index:2}
+
 .tvPlayerTag{font-size:11px;color:#fff;opacity:.7;background:rgba(0,0,0,.35);padding:3px 8px;border-radius:10px}
 .tvStrip{display:flex;align-items:center;gap:10px;padding:8px 12px 6px;flex-shrink:0;border-bottom:1px solid var(--p-line)}
 .tvStripT{flex:1;min-width:0;text-align:left;padding:2px 4px}
@@ -646,6 +646,20 @@ button.rank{min-width:32px;min-height:40px}
 .stackPage.tvroom .tvComposer{gap:6px}
 .stackPage.tvroom .tvComposer input{padding:0 12px;min-width:0}
 .tvAdminBtn,.tvPart{min-height:36px}
+/* Vídeo limpo (v40): ícones sem círculo escuro, degradê suave no topo e os
+   controles somem 3,5 s depois do último toque (voltam ao tocar no vídeo).
+   O "Ativar som" fica enquanto o vídeo está mudo. */
+.stackPage.tvroom .tvIc{background:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))}
+.stackPage.tvroom .tvVidTop .badge.live{background:transparent;padding:0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))}
+.tvSom{background:rgba(0,0,0,.45);height:32px;border-radius:16px;margin:4px 0}
+.tvSom.on{background:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))}
+.tvVideo::before{content:"";position:absolute;left:0;right:0;top:0;height:64px;background:linear-gradient(rgba(0,0,0,.5),transparent);z-index:1;pointer-events:none;transition:opacity .3s}
+.tvVidTop .tvIc,.tvVidTop .badge,.tvSom.on{transition:opacity .3s}
+.tvVideo.limpo::before{opacity:0}
+.stackPage.tvroom .tvVidTop{gap:0;left:4px;right:4px;top:4px}
+.stackPage.tvroom .tvVidTop .badge.live{white-space:nowrap;margin-left:4px}
+.tvSom{flex:0 0 auto;max-width:none}
+.tvVideo.limpo .tvVidTop .tvIc,.tvVideo.limpo .tvVidTop .badge,.tvVideo.limpo .tvSom.on{opacity:0;pointer-events:none}
 /* Cartão de compartilhar (Charts › ⋯ › Compartilhar) */
 .shWrap{display:flex;justify-content:center}
 .shCard{position:relative;width:min(100%,300px);border-radius:18px;overflow:hidden;background:#0b0b14;color:#fff;display:flex;flex-direction:column;box-shadow:0 14px 40px rgba(0,0,0,.45);font-family:inherit}
@@ -1460,8 +1474,8 @@ const pages = {
     const ms=msgs.split('</button><button class="tvMsg"'); 
     return {title:'Empire TV', cls:'tvroom', body:`
       <div class="tvVideo" style="background:radial-gradient(80% 80% at 70% 20%,#f43f5e,transparent 60%),linear-gradient(160deg,#4c1d95,#020617)">
-        <div class="tvVidTop"><button class="tvIc" data-back data-toast2="min" aria-label="Minimizar (continua tocando)">${svg('chev').replace('class=""','style="width:18px;height:18px;transform:rotate(90deg)"')}</button><span class="badge live">Ao vivo</span><span style="flex:1"></span><button class="tvIc" data-tvswap aria-pressed="false" aria-label="Trocar para o player da Kick">⇄</button><button class="tvSom" data-tvsom2 aria-label="Ativar som">🔇 <span>Ativar som</span></button><button class="tvIc" data-tvland aria-label="Celular deitado (tela cheia)">⤢</button></div>
-        <span class="tvLandTag">Simulação: celular deitado · toque em ⤢ para voltar</span><span class="tvPlayerTag" data-tvplayer-tag>Player do app · vídeo da Kick</span><button class="tvIc tvFs" data-toast="Tela cheia (no iPhone, a tela cheia do próprio vídeo)" aria-label="Tela cheia">⛶</button>
+        <div class="tvVidTop"><button class="tvIc" data-back data-toast2="min" aria-label="Minimizar (continua tocando)">${svg('chev').replace('class=""','style="width:18px;height:18px;transform:rotate(90deg)"')}</button><span class="badge live">Ao vivo</span><span style="flex:1"></span><button class="tvIc" data-tvswap aria-pressed="false" aria-label="Trocar para o player da Kick">⇄</button><button class="tvIc" data-toast="Tela cheia (no iPhone, a tela cheia do próprio vídeo)" aria-label="Tela cheia">⛶</button><button class="tvSom" data-tvsom2 aria-label="Ativar som">🔇 <span>Ativar som</span></button><button class="tvIc" data-tvland aria-label="Celular deitado (tela cheia)">⤢</button></div>
+        <span class="tvLandTag">Simulação: celular deitado · toque em ⤢ para voltar</span>
       </div>
       <div class="tvStrip">
         <button class="tvStripT" data-tvsheet="sobre"><b>Red Carpet do VMA</b><small>${svg('users').replace('class=""','style="width:12px;height:12px;vertical-align:-1px"')} 1.214 assistindo · Sobre</small></button>
@@ -1846,6 +1860,11 @@ box.addEventListener('input', e => {
   res.innerHTML = grupos.length ? grupos.map(([t,l])=>h2(t)+l.slice(0,4).join('')).join('') : `<div class="card" style="margin-top:12px;text-align:center"><b>Nada encontrado para “${q.replace(/[<>&"]/g,'')}”</b><p class="muted small" style="margin:6px 0 0">Confira a grafia ou tente o nome do artista.</p></div>`;
 });
 $('#mini').addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' '){ e.preventDefault(); $('#mini').click(); } });
+/* sala da TV: controles do vídeo somem 3,5 s depois do último toque */
+function tvAcordar(v){ v.dataset.t=Date.now(); v.classList.remove('limpo'); }
+document.addEventListener('pointerdown', e=>{ const v=e.target.closest&&e.target.closest('.tvVideo'); if(v) tvAcordar(v); }, true);
+document.addEventListener('mousemove', e=>{ const v=e.target.closest&&e.target.closest('.tvVideo'); if(v) tvAcordar(v); }, true);
+setInterval(()=>{ document.querySelectorAll('.tvVideo').forEach(v=>{ if(!v.dataset.t) v.dataset.t=Date.now(); if(Date.now()-v.dataset.t>3500) v.classList.add('limpo'); }); }, 500);
 /* sala da TV: arrastar a mensagem para a esquerda = responder; rolar até o fim some o "↓ novas" */
 (function(){
   let m=null,x0=0,dx=0;
