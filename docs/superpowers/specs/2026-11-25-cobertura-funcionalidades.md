@@ -463,3 +463,23 @@ pelas rotas de gravação do servidor (`backend/src/routes/api.ts`).
   continua no formulário do pre-save. Fica como ferramenta manual, igual às
   rotas `admin/diag*`/`fix*`.
 | Destaque de comentários (cartão com o último comentário) na página do lançamento | removido a pedido do usuário; fica o botão fixo "Avaliar & Comentar" e a lista de comentários | P |
+
+## 13ª conferência — o que entrou depois da 12ª (2026-11-27)
+
+Conferido: `main` até `e5cbbcd` (já juntada na branch), os commits da sala da
+Empire TV desta branch (PR #956) e todas as 58 rotas de `src/routes` contra
+este documento e o documento de design. Nenhuma rota ficou sem lugar no Beta.
+O que faltava foi colocado no protótipo (versão 36) e no documento de design.
+
+| Função | Onde estava faltando | No Beta | Status |
+|---|---|---|---|
+| **Gestão de usuários** (admin): buscar por nome ou ID, filtro "Só bloqueados", Deslogar (todos os aparelhos), Bloquear e Desbloquear, sempre com confirmação | protótipo e documentos | Meu Império › Admin › Gestão de usuários | **P** (novo no protótipo) |
+| Quem for deslogado/bloqueado volta para o login na próxima ação (sem checagem periódica) | documentos | comportamento global (fase 0) | D |
+| Player do app na sala: "Ativar som" com um toque, troca ⇄ "Player Kick"/"Player do app" (salva no aparelho), tela cheia, volta automática para a Kick | protótipo | sala da TV › vídeo | **P** (novo no protótipo) |
+| Enquete: **voto anônimo ou público** escolhido por quem cria; "Ver quem votou" na pública (nunca com "resultado só no fim" ainda aberta) | protótipo tinha "Voto secreto" fixo | sala da TV › Nova enquete / cartão da enquete | **P** (corrigido) |
+| Enquete: encerrar sozinho em **2, 5, 10 ou 15 min** (relógio do servidor) | protótipo só tinha "5 min" | sala da TV › Nova enquete | **P** (corrigido) |
+| Enquete: baixar CSV (com a coluna Votantes nas públicas) | — | sala da TV › 📊 Enquetes (admin) | P |
+| Chat: botão "↑ Ver mensagens anteriores" (além de carregar sozinho ao rolar) | protótipo tinha só o texto | sala da TV › chat | **P** (corrigido) |
+| Sala no endereço (`/tv?sala=`): recarregar volta para a mesma sala; com a sala aberta o app não recarrega sozinho (pílula "Atualizar") | documentos | comportamento da sala | D |
+| Participação pelo tempo com a sala ou o mini player aberto; botões de admin Início/Término | — | sala da TV › faixa "Só admin" e círculo de % | P |
+| Páginas escondidas de diagnóstico (`/tv-teste-som`, `/tv-teste-hls`) | — | só admin, sem lugar no menu (ficam como hoje) | D |

@@ -785,7 +785,10 @@ Abre ao tocar na foto do jogador. Grupos, nesta ordem:
 7. **Biblioteca:** Salvos · Minhas playlists (atalhos para o Catálogo).
 8. **Aparência:** Escuro · Claro · Sistema (5.10).
 9. **Admin** (só admin): Entrar como usuário / Voltar a ser admin ·
-   Banners · Programação da Empire TV · Painel do catálogo.
+   **Gestão de usuários** (buscar por nome ou ID, "Só bloqueados",
+   Deslogar de todos os aparelhos, Bloquear, Desbloquear — sempre com
+   confirmação; tela `/gestao-usuarios` de hoje) · Banners · Programação da
+   Empire TV · Painel do catálogo.
 10. **App:** Notificações · Canais oficiais · Guia de Sobrevivência · Sair.
 
 ---

@@ -126,6 +126,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-
 .tvTapIc{width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.2);backdrop-filter:blur(6px);display:grid;place-items:center}
 .tvTapIc svg{width:24px;height:24px}
 .tvVideo.tocando .tvTap{display:none}
+.tvSom{height:32px;padding:0 12px;border-radius:16px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;flex-shrink:0;max-width:45%;min-width:0;overflow:hidden;white-space:nowrap}
+.tvSom span{overflow:hidden;text-overflow:ellipsis}
+.tvSom.on span{display:none}
+.tvFs{position:absolute;right:8px;bottom:8px;z-index:2}
+.tvPlayerTag{font-size:11px;color:#fff;opacity:.7;background:rgba(0,0,0,.35);padding:3px 8px;border-radius:10px}
 .tvStrip{display:flex;align-items:center;gap:10px;padding:8px 12px 6px;flex-shrink:0;border-bottom:1px solid var(--p-line)}
 .tvStripT{flex:1;min-width:0;text-align:left;padding:2px 4px}
 .tvStripT b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1356,6 +1361,14 @@ const pages = {
       ${h2('Ações principais')}<div class="group">${[['Tocar música','9.840'],['Comentar no Fórum','1.212'],['Distribuir pontos','388'],['Publicar lançamento','96']].map(([t,v])=>`<div class="row"><span class="meta"><b>${t}</b></span><span class="end num" style="color:var(--p-fg)">${v}</span></div>`).join('')}</div>
       <p class="muted small pad" style="margin-top:14px">Sem custo: o app junta os eventos e envia em lote; o servidor só soma contadores. Nada de conteúdo de comentários ou buscas é guardado.</p>`};
   },
+  usuarios(){
+    const U=[['lia_star','1024','ativo'],['kai.moreau','1187','ativo'],['duda_rp','1302','bloqueado'],['revisor','1450','ativo']];
+    return {title:'Gestão de usuários', body:`<p class="sub" style="margin:14px 16px 10px">Só admin. Deslogar tira a pessoa de todos os aparelhos (ela entra de novo com a senha). Bloquear desloga e impede de entrar até desbloquear.</p>
+      <label class="search" style="margin:0 16px 10px">${svg('search')}<input placeholder="Buscar por nome ou ID" aria-label="Buscar por nome ou ID"></label>
+      ${chips(['Todos','Só bloqueados'],'Todos','noop')}
+      <div class="group">${U.map(([n,id,st])=>`<div class="row" style="flex-wrap:wrap;gap:8px"><span class="meta" style="min-width:0;flex:1 1 140px"><b>${n}</b><small>ID ${id}${st==='bloqueado'?' · <span style="color:#dc2626;font-weight:700">Bloqueado</span>':''}</small></span><span style="display:flex;gap:6px;flex-shrink:0">${st==='bloqueado'?`<button class="btn sec" style="height:36px;font-size:12px" data-toast="Desbloquear &quot;${n}&quot;? (confirma antes)">Desbloquear</button>`:`<button class="btn sec" style="height:36px;font-size:12px" data-toast="Deslogar &quot;${n}&quot; de todos os aparelhos? (confirma antes)">Deslogar</button><button class="btn sec" style="height:36px;font-size:12px;color:#dc2626" data-toast="Bloquear &quot;${n}&quot;? Ele será deslogado (confirma antes)">Bloquear</button>`}</span></div>`).join('')}</div>
+      <p class="muted small pad" style="margin-top:14px">Sem checagem periódica: o app só confere nas chamadas que já faz. Quem for deslogado volta para a tela de login na próxima ação.</p>`};
+  },
   ponto(){
     return {title:'Ponto', body:`
       <div class="card" style="margin-top:14px;display:flex;gap:12px;align-items:center"><span class="gicon" style="background:#0ea5e9;width:40px;height:40px">${svg('target')}</span><div style="flex:1;min-width:0"><b style="display:block">Semana da divulgação</b><span class="muted small">Saldo: <b class="num" style="color:var(--p-fg)">1.200</b> pontos · distribuídos 0%</span></div></div>
@@ -1407,8 +1420,8 @@ const pages = {
     const ms=msgs.split('</button><button class="tvMsg"'); 
     return {title:'Empire TV', cls:'tvroom', body:`
       <div class="tvVideo" style="background:radial-gradient(80% 80% at 70% 20%,#f43f5e,transparent 60%),linear-gradient(160deg,#4c1d95,#020617)">
-        <div class="tvVidTop"><button class="tvIc" data-back data-toast2="min" aria-label="Minimizar (continua tocando)">${svg('chev').replace('class=""','style="width:18px;height:18px;transform:rotate(90deg)"')}</button><span class="badge live">Ao vivo</span><span style="flex:1"></span><button class="tvIc" data-tvland aria-label="Celular deitado (tela cheia)">⤢</button></div>
-        <span class="tvLandTag">Simulação: celular deitado · toque em ⤢ para voltar</span><button class="tvTap" data-tvsom><span class="tvTapIc">${svg('play')}</span><b>Toque para assistir com som</b><small>O primeiro toque é no play do próprio player da Kick · aguardando o teste no celular</small></button>
+        <div class="tvVidTop"><button class="tvIc" data-back data-toast2="min" aria-label="Minimizar (continua tocando)">${svg('chev').replace('class=""','style="width:18px;height:18px;transform:rotate(90deg)"')}</button><span class="badge live">Ao vivo</span><span style="flex:1"></span><button class="tvIc" data-tvswap aria-pressed="false" aria-label="Trocar para o player da Kick">⇄</button><button class="tvSom" data-tvsom2 aria-label="Ativar som">🔇 <span>Ativar som</span></button><button class="tvIc" data-tvland aria-label="Celular deitado (tela cheia)">⤢</button></div>
+        <span class="tvLandTag">Simulação: celular deitado · toque em ⤢ para voltar</span><span class="tvPlayerTag" data-tvplayer-tag>Player do app · vídeo da Kick</span><button class="tvIc tvFs" data-toast="Tela cheia (no iPhone, a tela cheia do próprio vídeo)" aria-label="Tela cheia">⛶</button>
       </div>
       <div class="tvStrip">
         <button class="tvStripT" data-tvsheet="sobre"><b>Red Carpet do VMA</b><small>${svg('users').replace('class=""','style="width:12px;height:12px;vertical-align:-1px"')} 1.214 assistindo · Sobre</small></button>
@@ -1419,7 +1432,7 @@ const pages = {
       <div class="tvChatWrap">
         <div class="tvPinWrap" data-pinwrap><button class="tvPin" data-tvpin aria-expanded="false"><span class="tvPinBar"></span><span style="min-width:0;flex:1"><b class="small" style="color:var(--p-accent)">📊 Enquete aberta</b><span class="tvPinT" data-tvpin-t>${TVP.polls[0].q}</span></span><span class="small" style="flex-shrink:0;font-weight:800;color:var(--p-accent)" data-pin-lbl>Votar</span>${svg('chev','chev pinChev')}</button><div class="tvPinBody" data-pinbody hidden>${pollCard(TVP.polls[0])}</div></div>
         <div class="tvChat" data-tvchat>
-          <p class="tvOld">↑ Role para cima para ver as mensagens anteriores (carregam sozinhas)</p>
+          <p class="tvOld"><button class="tvArr" data-toast="Carrega as mensagens anteriores (também carregam sozinhas ao rolar para cima)">↑ Ver mensagens anteriores</button></p>
           <p class="tvDay"><span>Hoje · 20:02</span></p>
           ${ms.slice(0,4).join('</button><button class="tvMsg"')}</button>${chegada}<button class="tvMsg"${ms.slice(4).join('</button><button class="tvMsg"')}${pollAviso(TVP.polls[0],'aberta')}
         </div>
@@ -1458,7 +1471,7 @@ const pages = {
       ${grp('Biblioteca',[['heart','#e11d48','Salvos','37 faixas',`data-go-close="catalogo"`],['list','#7c3aed','Minhas playlists','4',`data-go-close="catalogo"`]])}
       ${grp('Premiações e festivais',[['trophy','#f59e0b','Abrir Premiações','Abertas agora, resultados e seus prêmios',`data-go-close-prem`],['trophy','#f59e0b','Indicar ao VMA','Aberto até 30/11'],['star','#e11d48','Votação','6 categorias',`data-open="votacao"`],['archive','#64748b','Prêmios já ganhos (retroativo)',''],['ticket','#ec4899','Inscrição em festival','Festival de Verão']])}
       ${h2('Aparência')}<div class="seg">${[['dark','Escuro'],['light','Claro'],['system','Sistema']].map(([v,l])=>`<button data-mode-set="${v}" aria-pressed="${v===mode}">${l}</button>`).join('')}</div>
-      ${grp('Admin (só aparece pra admin)',[['rocket','#f59e0b','Beta test: ligado para todos','Trocar para: só convidados · desligado · obrigatório'],['help','#f59e0b','Reportes do Beta','3 novos · 12 resolvidos'],['chart','#0ea5e9','Uso do app','Telas e ações mais usadas na semana · anterior × Beta',`data-open="uso"`],['users','#475569','Entrar como usuário',''],['image','#475569','Banners do Catálogo',''],['tv','#475569','Programação da Empire TV','Vídeos pendentes e publicar'],['list','#475569','Painel do catálogo','Fila de backup e D1 · Atualizar todos os artistas a partir da planilha'],['chart','#0f766e','Metacritic: atualizar agora','O ranking semanal já é automático; isto força na hora']])}
+      ${grp('Admin (só aparece pra admin)',[['rocket','#f59e0b','Beta test: ligado para todos','Trocar para: só convidados · desligado · obrigatório'],['help','#f59e0b','Reportes do Beta','3 novos · 12 resolvidos'],['chart','#0ea5e9','Uso do app','Telas e ações mais usadas na semana · anterior × Beta',`data-open="uso"`],['users','#475569','Entrar como usuário',''],['users','#dc2626','Gestão de usuários','Deslogar, bloquear e desbloquear jogadores',`data-open="usuarios"`],['image','#475569','Banners do Catálogo',''],['tv','#475569','Programação da Empire TV','Vídeos pendentes e publicar'],['list','#475569','Painel do catálogo','Fila de backup e D1 · Atualizar todos os artistas a partir da planilha'],['chart','#0f766e','Metacritic: atualizar agora','O ranking semanal já é automático; isto força na hora']])}
       ${grp('App',[['bell','#e11d48','Notificações','O que receber no celular'],['send','#0ea5e9','Canais oficiais',''],['help','#64748b','Como usar (tutorial)','Beta test e versão anterior',`data-open="tutorial"`],['help','#f59e0b','Beta test','Reportar problema ou voltar para a versão anterior',`data-toast="Toque no selo BETA, no topo"`],['logout','#475569','Sair','']])}`};
   }
 };
@@ -1473,7 +1486,7 @@ function pollCard(p){
   const votou = p.meu.length>0, ver = !p.aberta || (votou && !p.soFim);
   const tot=p.votos.reduce((a,b)=>a+b,0);
   const corpo = ver ? pollBars(p) : p.ops.map((o,i)=>`<button class="pOp" data-pvote="${p.id}" data-pi="${i}"><span class="pChk ${p.tipo==='multipla'?'sq':''}">${p.meu.includes(i)?'✓':''}</span>${o}</button>`).join('') + (p.tipo==='multipla'?`<button class="btn pri" style="width:100%;height:36px;margin-top:6px" data-pconf="${p.id}">Votar</button>`:'');
-  return `<div class="pCard" id="poll${p.id}" data-poll="${p.id}"><div class="pHead"><b>📊 ${p.aberta?'Enquete':'Enquete encerrada'}</b><span>${tipo}${p.secreto?' · voto secreto':''}</span></div><p class="pQ">${p.q}</p>${corpo}<div class="pFoot"><span>${tot} votos${p.aberta&&votou&&p.soFim?' · resultado no fim':''}</span>${p.aberta?`<button class="tvAdmOnly pEnc" data-pclose="${p.id}">Encerrar (admin)</button>`:''}</div></div>`;
+  return `<div class="pCard" id="poll${p.id}" data-poll="${p.id}"><div class="pHead"><b>📊 ${p.aberta?'Enquete':'Enquete encerrada'}</b><span>${tipo} · ${p.secreto?'voto anônimo':'voto público'}</span></div><p class="pQ">${p.q}</p>${corpo}<div class="pFoot"><span>${tot} votos${p.aberta&&votou&&p.soFim?' · resultado no fim':''}</span>${!p.secreto&&!(p.soFim&&p.aberta)?`<button class="pEnc" style="color:var(--p-accent)" data-toast="Quem votou: Lia, Kai, Duda (lido só quando alguém toca)">Ver quem votou</button>`:''}${p.aberta?`<button class="tvAdmOnly pEnc" data-pclose="${p.id}">Encerrar (admin)</button>`:''}</div></div>`;
 }
 function pollResultMsg(p){ return `<div class="pCard pRes"><div class="pHead"><b>🏁 Resultado da enquete</b><span>${p.tipo==='multipla'?'Múltipla escolha':'Escolha única'}</span></div><p class="pQ">${p.q}</p>${pollBars(p)}<div class="pFoot"><span>${p.votos.reduce((a,b)=>a+b,0)} votos · guardado em 📊 Enquetes</span></div></div>`; }
 function tvChatAdd(html){ const pg=stack[stack.length-1]; if(!pg) return; const c=pg.querySelector('[data-tvchat]'); if(!c) return; c.insertAdjacentHTML('beforeend',html); c.scrollTo({top:c.scrollHeight,behavior:'smooth'}); }
@@ -1584,7 +1597,7 @@ function openTvSheet(k){
     <label class="cLbl">Pergunta</label><input class="cQ" data-cq placeholder="Ex.: Melhor look da noite?" value="Quem leva Álbum do Ano?">
     <label class="cLbl">Tipo</label><div class="chips" style="padding:0"><button class="chip" data-ctipo="unica" aria-pressed="true">Escolha única</button><button class="chip" data-ctipo="multipla" aria-pressed="false">Múltipla escolha</button><button class="chip" data-ctipo="nota" aria-pressed="false">Nota (como a de hoje)</button></div>
     <div data-cops><label class="cLbl">Opções (2 a 10)</label>${['Nova Valente','Íris Sol','Kai Monroe'].map(o=>`<div class="cOpt"><input value="${o}" aria-label="Opção"></div>`).join('')}<button class="btn sec" style="width:100%;height:36px;margin-top:8px" data-cadd>＋ Adicionar opção</button></div>
-    <label class="cLbl">Configurações</label><div class="chips" style="padding:0"><button class="chip" data-ctog="secreto" aria-pressed="true">Voto secreto</button><button class="chip" data-ctog="soFim" aria-pressed="false">Resultado só no fim</button><button class="chip" data-ctog="auto" aria-pressed="false">Encerrar em 5 min</button></div>
+    <label class="cLbl">Configurações</label><div class="chips" style="padding:0"><button class="chip" data-ctog="secreto" aria-pressed="true">Voto anônimo</button><button class="chip" data-ctog="soFim" aria-pressed="false">Resultado só no fim</button></div><p class="muted small" style="margin:4px 0 0">Anônimo desligado = voto público: quem quiser toca em "Ver quem votou".</p><label class="cLbl">Encerrar sozinho</label><div class="chips" style="padding:0">${['Não','2 min','5 min','10 min','15 min'].map((t,i)=>`<button class="chip" data-cauto="${i}" aria-pressed="${i===0}">${t}</button>`).join('')}</div>
     <button class="btn pri" style="width:100%;margin-top:14px" data-cpub>📊 Publicar no chat</button>`;
   if (k==='enquetes') h = head('📊 Enquetes desta sala','Arquivo do chat: todas as enquetes desta transmissão, com os resultados guardados')+`<div style="max-height:56vh;overflow:auto;margin:0 -12px">${TVP.polls.map(p=>pollCard(p)).join('')}</div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn sec tvAdmOnly" style="flex:1" data-close-sheet data-toast="Planilha baixada: enquete, tipo, opção, votos, % e horário">Baixar planilha (admin)</button><button class="btn pri tvAdmOnly" style="flex:1" data-close-sheet data-tvsheet-after="criar">＋ Nova</button></div>`;
 
@@ -1654,6 +1667,8 @@ box.addEventListener('click', e => {
   if (b.hasAttribute('data-ir-antiga')){ closeSheet(); $('#oldApp').hidden=false; return; }
   if (b.id==='voltarBeta'){ $('#oldApp').hidden=true; return toast('Bem-vindo de volta ao Beta test'); }
   if (b.hasAttribute('data-go-close-prem')){ closeAll(); state.tab='inicio'; state.inicioTab='premiacoes'; return render(); }
+  if (b.hasAttribute('data-tvsom2')){ const on=!b.classList.contains('on'); b.classList.toggle('on',on); b.firstChild.textContent=on?'🔊':'🔇 '; b.setAttribute('aria-label',on?'Tirar o som':'Ativar som'); return toast(on?'Som ligado com um toque (player do app)':'Som desligado'); }
+  if (b.hasAttribute('data-tvswap')){ const k=b.getAttribute('aria-pressed')!=='true'; b.setAttribute('aria-pressed',k); b.setAttribute('aria-label',k?'Voltar para o player do app':'Trocar para o player da Kick'); const t=b.closest('.tvVideo').querySelector('[data-tvplayer-tag]'); if(t) t.textContent=k?'Player da Kick (som pelo player da Kick)':'Player do app · vídeo da Kick'; return toast(k?'Usando o player da Kick · escolha salva neste aparelho':'Usando o player do app'); }
   if (b.hasAttribute('data-tvsom')){ b.closest('.tvVideo').classList.add('tocando'); return toast('Tocando com som: o toque foi dentro do player da Kick'); }
   if (b.hasAttribute('data-tvland')){ const pg=b.closest('.stackPage'), bd=pg.querySelector('.stackBody'); const on=pg.classList.toggle('land'); bd.style.width=on?pg.clientHeight+'px':''; bd.style.height=on?pg.clientWidth+'px':''; if(on) histPush('l'); else if(HIST.pilha[HIST.pilha.length-1]==='l') histTirar(1); return; }
   if (b.hasAttribute('data-tvnovas')){ const c=b.parentElement.querySelector('[data-tvchat]'); c.scrollTo({top:c.scrollHeight,behavior:'smooth'}); b.hidden=true; return; }
@@ -1678,6 +1693,7 @@ box.addEventListener('click', e => {
   if (b.dataset.pclose){ const p=TVP.polls.find(x=>x.id==b.dataset.pclose); p.aberta=false; pollRefresh(p); closeSheet(); tvChatAdd(pollAviso(p,'encerrada')); return toast('Enquete encerrada · resultado publicado no chat'); }
   if (b.hasAttribute('data-tvpin')){ const w=b.closest('[data-pinwrap]'); const body=w.querySelector('[data-pinbody]'); body.hidden=!body.hidden; b.setAttribute('aria-expanded', !body.hidden); w.querySelector('[data-pin-lbl]').textContent = body.hidden ? 'Votar' : 'Recolher'; return; }
   if (b.dataset.ctipo){ b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); const o=$('#sheet [data-cops]'); o.hidden = b.dataset.ctipo==='nota'; return; }
+  if (b.dataset.cauto){ b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); return; }
   if (b.dataset.ctog){ b.setAttribute('aria-pressed', b.getAttribute('aria-pressed')!=='true'); return; }
   if (b.hasAttribute('data-cadd')){ const n=$('#sheet [data-cops]').querySelectorAll('.cOpt').length; if(n>=10) return toast('Máximo de 10 opções'); b.insertAdjacentHTML('beforebegin',`<div class="cOpt"><input placeholder="Opção ${n+1}" aria-label="Opção"></div>`); return; }
   if (b.hasAttribute('data-cpub')){ const sh=$('#sheet'); const q=sh.querySelector('[data-cq]').value.trim()||'Enquete'; const tipo=sh.querySelector('[data-ctipo][aria-pressed="true"]').dataset.ctipo; const tog=k=>sh.querySelector(`[data-ctog="${k}"]`).getAttribute('aria-pressed')==='true';
