@@ -71,6 +71,17 @@ test("lerPresencaGrupo une a pessoa em todos os segmentos", async () => {
   expect((await P.lerPresencaGrupo(db, [])).size).toBe(0);
 });
 
+test("lerPresencaGrupo com jogador lê só a linha dele (círculo da sala, sem varrer a sala toda)", async () => {
+  await P.garantirTabelaPresenca(db);
+  await P.gravarMinutosPresenca(db, { programaId: "row_7", jogadorId: "j3", nome: "Caio", minutos: [20] }, 1);
+  await P.gravarMinutosPresenca(db, { programaId: "row_8", jogadorId: "j3", nome: "Caio", minutos: [21] }, 1);
+  await P.gravarMinutosPresenca(db, { programaId: "row_7", jogadorId: "j4", nome: "Duda", minutos: [20] }, 1);
+  const m = await P.lerPresencaGrupo(db, ["row_7", "row_8"], "j3");
+  expect([...m.keys()]).toEqual(["j3"]);
+  expect(m.get("j3")).toEqual({ nome: "Caio", minutos: [20, 21] });
+  expect((await P.lerPresencaGrupo(db, ["row_7"], "ninguem")).size).toBe(0);
+});
+
 test("apagarPresencaAntiga remove só as mais velhas", async () => {
   await P.garantirTabelaPresenca(db);
   await P.gravarMinutosPresenca(db, { programaId: "row_9", jogadorId: "velho", nome: "V", minutos: [1] }, 100);

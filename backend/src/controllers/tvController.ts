@@ -302,6 +302,9 @@ export async function listarPresencaTVController(request: Request): Promise<Resp
   try {
     const url = new URL(request.url);
     const programaId = normalizeText(url.searchParams.get("programa_id"));
+    // `jogador_id`: só a linha dessa pessoa (círculo da sala). Sem ele, a sala
+    // toda (aba Participantes).
+    const soJogador = normalizeText(url.searchParams.get("jogador_id")) || undefined;
     if (!programaId) {
       return new Response(JSON.stringify({ success: true, data: [] }), {
         status: 200,
@@ -316,7 +319,7 @@ export async function listarPresencaTVController(request: Request): Promise<Resp
         await garantirTabelaPresenca(db);
         const grupo = agruparTransmissoes(await readProgramas()).find((g) => g.rowIds.includes(programaId));
         if (grupo) {
-          const porJogador = await lerPresencaGrupo(db, grupo.rowIds);
+          const porJogador = await lerPresencaGrupo(db, grupo.rowIds, soJogador);
           if (porJogador.size > 0) {
             const flags = (globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined;
             const agora = Date.now();
@@ -344,6 +347,7 @@ export async function listarPresencaTVController(request: Request): Promise<Resp
       if (normalizeComparison(r[1]) !== normId) continue;
       const telegramId = normalizeText(r[2]);
       if (!telegramId) continue;
+      if (soJogador && telegramId !== soJogador) continue;
       const seconds = Number(r[4] || 0);
       const atual = porPessoa.get(telegramId);
       if (!atual || seconds > atual.watched_seconds) {

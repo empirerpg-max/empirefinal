@@ -919,13 +919,16 @@ export const api = {
       return null;
     }
   },
+  /** Presença da sala. Com `jogadorId`, só a linha dessa pessoa (lê 1 linha no D1, não a sala toda). */
   async listarPresencaTV(
     programa_id: string,
+    jogadorId?: string,
   ): Promise<
     Array<{ telegram_id: string; nome: string; watched_seconds: number; percentual: number }>
   > {
     try {
-      const res = await fetch(`/api/tv/presenca?programa_id=${encodeURIComponent(programa_id)}`);
+      const so = jogadorId ? `&jogador_id=${encodeURIComponent(jogadorId)}` : "";
+      const res = await fetch(`/api/tv/presenca?programa_id=${encodeURIComponent(programa_id)}${so}`);
       if (!res.ok) return [];
       const json = await res.json();
       const data = Array.isArray(json?.data) ? json.data : [];

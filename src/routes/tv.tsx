@@ -1109,9 +1109,11 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   // A presença é contada pelo PresencaTVTracker (montado no TvPlayerProvider),
   // que vale tanto pra sala quanto pro mini player — nada de heartbeat aqui.
 
-  // Uma busca só de GET /api/tv/presenca alimenta o círculo "Sua
-  // participação" (linha do próprio jogador = o % que vai ser creditado) e a
-  // aba Participantes: a cada 30 s com a aba aberta, 60 s fora dela.
+  // GET /api/tv/presenca alimenta o círculo "Sua participação" (linha do
+  // próprio jogador = o % que vai ser creditado) e a aba Participantes. Fora
+  // da aba, pede SÓ a linha do jogador (1 linha lida no D1 por minuto, em vez
+  // da sala inteira por pessoa — com 200 pessoas isso estourava o limite
+  // diário do D1); com a aba aberta, a sala toda a cada 60 s.
   const [presencaRows, setPresencaRows] = useState<PresencaRow[]>([]);
   const [presencaCarregando, setPresencaCarregando] = useState(true);
   const participantesAberto = tab === "participantes";
@@ -1124,13 +1126,14 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     if (!presencaAtiva) return;
     let alive = true;
     const load = () => {
-      api.listarPresencaTV(programa.id)
+      api.listarPresencaTV(programa.id, participantesAberto ? undefined : String(myId))
         .then((r) => { if (alive) setPresencaRows(r); })
         .catch(() => {})
         .finally(() => { if (alive) setPresencaCarregando(false); });
     };
     load();
-    const t = setInterval(load, participantesAberto ? 30_000 : 60_000);
+    // 60 s nos dois casos: a lista completa lê uma linha por pessoa da sala.
+    const t = setInterval(load, 60_000);
     return () => { alive = false; clearInterval(t); };
   }, [programa.id, presencaAtiva, participantesAberto]);
   const meuPct = useMemo(() => {

@@ -114,16 +114,26 @@ export async function gravarMinutosPresenca(
 }
 
 /** Une as linhas de cada pessoa em todos os segmentos (lida pela chave primária). */
+/**
+ * Presença do grupo (todos os segmentos da transmissão). Com `jogadorId`, lê
+ * só a linha dessa pessoa (busca pela chave: uma linha por segmento) — é o
+ * que o círculo "Sua participação" usa a cada minuto; a sala inteira só é
+ * lida para a aba Participantes e para o processamento.
+ */
 export async function lerPresencaGrupo(
   db: D1DatabaseLike,
   rowIds: string[],
+  jogadorId?: string,
 ): Promise<Map<string, { nome: string; minutos: number[] }>> {
   const out = new Map<string, { nome: string; minutos: number[] }>();
   if (rowIds.length === 0) return out;
   const marcas = rowIds.map(() => "?").join(",");
   const r = await db
-    .prepare(`SELECT jogador_id, nome, minutos FROM tv_presenca WHERE programa_id IN (${marcas})`)
-    .bind(...rowIds)
+    .prepare(
+      `SELECT jogador_id, nome, minutos FROM tv_presenca WHERE programa_id IN (${marcas})` +
+        (jogadorId ? " AND jogador_id = ?" : ""),
+    )
+    .bind(...rowIds, ...(jogadorId ? [jogadorId] : []))
     .all<{ jogador_id: string; nome: string | null; minutos: string }>();
   for (const row of r.results) {
     const ant = out.get(row.jogador_id);

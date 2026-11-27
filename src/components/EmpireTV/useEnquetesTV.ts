@@ -16,7 +16,7 @@ export interface EnquetesTV {
 /**
  * Enquetes da sala, uma busca só para a aba, a faixa do chat e os avisos.
  * Atualiza a cada 5 s só enquanto `ativo` (aba Enquetes ou faixa expandida
- * visível) e a página está visível; fora disso, quem chama pede
+ * visível), há enquete aberta e a página está visível; fora disso, quem chama pede
  * `recarregar()` (aviso ENQ::/ENQRES:: chegando, abrir a aba). Também busca
  * ao voltar a página para visível e logo depois do horário de encerramento
  * automático de uma enquete aberta (o servidor fecha na leitura).
@@ -48,14 +48,21 @@ export function useEnquetesTV(programaId: string, ativo: boolean): EnquetesTV {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [programaId, recarregar]);
 
+  // Ao abrir a aba/faixa: uma busca. Atualização a cada 5 s SÓ enquanto há
+  // enquete aberta (placar mudando) — sem enquete aberta nada muda, e uma
+  // nova chega pelo aviso ENQ:: do chat. Sem isso, quem deixasse a aba
+  // Enquetes aberta a transmissão inteira faria 720 pedidos por hora.
   useEffect(() => {
-    if (!ativo) return;
-    void recarregar();
+    if (ativo) void recarregar();
+  }, [ativo, recarregar]);
+  const temAberta = lista.some((e) => e.aberta);
+  useEffect(() => {
+    if (!ativo || !temAberta) return;
     const t = setInterval(() => {
       if (document.visibilityState === "visible") void recarregar();
     }, INTERVALO_MS);
     return () => clearInterval(t);
-  }, [ativo, recarregar]);
+  }, [ativo, temAberta, recarregar]);
 
   // Encerramento automático: busca de novo logo depois do horário, para a
   // faixa sumir e o resultado aparecer mesmo sem nada visível atualizando.
