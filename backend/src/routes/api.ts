@@ -2763,7 +2763,7 @@ export async function handleEmpireApiRoutes(
         response = await calcularFortunaChartsController();
         break;
       case "/api/tv/programas":
-        response = await getProgramasTVController();
+        response = await getProgramasTVController(request);
         break;
       case "/api/gestao/musicas-em-chart":
         response = await getMusicasEmChartController();

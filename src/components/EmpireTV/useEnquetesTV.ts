@@ -4,7 +4,7 @@ import { api, type EnqueteTV } from "@/lib/api";
 export const ENQ_PREFIX = "ENQ::";
 export const ENQRES_PREFIX = "ENQRES::";
 
-const INTERVALO_MS = 5_000;
+const INTERVALO_MS = 10_000;
 
 export interface EnquetesTV {
   lista: EnqueteTV[];
@@ -15,7 +15,7 @@ export interface EnquetesTV {
 
 /**
  * Enquetes da sala, uma busca só para a aba, a faixa do chat e os avisos.
- * Atualiza a cada 5 s só enquanto `ativo` (aba Enquetes ou faixa expandida
+ * Atualiza a cada 10 s só enquanto `ativo` (aba Enquetes ou faixa expandida
  * visível), há enquete aberta e a página está visível; fora disso, quem chama pede
  * `recarregar()` (aviso ENQ::/ENQRES:: chegando, abrir a aba). Também busca
  * ao voltar a página para visível e logo depois do horário de encerramento
@@ -48,7 +48,7 @@ export function useEnquetesTV(programaId: string, ativo: boolean): EnquetesTV {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [programaId, recarregar]);
 
-  // Ao abrir a aba/faixa: uma busca. Atualização a cada 5 s SÓ enquanto há
+  // Ao abrir a aba/faixa: uma busca. Atualização a cada 10 s SÓ enquanto há
   // enquete aberta (placar mudando) — sem enquete aberta nada muda, e uma
   // nova chega pelo aviso ENQ:: do chat. Sem isso, quem deixasse a aba
   // Enquetes aberta a transmissão inteira faria 720 pedidos por hora.

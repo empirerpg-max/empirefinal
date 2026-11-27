@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -7,7 +6,6 @@ import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Arc
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost, type EnquetePayload } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
-import { getKickStatus } from "@/lib/kick.functions";
 import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { useTelegramUser } from "@/lib/telegram";
 import { useImageCrop } from "@/hooks/use-image-crop";
@@ -327,65 +325,45 @@ function TvPage() {
   // a sala pedida no endereço espera a próxima tentativa).
   const [gradeCarregada, setGradeCarregada] = useState(false);
   const [liveChannels, setLiveChannels] = useState<Record<string, { viewers?: number; title?: string; playbackUrl?: string }>>({});
-  const fetchKick = useServerFn(getKickStatus);
 
   // Recarrega a grade periodicamente — antes buscava só uma vez ao abrir a
   // tela, então marcar uma transmissão como "ao vivo" na planilha (pra
   // canais que não são Kick, cuja checagem abaixo só cobre Kick) só
   // aparecia pra quem desse reload manual na página. Com o polling, todo
   // mundo já vendo a tela do TV pega a mudança sozinho.
+  //
+  // Um pedido só traz a grade E o "está ao vivo?" da Kick (antes eram dois
+  // pedidos a cada 12 s por pessoa). Dentro da sala (vídeo já tocando), a
+  // cada 60 s — o limite grátis do Worker é de 100 mil pedidos por dia e a
+  // sala só precisa notar mudança de status; na lista da TV, a cada 12 s.
+  const naSala = !!watching && !floating;
   useEffect(() => {
     let alive = true;
     const load = () => {
-      api.listarProgramasTV()
-        .then((list) => {
-          if (!alive) return;
-          setProgramasRaw(list);
+      api.listarProgramasTVComKick()
+        .then((r) => {
+          if (!alive || !r.ok) return;
+          setProgramasRaw(r.programas);
           setGradeCarregada(true);
+          // Detecta ao vivo direto pela API do Kick (fonte da verdade).
+          const next: Record<string, { viewers?: number; title?: string; playbackUrl?: string }> = {};
+          for (const [ch, k] of Object.entries(r.kick))
+            if (k?.live) next[ch.toLowerCase()] = { viewers: k.viewers, title: k.title, playbackUrl: k.playbackUrl || undefined };
+          setLiveChannels(next);
         })
         .catch(() => {})
         .finally(() => alive && setLoading(false));
     };
     load();
-    const id = setInterval(load, 12_000);
+    const id = setInterval(load, naSala ? 60_000 : 12_000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
-
-  // Detecta ao vivo direto pela API do Kick (fonte da verdade).
-  useEffect(() => {
-    let alive = true;
-    const channels = new Set<string>();
-    for (const p of programasRaw) {
-      const slug = kickChannelFromUrl(p.stream_url);
-      if (slug) channels.add(slug);
-    }
-    if (channels.size === 0) { setLiveChannels({}); return; }
-
-    const tick = async () => {
-      const entries = await Promise.all(
-        Array.from(channels).map(async (ch) => {
-          try {
-            const r = await fetchKick({ data: { channel: ch } });
-            return [ch, r] as const;
-          } catch { return [ch, { live: false, channel: ch }] as const; }
-        })
-      );
-      if (!alive) return;
-      const next: Record<string, { viewers?: number; title?: string; playbackUrl?: string }> = {};
-      for (const [ch, r] of entries)
-        if (r.live) next[ch] = { viewers: r.viewers, title: r.title, playbackUrl: r.playbackUrl || undefined };
-      setLiveChannels(next);
-    };
-    tick();
-    const id = setInterval(tick, 12_000);
-    return () => { alive = false; clearInterval(id); };
-  }, [programasRaw, fetchKick]);
+  }, [naSala]);
 
   // Mescla: força ao_vivo=true (e tira finalizado) para qualquer programa cujo canal Kick esteja ao vivo agora.
   const programas = useMemo<Programa[]>(() => {
     return programasRaw.map((p) => {
       const slug = kickChannelFromUrl(p.stream_url);
-      const live = slug ? liveChannels[slug] : undefined;
+      const live = slug ? liveChannels[slug.toLowerCase()] : undefined;
       if (!live) return p;
       return {
         ...p,
@@ -2117,7 +2095,6 @@ function ChatPanel({
 
   return (
     <>
-      <EnqueteBanner programaId={programaId} />
       {enqueteAberta && (
         <EnqueteFaixa
           enquete={enqueteAberta}
@@ -2497,93 +2474,9 @@ function ChatPanel({
   );
 }
 
-// Cartão fixo de enquete no topo do Chat — cadastrada à mão na aba ENQUETES
-// (planilha "Empire TV Oficial"), sem precisar de deploy pra cada pergunta
-// nova. Só aparece quando existe uma enquete ATIVA pra essa sala; unificado
-// no Chat (não no Red Carpet) porque o Chat existe em toda sala, não só
-// nas de evento.
-function EnqueteBanner({ programaId }: { programaId: string }) {
-  const login = getStoredLogin();
-  const [enquete, setEnquete] = useState<EnquetePayload | null>(null);
-  const [enviando, setEnviando] = useState(false);
-
-  const carregar = () => {
-    api.buscarEnquete(programaId, login?.id).then(setEnquete);
-  };
-
-  useEffect(() => {
-    carregar();
-    // Reconsulta periodicamente — sem isso, quem já estava com o Chat
-    // aberto antes de uma enquete ser cadastrada/ativada na planilha só
-    // veria o cartão aparecer se saísse e voltasse pra sala. 20s é rápido o
-    // bastante pra parecer "ao vivo" sem pesar na cota de leitura do Sheets
-    // (já protegida pelo cache curto de 15s do próprio backend).
-    const interval = setInterval(carregar, 20_000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [programaId]);
-
-  const votar = async (nota: number) => {
-    if (!enquete || !login?.id || enviando) return;
-    setEnviando(true);
-    setEnquete((prev) => (prev ? { ...prev, minhaNota: nota } : prev)); // otimista
-    try {
-      await api.responderEnquete({
-        enqueteId: enquete.id,
-        programaId,
-        tgId: login.id,
-        nome: login.nome || "Anônimo",
-        nota,
-      });
-    } finally {
-      setEnviando(false);
-      carregar(); // busca média/total atualizados
-    }
-  };
-
-  if (!enquete) return null;
-
-  const notas = Array.from(
-    { length: enquete.notaMax - enquete.notaMin + 1 },
-    (_, i) => enquete.notaMin + i,
-  );
-
-  return (
-    <div className="shrink-0 border-b border-border bg-gradient-to-br from-primary/10 via-fuchsia-500/5 to-transparent px-3 py-2.5">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <Star className="size-3.5 text-amber-400 fill-amber-400" />
-        <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Enquete</span>
-      </div>
-      <p className="text-xs font-bold mb-2 leading-snug">
-        {enquete.pergunta}
-        {enquete.alvo && <span className="text-primary"> {enquete.alvo}</span>}
-      </p>
-
-      {enquete.minhaNota !== null ? (
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="px-2 py-1 rounded-md bg-primary/15 text-primary font-bold">
-            Você votou {enquete.minhaNota}
-          </span>
-          <span>Voto secreto — obrigado por participar!</span>
-        </div>
-      ) : (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {notas.map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => votar(n)}
-              disabled={enviando || !login?.id}
-              className="size-8 rounded-lg bg-white/5 border border-white/10 hover:bg-primary hover:text-primary-foreground hover:border-primary font-black text-sm transition active:scale-95 disabled:opacity-40"
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+// (A enquete antiga cadastrada à mão na planilha — EnqueteBanner — foi
+// desligada: as enquetes do chat a substituem. Ela consultava a planilha a
+// cada 20 s por pessoa na sala.)
 
 // ---------- Red Carpet ----------
 function RedCarpetCarousel({ fotos }: { fotos: string[] }) {

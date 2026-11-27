@@ -3,6 +3,7 @@ import { somarPrestigio } from "../services/prestigioService";
 import { readRuntimeEnv } from "../google/service-account";
 import { verifySessionToken, extractBearerToken, requestProvesAdmin } from "../services/sessionService";
 import { getCatalogoDb } from "../services/catalogoDbService";
+import { kickChannelFromUrl, statusKick, type KickStatus } from "../services/kickStatus";
 import {
   criarEnquete,
   votar,
@@ -134,8 +135,11 @@ export async function readProgramas(): Promise<ProgramaRow[]> {
  * Script legado — tudo numa passada só. "Ao vivo" é calculado comparando o
  * horário de cada linha (Data+Horario, horário de Brasília) com agora.
  */
-export async function getProgramasTVController(): Promise<Response> {
+export async function getProgramasTVController(request?: Request): Promise<Response> {
   try {
+    // `?kick=1`: junta o "está ao vivo?" da Kick (por canal) na mesma resposta
+    // — a tela da TV fazia dois pedidos a cada checagem (grade + Kick).
+    const comKick = !!request && new URL(request.url).searchParams.get("kick") === "1";
     const [programas, presencaRows] = await Promise.all([
       readProgramas(),
       googleSheetsService.agendaTV.readValues(PRESENCA_SHEET).catch(() => []),
@@ -199,7 +203,14 @@ export async function getProgramasTVController(): Promise<Response> {
       };
     });
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    let kick: Record<string, KickStatus> | undefined;
+    if (comKick) {
+      const canais = [...new Set(data.map((p) => kickChannelFromUrl(p.stream_url)).filter((c): c is string => !!c))];
+      const st = await Promise.all(canais.map((c) => statusKick(c)));
+      kick = Object.fromEntries(st.map((x) => [x.channel, x]));
+    }
+
+    return new Response(JSON.stringify({ success: true, data, ...(kick ? { kick } : {}) }), {
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });

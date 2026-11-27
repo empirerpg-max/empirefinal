@@ -629,12 +629,25 @@ export const api = {
   // aba Programacao_RPG (planilha Agenda_TV) e já calcula "ao vivo agora"
   // numa passada só, sem a segunda chamada extra que o Apps Script exigia.
   async listarProgramasTV(): Promise<ProgramaTV[]> {
+    return (await api.listarProgramasTVComKick(false)).programas;
+  },
+  /**
+   * Grade da TV. Com `comKick`, a mesma resposta traz o "está ao vivo?" de
+   * cada canal da Kick (um pedido só, em vez de grade + Kick separados).
+   * `ok` = a grade respondeu (falha de rede não apaga a grade na tela).
+   */
+  async listarProgramasTVComKick(comKick = true): Promise<{
+    ok: boolean;
+    programas: ProgramaTV[];
+    kick: Record<string, { live: boolean; viewers?: number; title?: string; playbackUrl?: string }>;
+  }> {
     try {
-      const res = await fetch(`/api/tv/programas`);
-      if (!res.ok) return [];
+      const res = await fetch(`/api/tv/programas${comKick ? "?kick=1" : ""}`);
+      if (!res.ok) return { ok: false, programas: [], kick: {} };
       const json = await res.json();
       const data = Array.isArray(json?.data) ? json.data : [];
-      return data.map((x: Record<string, unknown>) => ({
+      const kick = json?.kick && typeof json.kick === "object" ? json.kick : {};
+      const programas = data.map((x: Record<string, unknown>) => ({
         id: String(x.id || ""),
         titulo: String(x.titulo || ""),
         subtitulo: String(x.subtitulo || ""),
@@ -653,8 +666,9 @@ export const api = {
         buff: x.buff ? String(x.buff) : undefined,
         topico_url: x.topico_url ? String(x.topico_url) : undefined,
       }));
+      return { ok: true, programas, kick };
     } catch {
-      return [];
+      return { ok: false, programas: [], kick: {} };
     }
   },
 
