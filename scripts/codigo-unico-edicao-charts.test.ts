@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   analisarFormulaBD,
+  codigoDaFormulaParaLinha,
   codigoMusicaParaLinha,
   podeGravarCodigoNaLinha,
 } from "../backend/src/services/codigoUnicoEdicaoCharts";
@@ -42,4 +43,9 @@ describe("codigoMusicaParaLinha", () => {
   test("código já usado vira maior + 1", () => {
     expect(codigoMusicaParaLinha(1066, ["EMP1063", "EMP1065", "EMPALBM200"])).toBe("EMP1066");
   });
+});
+
+test("codigoDaFormulaParaLinha bate com a fórmula da planilha", () => {
+  expect(codigoDaFormulaParaLinha(1064)).toBe("EMP1063");
+  expect(codigoDaFormulaParaLinha(1067)).toBe("EMP1066");
 });

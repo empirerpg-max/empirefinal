@@ -7,6 +7,7 @@ import {
 import { withWriteLock } from "../services/writeLockService";
 import {
   analisarFormulaBD,
+  codigoDaFormulaParaLinha,
   codigoMusicaParaLinha,
   podeGravarCodigoNaLinha,
 } from "../services/codigoUnicoEdicaoCharts";
@@ -333,10 +334,15 @@ export async function garantirCodigoUnicoNaEdicaoCharts(rowIndex: number): Promi
     const topo = await googleSheetsService.edicaoCharts.readValuesFormula("EDIÇÃO CHARTS", "BD1:BD3");
     const estado = analisarFormulaBD(topo.map((r) => r?.[0] || ""));
     if (!podeGravarCodigoNaLinha(estado, rowIndex)) {
-      console.error(
-        `[garantirCodigoUnico] EDIÇÃO CHARTS!BD${rowIndex} vazio e a fórmula da coluna (${estado.tipo}) não permite gravar por cima.`,
+      // ARRAYFORMULA aberta que não calculou esta linha (visto em produção,
+      // 27/11: B2:B, mas BD vazio da 1065 em diante). Gravar por cima
+      // apagaria todos os códigos; a fórmula é "EMP" & (linha-1), então o
+      // código que ela vai dar é conhecido — usa esse, sem tocar em BD.
+      const codigo = codigoDaFormulaParaLinha(rowIndex);
+      console.warn(
+        `[garantirCodigoUnico] EDIÇÃO CHARTS!BD${rowIndex} vazio (ARRAYFORMULA aberta não calculou) — usando ${codigo}, sem gravar em BD.`,
       );
-      return "";
+      return codigo;
     }
     return await withWriteLock("gestao:edicao-charts-codigo", async () => {
       const colunaBD = await googleSheetsService.edicaoCharts.readValuesFresh("EDIÇÃO CHARTS", "BD2:BD20000");

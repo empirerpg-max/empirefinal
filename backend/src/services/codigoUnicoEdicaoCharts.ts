@@ -36,6 +36,11 @@ export function podeGravarCodigoNaLinha(estado: EstadoFormulaBD, linha: number):
   return false;
 }
 
+/** O que a fórmula da planilha ("EMP" & TEXT(linha-1; "000")) dá pra `linha`. */
+export function codigoDaFormulaParaLinha(linha: number): string {
+  return `EMP${String(linha - 1).padStart(3, "0")}`;
+}
+
 /**
  * Código da música na `linha` de EDIÇÃO CHARTS — o mesmo padrão da fórmula
  * da planilha ("EMP" & TEXT(linha-1; "000")). Se esse código já estiver em
@@ -45,7 +50,7 @@ export function codigoMusicaParaLinha(linha: number, codigosExistentes: string[]
   const usados = new Set(
     codigosExistentes.map((c) => (c || "").trim().toUpperCase()).filter(Boolean),
   );
-  const preferido = `EMP${String(linha - 1).padStart(3, "0")}`;
+  const preferido = codigoDaFormulaParaLinha(linha);
   if (!usados.has(preferido)) return preferido;
   let maior = 0;
   for (const c of usados) {
