@@ -205,23 +205,29 @@ export function criarDesmontador(
 }
 
 /**
- * Tempo máximo (ms) que uma ação "que muda de tela" espera a entrada da
- * camada sair antes de rodar assim mesmo (a ação nunca se perde).
+ * De quanto em quanto tempo (ms) a espera reconfere se a entrada da camada
+ * saiu (cobre saída sem popstate, ex.: entrada reaproveitada via replaceState).
  */
-export const LIMITE_ESPERA_SAIDA_MS = 500;
+export const INTERVALO_CHECAGEM_SAIDA_MS = 250;
+
+/**
+ * Teto (ms): se a entrada da camada ainda não saiu até aqui (ex.: quem
+ * hospeda não fechou), a ação roda assim mesmo — nunca se perde.
+ */
+export const LIMITE_ESPERA_SAIDA_MS = 3000;
 
 /**
  * Roda `depois` uma única vez, só quando a entrada da camada `marca` já saiu
- * do histórico (a marca sumiu da pilha `__overlays` do state atual, conferida
- * no popstate), ou ao estourar `limiteMs` se nenhum popstate chegar (ex.: a
- * entrada foi reaproveitada por outra camada via replaceState, ou quem
- * hospeda não fechou). `depois` roda fora do despacho do popstate
- * (`emSeguida`), para os outros ouvintes (router, desmontador) verem o state
- * pousado antes de a ação navegar. Se a entrada já não está na pilha ao
- * começar, roda logo (em `emSeguida`).
- *
- * Por quê: navegar (pushState do router) enquanto o go() de fechamento ainda
- * está em voo deixa a entrada da camada órfã por baixo da rota nova.
+ * do histórico: a marca sumiu da pilha `__overlays` do state atual. Confere
+ * no popstate e, a cada `INTERVALO_CHECAGEM_SAIDA_MS`, de novo (saída sem
+ * popstate, ex.: outra camada reaproveitou a entrada via replaceState e
+ * trocou a marca). Enquanto a marca estiver no state, continua esperando —
+ * mesmo com o tempo passando num aparelho lento em que o go() ainda não
+ * pousou (navegar nessa hora deixaria a entrada órfã ou voltaria para a
+ * folha). Só no teto `limiteMs` roda mesmo com a marca presente.
+ * `depois` roda fora do despacho do popstate (`emSeguida`), para os outros
+ * ouvintes (router, desmontador) verem o state pousado antes de a ação
+ * navegar. Se a entrada já não está na pilha ao começar, roda logo.
  */
 export function esperarSaidaDaEntrada(opcoes: {
   marca: string;
@@ -231,24 +237,37 @@ export function esperarSaidaDaEntrada(opcoes: {
   esperar: (f: () => void, ms: number) => () => void;
   emSeguida: (f: () => void) => void;
   limiteMs?: number;
+  intervaloMs?: number;
 }): void {
   const { marca, depois, lerState, ouvirPopstate, esperar, emSeguida } = opcoes;
+  const limite = opcoes.limiteMs ?? LIMITE_ESPERA_SAIDA_MS;
+  const intervalo = opcoes.intervaloMs ?? INTERVALO_CHECAGEM_SAIDA_MS;
+  const saiu = () => !pilhaDe(lerState()).includes(marca);
   let feito = false;
+  let decorrido = 0;
   let pararDeOuvir = () => {};
-  let cancelarLimite = () => {};
+  let cancelarTique = () => {};
   const concluir = () => {
     if (feito) return;
     feito = true;
     pararDeOuvir();
-    cancelarLimite();
+    cancelarTique();
     emSeguida(depois);
   };
-  if (!pilhaDe(lerState()).includes(marca)) {
+  if (saiu()) {
     concluir();
     return;
   }
+  const armar = () => {
+    const passo = Math.min(intervalo, limite - decorrido);
+    cancelarTique = esperar(() => {
+      decorrido += passo;
+      if (saiu() || decorrido >= limite) concluir();
+      else armar();
+    }, passo);
+  };
   pararDeOuvir = ouvirPopstate(() => {
     if (deveFecharNoPopstate(lerState(), marca)) concluir();
   });
-  cancelarLimite = esperar(concluir, opcoes.limiteMs ?? LIMITE_ESPERA_SAIDA_MS);
+  armar();
 }

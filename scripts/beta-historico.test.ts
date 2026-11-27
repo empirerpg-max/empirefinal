@@ -9,6 +9,7 @@ import {
   entradaEhDaCamada,
   esperarSaidaDaEntrada,
   LIMITE_ESPERA_SAIDA_MS,
+  INTERVALO_CHECAGEM_SAIDA_MS,
   type HistoricoLike,
 } from "../src/lib/historicoOverlay";
 
@@ -384,7 +385,9 @@ describe("historicoOverlay", () => {
 describe("esperarSaidaDaEntrada (ação que navega roda só depois que a entrada saiu)", () => {
   function montar() {
     const f = criarHistoricoFalso({ rota: "/pagina" });
-    const timers: Array<{ f: () => void; ms: number; ativo: boolean }> = [];
+    // relógio falso: avancar(ms) dispara os timers vencidos, em ordem
+    let agora = 0;
+    let timers: Array<{ f: () => void; quando: number; ativo: boolean }> = [];
     const agendados: Array<() => void> = [];
     const opcoes = {
       lerState: () => f.h.state,
@@ -396,7 +399,7 @@ describe("esperarSaidaDaEntrada (ação que navega roda só depois que a entrada
         };
       },
       esperar: (cb: () => void, ms: number) => {
-        const t = { f: cb, ms, ativo: true };
+        const t = { f: cb, quando: agora + ms, ativo: true };
         timers.push(t);
         return () => {
           t.ativo = false;
@@ -406,12 +409,30 @@ describe("esperarSaidaDaEntrada (ação que navega roda só depois que a entrada
       emSeguida: (cb: () => void) => agendados.push(cb),
     };
     const rodarAgendados = () => agendados.splice(0).forEach((cb) => cb());
-    const estourar = () => timers.filter((t) => t.ativo).forEach((t) => ((t.ativo = false), t.f()));
-    return { f, opcoes, timers, rodarAgendados, estourar };
+    const avancar = (ms: number) => {
+      const fim = agora + ms;
+      for (;;) {
+        const prox = timers.filter((t) => t.ativo && t.quando <= fim).sort((a, b) => a.quando - b.quando)[0];
+        if (!prox) break;
+        agora = prox.quando;
+        prox.ativo = false;
+        prox.f();
+      }
+      agora = fim;
+      timers = timers.filter((t) => t.ativo);
+      rodarAgendados();
+    };
+    const timersAtivos = () => timers.filter((t) => t.ativo).length;
+    return { f, opcoes, rodarAgendados, avancar, timersAtivos };
   }
 
+  test("constantes: checa a cada 250 ms, teto de 3 s", () => {
+    expect(INTERVALO_CHECAGEM_SAIDA_MS).toBe(250);
+    expect(LIMITE_ESPERA_SAIDA_MS).toBe(3000);
+  });
+
   test("não roda antes do popstate; roda depois que a entrada da camada saiu", () => {
-    const { f, opcoes, rodarAgendados } = montar();
+    const { f, opcoes, rodarAgendados, timersAtivos } = montar();
     abrirCamada(f.h, "m1");
     const chamadas: string[] = [];
     esperarSaidaDaEntrada({ ...opcoes, marca: "m1", depois: () => chamadas.push(String((f.h.state as any)?.rota)) });
@@ -424,6 +445,7 @@ describe("esperarSaidaDaEntrada (ação que navega roda só depois que a entrada
     rodarAgendados();
     expect(chamadas).toEqual(["/pagina"]); // roda com a entrada já fora: navegar empurra por cima da página
     expect(f.ouvintes.length).toBe(0); // ouvinte removido
+    expect(timersAtivos()).toBe(0); // checagem cancelada
   });
 
   test("popstate em que a marca ainda está na pilha (camada de cima fechou) não dispara", () => {
@@ -442,33 +464,64 @@ describe("esperarSaidaDaEntrada (ação que navega roda só depois que a entrada
     expect(n).toBe(1);
   });
 
-  test("sem popstate (ex.: entrada reaproveitada por outra camada), o tempo limite roda uma vez", () => {
-    const { f, opcoes, timers, rodarAgendados, estourar } = montar();
+  test("aparelho lento: o tempo passa antes do go() pousar → só roda depois do flush", () => {
+    const { f, opcoes, avancar, rodarAgendados } = montar();
     abrirCamada(f.h, "m1");
     let n = 0;
     esperarSaidaDaEntrada({ ...opcoes, marca: "m1", depois: () => n++ });
-    expect(timers[0].ms).toBe(LIMITE_ESPERA_SAIDA_MS);
-    estourar();
-    rodarAgendados();
-    expect(n).toBe(1);
-    f.h.back();
+    f.h.back(); // go() em voo, ainda não pousou
+    avancar(1000); // várias checagens com a marca ainda no state
+    expect(n).toBe(0);
     f.flush();
     rodarAgendados();
+    expect(n).toBe(1);
+    avancar(5000);
     expect(n).toBe(1); // nunca duas vezes
+  });
+
+  test("checagem periódica: marca some sem popstate (ex.: replaceState) → roda no próximo tique", () => {
+    const { f, opcoes, avancar } = montar();
+    abrirCamada(f.h, "m1");
+    let n = 0;
+    esperarSaidaDaEntrada({ ...opcoes, marca: "m1", depois: () => n++ });
+    avancar(INTERVALO_CHECAGEM_SAIDA_MS);
+    expect(n).toBe(0);
+    // outra camada reaproveita a entrada: a marca é trocada, sem popstate
+    f.h.replaceState({ rota: "/pagina", __overlay: "m9", __overlays: ["m9"] });
+    avancar(INTERVALO_CHECAGEM_SAIDA_MS);
+    expect(n).toBe(1);
     expect(f.ouvintes.length).toBe(0);
   });
 
-  test("depois do popstate, o tempo limite não roda de novo", () => {
-    const { f, opcoes, rodarAgendados, estourar } = montar();
+  test("troca via desmontador (reaproveitar) → depois roda", () => {
+    const { f, opcoes, avancar } = montar();
+    const d = criarDesmontador(f.h, () => {});
+    abrirCamada(f.h, "m1", d);
+    let n = 0;
+    esperarSaidaDaEntrada({ ...opcoes, marca: "m1", depois: () => n++ });
+    d.desmontar("m1", false); // fecha pela UI (go() agendado, não emitido)
+    abrirCamada(f.h, "m2", d); // nova camada no mesmo tick reaproveita a entrada
+    expect(f.entradas.at(-1)).toEqual(["m2"]);
+    avancar(INTERVALO_CHECAGEM_SAIDA_MS);
+    expect(n).toBe(1);
+  });
+
+  test("marca nunca sai → roda no teto de 3 s, exatamente uma vez", () => {
+    const { f, opcoes, avancar, timersAtivos } = montar();
     abrirCamada(f.h, "m1");
     let n = 0;
     esperarSaidaDaEntrada({ ...opcoes, marca: "m1", depois: () => n++ });
+    avancar(LIMITE_ESPERA_SAIDA_MS - 1);
+    expect(n).toBe(0);
+    avancar(1);
+    expect(n).toBe(1);
+    avancar(10_000);
     f.h.back();
     f.flush();
-    rodarAgendados();
-    estourar();
-    rodarAgendados();
+    avancar(0);
     expect(n).toBe(1);
+    expect(f.ouvintes.length).toBe(0);
+    expect(timersAtivos()).toBe(0);
   });
 
   test("se a entrada já saiu ao começar a esperar, roda logo (sem esperar popstate)", () => {

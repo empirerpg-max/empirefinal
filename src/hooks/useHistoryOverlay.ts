@@ -31,8 +31,8 @@ function obterDesmontador() {
  *
  * `fechar(depois)`: para uma ação que MUDA DE TELA (router.navigate etc.).
  * Fecha e só roda `depois` quando a entrada desta camada já saiu do
- * histórico (popstate pousado), com tempo limite de segurança
- * (`esperarSaidaDaEntrada`). Navegar no mesmo toque deixaria a entrada da
+ * histórico (marca fora do state, conferida no popstate e a cada 250 ms;
+ * teto de 3 s em que roda assim mesmo; `esperarSaidaDaEntrada`). Navegar no mesmo toque deixaria a entrada da
  * camada órfã por baixo da rota nova (o go() de fechamento ainda em voo vê
  * o state da rota nova, sem marcas, e não volta nada).
  *

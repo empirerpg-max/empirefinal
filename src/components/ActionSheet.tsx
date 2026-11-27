@@ -50,8 +50,9 @@ const FOCAVEIS =
  *   depois de um await não é coordenado com o go() do histórico em voo.
  * - Ação que muda de tela: marque `navega: true`. A folha fecha e
  *   `aoEscolher` só roda depois que a entrada dela saiu do histórico
- *   (popstate pousado; tempo limite de segurança de ~500 ms), para o voltar
- *   da tela nova levar à página de antes, sem entrada órfã no meio.
+ *   (marca fora do state, conferida no popstate e a cada 250 ms; teto de 3 s
+ *   em que roda assim mesmo), para o voltar da tela nova levar à página
+ *   de antes, sem entrada órfã no meio.
  *
  * SSR-safe: só renderiza (portal no document.body) depois de montar no cliente.
  */
