@@ -69,6 +69,27 @@ export interface EnquetePayload {
   minhaNota: number | null;
 }
 
+/** Enquete do chat da Empire TV (D1) — ver GET /api/tv/enquetes. */
+export interface EnqueteTV {
+  id: string;
+  pergunta: string;
+  tipo: "unica" | "multipla";
+  opcoes: string[];
+  secreto: boolean;
+  soFim: boolean;
+  aberta: boolean;
+  encerraEm: number | null;
+  criadaEm: number;
+  encerradaEm: number | null;
+  /** null enquanto aberta com "resultado só no fim". */
+  contagem: number[] | null;
+  pct: number[] | null;
+  /** Pessoas que votaram. */
+  total: number;
+  vencedores: number[];
+  meuVoto: number[] | null;
+}
+
 export interface NivelInfo {
   nivel: number;
   fase: string;
@@ -163,6 +184,8 @@ export interface ProgramaTV {
   espectadores: number;
   cover: string;
   stream_url: string;
+  /** Vídeo HLS da Kick (vem da checagem de "ao vivo"); usado pelo player do app. */
+  kick_hls?: string;
   data?: string; // DD/MM/YYYY
   horario?: string; // HH:mm
   data_inicio?: string;
@@ -606,12 +629,25 @@ export const api = {
   // aba Programacao_RPG (planilha Agenda_TV) e já calcula "ao vivo agora"
   // numa passada só, sem a segunda chamada extra que o Apps Script exigia.
   async listarProgramasTV(): Promise<ProgramaTV[]> {
+    return (await api.listarProgramasTVComKick(false)).programas;
+  },
+  /**
+   * Grade da TV. Com `comKick`, a mesma resposta traz o "está ao vivo?" de
+   * cada canal da Kick (um pedido só, em vez de grade + Kick separados).
+   * `ok` = a grade respondeu (falha de rede não apaga a grade na tela).
+   */
+  async listarProgramasTVComKick(comKick = true): Promise<{
+    ok: boolean;
+    programas: ProgramaTV[];
+    kick: Record<string, { live: boolean; viewers?: number; title?: string; playbackUrl?: string }>;
+  }> {
     try {
-      const res = await fetch(`/api/tv/programas`);
-      if (!res.ok) return [];
+      const res = await fetch(`/api/tv/programas${comKick ? "?kick=1" : ""}`);
+      if (!res.ok) return { ok: false, programas: [], kick: {} };
       const json = await res.json();
       const data = Array.isArray(json?.data) ? json.data : [];
-      return data.map((x: Record<string, unknown>) => ({
+      const kick = json?.kick && typeof json.kick === "object" ? json.kick : {};
+      const programas = data.map((x: Record<string, unknown>) => ({
         id: String(x.id || ""),
         titulo: String(x.titulo || ""),
         subtitulo: String(x.subtitulo || ""),
@@ -630,8 +666,9 @@ export const api = {
         buff: x.buff ? String(x.buff) : undefined,
         topico_url: x.topico_url ? String(x.topico_url) : undefined,
       }));
+      return { ok: true, programas, kick };
     } catch {
-      return [];
+      return { ok: false, programas: [], kick: {} };
     }
   },
 
@@ -719,26 +756,193 @@ export const api = {
     return res.json();
   },
 
-  async registrarPresencaTV(p: {
-    programa_id: string;
-    telegram_id: string;
-    nome: string;
-    watched_seconds: number;
-  }): Promise<CommonResponse> {
-    const res = await fetch("/api/tv/presenca", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(p),
-    });
-    return res.json();
+  // ---- Enquetes do chat da Empire TV (D1) ----
+  /** Lista as enquetes da sala (abertas primeiro). null = falhou (mantém a lista atual). */
+  async listarEnquetesTV(programaId: string): Promise<EnqueteTV[] | null> {
+    try {
+      const res = await fetch(`/api/tv/enquetes?programa_id=${encodeURIComponent(programaId)}`, {
+        headers: { ...authHeaders() },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok || !Array.isArray(json.enquetes)) return null;
+      return json.enquetes as EnqueteTV[];
+    } catch {
+      return null;
+    }
   },
+  /** Admin cria a enquete (o servidor avisa no chat). `encerraEmMin` = 2/5/10/15 ou 0 (o servidor conta pelo relógio dele). */
+  async criarEnqueteTV(e: {
+    programaId: string;
+    pergunta: string;
+    tipo: "unica" | "multipla";
+    opcoes: string[];
+    secreto: boolean;
+    soFim: boolean;
+    encerraEmMin: 0 | 2 | 5 | 10 | 15;
+  }): Promise<{ ok: boolean; id?: string; erro?: string }> {
+    try {
+      const res = await fetch("/api/tv/enquetes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          programa_id: e.programaId,
+          pergunta: e.pergunta,
+          tipo: e.tipo,
+          opcoes: e.opcoes,
+          secreto: e.secreto,
+          so_fim: e.soFim,
+          ...(e.encerraEmMin > 0 ? { encerra_em_min: e.encerraEmMin } : {}),
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) return { ok: false, erro: String(json?.erro || `Erro ${res.status}`) };
+      return { ok: true, id: json.id };
+    } catch {
+      return { ok: false, erro: "Sem conexão." };
+    }
+  },
+  /** Vota (troca o voto se já tinha). status: 200 ok, 401 sem sessão, 409 encerrada, 400 inválido, 0 sem conexão. */
+  async votarEnqueteTV(
+    programaId: string,
+    enqueteId: string,
+    opcoes: number[],
+  ): Promise<{ ok: boolean; status: number; erro?: string }> {
+    try {
+      const res = await fetch("/api/tv/enquetes/votar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ programa_id: programaId, enquete_id: enqueteId, opcoes }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) return { ok: false, status: res.status, erro: json?.erro ? String(json.erro) : undefined };
+      return { ok: true, status: res.status };
+    } catch {
+      return { ok: false, status: 0, erro: "Sem conexão." };
+    }
+  },
+  /**
+   * Quem votou em cada opção (só enquete pública; anônima ou "resultado só no
+   * fim" aberta → erro). Só sob demanda ("Ver quem votou"), nunca no refresh.
+   */
+  async votantesEnqueteTV(
+    programaId: string,
+    enqueteId: string,
+  ): Promise<{ ok: true; votantes: string[][] } | { ok: false; erro: string }> {
+    try {
+      const qs = new URLSearchParams({ programa_id: programaId, enquete_id: enqueteId });
+      const res = await fetch(`/api/tv/enquetes/votantes?${qs.toString()}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok || !Array.isArray(json.votantes)) {
+        return { ok: false, erro: String(json?.erro || `Erro ${res.status}`) };
+      }
+      return {
+        ok: true,
+        votantes: (json.votantes as unknown[]).map((l) => (Array.isArray(l) ? l.map((x) => String(x)) : [])),
+      };
+    } catch {
+      return { ok: false, erro: "Sem conexão." };
+    }
+  },
+  /** Admin encerra (o servidor avisa no chat e grava na planilha). */
+  async encerrarEnqueteTV(programaId: string, enqueteId: string): Promise<{ ok: boolean; erro?: string }> {
+    try {
+      const res = await fetch("/api/tv/enquetes/encerrar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ programa_id: programaId, enquete_id: enqueteId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) return { ok: false, erro: String(json?.erro || `Erro ${res.status}`) };
+      return { ok: true };
+    } catch {
+      return { ok: false, erro: "Sem conexão." };
+    }
+  },
+
+  /**
+   * Envia as idades (ms) dos minutos marcados na sala/mini player da Empire TV.
+   * O jogador vem da sessão (Authorization); telegram_id é só o fallback.
+   * keepalive: o envio sobrevive a fechar a aba (pagehide). true = gravado.
+   */
+  async enviarMinutosPresenca(
+    programaId: string,
+    idadesMs: number[],
+    nome: string,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<boolean> {
+    // Envio comum tem prazo (requisição pendurada não trava os próximos);
+    // envio de saída (pagehide) vai sem prazo, só com keepalive.
+    const ctrl = opts.timeoutMs && typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), opts.timeoutMs) : null;
+    try {
+      const login = getStoredLogin();
+      const res = await fetch("/api/tv/presenca", {
+        method: "POST",
+        keepalive: true,
+        ...(ctrl ? { signal: ctrl.signal } : {}),
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          programa_id: programaId,
+          idades_ms: idadesMs,
+          nome,
+          ...(login?.id ? { telegram_id: String(login.id) } : {}),
+        }),
+      });
+      if (!res.ok) return false;
+      const json = await res.json().catch(() => null);
+      return json?.ok === true;
+    } catch {
+      return false;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  },
+  /** Admin marca o início/término real da transmissão (crédito no próximo cron após "fim"). */
+  async eventoAdminTV(
+    programaId: string,
+    acao: "inicio" | "fim",
+  ): Promise<{ ok: boolean; acao?: string; inicioTs?: number; fimTs?: number; erro?: string }> {
+    try {
+      const res = await fetch("/api/tv/evento-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ programa_id: programaId, acao }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        return { ok: false, erro: String(json?.erro || `Erro ${res.status}`) };
+      }
+      return { ok: true, acao: json.acao, inicioTs: json.inicioTs, fimTs: json.fimTs };
+    } catch {
+      return { ok: false, erro: "Sem conexão." };
+    }
+  },
+  /** Estado atual do Início/Término marcados pelo admin (pra barra depois de recarregar). */
+  async estadoEventoAdminTV(programaId: string): Promise<{ inicioTs?: number; fimTs?: number } | null> {
+    try {
+      const res = await fetch(`/api/tv/evento-admin?programa_id=${encodeURIComponent(programaId)}`, {
+        headers: { ...authHeaders() },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) return null;
+      return {
+        inicioTs: typeof json.inicioTs === "number" ? json.inicioTs : undefined,
+        fimTs: typeof json.fimTs === "number" ? json.fimTs : undefined,
+      };
+    } catch {
+      return null;
+    }
+  },
+  /** Presença da sala. Com `jogadorId`, só a linha dessa pessoa (lê 1 linha no D1, não a sala toda). */
   async listarPresencaTV(
     programa_id: string,
+    jogadorId?: string,
   ): Promise<
     Array<{ telegram_id: string; nome: string; watched_seconds: number; percentual: number }>
   > {
     try {
-      const res = await fetch(`/api/tv/presenca?programa_id=${encodeURIComponent(programa_id)}`);
+      const so = jogadorId ? `&jogador_id=${encodeURIComponent(jogadorId)}` : "";
+      const res = await fetch(`/api/tv/presenca?programa_id=${encodeURIComponent(programa_id)}${so}`);
       if (!res.ok) return [];
       const json = await res.json();
       const data = Array.isArray(json?.data) ? json.data : [];

@@ -381,7 +381,7 @@ export default {
       );
       return;
     }
-    const { processarParticipacaoTV } = await import("../backend/src/controllers/tvController");
+    const { processarParticipacaoTV, limparPresencaTVDiaria } = await import("../backend/src/controllers/tvController");
     const {
       limparStoriesExpiradosScheduled,
       limparLinhasOrfasSocialPosts,
@@ -409,6 +409,15 @@ export default {
           ),
         )
         .catch((err) => console.error("[scheduled] Erro ao processar participação TV:", err)),
+    );
+    // Presença por minuto da TV (D1 tv_presenca): apaga o que tem mais de 30
+    // dias, no máximo 1x por dia UTC (marca no KV FLAGS). Nunca lança.
+    ctx.waitUntil(
+      limparPresencaTVDiaria((env as { FLAGS?: FlagsKv }).FLAGS)
+        .then((n) => {
+          if (n) console.log(`[scheduled] Presença TV antiga apagada do D1: ${n} linha(s).`);
+        })
+        .catch(() => {}),
     );
     ctx.waitUntil(
       limparStoriesExpiradosScheduled()

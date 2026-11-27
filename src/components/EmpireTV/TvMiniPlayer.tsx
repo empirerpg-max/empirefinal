@@ -1,8 +1,10 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { X, Maximize2, Radio } from "lucide-react";
 import { useTvPlayer } from "./TvPlayerContext";
 import { resolveStreamEmbed } from "@/lib/tvEmbed";
+import { PlayerAppHls } from "./PlayerAppHls";
+import { lerPlayerModo } from "@/lib/tvPlayerModo";
 
 /**
  * Miniatura flutuante da transmissão, montada na raiz do app (fora da rota
@@ -15,6 +17,11 @@ export function TvMiniPlayer() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  // Mesmo player da sala: o do app quando houver o vídeo HLS e a pessoa não
+  // escolheu a Kick; se falhar aqui, fica na Kick até trocar de transmissão.
+  const [hlsFalhou, setHlsFalhou] = useState(false);
+  const watchingId = watching?.id;
+  useEffect(() => setHlsFalhou(false), [watchingId]);
 
   // Enquanto a própria rota /tv está mostrando a tela cheia, o player dela
   // já cobre o caso — não duplica aqui.
@@ -40,7 +47,9 @@ export function TvMiniPlayer() {
         className="block w-full aspect-video bg-neutral-900 relative"
         aria-label="Expandir transmissão"
       >
-        {embed ? (
+        {watching.kick_hls && watching.ao_vivo && !hlsFalhou && lerPlayerModo() === "app" ? (
+          <PlayerAppHls src={watching.kick_hls} titulo={watching.titulo} compacto onFalha={() => setHlsFalhou(true)} />
+        ) : embed ? (
           <iframe
             ref={iframeRef}
             src={embed}

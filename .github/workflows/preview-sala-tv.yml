@@ -1,0 +1,48 @@
+name: Link de teste (sala da Empire TV)
+
+# Sobe uma CÓPIA DE TESTE do app (uma "versão" do Worker com link próprio),
+# sem trocar o app que os jogadores usam: `wrangler versions upload` só cria
+# a versão e o link de prévia; quem publica de verdade continua sendo o
+# deploy.yml, quando algo entra na main.
+#
+# ATENÇÃO: a cópia de teste usa os MESMOS dados de produção (D1, planilhas,
+# chat do Supabase, segredos do Worker). Testar numa sala de TESTE, fora do
+# horário dos eventos. Ninguém deve assistir um evento real pelo link de teste
+# (a participação iria para o D1, mas quem credita os eventos reais ainda é a
+# versão publicada, que lê a planilha).
+
+on:
+  push:
+    branches: [claude/nice-euler-1yslj3]
+  workflow_dispatch: {}
+
+concurrency:
+  group: preview-sala-tv
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Subir versão de teste (não publica)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          bunx wrangler versions upload \
+            -c dist/tanstack_start_app/wrangler.json \
+            --preview-alias sala-tv \
+            --tag "sala-tv-${GITHUB_SHA::7}" \
+            --message "Teste da sala da Empire TV (${GITHUB_SHA::7})" | tee upload.log
+          echo "## Link de teste" >> "$GITHUB_STEP_SUMMARY"
+          grep -Eo 'https://[^ ]+workers\.dev[^ ]*' upload.log | sort -u | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY" || true

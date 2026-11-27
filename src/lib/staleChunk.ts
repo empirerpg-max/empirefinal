@@ -5,6 +5,9 @@
 // module script failed" / "dynamically imported module") e a tela quebra
 // sem motivo aparente pro usuário.
 //
+// Com a sala da Empire TV aberta em tela cheia (ver salaAtiva.ts),
+// não recarrega: avisa uma vez e recarrega quando a pessoa sair da sala.
+//
 // Compartilhado entre dois pontos de entrada diferentes:
 // - client.tsx: escuta os eventos GLOBAIS (window "error"/"unhandledrejection"
 //   /"vite:preloadError") — cobre falhas de import que escapam pro nível do
@@ -19,6 +22,8 @@
 //   pre-save (rota carregada sob demanda, reconstruída várias vezes ao
 //   longo do dia) caía direto na tela "Algo deu errado" em vez de
 //   recarregar sozinho — exatamente esse gap.
+import { adiarAteSairDaSala, deveAdiarRecarga, salaAtiva } from "./salaAtiva";
+
 export function isStaleChunkErrorMessage(message: string | undefined | null): boolean {
   return /importing a module script failed|dynamically imported module|failed to fetch dynamically/i.test(
     message || "",
@@ -59,7 +64,10 @@ let avisoPendenteMostrado = false;
 // campo de texto ativo com conteúdo (espera a pessoa sair do campo).
 // `toastFn` é injetado pra não acoplar este util à lib de toast usada.
 export function reloadOnStaleChunk(
-  toastFn?: (title: string, opts?: { description?: string; duration?: number }) => void,
+  toastFn?: (
+    title: string,
+    opts?: { description?: string; duration?: number; action?: { label: string; onClick: () => void } },
+  ) => void,
 ) {
   if (typeof window === "undefined" || typeof sessionStorage === "undefined") return;
   const FLAG = "empire_stale_chunk_reload";
@@ -79,6 +87,23 @@ export function reloadOnStaleChunk(
   }
 
   const campoAtivo = estaDigitando();
+  const naSala = salaAtiva();
+  if (!deveAdiarRecarga(!!campoAtivo, naSala)) {
+    sessionStorage.setItem(FLAG, String(Date.now()));
+    window.location.reload();
+    return;
+  }
+
+  // Na sala da TV: espera sair dela (ou o toque em "Atualizar agora") e aí
+  // recarrega direto — chamar reloadOnStaleChunk de novo adiaria outra vez.
+  if (naSala) {
+    adiarAteSairDaSala(() => {
+      sessionStorage.setItem(FLAG, String(Date.now()));
+      window.location.reload();
+    }, toastFn);
+    return;
+  }
+
   if (campoAtivo) {
     if (!avisoPendenteMostrado) {
       avisoPendenteMostrado = true;
@@ -96,9 +121,5 @@ export function reloadOnStaleChunk(
       },
       { once: true },
     );
-    return;
   }
-
-  sessionStorage.setItem(FLAG, String(Date.now()));
-  window.location.reload();
 }

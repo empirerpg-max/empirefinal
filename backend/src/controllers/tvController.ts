@@ -1,6 +1,26 @@
-import { googleSheetsService, normalizeText, normalizeComparison } from "../services/googleSheetsService";
+import { googleSheetsService, normalizeText, normalizeComparison, appendRows } from "../services/googleSheetsService";
 import { somarPrestigio } from "../services/prestigioService";
 import { readRuntimeEnv } from "../google/service-account";
+import { verifySessionToken, extractBearerToken, requestProvesAdmin } from "../services/sessionService";
+import { getCatalogoDb } from "../services/catalogoDbService";
+import { kickChannelFromUrl, statusKick, type KickStatus } from "../services/kickStatus";
+import {
+  criarEnquete,
+  votar,
+  encerrar as encerrarEnquete,
+  listarEnquetes,
+  idsEnquetesAbertas,
+  resultadoEnquete,
+  votantesEnquete,
+} from "../services/tvEnquetes";
+import {
+  minutosDeIdades,
+  calcularPresenca,
+  garantirTabelaPresenca,
+  gravarMinutosPresenca,
+  lerPresencaGrupo,
+  apagarPresencaAntiga,
+} from "../services/tvPresenca";
 
 // "Programacao_RPG" é uma aba antiga/duplicada que ficou sem manutenção —
 // as capas lá estão todas com o link quebrado (uc?export=view&id= sem
@@ -12,7 +32,7 @@ import { readRuntimeEnv } from "../google/service-account";
 const PROGRAMACAO_SHEET = "Agenda_TV";
 const PRESENCA_SHEET = "Presenca_TV";
 
-interface ProgramaRow {
+export interface ProgramaRow {
   id: string;
   rowIndex: number;
   titulo: string;
@@ -41,7 +61,7 @@ function parseDataHorario(data: string, horario: string): number | null {
   return Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh) + 3, Number(min));
 }
 
-async function readProgramas(): Promise<ProgramaRow[]> {
+export async function readProgramas(): Promise<ProgramaRow[]> {
   const rows = await googleSheetsService.agendaTV.readValues(PROGRAMACAO_SHEET).catch(() => []);
   if (!rows || rows.length < 2) return [];
   // Agenda_TV: Programa, Tipo, Material, Buff, Data, Horario, Capa_URL, Status, Topico_ID, Topico_URL, TIPO_EVENTO
@@ -115,8 +135,11 @@ async function readProgramas(): Promise<ProgramaRow[]> {
  * Script legado — tudo numa passada só. "Ao vivo" é calculado comparando o
  * horário de cada linha (Data+Horario, horário de Brasília) com agora.
  */
-export async function getProgramasTVController(): Promise<Response> {
+export async function getProgramasTVController(request?: Request): Promise<Response> {
   try {
+    // `?kick=1`: junta o "está ao vivo?" da Kick (por canal) na mesma resposta
+    // — a tela da TV fazia dois pedidos a cada checagem (grade + Kick).
+    const comKick = !!request && new URL(request.url).searchParams.get("kick") === "1";
     const [programas, presencaRows] = await Promise.all([
       readProgramas(),
       googleSheetsService.agendaTV.readValues(PRESENCA_SHEET).catch(() => []),
@@ -180,7 +203,14 @@ export async function getProgramasTVController(): Promise<Response> {
       };
     });
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    let kick: Record<string, KickStatus> | undefined;
+    if (comKick) {
+      const canais = [...new Set(data.map((p) => kickChannelFromUrl(p.stream_url)).filter((c): c is string => !!c))];
+      const st = await Promise.all(canais.map((c) => statusKick(c)));
+      kick = Object.fromEntries(st.map((x) => [x.channel, x]));
+    }
+
+    return new Response(JSON.stringify({ success: true, data, ...(kick ? { kick } : {}) }), {
       status: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
@@ -191,6 +221,13 @@ export async function getProgramasTVController(): Promise<Response> {
       { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } },
     );
   }
+}
+
+function jsonPresenca(corpo: unknown, status: number): Response {
+  return new Response(JSON.stringify(corpo), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
 }
 
 /**
@@ -204,8 +241,44 @@ export async function registrarPresencaTVController(request: Request): Promise<R
       telegram_id?: string;
       nome?: string;
       watched_seconds?: number;
+      idades_ms?: unknown;
     };
     const programaId = (body.programa_id || "").trim();
+
+    // Corpo novo: o cliente manda só "há quantos ms eu estava presente" e o
+    // relógio do servidor decide o minuto. Grava no D1, não na planilha.
+    if (body.idades_ms !== undefined) {
+      const idades = body.idades_ms;
+      if (
+        !Array.isArray(idades) ||
+        idades.length > 400 ||
+        !idades.every((n) => typeof n === "number" && Number.isFinite(n))
+      ) {
+        return jsonPresenca({ ok: false, erro: "idades_ms inválido." }, 400);
+      }
+      const sessao = await verifySessionToken(extractBearerToken(request));
+      const jogadorId = sessao?.id || (body.telegram_id || "").trim();
+      if (!programaId || !jogadorId) {
+        return jsonPresenca({ ok: false, erro: "programa_id e jogador são obrigatórios." }, 400);
+      }
+      const db = getCatalogoDb();
+      if (!db) return jsonPresenca({ ok: false, erro: "Banco indisponível." }, 503);
+      await garantirTabelaPresenca(db);
+      const agora = Date.now();
+      const resultado = await gravarMinutosPresenca(
+        db,
+        {
+          programaId,
+          jogadorId,
+          // Com sessão vale o nome da conta (o corpo é só fallback); até 60.
+          nome: (sessao?.usuario || body.nome || "").trim().slice(0, 60) || "Anônimo",
+          minutos: minutosDeIdades(agora, idades as number[]),
+        },
+        agora,
+      );
+      return jsonPresenca({ ok: true, resultado }, 200);
+    }
+
     const telegramId = (body.telegram_id || "").trim();
     if (!programaId || !telegramId) {
       return new Response(JSON.stringify({ ok: false, erro: "programa_id e telegram_id são obrigatórios." }), {
@@ -240,12 +313,40 @@ export async function listarPresencaTVController(request: Request): Promise<Resp
   try {
     const url = new URL(request.url);
     const programaId = normalizeText(url.searchParams.get("programa_id"));
+    // `jogador_id`: só a linha dessa pessoa (círculo da sala). Sem ele, a sala
+    // toda (aba Participantes).
+    const soJogador = normalizeText(url.searchParams.get("jogador_id")) || undefined;
     if (!programaId) {
       return new Response(JSON.stringify({ success: true, data: [] }), {
         status: 200,
         headers: { "Content-Type": "application/json; charset=utf-8" },
       });
     }
+    // Presença por minuto no D1: se alguém do grupo inteiro (todos os
+    // segmentos da transmissão) tem linha lá, calcula por calcularPresenca.
+    const db = getCatalogoDb();
+    if (db) {
+      try {
+        await garantirTabelaPresenca(db);
+        const grupo = agruparTransmissoes(await readProgramas()).find((g) => g.rowIds.includes(programaId));
+        if (grupo) {
+          const porJogador = await lerPresencaGrupo(db, grupo.rowIds, soJogador);
+          if (porJogador.size > 0) {
+            const flags = (globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined;
+            const agora = Date.now();
+            const janela = janelaDoGrupo(grupo, await lerEventosReais(flags), agora);
+            const data = Array.from(porJogador.entries()).map(([id, v]) => {
+              const c = calcularPresenca(v.minutos, janela.inicioMs, janela.fimMs);
+              return { telegram_id: id, nome: v.nome || "Anônimo", watched_seconds: c.minutosPresentes * 60, percentual: c.pct };
+            });
+            return jsonPresenca({ success: true, data }, 200);
+          }
+        }
+      } catch (e) {
+        console.error("[listarPresencaTVController] D1 falhou, usando planilha:", e);
+      }
+    }
+
     const rows = await googleSheetsService.agendaTV.readValues(PRESENCA_SHEET).catch(() => []);
     const normId = normalizeComparison(programaId);
 
@@ -257,6 +358,7 @@ export async function listarPresencaTVController(request: Request): Promise<Resp
       if (normalizeComparison(r[1]) !== normId) continue;
       const telegramId = normalizeText(r[2]);
       if (!telegramId) continue;
+      if (soJogador && telegramId !== soJogador) continue;
       const seconds = Number(r[4] || 0);
       const atual = porPessoa.get(telegramId);
       if (!atual || seconds > atual.watched_seconds) {
@@ -351,7 +453,7 @@ function escolherTier(tiers: RegraTier[] | undefined, percentual: number): Regra
   return percentual > maisAlta.max ? maisAlta : null;
 }
 
-interface BroadcastGroup {
+export interface BroadcastGroup {
   chave: string;
   data: string;
   programa: string;
@@ -371,7 +473,7 @@ interface BroadcastGroup {
 // último segmento contaria 0s e o total ficaria menor que o real.
 const MINUTOS_ESTIMATIVA_ULTIMO_SEGMENTO = 5;
 
-function agruparTransmissoes(programas: ProgramaRow[]): BroadcastGroup[] {
+export function agruparTransmissoes(programas: ProgramaRow[]): BroadcastGroup[] {
   const grupos = new Map<string, BroadcastGroup>();
   const startsPorGrupo = new Map<string, number[]>();
 
@@ -536,7 +638,8 @@ async function contarChatPorTransmissao(
     const rows = (await res.json()) as Array<{ user_id: string; user_name: string }>;
     for (const r of rows) {
       const userId = normalizeText(r.user_id);
-      if (!userId) continue;
+      // Avisos do bot (enquetes) não são participação de ninguém.
+      if (!userId || userId === "empire-tv") continue;
       const atual = resultado.get(userId);
       resultado.set(userId, {
         nome: atual?.nome || normalizeText(r.user_name) || "Anônimo",
@@ -622,12 +725,49 @@ async function registrarDiagnosticoSkip(flags: FlagsKvLike | undefined, mensagem
 // processada (ver fim de processarParticipacaoTV), pra não crescer sem limite.
 const TV_EVENTOS_REAIS_KV_KEY = "tv-eventos-reais";
 
-interface EventoRealTV {
+export interface EventoRealTV {
   inicioTs?: number;
   fimTs?: number;
 }
 
-async function lerEventosReais(flags: FlagsKvLike | undefined): Promise<Record<string, EventoRealTV>> {
+/**
+ * Janela de uma transmissão para contar presença: início real > estimado
+ * (endTs - duração); fim real > agora (se ainda ao vivo) > endTs.
+ * `processamento: true` (só o cron de participação): com início real mas sem
+ * fim real e o fim agendado (endTs) já passado, o fim é
+ * max(endTs, início real + duração agendada) em vez de "agora" — senão um aviso de fim perdido esticaria a janela até a
+ * hora do processamento e derrubaria o % de todo mundo. A rota GET não usa.
+ */
+export function janelaDoGrupo(
+  grupo: BroadcastGroup,
+  eventosReais: Record<string, EventoRealTV>,
+  agoraMs: number,
+  opcoes: { processamento?: boolean } = {},
+): { inicioMs: number; fimMs: number; aoVivo: boolean } {
+  const real = eventosReais[grupo.chave];
+  const estimadoIni = (grupo.endTs ?? agoraMs) - grupo.totalDuracaoSeg * 1000;
+  const inicioMs = real?.inicioTs || estimadoIni;
+  let fimMs: number;
+  let aoVivo: boolean;
+  if (real?.fimTs) {
+    fimMs = real.fimTs;
+    aoVivo = false;
+  } else if (opcoes.processamento && real?.inicioTs && grupo.endTs !== null && agoraMs >= grupo.endTs) {
+    // Início real atrasado: conta a duração agendada a partir dele, pra
+    // janela nunca colapsar em 1 minuto (nem passar da duração agendada).
+    fimMs = Math.max(grupo.endTs, real.inicioTs + grupo.totalDuracaoSeg * 1000);
+    aoVivo = false;
+  } else if (real?.inicioTs || grupo.endTs === null || agoraMs < grupo.endTs) {
+    fimMs = agoraMs;
+    aoVivo = true;
+  } else {
+    fimMs = grupo.endTs;
+    aoVivo = false;
+  }
+  return { inicioMs, fimMs: Math.max(fimMs, inicioMs + 1), aoVivo };
+}
+
+export async function lerEventosReais(flags: FlagsKvLike | undefined): Promise<Record<string, EventoRealTV>> {
   if (!flags) return {};
   try {
     const raw = await flags.get(TV_EVENTOS_REAIS_KV_KEY);
@@ -637,7 +777,7 @@ async function lerEventosReais(flags: FlagsKvLike | undefined): Promise<Record<s
   }
 }
 
-async function gravarEventosReais(flags: FlagsKvLike, mapa: Record<string, EventoRealTV>): Promise<void> {
+export async function gravarEventosReais(flags: FlagsKvLike, mapa: Record<string, EventoRealTV>): Promise<void> {
   await flags.put(TV_EVENTOS_REAIS_KV_KEY, JSON.stringify(mapa));
 }
 
@@ -711,6 +851,371 @@ export async function registrarEventoTransmissaoController(
   }
 }
 
+/**
+ * POST /api/tv/evento-admin
+ * Botões Início/Término do admin: reforça/corrige o horário real da
+ * transmissão na MESMA chave KV usada pelo transmissao.py (chave do grupo).
+ * body: { programa_id, acao: "inicio" | "fim" }. Exige sessão de admin
+ * (401 sem token, 403 sem ser admin). "inicio" repetido sobrescreve com agora
+ * (409 se o "fim" já foi gravado); "fim" roda o processamento (dedup pela
+ * marca de processado).
+ */
+export async function registrarEventoAdminController(
+  request: Request,
+  flagsParam?: FlagsKvLike,
+): Promise<Response> {
+  const flags = flagsParam || ((globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined);
+  const resp = (corpo: unknown, status: number) =>
+    new Response(JSON.stringify(corpo), {
+      status,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  try {
+    if (!extractBearerToken(request)) return resp({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return resp({ ok: false, erro: "Apenas admin." }, 403);
+    if (!flags) return resp({ ok: false, erro: "KV FLAGS indisponível neste ambiente." }, 503);
+
+    const body = (await request.json().catch(() => ({}))) as { programa_id?: string; acao?: string };
+    const programaId = String(body.programa_id ?? "").trim();
+    const acao = String(body.acao ?? "").trim();
+    if (!programaId || (acao !== "inicio" && acao !== "fim")) {
+      return resp({ ok: false, erro: "programa_id e acao ('inicio' ou 'fim') são obrigatórios." }, 400);
+    }
+
+    const grupo = agruparTransmissoes(await readProgramas()).find((g) => g.rowIds.includes(programaId));
+    if (!grupo) return resp({ ok: false, erro: "Transmissão não encontrada para esse programa." }, 400);
+
+    const agora = Date.now();
+    const mapa = await lerEventosReais(flags);
+    const atual = mapa[grupo.chave] || {};
+    // Início depois de um Término já gravado colapsaria a janela (quase todo
+    // mundo com 0%): recusa em vez de sobrescrever.
+    if (acao === "inicio" && atual.fimTs) {
+      return resp({ ok: false, erro: "Término já marcado para essa transmissão — o Início não pode mais ser alterado." }, 409);
+    }
+    if (acao === "inicio") atual.inicioTs = agora;
+    else atual.fimTs = agora;
+    mapa[grupo.chave] = atual;
+    await gravarEventosReais(flags, mapa);
+
+    if (acao === "fim") {
+      try {
+        const db = getCatalogoDb();
+        if (db) {
+          for (const rowId of grupo.rowIds) {
+            for (const id of await idsEnquetesAbertas(db, rowId)) await fecharEnqueteEAvisar(db, rowId, id, agora);
+          }
+        }
+      } catch (err) {
+        console.warn("[registrarEventoAdminController] Falha ao encerrar enquetes:", err);
+      }
+    }
+
+    const processamento = acao === "fim" ? await processarParticipacaoTV(flags) : undefined;
+    return resp(
+      {
+        ok: true,
+        acao,
+        ...(acao === "inicio" ? { inicioTs: agora } : { fimTs: agora }),
+        ...(processamento ? { processamento } : {}),
+      },
+      200,
+    );
+  } catch (error: any) {
+    console.error("[registrarEventoAdminController] Erro:", error);
+    return resp({ ok: false, erro: error.message || "Erro ao registrar evento." }, 500);
+  }
+}
+
+/**
+ * GET /api/tv/evento-admin?programa_id=
+ * Estado atual do Início/Término do grupo (mesma chave KV do POST), pra barra
+ * do admin mostrar o que já foi marcado depois de recarregar. Só admin.
+ */
+export async function lerEventoAdminController(
+  request: Request,
+  flagsParam?: FlagsKvLike,
+): Promise<Response> {
+  const flags = flagsParam || ((globalThis as Record<string, unknown>).__FLAGS_KV__ as FlagsKvLike | undefined);
+  const resp = (corpo: unknown, status: number) =>
+    new Response(JSON.stringify(corpo), {
+      status,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  try {
+    if (!extractBearerToken(request)) return resp({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return resp({ ok: false, erro: "Apenas admin." }, 403);
+    if (!flags) return resp({ ok: false, erro: "KV FLAGS indisponível neste ambiente." }, 503);
+    const programaId = String(new URL(request.url).searchParams.get("programa_id") ?? "").trim();
+    if (!programaId) return resp({ ok: false, erro: "programa_id é obrigatório." }, 400);
+    const grupo = agruparTransmissoes(await readProgramas()).find((g) => g.rowIds.includes(programaId));
+    if (!grupo) return resp({ ok: false, erro: "Transmissão não encontrada para esse programa." }, 400);
+    const atual = (await lerEventosReais(flags))[grupo.chave] || {};
+    return resp(
+      {
+        ok: true,
+        ...(atual.inicioTs ? { inicioTs: atual.inicioTs } : {}),
+        ...(atual.fimTs ? { fimTs: atual.fimTs } : {}),
+      },
+      200,
+    );
+  } catch (error: any) {
+    console.error("[lerEventoAdminController] Erro:", error);
+    return resp({ ok: false, erro: error.message || "Erro ao ler evento." }, 500);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Enquetes do chat da Empire TV
+// ---------------------------------------------------------------------------
+
+function jsonEnquete(corpo: unknown, status: number): Response {
+  return new Response(JSON.stringify(corpo), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+// Aviso no chat (Supabase, service role). Falha só é registrada.
+async function avisarNoChat(programaId: string, texto: string): Promise<void> {
+  try {
+    const { url, key } = getSupabaseCreds();
+    if (!url || !key) return;
+    const res = await fetch(`${url}/rest/v1/tv_chat_messages`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ programa_id: programaId, user: "Empire TV", user_id: "empire-tv", text: texto }),
+    });
+    if (!res.ok) console.warn("[enquetes] Supabase recusou o aviso:", res.status);
+  } catch (err) {
+    console.warn("[enquetes] Falha ao avisar no chat:", err);
+  }
+}
+
+// Encerra, avisa no chat (ENQRES) e grava o resultado na planilha (best-effort).
+async function fecharEnqueteEAvisar(
+  db: NonNullable<ReturnType<typeof getCatalogoDb>>,
+  programaId: string,
+  enqueteId: string,
+  agora: number,
+): Promise<boolean> {
+  const fechou = await encerrarEnquete(db, programaId, enqueteId, agora);
+  if (!fechou) return false;
+  await avisarFechamento(db, programaId, enqueteId, agora);
+  return true;
+}
+
+// Só o aviso do fechamento (chat + planilha), para quem acabou de fechar a enquete.
+async function avisarFechamento(
+  db: NonNullable<ReturnType<typeof getCatalogoDb>>,
+  programaId: string,
+  enqueteId: string,
+  agora: number,
+): Promise<void> {
+  await avisarNoChat(programaId, `ENQRES::${enqueteId}`);
+  try {
+    const r = await resultadoEnquete(db, programaId, enqueteId);
+    if (r) {
+      const data = new Date(agora).toISOString();
+      const linhas = r.opcoes.map((op, i) => [data, programaId, r.pergunta, r.tipo, op, r.contagem[i], r.pct[i]]);
+      await appendRows("agendaTV", "Enquetes_TV", linhas, "A:G");
+    }
+  } catch (err) {
+    console.warn("[enquetes] Falha ao gravar na aba Enquetes_TV:", err);
+  }
+}
+
+/** POST /api/tv/enquetes — admin cria enquete e avisa no chat. */
+export async function criarEnqueteChatController(request: Request): Promise<Response> {
+  try {
+    if (!extractBearerToken(request)) return jsonEnquete({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return jsonEnquete({ ok: false, erro: "Apenas admin." }, 403);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const sessao = await verifySessionToken(extractBearerToken(request));
+    const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const programaId = String(b.programa_id ?? "").trim();
+    if (!programaId) return jsonEnquete({ ok: false, erro: "programa_id é obrigatório." }, 400);
+    // Encerramento automático em minutos (2, 5, 10 ou 15), contado pelo
+    // relógio do SERVIDOR — o relógio do aparelho do admin não entra.
+    const minRaw = b.encerra_em_min;
+    const encerraMin = minRaw == null || minRaw === "" || minRaw === 0 ? 0 : Number(minRaw);
+    if (![0, 2, 5, 10, 15].includes(encerraMin)) {
+      return jsonEnquete({ ok: false, erro: "Encerramento automático inválido (use 2, 5, 10 ou 15 minutos)." }, 400);
+    }
+    const agora = Date.now();
+    let id: string;
+    try {
+      id = await criarEnquete(
+        db,
+        {
+          programaId,
+          pergunta: String(b.pergunta ?? ""),
+          tipo: b.tipo as "unica" | "multipla",
+          opcoes: b.opcoes as string[],
+          // Votos são sempre secretos (nenhuma rota mostra quem votou em quê).
+          secreto: b.secreto !== false,
+          soFim: b.so_fim === true,
+          encerraEmMs: encerraMin > 0 ? agora + encerraMin * 60_000 : null,
+          criadaPor: sessao?.usuario || "admin",
+        },
+        agora,
+      );
+    } catch (err: any) {
+      return jsonEnquete({ ok: false, erro: err?.message || "Enquete inválida." }, 400);
+    }
+    // Publicar uma enquete nova encerra as anteriores ainda abertas da sala
+    // (mesmo caminho do "Encerrar": ENQRES no chat + Enquetes_TV), antes do
+    // aviso da nova. Feito depois de validar/gravar a nova, pra uma enquete
+    // inválida não fechar nada.
+    try {
+      for (const antiga of await idsEnquetesAbertas(db, programaId)) {
+        if (antiga !== id) await fecharEnqueteEAvisar(db, programaId, antiga, agora);
+      }
+    } catch (err) {
+      console.warn("[criarEnqueteChatController] Falha ao encerrar enquetes anteriores:", err);
+    }
+    await avisarNoChat(programaId, `ENQ::${id}`);
+    return jsonEnquete({ ok: true, id }, 200);
+  } catch (error: any) {
+    console.error("[criarEnqueteChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao criar enquete." }, 500);
+  }
+}
+
+/** POST /api/tv/enquetes/votar — jogador com sessão vota. */
+export async function votarEnqueteChatController(request: Request): Promise<Response> {
+  try {
+    const sessao = await verifySessionToken(extractBearerToken(request));
+    if (!sessao?.id) return jsonEnquete({ ok: false, erro: "Não autenticado." }, 401);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const programaId = String(b.programa_id ?? "").trim();
+    const enqueteId = String(b.enquete_id ?? "").trim();
+    if (!programaId || !enqueteId || !Array.isArray(b.opcoes)) {
+      return jsonEnquete({ ok: false, erro: "Voto inválido." }, 400);
+    }
+    const r = await votar(db, programaId, enqueteId, sessao.id, sessao.usuario || "Anônimo", b.opcoes as number[], Date.now(), (p, id) =>
+      avisarFechamento(db, p, id, Date.now()),
+    );
+    if (r === "invalida") return jsonEnquete({ ok: false, erro: "Voto inválido." }, 400);
+    if (r === "encerrada") return jsonEnquete({ ok: false, erro: "Enquete encerrada." }, 409);
+    return jsonEnquete({ ok: true }, 200);
+  } catch (error: any) {
+    console.error("[votarEnqueteChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao votar." }, 500);
+  }
+}
+
+/** POST /api/tv/enquetes/encerrar — admin encerra, avisa no chat e grava na planilha. */
+export async function encerrarEnqueteChatController(request: Request): Promise<Response> {
+  try {
+    if (!extractBearerToken(request)) return jsonEnquete({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return jsonEnquete({ ok: false, erro: "Apenas admin." }, 403);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const programaId = String(b.programa_id ?? "").trim();
+    const enqueteId = String(b.enquete_id ?? "").trim();
+    if (!programaId || !enqueteId) return jsonEnquete({ ok: false, erro: "programa_id e enquete_id são obrigatórios." }, 400);
+    const fechou = await fecharEnqueteEAvisar(db, programaId, enqueteId, Date.now());
+    return jsonEnquete({ ok: true, encerrada: fechou }, 200);
+  } catch (error: any) {
+    console.error("[encerrarEnqueteChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao encerrar enquete." }, 500);
+  }
+}
+
+/**
+ * GET /api/tv/enquetes/votantes?programa_id=&enquete_id= — nomes de quem votou
+ * em cada opção, só para enquete PÚBLICA e só sob demanda ("Ver quem votou").
+ * Mesmo acesso da lista (qualquer um na sala). Anônima → 403; "resultado só
+ * no fim" ainda aberta → 403; inexistente → 404.
+ */
+export async function votantesEnqueteChatController(request: Request): Promise<Response> {
+  try {
+    const q = new URL(request.url).searchParams;
+    const programaId = (q.get("programa_id") || "").trim();
+    const enqueteId = (q.get("enquete_id") || "").trim();
+    if (!programaId || !enqueteId) return jsonEnquete({ ok: false, erro: "programa_id e enquete_id são obrigatórios." }, 400);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const r = await votantesEnquete(db, programaId, enqueteId, Date.now());
+    if (r.status !== "ok") {
+      if (r.status === "inexistente") return jsonEnquete({ ok: false, erro: "Enquete não encontrada." }, 404);
+      if (r.status === "anonima") return jsonEnquete({ ok: false, erro: "Voto anônimo — só os totais aparecem." }, 403);
+      return jsonEnquete({ ok: false, erro: "Quem votou aparece quando a enquete encerrar." }, 403);
+    }
+    return jsonEnquete({ ok: true, votantes: r.votantes }, 200);
+  } catch (error: any) {
+    console.error("[votantesEnqueteChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao ler os votos." }, 500);
+  }
+}
+
+/** GET /api/tv/enquetes?programa_id= — lista (contadores na própria linha; meuVoto por chave primária). */
+export async function listarEnquetesChatController(request: Request): Promise<Response> {
+  try {
+    const programaId = (new URL(request.url).searchParams.get("programa_id") || "").trim();
+    if (!programaId) return jsonEnquete({ ok: false, erro: "programa_id é obrigatório." }, 400);
+    const db = getCatalogoDb();
+    if (!db) return jsonEnquete({ ok: false, erro: "Banco indisponível." }, 503);
+    const sessao = await verifySessionToken(extractBearerToken(request));
+    const lista = await listarEnquetes(db, programaId, sessao?.id || null, Date.now(), (p, id) =>
+      avisarFechamento(db, p, id, Date.now()),
+    );
+    return jsonEnquete({ ok: true, enquetes: lista }, 200);
+  } catch (error: any) {
+    console.error("[listarEnquetesChatController] Erro:", error);
+    return jsonEnquete({ ok: false, erro: error.message || "Erro ao listar enquetes." }, 500);
+  }
+}
+
+/**
+ * % que decide a faixa do jogador. "d1" (presença por minuto, relógio do
+ * servidor): só o tempo presente conta. "planilha" (corpo antigo,
+ * watched_seconds): regra de sempre, o maior entre tempo e chat.
+ */
+export function percentualDoJogador(origem: "d1" | "planilha", presencaPct: number, chatPct: number): number {
+  if (origem === "d1") return Math.round(presencaPct);
+  return Math.round(Math.max(presencaPct, chatPct));
+}
+
+const TV_PRESENCA_LIMPEZA_KV_KEY = "tv-presenca-limpeza-dia";
+const DIAS_GUARDAR_PRESENCA = 30;
+
+/**
+ * Apaga do D1 a presença com mais de 30 dias, no máximo 1x por dia UTC
+ * (último dia guardado no KV FLAGS). Devolve quantas linhas apagou, ou null
+ * se não rodou (já rodou hoje, sem D1/KV ou erro). Nunca lança.
+ */
+export async function limparPresencaTVDiaria(
+  flags: FlagsKvLike | undefined,
+  agoraMs: number = Date.now(),
+): Promise<number | null> {
+  try {
+    const db = getCatalogoDb();
+    if (!db || !flags) return null;
+    const dia = new Date(agoraMs).toISOString().slice(0, 10);
+    if ((await flags.get(TV_PRESENCA_LIMPEZA_KV_KEY)) === dia) return null;
+    await garantirTabelaPresenca(db);
+    const apagadas = await apagarPresencaAntiga(db, agoraMs - DIAS_GUARDAR_PRESENCA * 86400_000);
+    await flags.put(TV_PRESENCA_LIMPEZA_KV_KEY, dia);
+    return apagadas;
+  } catch (err) {
+    console.warn("[limparPresencaTVDiaria] Falhou:", err);
+    return null;
+  }
+}
+
+const isoOuVazio = (ms: number | null) => (ms === null ? "" : new Date(ms).toISOString());
+
 export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise<{
   transmissoesProcessadas: number;
   registrosGravados: number;
@@ -748,6 +1253,12 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
   // corrige totalDuracaoSeg (usado no cálculo de % de presença) pra duração
   // de fato transmitida, em vez do intervalo entre Data/Horario da planilha.
   const eventosReais = await lerEventosReais(flags);
+  // Janela da presença por minuto (D1): calculada AQUI, antes do laço abaixo
+  // mexer em endTs/totalDuracaoSeg — é a mesma conta da rota GET
+  // (listarPresencaTVController), então o % mostrado é o % creditado.
+  const janelasD1 = new Map<string, { inicioMs: number; fimMs: number }>();
+  for (const grupo of grupos) janelasD1.set(grupo.chave, janelaDoGrupo(grupo, eventosReais, now, { processamento: true }));
+  const db = getCatalogoDb();
   for (const grupo of grupos) {
     const real = eventosReais[grupo.chave];
     if (real?.fimTs) {
@@ -839,6 +1350,25 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
     // falhar, pula essa transmissão nessa execução (tenta de novo no
     // próximo ciclo, sem ter creditado ninguém ainda) em vez de creditar e
     // só then tentar marcar.
+    // Presença por minuto no D1: lida ANTES da marca de "processado" — se a
+    // leitura falhar, não marca nada e tenta de novo no próximo ciclo (senão
+    // quem tem presença só no D1 perderia o crédito pra sempre).
+    let presencaD1 = new Map<string, { nome: string; minutos: number[] }>();
+    if (db) {
+      try {
+        await garantirTabelaPresenca(db);
+        presencaD1 = await lerPresencaGrupo(db, grupo.rowIds);
+      } catch (err) {
+        console.warn(`[processarParticipacaoTV] Falha ao ler presença do D1 de "${key}":`, err);
+        await registrarDiagnosticoSkip(
+          flags,
+          `[processarParticipacaoTV] "${grupo.programa}" (${key}) NÃO processado nessa execução: falha ao ler a presença no D1 (tv_presenca). Tenta de novo no próximo ciclo do cron — ninguém foi creditado ainda.`,
+        );
+        continue;
+      }
+    }
+    const origem: "d1" | "planilha" = presencaD1.size > 0 ? "d1" : "planilha";
+
     const linhaMarcada = await googleSheetsService.agendaTV.appendRow(
       PROCESSADO_SHEET,
       [grupo.chave, grupo.programa, new Date().toISOString()],
@@ -858,11 +1388,17 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
     const margemChatMs = 15 * 60 * 1000;
     const inicioEstimadoTs = grupo.endTs - grupo.totalDuracaoSeg * 1000;
     const [presenca, chat] = await Promise.all([
+      // Também em grupo "d1": quem ainda usa o cliente antigo (só
+      // watched_seconds na Presenca_TV) é creditado pelo tempo de lá.
       somarPresencaPorTransmissao(grupo.rowIds),
       contarChatPorTransmissao(grupo.rowIds, inicioEstimadoTs - margemChatMs, grupo.endTs + margemChatMs),
     ]);
 
-    const jogadores = new Set([...presenca.keys(), ...chat.keys()]);
+    const jogadores = new Set([...presenca.keys(), ...presencaD1.keys(), ...chat.keys()]);
+    const janelaD1 = janelasD1.get(key)!;
+    const resumoD1: (string | number)[][] = [];
+    const agoraIso = new Date().toISOString();
+    let clientesAntigosNoD1 = 0;
     if (jogadores.size === 0) {
       // Transmissão bate TIPO_EVENTO e Regras, mas nenhum registro de
       // Presenca_TV/chat casou com os rowIds desse grupo — a transmissão é
@@ -877,16 +1413,68 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
     let registrosGravadosNesseGrupo = 0;
     for (const telegramId of jogadores) {
       const p = presenca.get(telegramId);
+      const d = presencaD1.get(telegramId);
       const c = chat.get(telegramId);
-      const presencaPct =
-        grupo.totalDuracaoSeg > 0 ? Math.min(100, ((p?.watchedSeconds || 0) / grupo.totalDuracaoSeg) * 100) : 0;
       const chatPct = Math.min(100, ((c?.count || 0) / CHAT_MSGS_PARA_100_PORCENTO) * 100);
-      const percentual = Math.round(Math.max(presencaPct, chatPct));
+      let presencaPct: number;
+      let nomeJogador: string;
+      if (origem === "d1" && !d && p) {
+        // Grupo "d1", mas essa pessoa só tem a presença antiga (planilha):
+        // % só pelo tempo de lá (chat não conta, igual à regra do D1).
+        presencaPct =
+          grupo.totalDuracaoSeg > 0 ? Math.min(100, (p.watchedSeconds / grupo.totalDuracaoSeg) * 100) : 0;
+        nomeJogador = p.nome || c?.nome || "Anônimo";
+        clientesAntigosNoD1++;
+        resumoD1.push([
+          agoraIso,
+          grupo.chave,
+          telegramId,
+          nomeJogador,
+          p.watchedSeconds,
+          Math.floor(p.watchedSeconds / 60),
+          Math.round(grupo.totalDuracaoSeg / 60),
+          Math.round(presencaPct),
+          c?.count || 0,
+          "",
+          "",
+          "planilha",
+        ]);
+      } else if (origem === "d1") {
+        // Só o tempo presente conta; quem só conversou fica com 0%.
+        const calc = calcularPresenca(d?.minutos ?? [], janelaD1.inicioMs, janelaD1.fimMs);
+        presencaPct = calc.pct;
+        // Quem tem D1 E segundos antigos na Presenca_TV (assistiu parte no
+        // cliente antigo antes de atualizar): fica com a maior das duas %
+        // (só tempo) — nunca perde o que o caminho antigo daria.
+        const pctPlanilha =
+          p && grupo.totalDuracaoSeg > 0 ? Math.min(100, (p.watchedSeconds / grupo.totalDuracaoSeg) * 100) : 0;
+        const venceuPlanilha = pctPlanilha > presencaPct;
+        if (venceuPlanilha) presencaPct = pctPlanilha;
+        nomeJogador = d?.nome || c?.nome || "Anônimo";
+        resumoD1.push([
+          agoraIso,
+          grupo.chave,
+          telegramId,
+          nomeJogador,
+          calc.minutosPresentes * 60,
+          calc.minutosPresentes,
+          calc.duracaoMin,
+          venceuPlanilha ? Math.round(presencaPct) : calc.pct,
+          c?.count || 0,
+          isoOuVazio(calc.entrouMs),
+          isoOuVazio(calc.saiuMs),
+          venceuPlanilha ? "planilha" : "d1",
+        ]);
+      } else {
+        presencaPct =
+          grupo.totalDuracaoSeg > 0 ? Math.min(100, ((p?.watchedSeconds || 0) / grupo.totalDuracaoSeg) * 100) : 0;
+        nomeJogador = p?.nome || c?.nome || "Anônimo";
+      }
+      const percentual = percentualDoJogador(origem, presencaPct, chatPct);
 
       const tier = escolherTier(tiers, percentual);
       if (!tier) continue;
 
-      const nomeJogador = p?.nome || c?.nome || "Anônimo";
       await gravarRegistroParticipacaoTV(nomeJogador, tier.label);
       registrosGravados++;
       registrosGravadosNesseGrupo++;
@@ -899,6 +1487,27 @@ export async function processarParticipacaoTV(flagsParam?: FlagsKvLike): Promise
       // pra controlar spam de comentário por comentário de forma justa.
       if (presencaPct >= 90) {
         await somarPrestigio({ telegramId }, "assistir_tv").catch(() => {});
+      }
+    }
+
+    if (clientesAntigosNoD1 > 0) {
+      await registrarDiagnosticoSkip(
+        flags,
+        `[processarParticipacaoTV] "${grupo.programa}" (${key}) tem presença no D1, mas ${clientesAntigosNoD1} jogador(es) só tinham a presença antiga (Presenca_TV, cliente antigo) — creditados só pelo tempo de lá.`,
+      );
+    }
+
+    // Resumo por pessoa na Presenca_TV (só informação, depois de creditar):
+    // uma chamada só por transmissão; se falhar, o crédito já está feito.
+    if (origem === "d1" && resumoD1.length > 0) {
+      try {
+        await appendRows("agendaTV", PRESENCA_SHEET, resumoD1, "A:L");
+      } catch (err) {
+        console.warn(`[processarParticipacaoTV] Falha ao gravar resumo em ${PRESENCA_SHEET}:`, err);
+        await registrarDiagnosticoSkip(
+          flags,
+          `[processarParticipacaoTV] "${grupo.programa}" (${key}) creditado, mas o resumo por pessoa NÃO foi gravado em ${PRESENCA_SHEET}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
@@ -1045,4 +1654,45 @@ export async function corrigirRegistroReprocessamentoTV(
   }
 
   return { modo: confirmar ? "aplicado" : "simulacao", gruposDuplicados: gruposDuplicados.length, itens };
+}
+
+/**
+ * GET /api/tv/kick-hls?canal= — TESTE (só admin): pede à Kick o link do vídeo
+ * (HLS) do canal, para a página escondida /tv-teste-hls tentar tocar no
+ * player do próprio app. Não é API oficial da Kick: pode ser recusada. Devolve
+ * o status da Kick para diagnóstico. Nada é gravado.
+ */
+export async function kickHlsTesteController(request: Request): Promise<Response> {
+  try {
+    if (!extractBearerToken(request)) return jsonEnquete({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return jsonEnquete({ ok: false, erro: "Apenas admin." }, 403);
+    const canal = (new URL(request.url).searchParams.get("canal") || "").trim().toLowerCase();
+    if (!/^[a-z0-9_-]{1,60}$/.test(canal)) return jsonEnquete({ ok: false, erro: "Canal inválido." }, 400);
+    const res = await fetch(`https://kick.com/api/v2/channels/${canal}`, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+      },
+    });
+    const texto = await res.text();
+    let json: any = null;
+    try {
+      json = JSON.parse(texto);
+    } catch {
+      /* resposta não-JSON (bloqueio) */
+    }
+    const url = typeof json?.playback_url === "string" ? json.playback_url : "";
+    return jsonEnquete(
+      {
+        ok: !!url,
+        status_kick: res.status,
+        ao_vivo: !!json?.livestream,
+        playback_url: url || null,
+        ...(url ? {} : { erro: json ? "A Kick não mandou o link (canal fora do ar?)." : "A Kick recusou o pedido do servidor." }),
+      },
+      200,
+    );
+  } catch (error: any) {
+    return jsonEnquete({ ok: false, erro: error?.message || "Erro ao falar com a Kick." }, 500);
+  }
 }

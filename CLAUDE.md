@@ -64,3 +64,11 @@ a entrada dela ainda for a atual (para não deixar entrada órfã). Ver o
 padrão em `src/routes/empire-play.index.tsx` (playlist) e
 `src/components/EmpirePlay/VitrineClipes.tsx` (clipe por cima da playlist).
 Vale para qualquer tela nova sem o usuário pedir de novo.
+
+## Sala da Empire TV (referência)
+
+Antes de mexer na sala da TV (`src/routes/tv.tsx`, `src/components/EmpireTV/*`,
+`/api/tv/*`), ler `docs/empire-tv-sala-manual.md`: mapa dos arquivos, como o
+player do app, a participação e as enquetes funcionam, limites do plano
+gratuito (nada por pessoa a cada poucos segundos pode ler a sala inteira no
+D1) e como testar pelo link de prévia sem publicar.

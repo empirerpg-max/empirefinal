@@ -1,18 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, Sparkles, Heart, Camera, Plus, Trash2, Star } from "lucide-react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Send, Radio, Users, Play, ArrowLeft, Calendar, MessageSquare, Info, Archive, ListVideo, Clock, X, Reply, Menu, ChevronLeft, ChevronRight, ImagePlus, Upload, Loader2, VolumeX, Volume2, Minimize2, RefreshCw, Sparkles, Heart, Camera, Plus, Trash2, Star, Square, ShieldCheck, Copy, BarChart3, Repeat } from "lucide-react";
 import logoIcon from "@/assets/logo-icon.png";
 import { api, driveImg, driveRawImg, resolveImg, type ProgramaTV, type Artist, type RedCarpetPost, type EnquetePayload } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
-import { getKickStatus } from "@/lib/kick.functions";
-import { getStoredLogin } from "@/components/LoginScreen";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { useTelegramUser } from "@/lib/telegram";
 import { useImageCrop } from "@/hooks/use-image-crop";
 import { useTvPlayer } from "@/components/EmpireTV/TvPlayerContext";
 import { resolveStreamEmbed, kickChannelFromUrl, forceUnmuteIframe, hasUnmutedThisSession } from "@/lib/tvEmbed";
+import { estaNoFim, pertoDoTopo, decidirAoChegar } from "@/lib/tvChatRolagem";
+import { useArrastarParaResponder } from "@/hooks/useArrastarParaResponder";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { StickyScrollArrowLeft, StickyScrollArrowRight } from "@/components/StickyScrollArrows";
+import { useEnquetesTV, ENQ_PREFIX, ENQRES_PREFIX, type EnquetesTV } from "@/components/EmpireTV/useEnquetesTV";
+import { EnquetesPanel, textoVencedor } from "@/components/EmpireTV/EnquetesPanel";
+import { EnqueteFaixa } from "@/components/EmpireTV/EnqueteFaixa";
+import { PlayerAppHls } from "@/components/EmpireTV/PlayerAppHls";
+import { lerPlayerModo, gravarPlayerModo, type TvPlayerModo } from "@/lib/tvPlayerModo";
+import { NovaEnqueteSheet, MARCA_NOVA_ENQUETE } from "@/components/EmpireTV/NovaEnqueteSheet";
+import { marcarSalaAtiva, salaDaUrl, recargaPendente, aoMudarRecargaPendente, atualizarAgora, DURACAO_AVISO_MS } from "@/lib/salaAtiva";
 
 
 export const Route = createFileRoute("/tv")({
@@ -22,8 +31,101 @@ export const Route = createFileRoute("/tv")({
       { name: "description", content: "Empire TV — transmissões ao vivo do Empire." },
     ],
   }),
+  // `?sala={id}`: a sala aberta fica no endereço, então qualquer recarga
+  // (atualização ou o navegador esvaziando a aba por memória) volta direto
+  // pra mesma sala em vez de cair no menu. O roteador lê `?sala=123` como
+  // número (JSON), por isso aceita os dois.
+  validateSearch: (search: Record<string, unknown>): { sala?: string } => {
+    const v = search.sala;
+    if (typeof v === "number" && Number.isFinite(v)) return { sala: String(v) };
+    if (typeof v === "string" && v.trim()) return { sala: v.trim() };
+    return {};
+  },
   component: TvPage,
 });
+
+// Entrada da sala no histórico: `?sala={id}` + a marca `tvSala` no state.
+// Entrar pelo menu EMPURRA essa entrada (voltar fecha a sala e mostra o
+// menu); vindo do mini player de outra tela, ela SUBSTITUI a entrada /tv
+// recém-aberta. As marcas do modo deitado (B4) e do menu da mensagem (B3)
+// são empurradas por cima dela com o mesmo endereço.
+function urlComSala(id: string | null): string {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set("sala", id);
+  else url.searchParams.delete("sala");
+  return url.pathname + url.search + url.hash;
+}
+
+function empurrarEntradaDaSala(id: string) {
+  const atual = window.history.state ?? {};
+  const idx = typeof atual.__TSR_index === "number" ? atual.__TSR_index + 1 : 1;
+  const key = Math.random().toString(36).slice(2, 10);
+  // Chaves do roteador junto: sem elas o TanStack reescreve o state numa
+  // recarga e a marca `tvSala` se perderia.
+  // `tvSalaEmpurrada`: só a entrada que a PRÓPRIA sala empurrou pode ser
+  // desfeita com history.back() (a substituída é a /tv de quem veio de outra
+  // tela — voltar dela sairia da Empire TV).
+  window.history.pushState({ __TSR_index: idx, key, __TSR_key: key, tvSala: id, tvSalaEmpurrada: true }, "", urlComSala(id));
+}
+
+// Troca só o `?sala=` (e a marca) da entrada ATUAL, mantendo o resto do
+// state. O roteador escuta pushState/replaceState, então useSearch acompanha.
+function trocarSalaNaUrl(id: string | null) {
+  if (typeof window === "undefined") return;
+  const st = { ...(window.history.state ?? {}) };
+  if (id) st.tvSala = id;
+  else {
+    delete st.tvSala;
+    delete st.tvSalaEmpurrada;
+  }
+  window.history.replaceState(st, "", urlComSala(id));
+}
+
+function naRotaTv(): boolean {
+  return window.location.pathname.replace(/\/+$/, "") === "/tv";
+}
+
+function entradaEmpurradaPelaSala(): boolean {
+  return !!window.history.state?.tvSalaEmpurrada;
+}
+
+function entradaDeOverlayDaSala(): boolean {
+  const st = typeof window !== "undefined" ? window.history.state : null;
+  return !!(st?.tvSalaDeitada || st?.tvChatMenu || st?.[MARCA_NOVA_ENQUETE]);
+}
+
+// Tira as entradas do modo deitado / menu da mensagem que estejam por cima
+// da entrada da sala (cada uma fecha no próprio popstate) e só então segue.
+// Se o voltar não responder (~400 ms, ex.: marca no começo do histórico),
+// tira as marcas da entrada atual no lugar e segue sem voltar mais.
+function voltarAteEntradaDaSala(depois: () => void) {
+  if (!entradaDeOverlayDaSala()) {
+    depois();
+    return;
+  }
+  let feito = false;
+  const onPop = () => {
+    if (feito) return;
+    feito = true;
+    window.clearTimeout(timer);
+    window.removeEventListener("popstate", onPop);
+    voltarAteEntradaDaSala(depois);
+  };
+  const timer = window.setTimeout(() => {
+    if (feito) return;
+    feito = true;
+    window.removeEventListener("popstate", onPop);
+    const st = { ...(window.history.state ?? {}) };
+    delete st.tvSalaDeitada;
+    delete st.tvChatMenu;
+    delete st[MARCA_NOVA_ENQUETE];
+    delete st.tvSalaEmpurrada;
+    window.history.replaceState(st, "", window.location.pathname + window.location.search + window.location.hash);
+    depois();
+  }, 400);
+  window.addEventListener("popstate", onPop);
+  window.history.back();
+}
 
 
 
@@ -66,7 +168,7 @@ const GIF_PREFIX = "GIF::";
 const VIDEO_GIF_PREFIX = "VIDGIF::";
 
 type HomeTab = "home" | "arquivo" | "grade";
-type WatchTab = "chat" | "redcarpet" | "participantes" | "sobre";
+type WatchTab = "chat" | "redcarpet" | "enquetes" | "participantes" | "sobre";
 
 // TIPO_EVENTO (Agenda_TV) que habilita a aba Red Carpet na sala — o termo
 // usado na planilha é essa única string fixa (as 3 categorias juntas numa
@@ -126,32 +228,84 @@ function colorFor(name: string) {
 const CHAT_HISTORY_LIMIT = 150;
 const MAX_LIVE_MESSAGES = 150;
 
-// Vídeo-GIF que só decodifica/toca quando está de fato visível na tela —
+// Vídeo-GIF que só decodifica/toca quando está perto/dentro da tela —
 // antes, TODO vídeo da lista tinha autoPlay+loop incondicional, então uma
 // sala com vários GIFs em vídeo mantinha dezenas deles tocando ao mesmo
-// tempo (inclusive os que já saíram de tela), sobrecarregando o aparelho.
-// Usa IntersectionObserver (gratuito, nativo do navegador) pra pausar fora
-// de vista e retomar só quando reaparece — sem precisar de nenhuma infra
-// nova, só disciplina de renderização.
+// tempo, sobrecarregando o aparelho. Fora da tela, além de pausar, SOLTA o
+// `src` (removeAttribute + load) pra liberar o vídeo decodificado da
+// memória — no iPhone a aba da transmissão era descartada pelo navegador
+// (tela cinza/preta) com o iframe da Kick + chat cheio de GIFs. A altura
+// atual fica travada enquanto está solto, pra lista não pular.
 function LazyGifVideo({ src }: { src: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      el.src = src;
+      el.play().catch(() => {});
+      return;
+    }
+    const aoCarregar = () => {
+      el.style.height = "";
+    };
+    el.addEventListener("loadeddata", aoCarregar);
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
+          if (el.getAttribute("src") !== src) el.src = src;
           el.play().catch(() => {});
-        } else {
+        } else if (el.getAttribute("src")) {
           el.pause();
+          const h = el.offsetHeight;
+          if (h > 0) el.style.height = `${h}px`;
+          el.removeAttribute("src");
+          el.load();
         }
       },
-      { threshold: 0.25 },
+      { rootMargin: "200px 0px" },
     );
     observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return <video ref={ref} src={src} muted loop playsInline preload="metadata" className="w-full h-auto block" />;
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("loadeddata", aoCarregar);
+      el.pause();
+      el.removeAttribute("src");
+      el.load();
+    };
+  }, [src]);
+  return <video ref={ref} muted loop playsInline preload="metadata" className="w-full h-auto block min-h-[96px]" />;
+}
+
+// Recarga adiada pela sala (salaAtiva.ts): depois que o aviso some, fica um
+// botão pequeno "Atualizar" na sala até a recarga acontecer.
+function BotaoAtualizarPendente({ sobreVideo = false }: { sobreVideo?: boolean }) {
+  const [pendente, setPendente] = useState(() => recargaPendente());
+  const [avisoSumiu, setAvisoSumiu] = useState(false);
+  useEffect(() => aoMudarRecargaPendente(() => setPendente(recargaPendente())), []);
+  useEffect(() => {
+    if (!pendente) {
+      setAvisoSumiu(false);
+      return;
+    }
+    const t = window.setTimeout(() => setAvisoSumiu(true), DURACAO_AVISO_MS);
+    return () => window.clearTimeout(t);
+  }, [pendente]);
+  if (!pendente || !avisoSumiu) return null;
+  return (
+    <button
+      type="button"
+      onClick={atualizarAgora}
+      className={`min-h-[40px] px-3 min-w-0 shrink-0 max-w-[45%] rounded-full border text-[12px] font-semibold flex items-center gap-1.5 active:scale-95 transition ${
+        sobreVideo ? "bg-black/60 backdrop-blur text-white border-white/20" : "bg-primary/15 border-primary/40 text-primary"
+      }`}
+      aria-label="Nova versão disponível — atualizar agora"
+      title="Nova versão disponível — atualizar agora"
+    >
+      <RefreshCw className="size-3.5 shrink-0" />
+      <span className="truncate">Atualizar</span>
+    </button>
+  );
 }
 
 // "DD/MM/YYYY HH:mm" → Date
@@ -164,65 +318,60 @@ function parseProgramDate(p: Programa): Date | null {
 
 function TvPage() {
   const { watching, floating, open: setWatching, minimize, restore, close: stopWatching, updateWatching } = useTvPlayer();
+  const { sala } = Route.useSearch();
   const [programasRaw, setProgramasRaw] = useState<Programa[]>([]);
   const [loading, setLoading] = useState(true);
-  const [liveChannels, setLiveChannels] = useState<Record<string, { viewers?: number; title?: string }>>({});
-  const fetchKick = useServerFn(getKickStatus);
+  // true depois da primeira resposta OK da grade (falha de rede não conta:
+  // a sala pedida no endereço espera a próxima tentativa).
+  const [gradeCarregada, setGradeCarregada] = useState(false);
+  const [liveChannels, setLiveChannels] = useState<Record<string, { viewers?: number; title?: string; playbackUrl?: string }>>({});
 
   // Recarrega a grade periodicamente — antes buscava só uma vez ao abrir a
   // tela, então marcar uma transmissão como "ao vivo" na planilha (pra
   // canais que não são Kick, cuja checagem abaixo só cobre Kick) só
   // aparecia pra quem desse reload manual na página. Com o polling, todo
   // mundo já vendo a tela do TV pega a mudança sozinho.
+  //
+  // Um pedido só traz a grade E o "está ao vivo?" da Kick (antes eram dois
+  // pedidos a cada 12 s por pessoa). Dentro da sala (vídeo já tocando), a
+  // cada 60 s — o limite grátis do Worker é de 100 mil pedidos por dia e a
+  // sala só precisa notar mudança de status; na lista da TV, a cada 12 s.
+  const naSala = !!watching && !floating;
   useEffect(() => {
     let alive = true;
     const load = () => {
-      api.listarProgramasTV()
-        .then((list) => alive && setProgramasRaw(list))
+      api.listarProgramasTVComKick()
+        .then((r) => {
+          if (!alive || !r.ok) return;
+          setProgramasRaw(r.programas);
+          setGradeCarregada(true);
+          // Detecta ao vivo direto pela API do Kick (fonte da verdade).
+          const next: Record<string, { viewers?: number; title?: string; playbackUrl?: string }> = {};
+          for (const [ch, k] of Object.entries(r.kick))
+            if (k?.live) next[ch.toLowerCase()] = { viewers: k.viewers, title: k.title, playbackUrl: k.playbackUrl || undefined };
+          setLiveChannels(next);
+        })
         .catch(() => {})
         .finally(() => alive && setLoading(false));
     };
     load();
-    const id = setInterval(load, 12_000);
+    const id = setInterval(load, naSala ? 60_000 : 12_000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
-
-  // Detecta ao vivo direto pela API do Kick (fonte da verdade).
-  useEffect(() => {
-    let alive = true;
-    const channels = new Set<string>();
-    for (const p of programasRaw) {
-      const slug = kickChannelFromUrl(p.stream_url);
-      if (slug) channels.add(slug);
-    }
-    if (channels.size === 0) { setLiveChannels({}); return; }
-
-    const tick = async () => {
-      const entries = await Promise.all(
-        Array.from(channels).map(async (ch) => {
-          try {
-            const r = await fetchKick({ data: { channel: ch } });
-            return [ch, r] as const;
-          } catch { return [ch, { live: false, channel: ch }] as const; }
-        })
-      );
-      if (!alive) return;
-      const next: Record<string, { viewers?: number; title?: string }> = {};
-      for (const [ch, r] of entries) if (r.live) next[ch] = { viewers: r.viewers, title: r.title };
-      setLiveChannels(next);
-    };
-    tick();
-    const id = setInterval(tick, 12_000);
-    return () => { alive = false; clearInterval(id); };
-  }, [programasRaw, fetchKick]);
+  }, [naSala]);
 
   // Mescla: força ao_vivo=true (e tira finalizado) para qualquer programa cujo canal Kick esteja ao vivo agora.
   const programas = useMemo<Programa[]>(() => {
     return programasRaw.map((p) => {
       const slug = kickChannelFromUrl(p.stream_url);
-      const live = slug ? liveChannels[slug] : undefined;
+      const live = slug ? liveChannels[slug.toLowerCase()] : undefined;
       if (!live) return p;
-      return { ...p, ao_vivo: true, finalizado: false, espectadores: live.viewers ?? p.espectadores };
+      return {
+        ...p,
+        ao_vivo: true,
+        finalizado: false,
+        espectadores: live.viewers ?? p.espectadores,
+        ...(live.playbackUrl ? { kick_hls: live.playbackUrl } : {}),
+      };
     });
   }, [programasRaw, liveChannels]);
 
@@ -230,7 +379,14 @@ function TvPage() {
   useEffect(() => {
     if (!watching) return;
     const updated = programas.find((p) => p.id === watching.id);
-    if (updated && (updated.ao_vivo !== watching.ao_vivo || updated.espectadores !== watching.espectadores)) {
+    if (
+      updated &&
+      (updated.ao_vivo !== watching.ao_vivo ||
+        updated.espectadores !== watching.espectadores ||
+        // Vídeo do player do app: só quando chega pela 1ª vez (o link muda a
+        // cada checagem e o player não precisa de cada versão).
+        (!!updated.kick_hls && !watching.kick_hls))
+    ) {
       updateWatching(updated);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -244,6 +400,116 @@ function TvPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---- Sala no endereço (?sala={id}) ----
+  const salaNaTela = watching && !floating ? String(watching.id) : null;
+  const salaNaTelaRef = useRef(salaNaTela);
+  salaNaTelaRef.current = salaNaTela;
+
+  // Só a sala em tela cheia adia recargas automáticas (staleChunk/pwa). Com
+  // só o mini player em outra tela, a recarga segue normal — uma tela
+  // quebrada é pior que perder a miniatura.
+  const salaAberta = salaNaTela != null;
+  useEffect(() => {
+    marcarSalaAtiva(salaAberta);
+  }, [salaAberta]);
+  useEffect(() => () => marcarSalaAtiva(false), []);
+
+  // A sala apareceu e o endereço ainda não tem o id dela: entrou pelo menu
+  // (ou expandiu o mini player aqui mesmo) → EMPURRA a entrada da sala;
+  // chegou de outra tela com a sala já aberta (mini player expandido) →
+  // SUBSTITUI a entrada /tv que acabou de abrir. Layout effect: roda antes
+  // do WatchView empurrar a marca do modo deitado.
+  const modoEntradaRef = useRef<"push" | "replace">(watching ? "replace" : "push");
+  useLayoutEffect(() => {
+    if (!salaNaTela) return;
+    const modo = modoEntradaRef.current;
+    modoEntradaRef.current = "push";
+    if (salaDaUrl(window.location.search) === salaNaTela) return;
+    if (modo === "push") empurrarEntradaDaSala(salaNaTela);
+    else trocarSalaNaUrl(salaNaTela);
+  }, [salaNaTela]);
+
+  const abrirPeloId = (id: string): boolean => {
+    if (watching && String(watching.id) === id) {
+      restore();
+      return true;
+    }
+    const p = programas.find((x) => String(x.id) === id);
+    if (!p) return false;
+    setWatching(p);
+    return true;
+  };
+  const abrirPeloIdRef = useRef(abrirPeloId);
+  abrirPeloIdRef.current = abrirPeloId;
+
+  // Pedido vindo do endereço ao abrir a tela (ex.: depois de uma recarga):
+  // entra direto nessa sala assim que a grade carrega, sem entrada nova; se
+  // não achar, fica no menu e tira o parâmetro.
+  const salaPedidaRef = useRef<string | null>(sala ?? null);
+  useEffect(() => {
+    const pedida = salaPedidaRef.current;
+    if (!pedida || !gradeCarregada) return;
+    salaPedidaRef.current = null;
+    if (salaNaTela === pedida) return;
+    if (!abrirPeloId(pedida) && !salaNaTela) trocarSalaNaUrl(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gradeCarregada, programas]);
+
+  // Voltar/avançar do celular ou navegador:
+  // - saiu da entrada da sala (endereço sem o id dela) → fecha a sala e o
+  //   menu da Empire TV aparece;
+  // - avançou de volta pra entrada de uma sala → reabre essa sala (a
+  //   entrada já existe, nada é empurrado de novo).
+  // As marcas do modo deitado/menu da mensagem têm o mesmo endereço da sala,
+  // então voltar delas não fecha nada aqui (cada uma cuida da sua).
+  useEffect(() => {
+    const onPop = () => {
+      if (!naRotaTv()) return;
+      if (entradaDeOverlayDaSala()) return;
+      const naUrl = salaDaUrl(window.location.search);
+      const naTela = salaNaTelaRef.current;
+      if (naTela && naUrl !== naTela) {
+        salaNaTelaRef.current = null;
+        if (naUrl && abrirPeloIdRef.current(naUrl)) return;
+        stopWatching();
+        return;
+      }
+      if (!naTela && naUrl && !salaPedidaRef.current) {
+        if (!abrirPeloIdRef.current(naUrl)) trocarSalaNaUrl(null);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Seta/X da própria sala: volta no histórico se a entrada foi empurrada
+  // pela sala (igual ao voltar do celular); senão (veio do mini player de
+  // outra tela, recarga de link sem a marca) fecha no lugar e troca o
+  // endereço pra /tv sem criar entrada.
+  const sairDaSala = () => {
+    voltarAteEntradaDaSala(() => {
+      if (entradaEmpurradaPelaSala()) {
+        window.history.back();
+      } else {
+        salaNaTelaRef.current = null;
+        stopWatching();
+        trocarSalaNaUrl(null);
+      }
+    });
+  };
+
+  // Minimizar continua mostrando o menu com o mini player; a entrada da
+  // sala sai do histórico do mesmo jeito (voltar de novo não reabre nada).
+  const minimizarSala = () => {
+    voltarAteEntradaDaSala(() => {
+      salaNaTelaRef.current = null;
+      minimize();
+      if (entradaEmpurradaPelaSala()) window.history.back();
+      else trocarSalaNaUrl(null);
+    });
+  };
+
   return (
     <div
       className={`fixed inset-0 bg-background text-foreground overflow-hidden transition-all ${
@@ -251,7 +517,7 @@ function TvPage() {
       }`}
     >
       {watching && !floating ? (
-        <WatchView programa={watching} onBack={stopWatching} onMinimize={minimize} />
+        <WatchView programa={watching} onBack={sairDaSala} onMinimize={minimizarSala} />
       ) : (
         <BrowseView programas={programas} loading={loading} onPlay={setWatching} />
       )}
@@ -694,17 +960,20 @@ function ArquivoFull({ finalizados, loading }: { finalizados: Programa[]; loadin
 // No iOS isso passava despercebido (o navegador geralmente pausa mídia de
 // iframe escondido), mas no Android os dois continuam tocando — daí o
 // áudio duplicado. Aqui a gente decide via JS qual bloco existe de fato,
-// garantindo um único player montado por vez.
-function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(false);
+// garantindo um único player montado por vez. Hoje a WatchView vai além:
+// é UMA árvore só nos três modos (celular em pé, celular deitado, tela larga)
+// e só as classes mudam — assim girar o celular não recria o iframe (a
+// transmissão não recarrega nem volta a ficar muda).
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    setIsDesktop(mq.matches);
-    const onChange = () => setIsDesktop(mq.matches);
+    const mq = window.matchMedia(query);
+    setMatches(mq.matches);
+    const onChange = () => setMatches(mq.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return isDesktop;
+  }, [query]);
+  return matches;
 }
 
 // Acompanha window.visualViewport (altura visível de verdade + quanto a
@@ -742,61 +1011,123 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
   const myName = login?.nome;
   const vv = useVisualViewport();
   const [tab, setTab] = useState<WatchTab>("chat");
-  const isDesktop = useIsDesktop();
   const tabBarScroll = useDragScroll<HTMLDivElement>();
 
-  // Heartbeat de presença
+  // Três modos de layout, decididos por media query (nada de API de rotação):
+  // - "deitado": celular na horizontal — vídeo ocupa a tela e o chat vira uma
+  //   coluna à direita (38%), sem abas;
+  // - "largo": área com 760 px ou mais (tablet deitado, computador) — vídeo,
+  //   faixa e abas à esquerda; chat fixo numa coluna à direita;
+  // - celular em pé (padrão): vídeo 16:9 no topo, faixa fina, abas e chat.
+  const deitadoMq = useMediaQuery("(orientation: landscape) and (max-height: 500px)");
+  const largoMq = useMediaQuery("(min-width: 760px)");
+  // Voltar do celular sai do modo deitado antes de sair da sala (regra
+  // "voltar = tela anterior"): entrar nele empurra uma entrada própria no
+  // histórico; o voltar a tira e a sala passa a mostrar o layout normal
+  // mesmo com o celular ainda deitado, até ele ser girado de novo.
+  const [deitadoDispensado, setDeitadoDispensado] = useState(false);
   useEffect(() => {
-    if (!myId) return;
-    const start = Date.now();
-    let accumulated = 0;
-    let lastTick = start;
-    let visible = !document.hidden;
-
-    const onVis = () => {
-      if (document.hidden) {
-        if (visible) accumulated += Math.floor((Date.now() - lastTick) / 1000);
-        visible = false;
-      } else {
-        visible = true;
-        lastTick = Date.now();
-      }
+    if (!deitadoMq) setDeitadoDispensado(false);
+  }, [deitadoMq]);
+  const deitado = deitadoMq && !deitadoDispensado;
+  const largo = largoMq && !deitado;
+  useEffect(() => {
+    if (!deitado) return;
+    let ativo = true;
+    let empurrado = false;
+    const empurrar = () => {
+      if (!ativo) return;
+      window.history.pushState({ tvSalaDeitada: true }, "");
+      empurrado = true;
     };
-    document.addEventListener("visibilitychange", onVis);
-
-    const send = (extraSeconds = 0) => {
-      const total = accumulated + extraSeconds;
-      if (total < 5) return;
-      api.registrarPresencaTV({
-        programa_id: programa.id,
-        telegram_id: myId,
-        nome: myName || "Anônimo",
-        watched_seconds: total,
-      }).catch(() => {});
+    // Girou com o menu de uma mensagem aberto: fecha o menu primeiro (tira a
+    // entrada dele) e só então empurra a do modo deitado — assim não fica
+    // entrada órfã do menu embaixo da nossa. O ChatPanel fecha o menu no
+    // mesmo popstate, porque a entrada atual deixa de ser a dele.
+    const depoisDoMenu = () => {
+      window.removeEventListener("popstate", depoisDoMenu);
+      empurrar();
     };
-
-    const interval = setInterval(() => {
-      if (visible) {
-        const now = Date.now();
-        accumulated += Math.floor((now - lastTick) / 1000);
-        lastTick = now;
-        send();
-      }
-    }, 30_000);
-
+    if (window.history.state?.tvChatMenu) {
+      window.addEventListener("popstate", depoisDoMenu);
+      window.history.back();
+    } else {
+      empurrar();
+    }
+    const onPop = () => {
+      if (empurrado && !window.history.state?.tvSalaDeitada) setDeitadoDispensado(true);
+    };
+    window.addEventListener("popstate", onPop);
     return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVis);
-      const extra = visible ? Math.floor((Date.now() - lastTick) / 1000) : 0;
-      send(extra);
+      ativo = false;
+      window.removeEventListener("popstate", depoisDoMenu);
+      window.removeEventListener("popstate", onPop);
+      // Saiu do modo deitado sem ser pelo voltar (girou o celular, minimizou,
+      // fechou a sala): tira a entrada para não deixar entrada órfã.
+      if (window.history.state?.tvSalaDeitada) window.history.back();
+      // Folha "Nova enquete" aberta por cima: a entrada do modo deitado fica
+      // embaixo dela; é tirada quando a folha fechar (efeito abaixo).
+      else if (window.history.state?.[MARCA_NOVA_ENQUETE]) deitadoOrfaoRef.current = true;
     };
-  }, [programa.id, myId, myName]);
+  }, [deitado]);
+  const deitadoOrfaoRef = useRef(false);
+  const deitadoAtualRef = useRef(deitado);
+  deitadoAtualRef.current = deitado;
+  useEffect(() => {
+    const onPop = () => {
+      if (!deitadoOrfaoRef.current) return;
+      if (window.history.state?.[MARCA_NOVA_ENQUETE]) return;
+      deitadoOrfaoRef.current = false;
+      if (window.history.state?.tvSalaDeitada && !deitadoAtualRef.current) window.history.back();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // A presença é contada pelo PresencaTVTracker (montado no TvPlayerProvider),
+  // que vale tanto pra sala quanto pro mini player — nada de heartbeat aqui.
+
+  // GET /api/tv/presenca alimenta o círculo "Sua participação" (linha do
+  // próprio jogador = o % que vai ser creditado) e a aba Participantes. Fora
+  // da aba, pede SÓ a linha do jogador (1 linha lida no D1 por minuto, em vez
+  // da sala inteira por pessoa — com 200 pessoas isso estourava o limite
+  // diário do D1); com a aba aberta, a sala toda a cada 60 s.
+  const [presencaRows, setPresencaRows] = useState<PresencaRow[]>([]);
+  const [presencaCarregando, setPresencaCarregando] = useState(true);
+  const participantesAberto = tab === "participantes";
+  const presencaAtiva = !!myId || participantesAberto;
+  useEffect(() => {
+    setPresencaRows([]);
+    setPresencaCarregando(true);
+  }, [programa.id]);
+  useEffect(() => {
+    if (!presencaAtiva) return;
+    let alive = true;
+    const load = () => {
+      api.listarPresencaTV(programa.id, participantesAberto ? undefined : String(myId))
+        .then((r) => { if (alive) setPresencaRows(r); })
+        .catch(() => {})
+        .finally(() => { if (alive) setPresencaCarregando(false); });
+    };
+    load();
+    // 60 s nos dois casos: a lista completa lê uma linha por pessoa da sala.
+    const t = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(t); };
+  }, [programa.id, presencaAtiva, participantesAberto]);
+  const meuPct = useMemo(() => {
+    if (!myId || presencaCarregando) return null;
+    const minha = presencaRows.find((r) => r.telegram_id === String(myId));
+    return minha ? Math.max(0, Math.min(100, Math.round(minha.percentual))) : 0;
+  }, [presencaRows, presencaCarregando, myId]);
+
+  const isAdmin = isAdminLogin(login);
 
   // Red Carpet sempre logo ao lado de Chat — só existe quando o TIPO_EVENTO
   // da sala está na lista (Eventos Oficiais/Premiações/Superbowl).
   const tabs: { id: WatchTab; label: string; icon: typeof MessageSquare }[] = [
     { id: "chat", label: "Chat", icon: MessageSquare },
     ...(temRedCarpet(programa) ? [{ id: "redcarpet" as WatchTab, label: "Red Carpet", icon: Sparkles }] : []),
+    { id: "enquetes", label: "Enquetes", icon: BarChart3 },
     { id: "participantes", label: "Participantes", icon: Users },
     { id: "sobre", label: "Sobre", icon: Info },
   ];
@@ -808,6 +1139,23 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     setHighlightPostId(postId);
     setTab("redcarpet");
   };
+
+  // Enquetes do chat: uma lista só para a aba, a faixa do topo do chat e os
+  // avisos. Atualiza a cada 5 s só com a aba Enquetes ou a faixa expandida
+  // na tela; fora disso, quando chega aviso ENQ::/ENQRES:: no chat.
+  const [faixaEnqExpandida, setFaixaEnqExpandida] = useState(false);
+  const chatNaTela = deitado || largo || tab === "chat";
+  const enquetes = useEnquetesTV(programa.id, (tab === "enquetes" && !deitado) || (faixaEnqExpandida && chatNaTela));
+  const [destaqueEnquete, setDestaqueEnquete] = useState<string | null>(null);
+  const [novaEnqueteAberta, setNovaEnqueteAberta] = useState(false);
+  // Aviso do chat tocado: abre a aba Enquetes com a enquete em destaque (no
+  // modo deitado não há abas, então sai dele primeiro).
+  const abrirEnquete = useCallback((id: string) => {
+    setDestaqueEnquete(id);
+    if (deitado) setDeitadoDispensado(true);
+    setTab("enquetes");
+  }, [deitado]);
+  const abrirNovaEnquete = useCallback(() => setNovaEnqueteAberta(true), []);
 
   // O navegador força o autoplay como mudo até haver uma interação real do
   // usuário — como o player é um iframe de outro domínio (Kick/YouTube),
@@ -829,7 +1177,74 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     setUnmutedOnce(false);
   }, [programa.id]);
 
+  // Player do app (HLS da Kick, som com um toque) x player embutido da Kick.
+  // O link do vídeo fica guardado depois da 1ª checagem, pra uma checagem
+  // falha no meio não derrubar o player; falha do player do app nesta sala
+  // volta pra Kick sozinho (até trocar de sala ou tocar em "Player do app").
+  const [playerModo, setPlayerModo] = useState<TvPlayerModo>("app");
+  useEffect(() => setPlayerModo(lerPlayerModo()), []);
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null);
+  const [hlsFalhou, setHlsFalhou] = useState(false);
+  useEffect(() => {
+    setHlsUrl(null);
+    setHlsFalhou(false);
+  }, [programa.id]);
+  useEffect(() => {
+    if (programa.kick_hls) setHlsUrl(programa.kick_hls);
+  }, [programa.kick_hls]);
+  const usarPlayerApp = !!hlsUrl && !!programa.ao_vivo && playerModo === "app" && !hlsFalhou;
+  const trocarPlayer = (modo: TvPlayerModo) => {
+    gravarPlayerModo(modo);
+    setPlayerModo(modo);
+    setHlsFalhou(false);
+  };
+  const botaoTrocarPlayer = (modo: TvPlayerModo) => (
+    <button
+      type="button"
+      onClick={() => trocarPlayer(modo)}
+      className="size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition"
+      aria-label={modo === "kick" ? "Usar o player da Kick" : "Usar o player do app"}
+      title={modo === "kick" ? "Usar o player da Kick" : "Usar o player do app"}
+    >
+      <Repeat className="size-[18px] shrink-0" />
+    </button>
+  );
+
+  // Controles do vídeo: aparecem ao entrar e a cada toque/movimento no vídeo
+  // e somem depois de 3,5 s, para o vídeo ficar limpo. Só no player do app:
+  // o toque no player da Kick (outro site) não chega ao app, então lá os
+  // poucos ícones ficam sempre à vista.
+  const [controlesTocados, setControlesTocados] = useState(true);
+  const timerControlesRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mostrarControles = useCallback(() => {
+    setControlesTocados(true);
+    if (timerControlesRef.current) clearTimeout(timerControlesRef.current);
+    timerControlesRef.current = setTimeout(() => setControlesTocados(false), 3_500);
+  }, []);
+  useEffect(() => {
+    mostrarControles();
+    return () => {
+      if (timerControlesRef.current) clearTimeout(timerControlesRef.current);
+    };
+  }, [programa.id, usarPlayerApp, mostrarControles]);
+  const controlesVisiveis = !usarPlayerApp || controlesTocados;
+
   const player = (() => {
+    if (usarPlayerApp && hlsUrl) {
+      return (
+        <PlayerAppHls
+          src={hlsUrl}
+          titulo={programa.titulo}
+          onFalha={(motivo) => {
+            console.warn("[tv] player do app falhou:", motivo);
+            setHlsFalhou(true);
+            toast("O player do app falhou — voltando para o player da Kick.");
+          }}
+          acoes={botaoTrocarPlayer("kick")}
+          controlesVisiveis={controlesVisiveis}
+        />
+      );
+    }
     const embed = resolveStreamEmbed(programa.stream_url, !!programa.ao_vivo);
     if (embed) {
       return (
@@ -842,22 +1257,37 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
             allow="autoplay; camera; microphone; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
           />
-          {/* Depois do primeiro toque bem-sucedido nesta sessão, troca o aviso
+          {/* O botão de som fica no canto de CIMA: os ~56 px de baixo são a
+              barra de controles do próprio player da Kick (com o botão de
+              mudo) e nada nosso pode cobrir essa faixa.
+              Depois do primeiro toque bem-sucedido nesta sessão, troca o aviso
               grande por um ícone discreto — cada transmissão nova ainda exige
               um toque de verdade (é o navegador quem exige, não dá pra
               pular), mas não precisa mais do aviso chamativo repetido. */}
+          <div className="absolute top-1 right-1 z-10 flex items-center max-w-[70%] min-w-0">
+          {hlsUrl && programa.ao_vivo && botaoTrocarPlayer("app")}
           <button
             type="button"
             onClick={handleUnmute}
             className={
               unmutedOnce || hasUnmutedThisSession()
-                ? "absolute bottom-3 left-3 z-10 size-8 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 transition"
-                : "absolute bottom-3 left-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold shadow-lg active:scale-95 transition"
+                ? "size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition"
+                : "min-w-0 h-10 px-1 flex items-center active:scale-95 transition"
             }
             aria-label="Ativar som"
           >
-            {unmutedOnce ? <Volume2 className="size-3.5" /> : <><VolumeX className="size-3.5" /> {!hasUnmutedThisSession() && "Toque para ativar o som"}</>}
+            {unmutedOnce ? (
+              <Volume2 className="size-[18px] shrink-0" />
+            ) : hasUnmutedThisSession() ? (
+              <VolumeX className="size-[18px] shrink-0" />
+            ) : (
+              <span className="min-w-0 h-8 flex items-center gap-1.5 px-3 rounded-full bg-black/45 backdrop-blur-sm text-white text-xs font-semibold">
+                <VolumeX className="size-3.5 shrink-0" />
+                <span className="truncate">Toque para ativar o som</span>
+              </span>
+            )}
           </button>
+          </div>
         </div>
       );
     }
@@ -878,121 +1308,297 @@ function WatchView({ programa, onBack, onMinimize }: { programa: Programa; onBac
     );
   })();
 
-  const header = (
-    <div
-      className="flex items-center gap-2 px-3 shrink-0 bg-background/95 backdrop-blur border-b border-border/60"
-      style={{ paddingTop: "env(safe-area-inset-top)", height: "calc(3rem + env(safe-area-inset-top))" }}
-    >
-      <button onClick={onBack} className="size-8 rounded-full hover:bg-muted flex items-center justify-center shrink-0" aria-label="Voltar">
-        <ArrowLeft className="size-4" />
-      </button>
-      <div className="min-w-0 flex-1 truncate text-sm font-semibold">{programa.titulo}</div>
-      {programa.ao_vivo && (
-        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-bold shrink-0">
-          <Radio className="size-2.5 animate-pulse" /> LIVE
-        </span>
+  // Controles por cima do vídeo, só no canto de CIMA (a faixa de baixo é da
+  // barra de controles da Kick — ver o botão de som acima).
+  const videoTopo = (
+    <>
+      {/* Sombra suave no topo, só com os controles à vista (dá contraste aos
+          ícones sem círculos escuros por cima do vídeo). */}
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-x-0 top-0 h-16 z-[5] bg-gradient-to-b from-black/55 to-transparent transition-opacity duration-300 ${
+          controlesVisiveis ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      <div
+        className={`absolute top-1 left-1 z-10 flex items-center min-w-0 transition-opacity duration-300 ${
+          controlesVisiveis ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <button onClick={onBack} className="size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition" aria-label="Voltar" title="Voltar">
+          <ArrowLeft className="size-[18px] shrink-0" />
+        </button>
+        <button onClick={onMinimize} className="size-10 shrink-0 flex items-center justify-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] active:scale-90 transition" aria-label="Minimizar (continua tocando)" title="Minimizar — continua tocando">
+          <Minimize2 className="size-[18px] shrink-0" />
+        </button>
+        {programa.ao_vivo && (
+          <span className="ml-1 flex items-center gap-1 text-white text-[10px] font-bold tracking-wide shrink-0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            <span className="size-1.5 rounded-full bg-red-500 animate-pulse shrink-0" aria-hidden="true" /> AO VIVO
+          </span>
+        )}
+      </div>
+      {deitado && (
+        <div className="absolute top-1 left-[88px] z-10 min-w-0">
+          <BotaoAtualizarPendente sobreVideo />
+        </div>
       )}
-      <button onClick={onMinimize} className="size-8 rounded-full hover:bg-muted flex items-center justify-center shrink-0" aria-label="Minimizar (continua tocando)" title="Minimizar — continua tocando">
-        <Minimize2 className="size-4" />
+    </>
+  );
+
+  // Faixa fina logo abaixo do vídeo: título (toque = Sobre), quantos estão
+  // assistindo e o círculo da participação.
+  const espectadores = programa.ao_vivo && programa.espectadores > 0 ? programa.espectadores : null;
+  const faixa = (
+    <div className="flex items-center gap-2 px-2 py-1 shrink-0 min-w-0 border-b border-border/60">
+      <button
+        type="button"
+        onClick={() => setTab("sobre")}
+        className="flex-1 min-w-0 px-1 py-0.5 text-left rounded-md hover:bg-muted/50 transition"
+        title={programa.titulo}
+      >
+        <span className="block truncate text-sm font-semibold leading-tight">{programa.titulo}</span>
+        <span className="flex items-center gap-1 min-w-0 text-[11px] text-muted-foreground leading-tight">
+          <Users className="size-3 shrink-0" />
+          <span className="truncate">
+            {espectadores != null ? `${espectadores.toLocaleString("pt-BR")} assistindo · Sobre` : "Sobre a transmissão"}
+          </span>
+        </span>
       </button>
+      <BotaoAtualizarPendente />
+      {myId && <ParticipacaoCirculo pct={meuPct} onClick={() => setTab("participantes")} />}
     </div>
   );
 
   const tabBar = (
     <div
       ref={tabBarScroll.ref}
-      className="flex items-center gap-1 px-2 h-10 border-b border-border shrink-0 overflow-x-auto cursor-grab active:cursor-grabbing select-none"
+      className="flex items-center gap-1 px-2 h-9 border-b border-border shrink-0 overflow-x-auto cursor-grab active:cursor-grabbing select-none"
     >
       <StickyScrollArrowLeft show={tabBarScroll.canScrollLeft} onClick={() => tabBarScroll.scrollByAmount(-1)} />
       <StickyScrollArrowRight show={tabBarScroll.canScrollRight} onClick={() => tabBarScroll.scrollByAmount(1)} />
-      {tabs.map((t) => {
+      {/* Na tela larga o chat já fica sempre na coluna da direita, então a
+          aba "Chat" sai da fileira: as outras abrem à esquerda. Sem nenhuma
+          aberta, a esquerda mostra o "Sobre" (nada de área vazia). */}
+      {tabs.filter((t) => !largo || t.id !== "chat").map((t) => {
         const Icon = t.icon;
-        const active = tab === t.id;
+        const active = tab === t.id || (largo && tab === "chat" && t.id === "sobre");
         return (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`relative shrink-0 h-8 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 ${
+            className={`relative shrink-0 h-7 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 ${
               active
                 ? "text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]"
                 : "text-muted-foreground border border-white/10 bg-white/[0.03] backdrop-blur-md hover:bg-white/[0.06]"
             }`}
           >
             {active && <span className="absolute inset-0 rounded-md bg-gradient-to-br from-primary via-primary to-fuchsia-500/80" aria-hidden="true" />}
-            <Icon className="relative z-10 size-3.5" /> <span className="relative z-10">{t.label}</span>
+            <Icon className="relative z-10 size-3.5 shrink-0" /> <span className="relative z-10 whitespace-nowrap">{t.label}</span>
           </button>
         );
       })}
     </div>
   );
 
-  const panel = (
-    <div className="flex-1 min-h-0 flex flex-col">
-      {tab === "chat" && <ChatPanel programaId={programa.id} onOpenRedCarpetPost={openRedCarpetPost} />}
-      {tab === "redcarpet" && (
-        <RedCarpetPanel programa={programa} highlightPostId={highlightPostId} onHighlightConsumed={() => setHighlightPostId(null)} />
-      )}
-      {tab === "participantes" && <ParticipantesPanel programa={programa} />}
-      {tab === "sobre" && <SobrePanel programa={programa} />}
-    </div>
-  );
-
-  // ---------- Mobile: vídeo em bloco fixo no topo (não tela cheia) + chat
-  // SEMPRE visível logo abaixo, sem gaveta que soma/sobrepõe o vídeo — vídeo
-  // e teclado nunca disputam o mesmo espaço, porque nenhum dos dois cobre o
-  // outro: cada um vive na sua própria faixa da tela o tempo todo. ----------
-  if (!isDesktop) {
-    // Vídeo + cabeçalho ficam em "position: absolute" (não itens normais de
-    // flex) e o painel de chat ocupa o resto via "position: absolute" com
-    // "top" calculado — de propósito, não é só estética. Como itens comuns
-    // de flex, quando o Safari rola pra revelar o campo de digitar acima do
-    // teclado, ele rola a COLUNA INTEIRA (arrastando vídeo e cabeçalho pra
-    // fora da tela junto, foi exatamente isso que aconteceu). "absolute"
-    // tira os dois de qualquer fluxo/scroll ancestral — só quem pode rolar
-    // é o scroller interno do próprio ChatPanel (ver comentário lá dentro).
-    const videoHeight = "calc(3rem + env(safe-area-inset-top) + 100vw * 9 / 16)";
-    return (
-      <div
-        className="relative bg-background overflow-hidden"
-        style={{
-          // window.visualViewport, quando disponível, é a área REALMENTE
-          // visível (já descontando o teclado) — mais confiável que h-full/
-          // 100dvh nesse cenário específico, porque o iOS às vezes pana a
-          // página em vez de encolher a viewport.
-          height: vv ? vv.height : "100%",
-          transform: vv?.offsetTop ? `translateY(${vv.offsetTop}px)` : undefined,
-        }}
-      >
-        <div className="absolute top-0 inset-x-0 z-20">
-          {header}
-          <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
-        </div>
-        <div className="absolute inset-x-0 bottom-0 flex flex-col" style={{ top: videoHeight }}>
-          {tabBar}
-          {panel}
-        </div>
+  // Conteúdo das abas que não são o chat (no celular em pé substitui o chat;
+  // na tela larga aparece à esquerda, com o chat continuando à direita).
+  // Na tela larga, sem aba aberta (tab "chat"), mostra o "Sobre".
+  const abaEsquerda: WatchTab = tab === "chat" && largo ? "sobre" : tab;
+  const painelAba =
+    abaEsquerda === "chat" ? null : (
+      <div className="flex-1 min-h-0 flex flex-col">
+        {abaEsquerda === "redcarpet" && (
+          <RedCarpetPanel programa={programa} highlightPostId={highlightPostId} onHighlightConsumed={() => setHighlightPostId(null)} />
+        )}
+        {abaEsquerda === "enquetes" && (
+          <EnquetesPanel
+            programaId={programa.id}
+            lista={enquetes.lista}
+            carregado={enquetes.carregado}
+            isAdmin={isAdmin}
+            onMudou={enquetes.recarregar}
+            onNova={abrirNovaEnquete}
+            destaqueId={destaqueEnquete}
+            onDestaqueConsumido={() => setDestaqueEnquete(null)}
+          />
+        )}
+        {abaEsquerda === "participantes" && <ParticipantesPanel rows={presencaRows} loading={presencaCarregando} />}
+        {abaEsquerda === "sobre" && <SobrePanel programa={programa} />}
       </div>
     );
-  }
+  const mostraChat = deitado || largo || tab === "chat";
 
-  // ---------- Desktop: player + painel lateral fixo ----------
+  // Altura do vídeo no celular em pé: 16:9 da largura + a área do entalhe.
+  const alturaVideoMobile = "calc(env(safe-area-inset-top) + 100vw * 9 / 16)";
+  const modo = deitado ? "deitado" : largo ? "largo" : "mobile";
+
+  // UMA árvore só para os três modos (só classes/estilos mudam), para o
+  // iframe e o chat não serem recriados ao girar o celular.
+  //
+  // Celular em pé: vídeo e o resto ficam em "position: absolute" (não itens
+  // normais de flex) com "top" calculado — de propósito, não é só estética.
+  // Como itens comuns de flex, quando o Safari rola pra revelar o campo de
+  // digitar acima do teclado, ele rola a COLUNA INTEIRA (arrastando o vídeo
+  // pra fora da tela junto). "absolute" tira o vídeo de qualquer fluxo/scroll
+  // ancestral — só quem pode rolar é o scroller interno do ChatPanel. E a
+  // altura vem de window.visualViewport (área REALMENTE visível, já sem o
+  // teclado): ao digitar, encolhe o chat, nunca o vídeo.
+  //
+  // Tela larga: grade de duas colunas; a parte de baixo vira "display:
+  // contents" e os filhos dela entram direto na grade. O vídeo tem altura
+  // máxima para a faixa e as abas caberem; o chat ocupa a altura toda da
+  // coluna da direita e nunca é empurrado para fora da tela.
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex-1 flex flex-col min-w-0">
-        {header}
-        <div className="w-full bg-black" style={{ aspectRatio: "16 / 9" }}>{player}</div>
+    <div
+      className={
+        modo === "largo"
+          ? "relative h-full min-h-0 overflow-hidden bg-background grid grid-cols-[minmax(0,1fr)_clamp(320px,34%,400px)] grid-rows-[auto_auto_auto_auto_minmax(0,1fr)]"
+          : modo === "deitado"
+            ? "relative overflow-hidden bg-black flex"
+            : "relative overflow-hidden bg-background"
+      }
+      style={
+        modo === "largo"
+          ? undefined
+          : {
+              height: vv ? vv.height : "100%",
+              transform: vv?.offsetTop ? `translateY(${vv.offsetTop}px)` : undefined,
+              // Celular deitado: controles e coluna do chat fora do entalhe.
+              ...(modo === "deitado"
+                ? { paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }
+                : {}),
+            }
+      }
+    >
+      <div
+        className={
+          modo === "largo"
+            ? "col-start-1 row-start-1 w-full bg-black"
+            : modo === "deitado"
+              ? "relative flex-1 min-w-0 h-full bg-black"
+              : "absolute top-0 inset-x-0 z-20 bg-black"
+        }
+        style={modo === "mobile" ? { paddingTop: "env(safe-area-inset-top)" } : undefined}
+      >
+        <div
+          className={modo === "deitado" ? "relative w-full h-full" : "relative w-full mx-auto"}
+          style={
+            modo === "deitado"
+              ? undefined
+              : modo === "largo"
+                ? { aspectRatio: "16 / 9", maxHeight: "calc(100dvh - 200px)" }
+                : { aspectRatio: "16 / 9" }
+          }
+        >
+          <div
+            className="absolute inset-0"
+            onPointerDown={mostrarControles}
+            onFocusCapture={mostrarControles}
+            onPointerMove={(e) => {
+              if (e.pointerType === "mouse") mostrarControles();
+            }}
+          >
+            {player}
+            {videoTopo}
+          </div>
+        </div>
       </div>
-
-      <div className="lg:w-[360px] border-l border-border flex flex-col min-h-0 bg-card/30">
-        {tabBar}
-        {panel}
+      <div
+        className={
+          modo === "mobile" ? "absolute inset-x-0 bottom-0 flex flex-col" : "contents"
+        }
+        style={modo === "mobile" ? { top: alturaVideoMobile } : undefined}
+      >
+        {modo !== "deitado" && <div className={modo === "largo" ? "col-start-1 row-start-2 min-w-0" : "min-w-0"}>{faixa}</div>}
+        {modo !== "deitado" && isAdmin && (
+          <div className={modo === "largo" ? "col-start-1 row-start-3 min-w-0" : "min-w-0"}>
+            <AdminEventoBar programaId={programa.id} />
+          </div>
+        )}
+        {modo !== "deitado" && <div className={modo === "largo" ? "col-start-1 row-start-4 min-w-0" : "min-w-0"}>{tabBar}</div>}
+        {modo !== "deitado" && painelAba && (
+          <div className={modo === "largo" ? "col-start-1 row-start-5 min-h-0 min-w-0 flex flex-col overflow-hidden" : "flex-1 min-h-0 flex flex-col"}>
+            {painelAba}
+          </div>
+        )}
+        {mostraChat && (
+          <div
+            className={
+              modo === "largo"
+                ? "col-start-2 row-start-1 row-span-5 min-h-0 min-w-0 flex flex-col border-l border-border bg-card/30"
+                : modo === "deitado"
+                  ? "dark w-[38%] shrink-0 h-full min-h-0 flex flex-col bg-black/55 text-foreground border-l border-white/10"
+                  : "flex-1 min-h-0 flex flex-col"
+            }
+          >
+            <ChatPanel
+              programaId={programa.id}
+              onOpenRedCarpetPost={openRedCarpetPost}
+              enquetes={enquetes}
+              isAdmin={isAdmin}
+              onAbrirEnquete={abrirEnquete}
+              onNovaEnquete={isAdmin ? abrirNovaEnquete : undefined}
+              onFaixaEnqueteExpandida={setFaixaEnqExpandida}
+            />
+          </div>
+        )}
       </div>
+      {novaEnqueteAberta && isAdmin && (
+        <NovaEnqueteSheet
+          programaId={programa.id}
+          onClose={() => setNovaEnqueteAberta(false)}
+          onPublicada={() => void enquetes.recarregar()}
+        />
+      )}
     </div>
   );
 }
 
 // ---------- Chat (realtime via Lovable Cloud) ----------
-function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; onOpenRedCarpetPost: (postId: string) => void }) {
+// Linha de mensagem do chat: compacta, com gesto de arrastar (responder) e
+// toque longo (menu). Fica compacta para todos; as próprias ganham fundo sutil.
+function LinhaMensagem({ id, className, onResponder, onMenu, children }: {
+  id: string;
+  className?: string;
+  onResponder: () => void;
+  onMenu: (pos: { x: number; y: number }) => void;
+  children: React.ReactNode;
+}) {
+  const g = useArrastarParaResponder(onResponder, onMenu);
+  return (
+    <div
+      id={id}
+      {...g.handlers}
+      style={g.style}
+      className={`group flex items-start gap-2 rounded-lg px-1.5 py-1 -mx-1 ${className ?? ""}`}
+    >
+      <div
+        className="flex items-start gap-2 flex-1 min-w-0"
+        style={{ transform: g.deslocamento ? `translateX(${g.deslocamento}px)` : undefined, transition: g.ativo ? "none" : "transform 150ms ease-out" }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ChatPanel({
+  programaId,
+  onOpenRedCarpetPost,
+  enquetes,
+  isAdmin,
+  onAbrirEnquete,
+  onNovaEnquete,
+  onFaixaEnqueteExpandida,
+}: {
+  programaId: string;
+  onOpenRedCarpetPost: (postId: string) => void;
+  enquetes: EnquetesTV;
+  isAdmin: boolean;
+  onAbrirEnquete: (id: string) => void;
+  onNovaEnquete?: () => void;
+  onFaixaEnqueteExpandida: (expandida: boolean) => void;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -1017,8 +1623,33 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   // de propósito.
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  // Falha ao buscar as anteriores: o botão do topo vira "Tentar de novo" e o
+  // carregamento automático ao rolar para de insistir até a pessoa tocar.
+  const [erroAnteriores, setErroAnteriores] = useState(false);
   const OLDER_PAGE_SIZE = 60;
   const justLoadedOlderRef = useRef(false);
+  const loadingOlderRef = useRef(false);
+
+  // Rolagem do chat: quem está lendo mensagens antigas não é puxado pro fim.
+  // `noFimRef` é medido no onScroll (e de novo logo antes de aplicar uma
+  // mensagem nova), SEMPRE antes do DOM crescer. `rolarAoFimRef` é o recado
+  // pro efeito de auto-scroll: só rola quando alguém marcou isso.
+  const [novas, setNovas] = useState(0);
+  const noFimRef = useRef(true);
+  const rolarAoFimRef = useRef(false);
+  const primeiraCargaRef = useRef(true);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  messagesRef.current = messages;
+  const restaurarAlturaRef = useRef<number | null>(null);
+  const listaRef = useRef<HTMLDivElement>(null);
+  // Identidade lida via ref no handler realtime (nunca fica velha).
+  const idRef = useRef({ myId, displayName });
+  idRef.current = { myId, displayName };
+  // Aviso de enquete (ENQ::/ENQRES::) chegando ao vivo: busca a lista de novo.
+  const recarregarEnquetesRef = useRef(enquetes.recarregar);
+  recarregarEnquetesRef.current = enquetes.recarregar;
+  const enquetePorId = useMemo(() => new Map(enquetes.lista.map((e) => [e.id, e])), [enquetes.lista]);
+  const enqueteAberta = enquetes.lista.find((e) => e.aberta) ?? null;
 
   // Histórico inicial + subscrição realtime — celular em segundo plano
   // (troca de app, tela apagada) costuma derrubar o websocket em silêncio,
@@ -1030,6 +1661,9 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   useEffect(() => {
     let alive = true;
     let channel: any = null;
+    primeiraCargaRef.current = true;
+    noFimRef.current = true;
+    setNovas(0);
 
     const fetchHistory = async () => {
       const { supabase } = await import("@/integrations/supabase/client");
@@ -1053,6 +1687,14 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
         .limit(CHAT_HISTORY_LIMIT);
       if (!alive || !data) return;
       setHasMoreHistory(data.length === CHAT_HISTORY_LIMIT);
+      // Carregar a sala sempre leva ao fim; recarga em segundo plano (aba
+      // voltou a ficar visível) só rola se a pessoa já estava no fim.
+      const elH = scrollerRef.current;
+      if (primeiraCargaRef.current || noFimRef.current || (elH && estaNoFim(elH))) {
+        rolarAoFimRef.current = true;
+        setNovas(0);
+      }
+      primeiraCargaRef.current = false;
       setMessages(
         data
           .slice()
@@ -1084,6 +1726,29 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
           { event: "INSERT", schema: "public", table: "tv_chat_messages", filter: `programa_id=eq.${programaId}` },
           (payload: any) => {
             const r = payload.new;
+            if (
+              r?.user_id === "empire-tv" &&
+              typeof r?.text === "string" &&
+              (r.text.startsWith(ENQ_PREFIX) || r.text.startsWith(ENQRES_PREFIX))
+            ) {
+              void recarregarEnquetesRef.current();
+            }
+            // Decide ANTES de o DOM crescer com a mensagem nova.
+            if (!messagesRef.current.some((m) => m.id === r.id)) {
+              // Intenção do usuário (ref), não distância ao vivo: mídia que
+              // cresce depois de carregar não deve fazer quem acompanha ao
+              // vivo parecer "lendo".
+              const noFim = noFimRef.current;
+              const { myId: mid, displayName: dn } = idRef.current;
+              const minha = mid ? r.user_id === mid : r.user_name === dn;
+              const d = decidirAoChegar(noFim, minha, 0);
+              if (d.rolar) {
+                rolarAoFimRef.current = true;
+                setNovas(0);
+              } else {
+                setNovas((n) => decidirAoChegar(false, false, n).novas);
+              }
+            }
             setMessages((prev) => {
               if (prev.some((m) => m.id === r.id)) return prev;
               const next = [
@@ -1099,11 +1764,12 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                   reply_to: r.reply_to || undefined,
                 },
               ];
+              // Poda só acontece com a pessoa no fim (ver efeito `podar`).
               // Numa transmissão longa e movimentada, essa lista cresceria pra
               // sempre (nunca era podada) — cada mensagem nova virando mais um
               // nó no DOM (e, se for GIF-vídeo, mais um <video> decodificando)
               // até travar o app. Mantém só a janela mais recente.
-              return next.length > MAX_LIVE_MESSAGES ? next.slice(next.length - MAX_LIVE_MESSAGES) : next;
+              return noFimRef.current && next.length > MAX_LIVE_MESSAGES ? next.slice(next.length - MAX_LIVE_MESSAGES) : next;
             });
           }
         )
@@ -1133,20 +1799,21 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   }, [programaId]);
 
   const loadOlderMessages = async () => {
-    if (loadingOlder || !hasMoreHistory || messages.length === 0) return;
+    if (loadingOlder || loadingOlderRef.current || !hasMoreHistory || messages.length === 0) return;
+    loadingOlderRef.current = true;
     setLoadingOlder(true);
+    setErroAnteriores(false);
     try {
-      const el = scrollerRef.current;
-      const alturaAntes = el?.scrollHeight || 0;
       const oldestIso = new Date(messages[0].ts).toISOString();
       const { supabase } = await import("@/integrations/supabase/client");
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("tv_chat_messages")
         .select("id,user_name,user_id,user_photo,text,reply_to,created_at")
         .eq("programa_id", programaId)
         .lt("created_at", oldestIso)
         .order("created_at", { ascending: false })
         .limit(OLDER_PAGE_SIZE);
+      if (error) throw error;
 
       const mais = (data || []).map((r: any) => ({
         id: r.id,
@@ -1161,36 +1828,128 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
       setHasMoreHistory(mais.length === OLDER_PAGE_SIZE);
       if (mais.length > 0) {
         justLoadedOlderRef.current = true;
+        restaurarAlturaRef.current = scrollerRef.current?.scrollHeight ?? null;
         setMessages((prev) => {
           const existentes = new Set(prev.map((m) => m.id));
           return [...mais.reverse().filter((m) => !existentes.has(m.id)), ...prev];
         });
-        // Mantém a posição de leitura — sem isso, prepender mensagens acima
-        // empurra tudo pra baixo e a pessoa "perde o lugar" onde estava lendo.
-        requestAnimationFrame(() => {
-          if (el) el.scrollTop = el.scrollHeight - alturaAntes;
-        });
       }
+    } catch {
+      setErroAnteriores(true);
     } finally {
+      loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
   };
 
-  // auto-scroll — pulado quando a mudança em `messages` veio de "Carregar
-  // mais antigas" (loadOlderMessages já cuida da própria posição de scroll
-  // ali, senão esse efeito jogaria a pessoa de volta pro fundo do chat).
+  // auto-scroll — pulado quando a mudança em `messages` veio de mensagens
+  // antigas (loadOlderMessages cuida da própria posição de scroll, e antigas
+  // nunca contam como "novas"). Fora isso, só rola quando quem aplicou a
+  // mudança marcou `rolarAoFimRef` (estava no fim, mensagem própria, carga
+  // inicial) — quem está lendo mais acima não é puxado.
   useEffect(() => {
     if (justLoadedOlderRef.current) {
       justLoadedOlderRef.current = false;
       return;
     }
+    if (!rolarAoFimRef.current) return;
+    rolarAoFimRef.current = false;
     const el = scrollerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+      noFimRef.current = true;
+    }
   }, [messages]);
+
+  // Mantém a posição de leitura ao prepender antigas: ajusta no commit
+  // (antes da pintura), sem depender de timing de requestAnimationFrame.
+  useLayoutEffect(() => {
+    const antes = restaurarAlturaRef.current;
+    if (antes === null) return;
+    restaurarAlturaRef.current = null;
+    const el = scrollerRef.current;
+    if (el) el.scrollTop = el.scrollHeight - antes;
+  }, [messages]);
+
+  // Poda de memória só com a pessoa no fim (nunca tira conteúdo de quem lê).
+  // As que saem da memória continuam no servidor: volta a haver "anteriores"
+  // (botão do topo / rolar ao topo trazem de volta).
+  const podar = () => {
+    if (messagesRef.current.length <= MAX_LIVE_MESSAGES) return;
+    setHasMoreHistory(true);
+    setMessages((prev) => (prev.length > MAX_LIVE_MESSAGES ? prev.slice(prev.length - MAX_LIVE_MESSAGES) : prev));
+  };
+  useEffect(() => {
+    if (noFimRef.current && messages.length > MAX_LIVE_MESSAGES && !loadingOlderRef.current) podar();
+  }, [messages]);
+
+  // Mídia (GIF/vídeo) cresce depois de carregar, sem evento de scroll: se a
+  // pessoa estava no fim, reancora no fim.
+  useEffect(() => {
+    const lista = listaRef.current;
+    const el = scrollerRef.current;
+    if (!lista || !el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (noFimRef.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(lista);
+    // A faixa da enquete (fora da lista) expandindo/recolhendo muda a altura
+    // do próprio scroller: quem estava no fim continua no fim.
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const onScrollChat = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const noFim = estaNoFim(el);
+    noFimRef.current = noFim;
+    if (noFim) {
+      setNovas((n) => (n === 0 ? n : 0));
+      if (messagesRef.current.length > MAX_LIVE_MESSAGES && !loadingOlderRef.current) podar();
+    }
+    if (pertoDoTopo(el.scrollTop) && hasMoreHistory && !loadingOlder && !erroAnteriores) loadOlderMessages();
+  };
+
+  const irParaFim = () => {
+    const el = scrollerRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    setNovas(0);
+  };
 
   const startReply = (m: ChatMessage) => {
     setReplyTo(m);
     setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  // Menu da mensagem (toque longo / botão direito): Responder e Copiar texto.
+  // Entra no histórico: voltar fecha só o menu (regra "voltar = tela anterior").
+  const [menuMsg, setMenuMsg] = useState<{ m: ChatMessage; x: number; y: number } | null>(null);
+  // Com o menu já aberto, um 2º disparo (ex.: timer + contextmenu nativo) é ignorado.
+  const abrirMenu = (m: ChatMessage, pos: { x: number; y: number }) =>
+    setMenuMsg((atual) => atual ?? { m, ...pos });
+  const menuAberto = !!menuMsg;
+  useEffect(() => {
+    if (!menuAberto) return;
+    window.history.pushState({ tvChatMenu: true }, "");
+    const onPop = () => {
+      if (!window.history.state?.tvChatMenu) setMenuMsg(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [menuAberto]);
+  const fecharMenu = () => {
+    if (window.history.state?.tvChatMenu) window.history.back();
+    else setMenuMsg(null);
+  };
+  const copiarMensagem = async (m: ChatMessage) => {
+    const texto = m.text.startsWith(GIF_PREFIX) || m.text.startsWith(VIDEO_GIF_PREFIX) ? m.text.replace(/^[A-Z_]+::/, "") : m.text;
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast.success("Texto copiado");
+    } catch {
+      toast.error("Não foi possível copiar");
+    }
   };
 
   const sendRaw = async (rawText: string) => {
@@ -1210,6 +1969,8 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
     // própria mensagem aparecer, achava que não tinha ido e digitava tudo
     // de novo (causa raiz do "mensagem sumiu"/"travou" relatado ontem).
     const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    rolarAoFimRef.current = true; // mensagem própria sempre leva ao fim
+    setNovas(0);
     setMessages((prev) => [
       ...prev,
       {
@@ -1381,38 +2142,48 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
 
   return (
     <>
-      <EnqueteBanner programaId={programaId} />
+      {enqueteAberta && (
+        <EnqueteFaixa
+          enquete={enqueteAberta}
+          programaId={programaId}
+          isAdmin={isAdmin}
+          onMudou={enquetes.recarregar}
+          onExpandidaChange={onFaixaEnqueteExpandida}
+        />
+      )}
     {/* Tudo (mensagens + campo de digitar) vive dentro do MESMO container
         rolável. Isso é o que faz o teclado do celular se comportar direito:
         o navegador só consegue rolar internamente pra revelar o campo em
         vez de arrastar a tela inteira (e o vídeo) quando o campo focado
         fica fora de qualquer ancestral rolável. */}
-    <div ref={scrollerRef} className="flex-1 overflow-y-auto min-h-0 flex flex-col">
-      <div className="flex-1 px-3 py-3 space-y-2 text-sm">
+    <div ref={scrollerRef} onScroll={onScrollChat} className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+      <div ref={listaRef} className="flex-1 px-3 py-3 space-y-2 text-sm">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-xs text-center px-6">
             Seja o primeiro a comentar.
           </div>
         ) : (
           <>
-            {hasMoreHistory && (
-              <div className="flex justify-center pb-1">
+            {loadingOlder ? (
+              <div className="flex justify-center pb-1 text-[11px] text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+              </div>
+            ) : hasMoreHistory ? (
+              // Além do carregamento automático ao rolar: pra quem prefere
+              // tocar, sala com poucas mensagens (sem rolagem) e quando a
+              // busca falhou.
+              <div className="flex justify-center pb-1 min-w-0">
                 <button
                   type="button"
-                  onClick={loadOlderMessages}
-                  disabled={loadingOlder}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-muted/40 text-[11px] font-semibold text-muted-foreground hover:bg-muted active:scale-95 transition disabled:opacity-60"
+                  onClick={() => loadOlderMessages()}
+                  className="min-h-[40px] px-3 max-w-full min-w-0 rounded-full text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 active:scale-95 transition"
                 >
-                  {loadingOlder ? (
-                    <>
-                      <Loader2 className="size-3 animate-spin" /> Carregando...
-                    </>
-                  ) : (
-                    "Carregar mensagens mais antigas"
-                  )}
+                  <span className="block truncate">
+                    {erroAnteriores ? "Tentar de novo" : "↑ Ver mensagens anteriores"}
+                  </span>
                 </button>
               </div>
-            )}
+            ) : null}
             {messages.map((m) => {
             // Aviso de chegada no Red Carpet — pill centralizada e clicável
             // que leva direto ao look publicado, em vez de bolha de chat comum.
@@ -1432,89 +2203,162 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
                 </div>
               );
             }
+            // Avisos de enquete: uma linha só, toque abre a aba Enquetes com
+            // ela em destaque. Enquete fora da lista (id desconhecido) some.
+            if (m.text.startsWith(ENQ_PREFIX) || m.text.startsWith(ENQRES_PREFIX)) {
+              // Só o bot "empire-tv" publica avisos; o mesmo texto vindo de
+              // qualquer outra pessoa não aparece.
+              if (m.userId !== "empire-tv") return null;
+              const fechou = m.text.startsWith(ENQRES_PREFIX);
+              const enq = enquetePorId.get(m.text.slice(fechou ? ENQRES_PREFIX.length : ENQ_PREFIX.length).trim());
+              if (!enq) return null;
+              return (
+                <div key={m.id} className="flex justify-center py-1 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => onAbrirEnquete(enq.id)}
+                    className={`max-w-[calc(100%-1rem)] min-w-0 flex items-center px-3 py-1.5 rounded-full border text-[11.5px] font-semibold active:scale-95 transition ${
+                      fechou
+                        ? "bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20"
+                        : "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+                    }`}
+                  >
+                    <span className="block min-w-0 truncate">
+                      {fechou ? (
+                        enq.aberta ? (
+                          <>🏁 Enquete encerrada · Ver resultado</>
+                        ) : (
+                          <>🏁 Enquete encerrada: <b className="text-foreground">{textoVencedor(enq)}</b> · Ver resultado</>
+                        )
+                      ) : (
+                        <>📊 Enquete aberta: <b className="text-foreground">{enq.pergunta}</b> · Votar</>
+                      )}
+                    </span>
+                  </button>
+                </div>
+              );
+            }
             const own = myId ? m.userId === myId : m.user === displayName;
+            const ehMidia = m.text.startsWith(GIF_PREFIX) || m.text.startsWith(VIDEO_GIF_PREFIX);
             return (
-              <div
+              <LinhaMensagem
                 key={m.id}
                 id={`tvmsg-${m.id}`}
-                className={`group flex items-end gap-2 rounded-lg px-1 py-0.5 -mx-1 ${own ? "flex-row-reverse" : ""} ${m.pending ? "opacity-50" : ""}`}
+                className={`${own ? "bg-primary/5" : ""} ${m.pending ? "opacity-50" : ""}`}
+                onResponder={() => startReply(m)}
+                onMenu={(pos) => abrirMenu(m, pos)}
               >
-                {!own && (
-                  <div className="size-7 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mb-0.5">
-                    {m.userPhoto ? (
-                      <SmartImg
-                        src={m.userPhoto}
-                        alt=""
-                        className="w-full h-full object-cover"
-                        fallback={<span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>}
-                      />
-                    ) : (
-                      <span className={`text-[10px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>
-                    )}
-                  </div>
-                )}
+                <div className="size-6 rounded-full overflow-hidden shrink-0 bg-muted grid place-items-center mt-0.5">
+                  {m.userPhoto ? (
+                    <SmartImg
+                      src={m.userPhoto}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      fallback={<span className={`text-[9px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>}
+                    />
+                  ) : (
+                    <span className={`text-[9px] font-black ${m.color}`}>{m.user.slice(0, 1).toUpperCase()}</span>
+                  )}
+                </div>
 
-                <div className={`max-w-[78%] flex flex-col ${own ? "items-end" : "items-start"}`}>
+                <div className="flex-1 min-w-0 leading-snug break-words">
                   {m.reply_to && (
                     <button
                       type="button"
                       onClick={() => scrollToMsg(m.reply_to!.id)}
-                      className={`block w-full text-left mb-1 pl-2 py-1 border-l-2 border-primary/60 text-[11px] rounded-r bg-black/10 hover:bg-black/20 transition-colors ${own ? "text-right border-l-0 border-r-2 pr-2 pl-0" : ""}`}
+                      className="block w-full min-w-0 text-left mb-0.5 pl-2 py-0.5 border-l-2 border-primary/60 text-[11px] rounded-r bg-black/10 hover:bg-black/20 transition-colors truncate"
                     >
                       <span className="font-semibold text-primary/80">{m.reply_to.user}</span>
                       <span className="text-muted-foreground">: {m.reply_to.text.startsWith(GIF_PREFIX) || m.reply_to.text.startsWith(VIDEO_GIF_PREFIX) ? "GIF/figurinha" : m.reply_to.text}</span>
                     </button>
                   )}
-                  {m.text.startsWith(GIF_PREFIX) || m.text.startsWith(VIDEO_GIF_PREFIX) ? (
-                    <div className={`rounded-2xl overflow-hidden ${own ? "rounded-br-sm" : "rounded-bl-sm"} max-w-[180px]`}>
-                      {!own && (
-                        <span className={`block text-[11px] font-bold px-2 pt-1 bg-muted ${m.color}`}>{m.user}</span>
-                      )}
-                      {m.text.startsWith(VIDEO_GIF_PREFIX) ? (
-                        <LazyGifVideo src={m.text.slice(VIDEO_GIF_PREFIX.length)} />
-                      ) : (
-                        <img
-                          src={m.text.slice(GIF_PREFIX.length)}
-                          alt="GIF"
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          className="w-full h-auto block"
-                        />
-                      )}
-                    </div>
+                  {ehMidia ? (
+                    <>
+                      <span className={`block text-[13px] font-bold ${m.color}`}>{m.user}</span>
+                      <div className="rounded-2xl overflow-hidden bg-muted/40 min-h-[96px] min-w-[96px] max-w-[180px] mt-0.5">
+                        {m.text.startsWith(VIDEO_GIF_PREFIX) ? (
+                          <LazyGifVideo src={m.text.slice(VIDEO_GIF_PREFIX.length)} />
+                        ) : (
+                          <img
+                            src={m.text.slice(GIF_PREFIX.length)}
+                            alt="GIF"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-auto block"
+                          />
+                        )}
+                      </div>
+                    </>
                   ) : (
-                    <div
-                      className={`relative rounded-2xl px-3 py-1.5 leading-snug break-words ${
-                        own
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
-                          : "bg-muted text-foreground rounded-bl-sm"
-                      }`}
-                    >
-                      {!own && <span className={`block text-[11px] font-bold ${m.color}`}>{m.user}</span>}
-                      <span>{renderFormattedText(m.text)}</span>
-                    </div>
+                    <span className="text-[13px]">
+                      <span className={`font-bold ${m.color}`}>{m.user}</span>{" "}
+                      <span className="text-foreground">{renderFormattedText(m.text)}</span>
+                    </span>
                   )}
                 </div>
 
                 <button
                   type="button"
                   onClick={() => startReply(m)}
-                  className="mb-1 size-7 grid place-items-center rounded-full opacity-70 active:opacity-100 active:bg-muted lg:opacity-0 lg:group-hover:opacity-100 text-muted-foreground hover:text-primary transition shrink-0"
+                  className="hidden lg:grid size-6 place-items-center rounded-full opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-primary transition shrink-0"
                   aria-label="Responder"
                 >
                   <Reply className="inline size-3.5" />
                 </button>
-              </div>
+              </LinhaMensagem>
             );
           })}
           </>
         )}
       </div>
 
+      {menuMsg && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200]" onClick={fecharMenu} onContextMenu={(e) => { e.preventDefault(); fecharMenu(); }}>
+          <div
+            role="menu"
+            className="absolute w-44 rounded-xl border border-border bg-popover text-popover-foreground shadow-xl overflow-hidden"
+            style={{
+              left: Math.max(8, Math.min(menuMsg.x - 88, window.innerWidth - 184)),
+              top: Math.max(8, Math.min(menuMsg.y - 8, window.innerHeight - 100)),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full min-w-0 flex items-center gap-2 px-3 py-2.5 text-sm text-left active:bg-muted hover:bg-muted"
+              onClick={() => { const m = menuMsg.m; fecharMenu(); startReply(m); }}
+            >
+              <Reply className="size-4 shrink-0" />
+              <span className="truncate">Responder</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full min-w-0 flex items-center gap-2 px-3 py-2.5 text-sm text-left active:bg-muted hover:bg-muted"
+              onClick={() => { const m = menuMsg.m; fecharMenu(); void copiarMensagem(m); }}
+            >
+              <Copy className="size-4 shrink-0" />
+              <span className="truncate">Copiar texto</span>
+            </button>
+          </div>
+        </div>,
+        document.body,
+      )}
+
       {/* Grudado no fundo do MESMO scroller das mensagens (não fora dele) —
           é isso que dá ao Safari um ancestral rolável válido pra revelar o
           campo sem precisar deslizar a página/vídeo inteiros. */}
       <div className="sticky bottom-0 bg-background">
+      {novas > 0 && (
+        <button
+          type="button"
+          onClick={irParaFim}
+          className="absolute bottom-full right-3 mb-2 min-h-[40px] px-3 max-w-[calc(100%-1.5rem)] rounded-full bg-primary text-primary-foreground text-xs font-bold shadow-lg active:scale-95 transition"
+        >
+          <span className="block truncate">↓ {novas} {novas === 1 ? "nova" : "novas"}</span>
+        </button>
+      )}
       {replyTo && (
         <div className="flex items-start gap-2 px-3 py-1.5 border-t border-border bg-muted/40 text-[11px]">
           <Reply className="size-3 mt-0.5 text-primary shrink-0" />
@@ -1644,6 +2488,17 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
         >
           <ImagePlus className="size-4" />
         </button>
+        {onNovaEnquete && (
+          <button
+            type="button"
+            onClick={onNovaEnquete}
+            title="Nova enquete (admin)"
+            aria-label="Nova enquete"
+            className="size-8 shrink-0 rounded-md grid place-items-center text-[15px] hover:bg-muted transition"
+          >
+            📊
+          </button>
+        )}
         <input
           ref={inputRef}
           value={text}
@@ -1666,93 +2521,9 @@ function ChatPanel({ programaId, onOpenRedCarpetPost }: { programaId: string; on
   );
 }
 
-// Cartão fixo de enquete no topo do Chat — cadastrada à mão na aba ENQUETES
-// (planilha "Empire TV Oficial"), sem precisar de deploy pra cada pergunta
-// nova. Só aparece quando existe uma enquete ATIVA pra essa sala; unificado
-// no Chat (não no Red Carpet) porque o Chat existe em toda sala, não só
-// nas de evento.
-function EnqueteBanner({ programaId }: { programaId: string }) {
-  const login = getStoredLogin();
-  const [enquete, setEnquete] = useState<EnquetePayload | null>(null);
-  const [enviando, setEnviando] = useState(false);
-
-  const carregar = () => {
-    api.buscarEnquete(programaId, login?.id).then(setEnquete);
-  };
-
-  useEffect(() => {
-    carregar();
-    // Reconsulta periodicamente — sem isso, quem já estava com o Chat
-    // aberto antes de uma enquete ser cadastrada/ativada na planilha só
-    // veria o cartão aparecer se saísse e voltasse pra sala. 20s é rápido o
-    // bastante pra parecer "ao vivo" sem pesar na cota de leitura do Sheets
-    // (já protegida pelo cache curto de 15s do próprio backend).
-    const interval = setInterval(carregar, 20_000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [programaId]);
-
-  const votar = async (nota: number) => {
-    if (!enquete || !login?.id || enviando) return;
-    setEnviando(true);
-    setEnquete((prev) => (prev ? { ...prev, minhaNota: nota } : prev)); // otimista
-    try {
-      await api.responderEnquete({
-        enqueteId: enquete.id,
-        programaId,
-        tgId: login.id,
-        nome: login.nome || "Anônimo",
-        nota,
-      });
-    } finally {
-      setEnviando(false);
-      carregar(); // busca média/total atualizados
-    }
-  };
-
-  if (!enquete) return null;
-
-  const notas = Array.from(
-    { length: enquete.notaMax - enquete.notaMin + 1 },
-    (_, i) => enquete.notaMin + i,
-  );
-
-  return (
-    <div className="shrink-0 border-b border-border bg-gradient-to-br from-primary/10 via-fuchsia-500/5 to-transparent px-3 py-2.5">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <Star className="size-3.5 text-amber-400 fill-amber-400" />
-        <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Enquete</span>
-      </div>
-      <p className="text-xs font-bold mb-2 leading-snug">
-        {enquete.pergunta}
-        {enquete.alvo && <span className="text-primary"> {enquete.alvo}</span>}
-      </p>
-
-      {enquete.minhaNota !== null ? (
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="px-2 py-1 rounded-md bg-primary/15 text-primary font-bold">
-            Você votou {enquete.minhaNota}
-          </span>
-          <span>Voto secreto — obrigado por participar!</span>
-        </div>
-      ) : (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {notas.map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => votar(n)}
-              disabled={enviando || !login?.id}
-              className="size-8 rounded-lg bg-white/5 border border-white/10 hover:bg-primary hover:text-primary-foreground hover:border-primary font-black text-sm transition active:scale-95 disabled:opacity-40"
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+// (A enquete antiga cadastrada à mão na planilha — EnqueteBanner — foi
+// desligada: as enquetes do chat a substituem. Ela consultava a planilha a
+// cada 20 s por pessoa na sala.)
 
 // ---------- Red Carpet ----------
 function RedCarpetCarousel({ fotos }: { fotos: string[] }) {
@@ -2354,24 +3125,13 @@ function RedCarpetPanel({
 }
 
 // ---------- Participantes ----------
-function ParticipantesPanel({ programa }: { programa: Programa }) {
-  const [rows, setRows] = useState<Array<{ telegram_id: string; nome: string; watched_seconds: number; percentual: number }>>([]);
-  const [loading, setLoading] = useState(true);
+type PresencaRow = { telegram_id: string; nome: string; watched_seconds: number; percentual: number };
 
-  useEffect(() => {
-    let alive = true;
-    const load = () => {
-      api.listarPresencaTV(programa.id)
-        .then((r) => { if (alive) setRows(r); })
-        .catch(() => {})
-        .finally(() => { if (alive) setLoading(false); });
-    };
-    load();
-    const t = setInterval(load, 30_000);
-    return () => { alive = false; clearInterval(t); };
-  }, [programa.id]);
-
-  const sorted = useMemo(() => [...rows].sort((a, b) => b.watched_seconds - a.watched_seconds), [rows]);
+function ParticipantesPanel({ rows, loading }: { rows: PresencaRow[]; loading: boolean }) {
+  const sorted = useMemo(
+    () => [...rows].sort((a, b) => b.percentual - a.percentual || b.watched_seconds - a.watched_seconds),
+    [rows],
+  );
 
   return (
     <div className="flex-1 overflow-y-auto p-3">
@@ -2383,13 +3143,149 @@ function ParticipantesPanel({ programa }: { programa: Programa }) {
         <ul className="space-y-1.5">
           {sorted.map((p) => (
             <li key={p.telegram_id} className="flex items-center justify-between text-sm">
-              <span className={`font-semibold truncate ${colorFor(p.nome)}`}>{p.nome}</span>
-              <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                {p.percentual > 0 ? `${p.percentual.toFixed(0)}%` : fmtMin(p.watched_seconds)}
+              <span className={`min-w-0 font-semibold truncate ${colorFor(p.nome)}`}>{p.nome}</span>
+              {/* % do servidor = o que vai ser creditado (0% também); minutos só como informação. */}
+              <span className="flex items-baseline gap-1.5 shrink-0 ml-2 tabular-nums">
+                <span className="text-[10px] text-muted-foreground/70">{fmtMin(p.watched_seconds)}</span>
+                <span className="text-xs font-semibold text-foreground">{`${Math.round(p.percentual)}%`}</span>
               </span>
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/** Círculo pequeno com a % de participação do próprio jogador; toque abre Participantes. */
+function ParticipacaoCirculo({ pct, onClick }: { pct: number | null; onClick: () => void }) {
+  const r = 13;
+  const c = 2 * Math.PI * r;
+  const v = pct ?? 0;
+  const cor = v >= 90 ? "text-emerald-400" : v >= 50 ? "text-amber-400" : "text-primary";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative size-8 min-w-0 shrink-0 px-1 rounded-full hover:bg-muted flex items-center justify-center active:scale-95 transition"
+      aria-label={pct == null ? "Sua participação" : `Sua participação: ${v}%`}
+      title={pct == null ? "Sua participação" : `Sua participação: ${v}%`}
+    >
+      <svg viewBox="0 0 32 32" className="absolute inset-0 size-8 -rotate-90 shrink-0" aria-hidden="true">
+        <circle cx="16" cy="16" r={r} fill="none" strokeWidth="2.5" className="stroke-muted" />
+        <circle
+          cx="16"
+          cy="16"
+          r={r}
+          fill="none"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          stroke="currentColor"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - v / 100)}
+          className={`${cor} transition-[stroke-dashoffset] duration-500`}
+        />
+      </svg>
+      <span className="relative truncate text-[9px] font-bold tabular-nums leading-none">
+        {pct == null ? "–" : `${v}%`}
+      </span>
+    </button>
+  );
+}
+
+/** Faixa só para admin: marca o início e o término reais da transmissão. */
+function AdminEventoBar({ programaId }: { programaId: string }) {
+  const [enviando, setEnviando] = useState<"inicio" | "fim" | null>(null);
+  const [estado, setEstado] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
+  // Início/Término já gravados no servidor (carregado ao abrir, pra não
+  // perder o estado depois de recarregar).
+  const [marcados, setMarcados] = useState<{ inicioTs?: number; fimTs?: number }>({});
+
+  const hora = (ts?: number) =>
+    ts ? new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+
+  useEffect(() => {
+    setEstado(null);
+    setMarcados({});
+    let vivo = true;
+    void api.estadoEventoAdminTV(programaId).then((r) => {
+      if (!vivo || !r) return;
+      setMarcados(r);
+      if (r.fimTs) setEstado({ tipo: "ok", texto: `Término marcado às ${hora(r.fimTs)}` });
+      else if (r.inicioTs) setEstado({ tipo: "ok", texto: `Início marcado às ${hora(r.inicioTs)}` });
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [programaId]);
+
+  const disparar = async (acao: "inicio" | "fim") => {
+    if (enviando) return;
+    if (
+      acao === "inicio" &&
+      !window.confirm(
+        marcados.fimTs
+          ? "O TÉRMINO já foi marcado. Marcar o INÍCIO agora mesmo assim?"
+          : marcados.inicioTs
+            ? `O início já foi marcado às ${hora(marcados.inicioTs)}. Marcar de novo com o horário de agora?`
+            : "Marcar o INÍCIO do evento agora?",
+      )
+    ) {
+      return;
+    }
+    if (
+      acao === "fim" &&
+      !window.confirm("Marcar o TÉRMINO do evento agora? A participação de todos será calculada até este momento.")
+    ) {
+      return;
+    }
+    setEnviando(acao);
+    const r = await api.eventoAdminTV(programaId, acao);
+    setEnviando(null);
+    if (!r.ok) {
+      setEstado({ tipo: "erro", texto: r.erro || "Não foi possível registrar." });
+    } else if (acao === "inicio") {
+      setMarcados((m) => ({ ...m, inicioTs: r.inicioTs }));
+      setEstado({ tipo: "ok", texto: `Início marcado às ${hora(r.inicioTs)}` });
+    } else {
+      setMarcados((m) => ({ ...m, fimTs: r.fimTs }));
+      // Crédito sai no próximo cron (até ~15 min) — processamento {0,0} aqui não é falha.
+      setEstado({ tipo: "ok", texto: "Encerrado — a participação será creditada em alguns minutos" });
+    }
+  };
+
+  const btn =
+    "min-w-0 shrink-0 h-7 px-2.5 rounded-md text-[11px] font-semibold flex items-center gap-1 border transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none";
+  return (
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 py-1 border-b border-border bg-amber-500/5 shrink-0 min-w-0">
+      <span className="flex items-center gap-1 shrink-0 text-[10px] font-bold uppercase tracking-wide text-amber-400">
+        <ShieldCheck className="size-3 shrink-0" /> Só admin
+      </span>
+      <button
+        type="button"
+        onClick={() => disparar("inicio")}
+        disabled={!!enviando}
+        className={`${btn} border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10`}
+      >
+        {enviando === "inicio" ? <Loader2 className="size-3 shrink-0 animate-spin" /> : <Play className="size-3 shrink-0" />}
+        <span className="truncate">Início do evento</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => disparar("fim")}
+        disabled={!!enviando}
+        className={`${btn} border-red-500/40 text-red-400 hover:bg-red-500/10`}
+      >
+        {enviando === "fim" ? <Loader2 className="size-3 shrink-0 animate-spin" /> : <Square className="size-3 shrink-0" />}
+        <span className="truncate">Término</span>
+      </button>
+      {estado && (
+        <span
+          role="status"
+          className={`basis-full min-w-0 text-[10px] leading-tight ${estado.tipo === "erro" ? "text-red-400" : "text-muted-foreground"}`}
+        >
+          {estado.texto}
+        </span>
       )}
     </div>
   );

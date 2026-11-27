@@ -156,6 +156,14 @@ import {
   processarParticipacaoTV,
   corrigirRegistroReprocessamentoTV,
   registrarEventoTransmissaoController,
+  registrarEventoAdminController,
+  kickHlsTesteController,
+  lerEventoAdminController,
+  criarEnqueteChatController,
+  votarEnqueteChatController,
+  encerrarEnqueteChatController,
+  listarEnquetesChatController,
+  votantesEnqueteChatController,
 } from "../controllers/tvController";
 import {
   getRedCarpetFeedController,
@@ -581,11 +589,17 @@ export async function handleEmpireApiRoutes(
     "/api/tv/presenca",
     "/api/tv/processar-participacao",
     "/api/tv/evento-transmissao",
+    "/api/tv/evento-admin",
+    "/api/tv/kick-hls",
     "/api/tv/red-carpet",
     "/api/tv/red-carpet/curtir",
     "/api/tv/red-carpet/ranking",
     "/api/tv/red-carpet/deletar",
     "/api/tv/enquete",
+    "/api/tv/enquetes",
+    "/api/tv/enquetes/votar",
+    "/api/tv/enquetes/encerrar",
+    "/api/tv/enquetes/votantes",
     "/api/tv/enquete/responder",
     "/api/artistas/vincular",
     "/api/artistas/criar",
@@ -1430,6 +1444,35 @@ export async function handleEmpireApiRoutes(
     response = await deleteRedCarpetPostController(request);
   } else if (url.pathname === "/api/tv/enquete") {
     response = await getEnqueteController(request);
+  } else if (url.pathname === "/api/tv/enquetes") {
+    response =
+      request.method === "GET"
+        ? await listarEnquetesChatController(request)
+        : request.method === "POST"
+          ? await criarEnqueteChatController(request)
+          : new Response(
+              JSON.stringify({ success: false, error: "Use GET ou POST para /api/tv/enquetes." }),
+              { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+            );
+  } else if (url.pathname === "/api/tv/enquetes/votantes") {
+    if (request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Use GET para /api/tv/enquetes/votantes." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response = await votantesEnqueteChatController(request);
+  } else if (url.pathname === "/api/tv/enquetes/votar" || url.pathname === "/api/tv/enquetes/encerrar") {
+    if (request.method !== "POST") {
+      return new Response(
+        JSON.stringify({ success: false, error: `Use POST para ${url.pathname}.` }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response =
+      url.pathname === "/api/tv/enquetes/votar"
+        ? await votarEnqueteChatController(request)
+        : await encerrarEnqueteChatController(request);
   } else if (url.pathname === "/api/tv/enquete/responder") {
     if (request.method !== "POST") {
       return new Response(
@@ -1729,6 +1772,17 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await registrarEventoTransmissaoController(request);
+  } else if (url.pathname === "/api/tv/kick-hls") {
+    response = await kickHlsTesteController(request);
+  } else if (url.pathname === "/api/tv/evento-admin") {
+    if (request.method !== "POST" && request.method !== "GET") {
+      return new Response(
+        JSON.stringify({ ok: false, erro: "Use GET ou POST para /api/tv/evento-admin." }),
+        { status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+    response =
+      request.method === "GET" ? await lerEventoAdminController(request) : await registrarEventoAdminController(request);
   } else if (url.pathname === "/api/tv/processar-participacao") {
     // Aceita GET também, pra dar pra colar a URL direto no navegador sem
     // precisar de console/curl — mesma filosofia dos outros endpoints de
@@ -2715,7 +2769,7 @@ export async function handleEmpireApiRoutes(
         response = await calcularFortunaChartsController();
         break;
       case "/api/tv/programas":
-        response = await getProgramasTVController();
+        response = await getProgramasTVController(request);
         break;
       case "/api/gestao/musicas-em-chart":
         response = await getMusicasEmChartController();

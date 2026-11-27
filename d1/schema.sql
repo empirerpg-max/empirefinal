@@ -139,3 +139,8 @@ CREATE INDEX IF NOT EXISTS idx_fila_backup_aba ON fila_backup_planilha(planilha,
 CREATE TABLE IF NOT EXISTS planilha_virtual_guarda (falhou INTEGER NOT NULL CHECK (falhou = 0));
 CREATE TABLE IF NOT EXISTS catalogo_estado_aba (aba TEXT PRIMARY KEY, estado TEXT NOT NULL, atualizado_em_ms INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS despachante_lock (id INTEGER PRIMARY KEY CHECK (id = 1), ate_ms INTEGER NOT NULL);
+-- Empire TV: presença por minuto, uma linha por pessoa por segmento da transmissão.
+CREATE TABLE IF NOT EXISTS tv_presenca (programa_id TEXT NOT NULL, jogador_id TEXT NOT NULL, nome TEXT, minutos TEXT NOT NULL, atualizado_em INTEGER NOT NULL, PRIMARY KEY (programa_id, jogador_id)) WITHOUT ROWID;
+-- Empire TV: enquetes do chat e votos (só chave primária).
+CREATE TABLE IF NOT EXISTS tv_enquete (programa_id TEXT NOT NULL, id TEXT NOT NULL, pergunta TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('unica','multipla')), opcoes TEXT NOT NULL, secreto INTEGER NOT NULL, so_fim INTEGER NOT NULL, encerra_em INTEGER, aberta INTEGER NOT NULL, criada_em INTEGER NOT NULL, encerrada_em INTEGER, criada_por TEXT, contagem TEXT NOT NULL DEFAULT '', total INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (programa_id, id)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS tv_enquete_voto (enquete_id TEXT NOT NULL, jogador_id TEXT NOT NULL, nome TEXT, opcoes TEXT NOT NULL, votado_em INTEGER NOT NULL, PRIMARY KEY (enquete_id, jogador_id)) WITHOUT ROWID;
