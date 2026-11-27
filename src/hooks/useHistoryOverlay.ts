@@ -12,7 +12,12 @@ const useEfeitoIsomorfico = typeof window === "undefined" ? useEffect : useLayou
 // Coordena camadas que desmontam no mesmo commit (um único history.go(-n)).
 let desmontador: ReturnType<typeof criarDesmontador> | null = null;
 function obterDesmontador() {
-  return (desmontador ??= criarDesmontador(window.history, (f) => queueMicrotask(f)));
+  if (!desmontador) {
+    desmontador = criarDesmontador(window.history, (f) => queueMicrotask(f));
+    const d = desmontador;
+    window.addEventListener("popstate", () => d.assentou());
+  }
+  return desmontador;
 }
 
 /**
@@ -50,7 +55,7 @@ export function useHistoryOverlay(aberto: boolean, aoFechar: () => void): { fech
 
     return () => {
       window.removeEventListener("popstate", onPopState);
-      obterDesmontador()(marca, fechadoPeloVoltar);
+      obterDesmontador().desmontar(marca, fechadoPeloVoltar);
     };
   }, [aberto]);
 

@@ -16,6 +16,7 @@ function criarHistoricoFalso(estadoInicial: unknown = null) {
   const pilha: unknown[] = [estadoInicial];
   let indice = 0;
   const fila: number[] = [];
+  const chamadasGo: number[] = [];
   const ouvintes: Array<() => void> = [];
   const h = {
     get state() {
@@ -27,15 +28,18 @@ function criarHistoricoFalso(estadoInicial: unknown = null) {
       indice++;
     },
     go(d: number) {
+      chamadasGo.push(d);
       fila.push(d);
     },
     back() {
+      chamadasGo.push(-1);
       fila.push(-1);
     },
   };
   return {
     h,
     ouvintes,
+    chamadasGo,
     get tamanho() {
       return pilha.length;
     },
@@ -114,13 +118,25 @@ describe("historicoOverlay", () => {
     expect(deveFecharNoPopstate(f.h.state, a)).toBe(true);
   });
 
-  test("duas camadas: fechar a de baixo com a de cima ainda aberta não desfaz nada", () => {
+  test("duas camadas: fechar só a de baixo consome as 2 entradas; a de cima fecha pelo popstate", () => {
     const f = criarHistoricoFalso({ key: "r" });
     const a = criarMarca();
     const b = criarMarca();
     abrirCamada(f.h, a);
     abrirCamada(f.h, b);
-    expect(deveVoltarAoFecharPelaUi(f.h.state, a)).toBe(false);
+    const tarefas: Array<() => void> = [];
+    const d = criarDesmontador(f.h, (fn) => tarefas.push(fn));
+    let cimaFechou = false;
+    f.ouvintes.push(() => {
+      if (deveFecharNoPopstate(f.h.state, b)) cimaFechou = true;
+      d.assentou();
+    });
+    d.desmontar(a, false);
+    tarefas.splice(0).forEach((t) => t());
+    expect(f.chamadasGo).toEqual([-2]);
+    f.flush();
+    expect(f.indice).toBe(0);
+    expect(cimaFechou).toBe(true);
   });
 
   test("navegou para outra rota com a camada aberta: fechar não consome nada", () => {
@@ -129,8 +145,8 @@ describe("historicoOverlay", () => {
     abrirCamada(f.h, m);
     f.h.pushState({ key: "outra-rota" }, ""); // navegação por link
     expect(quantoVoltarAoDesmontar(f.h.state, m, false)).toBe(0);
-    const desmontar = criarDesmontador(f.h, () => {});
-    desmontar(m, false);
+    const desmontar = criarDesmontador(f.h, (fn) => fn());
+    desmontar.desmontar(m, false);
     f.flush();
     expect((f.h.state as any).key).toBe("outra-rota");
   });
@@ -151,31 +167,51 @@ describe("historicoOverlay", () => {
     const f = criarHistoricoFalso({ key: "r" });
     const m = criarMarca();
     abrirCamada(f.h, m);
-    criarDesmontador(f.h, () => {})(m, false);
+    criarDesmontador(f.h, (fn) => fn()).desmontar(m, false);
     f.flush();
     expect(f.indice).toBe(0);
   });
 
   for (const ordem of ["baixo-primeiro", "cima-primeiro"]) {
-    test(`duas camadas fechadas no mesmo tick (${ordem}): consome 2 entradas, nenhuma sobra`, () => {
+    test(`duas camadas fechadas no mesmo tick (${ordem}): UM go(-2), nenhuma entrada sobra`, () => {
       const f = criarHistoricoFalso({ key: "r" });
       const a = criarMarca();
       const b = criarMarca();
       abrirCamada(f.h, a);
       abrirCamada(f.h, b);
-      let zerar: () => void = () => {};
-      const desmontar = criarDesmontador(f.h, (fn) => (zerar = fn));
+      const tarefas: Array<() => void> = [];
+      const d = criarDesmontador(f.h, (fn) => tarefas.push(fn));
       if (ordem === "baixo-primeiro") {
-        desmontar(a, false);
-        desmontar(b, false);
+        d.desmontar(a, false);
+        d.desmontar(b, false);
       } else {
-        desmontar(b, false);
-        desmontar(a, false);
+        d.desmontar(b, false);
+        d.desmontar(a, false);
       }
+      expect(f.chamadasGo).toEqual([]);
+      tarefas.splice(0).forEach((t) => t());
+      expect(f.chamadasGo).toEqual([-2]);
       f.flush();
       expect(f.indice).toBe(0);
       expect((f.h.state as any).key).toBe("r");
-      zerar();
     });
   }
+
+  test("camada de cima fecha, e em tick posterior (antes do popstate) a de baixo: total 2, nunca 3", () => {
+    const f = criarHistoricoFalso({ key: "r" });
+    const a = criarMarca();
+    const b = criarMarca();
+    abrirCamada(f.h, a);
+    abrirCamada(f.h, b);
+    const tarefas: Array<() => void> = [];
+    const d = criarDesmontador(f.h, (fn) => tarefas.push(fn));
+    f.ouvintes.push(() => d.assentou());
+    d.desmontar(b, false);
+    tarefas.splice(0).forEach((t) => t()); // go(-1) enfileirado, SEM flush
+    d.desmontar(a, false); // outro tick, state ainda velho
+    tarefas.splice(0).forEach((t) => t());
+    expect(f.chamadasGo.reduce((x, y) => x + y, 0)).toBe(-2);
+    f.flush();
+    expect(f.indice).toBe(0);
+  });
 });

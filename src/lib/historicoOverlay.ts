@@ -51,7 +51,7 @@ export function deveFecharNoPopstate(stateAtual: unknown, marca: string): boolea
   return !pilhaDe(stateAtual).includes(marca);
 }
 
-/** Ao fechar pelo X/seta: só chama history.back() se a entrada da camada ainda é a atual. */
+/** Helper puro (o hook usa `quantoVoltarAoDesmontar`): só voltar se a entrada da camada ainda é a atual. */
 export function deveVoltarAoFecharPelaUi(stateAtual: unknown, marca: string): boolean {
   return entradaEhDaCamada(stateAtual, marca);
 }
@@ -82,19 +82,39 @@ export function quantoVoltarAoDesmontar(
 
 /**
  * Cria o "desmontador": coordena camadas que desmontam no mesmo tick para
- * resultar em um único `history.go(-n)`. `agendar` zera o contador quando o
- * tick acaba (no app: queueMicrotask).
+ * resultar em UM único `history.go(-n)` (navegadores podem descartar/fundir
+ * vários go() no mesmo tick). `alvo` = maior quantidade lida do state (velho,
+ * pois go() é assíncrono) na janela; `emitido` = quanto já pedimos ao
+ * navegador. Só emite a diferença, então um desmonte em tick posterior, antes
+ * do popstate chegar, nunca conta em dobro. `assentou()` (chamar no popstate)
+ * encerra a janela. `agendar` roda a emissão ao fim do tick (queueMicrotask).
  */
 export function criarDesmontador(
   h: HistoricoLike & { go(delta: number): void },
   agendar: (f: () => void) => void,
 ) {
-  let pendentes = 0;
-  return function desmontar(marca: string, fechadoPeloVoltar: boolean): void {
-    const n = quantoVoltarAoDesmontar(h.state, marca, fechadoPeloVoltar, pendentes);
-    if (n <= 0) return;
-    if (pendentes === 0) agendar(() => (pendentes = 0));
-    pendentes += n;
-    h.go(-n);
+  let alvo = 0;
+  let emitido = 0;
+  let agendado = false;
+  return {
+    desmontar(marca: string, fechadoPeloVoltar: boolean): void {
+      const n = quantoVoltarAoDesmontar(h.state, marca, fechadoPeloVoltar);
+      if (n <= alvo) return;
+      alvo = n;
+      if (agendado) return;
+      agendado = true;
+      agendar(() => {
+        agendado = false;
+        const extra = alvo - emitido;
+        if (extra > 0) {
+          emitido = alvo;
+          h.go(-extra);
+        }
+      });
+    },
+    assentou(): void {
+      alvo = 0;
+      emitido = 0;
+    },
   };
 }
