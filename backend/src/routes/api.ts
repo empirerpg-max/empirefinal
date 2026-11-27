@@ -726,6 +726,7 @@ export async function handleEmpireApiRoutes(
     "/api/musicas/admin/fix-boulangerie-audio",
     "/api/gestao/admin/diagnostico-musica",
     "/api/gestao/admin/dump-linhas-musicas",
+    "/api/gestao/admin/reparar-musicas-sem-codigo",
     "/api/gestao/admin/diag-faixas-samantha",
     "/api/gestao/admin/relancar-faixas-faltantes-presave",
     "/api/gestao/admin/fix-duplicata-its-over",
@@ -2262,6 +2263,11 @@ export async function handleEmpireApiRoutes(
     response = await adminFixBoulangerieAudioController();
   } else if (url.pathname === "/api/gestao/admin/diagnostico-musica") {
     response = await diagnosticoMusicaController(request);
+  } else if (url.pathname === "/api/gestao/admin/reparar-musicas-sem-codigo") {
+    const { adminRepararMusicasSemCodigoController } = await import(
+      "../controllers/adminRepararMusicasSemCodigoController"
+    );
+    response = await adminRepararMusicasSemCodigoController(request);
   } else if (url.pathname === "/api/gestao/admin/dump-linhas-musicas") {
     response = await adminDumpLinhasMusicasController(request);
   } else if (url.pathname === "/api/gestao/admin/diag-faixas-samantha") {

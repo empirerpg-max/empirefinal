@@ -5,6 +5,11 @@ import {
   type GoogleSheetRow,
 } from "../services/googleSheetsService";
 import { withWriteLock } from "../services/writeLockService";
+import {
+  analisarFormulaBD,
+  codigoMusicaParaLinha,
+  podeGravarCodigoNaLinha,
+} from "../services/codigoUnicoEdicaoCharts";
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
 import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
@@ -190,6 +195,11 @@ export async function registrarNaEdicaoCharts(params: {
   // aparecia "estreando" enquanto o álbum já mostrava várias semanas de
   // chart. Lançamento normal nunca passa isso, continua sempre "1".
   weeksOverride?: string;
+  // Lançamento avulso (createSongController): se uma tentativa anterior
+  // dessa MESMA música já gravou a linha mas ficou sem Código único (BD
+  // vazio), reaproveita essa linha em vez de criar outra — senão cada
+  // reenvio do jogador vira uma música duplicada nos charts.
+  reaproveitarOrfa?: boolean;
 }): Promise<number | null> {
   const participantesLimpos = (params.participantes || []).filter(Boolean).slice(0, 5);
   const albunsExtrasLimpos = (params.albunsExtras || []).filter(Boolean).slice(0, 4);
@@ -210,6 +220,7 @@ async function registrarNaEdicaoChartsSemTrava(params: {
   participantes?: string[];
   albunsExtras?: string[];
   weeksOverride?: string;
+  reaproveitarOrfa?: boolean;
 }): Promise<number | null> {
   const participantesLimpos = (params.participantes || []).filter(Boolean).slice(0, 5);
   const albunsExtrasLimpos = (params.albunsExtras || []).filter(Boolean).slice(0, 4);
@@ -226,14 +237,33 @@ async function registrarNaEdicaoChartsSemTrava(params: {
     // Em vez disso, acha a última linha com título de verdade na coluna B
     // e escreve direto na linha seguinte via updateValues — mesmo padrão
     // já usado (e confirmado funcionando) pra corrigir REGISTRO.
-    const rows = await googleSheetsService.edicaoCharts.readValuesFresh("EDIÇÃO CHARTS", "A2:B20000");
+    // Com reaproveitarOrfa, lê até BD (col. 55, Código único) pra achar
+    // uma linha da mesma música que ficou sem código.
+    const rows = await googleSheetsService.edicaoCharts.readValuesFresh(
+      "EDIÇÃO CHARTS",
+      params.reaproveitarOrfa ? "A2:BD20000" : "A2:B20000",
+    );
     let ultimaLinhaComTitulo = 1; // linha 1 = cabeçalho
+    let linhaOrfa = -1;
+    const tituloNorm = normalizeComparison(params.fullTitle);
     for (let i = 0; i < rows.length; i++) {
-      if ((rows[i]?.[1] || "").trim()) ultimaLinhaComTitulo = i + 2;
+      const titulo = (rows[i]?.[1] || "").trim();
+      if (!titulo) continue;
+      ultimaLinhaComTitulo = i + 2;
+      if (
+        params.reaproveitarOrfa &&
+        !(rows[i]?.[55] || "").trim() &&
+        normalizeComparison(titulo) === tituloNorm
+      ) {
+        linhaOrfa = i + 2;
+      }
     }
-    const linhaAlvo = ultimaLinhaComTitulo + 1;
+    const linhaAlvo = linhaOrfa > 0 ? linhaOrfa : ultimaLinhaComTitulo + 1;
 
-    await googleSheetsService.edicaoCharts.updateValues(
+    // updateValues NÃO lança quando as 3 tentativas falham — devolve false.
+    // Antes isso era ignorado e a função devolvia a linha como se tivesse
+    // gravado (a música "sumia" sem ninguém saber).
+    const gravou = await googleSheetsService.edicaoCharts.updateValues(
       "EDIÇÃO CHARTS",
       `A${linhaAlvo}:Q${linhaAlvo}`,
       [
@@ -258,6 +288,10 @@ async function registrarNaEdicaoChartsSemTrava(params: {
         ],
       ],
     );
+    if (!gravou) {
+      console.warn(`[registrarNaEdicaoCharts] Gravação em EDIÇÃO CHARTS!A${linhaAlvo} falhou ("${params.fullTitle}").`);
+      return null;
+    }
     return linhaAlvo;
   } catch (err) {
     console.warn("[registrarNaEdicaoCharts] Erro ao gravar em EDIÇÃO CHARTS:", err);
@@ -287,6 +321,39 @@ export async function lerCodigoUnicoGerado(rowIndex: number): Promise<string> {
   return "";
 }
 
+// Garante o Código único da linha de EDIÇÃO CHARTS: lê o que a fórmula da
+// planilha gerou e, se BD ficou vazio (a fórmula não cobre a linha — ver
+// codigoUnicoEdicaoCharts.ts, caso Sparks), grava o código no mesmo padrão
+// da fórmula. Só grava quando isso não quebra a fórmula; senão devolve ""
+// e loga, pra quem chama tratar como falha (nunca como sucesso).
+export async function garantirCodigoUnicoNaEdicaoCharts(rowIndex: number): Promise<string> {
+  const gerado = await lerCodigoUnicoGerado(rowIndex);
+  if (gerado) return gerado;
+  try {
+    const topo = await googleSheetsService.edicaoCharts.readValuesFormula("EDIÇÃO CHARTS", "BD1:BD3");
+    const estado = analisarFormulaBD(topo.map((r) => r?.[0] || ""));
+    if (!podeGravarCodigoNaLinha(estado, rowIndex)) {
+      console.error(
+        `[garantirCodigoUnico] EDIÇÃO CHARTS!BD${rowIndex} vazio e a fórmula da coluna (${estado.tipo}) não permite gravar por cima.`,
+      );
+      return "";
+    }
+    return await withWriteLock("gestao:edicao-charts-codigo", async () => {
+      const colunaBD = await googleSheetsService.edicaoCharts.readValuesFresh("EDIÇÃO CHARTS", "BD2:BD20000");
+      const atual = (colunaBD[rowIndex - 2]?.[0] || "").trim();
+      if (atual) return atual; // outra chamada já resolveu
+      const codigo = codigoMusicaParaLinha(rowIndex, colunaBD.map((r) => r?.[0] || ""));
+      const ok = await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `BD${rowIndex}`, [[codigo]]);
+      if (!ok) return "";
+      console.warn(`[garantirCodigoUnico] BD${rowIndex} estava vazio — gravado ${codigo} (${estado.tipo}).`);
+      return codigo;
+    });
+  } catch (err) {
+    console.error(`[garantirCodigoUnico] Falha ao garantir código da linha ${rowIndex}:`, err);
+    return "";
+  }
+}
+
 const INFOS_MUSICAS_SHEET = "INFOS MÚSICAS";
 
 // INFOS MÚSICAS (planilha registrosCharts) é a aba de onde os CHARTS puxam
@@ -304,6 +371,12 @@ export async function registrarInfosMusicas(params: {
 }): Promise<void> {
   if (!params.capaUrl) return;
   try {
+    // Reenvio de lançamento que falhou: a linha já pode ter sido criada.
+    const existentes = await googleSheetsService.registrosCharts
+      .readValues(INFOS_MUSICAS_SHEET, "A:A")
+      .catch(() => [] as string[][]);
+    const alvo = normalizeComparison(params.fullTitle);
+    if (existentes.some((r, i) => i > 0 && normalizeComparison(r?.[0] || "") === alvo)) return;
     await googleSheetsService.registrosCharts.appendRow(INFOS_MUSICAS_SHEET, [
       params.fullTitle, // A - MÚSICA
       "", // B
@@ -591,7 +664,11 @@ export async function createSongController(request: Request): Promise<Response> 
 
     // ID único do tópico gerado para essa música — usado tanto como chave do
     // registro em Musicas (Coluna B) quanto como "Comentários para" (Coluna F).
-    const topicId = `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // Reenvio de um lançamento que falhou no meio (linha em Musicas sem
+    // Código único — caso Sparks, "Alone" gravada 2x): reaproveita a linha
+    // e o tópico da tentativa anterior em vez de criar uma duplicata.
+    const orfa = await acharMusicaOrfaDoLancamento(fullTitle, jogadorId).catch(() => null);
+    const topicId = orfa?.topicId || `musica_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     // 1. Gravar em Musicas na planilha principal — mapeamento exato do
     // cabeçalho oficial (Data, ID do tópico, ID do arquivo, Capa, Letra,
@@ -615,7 +692,7 @@ export async function createSongController(request: Request): Promise<Response> 
     // por 4 abas diferentes sem ninguém notar.
     let musicaRowIndexNova: number | null = null;
     try {
-      musicaRowIndexNova = await appendRowMusicasSeguro([
+      const linhaMusicas: GoogleSheetRow = [
         dataFormatada, // A - Data de lançamento
         topicId, // B - ID do tópico
         mediaUrl || "", // C - ID do arquivo (link do Drive ou YouTube)
@@ -641,7 +718,10 @@ export async function createSongController(request: Request): Promise<Response> 
         "", // W - Média Metacritic
         pendenteFinal, // X - Pendente?
         musicaReferencia || "", // Y - Referência (Substituição/Vínculo)
-      ]);
+      ];
+      musicaRowIndexNova = orfa
+        ? await regravarLinhaMusicas(orfa.rowIndex, linhaMusicas)
+        : await appendRowMusicasSeguro(linhaMusicas);
       // Espelha pro D1 em tempo real — combinado: toda escrita nova vai pros
       // dois lugares, não só no backfill/migração em lote.
       upsertMidiaD1({
@@ -706,9 +786,29 @@ export async function createSongController(request: Request): Promise<Response> 
         artistaPrincipal,
         participantes: participantesLimpos,
         weeksOverride: weeksOverrideMusica,
+        reaproveitarOrfa: true,
       });
       if (musicaRowIndexNova && edicaoChartsRowIndex) {
-        codigoUnicoGerado = await lerCodigoUnicoGerado(edicaoChartsRowIndex);
+        codigoUnicoGerado = await garantirCodigoUnicoNaEdicaoCharts(edicaoChartsRowIndex);
+      }
+      // Sem Código único a música não aparece publicada nem entra nos
+      // charts — antes isso passava em silêncio e o app dizia "publicado com
+      // sucesso" (caso Sparks). Agora avisa: o reenvio reaproveita as linhas
+      // já gravadas (Musicas e EDIÇÃO CHARTS), sem duplicar nada.
+      if (!codigoUnicoGerado) {
+        registrarLogSistema({
+          categoria: "Falha de escrita",
+          oQueAconteceu: `Música "${fullTitle}" (${nomeJogador}) ficou sem Código único — EDIÇÃO CHARTS linha ${edicaoChartsRowIndex ?? "não gravada"}.`,
+          onde: "createSongController",
+        }).catch(() => {});
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error:
+              "A música foi salva, mas não conseguiu entrar nos charts agora. Tente publicar de novo em alguns minutos (não vai duplicar). Se continuar, avise a administração.",
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
       }
       if (pendenteFinal !== "Sim") {
         await registrarInfosMusicas({ fullTitle, capaUrl });
@@ -767,7 +867,15 @@ export async function createSongController(request: Request): Promise<Response> 
       const registroRows =
         await googleSheetsService.registrosCharts.readValues("REGISTRO DE MÚSICA");
       let targetRow = (registroRows?.length || 0) + 1;
-      if (registroRows && registroRows.length > 1) {
+      // Reenvio (linha reaproveitada): regrava a linha da tentativa anterior.
+      const linhaJaRegistrada = orfa
+        ? (registroRows || []).findIndex(
+            (r, i) => i > 0 && normalizeComparison(r[1] || "") === normalizeComparison(fullTitle),
+          )
+        : -1;
+      if (linhaJaRegistrada > 0) {
+        targetRow = linhaJaRegistrada + 1;
+      } else if (registroRows && registroRows.length > 1) {
         for (let i = 1; i < registroRows.length; i++) {
           if (!(registroRows[i][1] || "").trim()) {
             targetRow = i + 1;
@@ -817,6 +925,8 @@ export async function createSongController(request: Request): Promise<Response> 
     // forumController.ts) — lançar a própria música não é um comentário, e
     // registrar isso aqui como se fosse um inflava indevidamente a aba.
 
+    // Só chega aqui com Código único garantido — tentativa que falhou volta
+    // antes (sem prestígio), então o reenvio que dá certo soma normalmente.
     await somarPrestigio(
       { telegramId: jogadorId, usuario: nomeJogador },
       "publicar_lancamento",
@@ -1846,6 +1956,37 @@ async function proximaLinhaLivreMusicas(): Promise<number> {
   // tem H vazio mas conteúdo mais à direita — conta como ocupada.
   const rows = await googleSheetsService.principal.readValuesFresh("Musicas");
   return rows.length + 1;
+}
+
+// Linha de "Musicas" de um lançamento avulso que falhou no meio: mesmo
+// título, mesmo criador, sem Código único (Z) e sem referência (Y — opção
+// c copia o código de outra música). Devolve a ÚLTIMA (a mais recente).
+export async function acharMusicaOrfaDoLancamento(
+  fullTitle: string,
+  jogadorId: string,
+): Promise<{ rowIndex: number; topicId: string } | null> {
+  const rows = await googleSheetsService.principal.readValuesFresh("Musicas", "A1:Z20000");
+  const alvo = normalizeComparison(fullTitle);
+  const criador = (jogadorId || "").trim();
+  for (let i = rows.length - 1; i >= 1; i--) {
+    const r = rows[i] || [];
+    if (normalizeComparison(r[7] || "") !== alvo) continue;
+    if ((r[25] || "").trim() || (r[24] || "").trim()) continue;
+    if (normalizeComparison(r[23] || "") === "sim") continue;
+    if ((r[6] || "").trim() !== criador) continue;
+    const topicId = (r[1] || "").trim();
+    if (!topicId) continue;
+    return { rowIndex: i + 1, topicId };
+  }
+  return null;
+}
+
+// Regrava A:Y de uma linha que JÁ é deste lançamento (ver
+// acharMusicaOrfaDoLancamento) — nunca usar pra linha de outra música.
+async function regravarLinhaMusicas(linha: number, values: GoogleSheetRow): Promise<number> {
+  const ok = await googleSheetsService.principal.updateValues("Musicas", `A${linha}:Y${linha}`, [values]);
+  if (!ok) throw new Error(`Falha ao regravar a linha ${linha} de Musicas.`);
+  return linha;
 }
 
 export async function appendRowMusicasSeguro(values: GoogleSheetRow): Promise<number> {
