@@ -1,3 +1,4 @@
+import { postTemConteudo } from "../services/socialValidacao";
 import {
   googleSheetsService,
   normalizeText,
@@ -328,7 +329,8 @@ export async function createSocialPostController(request: Request): Promise<Resp
   // Post de Twitter compartilhando material do catálogo não precisa de
   // legenda — o card do material já é o conteúdo (igual compartilhar um
   // link de música/álbum de verdade, a pessoa pode só soltar o link).
-  if (!payload.tipo || !payload.autor || (!payload.texto?.trim() && !payload.material)) {
+  // Legenda opcional quando há mídia (Story/Feed/TikTok) ou material.
+  if (!payload.tipo || !payload.autor || !postTemConteudo(payload)) {
     return jsonResponse({ ok: false, error: "Dados incompletos para o post." }, 400);
   }
 
@@ -438,7 +440,8 @@ export async function editSocialPostController(request: Request): Promise<Respon
   const { postId, texto, tgId } = body;
   const media_url = body.media_url ?? "";
 
-  if (!postId || !texto?.trim() || !tgId) {
+  // Editar: legenda pode ficar vazia se o post tem mídia.
+  if (!postId || !tgId || !postTemConteudo({ texto, media_url })) {
     return jsonResponse({ ok: false, error: "Dados incompletos para editar o post." }, 400);
   }
 
@@ -462,11 +465,11 @@ export async function editSocialPostController(request: Request): Promise<Respon
   const autorTrim = body.autor?.trim();
   if (autorTrim) {
     await googleSheetsService.usuarios.updateValues(SHEETS.posts, `D${rowIndex + 1}:F${rowIndex + 1}`, [
-      [autorTrim, texto.trim(), media_url],
+      [autorTrim, (texto || "").trim(), media_url],
     ]);
   } else {
     await googleSheetsService.usuarios.updateValues(SHEETS.posts, `E${rowIndex + 1}:F${rowIndex + 1}`, [
-      [texto.trim(), media_url],
+      [(texto || "").trim(), media_url],
     ]);
   }
 
