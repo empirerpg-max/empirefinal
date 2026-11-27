@@ -1,34 +1,36 @@
 import { describe, expect, test } from "bun:test";
 import {
   abrirCamada,
+  criarDesmontador,
   criarMarca,
+  quantoVoltarAoDesmontar,
   deveFecharNoPopstate,
   deveVoltarAoFecharPelaUi,
   entradaEhDaCamada,
   type HistoricoLike,
 } from "../src/lib/historicoOverlay";
 
-// Histórico falso em memória: pilha + índice; back() move o índice e avisa os ouvintes.
+// Histórico falso em memória: pilha + índice. back()/go() são ENFILEIRADOS (como no
+// navegador, são assíncronos) e só valem em flush(), que avisa os ouvintes (popstate).
 function criarHistoricoFalso(estadoInicial: unknown = null) {
   const pilha: unknown[] = [estadoInicial];
   let indice = 0;
+  const fila: number[] = [];
   const ouvintes: Array<() => void> = [];
-  let backs = 0;
-  const h: HistoricoLike = {
+  const h = {
     get state() {
       return pilha[indice];
     },
-    pushState(s) {
+    pushState(s: unknown) {
       pilha.splice(indice + 1);
       pilha.push(s);
       indice++;
     },
+    go(d: number) {
+      fila.push(d);
+    },
     back() {
-      backs++;
-      if (indice > 0) {
-        indice--;
-        ouvintes.forEach((f) => f());
-      }
+      fila.push(-1);
     },
   };
   return {
@@ -37,8 +39,14 @@ function criarHistoricoFalso(estadoInicial: unknown = null) {
     get tamanho() {
       return pilha.length;
     },
-    get backs() {
-      return backs;
+    get indice() {
+      return indice;
+    },
+    flush() {
+      while (fila.length) {
+        indice = Math.max(0, Math.min(pilha.length - 1, indice + fila.shift()!));
+        ouvintes.forEach((f) => f());
+      }
     },
   };
 }
@@ -74,6 +82,7 @@ describe("historicoOverlay", () => {
     abrirCamada(f.h, m);
     expect(deveFecharNoPopstate(f.h.state, m)).toBe(false);
     f.h.back();
+    f.flush();
     expect(deveFecharNoPopstate(f.h.state, m)).toBe(true);
   });
 
@@ -83,6 +92,7 @@ describe("historicoOverlay", () => {
     abrirCamada(f.h, m);
     expect(deveVoltarAoFecharPelaUi(f.h.state, m)).toBe(true);
     f.h.back();
+    f.flush();
     expect(deveVoltarAoFecharPelaUi(f.h.state, m)).toBe(false);
   });
 
@@ -93,12 +103,14 @@ describe("historicoOverlay", () => {
     abrirCamada(f.h, a);
     abrirCamada(f.h, b);
     expect((f.h.state as any).key).toBe("r");
-    f.h.back(); // popstate: as duas camadas escutam
+    f.h.back();
+    f.flush(); // popstate: as duas camadas escutam
     expect(deveFecharNoPopstate(f.h.state, b)).toBe(true);
     expect(deveFecharNoPopstate(f.h.state, a)).toBe(false);
     // fechar a de baixo pelo X ainda consome a entrada dela
     expect(deveVoltarAoFecharPelaUi(f.h.state, a)).toBe(true);
     f.h.back();
+    f.flush();
     expect(deveFecharNoPopstate(f.h.state, a)).toBe(true);
   });
 
@@ -111,12 +123,59 @@ describe("historicoOverlay", () => {
     expect(deveVoltarAoFecharPelaUi(f.h.state, a)).toBe(false);
   });
 
-  test("navegou para outra rota com a camada aberta: fechar não chama back()", () => {
+  test("navegou para outra rota com a camada aberta: fechar não consome nada", () => {
     const f = criarHistoricoFalso({ key: "r" });
     const m = criarMarca();
     abrirCamada(f.h, m);
     f.h.pushState({ key: "outra-rota" }, ""); // navegação por link
-    expect(deveVoltarAoFecharPelaUi(f.h.state, m)).toBe(false);
-    expect(f.backs).toBe(0);
+    expect(quantoVoltarAoDesmontar(f.h.state, m, false)).toBe(0);
+    const desmontar = criarDesmontador(f.h, () => {});
+    desmontar(m, false);
+    f.flush();
+    expect((f.h.state as any).key).toBe("outra-rota");
   });
+
+  test("quantoVoltarAoDesmontar: fechada pelo voltar = 0; topo = 1; com pendentes desconta", () => {
+    const f = criarHistoricoFalso({ key: "r" });
+    const a = criarMarca();
+    const b = criarMarca();
+    abrirCamada(f.h, a);
+    abrirCamada(f.h, b);
+    expect(quantoVoltarAoDesmontar(f.h.state, a, true)).toBe(0);
+    expect(quantoVoltarAoDesmontar(f.h.state, b, false)).toBe(1);
+    expect(quantoVoltarAoDesmontar(f.h.state, a, false)).toBe(2);
+    expect(quantoVoltarAoDesmontar(f.h.state, a, false, 2)).toBe(0);
+  });
+
+  test("camada única fechada pelo X: consome exatamente 1 entrada", () => {
+    const f = criarHistoricoFalso({ key: "r" });
+    const m = criarMarca();
+    abrirCamada(f.h, m);
+    criarDesmontador(f.h, () => {})(m, false);
+    f.flush();
+    expect(f.indice).toBe(0);
+  });
+
+  for (const ordem of ["baixo-primeiro", "cima-primeiro"]) {
+    test(`duas camadas fechadas no mesmo tick (${ordem}): consome 2 entradas, nenhuma sobra`, () => {
+      const f = criarHistoricoFalso({ key: "r" });
+      const a = criarMarca();
+      const b = criarMarca();
+      abrirCamada(f.h, a);
+      abrirCamada(f.h, b);
+      let zerar: () => void = () => {};
+      const desmontar = criarDesmontador(f.h, (fn) => (zerar = fn));
+      if (ordem === "baixo-primeiro") {
+        desmontar(a, false);
+        desmontar(b, false);
+      } else {
+        desmontar(b, false);
+        desmontar(a, false);
+      }
+      f.flush();
+      expect(f.indice).toBe(0);
+      expect((f.h.state as any).key).toBe("r");
+      zerar();
+    });
+  }
 });
