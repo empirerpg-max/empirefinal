@@ -72,6 +72,12 @@ export function destinoDaPagina(
  * `offsetLeft` e `offsetLeft + offsetWidth`) fique inteiro entre as duas
  * faixas. `null` se ele já está inteiro (ou se a rolagem não mudaria nada).
  * Item mais largo que a área útil: mostra o começo dele.
+ *
+ * `inicios` (opcional, os mesmos de `destinoDaPagina`): quando o item está
+ * cortado à direita, em vez de parar no ponto exato (que não é ponto de
+ * snap — o `proximity` poderia puxar de volta e deixar o item embaixo da
+ * faixa), para no menor início ≥ esse ponto. Esse início nunca passa do
+ * início do próprio item, então o item continua inteiro.
  */
 export function scrollParaMostrar(
   inicio: number,
@@ -79,6 +85,7 @@ export function scrollParaMostrar(
   scrollLeft: number,
   clientWidth: number,
   faixa = FAIXA_SETA,
+  inicios?: number[],
 ): number | null {
   const areaInicio = scrollLeft + faixa;
   const areaFim = scrollLeft + clientWidth - faixa;
@@ -87,6 +94,12 @@ export function scrollParaMostrar(
     destino = inicio - faixa;
   } else if (fim > areaFim) {
     destino = fim - clientWidth + faixa;
+    if (inicios && inicios.length > 0) {
+      // Tolerância de 1 px (arredondamento) e nunca além do início do item.
+      const doItem = Math.max(inicio - faixa, 0);
+      const snap = inicios.find((x) => x >= destino - 1 && x <= doItem + 1);
+      if (snap !== undefined) destino = snap;
+    }
   } else {
     return null;
   }

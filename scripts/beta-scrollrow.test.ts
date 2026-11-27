@@ -70,6 +70,17 @@ describe("destinoDaPagina", () => {
     expect(destinoDaPagina(1, 0, 400, inicios, 0)).toBe(400);
   });
 
+  test("inícios além do máximo de rolagem (último item): devolve o início, o navegador limita", () => {
+    // clientWidth 400, scrollWidth 1000 → máximo 600. Já no máximo, a seta
+    // direita não aparece; se for chamada mesmo assim, devolve um início
+    // à frente (≤ último) e o navegador segura em 600.
+    const r = destinoDaPagina(1, 600, 400, inicios);
+    expect(r).toBe(800);
+    expect(r).toBeLessThanOrEqual(900);
+    // e voltar a partir do máximo encosta num início normal
+    expect(destinoDaPagina(-1, 600, 400, inicios)).toBe(400);
+  });
+
   test("sem itens: 0", () => {
     expect(destinoDaPagina(1, 0, 400, [])).toBe(0);
   });
@@ -107,5 +118,42 @@ describe("scrollParaMostrar", () => {
 
   test("item maior que a área útil → mostra o começo dele", () => {
     expect(scrollParaMostrar(500, 1000, 0, 400)).toBe(444);
+  });
+
+  describe("com inícios (pontos de snap)", () => {
+    // Itens de 100 px a cada 100 px; inícios = offsetLeft − 56, mín. 0.
+    const iniciosSnap = [0, 44, 144, 244, 344, 444, 544, 644, 744, 844];
+
+    test("cortado à direita → para no menor início ≥ o ponto exato", () => {
+      // item [400, 500], ponto exato 156; 144 < 156, então 244
+      // (≤ 344, o início de snap do próprio item: continua inteiro).
+      expect(scrollParaMostrar(400, 500, 0, 400, 56, iniciosSnap)).toBe(244);
+      // item [300, 400], ponto exato 56 → 144
+      expect(scrollParaMostrar(300, 400, 0, 400, 56, iniciosSnap)).toBe(144);
+    });
+
+    test("o item fica inteiro entre as faixas no destino", () => {
+      const d = scrollParaMostrar(400, 500, 0, 400, 56, iniciosSnap)!;
+      expect(400).toBeGreaterThanOrEqual(d + 56);
+      expect(500).toBeLessThanOrEqual(d + 400 - 56);
+    });
+
+    test("ponto exato já é um início (±1 px) → usa ele", () => {
+      // item [388, 488]: ponto exato 144 → 144
+      expect(scrollParaMostrar(388, 488, 0, 400, 56, iniciosSnap)).toBe(144);
+    });
+
+    test("cortado à esquerda continua no início do próprio item", () => {
+      expect(scrollParaMostrar(300, 400, 400, 400, 56, iniciosSnap)).toBe(244);
+    });
+
+    test("já inteiro → null, com ou sem inícios", () => {
+      expect(scrollParaMostrar(100, 200, 0, 400, 56, iniciosSnap)).toBeNull();
+    });
+
+    test("sem início que sirva → ponto exato (comportamento antigo)", () => {
+      expect(scrollParaMostrar(400, 500, 0, 400, 56, [0])).toBe(156);
+      expect(scrollParaMostrar(400, 500, 0, 400, 56, [])).toBe(156);
+    });
   });
 });
