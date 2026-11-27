@@ -10,11 +10,12 @@ import {
 const useEfeitoIsomorfico = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 // Coordena camadas que desmontam no mesmo commit (um único history.go(-n)).
+// Criado no primeiro open (dentro do efeito, SSR-safe), junto com o ouvinte
+// global de popstate, registrado cedo (antes dos ouvintes das camadas).
 let desmontador: ReturnType<typeof criarDesmontador> | null = null;
 function obterDesmontador() {
   if (!desmontador) {
-    desmontador = criarDesmontador(window.history, (f) => queueMicrotask(f));
-    const d = desmontador;
+    const d = (desmontador = criarDesmontador(window.history, (f) => queueMicrotask(f)));
     window.addEventListener("popstate", () => d.assentou());
   }
   return desmontador;
@@ -42,6 +43,7 @@ export function useHistoryOverlay(aberto: boolean, aoFechar: () => void): { fech
 
   useEffect(() => {
     if (!aberto) return;
+    obterDesmontador();
     const marca = criarMarca();
     let fechadoPeloVoltar = false;
     abrirCamada(window.history, marca);

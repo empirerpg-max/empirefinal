@@ -83,38 +83,50 @@ export function quantoVoltarAoDesmontar(
 /**
  * Cria o "desmontador": coordena camadas que desmontam no mesmo tick para
  * resultar em UM único `history.go(-n)` (navegadores podem descartar/fundir
- * vários go() no mesmo tick). `alvo` = maior quantidade lida do state (velho,
- * pois go() é assíncrono) na janela; `emitido` = quanto já pedimos ao
- * navegador. Só emite a diferença, então um desmonte em tick posterior, antes
- * do popstate chegar, nunca conta em dobro. `assentou()` (chamar no popstate)
- * encerra a janela. `agendar` roda a emissão ao fim do tick (queueMicrotask).
+ * vários go() no mesmo tick).
+ * Contabilidade em comprimentos ABSOLUTOS da pilha de marcas (estável mesmo
+ * com o state ainda velho, pois go() é assíncrono): fechar a camada na posição
+ * `i` da pilha leva a pilha a ter comprimento `i`. `alvo` = menor comprimento
+ * pedido na janela; `emitido` = comprimento que a pilha terá quando todos os
+ * go() já emitidos pousarem. Só emite a diferença (nunca conta em dobro entre
+ * ticks). `assentou()` (chamar no popstate) só encerra a janela quando o state
+ * pousado já tem comprimento <= `emitido`; um popstate intermediário de go()
+ * ainda em voo não zera nada. `agendar` roda a emissão ao fim do tick.
  */
 export function criarDesmontador(
   h: HistoricoLike & { go(delta: number): void },
   agendar: (f: () => void) => void,
 ) {
-  let alvo = 0;
-  let emitido = 0;
+  let alvo: number | null = null;
+  let emitido: number | null = null;
   let agendado = false;
   return {
     desmontar(marca: string, fechadoPeloVoltar: boolean): void {
-      const n = quantoVoltarAoDesmontar(h.state, marca, fechadoPeloVoltar);
-      if (n <= alvo) return;
-      alvo = n;
+      if (fechadoPeloVoltar) return;
+      const i = pilhaDe(h.state).indexOf(marca);
+      if (i < 0) return;
+      if (emitido !== null && i >= emitido) return; // já coberta por go() emitido
+      if (alvo !== null && i >= alvo) return;
+      alvo = i;
       if (agendado) return;
       agendado = true;
       agendar(() => {
         agendado = false;
-        const extra = alvo - emitido;
+        if (alvo === null) return;
+        const base = emitido ?? pilhaDe(h.state).length;
+        const extra = base - alvo;
         if (extra > 0) {
           emitido = alvo;
           h.go(-extra);
         }
+        alvo = null;
       });
     },
     assentou(): void {
-      alvo = 0;
-      emitido = 0;
+      if (emitido !== null && pilhaDe(h.state).length <= emitido) {
+        emitido = null;
+        alvo = null;
+      }
     },
   };
 }

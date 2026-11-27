@@ -214,4 +214,49 @@ describe("historicoOverlay", () => {
     f.flush();
     expect(f.indice).toBe(0);
   });
+
+  test("tres camadas, tres ticks, popstates pousando no meio: total exatamente 3, indice 0", () => {
+    const f = criarHistoricoFalso({ key: "r" });
+    const [a, b, c] = [criarMarca(), criarMarca(), criarMarca()];
+    abrirCamada(f.h, a);
+    abrirCamada(f.h, b);
+    abrirCamada(f.h, c);
+    const tarefas: Array<() => void> = [];
+    const rodar = () => tarefas.splice(0).forEach((t) => t());
+    const d = criarDesmontador(f.h, (fn) => tarefas.push(fn));
+    f.ouvintes.push(() => d.assentou());
+    d.desmontar(c, false);
+    rodar();
+    f.flush(); // popstate pousa
+    d.desmontar(b, false);
+    rodar();
+    f.flush();
+    d.desmontar(a, false);
+    rodar();
+    f.flush();
+    expect(f.chamadasGo.reduce((x, y) => x + y, 0)).toBe(-3);
+    expect(f.indice).toBe(0);
+  });
+
+  test("tres camadas, go() em voo: popstate intermediário não zera a janela (total 3)", () => {
+    const f = criarHistoricoFalso({ key: "r" });
+    const [a, b, c] = [criarMarca(), criarMarca(), criarMarca()];
+    abrirCamada(f.h, a);
+    abrirCamada(f.h, b);
+    abrirCamada(f.h, c);
+    const tarefas: Array<() => void> = [];
+    const rodar = () => tarefas.splice(0).forEach((t) => t());
+    const d = criarDesmontador(f.h, (fn) => tarefas.push(fn));
+    f.ouvintes.push(() => d.assentou());
+    d.desmontar(c, false);
+    rodar(); // go(-1) em voo
+    d.desmontar(b, false);
+    rodar(); // go(-1) em voo, state ainda velho
+    d.assentou(); // popstate do 1o passo: nao pode zerar (aqui state ainda [a,b,c])
+    d.desmontar(a, false);
+    rodar();
+    f.flush();
+    expect(f.chamadasGo.reduce((x, y) => x + y, 0)).toBe(-3);
+    expect(f.indice).toBe(0);
+  });
 });
