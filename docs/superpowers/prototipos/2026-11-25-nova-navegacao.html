@@ -646,6 +646,31 @@ button.rank{min-width:32px;min-height:40px}
 .stackPage.tvroom .tvComposer{gap:6px}
 .stackPage.tvroom .tvComposer input{padding:0 12px;min-width:0}
 .tvAdminBtn,.tvPart{min-height:36px}
+/* Cartão de compartilhar (Charts › ⋯ › Compartilhar) */
+.shWrap{display:flex;justify-content:center}
+.shCard{position:relative;width:min(100%,300px);border-radius:18px;overflow:hidden;background:#0b0b14;color:#fff;display:flex;flex-direction:column;box-shadow:0 14px 40px rgba(0,0,0,.45);font-family:inherit}
+.shCard.f45{aspect-ratio:4/5}
+.shCard.f916{aspect-ratio:9/16;width:min(100%,240px)}
+.shArt{flex:1;margin:10px 10px 0;border-radius:12px;position:relative;min-height:0}
+.shArtLbl{position:absolute;left:10px;bottom:8px;font-size:11px;font-weight:800;opacity:.8;letter-spacing:.02em}
+.shTop{position:absolute;top:18px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.shBrand{font-size:11px;font-weight:900;letter-spacing:.08em;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:8px;white-space:nowrap}
+.shBrand i{font-style:normal;color:#c4b5fd}
+.shChart{font-size:10.5px;font-weight:900;letter-spacing:.1em;background:#957AF8;color:#0b0b14;padding:4px 8px;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.shPanel{padding:10px 14px 12px;display:flex;flex-direction:column;gap:6px}
+.shBadge{background:transparent;align-self:flex-start;font-size:10.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1.5px solid #957AF8;color:#c4b5fd}
+.shBadge.sbOuro{border-color:#fbbf24;color:#fde68a}
+.shBadge.sbNovo{border-color:#34d399;color:#a7f3d0}
+.shBadge.sbSobe{border-color:#38bdf8;color:#bae6fd}
+.shRow{display:flex;align-items:flex-end;gap:10px;min-width:0}
+.shInfo{flex:1;min-width:0;display:flex;flex-direction:column}
+.shInfo small{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#a1a1aa;margin-top:4px}
+.shInfo b{font-size:17px;font-weight:900;line-height:1.1;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shPos{display:flex;align-items:flex-start;gap:2px;flex-shrink:0;line-height:.8}
+.shPos small{font-size:14px;font-weight:900;color:#c4b5fd;margin-top:6px}
+.shPos b{font-size:64px;font-weight:900;letter-spacing:-.05em;background:linear-gradient(160deg,#c4b5fd,#957AF8 60%,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent}
+.shFoot{display:flex;justify-content:space-between;font-size:9.5px;color:#a1a1aa;font-weight:700;letter-spacing:.04em;border-top:1px solid rgba(255,255,255,.1);padding-top:6px}
+.shCard.f916 .shPanel{padding-bottom:18px}
 </style>
 
 <div class="wrap">
@@ -1584,7 +1609,7 @@ function openCreateSub(k){
 }
 /* ── menu ⋯ (ações de cada item) ── */
 const ACTIONS = {
-  faixa:[['list','Adicionar à playlist'],['heart','Salvar nos Salvos'],['forum','Abrir discussão no Fórum'],['share','Compartilhar'],['help','Reportar conteúdo errado']],
+  faixa:[['list','Adicionar à playlist'],['heart','Salvar nos Salvos'],['forum','Abrir discussão no Fórum'],['share','Compartilhar','data-share-open'],['help','Reportar conteúdo errado']],
   video:[['list','Adicionar à playlist'],['heart','Salvar'],['forum','Abrir discussão no Fórum'],['help','Reportar problema no vídeo'],['help','Reportar conteúdo errado']],
   album:[['pen','Editar lançamento (dono)'],['heart','Salvar álbum'],['share','Compartilhar'],['help','Reportar conteúdo errado']],
   comentario:[['pen','Editar comentário'],['heart','Reagir'],['reply','Responder'],['logout','Excluir (dono ou admin)']],
@@ -1621,6 +1646,38 @@ function openTvSheet(k){
   if (k==='formato') h = head('Formatar mensagem','Como hoje: *negrito* e _itálico_')+`<div style="display:flex;gap:8px"><button class="btn sec" style="flex:1;font-weight:900" data-close-sheet data-toast="Negrito: *texto*">B Negrito</button><button class="btn sec" style="flex:1;font-style:italic" data-close-sheet data-toast="Itálico: _texto_">I Itálico</button></div>`;
   $('#sheet').setAttribute('aria-label','Sala da TV');
   $('#sheet').innerHTML=h; $('#scrim').classList.add('in'); $('#sheet').classList.add('in');
+}
+/* ── Compartilhar (Charts › ⋯ › Compartilhar): cartão pronto para o Feed ou os Stories do Social ── */
+const SHARE={title:'',chart:'',fmt:'feed'};
+function shareBadge(s){ if(s.p===1) return ['Nº 1','sbOuro']; if(s.ch==='NEW') return ['Estreia','sbNovo']; if(s.ch==='0'||s.ch==='+0') return ['Mantém a posição','sbNeutro']; const n=parseInt(s.ch,10); return n>0?[`Subiu ${n}`,'sbSobe']:[`Caiu ${-n}`,'sbNeutro']; }
+function shareCard(s, chart, fmt){
+  const c=G[s.al%G.length]; const [bt,bk]=shareBadge(s);
+  return `<div class="shCard ${fmt==='story'?'f916':'f45'}" role="img" aria-label="${chart?`${chart}: ${s.t}, de ${ART[s.a]}, posição ${s.p}, ${bt}`:`${s.t}, de ${ART[s.a]}`}">
+    <div class="shArt" style="background:radial-gradient(70% 60% at 70% 25%,${c[0]},transparent 70%),linear-gradient(150deg,${c[0]},${c[1]})"><span class="shArtLbl">${ALB[s.al].t}</span></div>
+    <div class="shTop"><span class="shBrand">♛ EMPIRE <i>HUB</i></span>${chart?`<span class="shChart">${chart.toUpperCase()}</span>`:''}</div>
+    <div class="shPanel">
+      ${chart?`<span class="shBadge ${bk}">${bt}</span>`:''}
+      <div class="shRow">
+        <div class="shInfo"><small>Música</small><b>${s.t}</b><small>Artista</small><b>${ART[s.a]}</b></div>
+        ${chart?`<div class="shPos"><small>Nº</small><b>${s.p}</b></div>`:''}
+      </div>
+      <div class="shFoot"><span>${chart?'Semana de 27/11/2026':'Ouça no Catálogo do Empire Hub'}</span><span>empirehub</span></div>
+    </div>
+  </div>`;
+}
+function openShare(){
+  const s=SONG.find(x=>x.t===SHARE.title)||SONG[0]; const chart=SHARE.chart; const f=SHARE.fmt;
+  $('#sheet').setAttribute('aria-label','Compartilhar');
+  $('#sheet').innerHTML = `<div class="grab"></div><div class="crHead"><b>Compartilhar</b><button class="crX" data-close-sheet aria-label="Fechar">✕</button></div>
+    <div class="seg" style="margin:0 0 12px">${[['feed','Feed (4:5)'],['story','Stories (9:16)']].map(([v,l])=>`<button data-share-fmt="${v}" aria-pressed="${v===f}">${l}</button>`).join('')}</div>
+    <div class="shWrap">${shareCard(s,chart,f)}</div>
+    <p class="muted small" style="margin:10px 2px 12px">${chart?'Capa, chart, posição e título vêm do próprio chart desta semana. ':''}Você escolhe o perfil ("Interagindo como") e escreve a legenda antes de publicar.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="btn pri" data-close-sheet data-toast="Abre o novo post do Social com a imagem pronta (${f==='story'?'Stories':'Feed'})">${svg('social')}<span>${f==='story'?'Postar nos Stories':'Postar no Feed'}</span></button>
+      <button class="btn sec" data-close-sheet data-toast="Imagem salva no aparelho">${svg('share')}<span>Baixar imagem</span></button>
+    </div>
+    <button class="btn sec" style="width:100%;margin-top:8px" data-close-sheet data-toast="Link copiado: abre ${chart?'o chart nesta música':'a música'} no app">Copiar link</button>`;
+  $('#scrim').classList.add('in'); $('#sheet').classList.add('in');
 }
 function closeSheet(){ $('#scrim').classList.remove('in'); $('#sheet').classList.remove('in'); $('#sheet').style.zIndex=''; }
 
@@ -1661,7 +1718,7 @@ function setMode(m){
 const labelToKey = {'Para você':'voce','Empire TV':'tv','Turnês':'tours','Premiações':'premiacoes'};
 box.addEventListener('click', e => {
   const act = e.target.closest('[data-actions]');
-  if (act){ e.stopPropagation(); return openActions(act.dataset.actions, act.dataset.title); }
+  if (act){ e.stopPropagation(); SHARE.title=act.dataset.title; SHARE.chart=state.tab==='charts'&&state.chartTab!=='Ao vivo'?state.chartTab:(state.tab==='charts'?'Global 100':''); return openActions(act.dataset.actions, act.dataset.title); }
   const b = e.target.closest('button,[role="button"]'); if (!b) return;
   if (b.classList.contains('chipArrow')){ const row=b.parentElement.querySelector('.chips'); row.scrollBy({left:(b.classList.contains('l')?-1:1)*(row.clientWidth-96),behavior:'smooth'}); return; }
   if (b.hasAttribute('data-oque-mudou')){ $('#sheet').setAttribute('aria-label','Bem-vindo ao Beta test'); $('#sheet').innerHTML = `<div class="grab"></div><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><span class="betaPill" style="display:inline-grid;place-items:center">BETA</span><b style="font-size:19px">Bem-vindo ao Beta test</b></div><p class="muted small" style="margin:0 0 12px">Esta é a versão nova do Empire Hub. Nada saiu do app: seus artistas, lançamentos e comentários estão aqui. Veja onde ficou cada coisa:</p><div class="group" style="margin:0">${[['tv','Empire TV, Turnês e Premiações','Início › abas no topo'],['archive','Acervo (agora Imprensa)','Social › Imprensa'],['pen','Gestão e Pre-save','botão ＋ Criar'],['user','Perfil, Ponto, Market, Premiações','sua foto, no topo'],['forum','Fórum','aba própria na barra de baixo'],['chart','Playlists ao vivo','Charts › Ao vivo']].map(([ic,t,d])=>`<div class="row"><span class="gicon" style="background:var(--p-accent);color:var(--p-accent-fg)">${svg(ic)}</span><span class="meta"><b>${t}</b><small>${d}</small></span></div>`).join('')}</div><p class="muted small" style="margin:12px 0">Se algo der errado, toque em <b>BETA</b> no topo para reportar ou voltar para a versão anterior.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn sec" data-close-sheet data-open-after="tutorial">Ver o tutorial</button><button class="btn pri" data-close-sheet id="comecarBeta">Começar no Beta</button></div><button class="small muted" style="display:block;margin:12px auto 0;font-weight:700;text-decoration:underline" data-voltar-antiga>Prefiro a versão anterior</button>`; $('#scrim').classList.add('in'); $('#sheet').classList.add('in'); return; }
@@ -1682,6 +1739,8 @@ box.addEventListener('click', e => {
   if (b.hasAttribute('data-ir-antiga')){ closeSheet(); $('#oldApp').hidden=false; return; }
   if (b.id==='voltarBeta'){ $('#oldApp').hidden=true; return toast('Bem-vindo de volta ao Beta test'); }
   if (b.hasAttribute('data-go-close-prem')){ closeAll(); state.tab='inicio'; state.inicioTab='premiacoes'; return render(); }
+  if (b.hasAttribute('data-share-open')){ return openShare(); }
+  if (b.dataset.shareFmt){ SHARE.fmt=b.dataset.shareFmt; return openShare(); }
   if (b.hasAttribute('data-tvsom2')){ const on=!b.classList.contains('on'); b.classList.toggle('on',on); b.firstChild.textContent=on?'🔊':'🔇 '; b.setAttribute('aria-label',on?'Tirar o som':'Ativar som'); return toast(on?'Som ligado com um toque (player do app)':'Som desligado'); }
   if (b.hasAttribute('data-tvswap')){ const k=b.getAttribute('aria-pressed')!=='true'; b.setAttribute('aria-pressed',k); b.setAttribute('aria-label',k?'Voltar para o player do app':'Trocar para o player da Kick'); const t=b.closest('.tvVideo').querySelector('[data-tvplayer-tag]'); if(t) t.textContent=k?'Player da Kick (som pelo player da Kick)':'Player do app · vídeo da Kick'; return toast(k?'Usando o player da Kick · escolha salva neste aparelho':'Usando o player do app'); }
   if (b.hasAttribute('data-tvsom')){ b.closest('.tvVideo').classList.add('tocando'); return toast('Tocando com som: o toque foi dentro do player da Kick'); }

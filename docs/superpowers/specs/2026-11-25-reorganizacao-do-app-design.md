@@ -1703,6 +1703,46 @@ escapando de botão e nenhum problema de contraste. Corrigido nesta rodada:
    fica abaixo disso e o chat vai para baixo do vídeo, como no celular.
    Conferir no aparelho se é o que o usuário prefere.
 
+### 6.22 Compartilhar do chart para o Social *(NOVO, pedido do usuário, 2026-11-27)*
+
+**Onde:** Charts › ⋯ de uma música › **Compartilhar**. Fora dos Charts
+(Catálogo, álbum), o mesmo cartão sai sem chart e sem posição.
+
+**Folha "Compartilhar":** troca de formato **Feed (4:5)** / **Stories
+(9:16)**, prévia do cartão e os botões:
+- **Postar no Feed** ou **Postar nos Stories**: abre o novo post do Social
+  com a imagem já anexada. O jogador escolhe o perfil ("Interagindo como")
+  e escreve a legenda.
+- **Baixar imagem.**
+- **Copiar link**: abre o chart nessa música.
+
+**Cartão (modelo próprio do Empire Hub, sem copiar marca de terceiros):**
+- capa do material em cima, com o nome do álbum;
+- selo "♛ EMPIRE HUB" e o nome do chart (ex.: GLOBAL 100);
+- etiqueta do momento:
+  - **Nº 1** (dourada);
+  - **Estreia** (verde);
+  - **Subiu N** (azul);
+  - **Mantém a posição** ou **Caiu N** (neutras);
+- "Música" e "Artista" em caixa alta;
+- a posição grande ("Nº 5") na cor do app;
+- rodapé "Semana de dd/mm/aaaa".
+
+**Como fazer na implementação:**
+- **Custo zero:** o cartão é desenhado no próprio aparelho (`canvas`,
+  1080×1350 no Feed e 1080×1920 nos Stories) com os dados que a tela do chart
+  já carregou (posição, variação, capa, título, artista, data da semana).
+  Não lê nada a mais no D1 nem na planilha.
+- **A etiqueta só lê campos que o chart já tem** (posição e variação "NEW",
+  "+n", "−n"). Nenhuma regra ou cálculo dos charts muda.
+- **A capa precisa vir por um endereço que libere o desenho no `canvas`**
+  (o mesmo proxy de imagem já usado no app). Se a capa não carregar, o
+  cartão usa um fundo em degradê com a cor do app, sem quebrar.
+- **Postar usa o fluxo de post que já existe** (`SocialPostComposer`, pastas
+  `socialPosts`/`socialStories`), com a imagem gerada no lugar da foto
+  escolhida. As travas de hoje (Stories etc.) continuam valendo.
+- **Fontes:** Geist, já carregada antes de desenhar.
+
 ## 7. Itens que mudam de texto (resquícios de Telegram)
 
 | Onde | Hoje | Novo |
