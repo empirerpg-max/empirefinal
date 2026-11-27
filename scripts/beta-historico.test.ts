@@ -17,6 +17,7 @@ function criarHistoricoFalso(estadoInicial: unknown = null) {
   let indice = 0;
   const fila: number[] = [];
   const chamadasGo: number[] = [];
+  const chamadasReplace: unknown[] = [];
   const ouvintes: Array<() => void> = [];
   const h = {
     get state() {
@@ -26,6 +27,10 @@ function criarHistoricoFalso(estadoInicial: unknown = null) {
       pilha.splice(indice + 1);
       pilha.push(s);
       indice++;
+    },
+    replaceState(s: unknown) {
+      chamadasReplace.push(s);
+      pilha[indice] = s;
     },
     go(d: number) {
       chamadasGo.push(d);
@@ -40,6 +45,11 @@ function criarHistoricoFalso(estadoInicial: unknown = null) {
     h,
     ouvintes,
     chamadasGo,
+    chamadasReplace,
+    /** Pilhas de marcas de cada entrada do histórico, da base até a última. */
+    get entradas() {
+      return pilha.map((e) => ((e as any)?.__overlays ?? []) as string[]);
+    },
     get tamanho() {
       return pilha.length;
     },
@@ -257,6 +267,114 @@ describe("historicoOverlay", () => {
     rodar();
     f.flush();
     expect(f.chamadasGo.reduce((x, y) => x + y, 0)).toBe(-3);
+    expect(f.indice).toBe(0);
+  });
+
+  // Troca: a camada que fecha pela UI e a que abre no mesmo tick (cleanup de
+  // uma, efeito da outra, depois a microtask). Ouvinte global (assentou) é
+  // registrado antes dos das camadas, como no hook.
+  function montarTroca() {
+    const f = criarHistoricoFalso({ key: "r", __TSR_index: 1 });
+    const tarefas: Array<() => void> = [];
+    const rodar = () => tarefas.splice(0).forEach((t) => t());
+    const d = criarDesmontador(f.h, (fn) => tarefas.push(fn));
+    f.ouvintes.push(() => d.assentou());
+    const fechadas = new Set<string>();
+    const escutar = (m: string) =>
+      f.ouvintes.push(() => {
+        if (deveFecharNoPopstate(f.h.state, m)) fechadas.add(m);
+      });
+    return { f, d, rodar, fechadas, escutar };
+  }
+
+  test("troca: c fecha pela UI e d abre no mesmo tick -> d reaproveita a entrada, sem go()", () => {
+    const { f, d, rodar, fechadas, escutar } = montarTroca();
+    const c = criarMarca();
+    abrirCamada(f.h, c, d);
+    escutar(c);
+    d.desmontar(c, false); // cleanup de c
+    const dd = criarMarca();
+    abrirCamada(f.h, dd, d); // efeito de d, mesmo tick
+    escutar(dd);
+    rodar();
+    f.flush();
+    expect(f.chamadasGo).toEqual([]);
+    expect(f.chamadasReplace.length).toBe(1);
+    expect(f.entradas).toEqual([[], [dd]]);
+    expect(f.indice).toBe(1);
+    expect((f.h.state as any).key).toBe("r");
+    expect((f.h.state as any).__TSR_index).toBe(1);
+    expect(fechadas.has(dd)).toBe(false);
+    // voltar do usuário fecha d e cai na base
+    f.h.back();
+    f.flush();
+    expect(fechadas.has(dd)).toBe(true);
+    expect(f.indice).toBe(0);
+    expect((f.h.state as any).key).toBe("r");
+  });
+
+  test("troca com duas camadas abaixo: a aberta, b sobre a, b trocada por c -> a e c, uma entrada cada", () => {
+    const { f, d, rodar, fechadas, escutar } = montarTroca();
+    const [a, b, c] = [criarMarca(), criarMarca(), criarMarca()];
+    abrirCamada(f.h, a, d);
+    escutar(a);
+    abrirCamada(f.h, b, d);
+    escutar(b);
+    d.desmontar(b, false);
+    abrirCamada(f.h, c, d);
+    escutar(c);
+    rodar();
+    f.flush();
+    expect(f.chamadasGo).toEqual([]);
+    expect(f.entradas).toEqual([[], [a], [a, c]]);
+    expect(f.indice).toBe(2);
+    expect(fechadas.size).toBe(0);
+    f.h.back();
+    f.flush();
+    expect(fechadas.has(c)).toBe(true);
+    expect(fechadas.has(a)).toBe(false);
+    f.h.back();
+    f.flush();
+    expect(fechadas.has(a)).toBe(true);
+    expect(f.indice).toBe(0);
+  });
+
+  test("troca com duas camadas fechando juntas (b e c) e d abrindo: go(-1) e d assume a entrada de b", () => {
+    const { f, d, rodar, fechadas, escutar } = montarTroca();
+    const [a, b, c] = [criarMarca(), criarMarca(), criarMarca()];
+    abrirCamada(f.h, a, d);
+    escutar(a);
+    abrirCamada(f.h, b, d);
+    abrirCamada(f.h, c, d);
+    d.desmontar(c, false);
+    d.desmontar(b, false);
+    const dd = criarMarca();
+    abrirCamada(f.h, dd, d);
+    escutar(dd);
+    rodar();
+    expect(f.chamadasGo).toEqual([-1]);
+    f.flush();
+    expect(f.entradas.slice(0, f.indice + 1)).toEqual([[], [a], [a, dd]]);
+    expect(fechadas.size).toBe(0);
+    f.h.back();
+    f.flush();
+    expect(fechadas.has(dd)).toBe(true);
+    expect(fechadas.has(a)).toBe(false);
+    expect(f.indice).toBe(1);
+  });
+
+  test("troca adiada em que a nova fecha antes do go() pousar: consome a entrada reservada também", () => {
+    const { f, d, rodar } = montarTroca();
+    const [a, b] = [criarMarca(), criarMarca()];
+    abrirCamada(f.h, a, d);
+    abrirCamada(f.h, b, d);
+    d.desmontar(a, false); // a fecha (b junto, via popstate)
+    const dd = criarMarca();
+    abrirCamada(f.h, dd, d);
+    rodar(); // go(-1): reserva a entrada de a para dd
+    d.desmontar(dd, false); // dd fecha antes de pousar
+    f.flush();
+    expect(f.chamadasGo.reduce((x, y) => x + y, 0)).toBe(-2);
     expect(f.indice).toBe(0);
   });
 });

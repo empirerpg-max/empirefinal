@@ -32,6 +32,13 @@ function obterDesmontador() {
  * outra rota; quem a hospeda deve desmontar (ou pôr `aberto=false`) na troca
  * de rota. Nesse caso a entrada dela já saiu da pilha e não chamamos back().
  *
+ * Troca de camada (uma fecha pelo X e outra abre no mesmo commit, ex.: um
+ * menu que abre uma folha): a nova REAPROVEITA a entrada da que fechou
+ * (replaceState, cancelando o go() pendente), então fica exatamente uma
+ * entrada por camada visível; o próximo voltar fecha a nova e cai na tela
+ * de baixo. Se mais de uma camada fechava junto, o go() para uma entrada
+ * antes e a nova assume essa entrada quando ele pousar.
+ *
  * StrictMode (só dev): o efeito roda, limpa e roda de novo, empurrando e
  * consumindo uma entrada extra; em produção não acontece.
  */
@@ -43,10 +50,9 @@ export function useHistoryOverlay(aberto: boolean, aoFechar: () => void): { fech
 
   useEffect(() => {
     if (!aberto) return;
-    obterDesmontador();
     const marca = criarMarca();
     let fechadoPeloVoltar = false;
-    abrirCamada(window.history, marca);
+    abrirCamada(window.history, marca, obterDesmontador());
 
     const onPopState = () => {
       if (!deveFecharNoPopstate(window.history.state, marca)) return;

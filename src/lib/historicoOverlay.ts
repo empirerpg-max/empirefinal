@@ -15,6 +15,7 @@
 export type HistoricoLike = {
   state: unknown;
   pushState(s: unknown, t: string): void;
+  replaceState(s: unknown, t: string): void;
   back(): void;
 };
 
@@ -35,10 +36,24 @@ function pilhaDe(state: unknown): string[] {
   return Array.isArray(p) ? (p as string[]) : [];
 }
 
-/** Empurra a entrada da camada preservando o state atual (o TanStack Router guarda dados nele). */
-export function abrirCamada(h: HistoricoLike, marca: string): void {
-  const atual = comoObjeto(h.state);
-  h.pushState({ ...atual, __overlay: marca, __overlays: [...pilhaDe(h.state), marca] }, "");
+/** State da entrada da camada: preserva o atual (o TanStack Router guarda dados nele). */
+function stateDaCamada(h: HistoricoLike, abaixo: string[], marca: string): unknown {
+  return { ...comoObjeto(h.state), __overlay: marca, __overlays: [...abaixo, marca] };
+}
+
+/** Quem pode ceder uma entrada que está fechando (ver `criarDesmontador`). */
+export type Reaproveitador = { reaproveitar(marca: string): boolean };
+
+/**
+ * Empurra a entrada da camada preservando o state atual. Com `desmontador`:
+ * se o topo do histórico é de uma camada com fechamento pendente (fechou pela
+ * UI neste mesmo tick e o go() ainda não saiu), a nova camada REAPROVEITA
+ * essa entrada (replaceState) em vez de empurrar outra: uma entrada por
+ * camada visível, sem órfã e sem consumir a da nova.
+ */
+export function abrirCamada(h: HistoricoLike, marca: string, desmontador?: Reaproveitador): void {
+  if (desmontador?.reaproveitar(marca)) return;
+  h.pushState(stateDaCamada(h, pilhaDe(h.state), marca), "");
 }
 
 /** O state atual é exatamente a entrada desta camada (é o topo). */
@@ -100,8 +115,18 @@ export function criarDesmontador(
   let alvo: number | null = null;
   let emitido: number | null = null;
   let agendado = false;
+  // Troca de camada com mais de uma entrada fechando (alvo abaixo do topo):
+  // camadas que abriram na janela e esperam o go() pousar na entrada `alvo`
+  // para assumi-la (a 1a por replaceState, as demais por pushState).
+  let aguardando: string[] = [];
+  let reservado = false; // o go() emitido deixou uma entrada para `aguardando`
   return {
     desmontar(marca: string, fechadoPeloVoltar: boolean): void {
+      const k = aguardando.indexOf(marca);
+      if (k >= 0) {
+        aguardando.splice(k, 1); // ainda nem tinha entrada
+        return;
+      }
       if (fechadoPeloVoltar) return;
       const i = pilhaDe(h.state).indexOf(marca);
       if (i < 0) return;
@@ -114,16 +139,64 @@ export function criarDesmontador(
         agendado = false;
         if (alvo === null) return;
         const base = emitido ?? pilhaDe(h.state).length;
-        const extra = base - alvo;
+        reservado = aguardando.length > 0;
+        const fim = reservado ? alvo + 1 : alvo;
+        const extra = base - fim;
         if (extra > 0) {
-          emitido = alvo;
+          emitido = fim;
           h.go(-extra);
-        }
+        } else reservado = false;
         alvo = null;
       });
     },
+    /**
+     * Abrir no mesmo tick em que o topo está fechando pela UI (pendente, go()
+     * ainda não emitido): a nova camada fica com a entrada que sairia.
+     * Só o topo fechando: replaceState já e o go() pendente é cancelado.
+     * Mais entradas fechando: o go() para uma antes e a camada assume aquela
+     * entrada quando ele pousar (em `assentou`).
+     */
+    reaproveitar(marca: string): boolean {
+      if (alvo === null || !agendado || emitido !== null) return false;
+      const pilha = pilhaDe(h.state);
+      const topo = pilha.length - 1;
+      if (alvo > topo) return false;
+      if (alvo === topo && aguardando.length === 0) {
+        h.replaceState(stateDaCamada(h, pilha.slice(0, topo), marca), "");
+        alvo = null;
+        return true;
+      }
+      aguardando.push(marca);
+      return true;
+    },
     assentou(): void {
-      if (emitido !== null && pilhaDe(h.state).length <= emitido) {
+      if (emitido === null) return;
+      const n = pilhaDe(h.state).length;
+      if (reservado && n === emitido) {
+        reservado = false;
+        const [primeira, ...resto] = aguardando;
+        aguardando = [];
+        if (primeira === undefined) {
+          // quem ia assumir a entrada fechou antes: consome-a também
+          emitido = n - 1;
+          h.go(-1);
+          return;
+        }
+        const abaixo = pilhaDe(h.state).slice(0, n - 1);
+        h.replaceState(stateDaCamada(h, abaixo, primeira), "");
+        let pilhaAtual = [...abaixo, primeira];
+        for (const m of resto) {
+          h.pushState(stateDaCamada(h, pilhaAtual, m), "");
+          pilhaAtual = [...pilhaAtual, m];
+        }
+        emitido = null;
+        alvo = null;
+        return;
+      }
+      if (n <= emitido) {
+        // pousou (ou o usuário voltou além): encerra a janela
+        reservado = false;
+        aguardando = [];
         emitido = null;
         alvo = null;
       }
