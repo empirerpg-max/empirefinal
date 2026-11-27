@@ -77,6 +77,11 @@ describe("normalizarCaminhoApi", () => {
     expect(normalizarCaminhoApi("/api/x/123/y")).toBe("/api/x/:id/y");
     expect(normalizarCaminhoApi("/api/x/0123456789abcdef0123/y")).toBe("/api/x/:id/y");
     expect(normalizarCaminhoApi("/api/artistas/Anitta%20X")).toBe("/api/artistas/:id");
+    expect(normalizarCaminhoApi("/api/x/u123/y")).toBe("/api/x/:id/y");
+    expect(normalizarCaminhoApi("/api/x/Beyoncé")).toBe("/api/x/:id");
+    expect(normalizarCaminhoApi("/api/x/@joao/seguir")).toBe("/api/x/:id/seguir");
+    expect(normalizarCaminhoApi("/api/x/c_9x2")).toBe("/api/x/:id");
+    expect(normalizarCaminhoApi("/api/gestao/musicas-em-chart")).toBe("/api/gestao/musicas-em-chart");
   });
   test("ignora o que não é /api ou é ruído", () => {
     expect(normalizarCaminhoApi("/api/uso")).toBeNull();
@@ -105,7 +110,17 @@ describe("telaDaRota", () => {
     expect(telaDaRota("/charts", { tab: "x".repeat(31) })).toBe("/charts");
     expect(telaDaRota("/charts", { tab: "id 123456789" })).toBe("/charts");
     expect(telaDaRota("/charts", { tab: 5 })).toBe("/charts");
+    expect(telaDaRota("/charts", { tab: "@joao" })).toBe("/charts");
   });
+});
+
+test("relógio voltando não trava a busca", () => {
+  let t = 100_000;
+  const c = new ColetorUso(() => t);
+  c.acao("buscar", null);
+  t = 1000;
+  c.acao("buscar", null);
+  expect(c.retirarLote("anterior", "celular")!.eventos[0].n).toBe(2);
 });
 
 test("aparelhoPelaLargura", () => {

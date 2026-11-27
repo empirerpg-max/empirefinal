@@ -18,7 +18,12 @@ const MAX_N = 1000;
 const INTERVALO_BUSCA_MS = 10_000;
 
 const IGNORADOS = ["/api/uso", "/api/log-error", "/api/flags"];
-const PARECE_ID = [/^\d+$/, /^[0-9a-f-]{16,}$/i, /^[A-Z]{2,}[-_][A-Za-z0-9-]+$/];
+// Lista de permissão: só segmentos que são palavras de rota (minúsculas ASCII, até 4
+// partes ligadas por hífen, até 32 caracteres) são mantidos; o resto vira `:id`.
+// Risco residual aceito: um slug todo minúsculo com até 4 palavras (ex.: `joao-silva`)
+// passa; valores de usuário no app vão na query string, que é descartada.
+const SEGMENTO_DE_ROTA = /^[a-z]+(-[a-z]+){0,3}$/;
+const VALOR_DE_ABA = /^[\p{L}\p{N} ._›-]{1,30}$/u;
 
 /** Só `/api/...`, sem query, com ids trocados por `:id`; `null` se não deve ser medido. */
 export function normalizarCaminhoApi(url: string): string | null {
@@ -32,7 +37,7 @@ export function normalizarCaminhoApi(url: string): string | null {
   if (IGNORADOS.some((p) => caminho === p || caminho.startsWith(p + "/"))) return null;
   return caminho
     .split("/")
-    .map((seg) => (seg && (seg.includes("%") || PARECE_ID.some((re) => re.test(seg))) ? ":id" : seg))
+    .map((seg) => (seg === "" || (seg.length <= 32 && SEGMENTO_DE_ROTA.test(seg)) ? seg : ":id"))
     .join("/");
 }
 
@@ -50,7 +55,7 @@ export function acaoDaRequisicao(metodo: string, url: string, ok: boolean): stri
 export function telaDaRota(routeId: string, search: Record<string, unknown>): string {
   for (const chave of ["aba", "tab", "view"]) {
     const v = search?.[chave];
-    if (typeof v === "string" && v.length > 0 && v.length <= 30 && !/\d{4,}/.test(v)) {
+    if (typeof v === "string" && VALOR_DE_ABA.test(v) && !/\d{4,}/.test(v)) {
       return `${routeId} › ${v}`;
     }
   }
@@ -87,6 +92,7 @@ export class ColetorUso {
     if (!alvo) return;
     if (alvo === "buscar") {
       const t = this.agora();
+      if (this.ultimaBusca !== null && t < this.ultimaBusca) this.ultimaBusca = null; // relógio voltou
       if (this.ultimaBusca !== null && t - this.ultimaBusca < INTERVALO_BUSCA_MS) return;
       this.ultimaBusca = t;
     }
@@ -94,7 +100,7 @@ export class ColetorUso {
     if (telaAtual) this.somar("caminho", `${alvo} ← ${telaAtual}`);
   }
 
-  /** Telas distintas registradas desde a criação / última retirada. */
+  /** Telas distintas registradas desde a última retirada (ou criação). */
   telasDoDia(): string[] {
     return [...this.telas];
   }
