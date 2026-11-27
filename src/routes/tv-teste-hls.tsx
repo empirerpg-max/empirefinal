@@ -94,33 +94,68 @@ function TesteHlsPage() {
       }
       const v = videoRef.current;
       if (!v) return;
+      anotar({ ok: null, texto: `Link: ${link.replace(/\?.*$/, "")}` });
+      // Diagnóstico: o link do vídeo responde daqui? (sem isso nenhum player toca)
+      try {
+        const r = await fetch(link);
+        const corpo = await r.text();
+        const ehLista = corpo.startsWith("#EXTM3U");
+        anotar({
+          ok: r.ok && ehLista,
+          texto: `Lista do vídeo: HTTP ${r.status}${ehLista ? " (lista válida)" : ` — ${corpo.slice(0, 80)}`}`,
+        });
+      } catch {
+        anotar({ ok: false, texto: "Lista do vídeo: bloqueada pelo navegador (CORS) ou sem conexão." });
+      }
       v.muted = true;
-      if (v.canPlayType("application/vnd.apple.mpegurl")) {
-        // iPhone/Safari tocam HLS direto.
-        v.src = link;
-        anotar({ ok: null, texto: "Usando o HLS nativo do aparelho." });
-      } else {
-        const { default: Hls } = await import("hls.js");
-        if (!Hls.isSupported()) {
-          anotar({ ok: false, texto: "Este navegador não toca HLS." });
-          return;
+      // 1º o hls.js (no iPhone com iOS 17.1+ ele também funciona); se não
+      // houver suporte, o HLS nativo do Safari.
+      const { default: Hls } = await import("hls.js");
+      const tocar = async (modo: string) => {
+        try {
+          await v.play();
+          setTocando(true);
+          anotar({ ok: true, texto: `Vídeo tocando (mudo) com ${modo}. Agora toque em "Ativar som".` });
+          return true;
+        } catch (e: any) {
+          anotar({ ok: false, texto: `${modo}: não começou a tocar — ${e?.message || e}` });
+          return false;
         }
+      };
+      if (Hls.isSupported()) {
         const hls = new Hls({ lowLatencyMode: true });
         hls.on(Hls.Events.ERROR, (_e, d) => {
-          if (d.fatal) anotar({ ok: false, texto: `Erro do player: ${d.type} / ${d.details}` });
+          if (d.fatal) anotar({ ok: false, texto: `hls.js: erro ${d.type} / ${d.details}${d.response?.code ? ` (HTTP ${d.response.code})` : ""}` });
         });
-        hls.loadSource(link);
-        hls.attachMedia(v);
         hlsRef.current = hls;
-        anotar({ ok: null, texto: "Usando o hls.js." });
+        const pronto = await new Promise<boolean>((res) => {
+          const t = setTimeout(() => res(false), 15_000);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            clearTimeout(t);
+            res(true);
+          });
+          hls.on(Hls.Events.ERROR, (_e, d) => {
+            if (d.fatal) {
+              clearTimeout(t);
+              res(false);
+            }
+          });
+          hls.loadSource(link);
+          hls.attachMedia(v);
+        });
+        if (pronto && (await tocar("hls.js"))) return;
+        hls.destroy();
+        hlsRef.current = null;
+      } else {
+        anotar({ ok: null, texto: "hls.js sem suporte neste aparelho." });
       }
-      await v.play().then(
-        () => {
-          setTocando(true);
-          anotar({ ok: true, texto: "Vídeo tocando (mudo). Agora toque em \"Ativar som\"." });
-        },
-        (e) => anotar({ ok: false, texto: `Não começou a tocar: ${e?.message || e}` }),
-      );
+      if (v.canPlayType("application/vnd.apple.mpegurl")) {
+        v.src = link;
+        v.load();
+        await tocar("HLS nativo");
+      } else {
+        anotar({ ok: false, texto: "Este navegador não toca HLS." });
+      }
     } finally {
       setCarregando(false);
     }
