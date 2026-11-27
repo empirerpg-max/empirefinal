@@ -22,6 +22,7 @@ import { Route as PremiacoesRouteImport } from './routes/premiacoes'
 import { Route as SocialRouteImport } from './routes/social'
 import { Route as TutorialRouteImport } from './routes/tutorial'
 import { Route as TvRouteImport } from './routes/tv'
+import { Route as TvTesteHlsRouteImport } from './routes/tv-teste-hls'
 import { Route as TvTesteSomRouteImport } from './routes/tv-teste-som'
 import { Route as AcoesAlbumRouteImport } from './routes/acoes.album'
 import { Route as AcoesCinemaRouteImport } from './routes/acoes.cinema'
@@ -129,6 +130,11 @@ const TutorialRoute = TutorialRouteImport.update({
 const TvRoute = TvRouteImport.update({
   id: '/tv',
   path: '/tv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TvTesteHlsRoute = TvTesteHlsRouteImport.update({
+  id: '/tv-teste-hls',
+  path: '/tv-teste-hls',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TvTesteSomRoute = TvTesteSomRouteImport.update({
@@ -366,6 +372,7 @@ export interface FileRoutesByFullPath {
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
+  '/tv-teste-hls': typeof TvTesteHlsRoute
   '/tv-teste-som': typeof TvTesteSomRoute
   '/acoes/album': typeof AcoesAlbumRoute
   '/acoes/cinema': typeof AcoesCinemaRoute
@@ -422,6 +429,7 @@ export interface FileRoutesByTo {
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
+  '/tv-teste-hls': typeof TvTesteHlsRoute
   '/tv-teste-som': typeof TvTesteSomRoute
   '/acoes/album': typeof AcoesAlbumRoute
   '/acoes/cinema': typeof AcoesCinemaRoute
@@ -477,6 +485,7 @@ export interface FileRoutesById {
   '/social': typeof SocialRoute
   '/tutorial': typeof TutorialRoute
   '/tv': typeof TvRoute
+  '/tv-teste-hls': typeof TvTesteHlsRoute
   '/tv-teste-som': typeof TvTesteSomRoute
   '/acoes/album': typeof AcoesAlbumRoute
   '/acoes/cinema': typeof AcoesCinemaRoute
@@ -537,6 +546,7 @@ export interface FileRouteTypes {
     | '/social'
     | '/tutorial'
     | '/tv'
+    | '/tv-teste-hls'
     | '/tv-teste-som'
     | '/acoes/album'
     | '/acoes/cinema'
@@ -593,6 +603,7 @@ export interface FileRouteTypes {
     | '/social'
     | '/tutorial'
     | '/tv'
+    | '/tv-teste-hls'
     | '/tv-teste-som'
     | '/acoes/album'
     | '/acoes/cinema'
@@ -647,6 +658,7 @@ export interface FileRouteTypes {
     | '/social'
     | '/tutorial'
     | '/tv'
+    | '/tv-teste-hls'
     | '/tv-teste-som'
     | '/acoes/album'
     | '/acoes/cinema'
@@ -706,6 +718,7 @@ export interface RootRouteChildren {
   SocialRoute: typeof SocialRoute
   TutorialRoute: typeof TutorialRoute
   TvRoute: typeof TvRoute
+  TvTesteHlsRoute: typeof TvTesteHlsRoute
   TvTesteSomRoute: typeof TvTesteSomRoute
   AcoesAlbumRoute: typeof AcoesAlbumRoute
   AcoesCinemaRoute: typeof AcoesCinemaRoute
@@ -817,6 +830,13 @@ declare module '@tanstack/react-router' {
       path: '/tv'
       fullPath: '/tv'
       preLoaderRoute: typeof TvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tv-teste-hls': {
+      id: '/tv-teste-hls'
+      path: '/tv-teste-hls'
+      fullPath: '/tv-teste-hls'
+      preLoaderRoute: typeof TvTesteHlsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tv-teste-som': {
@@ -1267,6 +1287,7 @@ const rootRouteChildren: RootRouteChildren = {
   SocialRoute: SocialRoute,
   TutorialRoute: TutorialRoute,
   TvRoute: TvRoute,
+  TvTesteHlsRoute: TvTesteHlsRoute,
   TvTesteSomRoute: TvTesteSomRoute,
   AcoesAlbumRoute: AcoesAlbumRoute,
   AcoesCinemaRoute: AcoesCinemaRoute,

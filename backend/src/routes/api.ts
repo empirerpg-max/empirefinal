@@ -157,6 +157,7 @@ import {
   corrigirRegistroReprocessamentoTV,
   registrarEventoTransmissaoController,
   registrarEventoAdminController,
+  kickHlsTesteController,
   lerEventoAdminController,
   criarEnqueteChatController,
   votarEnqueteChatController,
@@ -589,6 +590,7 @@ export async function handleEmpireApiRoutes(
     "/api/tv/processar-participacao",
     "/api/tv/evento-transmissao",
     "/api/tv/evento-admin",
+    "/api/tv/kick-hls",
     "/api/tv/red-carpet",
     "/api/tv/red-carpet/curtir",
     "/api/tv/red-carpet/ranking",
@@ -1769,6 +1771,8 @@ export async function handleEmpireApiRoutes(
       );
     }
     response = await registrarEventoTransmissaoController(request);
+  } else if (url.pathname === "/api/tv/kick-hls") {
+    response = await kickHlsTesteController(request);
   } else if (url.pathname === "/api/tv/evento-admin") {
     if (request.method !== "POST" && request.method !== "GET") {
       return new Response(

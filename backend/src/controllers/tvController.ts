@@ -1640,3 +1640,44 @@ export async function corrigirRegistroReprocessamentoTV(
 
   return { modo: confirmar ? "aplicado" : "simulacao", gruposDuplicados: gruposDuplicados.length, itens };
 }
+
+/**
+ * GET /api/tv/kick-hls?canal= — TESTE (só admin): pede à Kick o link do vídeo
+ * (HLS) do canal, para a página escondida /tv-teste-hls tentar tocar no
+ * player do próprio app. Não é API oficial da Kick: pode ser recusada. Devolve
+ * o status da Kick para diagnóstico. Nada é gravado.
+ */
+export async function kickHlsTesteController(request: Request): Promise<Response> {
+  try {
+    if (!extractBearerToken(request)) return jsonEnquete({ ok: false, erro: "Não autenticado." }, 401);
+    if (!(await requestProvesAdmin(request))) return jsonEnquete({ ok: false, erro: "Apenas admin." }, 403);
+    const canal = (new URL(request.url).searchParams.get("canal") || "").trim().toLowerCase();
+    if (!/^[a-z0-9_-]{1,60}$/.test(canal)) return jsonEnquete({ ok: false, erro: "Canal inválido." }, 400);
+    const res = await fetch(`https://kick.com/api/v2/channels/${canal}`, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+      },
+    });
+    const texto = await res.text();
+    let json: any = null;
+    try {
+      json = JSON.parse(texto);
+    } catch {
+      /* resposta não-JSON (bloqueio) */
+    }
+    const url = typeof json?.playback_url === "string" ? json.playback_url : "";
+    return jsonEnquete(
+      {
+        ok: !!url,
+        status_kick: res.status,
+        ao_vivo: !!json?.livestream,
+        playback_url: url || null,
+        ...(url ? {} : { erro: json ? "A Kick não mandou o link (canal fora do ar?)." : "A Kick recusou o pedido do servidor." }),
+      },
+      200,
+    );
+  } catch (error: any) {
+    return jsonEnquete({ ok: false, erro: error?.message || "Erro ao falar com a Kick." }, 500);
+  }
+}
