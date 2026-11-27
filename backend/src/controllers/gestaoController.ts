@@ -5,12 +5,7 @@ import {
   type GoogleSheetRow,
 } from "../services/googleSheetsService";
 import { withWriteLock } from "../services/writeLockService";
-import {
-  analisarFormulaBD,
-  codigoDaFormulaParaLinha,
-  codigoMusicaParaLinha,
-  podeGravarCodigoNaLinha,
-} from "../services/codigoUnicoEdicaoCharts";
+import { codigoDaFormulaParaLinha } from "../services/codigoUnicoEdicaoCharts";
 import { DRIVE_FOLDERS, uploadFileToDrive } from "../services/googleDriveService";
 import { somarPrestigio } from "../services/prestigioService";
 import { registrarLogSistema } from "../services/logSistemaService";
@@ -322,42 +317,18 @@ export async function lerCodigoUnicoGerado(rowIndex: number): Promise<string> {
   return "";
 }
 
-// Garante o Código único da linha de EDIÇÃO CHARTS: lê o que a fórmula da
-// planilha gerou e, se BD ficou vazio (a fórmula não cobre a linha — ver
-// codigoUnicoEdicaoCharts.ts, caso Sparks), grava o código no mesmo padrão
-// da fórmula. Só grava quando isso não quebra a fórmula; senão devolve ""
-// e loga, pra quem chama tratar como falha (nunca como sucesso).
+// Código único da linha de EDIÇÃO CHARTS: o que a fórmula de BD gerou ou,
+// se BD ainda está vazio (caso Sparks — a fórmula não calculou a linha), o
+// código que ela dá pra essa linha ("EMP" & linha-1). NUNCA escreve em BD:
+// o app só escreve até Q nessa aba (ver codigoUnicoEdicaoCharts.ts).
 export async function garantirCodigoUnicoNaEdicaoCharts(rowIndex: number): Promise<string> {
   const gerado = await lerCodigoUnicoGerado(rowIndex);
   if (gerado) return gerado;
-  try {
-    const topo = await googleSheetsService.edicaoCharts.readValuesFormula("EDIÇÃO CHARTS", "BD1:BD3");
-    const estado = analisarFormulaBD(topo.map((r) => r?.[0] || ""));
-    if (!podeGravarCodigoNaLinha(estado, rowIndex)) {
-      // ARRAYFORMULA aberta que não calculou esta linha (visto em produção,
-      // 27/11: B2:B, mas BD vazio da 1065 em diante). Gravar por cima
-      // apagaria todos os códigos; a fórmula é "EMP" & (linha-1), então o
-      // código que ela vai dar é conhecido — usa esse, sem tocar em BD.
-      const codigo = codigoDaFormulaParaLinha(rowIndex);
-      console.warn(
-        `[garantirCodigoUnico] EDIÇÃO CHARTS!BD${rowIndex} vazio (ARRAYFORMULA aberta não calculou) — usando ${codigo}, sem gravar em BD.`,
-      );
-      return codigo;
-    }
-    return await withWriteLock("gestao:edicao-charts-codigo", async () => {
-      const colunaBD = await googleSheetsService.edicaoCharts.readValuesFresh("EDIÇÃO CHARTS", "BD2:BD20000");
-      const atual = (colunaBD[rowIndex - 2]?.[0] || "").trim();
-      if (atual) return atual; // outra chamada já resolveu
-      const codigo = codigoMusicaParaLinha(rowIndex, colunaBD.map((r) => r?.[0] || ""));
-      const ok = await googleSheetsService.edicaoCharts.updateValues("EDIÇÃO CHARTS", `BD${rowIndex}`, [[codigo]]);
-      if (!ok) return "";
-      console.warn(`[garantirCodigoUnico] BD${rowIndex} estava vazio — gravado ${codigo} (${estado.tipo}).`);
-      return codigo;
-    });
-  } catch (err) {
-    console.error(`[garantirCodigoUnico] Falha ao garantir código da linha ${rowIndex}:`, err);
-    return "";
-  }
+  const codigo = codigoDaFormulaParaLinha(rowIndex);
+  console.warn(
+    `[garantirCodigoUnico] EDIÇÃO CHARTS!BD${rowIndex} vazio (fórmula não calculou a linha) — usando ${codigo}.`,
+  );
+  return codigo;
 }
 
 const INFOS_MUSICAS_SHEET = "INFOS MÚSICAS";
