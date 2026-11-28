@@ -39,6 +39,7 @@ import {
   startImpersonating,
   isImpersonating,
   stopImpersonating,
+  isAdminLogin,
   type LoginResult,
 } from "@/components/LoginScreen";
 import { BUILD_ID } from "@/lib/pwa";
@@ -73,10 +74,10 @@ function Perfil() {
   const [premiacoesAberta, setPremiacoesAberta] = useState(false);
   const [festivaisAberta, setFestivaisAberta] = useState(false);
   // "Entrar como usuário" (admin) — ver LoginScreen.tsx (startImpersonating/
-  // stopImpersonating). loginTgId usa o MESMO critério já estabelecido em
-  // Gestao.tsx (isAdminUser) pra decidir quem vê esse bloco.
+  // stopImpersonating). Quem vê esse bloco: critério único isAdminLogin
+  // (LoginScreen.tsx), com o id já resolvido pela tela.
   const loginTgIdPerfil = user?.id?.toString() || login?.id || "";
-  const isAdminUser = loginTgIdPerfil === "810141686" || login?.tipoPerfil === "Admin";
+  const isAdminUser = isAdminLogin(login, loginTgIdPerfil);
   const [impersonando, setImpersonando] = useState(() => isImpersonating());
   const [impersonarUsuario, setImpersonarUsuario] = useState("");
   const [impersonarCarregando, setImpersonarCarregando] = useState(false);

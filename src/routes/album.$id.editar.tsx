@@ -11,6 +11,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { api, type AlbumFaixa, type AlbumPayload } from "@/lib/api";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { useTelegramUser } from "@/lib/telegram";
 import { Field, Input, ResultBanner } from "./acoes.tour";
 
@@ -46,12 +47,13 @@ function AlbumEditor() {
         return;
       }
 
-      // Permission check using local ID from login
+      // Permission check using local ID from login — nega se não for o dono
+      // nem admin (critério único isAdminLogin, LoginScreen.tsx).
       const localId = typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null;
       if (
         a.telegram_id &&
         localId &&
-        localId !== "810141686" &&
+        !isAdminLogin(getStoredLogin(), localId) &&
         String(a.telegram_id) !== String(localId)
       ) {
         setUnauthorized(true);

@@ -13,6 +13,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { api, driveImg, driveRawImg, driveAudioSrc, type AlbumPayload, type PlaylistTrack } from "@/lib/api";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { SmartImg } from "@/components/SmartImg";
 import { AddToPlaylistSheet } from "@/components/AddToPlaylistSheet";
 
@@ -79,7 +80,11 @@ function AlbumPage() {
   }
 
   const localTgId = typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null;
-  const isOwner = album && localTgId && (String(album.telegram_id) === String(localTgId) || localTgId === "810141686");
+  // Dono do álbum ou admin (critério único isAdminLogin, LoginScreen.tsx).
+  const isOwner =
+    album &&
+    localTgId &&
+    (String(album.telegram_id) === String(localTgId) || isAdminLogin(getStoredLogin(), localTgId));
 
   return (
     <main className="flex-1 mx-auto w-full max-w-2xl pb-32">

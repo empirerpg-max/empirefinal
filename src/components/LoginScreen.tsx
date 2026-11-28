@@ -35,10 +35,25 @@ const ADMIN_LOGIN_ID = "810141686";
  * Quem conta como admin na interface: o id histórico ou quem tem
  * tipo_de_perfil = "Admin" na aba Usuários. `id` permite passar o id já
  * resolvido pela tela (ex.: fallback do usuário legado); sem ele, usa o do
- * login guardado. O backend confere de novo pela sessão.
+ * login guardado. Aceita também outro usuário que não o logado (ex.: um da
+ * lista da gestão de usuários), basta ter `id`/`tipoPerfil`. Único lugar do
+ * front com o id histórico. O backend confere de novo pela sessão.
  */
-export function isAdminLogin(login: LoginResult | null = getStoredLogin(), id?: string): boolean {
+export function isAdminLogin(
+  login: Pick<LoginResult, "id" | "tipoPerfil"> | null = getStoredLogin(),
+  id?: string,
+): boolean {
   return (id ?? login?.id) === ADMIN_LOGIN_ID || login?.tipoPerfil === "Admin";
+}
+
+/**
+ * Só o id histórico, sem olhar tipoPerfil. Para os poucos lugares em que o
+ * servidor ainda só aceita o id antigo (editar álbum antigo, editar revista
+ * do acervo): mostrar o botão a quem o servidor recusaria só daria erro.
+ * Sai quando o backend for unificado (decisão pendente do usuário).
+ */
+export function ehAdminPorIdLegado(id?: string | null): boolean {
+  return id != null && String(id) === ADMIN_LOGIN_ID;
 }
 
 export function clearStoredLogin() {

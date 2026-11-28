@@ -200,7 +200,8 @@ function GestaoUsuarios() {
               {filtrados.map((u) => {
                 const chave = `${u.id}|${u.usuario}`;
                 const ocupado = executando === chave;
-                const ehAdmin = u.tipoPerfil === "Admin" || u.id === "810141686";
+                // Confere o usuário DA LISTA (não o logado) pelo critério único.
+                const ehAdmin = isAdminLogin(u, u.id);
                 return (
                   <li
                     key={chave}

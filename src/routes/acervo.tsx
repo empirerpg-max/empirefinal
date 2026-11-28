@@ -32,7 +32,7 @@ import {
 import { api, resolveImg, driveImg, fmtMoney, type Artist } from "@/lib/api";
 import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { getStoredLogin } from "@/components/LoginScreen";
+import { getStoredLogin, ehAdminPorIdLegado } from "@/components/LoginScreen";
 import { useImageCrop } from "@/hooks/use-image-crop";
 
 // Transição de "capa vira detalhe" (mesmo mecanismo do card de notícia no
@@ -1398,11 +1398,12 @@ function RevistaViewer({
   const [lendo, setLendo] = useState(false);
   const [page, setPage] = useState(0);
   const total = revista.paginas.length;
-  const ADMIN_ID = "810141686";
+  // Dono da revista ou admin pelo id antigo: o servidor ainda só aceita o id
+  // antigo aqui; unificar junto com o backend (decisão pendente do usuário).
   const souDono =
     !!tgId &&
     !!revista.telegram_id &&
-    (String(revista.telegram_id) === String(tgId) || String(tgId) === ADMIN_ID);
+    (String(revista.telegram_id) === String(tgId) || ehAdminPorIdLegado(String(tgId)));
   const paginaAtual = revista.paginas[page] || "";
   const textoAtual = isTextoPagina(paginaAtual) ? parseTextoPagina(paginaAtual) : null;
 
