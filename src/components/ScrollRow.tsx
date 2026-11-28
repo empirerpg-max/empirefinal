@@ -59,6 +59,13 @@ export function ScrollRow({
   // Já rolou até um selecionado alguma vez? A primeira é instantânea (a
   // fileira já abre no lugar); as seguintes, suaves.
   const jaMostrou = useRef(false);
+  // O jogador já mexeu na fileira (toque, roda, teclado, seta) desde o último
+  // selecionado mostrado? Enquanto não mexeu, se os itens mudarem de largura
+  // depois de montar (fonte da web chegando tarde, texto trocado), a fileira
+  // volta a mostrar o selecionado inteiro. Depois que mexeu, não puxa mais.
+  const usuarioMexeu = useRef(false);
+  const selecionadoRef = useRef(selecionado);
+  selecionadoRef.current = selecionado;
 
   // Arrastar com o mouse mexe em scrollLeft a cada movimento; com snap ligado
   // o navegador puxaria para o item mais perto no meio do arraste. Desliga o
@@ -77,11 +84,23 @@ export function ScrollRow({
       window.addEventListener("pointerup", soltar);
     };
     el.addEventListener("pointerdown", apertar);
+    const mexeu = () => {
+      usuarioMexeu.current = true;
+    };
+    const eventosDoJogador = ["pointerdown", "wheel", "touchstart", "keydown"] as const;
+    for (const ev of eventosDoJogador) el.addEventListener(ev, mexeu, { passive: true });
     // O useDragScroll só reavalia as setas no scroll e quando a fileira muda
     // de tamanho; quando os ITENS mudam de largura (texto trocado, item
     // novo), avisa com um "scroll" sintético.
     const avisar = () => el.dispatchEvent(new Event("scroll"));
-    const ro = new ResizeObserver(avisar);
+    const aoRedimensionar = () => {
+      avisar();
+      const id = selecionadoRef.current;
+      if (usuarioMexeu.current || !jaMostrou.current || id === undefined) return;
+      const item = itensDe(el).find((c) => c.getAttribute("data-scroll-item") === id);
+      if (item) mostrarItem(el, item, false);
+    };
+    const ro = new ResizeObserver(aoRedimensionar);
     const observar = () => {
       ro.disconnect();
       ro.observe(el);
@@ -102,6 +121,7 @@ export function ScrollRow({
     mo.observe(el, { childList: true });
     return () => {
       el.removeEventListener("pointerdown", apertar);
+      for (const ev of eventosDoJogador) el.removeEventListener(ev, mexeu);
       window.removeEventListener("pointerup", soltar);
       ro.disconnect();
       mo.disconnect();
@@ -125,12 +145,14 @@ export function ScrollRow({
     pendente.current = null;
     mostrarItem(el, item, jaMostrou.current);
     jaMostrou.current = true;
+    usuarioMexeu.current = false;
   }, [no, selecionado]);
 
   const rolarPagina = (dir: -1 | 1) => {
     const el = no;
     if (!el) return;
     const inicios = iniciosDe(itensDe(el));
+    usuarioMexeu.current = true;
     const destino = destinoDaPagina(dir, el.scrollLeft, el.clientWidth, inicios);
     el.scrollTo({ left: destino, behavior: semAnimacao() ? "auto" : "smooth" });
   };
