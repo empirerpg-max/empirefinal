@@ -102,20 +102,44 @@ function ehConvidado(cfg: ConfigBeta, id: string, usuario: string): boolean {
   return cfg.convidados.some((c) => alvos.includes(semArroba(c)));
 }
 
-const ehAdmin = (sessao: { id: string }): boolean => sessao.id.trim() === ADMIN_TG_ID;
+/** Confirmação "é admin pela planilha" por id de sessão (por isolate), 10 min. */
+const CACHE_ADMIN_MS = 10 * 60 * 1000;
+const cacheAdmin = new Map<string, { admin: boolean; em: number }>();
 
-/** podeVer não depende da escolha: dá para saber sem ler o D1. */
-function podeVerBeta(cfg: ConfigBeta, sessao: { id: string; usuario: string }): boolean {
-  return estadoBeta({ modo: cfg.modo, convidado: ehConvidado(cfg, sessao.id, sessao.usuario), admin: ehAdmin(sessao), escolha: null }).podeVer;
+/** Zera o cache de admin (testes). */
+export function _zerarCacheAdminBeta(): void {
+  cacheAdmin.clear();
 }
 
-async function estadoDe(sessao: { id: string; usuario: string }, db: NonNullable<ReturnType<typeof getCatalogoDb>>) {
+/**
+ * Admin = id antigo (ADMIN_TG_ID) ou "Tipo de Perfil = Admin" na planilha. O token não carrega o
+ * tipo de perfil, então o app manda a dica `X-Empire-Admin: 1` e só então o servidor confirma na
+ * planilha (cacheado 10 min). Sem a dica a planilha nunca é lida.
+ */
+async function ehAdmin(request: Request, sessao: { id: string }): Promise<boolean> {
+  const id = sessao.id.trim();
+  if (id === ADMIN_TG_ID) return true;
+  if (request.headers.get("X-Empire-Admin") !== "1") return false;
+  const agora = Date.now();
+  const guardado = cacheAdmin.get(id);
+  if (guardado && agora - guardado.em < CACHE_ADMIN_MS) return guardado.admin;
+  const admin = await requestProvesAdmin(request).catch(() => false);
+  cacheAdmin.set(id, { admin, em: agora });
+  return admin;
+}
+
+/** podeVer não depende da escolha: dá para saber sem ler o D1. */
+async function podeVerBeta(request: Request, cfg: ConfigBeta, sessao: { id: string; usuario: string }): Promise<boolean> {
+  return estadoBeta({ modo: cfg.modo, convidado: ehConvidado(cfg, sessao.id, sessao.usuario), admin: await ehAdmin(request, sessao), escolha: null }).podeVer;
+}
+
+async function estadoDe(request: Request, sessao: { id: string; usuario: string }, db: NonNullable<ReturnType<typeof getCatalogoDb>>) {
   const cfg = await lerConfig();
   const escolha = await lerEscolha(db, sessao.id);
   const est = estadoBeta({
     modo: cfg.modo,
     convidado: ehConvidado(cfg, sessao.id, sessao.usuario),
-    admin: ehAdmin(sessao),
+    admin: await ehAdmin(request, sessao),
     escolha: escolha.versao,
   });
   return { cfg, escolha, est };
@@ -129,12 +153,12 @@ export async function betaEstadoController(request: Request): Promise<Response> 
   if (!sessao?.id) return estadoSemBeta((await lerConfig()).modo);
   // Desligado e não admin: nada a ler no D1 (caso mais comum enquanto o Beta não abre).
   const cfgAntes = await lerConfig();
-  if (cfgAntes.modo === "desligado" && !ehAdmin(sessao)) return estadoSemBeta(cfgAntes.modo);
+  if (cfgAntes.modo === "desligado" && !(await ehAdmin(request, sessao))) return estadoSemBeta(cfgAntes.modo);
   const db = getCatalogoDb();
   if (!db) return SEM_BANCO();
   try {
     await garantirTabelasBeta(db);
-    const { cfg, escolha, est } = await estadoDe(sessao, db);
+    const { cfg, escolha, est } = await estadoDe(request, sessao, db);
     return json({ ok: true, modo: cfg.modo, ...est, boasVindasVistas: escolha.boasVindasEm !== null });
   } catch (err) {
     console.warn("[betaEstadoController] Falhou:", err);
@@ -200,7 +224,7 @@ export async function betaEscolhaController(request: Request, ctx?: WaitUntilCtx
   if (!db) return SEM_BANCO();
   try {
     await garantirTabelasBeta(db);
-    const { est } = await estadoDe(sessao, db);
+    const { est } = await estadoDe(request, sessao, db);
     if (versao === "anterior" && !est.podeVoltar) return json({ ok: false, erro: "Não é possível voltar agora." }, 409);
     if (versao === "beta" && !est.podeVer) return json({ ok: false, erro: "O Beta não está liberado para você." }, 403);
     await gravarEscolha(db, sessao.id, versao, Date.now());
@@ -242,7 +266,7 @@ export async function betaReporteController(request: Request, ctx?: WaitUntilCtx
   if (!corpo) return json({ ok: false, erro: "Pedido inválido." }, 400);
   const texto = str(corpo.texto).trim();
   if (!texto) return json({ ok: false, erro: "Conte o que aconteceu." }, 400);
-  if (!podeVerBeta(await lerConfig(), sessao)) return json({ ok: false, erro: "O Beta test não está aberto para você." }, 403);
+  if (!(await podeVerBeta(request, await lerConfig(), sessao))) return json({ ok: false, erro: "O Beta test não está aberto para você." }, 403);
   const db = getCatalogoDb();
   if (!db) return SEM_BANCO();
   try {

@@ -5,6 +5,7 @@ import {
   getStoredSessionToken,
   setStoredSessionToken,
   getStoredLogin,
+  isAdminLogin,
   setStoredLogin,
   type LoginResult,
 } from "@/components/LoginScreen";
@@ -421,10 +422,19 @@ export interface GrupoResultadoBusca {
 // Rotas do Beta (`/api/beta/*`). O token vai aqui direto: o fetch embrulhado do
 // __root é instalado num efeito do pai, depois da 1ª consulta do BetaProvider
 // (ele só põe Authorization se ainda não houver, então não duplica).
+/** Dica de admin para o servidor do Beta (ele confirma na planilha). Mesmo critério de useIsAdmin. */
+export function dicaAdminDoLogin(login: Pick<LoginResult, "id" | "tipoPerfil"> | null): boolean {
+  return !!login && isAdminLogin(login, login.id);
+}
+
 async function betaChamar<T>(caminho: string, corpo?: unknown): Promise<T> {
   const res = await fetch(`/api/beta/${caminho}`, {
     method: corpo === undefined ? "GET" : "POST",
-    headers: { ...authHeaders(), ...(corpo === undefined ? {} : { "Content-Type": "application/json" }) },
+    headers: {
+      ...authHeaders(),
+      ...(dicaAdminDoLogin(getStoredLogin()) ? { "X-Empire-Admin": "1" } : {}),
+      ...(corpo === undefined ? {} : { "Content-Type": "application/json" }),
+    },
     body: corpo === undefined ? undefined : JSON.stringify(corpo),
     cache: "no-store",
   });

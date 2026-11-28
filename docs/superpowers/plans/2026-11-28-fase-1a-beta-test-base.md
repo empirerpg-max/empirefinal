@@ -26,7 +26,7 @@ A fase 1 do design é grande demais para um plano só. São três planos, cada u
 - Plano gratuito: D1 ≤100 parâmetros por instrução; nada por pessoa a cada poucos segundos lê tabela inteira; KV 1.000 gravações/dia (só o admin grava `beta-config`).
 - Voltar = tela anterior: toda folha usa `useHistoryOverlay`; todo menu ⋯ usa `ActionSheet`; fileira de abas usa `ScrollRow` (`docs/beta-fundacoes.md`).
 - Botões com texto: `min-w-0`, padding real (`px-1`+), ícone `shrink-0`, texto `truncate`; alvo de toque ≥ 40 px nos principais.
-- Admin no front: `useIsAdmin()`; no back: `requestProvesAdmin(request)` (já aceita o id antigo e "Tipo de Perfil = Admin").
+- Admin no front: `useIsAdmin()`; no back: `requestProvesAdmin(request)` (já aceita o id antigo e "Tipo de Perfil = Admin"). No estado/escolha/reporte do Beta, o app manda a dica `X-Empire-Admin: 1` e o servidor confirma com `requestProvesAdmin` (cache de 10 min por id); sem a dica nunca lê a planilha.
 - Medição: todo POST automático em segundo plano entra em `IGNORADOS` (`src/lib/uso/coletor.ts`); nenhum texto do jogador entra em `alvo`.
 - Não mexer em nada de Charts.
 - Textos visíveis em português, sem "Telegram".

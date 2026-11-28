@@ -48,6 +48,8 @@ async function novaPagina(width, estado, admin = false) {
       // Como o servidor real: sem Authorization, responde o estado "sem sessão".
       const temToken = /^Bearer \S/.test(req.headers()['authorization'] || '');
       if (!temToken) p.estadoSemToken = (p.estadoSemToken || 0) + 1;
+      // Admin por Tipo de Perfil: o servidor só o reconhece com a dica X-Empire-Admin: 1 do app.
+      if (p.exigeDicaAdmin && req.headers()['x-empire-admin'] !== '1') { p.semDica = (p.semDica || 0) + 1; return json({ ok: true, modo: estado.modo, podeVer: false, podeVoltar: false, versao: 'anterior', boasVindasVistas: true }); }
       return json(temToken ? { ok: true, ...estado } : { ok: true, modo: estado.modo, podeVer: false, podeVoltar: false, versao: 'anterior', boasVindasVistas: true });
     }
     if (u.pathname === '/api/beta/escolha' && p.falharEscolha) return r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false, erro: 'Falha ao gravar.' }) });
@@ -338,6 +340,16 @@ for (const w of [320, 390]) {
   await salvar.click(); await p.waitForTimeout(500);
   const cor = await p.getByRole('button', { name: 'Confirmar: Obrigatório' }).evaluate((e) => getComputedStyle(e).color);
   rec('(e) Obrigatório: confirmação em vermelho', /^oklch\(0\.[5-8]\d* 0\.[12]\d* (1\d|2\d|3\d)(\.\d+)?\)/.test(cor) || /^rgb\((2[0-9]{2}|1[5-9][0-9]), ?\d{1,2}, ?\d{1,2}\)/.test(cor), cor);
+  await p.context().close();
+}
+
+// (g) admin só por Tipo de Perfil (id diferente do antigo): o app manda X-Empire-Admin: 1 e a faixa aparece
+{
+  const p = await novaPagina(390, ANTERIOR, true);
+  p.exigeDicaAdmin = true;
+  await abrir(p);
+  rec('(g) admin por tipoPerfil (id admin-teste): faixa "Ir para o Beta test" aparece', await p.getByRole('button', { name: 'Ir para o Beta test' }).isVisible());
+  rec('(g) nenhum estado saiu sem a dica X-Empire-Admin', !p.semDica, { semDica: p.semDica });
   await p.context().close();
 }
 

@@ -6,10 +6,14 @@ const R = new URL("../backend/src/", import.meta.url).pathname;
 
 let sessao: { id: string; usuario: string } | null = null;
 let admin = false;
+let provas = 0;
 mock.module(R + "services/sessionService.ts", () => ({
   verifySessionToken: async () => sessao,
   extractBearerToken: (r: Request) => r.headers.get("authorization")?.replace(/^Bearer /, "") ?? "",
-  requestProvesAdmin: async () => admin,
+  requestProvesAdmin: async () => {
+    provas++;
+    return admin;
+  },
   ADMIN_TG_ID: "999",
 }));
 const notificacoes: any[] = [];
@@ -21,10 +25,10 @@ mock.module(R + "controllers/notificacoesController.ts", () => ({
 
 const C = await import(R + "controllers/betaController.ts");
 
-const req = (path: string, corpo?: unknown) =>
+const req = (path: string, corpo?: unknown, dicaAdmin = false) =>
   new Request("http://x/api/beta/" + path, {
     method: corpo === undefined ? "GET" : "POST",
-    headers: { authorization: "Bearer t", "Content-Type": "application/json" },
+    headers: { authorization: "Bearer t", "Content-Type": "application/json", ...(dicaAdmin ? { "X-Empire-Admin": "1" } : {}) },
     body: corpo === undefined ? undefined : JSON.stringify(corpo),
   });
 const kv = (cfg: unknown) => {
@@ -43,9 +47,11 @@ beforeEach(() => {
   sqlite = instalarFakeD1();
   sessao = { id: "j1", usuario: "Ana" };
   admin = false;
+  provas = 0;
   notificacoes.length = 0;
   (globalThis as any).__FLAGS_KV__ = undefined;
   C._zerarCacheConfigBeta();
+  C._zerarCacheAdminBeta();
 });
 
 test("estado sem tabela no D1 cria a tabela e responde", async () => {
@@ -253,4 +259,63 @@ test("config POST com modo inválido/ausente ou corpo não-objeto → 400 sem gr
   expect((await ok.json()).config).toEqual({ modo: "convidados", convidados: ["a"] });
   (globalThis as any).__FLAGS_KV__ = undefined;
   expect((await C.betaConfigPostController(req("config", { modo: "todos" }))).status).toBe(503);
+});
+
+// Admin só por "Tipo de Perfil" (id diferente de ADMIN_TG_ID): o app manda a dica e o servidor confirma na planilha.
+const SEM_BETA = { ok: true, modo: "desligado", podeVer: false, podeVoltar: false, versao: "anterior", boasVindasVistas: true };
+
+test("admin por tipoPerfil com dica e planilha confirmando vê o Beta com a chave desligada", async () => {
+  sessao = { id: "hugo", usuario: "Hugo" };
+  admin = true;
+  const j = await (await C.betaEstadoController(req("estado", undefined, true))).json();
+  expect(j.podeVer).toBe(true);
+  expect(j.modo).toBe("desligado");
+});
+
+test("sem a dica: sem Beta e a planilha não é lida", async () => {
+  sessao = { id: "hugo", usuario: "Hugo" };
+  admin = true;
+  const j = await (await C.betaEstadoController(req("estado"))).json();
+  expect(j).toEqual(SEM_BETA);
+  expect(provas).toBe(0);
+});
+
+test("dica falsa (planilha diz que não é admin): sem Beta", async () => {
+  sessao = { id: "j1", usuario: "Ana" };
+  admin = false;
+  const j = await (await C.betaEstadoController(req("estado", undefined, true))).json();
+  expect(j).toEqual(SEM_BETA);
+  expect(provas).toBe(1);
+});
+
+test("a confirmação do admin fica em cache por 10 min (2ª chamada não lê a planilha)", async () => {
+  sessao = { id: "hugo", usuario: "Hugo" };
+  admin = true;
+  await C.betaEstadoController(req("estado", undefined, true));
+  await C.betaEstadoController(req("estado", undefined, true));
+  expect(provas).toBe(1);
+  sessao = { id: "j1", usuario: "Ana" };
+  admin = false;
+  await C.betaEstadoController(req("estado", undefined, true));
+  await C.betaEstadoController(req("estado", undefined, true));
+  expect(provas).toBe(2);
+});
+
+test("id do ADMIN_TG_ID é admin sem dica e sem ler a planilha", async () => {
+  sessao = { id: "999", usuario: "Dono" };
+  const j = await (await C.betaEstadoController(req("estado"))).json();
+  expect(j.podeVer).toBe(true);
+  expect(provas).toBe(0);
+});
+
+test("escolha beta e reporte funcionam para o admin por tipoPerfil", async () => {
+  sessao = { id: "hugo", usuario: "Hugo" };
+  admin = true;
+  const e = await C.betaEscolhaController(req("escolha", { versao: "beta" }, true));
+  expect(e.status).toBe(200);
+  const r = await C.betaReporteController(req("reporte", { texto: "bug", tela: "Home", rota: "/", versao: "beta" }, true));
+  expect(r.status).toBe(200);
+  C._zerarCacheAdminBeta();
+  const r2 = await C.betaReporteController(req("reporte", { texto: "bug", tela: "Home", rota: "/", versao: "beta" }));
+  expect(r2.status).toBe(403);
 });

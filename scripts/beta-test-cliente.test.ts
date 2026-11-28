@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { api } from "../src/lib/api";
+import { api, dicaAdminDoLogin } from "../src/lib/api";
 import { acaoDaRequisicao, ColetorUso } from "../src/lib/uso/coletor";
 import { limparLote } from "../backend/src/services/usoService";
 import {
@@ -199,5 +199,27 @@ describe("medição de uso", () => {
       { evento: "acao", alvo: "beta:voltar:sem_motivo", n: 1 },
     ] })!;
     expect(mao.eventos.map((e: { alvo: string }) => e.alvo)).toEqual(["beta:voltar:sem_motivo"]);
+  });
+});
+
+describe("dica de admin do app", () => {
+  test("dicaAdminDoLogin: true para tipoPerfil Admin, false para comum e sem login", () => {
+    expect(dicaAdminDoLogin({ id: "hugo", tipoPerfil: "Admin" })).toBe(true);
+    expect(dicaAdminDoLogin({ id: "ana", tipoPerfil: "Jogador" })).toBe(false);
+    expect(dicaAdminDoLogin(null)).toBe(false);
+  });
+
+  test("betaChamar manda X-Empire-Admin só para o login admin", async () => {
+    let h: Headers | null = null;
+    g.fetch = async (_u: unknown, init?: RequestInit) => {
+      h = new Headers(init?.headers);
+      return new Response(JSON.stringify({ ok: true, modo: "todos", podeVer: true, podeVoltar: true, versao: "beta", boasVindasVistas: true }));
+    };
+    localStorage.setItem("empire_login_user", JSON.stringify({ id: "ana", usuario: "Ana", tipoPerfil: "Jogador" }));
+    await api.betaEstado();
+    expect(h!.get("X-Empire-Admin")).toBeNull();
+    localStorage.setItem("empire_login_user", JSON.stringify({ id: "hugo", usuario: "Hugo", tipoPerfil: "Admin" }));
+    await api.betaEstado();
+    expect(h!.get("X-Empire-Admin")).toBe("1");
   });
 });

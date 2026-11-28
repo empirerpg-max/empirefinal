@@ -292,7 +292,7 @@ Método errado responde 405 com "Use GET/POST para ...".
 | `obrigatorio` | todos | sempre beta | **não** (sem faixa, sem "Voltar") |
 
 - O **admin vê o Beta em qualquer modo** (para testar antes de ligar).
-- "Admin" no estado é o **id antigo `ADMIN_TG_ID`**. Quem é admin só pelo "Tipo de Perfil" **não** ganha essa regra: para testar, precisa se pôr na lista de convidados (modo `convidados`).
+- "Admin" no estado = **id antigo `ADMIN_TG_ID`** ou **"Tipo de Perfil = Admin"**. O token de sessão não carrega o tipo de perfil, então o app manda a dica `X-Empire-Admin: 1` (`betaChamar`, só quando `isAdminLogin` do login guardado é verdadeiro) e o servidor confirma na planilha com `requestProvesAdmin`, com cache de 10 min por id de sessão (por isolate). Sem a dica a planilha nunca é lida (jogador comum: zero leitura de planilha e de D1 com a chave desligada); dica falsa só custa uma leitura cacheada e recebe "sem Beta".
 - Quem não pode ver o Beta não vê nada novo: nem faixa, nem selo, nem tela.
 - Sem sessão (ou erro de rede/servidor) o app usa o estado seguro: sem Beta, versão anterior.
 
