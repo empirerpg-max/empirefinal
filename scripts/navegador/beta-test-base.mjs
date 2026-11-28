@@ -41,7 +41,12 @@ async function novaPagina(width, estado, admin = false) {
     const req = r.request(); const u = new URL(req.url());
     if (u.hostname !== 'localhost') return r.abort();
     const json = (o) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(o) });
-    if (u.pathname === '/api/beta/estado') return json({ ok: true, ...estado });
+    if (u.pathname === '/api/beta/estado') {
+      // Como o servidor real: sem Authorization, responde o estado "sem sessão".
+      const temToken = /^Bearer \S/.test(req.headers()['authorization'] || '');
+      if (!temToken) p.estadoSemToken = (p.estadoSemToken || 0) + 1;
+      return json(temToken ? { ok: true, ...estado } : { ok: true, modo: estado.modo, podeVer: false, podeVoltar: false, versao: 'anterior', boasVindasVistas: true });
+    }
     if (u.pathname === '/api/beta/escolha') { p.posts.escolha.push(req.postDataJSON()); return json({ ok: true, versao: req.postDataJSON().versao }); }
     if (u.pathname === '/api/beta/reporte') { p.posts.reporte.push(req.postDataJSON()); return json({ ok: true, id: 'R1' }); }
     if (u.pathname === '/api/beta/reportes') {
@@ -94,7 +99,8 @@ for (const w of [320, 390]) {
   await p.evaluate(() => { window.__semRecarga = 1; });
   const navAntes = await p.evaluate(() => performance.getEntriesByType('navigation').length);
   const faixa = p.getByText('Versão anterior', { exact: true });
-  rec(`(b) ${w}px faixa visível`, await faixa.isVisible());
+  rec(`(b) ${w}px faixa visível na 1ª abertura com login guardado`, await faixa.isVisible());
+  rec(`(b) ${w}px nenhum GET /api/beta/estado saiu sem token`, !p.estadoSemToken, { semToken: p.estadoSemToken });
   const bt = await p.getByRole('button', { name: 'Reportar', exact: true }).boundingBox();
   const bi = await p.getByRole('button', { name: 'Ir para o Beta test' }).boundingBox();
   rec(`(b) ${w}px os dois botões inteiros na tela`, !!bt && !!bi && bt.x >= 0 && bi.x + bi.width <= w, { bt, bi });
@@ -130,6 +136,7 @@ for (const w of [320, 390]) {
 // (c) selo -> FolhaBeta -> Reportar -> voltar fecha uma de cada vez
 {
   const p = await novaPagina(320, BETA); await abrir(p);
+  rec('(c) selo BETA na 1ª abertura com login guardado e sem GET sem token', /\bBETA\b/.test(await texto(p)) && !p.estadoSemToken, { semToken: p.estadoSemToken });
   const inicio = await estadoHist(p);
   await p.getByRole('button', { name: /Beta test: abrir/ }).click(); await p.waitForTimeout(500);
   rec('(c) FolhaBeta abre com os itens', await p.getByText('Você está no Beta test').first().isVisible()

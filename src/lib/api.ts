@@ -418,11 +418,13 @@ export interface GrupoResultadoBusca {
   itens: ItemResultadoBusca[];
 }
 
-// Rotas do Beta (`/api/beta/*`); o token de sessão entra pelo fetch embrulhado do __root.
+// Rotas do Beta (`/api/beta/*`). O token vai aqui direto: o fetch embrulhado do
+// __root é instalado num efeito do pai, depois da 1ª consulta do BetaProvider
+// (ele só põe Authorization se ainda não houver, então não duplica).
 async function betaChamar<T>(caminho: string, corpo?: unknown): Promise<T> {
   const res = await fetch(`/api/beta/${caminho}`, {
     method: corpo === undefined ? "GET" : "POST",
-    headers: corpo === undefined ? undefined : { "Content-Type": "application/json" },
+    headers: { ...authHeaders(), ...(corpo === undefined ? {} : { "Content-Type": "application/json" }) },
     body: corpo === undefined ? undefined : JSON.stringify(corpo),
     cache: "no-store",
   });

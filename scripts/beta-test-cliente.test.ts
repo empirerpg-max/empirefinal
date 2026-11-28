@@ -86,6 +86,29 @@ describe("estado do Beta", () => {
     expect(estadoInicial()).toEqual(e);
   });
 
+  test("betaEstado manda o token guardado no cabeçalho (sem depender do fetch embrulhado)", async () => {
+    localStorage.setItem("empire_session_token", "tok-123");
+    let auth: string | null = null;
+    g.fetch = async (_u: unknown, init?: RequestInit) => {
+      auth = new Headers(init?.headers).get("Authorization");
+      return new Response(JSON.stringify({ ok: true, modo: "todos", podeVer: true, podeVoltar: true, versao: "beta", boasVindasVistas: true }));
+    };
+    await api.betaEstado();
+    expect(auth).toBe("Bearer tok-123");
+  });
+
+  test("POST do Beta manda token e Content-Type juntos", async () => {
+    localStorage.setItem("empire_session_token", "tok-9");
+    let h: Headers | null = null;
+    g.fetch = async (_u: unknown, init?: RequestInit) => {
+      h = new Headers(init?.headers);
+      return new Response(JSON.stringify({ ok: true, versao: "beta" }));
+    };
+    await api.betaEscolher({ versao: "beta" });
+    expect(h!.get("Authorization")).toBe("Bearer tok-9");
+    expect(h!.get("Content-Type")).toBe("application/json");
+  });
+
   test("resposta do servidor ok é devolvida", async () => {
     g.fetch = async () =>
       new Response(JSON.stringify({ ok: true, modo: "todos", podeVer: true, podeVoltar: true, versao: "beta", boasVindasVistas: false }));
