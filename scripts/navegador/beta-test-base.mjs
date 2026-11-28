@@ -37,8 +37,11 @@ async function novaPagina(width, estado, admin = false) {
   const p = await ctx.newPage();
   p.posts = { escolha: [], reporte: [], status: [], config: [] };
   p.reportesGet = [];
+  p.imgs = [];
   await p.route('**/*', (r) => {
     const req = r.request(); const u = new URL(req.url());
+    // Imagem do print: o app pede pelo proxy lh3 do Drive; responde um PNG e guarda a URL.
+    if (u.hostname === 'lh3.googleusercontent.com') { p.imgs.push(req.url()); return r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(PNG_B64, 'base64') }); }
     if (u.hostname !== 'localhost') return r.abort();
     const json = (o) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(o) });
     if (u.pathname === '/api/beta/estado') {
@@ -57,7 +60,7 @@ async function novaPagina(width, estado, admin = false) {
       if (!st) return json({ ok: true, reportes: Array.from({ length: 20 }, (_, i) => mk(i + 1)) });
       if (st !== 'novo') return json({ ok: true, reportes: [] });
       return json({ ok: true, reportes: [
-        mk(1, { texto: 'Texto bem longo. '.repeat(40), motivo: 'quebrou', printUrl: PNG, tecnico: JSON.stringify({ ua: 'x'.repeat(300), tela: 'a'.repeat(200) }) }),
+        mk(1, { texto: 'Texto bem longo. '.repeat(40), motivo: 'quebrou', printUrl: PRINT_DRIVE, tecnico: JSON.stringify({ ua: 'x'.repeat(300), tela: 'a'.repeat(200) }) }),
         mk(2),
       ] });
     }
@@ -72,7 +75,10 @@ async function novaPagina(width, estado, admin = false) {
   p.on('pageerror', (e) => console.log('PAGEERR', e.message));
   return p;
 }
-const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+// Como o uploadToDrive devolve (página do Drive, não a imagem).
+const ID_PRINT = '1AbCdEfGhIjKlMnOpQrStUvWxYz0123';
+const PRINT_DRIVE = `https://drive.google.com/file/d/${ID_PRINT}/view?usp=drivesdk`;
 const ANTERIOR = { modo: 'todos', podeVer: true, podeVoltar: true, versao: 'anterior', boasVindasVistas: true };
 const BETA = { ...ANTERIOR, versao: 'beta' };
 const DESLIGADO = { modo: 'desligado', podeVer: false, podeVoltar: false, versao: 'anterior', boasVindasVistas: true };
@@ -253,10 +259,15 @@ for (const w of [320, 390]) {
   rec('(e) dados técnicos formatados, rolam dentro do cartão e a página não rola', pre.json && pre.rolaH && pre.caixa <= 320 && await semRolagemH(p), pre);
   await foto(p, 'beta-e-reportes-320.png');
   await p.getByRole('button', { name: 'Dados técnicos' }).click();
+  // miniatura do print sai pelo proxy do Drive e carrega de verdade
+  const mini = await p.getByRole('button', { name: 'Abrir print em tamanho grande' }).locator('img').evaluate((e) => ({ src: e.src, w: e.naturalWidth }));
+  rec('(e) miniatura do print pelo lh3 (driveImg) e carregada', mini.src.startsWith('https://lh3.googleusercontent.com/d/' + ID_PRINT + '=w') && mini.w > 0, mini);
   // print abre grande numa folha; voltar fecha só ela
   const inicio = await estadoHist(p);
   await p.getByRole('button', { name: 'Abrir print em tamanho grande' }).click(); await p.waitForTimeout(500);
   rec('(e) print abre numa folha', (await estadoHist(p)).dialogos === 1 && await p.getByRole('dialog').getByRole('img').isVisible());
+  const grande = await p.getByRole('dialog').getByRole('img').evaluate((e) => ({ src: e.src, w: e.naturalWidth }));
+  rec('(e) print grande pelo lh3 sem recorte (driveImgWide) e carregado', /^https:\/\/lh3\.googleusercontent\.com\/d\/[-\w]+=w\d+$/.test(grande.src) && grande.w > 0, grande);
   await p.goBack(); await p.waitForTimeout(500);
   let h = await estadoHist(p);
   rec('(e) voltar fecha só a folha do print', h.dialogos === 0 && h.path === '/beta-admin' && JSON.stringify(h.over) === JSON.stringify(inicio.over), h);

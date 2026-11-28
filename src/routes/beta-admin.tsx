@@ -8,7 +8,7 @@ import { ScrollRow } from "@/components/ScrollRow";
 import { ActionSheet, type AcaoMenu } from "@/components/ActionSheet";
 import { Folha } from "@/components/Beta/Folha";
 import { useIsAdmin, useJogador } from "@/hooks/useJogador";
-import { api } from "@/lib/api";
+import { api, driveImg, driveImgWide } from "@/lib/api";
 import { opcoesConsulta } from "@/lib/consultas";
 import { ROTULO_MOTIVO, type ConfigBeta, type ModoBeta } from "@/lib/beta/regras";
 import { nomeDaTela } from "@/lib/uso/nomes";
@@ -246,7 +246,7 @@ function AbaReportes() {
       <Folha aberto={!!printAberto} titulo="Print do reporte" aoFechar={() => setPrintAberto(null)}>
         {() => (
           <div className="pb-2">
-            {printAberto && <img src={printAberto} alt="Print do reporte" className="mx-auto max-h-[70dvh] w-full rounded-xl object-contain" />}
+            {printAberto && <img src={driveImgWide(printAberto, 1200)} alt="Print do reporte" className="mx-auto max-h-[70dvh] w-full rounded-xl object-contain" />}
           </div>
         )}
       </Folha>
@@ -309,7 +309,7 @@ function CartaoReporte({ r, aoMenu, aoPrint }: { r: Reporte; aoMenu: () => void;
       )}
       {r.printUrl && (
         <button type="button" onClick={aoPrint} aria-label="Abrir print em tamanho grande" className="mt-3 block rounded-xl">
-          <img src={r.printUrl} alt="Print do reporte" loading="lazy" className="h-24 w-auto max-w-full rounded-xl object-cover" />
+          <img src={driveImg(r.printUrl, 400)} alt="Print do reporte" loading="lazy" className="h-24 w-auto max-w-full rounded-xl object-cover" />
         </button>
       )}
       {r.tecnico && (
