@@ -82,3 +82,13 @@ export const ESTADO_SEGURO: EstadoBeta = {
 export function acaoUsoVoltar(motivo?: MotivoVolta | null): string {
   return `beta:voltar:${motivo && (MOTIVOS_VOLTA as readonly string[]).includes(motivo) ? motivo : "sem_motivo"}`;
 }
+
+/** Faixa "Versão anterior": só para quem pode ver o Beta e está na anterior. */
+export function mostrarFaixa(e: EstadoBeta): boolean {
+  return e.podeVer && e.versao === "anterior";
+}
+
+/** Selo "BETA" no topo: só na versão beta. */
+export function mostrarSelo(e: EstadoBeta): boolean {
+  return e.versao === "beta";
+}

@@ -13,7 +13,7 @@ function fileToBase64(file: File): Promise<string> {
 
 export async function uploadToDrive(
   file: File,
-  folderType: "materiaisMusica" | "materiaisAlbum",
+  folderType: "materiaisMusica" | "materiaisAlbum" | "socialPosts",
   customName?: string,
 ): Promise<string> {
   try {
