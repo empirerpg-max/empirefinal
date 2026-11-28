@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AcervoRouteImport } from './routes/acervo'
 import { Route as AcessoRapidoRouteImport } from './routes/acesso-rapido'
 import { Route as AlbunsRouteImport } from './routes/albuns'
-import { Route as BetaAdminRouteImport } from './routes/beta-admin'
 import { Route as BetaPecasRouteImport } from './routes/beta-pecas'
 import { Route as ChartsRouteImport } from './routes/charts'
 import { Route as EmpirePlayRouteImport } from './routes/empire-play'
@@ -88,11 +87,6 @@ const AcessoRapidoRoute = AcessoRapidoRouteImport.update({
 const AlbunsRoute = AlbunsRouteImport.update({
   id: '/albuns',
   path: '/albuns',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BetaAdminRoute = BetaAdminRouteImport.update({
-  id: '/beta-admin',
-  path: '/beta-admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BetaPecasRoute = BetaPecasRouteImport.update({
@@ -381,7 +375,6 @@ export interface FileRoutesByFullPath {
   '/acervo': typeof AcervoRoute
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
-  '/beta-admin': typeof BetaAdminRoute
   '/beta-pecas': typeof BetaPecasRoute
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
@@ -443,7 +436,6 @@ export interface FileRoutesByTo {
   '/acervo': typeof AcervoRoute
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
-  '/beta-admin': typeof BetaAdminRoute
   '/beta-pecas': typeof BetaPecasRoute
   '/charts': typeof ChartsRoute
   '/gestao-usuarios': typeof GestaoUsuariosRoute
@@ -500,7 +492,6 @@ export interface FileRoutesById {
   '/acervo': typeof AcervoRoute
   '/acesso-rapido': typeof AcessoRapidoRoute
   '/albuns': typeof AlbunsRoute
-  '/beta-admin': typeof BetaAdminRoute
   '/beta-pecas': typeof BetaPecasRoute
   '/charts': typeof ChartsRoute
   '/empire-play': typeof EmpirePlayRouteWithChildren
@@ -564,7 +555,6 @@ export interface FileRouteTypes {
     | '/acervo'
     | '/acesso-rapido'
     | '/albuns'
-    | '/beta-admin'
     | '/beta-pecas'
     | '/charts'
     | '/empire-play'
@@ -626,7 +616,6 @@ export interface FileRouteTypes {
     | '/acervo'
     | '/acesso-rapido'
     | '/albuns'
-    | '/beta-admin'
     | '/beta-pecas'
     | '/charts'
     | '/gestao-usuarios'
@@ -682,7 +671,6 @@ export interface FileRouteTypes {
     | '/acervo'
     | '/acesso-rapido'
     | '/albuns'
-    | '/beta-admin'
     | '/beta-pecas'
     | '/charts'
     | '/empire-play'
@@ -745,7 +733,6 @@ export interface RootRouteChildren {
   AcervoRoute: typeof AcervoRoute
   AcessoRapidoRoute: typeof AcessoRapidoRoute
   AlbunsRoute: typeof AlbunsRoute
-  BetaAdminRoute: typeof BetaAdminRoute
   BetaPecasRoute: typeof BetaPecasRoute
   ChartsRoute: typeof ChartsRoute
   EmpirePlayRoute: typeof EmpirePlayRouteWithChildren
@@ -806,13 +793,6 @@ declare module '@tanstack/react-router' {
       path: '/albuns'
       fullPath: '/albuns'
       preLoaderRoute: typeof AlbunsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/beta-admin': {
-      id: '/beta-admin'
-      path: '/beta-admin'
-      fullPath: '/beta-admin'
-      preLoaderRoute: typeof BetaAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/beta-pecas': {
@@ -1338,7 +1318,6 @@ const rootRouteChildren: RootRouteChildren = {
   AcervoRoute: AcervoRoute,
   AcessoRapidoRoute: AcessoRapidoRoute,
   AlbunsRoute: AlbunsRoute,
-  BetaAdminRoute: BetaAdminRoute,
   BetaPecasRoute: BetaPecasRoute,
   ChartsRoute: ChartsRoute,
   EmpirePlayRoute: EmpirePlayRouteWithChildren,

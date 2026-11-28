@@ -114,7 +114,7 @@ conferida.
 
 ```
 ┌──────────────────────────────────────────────┐
-│ [logo] EMPIRE HUB [beta]    [🔍] [＋] [🔔] (RV) │  ← topo
+│ [logo] EMPIRE HUB [beta]        [＋] [🔔] (RV) │  ← topo
 ├──────────────────────────────────────────────┤
 │                                              │
 │                conteúdo                      │
@@ -136,18 +136,8 @@ conferida.
   molde dele: ícone ＋ simples, sem cor, num círculo com contorno fino.
   Abre a folha Criar (5.7). No computador, o Criar é o primeiro botão da
   barra lateral (e o ＋ do topo some, para não repetir).
-- **Busca (correção do usuário, 2026-11-28):** a **lupa fica no topo**, em
-  todas as telas e tamanhos, à esquerda do ＋, no mesmo molde do sino. Abre a
-  **Busca rápida de hoje** (`BuscaRapida`, `/api/busca`: Músicas, Vídeos,
-  Álbuns, Artistas), sem mudar nada nela. No computador vira o campo aberto
-  no topo (mesma busca). Catálogo › Buscar (fase 3) continua existindo para
-  filtrar e navegar; quando existir, a janela da lupa ganha "Ver tudo no
-  Catálogo". As buscas do Fórum, do Social e dos Charts continuam dentro de
-  cada tela.
-  Cabe em 320 px (conferido no protótipo v41, sem botões sobrepostos): logo,
-  selo e os 4 botões não encolhem (`shrink-0`); o nome "EMPIRE HUB" some
-  quando o próprio topo tem menos de 370 px (consulta de contêiner), senão
-  ele cobriria o selo beta.
+- **Busca:** no celular e no tablet, em **Catálogo › Buscar** (e nas buscas
+  do Fórum, do Social e dos Charts); no computador, campo aberto no topo.
 - **Sai do topo:** o botão Recarregar. Vira **puxar para baixo para
   atualizar** em toda tela com lista (call meu; o recarregar de hoje recarrega
   a página inteira).
@@ -1055,7 +1045,7 @@ largura da área do app):
 
 | Largura | Navegação | Conteúdo | Player |
 |---|---|---|---|
-| até 699px (celular) | barra de baixo com 5 abas; topo com logo + selo beta, lupa, ＋, sino e foto | 1 coluna | mini player acima da barra |
+| até 699px (celular) | barra de baixo com 5 abas; topo com logo + selo beta, ＋, sino e foto | 1 coluna | mini player acima da barra |
 | 700–999px (tablet) | **trilho lateral** com as 5 abas (ícone + nome); topo igual ao celular | grades com várias colunas (cartões de ~170px), prateleiras maiores | mini player flutuante embaixo |
 | 1000px ou mais (computador) | **barra lateral completa** (240px): logo, botão **Criar**, 5 abas, **Sua biblioteca** (Minhas playlists, Salvos), **Meu Império** (Perfil e economia, Meus lançamentos); topo com **campo de busca aberto**, sino e foto | conteúdo com largura máxima de ~1100px | **barra de player fixa** embaixo, de ponta a ponta (como no Spotify) |
 
@@ -1122,10 +1112,6 @@ aconteceu.
     abertura (botão de emergência se o Beta quebrar).
   - **Obrigatório:** o Beta vira a única versão; o botão de voltar some.
     É o passo antes de apagar o código antigo (fase 6).
-
-**Feito na fase 1a (2026-11-28):** a chave fica no KV (`beta-config`); **chave
-ausente = desligado** (nada muda para ninguém). **No lançamento o admin liga
-"Ligado para todos"** em `/beta-admin`. Manual: `docs/beta-fundacoes.md`.
 
 **O que um jogador vê do outro (decisão confirmada com o usuário)**
 
@@ -1803,7 +1789,6 @@ de 360px nos dois tamanhos de texto.
 | **0a. Medição de uso** (na versão de hoje) ✅ **feito** (branch `claude/nice-euler-1yslj3`, aguardando PR/merge; manual `docs/medicao-de-uso.md`) | 6.15: envio em lote, tabelas `uso_diario` e `uso_jogador_dia`, chave em `homeFlags`, tela Admin › Uso do app. **Vai ao ar primeiro**, para medir a base por ~4 semanas antes do Beta | — |
 | **0b. Sala da TV na versão de hoje** ✅ **feito** ([PR #956](https://github.com/empirerpg-max/empirefinal/pull/956), aguardando merge) | 6.19.1 participação pelo tempo (D1), Início/Término do admin, chat novo, enquetes no chat, player do app (6.19.2), economia de pedidos e de leituras (`2026-11-27-orcamento-d1-e-requisicoes.md`); GIFs "Mais usados/Recentes" já estavam na `main` | — |
 | **0. Fundações** (nada visível muda) ✅ **feito** (branch `claude/nice-euler-1yslj3`, aguardando PR; manual `docs/beta-fundacoes.md`, vitrine só admin `/beta-pecas`) | `ScrollRow`, `useHistoryOverlay`, `ActionSheet`, `useIsAdmin`, `useJogador`, React Query (tempos de cache prontos; o cliente de API por domínio vai junto com a migração de cada tela, fases 1+), tokens de cor com os valores atuais | — |
-| **1a. Base do Beta test** ✅ **feito** (branch `claude/nice-euler-1yslj3`; plano `docs/superpowers/plans/2026-11-28-fase-1a-beta-test-base.md`; manual `docs/beta-fundacoes.md`) | 6.11 sem a casca: chave do admin (4 modos, KV), escolha beta/anterior por jogador (D1), faixa na versão anterior, selo BETA, folhas (Beta, Reportar, Voltar), reportes com aviso ao admin, tela `/beta-admin`; chave ausente = desligado | 0, 0a |
 | **1. Navegação (Beta test)** | casca nova inteira **atrás do Beta test** (6.11): topo, barra/trilho/barra lateral (6.10), Criar, Meu Império, abas do Início, aviso de mudança, tutorial; chave do admin, reportes e faixa na versão anterior | 0 |
 | **1b. Sala da Empire TV** (Beta) | 6.19: enquetes no chat (6.19.4, + tipo **Nota**), vídeo no topo, faixa fina, folhas, chat compacto, "↓ novas", arrastar para responder, reações, celular deitado; player do app (D5) | 0b, 1 |
 | **2. Charts** | Ao vivo = painel do Catálogo; `ChartPlaylist` (só tela); **Compartilhar para o Feed/Stories** (6.22). **Nenhuma mudança de backend nem de cálculo.** | 0, 1 (o post usa o Social de hoje) |

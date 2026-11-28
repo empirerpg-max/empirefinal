@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Bell, BellOff, BellRing, Bug, Heart, Loader2, MessageCircle, Settings, Smartphone } from "lucide-react";
+import { ArrowLeft, Bell, BellOff, BellRing, Heart, Loader2, MessageCircle, Settings, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { Switch } from "@/components/ui/switch";
-import { nomeDaTela } from "@/lib/uso/nomes";
 
-// "reporte_beta" só chega ao admin: não tem toggle em "O que receber no celular".
-type EventoPref = "comentario_forum" | "curtida_social" | "comentario_social";
-type Evento = EventoPref | "reporte_beta";
+type Evento = "comentario_forum" | "curtida_social" | "comentario_social";
 
 interface NotificacaoItem {
   id: string;
@@ -22,7 +19,7 @@ interface NotificacaoItem {
   evento?: Evento;
 }
 
-type Prefs = Record<EventoPref, boolean>;
+type Prefs = Record<Evento, boolean>;
 
 const DEFAULT_PREFS: Prefs = {
   curtida_social: true,
@@ -30,7 +27,7 @@ const DEFAULT_PREFS: Prefs = {
   comentario_forum: true,
 };
 
-const PREF_LABELS: { key: EventoPref; titulo: string; descricao: string }[] = [
+const PREF_LABELS: { key: Evento; titulo: string; descricao: string }[] = [
   {
     key: "curtida_social",
     titulo: "Curtidas nas minhas publicações",
@@ -271,7 +268,7 @@ export function NotificationBell() {
     }
   };
 
-  const togglePref = async (key: EventoPref, value: boolean) => {
+  const togglePref = async (key: Evento, value: boolean) => {
     haptic.selection();
     const anterior = prefs;
     setPrefs({ ...prefs, [key]: value });
@@ -295,8 +292,7 @@ export function NotificationBell() {
   const renderItem = (n: NotificacaoItem) => {
     const evento = n.evento || "comentario_forum";
     const isSocial = evento === "curtida_social" || evento === "comentario_social";
-    const isReporte = evento === "reporte_beta";
-    const Icon = evento === "curtida_social" ? Heart : isReporte ? Bug : MessageCircle;
+    const Icon = evento === "curtida_social" ? Heart : MessageCircle;
     const conteudo = (
       <div className="flex gap-3">
         <span
@@ -311,8 +307,6 @@ export function NotificationBell() {
             <span className="font-bold">{n.autorNome}</span>{" "}
             {evento === "curtida_social" ? (
               "curtiu sua publicação"
-            ) : isReporte ? (
-              "enviou um reporte do Beta"
             ) : evento === "comentario_social" ? (
               "comentou sua publicação"
             ) : (
@@ -321,9 +315,9 @@ export function NotificationBell() {
               </>
             )}
           </p>
-          {(isSocial || isReporte) && n.tituloMedia && (
+          {isSocial && n.tituloMedia && (
             <p className="text-[11px] text-muted-foreground/80 mt-1 line-clamp-1 break-words italic">
-              {isReporte ? nomeDaTela(n.tituloMedia) : n.tituloMedia}
+              {n.tituloMedia}
             </p>
           )}
           {n.comentario && (
@@ -340,11 +334,7 @@ export function NotificationBell() {
     };
     return (
       <li key={n.id}>
-        {isReporte ? (
-          <Link to="/beta-admin" onClick={onClick} className={className}>
-            {conteudo}
-          </Link>
-        ) : isSocial ? (
+        {isSocial ? (
           <Link to="/social" search={{ postId: n.topicId }} onClick={onClick} className={className}>
             {conteudo}
           </Link>

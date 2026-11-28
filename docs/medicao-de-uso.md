@@ -22,7 +22,7 @@ Documentos de apoio:
 |---|---|
 | **Telas** abertas | id da rota (ex.: `/social`) + valor curto da aba (`aba`/`tab`/`view`), ex.: `/social › feed` |
 | **Ações**: POST/PUT/PATCH/DELETE que deram certo | caminho da API normalizado (ex.: `/api/social/posts`) |
-| Ações especiais | `buscar` (GET `/api/busca`, no máximo 1 a cada 10 s), `tocar_musica` (player de música) e `beta:voltar:<motivo|sem_motivo>` (volta do Beta; só códigos de `MOTIVOS_VOLTA`, regex `ACAO_BETA_VOLTAR_RE`) |
+| Ações especiais | `buscar` (GET `/api/busca`, no máximo 1 a cada 10 s) e `tocar_musica` (player de música) |
 | **Caminhos** | `<ação> ← <tela>`: em que tela a ação foi feita |
 | **Aparelho** | pela largura da janela: `< 768` celular, `< 1024` tablet, senão computador |
 | **Jogadores distintos** | só nas tabelas `uso_jogador_dia` e `uso_jogador_tela_dia` (id do jogador) |
@@ -73,7 +73,7 @@ tela muda / fetch (POST...) ──► ColetorUso (memória do aparelho)
 ```
 
 1. **Coletor** (`ColetorUso`): só soma contagens em memória; não usa DOM nem rede.
-2. **Envio** (`envio.ts`): um lote **a cada 5 min enquanto a aba está visível** (`INTERVALO_ENVIO_MS`) e outro em `pagehide`/`visibilitychange→hidden` via `navigator.sendBeacon` (que não passa pelo wrapper de `window.fetch` e não manda cabeçalho, por isso o token vai no corpo). Nunca uma requisição por clique. A versão enviada vem do estado do Beta (`definirVersaoUso` em `envio.ts`, chamada pelo `BetaProvider`): `"beta"` ou `"anterior"`; sem Beta liberado é sempre `"anterior"`. Ao voltar para a versão anterior o app conta a ação `beta:voltar:<motivo>` (ou `sem_motivo`); o servidor só aceita esses códigos (`ACAO_BETA_VOLTAR_RE`), nunca texto livre. `/api/beta/estado` está em `IGNORADOS`. Detalhes: `docs/beta-fundacoes.md`, seção "Beta test: chave, escolha e reportes".
+2. **Envio** (`envio.ts`): um lote **a cada 5 min enquanto a aba está visível** (`INTERVALO_ENVIO_MS`) e outro em `pagehide`/`visibilitychange→hidden` via `navigator.sendBeacon` (que não passa pelo wrapper de `window.fetch` e não manda cabeçalho, por isso o token vai no corpo). Nunca uma requisição por clique. A versão enviada é sempre `"anterior"` nesta fase.
 3. **Telas do dia**: o aparelho lembra no `localStorage` (`uso-telas-AAAA-MM-DD`) as telas já mandadas hoje, para mandar só as novas (o servidor também deduplica). Dias velhos são apagados. **Sem token (não logado) o lote vai sem `telas` e nada é marcado como enviado** (`telasDoLote` em `coletor.ts`): o servidor não grava telas sem jogador, e assim uma tela vista antes do login ainda conta quando o jogador a abrir de novo logado.
 4. **Servidor** (`registrarUsoController`): se desligado responde `{ ok:true, ativo:false }`; senão descobre o jogador (sessão no cabeçalho ou `token` no corpo), valida o lote e grava.
    - **Formato do `alvo` conferido no servidor** (`limparLote` em `usoService.ts`), para ninguém pôr texto arbitrário na tela admin com um POST feito à mão: `tela` começa com `/` (sem `←` nem caracteres de controle); `acao` é `/api` + segmentos já normalizados (palavra de rota ou `:id`, regex `ACAO_API_RE`) **ou** uma das `ACOES_ESPECIAIS` (`buscar`, `tocar_musica`); `caminho` é `<ação válida> ← <tela válida>`. O que não bate é descartado. O mesmo vale para a lista `telas`.

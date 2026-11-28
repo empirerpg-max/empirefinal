@@ -19,7 +19,7 @@
 | Notificações push e preferências (sino) | sino + Meu Império › Notificações | P |
 | Instalar app, aviso de versão nova | igual (global) | D |
 | Recarregar | puxar a tela pra baixo | D |
-| Busca rápida (artistas, músicas, vídeos, álbuns) | **lupa no topo, como hoje** (correção do usuário, 2026-11-28; no computador, campo aberto no topo) + Catálogo › Buscar | P |
+| Busca rápida (artistas, músicas, vídeos, álbuns) | Catálogo › Buscar (no computador, campo no topo) | P |
 | Popups VMA / votação / festival | iguais (um componente só) + "Pra fazer hoje" | P |
 | Acesso Rápido (canais), Guia de Sobrevivência | Meu Império › Canais oficiais / Guia | P |
 
@@ -518,19 +518,3 @@ Também conferido nesta rodada:
 músicas sem "Código único" (`gestaoController.ts`, novo
 `adminRepararMusicasSemCodigoController.ts`, `codigoUnicoEdicaoCharts.ts`).
 Só servidor, sem tela nova: nada muda na cobertura do Beta.
-
-## Fase 1a (2026-11-28): base do Beta test (6.11)
-
-Entregue (manual: `docs/beta-fundacoes.md`, seção "Beta test: chave, escolha e reportes"):
-
-| Linha da 6.11 | Status |
-|---|---|
-| Escolha beta/anterior por jogador, salva no servidor (D1) e no aparelho | feito na 1a |
-| Faixa fixa "Versão anterior" e selo **BETA** no topo | feito na 1a |
-| Folha "Você está no Beta test" (Reportar · Como usar · Voltar) | feito na 1a ("Como usar" ainda abre o `/tutorial` antigo; fase 1c) |
-| Voltar com motivos opcionais; a troca não recarrega a página | feito na 1a |
-| Reportar um problema (texto, print, dados técnicos) em tabela D1 | feito na 1a |
-| Aviso ao admin (sino e celular) e tela de reportes com status | feito na 1a (`/beta-admin`) |
-| Chave do admin: desligado · convidados · todos · obrigatório | feito na 1a (chave ausente = desligado) |
-| Medição da volta do Beta (`beta:voltar:*`, versão `beta`) | feito na 1a |
-| Casca nova (topo, barras, telas) atrás do Beta | **fase 1b** |
