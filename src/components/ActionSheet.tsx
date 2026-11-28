@@ -125,7 +125,7 @@ export function ActionSheet({
   return createPortal(
     <AnimatePresence>
       {aberto && (
-        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center">
+        <div key="folha" className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center">
           <motion.div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             initial={{ opacity: 0 }}

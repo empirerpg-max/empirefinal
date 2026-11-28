@@ -46,6 +46,16 @@ export function isAdminLogin(
   return (id ?? login?.id) === ADMIN_LOGIN_ID || login?.tipoPerfil === "Admin";
 }
 
+/**
+ * Só o id histórico, sem olhar tipoPerfil. Para os poucos lugares em que o
+ * servidor ainda só aceita o id antigo (editar álbum antigo, editar revista
+ * do acervo): mostrar o botão a quem o servidor recusaria só daria erro.
+ * Sai quando o backend for unificado (decisão pendente do usuário).
+ */
+export function ehAdminPorIdLegado(id?: string | null): boolean {
+  return id != null && String(id) === ADMIN_LOGIN_ID;
+}
+
 export function clearStoredLogin() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(TOKEN_STORAGE_KEY);

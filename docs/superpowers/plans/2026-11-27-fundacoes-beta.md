@@ -50,7 +50,7 @@ navegador e no celular.
   **30 s**; charts = comportamento de hoje (sem mudar backend de charts).
 - Tokens (spec 5.10): valor do **escuro igual ao de hoje**; valor do claro
   novo; o claro **não é ligado** nesta fase. Destaque roxo `#957AF8`
-  (escuro) / `#6C4CE8` (claro); textos secundários do claro `#6B6B73`.
+  (escuro) / `#6C4CE8` (claro); textos secundários do claro `#55555c` (spec 6.20, contraste AA; não `#6B6B73`).
 - Nenhuma lógica de charts é alterada.
 
 ## Review Focus

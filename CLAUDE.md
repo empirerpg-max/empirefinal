@@ -103,3 +103,7 @@ Tela nova do Beta usa essas peças: `ScrollRow` em toda fileira de
 abas/filtros, `useHistoryOverlay` em toda camada por cima (folha, modal,
 player), `ActionSheet` em todo menu ⋯, `useIsAdmin`/`useJogador` para
 admin/jogador, e ação de menu que muda de tela marcada `navega: true`.
+Não misturar camada antiga (que troca o `history.state` inteiro, ex.:
+`use-back-close.ts`, `VitrineClipes.tsx`, `tv.tsx`) com `useHistoryOverlay`
+sem antes migrá-la, nem navegar com `replace: true` com camada aberta (ver
+"Limites conhecidos" no doc).

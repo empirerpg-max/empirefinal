@@ -108,8 +108,12 @@ if (!carregado) return null;                // não pisca "não encontrada"
 
 - Login salvo primeiro, senão o id antigo do `useTelegramUser` (nome legado;
   o app roda no Cloudflare). SSR-safe: no servidor e no 1º render `null`.
-- Admin = `tipoPerfil` "Admin" **ou** o id antigo — mesmo critério em todo o
-  front. Só decide o que mostrar; o backend confere de novo pela sessão.
+- Admin = `tipoPerfil` "Admin" **ou** o id antigo — mesmo critério no
+  front, **exceto** editar álbum antigo (`empire-play.albuns-antigos.$id.tsx`)
+  e editar revista do acervo (`acervo.tsx`, `RevistaViewer`): ali o servidor
+  ainda só aceita o id antigo, então o botão usa `ehAdminPorIdLegado` (só o
+  id antigo) e admin só por `tipoPerfil` **não** vê "Editar" nesses dois
+  lugares. Só decide o que mostrar; o backend confere de novo pela sessão.
 
 ## Tempos de cache (React Query)
 
@@ -175,6 +179,23 @@ Registrados como utilitários Tailwind (`bg-superficie-1`, `text-texto-secundari
   editar playlist quase nunca reconhece ninguém hoje. Corrigir na fase 3
   migrando essas telas para `useJogador`.
 - StrictMode (só dev) empurra e consome uma entrada extra ao montar.
+- **Admin no backend ainda não unificado (pendente, decisão do usuário por
+  ser de segurança)**: `playlistsController.ts` 187-188, 1768
+  (`podeEditarAlbumAntigo`) e 1982-1983, e `acervoController.ts` 205-206 só
+  aceitam o id antigo. Até unificar, os dois botões acima seguem só pelo id
+  antigo (`ehAdminPorIdLegado`); depois, trocar por `useIsAdmin()`.
+- **Camadas antigas não convivem com as novas**: `use-back-close.ts:21`,
+  `NovaEnqueteSheet.tsx:56`, `VitrineClipes.tsx:98`, `empire-play.index.tsx:25`
+  e `tv.tsx:1040`/`1934` trocam o `history.state` inteiro e apagam
+  `__overlays`. Abrir uma delas a partir de uma camada nova (ou uma nova por
+  cima de uma antiga) deixa entrada órfã ou fecha as duas. Regra: migrar a
+  camada antiga para `useHistoryOverlay` antes de misturar.
+- **`router.navigate({ replace: true })` com camada aberta** apaga
+  `__overlays` e a entrada fica órfã depois. Regra: não navegar com
+  `replace` com camada aberta (ou passar `state: true` para manter o state).
+- **Folha aberta por troca** (ex.: "Abrir outra folha" no ⋯) deve focar em
+  efeito passivo (`useEffect`, só ao abrir), não no ref callback — senão o
+  foco volta ao ⋯ atrás dela quando o ActionSheet devolve o foco.
 
 ## Testes
 
@@ -185,9 +206,14 @@ bunx tsc --noEmit -p .
 bun run build
 ```
 
-Conferência no navegador (feita na fase 0): `bun run build`, depois
-`bunx wrangler dev -c dist/tanstack_start_app/wrangler.json --local --port 8799`,
-entrar como admin e abrir `/beta-pecas` em 320, 390 e 1300 px — setas nas
-pontas, seta parando no começo de item, selecionado inteiro, ←/→, voltar
-fechando só a folha de cima (inclusive depois de "Ir para o Perfil"), Esc,
-foco voltando ao ⋯; jogador comum vê "Página não encontrada.".
+Conferência no navegador (automática, `scripts/navegador/beta-pecas.mjs`,
+Playwright): `bun run build`, depois
+`bunx wrangler dev -c dist/tanstack_start_app/wrangler.json --local --port 8799`
+(em outro terminal) e `node scripts/navegador/beta-pecas.mjs`. Entra como
+admin e abre `/beta-pecas` em 320, 390 e 1300 px — setas nas pontas, seta
+parando no começo de item, selecionado inteiro, ←/→, voltar fechando só a
+folha de cima (inclusive depois de "Ir para o Perfil"), Esc, foco voltando
+ao ⋯, ⋯ empilhado por cima da folha (voltar fecha só ele; X da folha de
+baixo fecha as duas sem sobrar entrada; ação `navega` no ⋯ de cima vai para
+`/perfil` e 1 voltar volta sem nada aberto); jogador comum vê "Página não
+encontrada.".

@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Copy, Layers, MoreHorizontal, Trash2, User, X } from "lucide-react";
 import { toast } from "sonner";
@@ -115,7 +115,11 @@ function BetaPecasPage() {
       </div>
 
       <ActionSheet aberto={menuAberto} titulo="Opções de teste" acoes={acoes} aoFechar={() => setMenuAberto(false)} />
-      <FolhaSimples aberta={folhaAberta} aoFechar={() => setFolhaAberta(false)} />
+      <FolhaSimples
+        aberta={folhaAberta}
+        aoFechar={() => setFolhaAberta(false)}
+        irParaPerfil={() => router.navigate({ to: "/perfil" })}
+      />
     </main>
   );
 }
@@ -141,12 +145,47 @@ function AmostrasTokens({ titulo, claro }: { titulo: string; claro?: boolean }) 
   );
 }
 
-/** Segunda folha, simples, aberta por cima do menu ⋯ (mesma entrada reaproveitada). */
-function FolhaSimples({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => void }) {
+/**
+ * Segunda folha, aberta pelo menu ⋯ por TROCA (o menu fecha e ela reaproveita
+ * a entrada dele). Dentro dela, outro ⋯ abre um menu EMPILHADO por cima
+ * (entrada própria): voltar fecha só o de cima; o X da folha fecha os dois.
+ */
+function FolhaSimples({
+  aberta,
+  aoFechar,
+  irParaPerfil,
+}: {
+  aberta: boolean;
+  aoFechar: () => void;
+  irParaPerfil: () => void;
+}) {
   const { fechar } = useHistoryOverlay(aberta, aoFechar);
   const [montado, setMontado] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const dialogoRef = useRef<HTMLDivElement>(null);
   useEffect(() => setMontado(true), []);
+  // Fecha o menu de cima junto quando a folha fecha (mesmo commit: um único go()).
+  useEffect(() => {
+    if (!aberta) setMenuAberto(false);
+  }, [aberta]);
+  // Foco em efeito passivo, só ao abrir: roda depois da limpeza do ActionSheet
+  // que devolve o foco ao ⋯ (troca no mesmo commit), então o foco fica aqui.
+  useEffect(() => {
+    if (aberta && montado) dialogoRef.current?.focus({ preventScroll: true });
+  }, [aberta, montado]);
   if (!montado || !aberta) return null;
+  const acoesDeCima: AcaoMenu[] = [
+    {
+      id: "perfil",
+      rotulo: "Ir para o Perfil",
+      icone: User,
+      navega: true,
+      // O menu já saiu do histórico; fecha a folha e só navega quando a
+      // entrada dela também saiu (nada órfão por baixo do /perfil).
+      aoEscolher: () => fechar(irParaPerfil),
+    },
+    { id: "copiar", rotulo: "Copiar", icone: Copy, aoEscolher: () => toast("Copiado (só teste).") },
+  ];
   const aoTeclar = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Escape") {
       e.preventDefault();
@@ -161,13 +200,22 @@ function FolhaSimples({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => v
         aria-modal="true"
         aria-label="Outra folha"
         tabIndex={-1}
-        ref={(n) => n?.focus({ preventScroll: true })}
+        ref={dialogoRef}
         onKeyDown={aoTeclar}
         className="relative w-full sm:max-w-sm rounded-t-[1.75rem] sm:rounded-[1.75rem] border-t sm:border border-border bg-background p-4 outline-none"
         style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center gap-2">
           <b className="min-w-0 flex-1 truncate px-1 text-base font-bold">Outra folha</b>
+          <button
+            type="button"
+            aria-label="Mais opções da folha"
+            data-testid="botao-menu-folha"
+            onClick={() => setMenuAberto(true)}
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-superficie-2 px-1"
+          >
+            <MoreHorizontal className="size-5 shrink-0" />
+          </button>
           <button
             type="button"
             aria-label="Fechar"
@@ -178,9 +226,16 @@ function FolhaSimples({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => v
           </button>
         </div>
         <p className="mt-2 px-1 text-sm text-texto-secundario">
-          Aberta por cima do menu ⋯. O voltar fecha só esta folha.
+          Aberta no lugar do menu ⋯ (troca). O ⋯ daqui abre um menu por cima
+          desta folha; o voltar fecha só o de cima.
         </p>
       </div>
+      <ActionSheet
+        aberto={aberta && menuAberto}
+        titulo="Opções da folha"
+        acoes={acoesDeCima}
+        aoFechar={() => setMenuAberto(false)}
+      />
     </div>,
     document.body,
   );
