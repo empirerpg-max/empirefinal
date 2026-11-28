@@ -107,3 +107,6 @@ Não misturar camada antiga (que troca o `history.state` inteiro, ex.:
 `use-back-close.ts`, `VitrineClipes.tsx`, `tv.tsx`) com `useHistoryOverlay`
 sem antes migrá-la, nem navegar com `replace: true` com camada aberta (ver
 "Limites conhecidos" no doc).
+A chave do Beta (`beta-config`), a escolha de versão por jogador e os
+reportes (`/api/beta/*`, `/beta-admin`) estão documentados na mesma página,
+na seção "Beta test: chave, escolha e reportes".
