@@ -155,6 +155,14 @@ async function createSignedJwt(
   return `${unsignedToken}.${base64UrlEncode(new Uint8Array(signature))}`;
 }
 
+// Limite do pedido de token (10 s em produção).
+let limiteTokenMs = 10_000;
+
+/** Só para teste: encurta o limite do token (produção continua 10 s). */
+export function __definirLimiteTokenParaTeste(ms: number): void {
+  limiteTokenMs = ms;
+}
+
 export async function getGoogleAccessToken(scopes: string[]): Promise<string> {
   const cacheKey = [...scopes].sort().join(" ");
   const cached = GOOGLE_TOKEN_CACHE.get(cacheKey);
@@ -166,24 +174,36 @@ export async function getGoogleAccessToken(scopes: string[]): Promise<string> {
   const credentials = resolveServiceAccount();
   const assertion = await createSignedJwt(credentials, scopes);
   registrarChamadaExterna();
-  const response = await fetch(credentials.tokenUri, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion,
-    }).toString(),
-  });
-
-  const body = (await response.json()) as {
+  // Limite de tempo no pedido de token (28/11: sem limite, um token pendurado
+  // prendia a aba inteira no isolate, igual a leitura pendurada). É seguro:
+  // pedir token de novo não tem efeito colateral. Cobre também o corpo.
+  const sinal = AbortSignal.timeout(limiteTokenMs);
+  let response: Response;
+  let body: {
     access_token?: string;
     expires_in?: number;
     token_type?: string;
     error?: string;
     error_description?: string;
   };
+  try {
+    response = await fetch(credentials.tokenUri, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion,
+      }).toString(),
+      signal: sinal,
+    });
+
+    body = (await response.json()) as typeof body;
+  } catch (err) {
+    if (sinal.aborted) throw new Error("Google (token) não respondeu em 10 s");
+    throw err;
+  }
 
   if (!response.ok || !body.access_token) {
     throw new Error(

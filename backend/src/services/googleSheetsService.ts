@@ -147,34 +147,76 @@ export async function fetchGVizCsv(spreadsheetId: string, sheetName: string): Pr
   )}`;
 
   registrarChamadaExterna();
-  const res = await fetch(gvizUrl);
-  if (!res.ok) {
-    throw new Error(`GViz CSV export retornou HTTP ${res.status}`);
-  }
+  // Limite de tempo (28/11: uma leitura pendurada prendeu a aba inteira no
+  // isolate via `readInFlight`). Cobre também a leitura do corpo.
+  const sinal = AbortSignal.timeout(limitesDeTempo.gvizMs);
+  try {
+    const res = await fetch(gvizUrl, { signal: sinal });
+    if (!res.ok) {
+      throw new Error(`GViz CSV export retornou HTTP ${res.status}`);
+    }
 
-  const csvText = await res.text();
-  return parseCsv(csvText);
+    const csvText = await res.text();
+    return parseCsv(csvText);
+  } catch (err) {
+    if (sinal.aborted) throw new Error("GViz CSV não respondeu em 10 s");
+    throw err;
+  }
+}
+
+// Limites de tempo das LEITURAS no Google (28/11: a leitura da aba
+// `usuarios` ficou pendurada ~45 min e, como `readValuesGoogle` junta
+// pedidos iguais em andamento, prendeu login/heartbeat, Gestão de usuários e
+// conferência de admin até o isolate morrer). Escritas NUNCA têm limite:
+// abortar uma escrita que o Google já aplicou levaria a reenvio duplicado.
+const limitesDeTempo = { leituraSheetsMs: 20_000, gvizMs: 10_000 };
+
+/** Só para teste: encurta os limites (produção continua 20 s / 10 s). */
+export function __definirLimitesDeTempoParaTeste(novos: {
+  leituraSheetsMs?: number;
+  gvizMs?: number;
+}): void {
+  Object.assign(limitesDeTempo, novos);
 }
 
 async function sheetsRequest<T>(path: string, init: RequestInit, scopes: string[]): Promise<T> {
   const accessToken = await getGoogleAccessToken(scopes);
   registrarChamadaExterna();
-  const response = await fetch(`${GOOGLE_SHEETS_API_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
-  });
+  // Limite de tempo SÓ em leitura (GET) — nunca em POST/PUT/escrita (ver
+  // `limitesDeTempo`). Respeita um `signal` que já venha em `init`.
+  const ehLeitura = (init.method ?? "").toUpperCase() === "GET";
+  const sinalTempo = ehLeitura ? AbortSignal.timeout(limitesDeTempo.leituraSheetsMs) : undefined;
+  let signal = init.signal ?? undefined;
+  if (sinalTempo) {
+    if (!signal) signal = sinalTempo;
+    else if (typeof AbortSignal.any === "function") signal = AbortSignal.any([signal, sinalTempo]);
+  }
 
-  const payload = (await response.json()) as T & {
+  let response: Response;
+  let payload: T & {
     error?: {
       code?: number;
       message?: string;
       status?: string;
     };
   };
+  try {
+    response = await fetch(`${GOOGLE_SHEETS_API_BASE}${path}`, {
+      ...init,
+      ...(signal ? { signal } : {}),
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        ...(init.headers ?? {}),
+      },
+    });
+
+    payload = (await response.json()) as typeof payload;
+  } catch (err) {
+    // Mensagem que não casa com o padrão de cota (não dispara as esperas de 429).
+    if (sinalTempo?.aborted) throw new Error("Google Sheets não respondeu em 20 s");
+    throw err;
+  }
 
   if (!response.ok) {
     const message =
