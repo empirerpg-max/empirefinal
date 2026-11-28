@@ -75,6 +75,7 @@ const foto = (p, nome) => FOTOS ? p.screenshot({ path: join(FOTOS, nome) }) : nu
 const semRolagemH = (p) => p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth && (() => { const s = document.getElementById('app-scroll'); return !s || s.scrollWidth <= s.clientWidth; })());
 const texto = (p) => p.evaluate(() => document.body.innerText);
 const estadoHist = (p) => p.evaluate(() => ({ path: location.pathname, over: (history.state && history.state.__overlays) || null, dialogos: document.querySelectorAll('[role=dialog]').length }));
+const botoesBaixos = (p) => p.evaluate(() => [...document.querySelectorAll('main button, main a')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 39.5 && e.textContent.trim() !== 'Voltar'; }).map((e) => `${(e.getAttribute('aria-label') || e.textContent).trim().slice(0, 30)}:${Math.round(e.getBoundingClientRect().height)}`));
 async function abrir(p) { await p.goto(BASE + '/'); await p.waitForTimeout(1500); }
 
 // (a) desligado: nada aparece
@@ -223,6 +224,7 @@ for (const w of [320, 390]) {
   // jogador comum
   const p = await novaPagina(320, BETA);
   await p.goto(BASE + '/beta-admin'); await p.waitForTimeout(1500);
+  rec('(e) aviso: link com 40 px ou mais', (await botoesBaixos(p)).length === 0, await botoesBaixos(p));
   rec('(e) jogador vê "Só o admin pode ver esta tela." e link para o Início', await p.getByText('Só o admin pode ver esta tela.').isVisible() && await p.getByRole('link', { name: 'Ir para o Início' }).isVisible());
   await p.context().close();
 }
@@ -257,6 +259,7 @@ for (const w of [320, 390]) {
   await p.getByRole('button', { name: 'Marcar como resolvido' }).click(); await p.waitForTimeout(800);
   rec('(e) POST de status certo', p.posts.status.at(-1)?.id === 'R1' && p.posts.status.at(-1)?.status === 'resolvido', p.posts.status);
   rec('(e) lista recarregada depois de mudar', p.reportesGet.length >= 2, p.reportesGet);
+  rec('(e) reportes: todo botão visível com 40 px ou mais', (await botoesBaixos(p)).length === 0, await botoesBaixos(p));
   // Todos + carregar mais
   await p.getByRole('button', { name: 'Todos', exact: true }).click(); await p.waitForTimeout(800);
   await p.getByRole('button', { name: 'Carregar mais' }).click(); await p.waitForTimeout(800);
@@ -278,6 +281,7 @@ for (const w of [320, 390]) {
   await p.getByLabel('ID ou @usuário do convidado').fill('@123');
   await p.getByRole('button', { name: 'Adicionar' }).click(); await p.waitForTimeout(300);
   rec('(e) convidado sem @, sem repetir', (await p.locator('main ul li').count()) === 1 && await p.getByText('Esse convidado já está na lista.').isVisible(), await p.locator('main ul li').allTextContents());
+  rec('(e) chave: todo botão visível com 40 px ou mais', (await botoesBaixos(p)).length === 0, await botoesBaixos(p));
   await foto(p, 'beta-e-chave-320.png');
   rec('(e) sem rolagem horizontal na chave', await semRolagemH(p));
   await salvar.click(); await p.waitForTimeout(500);

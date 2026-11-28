@@ -104,7 +104,7 @@ function BetaAdminPage() {
       <main className="flex-1 mx-auto w-full max-w-2xl px-4 pt-6 pb-20">
         <BackButton />
         <p className="mt-6 text-texto-secundario">Só o admin pode ver esta tela.</p>
-        <Link to="/" className="mt-3 inline-block rounded-full bg-superficie-2 px-4 py-2 text-sm font-bold">
+        <Link to="/" className="mt-3 inline-flex items-center rounded-full bg-superficie-2 px-4 py-2 min-h-10 text-sm font-bold">
           Ir para o Início
         </Link>
       </main>
@@ -124,7 +124,7 @@ function BetaAdminPage() {
               aria-pressed={a.id === aba}
               onClick={() => setAba(a.id)}
               className={cn(
-                "shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition-colors",
+                "shrink-0 whitespace-nowrap rounded-full px-4 py-2 min-h-10 text-sm font-bold transition-colors",
                 a.id === aba ? "bg-destaque text-white" : "bg-superficie-2 text-foreground",
               )}
             >
@@ -190,7 +190,7 @@ function AbaReportes() {
               aria-pressed={f.id === filtro}
               onClick={() => setFiltro(f.id)}
               className={cn(
-                "shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition-colors",
+                "shrink-0 whitespace-nowrap rounded-full px-4 py-2 min-h-10 text-sm font-bold transition-colors",
                 f.id === filtro ? "bg-destaque text-white" : "bg-superficie-2 text-foreground",
               )}
             >
@@ -212,7 +212,7 @@ function AbaReportes() {
             <button
               type="button"
               onClick={() => q.refetch()}
-              className="mt-2 rounded-full bg-superficie-2 px-4 py-2 text-sm font-bold"
+              className="mt-2 rounded-full bg-superficie-2 px-4 py-2 min-h-10 text-sm font-bold"
             >
               Tentar de novo
             </button>
@@ -234,7 +234,7 @@ function AbaReportes() {
             type="button"
             onClick={() => q.fetchNextPage()}
             disabled={q.isFetchingNextPage}
-            className="mx-auto flex min-w-0 items-center justify-center gap-2 rounded-full bg-superficie-2 px-5 py-2.5 text-sm font-bold disabled:opacity-60"
+            className="mx-auto flex min-w-0 items-center justify-center gap-2 rounded-full bg-superficie-2 px-5 py-2.5 min-h-10 text-sm font-bold disabled:opacity-60"
           >
             {q.isFetchingNextPage && <Loader2 className="size-4 shrink-0 animate-spin" />}
             <span className="truncate">Carregar mais</span>
@@ -302,7 +302,7 @@ function CartaoReporte({ r, aoMenu, aoPrint }: { r: Reporte; aoMenu: () => void;
         <button
           type="button"
           onClick={() => setExpandido((v) => !v)}
-          className="mt-1 rounded px-1 py-1 text-xs font-bold text-destaque"
+          className="mt-1 min-h-10 rounded px-1 py-1 text-xs font-bold text-destaque"
         >
           {expandido ? "ver menos" : "ver mais"}
         </button>
@@ -318,7 +318,7 @@ function CartaoReporte({ r, aoMenu, aoPrint }: { r: Reporte; aoMenu: () => void;
             type="button"
             aria-expanded={tecnicoAberto}
             onClick={() => setTecnicoAberto((v) => !v)}
-            className="flex min-w-0 items-center gap-1 rounded px-1 py-1 text-xs font-bold text-texto-secundario"
+            className="flex min-h-10 min-w-0 items-center gap-1 rounded px-1 py-1 text-xs font-bold text-texto-secundario"
           >
             <ChevronDown className={cn("size-4 shrink-0 transition-transform", tecnicoAberto && "rotate-180")} />
             <span className="truncate">Dados técnicos</span>
@@ -371,7 +371,7 @@ function AbaChave() {
     return (
       <div className="mt-3 rounded-2xl bg-superficie-1 p-4 text-sm">
         <p className="text-queda">{(q.error as Error | null)?.message ?? "Não foi possível carregar."}</p>
-        <button type="button" onClick={() => q.refetch()} className="mt-2 rounded-full bg-superficie-2 px-4 py-2 text-sm font-bold">
+        <button type="button" onClick={() => q.refetch()} className="mt-2 rounded-full bg-superficie-2 px-4 py-2 min-h-10 text-sm font-bold">
           Tentar de novo
         </button>
       </div>
@@ -461,7 +461,7 @@ function AbaChave() {
         <button
           type="submit"
           disabled={!limparConvidado(novo)}
-          className="shrink-0 rounded-xl bg-superficie-2 px-4 py-2.5 text-sm font-bold disabled:opacity-50"
+          className="shrink-0 rounded-xl bg-superficie-2 px-4 py-2.5 min-h-10 text-sm font-bold disabled:opacity-50"
         >
           Adicionar
         </button>
