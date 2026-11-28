@@ -76,6 +76,15 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-superficie-1: var(--superficie-1);
+  --color-superficie-2: var(--superficie-2);
+  --color-texto-secundario: var(--texto-secundario);
+  --color-linha: var(--linha);
+  --color-destaque: var(--destaque);
+  --color-ao-vivo: var(--ao-vivo);
+  --color-alta: var(--alta);
+  --color-queda: var(--queda);
+  --color-ouro: var(--ouro);
 }
 
 :root {
@@ -119,6 +128,31 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /*
+   * Tokens semânticos do Beta (spec 5.10). Estão em :root, não em .dark, porque
+   * são novos e o app força .dark: aqui valem os valores ESCUROS, iguais ao que
+   * o app mostra hoje. O claro está em .tema-claro (mais abaixo) e nada o aplica
+   * nesta fase.
+   *   --superficie-1      = bg-white/5       (cartões, linhas)
+   *   --superficie-2      = bg-white/10      (hover, chips, campos)
+   *   --texto-secundario  = text-muted-foreground (.dark)
+   *   --linha             = border-white/10  (divisórias)
+   *   --destaque          = roxo da marca #957AF8
+   *   --ao-vivo           = red-500 (#ef4444, selo AO VIVO)
+   *   --alta              = emerald-500 (#10b981, sobe / ok)
+   *   --queda             = red-400 (#f87171, desce)
+   *   --ouro              = amber-400 (#fbbf24, coroa / destaque dourado)
+   */
+  --superficie-1: color-mix(in oklab, white 5%, transparent);
+  --superficie-2: color-mix(in oklab, white 10%, transparent);
+  --texto-secundario: oklch(0.704 0.04 256.788);
+  --linha: color-mix(in oklab, white 10%, transparent);
+  --destaque: #957af8;
+  --ao-vivo: #ef4444;
+  --alta: #10b981;
+  --queda: #f87171;
+  --ouro: #fbbf24;
 }
 
 .dark {
@@ -154,6 +188,23 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+
+/*
+ * Modo claro (spec 5.10, paleta do protótipo): DEFINIDO, NÃO LIGADO. Nenhum
+ * elemento recebe a classe .tema-claro nesta fase. Fica depois de :root para
+ * vencer na cascata quando for aplicado.
+ */
+.tema-claro {
+  --superficie-1: #f2f2f7;
+  --superficie-2: #e5e5ea;
+  --texto-secundario: #6b6b73;
+  --linha: rgba(0, 0, 0, 0.1);
+  --destaque: #6c4ce8;
+  --ao-vivo: #d61f35;
+  --alta: #087a54;
+  --queda: #d1323a;
+  --ouro: #a16207;
 }
 
 @layer base {
