@@ -19,30 +19,39 @@ jobs:
 
       # Os dois workflows (deploy.yml e preview-sala-tv.yml) mexem no MESMO
       # Worker (tanstack-start-app). Em 28/11 o `secret put` do deploy falhou
-      # porque a prévia subiu uma versão no meio. Este passo só ESPERA o outro
-      # terminar — nunca cancela nada (um grupo de concorrência compartilhado
-      # poderia cancelar um deploy de produção que estivesse na fila).
-      # Aqui só espera prévia EM ANDAMENTO (não a da fila), para a prévia nunca segurar a produção indefinidamente.
+      # porque a prévia subiu uma versão no meio. Este passo só ESPERA — nunca
+      # cancela nada (um grupo de concorrência compartilhado poderia cancelar
+      # um deploy de produção que estivesse na fila).
+      # Espera só as execuções do outro workflow CRIADAS ANTES desta (em
+      # andamento ou na fila): a mais antiga sempre passa primeiro, então os
+      # dois nunca ficam esperando um ao outro.
       # Confere a cada 15 s, no máximo 10 min; depois segue com um aviso. Se a
       # consulta falhar (ex.: token sem permissão de ler Actions), não trava:
       # segue com um aviso no log.
-      - name: Esperar preview-sala-tv.yml terminar (mesmo Worker)
+      - name: Esperar preview-sala-tv.yml mais antigo terminar (mesmo Worker)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Sem `shell: bash` o padrão é `bash -e` (sem pipefail): sem isto, falha
+          # do `gh` no pipe com o jq passaria despercebida (n vazio).
+          set -o pipefail
+          if ! meu=$(gh run view "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" --json createdAt --jq .createdAt); then
+            echo "::warning::Não consegui ler o horário desta execução; seguindo sem esperar."
+            exit 0
+          fi
           fim=$((SECONDS + 600))
           while true; do
-            if ! n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow preview-sala-tv.yml --limit 20 \
-                --json status --jq '[.[] | select(.status == "in_progress")] | length'); then
+            if ! n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow preview-sala-tv.yml --limit 20 --json status,createdAt \
+                | jq --arg meu "$meu" '[.[] | select(.createdAt < $meu and (.status == "in_progress" or .status == "queued"))] | length'); then
               echo "::warning::Não consegui consultar preview-sala-tv.yml; seguindo sem esperar."
               break
             fi
             [ "$n" = "0" ] && break
             if [ "$SECONDS" -ge "$fim" ]; then
-              echo "::warning::preview-sala-tv.yml ainda rodando depois de 10 min; seguindo mesmo assim."
+              echo "::warning::preview-sala-tv.yml mais antigo ainda rodando depois de 10 min; seguindo mesmo assim."
               break
             fi
-            echo "preview-sala-tv.yml rodando ($n); esperando 15 s..."
+            echo "preview-sala-tv.yml mais antigo rodando ($n); esperando 15 s..."
             sleep 15
           done
 
