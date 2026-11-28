@@ -28,7 +28,12 @@ interface FlagsKvLike {
   put?(key: string, value: string): Promise<void>;
 }
 
+type WaitUntilCtx = { waitUntil: (promise: Promise<unknown>) => void };
+
 const KV_KEY = "beta-config";
+const MODOS_VALIDOS: readonly string[] = ["desligado", "convidados", "todos", "obrigatorio"];
+// Print só do Drive (o upload do app devolve drive.google.com; lh3 é o proxy de imagem).
+const HOSTS_PRINT: readonly string[] = ["drive.google.com", "lh3.googleusercontent.com"];
 const CACHE_CONFIG_MS = 60_000;
 const POR_PAGINA = 20;
 const STATUS_VALIDOS: readonly string[] = ["novo", "visto", "resolvido"];
@@ -53,18 +58,31 @@ export function _zerarCacheConfigBeta(): void {
   cacheConfig = null;
 }
 
+/** Config lida direto do KV (sem cache); erro ou sem KV → padrão. */
+async function lerConfigDoKv(): Promise<ConfigBeta> {
+  try {
+    const kv = getKv();
+    return kv ? lerConfigBeta(await kv.get(KV_KEY)) : { ...CONFIG_BETA_PADRAO, convidados: [] };
+  } catch {
+    return { ...CONFIG_BETA_PADRAO, convidados: [] };
+  }
+}
+
 async function lerConfig(): Promise<ConfigBeta> {
   const agora = Date.now();
   if (cacheConfig && agora - cacheConfig.em < CACHE_CONFIG_MS) return cacheConfig.valor;
-  let valor: ConfigBeta;
-  try {
-    const kv = getKv();
-    valor = kv ? lerConfigBeta(await kv.get(KV_KEY)) : { ...CONFIG_BETA_PADRAO, convidados: [] };
-  } catch {
-    valor = { ...CONFIG_BETA_PADRAO, convidados: [] };
-  }
+  const valor = await lerConfigDoKv();
   cacheConfig = { valor, em: agora };
   return valor;
+}
+
+function printDoDrive(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && HOSTS_PRINT.includes(u.hostname) ? url.slice(0, 500) : "";
+  } catch {
+    return "";
+  }
 }
 
 async function lerCorpo(request: Request): Promise<Record<string, unknown> | null> {
@@ -84,24 +102,34 @@ function ehConvidado(cfg: ConfigBeta, id: string, usuario: string): boolean {
   return cfg.convidados.some((c) => alvos.includes(semArroba(c)));
 }
 
+const ehAdmin = (sessao: { id: string }): boolean => sessao.id.trim() === ADMIN_TG_ID;
+
+/** podeVer não depende da escolha: dá para saber sem ler o D1. */
+function podeVerBeta(cfg: ConfigBeta, sessao: { id: string; usuario: string }): boolean {
+  return estadoBeta({ modo: cfg.modo, convidado: ehConvidado(cfg, sessao.id, sessao.usuario), admin: ehAdmin(sessao), escolha: null }).podeVer;
+}
+
 async function estadoDe(sessao: { id: string; usuario: string }, db: NonNullable<ReturnType<typeof getCatalogoDb>>) {
   const cfg = await lerConfig();
   const escolha = await lerEscolha(db, sessao.id);
   const est = estadoBeta({
     modo: cfg.modo,
     convidado: ehConvidado(cfg, sessao.id, sessao.usuario),
-    admin: sessao.id.trim() === ADMIN_TG_ID,
+    admin: ehAdmin(sessao),
     escolha: escolha.versao,
   });
   return { cfg, escolha, est };
 }
 
+const estadoSemBeta = (modo: ConfigBeta["modo"]) =>
+  json({ ok: true, modo, podeVer: false, podeVoltar: false, versao: "anterior", boasVindasVistas: true });
+
 export async function betaEstadoController(request: Request): Promise<Response> {
   const sessao = await verifySessionToken(extractBearerToken(request));
-  if (!sessao?.id) {
-    const cfg = await lerConfig();
-    return json({ ok: true, modo: cfg.modo, podeVer: false, podeVoltar: false, versao: "anterior", boasVindasVistas: true });
-  }
+  if (!sessao?.id) return estadoSemBeta((await lerConfig()).modo);
+  // Desligado e não admin: nada a ler no D1 (caso mais comum enquanto o Beta não abre).
+  const cfgAntes = await lerConfig();
+  if (cfgAntes.modo === "desligado" && !ehAdmin(sessao)) return estadoSemBeta(cfgAntes.modo);
   const db = getCatalogoDb();
   if (!db) return SEM_BANCO();
   try {
@@ -114,13 +142,14 @@ export async function betaEstadoController(request: Request): Promise<Response> 
   }
 }
 
-/** Monta o reporte limpo (cortes e validações) e grava; avisa o admin sem esperar. */
+/** Monta o reporte limpo (cortes e validações) e grava; avisa o admin sem esperar (ctx.waitUntil quando há). */
 async function gravarReporte(
   db: NonNullable<ReturnType<typeof getCatalogoDb>>,
   sessao: { id: string; usuario: string },
   c: { texto: string; tela: string; rota: string; versao: Versao; motivo: MotivoVolta | null; printUrl: string; tecnico: string },
+  ctx?: WaitUntilCtx,
 ): Promise<{ id: string } | { erro: "limite" }> {
-  const printUrl = c.printUrl.startsWith("https://") ? c.printUrl.slice(0, 500) : "";
+  const printUrl = printDoDrive(c.printUrl);
   const tela = c.tela.slice(0, 120);
   const r = await criarReporte(
     db,
@@ -138,9 +167,9 @@ async function gravarReporte(
     Date.now(),
   );
   if ("id" in r) {
-    // Aviso ao admin: sem esperar e sem derrubar o reporte.
+    // Aviso ao admin: sem esperar e sem derrubar o reporte; o waitUntil segura o Worker até terminar.
     try {
-      void Promise.resolve(
+      const tarefa = Promise.resolve(
         registrarNotificacao({
           evento: "reporte_beta",
           ownerId: ADMIN_TG_ID,
@@ -151,7 +180,9 @@ async function gravarReporte(
           topicId: r.id,
           comentario: c.texto,
         }),
-      ).catch(() => {});
+      ).catch((err) => console.warn("[Beta] Erro ao avisar o admin:", err));
+      if (ctx) ctx.waitUntil(tarefa);
+      else void tarefa;
     } catch {
       /* ignora */
     }
@@ -159,7 +190,7 @@ async function gravarReporte(
   return r;
 }
 
-export async function betaEscolhaController(request: Request): Promise<Response> {
+export async function betaEscolhaController(request: Request, ctx?: WaitUntilCtx): Promise<Response> {
   const sessao = await verifySessionToken(extractBearerToken(request));
   if (!sessao?.id) return json({ ok: false, erro: "Entre na sua conta." }, 401);
   const corpo = await lerCorpo(request);
@@ -177,15 +208,25 @@ export async function betaEscolhaController(request: Request): Promise<Response>
     const texto = str(corpo.texto).trim();
     if (motivo || texto) {
       // Reporte de quem trocou de versão: versao = a que estava usando antes da troca.
-      await gravarReporte(db, sessao, {
-        texto: texto || (motivo ? ROTULO_MOTIVO[motivo] : ""),
-        tela: str(corpo.tela),
-        rota: str(corpo.rota),
-        versao: versao === "anterior" ? "beta" : "anterior",
-        motivo,
-        printUrl: "",
-        tecnico: "",
-      });
+      // Try próprio: a escolha já está gravada, um erro aqui não vira 500.
+      try {
+        await gravarReporte(
+          db,
+          sessao,
+          {
+            texto: texto || (motivo ? ROTULO_MOTIVO[motivo] : ""),
+            tela: str(corpo.tela),
+            rota: str(corpo.rota),
+            versao: versao === "anterior" ? "beta" : "anterior",
+            motivo,
+            printUrl: "",
+            tecnico: "",
+          },
+          ctx,
+        );
+      } catch (err) {
+        console.warn("[betaEscolhaController] Reporte da troca falhou:", err);
+      }
     }
     return json({ ok: true, versao });
   } catch (err) {
@@ -194,13 +235,14 @@ export async function betaEscolhaController(request: Request): Promise<Response>
   }
 }
 
-export async function betaReporteController(request: Request): Promise<Response> {
+export async function betaReporteController(request: Request, ctx?: WaitUntilCtx): Promise<Response> {
   const sessao = await verifySessionToken(extractBearerToken(request));
   if (!sessao?.id) return json({ ok: false, erro: "Entre na sua conta." }, 401);
   const corpo = await lerCorpo(request);
   if (!corpo) return json({ ok: false, erro: "Pedido inválido." }, 400);
   const texto = str(corpo.texto).trim();
   if (!texto) return json({ ok: false, erro: "Conte o que aconteceu." }, 400);
+  if (!podeVerBeta(await lerConfig(), sessao)) return json({ ok: false, erro: "O Beta test não está aberto para você." }, 403);
   const db = getCatalogoDb();
   if (!db) return SEM_BANCO();
   try {
@@ -212,7 +254,7 @@ export async function betaReporteController(request: Request): Promise<Response>
       motivo: null,
       printUrl: str(corpo.printUrl),
       tecnico: str(corpo.tecnico),
-    });
+    }, ctx);
     if ("erro" in r) return json({ ok: false, erro: "Você já enviou muitos reportes hoje. Tente amanhã." }, 429);
     return json({ ok: true, id: r.id });
   } catch (err) {
@@ -261,7 +303,8 @@ export async function betaReporteStatusController(request: Request): Promise<Res
 
 export async function betaConfigGetController(request: Request): Promise<Response> {
   if (!(await requestProvesAdmin(request))) return SO_ADMIN();
-  return json({ ok: true, config: await lerConfig() });
+  // Direto do KV: o admin vê o que salvou, sem o cache de 60 s do estado.
+  return json({ ok: true, config: await lerConfigDoKv() });
 }
 
 export async function betaConfigPostController(request: Request): Promise<Response> {
@@ -269,7 +312,11 @@ export async function betaConfigPostController(request: Request): Promise<Respon
   const kv = getKv();
   if (!kv?.put) return json({ ok: false, erro: "Armazenamento indisponível." }, 503);
   const corpo = await lerCorpo(request);
-  const config = lerConfigBeta(corpo ? JSON.stringify(corpo) : null);
+  if (!corpo || typeof corpo.modo !== "string" || !MODOS_VALIDOS.includes(corpo.modo)) {
+    return json({ ok: false, erro: "Configuração inválida." }, 400);
+  }
+  // Convidados inválidos são limpos por lerConfigBeta.
+  const config = lerConfigBeta(JSON.stringify(corpo));
   try {
     await kv.put(KV_KEY, JSON.stringify(config));
     _zerarCacheConfigBeta();

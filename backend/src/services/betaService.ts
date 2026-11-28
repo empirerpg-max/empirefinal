@@ -46,10 +46,12 @@ export async function lerEscolha(
   jogadorId: string,
 ): Promise<{ versao: Versao | null; boasVindasEm: number | null }> {
   await garantirTabelasBeta(db);
-  const l = (await db
+  // .all() + [0]: o tipo local do D1 não tem .first() (o D1 real e o falso têm .all()).
+  const { results } = await db
     .prepare("SELECT versao, boas_vindas_em FROM beta_jogador WHERE jogador_id = ?")
     .bind(jogadorId)
-    .first()) as { versao: string | null; boas_vindas_em: number | null } | null;
+    .all<{ versao: string | null; boas_vindas_em: number | null }>();
+  const l = results[0];
   const versao = l?.versao === "beta" || l?.versao === "anterior" ? l.versao : null;
   return { versao, boasVindasEm: l?.boas_vindas_em ?? null };
 }
@@ -88,11 +90,11 @@ export async function criarReporte(
 ): Promise<{ id: string } | { erro: "limite" }> {
   await garantirTabelasBeta(db);
   const inicioDia = Math.floor(agora / 86_400_000) * 86_400_000; // meia-noite UTC
-  const c = (await db
+  const { results: contagem } = await db
     .prepare("SELECT COUNT(*) AS n FROM beta_reporte WHERE jogador_id = ? AND criado_em >= ?")
     .bind(r.jogadorId, inicioDia)
-    .first()) as { n: number } | null;
-  if ((c?.n ?? 0) >= MAX_REPORTES_DIA) return { erro: "limite" };
+    .all<{ n: number }>();
+  if ((contagem[0]?.n ?? 0) >= MAX_REPORTES_DIA) return { erro: "limite" };
   // Colisão de id (outro isolate no mesmo ms com o mesmo sufixo): tenta de novo com outro sufixo.
   for (let tentativa = 0; ; tentativa++) {
     const id = novoIdReporte();
@@ -140,6 +142,8 @@ export async function listarReportes(
 export async function mudarStatusReporte(db: D1DatabaseLike, id: string, status: StatusReporte): Promise<boolean> {
   if (!STATUS.includes(status)) return false;
   await garantirTabelasBeta(db);
-  const r = (await db.prepare("UPDATE beta_reporte SET status = ? WHERE id = ?").bind(status, id).run()) as any;
-  return (r?.meta?.changes ?? 0) > 0;
+  // meta.changes vem do D1 real (e do falso), mas não está no tipo local D1Result.
+  const r = await db.prepare("UPDATE beta_reporte SET status = ? WHERE id = ?").bind(status, id).run();
+  const meta = "meta" in r ? (r.meta as { changes?: number } | undefined) : undefined;
+  return (meta?.changes ?? 0) > 0;
 }

@@ -1821,7 +1821,7 @@ export async function handleEmpireApiRoutes(
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
     }
-    response = await betaEscolhaController(request);
+    response = await betaEscolhaController(request, ctx);
   } else if (url.pathname === "/api/beta/reporte") {
     if (request.method !== "POST") {
       return new Response(JSON.stringify({ ok: false, erro: "Use POST para /api/beta/reporte." }), {
@@ -1829,7 +1829,7 @@ export async function handleEmpireApiRoutes(
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
     }
-    response = await betaReporteController(request);
+    response = await betaReporteController(request, ctx);
   } else if (url.pathname === "/api/beta/reportes") {
     if (request.method !== "GET") {
       return new Response(JSON.stringify({ ok: false, erro: "Use GET para /api/beta/reportes." }), {
