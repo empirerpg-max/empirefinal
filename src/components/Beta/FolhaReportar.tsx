@@ -1,22 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Paperclip } from "lucide-react";
 import { toast } from "sonner";
-import { useBeta } from "@/hooks/useBeta";
+import { useBeta, useTelaAtual } from "@/hooks/useBeta";
 import { uploadToDrive } from "@/lib/driveUpload";
-import { telaDaRota } from "@/lib/uso/coletor";
+import { nomeDaTela } from "@/lib/uso/nomes";
 import { Folha } from "./Folha";
 
 // Pasta do Drive do print. Trocar aqui quando existir a pasta própria do Beta.
 export const PASTA_PRINT_REPORTE = "socialPosts" as const;
 const MAX_TEXTO = 2000;
 const MAX_PRINT = 8 * 1024 * 1024;
-
-function telaAtual(): string {
-  if (typeof window === "undefined") return "/";
-  const search: Record<string, unknown> = {};
-  new URLSearchParams(window.location.search).forEach((v, k) => (search[k] = v));
-  return telaDaRota(window.location.pathname, search);
-}
 
 export function FolhaReportar({ aberto, aoFechar }: { aberto: boolean; aoFechar: () => void }) {
   const { reportar } = useBeta();
@@ -26,7 +19,7 @@ export function FolhaReportar({ aberto, aoFechar }: { aberto: boolean; aoFechar:
   const [tecnico, setTecnico] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
-  const [tela, setTela] = useState("");
+  const tela = useTelaAtual();
   const arquivo = useRef<HTMLInputElement>(null);
 
   // Ao abrir: limpa o formulário e fixa o nome da tela de onde o jogador veio.
@@ -38,7 +31,6 @@ export function FolhaReportar({ aberto, aoFechar }: { aberto: boolean; aoFechar:
     setTecnico(true);
     setErro("");
     setEnviando(false);
-    setTela(telaAtual());
   }, [aberto]);
 
   return (
@@ -81,7 +73,7 @@ export function FolhaReportar({ aberto, aoFechar }: { aberto: boolean; aoFechar:
               </span>
             </label>
 
-            <p className="min-w-0 truncate px-1 text-xs text-muted-foreground">Tela: {tela}</p>
+            <p className="min-w-0 truncate px-1 text-xs text-muted-foreground">Tela: {nomeDaTela(tela)}</p>
 
             <div>
               <input

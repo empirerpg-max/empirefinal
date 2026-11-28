@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouterState } from "@tanstack/react-router";
 import { api } from "@/lib/api";
 import { opcoesConsulta } from "@/lib/consultas";
 import { acaoUsoVoltar, type MotivoVolta, type Versao } from "@/lib/beta/regras";
@@ -38,16 +39,26 @@ const FORA: BetaContexto = {
 
 const Ctx = createContext<BetaContexto>(FORA);
 
-/** Tela e rota atuais (rota sem query string). */
-function telaERota(): { tela: string; rota: string } {
-  if (typeof window === "undefined") return { tela: "/", rota: "/" };
-  const rota = window.location.pathname;
-  const search: Record<string, unknown> = {};
-  new URLSearchParams(window.location.search).forEach((v, k) => (search[k] = v));
-  return { tela: telaDaRota(rota, search), rota };
+/**
+ * Nome da tela atual: id da rota mais funda + aba validada (igual à medição de uso).
+ * Só a search validada (`_strictSearch`), nunca chaves cruas da URL.
+ */
+export function useTelaAtual(): string {
+  return useRouterState({
+    select: (s) => {
+      const ultima = s.matches[s.matches.length - 1];
+      return ultima ? telaDaRota(ultima.routeId, (ultima._strictSearch ?? {}) as Record<string, unknown>) : "";
+    },
+  });
+}
+
+/** Rota atual sem query string. */
+function rotaAtual(): string {
+  return typeof window === "undefined" ? "/" : window.location.pathname;
 }
 
 export function BetaProvider({ children }: { children: ReactNode }) {
+  const telaAtual = useTelaAtual();
   const qc = useQueryClient();
   // Primeiro desenho já com o estado guardado (app é ssr:false, leitura síncrona).
   const [guardado] = useState<EstadoBeta>(() => {
@@ -85,7 +96,8 @@ export function BetaProvider({ children }: { children: ReactNode }) {
 
   const trocarVersao = useCallback<BetaContexto["trocarVersao"]>(
     async (v, extra) => {
-      const { tela, rota } = telaERota();
+      const tela = telaAtual;
+      const rota = rotaAtual();
       try {
         await api.betaEscolher({ versao: v, motivo: extra?.motivo, texto: extra?.texto, tela, rota });
       } catch {
@@ -100,12 +112,13 @@ export function BetaProvider({ children }: { children: ReactNode }) {
       if (v === "anterior") usoGlobal()?.acao(acaoUsoVoltar(extra?.motivo));
       return true;
     },
-    [qc],
+    [qc, telaAtual],
   );
 
   const reportar = useCallback<BetaContexto["reportar"]>(
     async (r) => {
-      const { tela, rota } = telaERota();
+      const tela = telaAtual;
+      const rota = rotaAtual();
       try {
         await api.betaReportar({
           texto: r.texto,
@@ -120,7 +133,7 @@ export function BetaProvider({ children }: { children: ReactNode }) {
         return { ok: false as const, erro: err instanceof Error ? err.message : "Não deu para enviar." };
       }
     },
-    [estado.versao],
+    [estado.versao, telaAtual],
   );
 
   const valor = useMemo<BetaContexto>(

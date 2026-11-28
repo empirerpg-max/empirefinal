@@ -119,7 +119,7 @@ for (const w of [320, 390]) {
   rec('(c) Reportar abre por cima (2 folhas)', (await estadoHist(p)).dialogos === 2, await estadoHist(p));
   const enviar = p.getByRole('button', { name: 'Enviar' });
   rec('(c) Enviar desabilitado com texto vazio', await enviar.isDisabled());
-  rec('(c) mostra "Tela: /" e interruptor ligado', await p.getByText(/^Tela: \//).isVisible() && (await p.getByRole('switch').getAttribute('aria-checked')) === 'true');
+  rec('(c) mostra "Tela: Início" e interruptor ligado', await p.getByText('Tela: Início', { exact: true }).isVisible() && (await p.getByRole('switch').getAttribute('aria-checked')) === 'true');
   await foto(p, 'beta-c-reportar-320.png');
   await p.goBack(); await p.waitForTimeout(600);
   let h = await estadoHist(p);
@@ -134,7 +134,7 @@ for (const w of [320, 390]) {
   rec('(c) contador de caracteres', await p.getByText('16/2000').isVisible());
   await p.getByRole('button', { name: 'Enviar' }).click(); await p.waitForTimeout(800);
   const rp = p.posts.reporte.at(-1);
-  rec('(c) POST do reporte com texto, tela, rota e dados técnicos', rp?.texto === 'Teste de reporte' && rp.rota === '/' && rp.versao === 'beta' && !!rp.tecnico, rp && { ...rp, tecnico: (rp.tecnico || '').slice(0, 40) });
+  rec('(c) POST do reporte com texto, tela, rota e dados técnicos', rp?.texto === 'Teste de reporte' && rp.tela === '/' && rp.rota === '/' && rp.versao === 'beta' && !!rp.tecnico, rp && { ...rp, tecnico: (rp.tecnico || '').slice(0, 40) });
   rec('(c) toast "Recebido! A moderação vai olhar."', await p.getByText('Recebido! A moderação vai olhar.').isVisible());
   h = await estadoHist(p);
   rec('(c) depois do envio só a FolhaBeta segue aberta', h.dialogos === 1, h);
@@ -148,6 +148,21 @@ for (const w of [320, 390]) {
   await p.locator('input[type=file]').setInputFiles({ name: 'g.png', mimeType: 'image/png', buffer: Buffer.alloc(8 * 1024 * 1024 + 1) });
   rec('(c) print acima de 8 MB recusado', await p.getByText('A imagem passa de 8 MB.').isVisible());
   rec('(c) input aceita só imagem', (await p.locator('input[type=file]').getAttribute('accept')) === 'image/*');
+  await p.context().close();
+}
+
+// (c2) rota com parâmetro: a tela é o routeId, nunca o valor do caminho
+{
+  const p = await novaPagina(390, BETA);
+  await p.goto(BASE + '/album/SegredoXYZ99?aba=SegredoAba77'); await p.waitForTimeout(1500);
+  await p.getByRole('button', { name: /Beta test: abrir/ }).click(); await p.waitForTimeout(400);
+  await p.getByRole('button', { name: 'Reportar um problema' }).click(); await p.waitForTimeout(400);
+  const linha = await p.getByText(/^Tela: /).textContent();
+  rec('(c2) linha "Tela:" mostra o routeId, sem o valor do caminho', linha === 'Tela: /album/$id' && !/Segredo/.test(linha), linha);
+  await p.locator('textarea').fill('x');
+  await p.getByRole('button', { name: 'Enviar' }).click(); await p.waitForTimeout(800);
+  const rp = p.posts.reporte.at(-1);
+  rec('(c2) POST leva o routeId em tela e sem valor de aba cru', rp?.tela === '/album/$id' && !/Segredo/.test(rp.tela), rp && { tela: rp.tela, rota: rp.rota });
   await p.context().close();
 }
 
