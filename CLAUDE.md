@@ -94,3 +94,12 @@ Antes de mexer na medição de uso (`src/lib/uso/*`, `backend/src/services/usoSe
 que não é, mapa dos arquivos, tabelas, liga/desliga no KV e custo. Todo novo POST
 automático em segundo plano precisa entrar em `IGNORADOS` (`src/lib/uso/coletor.ts`)
 e nenhum conteúdo de usuário pode entrar em `alvo`.
+
+## Fundações do Beta (referência)
+
+Antes de criar ou mexer numa tela do Beta, ler `docs/beta-fundacoes.md`
+(peças, exemplos, regras e limites; vitrine só admin em `/beta-pecas`).
+Tela nova do Beta usa essas peças: `ScrollRow` em toda fileira de
+abas/filtros, `useHistoryOverlay` em toda camada por cima (folha, modal,
+player), `ActionSheet` em todo menu ⋯, `useIsAdmin`/`useJogador` para
+admin/jogador, e ação de menu que muda de tela marcada `navega: true`.
