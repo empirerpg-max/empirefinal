@@ -165,6 +165,15 @@ import {
   listarEnquetesChatController,
   votantesEnqueteChatController,
 } from "../controllers/tvController";
+import {
+  betaEstadoController,
+  betaEscolhaController,
+  betaReporteController,
+  betaReportesController,
+  betaReporteStatusController,
+  betaConfigGetController,
+  betaConfigPostController,
+} from "../controllers/betaController";
 import { registrarUsoController, resumoUsoController } from "../controllers/usoController";
 import {
   getRedCarpetFeedController,
@@ -593,6 +602,12 @@ export async function handleEmpireApiRoutes(
     "/api/tv/evento-admin",
     "/api/uso",
     "/api/uso/resumo",
+    "/api/beta/estado",
+    "/api/beta/escolha",
+    "/api/beta/reporte",
+    "/api/beta/reportes",
+    "/api/beta/reporte/status",
+    "/api/beta/config",
     "/api/tv/kick-hls",
     "/api/tv/red-carpet",
     "/api/tv/red-carpet/curtir",
@@ -1791,6 +1806,55 @@ export async function handleEmpireApiRoutes(
       });
     }
     response = await resumoUsoController(request);
+  } else if (url.pathname === "/api/beta/estado") {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ ok: false, erro: "Use GET para /api/beta/estado." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await betaEstadoController(request);
+  } else if (url.pathname === "/api/beta/escolha") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ ok: false, erro: "Use POST para /api/beta/escolha." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await betaEscolhaController(request);
+  } else if (url.pathname === "/api/beta/reporte") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ ok: false, erro: "Use POST para /api/beta/reporte." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await betaReporteController(request);
+  } else if (url.pathname === "/api/beta/reportes") {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ ok: false, erro: "Use GET para /api/beta/reportes." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await betaReportesController(request);
+  } else if (url.pathname === "/api/beta/reporte/status") {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ ok: false, erro: "Use POST para /api/beta/reporte/status." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    response = await betaReporteStatusController(request);
+  } else if (url.pathname === "/api/beta/config") {
+    if (request.method === "GET") response = await betaConfigGetController(request);
+    else if (request.method === "POST") response = await betaConfigPostController(request);
+    else {
+      return new Response(JSON.stringify({ ok: false, erro: "Use GET ou POST para /api/beta/config." }), {
+        status: 405,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
   } else if (url.pathname === "/api/tv/kick-hls") {
     response = await kickHlsTesteController(request);
   } else if (url.pathname === "/api/tv/evento-admin") {
