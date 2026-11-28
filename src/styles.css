@@ -139,7 +139,7 @@
    *   --texto-secundario  = text-muted-foreground (.dark)
    *   --linha             = border-white/10  (divisórias)
    *   --destaque          = roxo da marca #957AF8
-   *   --ao-vivo           = red-500 (#ef4444, selo AO VIVO)
+   *   --ao-vivo           = red-600 (#dc2626, selo AO VIVO, spec 6.20)
    *   --alta              = emerald-500 (#10b981, sobe / ok)
    *   --queda             = red-400 (#f87171, desce)
    *   --ouro              = amber-400 (#fbbf24, coroa / destaque dourado)
@@ -149,7 +149,7 @@
   --texto-secundario: oklch(0.704 0.04 256.788);
   --linha: color-mix(in oklab, white 10%, transparent);
   --destaque: #957af8;
-  --ao-vivo: #ef4444;
+  --ao-vivo: #dc2626;
   --alta: #10b981;
   --queda: #f87171;
   --ouro: #fbbf24;
@@ -191,20 +191,20 @@
 }
 
 /*
- * Modo claro (spec 5.10, paleta do protótipo): DEFINIDO, NÃO LIGADO. Nenhum
+ * Modo claro (spec 5.10 + regras de acessibilidade da 6.20 item 2, que prevalecem; paleta do protótipo): DEFINIDO, NÃO LIGADO. Nenhum
  * elemento recebe a classe .tema-claro nesta fase. Fica depois de :root para
  * vencer na cascata quando for aplicado.
  */
 .tema-claro {
   --superficie-1: #f2f2f7;
   --superficie-2: #e5e5ea;
-  --texto-secundario: #6b6b73;
+  --texto-secundario: #55555c;
   --linha: rgba(0, 0, 0, 0.1);
   --destaque: #6c4ce8;
   --ao-vivo: #d61f35;
   --alta: #087a54;
   --queda: #d1323a;
-  --ouro: #a16207;
+  --ouro: #92400e;
 }
 
 @layer base {
