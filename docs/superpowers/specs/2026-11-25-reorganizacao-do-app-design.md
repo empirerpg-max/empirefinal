@@ -114,7 +114,7 @@ conferida.
 
 ```
 ┌──────────────────────────────────────────────┐
-│ [logo] EMPIRE HUB [beta]        [＋] [🔔] (RV) │  ← topo
+│ [logo] EMPIRE HUB [beta]    [🔍] [＋] [🔔] (RV) │  ← topo
 ├──────────────────────────────────────────────┤
 │                                              │
 │                conteúdo                      │
@@ -136,8 +136,18 @@ conferida.
   molde dele: ícone ＋ simples, sem cor, num círculo com contorno fino.
   Abre a folha Criar (5.7). No computador, o Criar é o primeiro botão da
   barra lateral (e o ＋ do topo some, para não repetir).
-- **Busca:** no celular e no tablet, em **Catálogo › Buscar** (e nas buscas
-  do Fórum, do Social e dos Charts); no computador, campo aberto no topo.
+- **Busca (correção do usuário, 2026-11-28):** a **lupa fica no topo**, em
+  todas as telas e tamanhos, à esquerda do ＋, no mesmo molde do sino. Abre a
+  **Busca rápida de hoje** (`BuscaRapida`, `/api/busca`: Músicas, Vídeos,
+  Álbuns, Artistas), sem mudar nada nela. No computador vira o campo aberto
+  no topo (mesma busca). Catálogo › Buscar (fase 3) continua existindo para
+  filtrar e navegar; quando existir, a janela da lupa ganha "Ver tudo no
+  Catálogo". As buscas do Fórum, do Social e dos Charts continuam dentro de
+  cada tela.
+  Cabe em 320 px (conferido no protótipo v41, sem botões sobrepostos): logo,
+  selo e os 4 botões não encolhem (`shrink-0`); o nome "EMPIRE HUB" some
+  quando o próprio topo tem menos de 370 px (consulta de contêiner), senão
+  ele cobriria o selo beta.
 - **Sai do topo:** o botão Recarregar. Vira **puxar para baixo para
   atualizar** em toda tela com lista (call meu; o recarregar de hoje recarrega
   a página inteira).
@@ -1045,7 +1055,7 @@ largura da área do app):
 
 | Largura | Navegação | Conteúdo | Player |
 |---|---|---|---|
-| até 699px (celular) | barra de baixo com 5 abas; topo com logo + selo beta, ＋, sino e foto | 1 coluna | mini player acima da barra |
+| até 699px (celular) | barra de baixo com 5 abas; topo com logo + selo beta, lupa, ＋, sino e foto | 1 coluna | mini player acima da barra |
 | 700–999px (tablet) | **trilho lateral** com as 5 abas (ícone + nome); topo igual ao celular | grades com várias colunas (cartões de ~170px), prateleiras maiores | mini player flutuante embaixo |
 | 1000px ou mais (computador) | **barra lateral completa** (240px): logo, botão **Criar**, 5 abas, **Sua biblioteca** (Minhas playlists, Salvos), **Meu Império** (Perfil e economia, Meus lançamentos); topo com **campo de busca aberto**, sino e foto | conteúdo com largura máxima de ~1100px | **barra de player fixa** embaixo, de ponta a ponta (como no Spotify) |
 

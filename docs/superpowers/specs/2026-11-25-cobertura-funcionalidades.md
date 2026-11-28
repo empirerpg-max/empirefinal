@@ -19,7 +19,7 @@
 | Notificações push e preferências (sino) | sino + Meu Império › Notificações | P |
 | Instalar app, aviso de versão nova | igual (global) | D |
 | Recarregar | puxar a tela pra baixo | D |
-| Busca rápida (artistas, músicas, vídeos, álbuns) | Catálogo › Buscar (no computador, campo no topo) | P |
+| Busca rápida (artistas, músicas, vídeos, álbuns) | **lupa no topo, como hoje** (correção do usuário, 2026-11-28; no computador, campo aberto no topo) + Catálogo › Buscar | P |
 | Popups VMA / votação / festival | iguais (um componente só) + "Pra fazer hoje" | P |
 | Acesso Rápido (canais), Guia de Sobrevivência | Meu Império › Canais oficiais / Guia | P |
 

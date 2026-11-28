@@ -17,7 +17,7 @@ A fase 1 do design é grande demais para um plano só. São três planos, cada u
 | Parte | O que entrega | Visível para jogadores? |
 |---|---|---|
 | **1a (este plano)** | chave do admin, escolha de versão, reportes, faixa na versão anterior, selo BETA | não, enquanto a chave estiver **desligada** (padrão) |
-| 1b | casca nova: topo (logo + beta, ＋, sino, foto), barra de 5 abas / trilho / barra lateral (6.10), folha Criar (5.7.1), Meu Império (5.8), fileiras de abas do Início e do Social › Imprensa, faixa "Vendo como" (6.18), 404 em português (6.9), textos de Telegram (7), Geist no Beta (6.17) | só para quem está no Beta |
+| 1b | casca nova: topo (logo + beta, **lupa da Busca rápida**, ＋, sino, foto), barra de 5 abas / trilho / barra lateral (6.10), folha Criar (5.7.1), Meu Império (5.8), fileiras de abas do Início e do Social › Imprensa, faixa "Vendo como" (6.18), 404 em português (6.9), textos de Telegram (7), Geist no Beta (6.17) | só para quem está no Beta |
 | 1c | Início › Para você (faixa Ao vivo, cronômetro 6.14, "Pra fazer hoje"), aba Premiações, popup de boas-vindas e tutorial (6.12), guia "mudou de lugar" | só para quem está no Beta |
 
 ## Global Constraints
