@@ -59,3 +59,26 @@ export const ROTULO_MOTIVO: Record<MotivoVolta, string> = {
   visual_antigo: "Prefiro o visual antigo",
   outro: "Outro",
 };
+
+/** O que o app sabe do Beta para este jogador (resposta de GET /api/beta/estado). */
+export type EstadoBeta = {
+  modo: ModoBeta;
+  podeVer: boolean;
+  podeVoltar: boolean;
+  versao: Versao;
+  boasVindasVistas: boolean;
+};
+
+/** Estado de segurança: sem Beta, versão anterior, sem boas-vindas. */
+export const ESTADO_SEGURO: EstadoBeta = {
+  modo: "desligado",
+  podeVer: false,
+  podeVoltar: false,
+  versao: "anterior",
+  boasVindasVistas: true,
+};
+
+/** Ação de uso ao voltar para a versão anterior: só o código do motivo, nunca texto livre. */
+export function acaoUsoVoltar(motivo?: MotivoVolta | null): string {
+  return `beta:voltar:${motivo && (MOTIVOS_VOLTA as readonly string[]).includes(motivo) ? motivo : "sem_motivo"}`;
+}

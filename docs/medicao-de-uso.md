@@ -22,7 +22,7 @@ Documentos de apoio:
 |---|---|
 | **Telas** abertas | id da rota (ex.: `/social`) + valor curto da aba (`aba`/`tab`/`view`), ex.: `/social › feed` |
 | **Ações**: POST/PUT/PATCH/DELETE que deram certo | caminho da API normalizado (ex.: `/api/social/posts`) |
-| Ações especiais | `buscar` (GET `/api/busca`, no máximo 1 a cada 10 s) e `tocar_musica` (player de música) |
+| Ações especiais | `buscar` (GET `/api/busca`, no máximo 1 a cada 10 s), `tocar_musica` (player de música) e `beta:voltar:<motivo|sem_motivo>` (volta do Beta; só códigos de `MOTIVOS_VOLTA`, regex `ACAO_BETA_VOLTAR_RE`) |
 | **Caminhos** | `<ação> ← <tela>`: em que tela a ação foi feita |
 | **Aparelho** | pela largura da janela: `< 768` celular, `< 1024` tablet, senão computador |
 | **Jogadores distintos** | só nas tabelas `uso_jogador_dia` e `uso_jogador_tela_dia` (id do jogador) |

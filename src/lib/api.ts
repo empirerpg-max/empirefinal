@@ -8,6 +8,7 @@ import {
   setStoredLogin,
   type LoginResult,
 } from "@/components/LoginScreen";
+import type { ConfigBeta, EstadoBeta, MotivoVolta, Versao } from "@/lib/beta/regras";
 
 // Anexa o token de sessão (quando existe) como Authorization: Bearer — só
 // as ações admin-gated no backend (bypass do ID hardcoded) exigem que ele
@@ -417,7 +418,42 @@ export interface GrupoResultadoBusca {
   itens: ItemResultadoBusca[];
 }
 
+// Rotas do Beta (`/api/beta/*`); o token de sessão entra pelo fetch embrulhado do __root.
+async function betaChamar<T>(caminho: string, corpo?: unknown): Promise<T> {
+  const res = await fetch(`/api/beta/${caminho}`, {
+    method: corpo === undefined ? "GET" : "POST",
+    headers: corpo === undefined ? undefined : { "Content-Type": "application/json" },
+    body: corpo === undefined ? undefined : JSON.stringify(corpo),
+    cache: "no-store",
+  });
+  let json: unknown = null;
+  try {
+    json = await res.json();
+  } catch {
+    // corpo vazio ou inválido
+  }
+  const j = (json && typeof json === "object" ? json : {}) as { ok?: boolean; erro?: string };
+  if (!res.ok || j.ok === false) throw new Error(j.erro || `Falha (${res.status}).`);
+  return j as T;
+}
+
 export const api = {
+  betaEstado: () => betaChamar<EstadoBeta & { ok: true }>("estado"),
+  betaEscolher: (c: { versao: Versao; motivo?: MotivoVolta; texto?: string; tela?: string; rota?: string }) =>
+    betaChamar<{ ok: true; versao: Versao }>("escolha", c),
+  betaReportar: (r: { texto: string; tela: string; rota: string; versao: Versao; printUrl?: string; tecnico?: string }) =>
+    betaChamar<{ ok: true; id: string | number }>("reporte", r),
+  betaListarReportes: (p: { status?: string; antesDe?: string | number } = {}) => {
+    const q = new URLSearchParams();
+    if (p.status) q.set("status", p.status);
+    if (p.antesDe !== undefined) q.set("antesDe", String(p.antesDe));
+    const s = q.toString();
+    return betaChamar<{ ok: true; reportes: unknown[] }>(`reportes${s ? `?${s}` : ""}`);
+  },
+  betaMudarStatus: (id: string | number, status: string) =>
+    betaChamar<{ ok: true }>("reporte/status", { id, status }),
+  betaConfig: () => betaChamar<{ ok: true; config: ConfigBeta }>("config"),
+  betaSalvarConfig: (config: ConfigBeta) => betaChamar<{ ok: true; config: ConfigBeta }>("config", config),
   async buscar(
     q: string,
     opcoes: { grupo?: GrupoBusca; limite?: number; signal?: AbortSignal } = {},
