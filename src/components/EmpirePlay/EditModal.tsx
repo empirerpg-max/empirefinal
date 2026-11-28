@@ -37,7 +37,7 @@ import {
 import { SyncStudioModal, type SyncStudioTrack } from "./SyncStudioModal";
 import { FocoSelect } from "./FocoSelect";
 import { lerFoco, salvarFoco, rotuloFoco } from "@/lib/focoMusica";
-import { getStoredLogin } from "@/components/LoginScreen";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { useTelegramUser } from "@/lib/telegram";
 
 // "music-videos" foi consolidado dentro de "videos" — vivem na mesma aba
@@ -204,14 +204,14 @@ export const EditModal: React.FC<EditModalProps> = ({
   // Código da música em edição no momento — descarta resposta de lerFoco
   // que chega depois de o jogador já ter trocado de item.
   const focoCodigoRef = useRef<string | null>(null);
-  // Mesma regra de admin de Gestao.tsx (isAdminUser) — o backend confere de
-  // novo pelo token de sessão, isso aqui só decide o que mostrar.
+  // Critério único de admin (isAdminLogin, LoginScreen.tsx) — o backend
+  // confere de novo pelo token de sessão, isso aqui só decide o que mostrar.
   const { user: telegramUser } = useTelegramUser();
   const loginAtual = getStoredLogin();
   const loginTgId =
     loginAtual?.id ||
     (telegramUser?.id && telegramUser.id !== "guest" ? String(telegramUser.id) : "");
-  const isAdminUser = loginTgId === "810141686" || loginAtual?.tipoPerfil === "Admin";
+  const isAdminUser = isAdminLogin(loginAtual, loginTgId);
 
   // Formulário de "adicionar faixa nova"
   const [addingFaixa, setAddingFaixa] = useState<boolean>(false);

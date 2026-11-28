@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { api, type PlaylistPayload } from "@/lib/api";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { PlaylistEditor } from "@/components/PlaylistEditor";
 import { Loader2 } from "lucide-react";
 
@@ -20,7 +21,8 @@ function EditPlaylistPage() {
         return;
       }
       const localId = typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null;
-      if (pl.telegram_id && localId && localId !== "810141686" && String(pl.telegram_id) !== String(localId)) {
+      // Nega se não for o dono nem admin (critério único isAdminLogin, LoginScreen.tsx).
+      if (pl.telegram_id && localId && !isAdminLogin(getStoredLogin(), localId) && String(pl.telegram_id) !== String(localId)) {
         setUnauthorized(true);
       } else {
         setPlaylist(pl);

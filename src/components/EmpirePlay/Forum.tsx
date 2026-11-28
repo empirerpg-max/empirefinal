@@ -30,7 +30,7 @@ import { PreSaveCounterBadge } from "@/components/PreSaveCounterBadge";
 import { AwardBadge, type AwardBadgeInfo } from "@/components/AwardBadge";
 import { EncarteViewer } from "./EncarteViewer";
 import { useTelegramUser, haptic } from "@/lib/telegram";
-import { getStoredLogin } from "@/components/LoginScreen";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { useBackClose } from "@/hooks/use-back-close";
 import { CommentModal } from "./CommentModal";
@@ -262,10 +262,10 @@ export const Forum: React.FC<ForumProps> = ({
   const { user: telegramUser } = useTelegramUser();
   const myId = telegramUser?.id ? String(telegramUser.id) : "";
 
-  // Admin-only: mesma condição já usada em Gestao.tsx/perfil.tsx
-  // (isAdminUser) — ID hardcoded OU tipo_de_perfil=Admin na planilha.
+  // Admin-only: critério único isAdminLogin (LoginScreen.tsx) — id
+  // histórico OU tipo_de_perfil=Admin na planilha.
   const loginForum = getStoredLogin();
-  const isAdminUser = myId === "810141686" || loginForum?.tipoPerfil === "Admin";
+  const isAdminUser = isAdminLogin(loginForum, myId);
 
   // Ações admin do tópico (ver CLAUDE.md desta task) — editar qualquer
   // material, desfazer um tópico aberto por engano ("marcar pendente") ou

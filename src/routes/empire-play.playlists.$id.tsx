@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Play, ListMusic, Edit, Trash2, FileText, X } from "lucide-react";
 import { api, driveImg, type PlaylistPayload, type PlaylistTrack } from "@/lib/api";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { SmartImg } from "@/components/SmartImg";
 import { useTelegramUser } from "@/lib/telegram";
 import { notify } from "@/lib/notify";
@@ -56,7 +57,11 @@ function PlaylistView() {
     );
 
   const localId = typeof window !== "undefined" ? localStorage.getItem("empire_tg_id") : null;
-  const isOwner = (pl.telegram_id && String(pl.telegram_id) === String(localId)) || localId === "810141686";
+  // Dono da playlist ou admin (critério único isAdminLogin, LoginScreen.tsx).
+  // A parte "admin" só vale com localId, como antes (sem ele não havia bypass).
+  const isOwner =
+    (pl.telegram_id && String(pl.telegram_id) === String(localId)) ||
+    (!!localId && isAdminLogin(getStoredLogin(), localId));
 
   return (
     <div className="-mx-3 sm:-mx-4 pb-8">

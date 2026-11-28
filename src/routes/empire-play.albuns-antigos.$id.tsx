@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Disc3, Play, FileText, X, MoreVertical, Pencil } from "lucide-react";
 import { api, type PlaylistTrack } from "@/lib/api";
+import { getStoredLogin, isAdminLogin } from "@/components/LoginScreen";
 import { SmartImg } from "@/components/SmartImg";
 import { useEmpirePlayer } from "@/components/EmpirePlay/PlayerContext";
 import { useTelegramUser } from "@/lib/telegram";
@@ -56,7 +57,7 @@ function AlbumAntigoDetail() {
           <Link to="/empire-play/albuns-antigos" className="inline-flex items-center gap-1 text-white/80">
             <ChevronLeft className="size-5" />
           </Link>
-          {tgId && (tgId === album.telegram_id || tgId === "810141686") && (
+          {tgId && (tgId === album.telegram_id || isAdminLogin(getStoredLogin(), tgId)) && (
             <Link
               to="/empire-play/gestao/album-antigo"
               search={{ id: album.id }}

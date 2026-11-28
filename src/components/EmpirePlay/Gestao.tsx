@@ -462,8 +462,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
   const { user: telegramUser } = useTelegramUser();
   // Fora do Telegram (login normal por usuário/senha), telegramUser.id vem
   // "guest" — o id de verdade do jogador logado é o do getStoredLogin(). E o
-  // "admin" que importa aqui não é só o dono do id hardcoded "810141686"
-  // (bypass histórico usado em outros pontos do app) — é quem tem
+  // "admin" que importa aqui não é só o id histórico de admin (ver
+  // isAdminLogin em LoginScreen.tsx, único lugar com ele) — é também quem tem
   // tipo_de_perfil = "Admin" na aba Usuários (ver getStoredLogin().tipoPerfil,
   // preenchido a partir dessa coluna no login).
   const storedLogin = getStoredLogin();
@@ -1904,8 +1904,8 @@ export const Gestao: React.FC<{ initialTab?: TabType; initialArtista?: string }>
           )}
 
           {/* BANNERS DO CATÁLOGO — tela própria, fora do fluxo de músicas/vídeos/álbuns.
-          Só admin (mesmo dono do "810141686" hardcoded em outros pontos do
-          app) — o backend também recusa sem o token de sessão de admin. */}
+          Só admin (critério de isAdminLogin, LoginScreen.tsx) — o backend
+          também recusa sem o token de sessão de admin. */}
           {activeTab === "banners" && isAdminUser && <BannersManager tgId={loginTgId} />}
           {activeTab === "empiretv" && isAdminUser && (
             <>
