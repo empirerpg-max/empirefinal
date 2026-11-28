@@ -39,6 +39,11 @@ export function lerEstadoGuardado(): EstadoBeta | null {
   }
 }
 
+/** Estado do primeiro desenho: o guardado, senão o seguro (app é ssr:false, então lê síncrono). */
+export function estadoInicial(): EstadoBeta {
+  return typeof window === "undefined" ? ESTADO_SEGURO : estadoFinal(null, lerEstadoGuardado());
+}
+
 export function guardarEstado(e: EstadoBeta): void {
   try {
     localStorage.setItem(CHAVE, JSON.stringify(e));

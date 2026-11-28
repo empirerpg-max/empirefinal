@@ -9,6 +9,7 @@ import {
   estadoFinal,
   estadoValido,
   guardarEstado,
+  estadoInicial,
   lerEstadoGuardado,
   type EstadoBeta,
 } from "@/lib/beta/cliente";
@@ -48,16 +49,16 @@ function telaERota(): { tela: string; rota: string } {
 
 export function BetaProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
-  // Começa pelo estado guardado (lido em efeito: evita divergir na hidratação).
-  const [guardado, setGuardado] = useState<EstadoBeta | null>(null);
-  const [lido, setLido] = useState(false);
+  // Primeiro desenho já com o estado guardado (app é ssr:false, leitura síncrona).
+  const [guardado] = useState<EstadoBeta>(() => {
+    const e = estadoInicial();
+    definirVersaoUso(e.versao);
+    return e;
+  });
+  const lido = true;
 
   useEffect(() => {
     instalarErrosRecentes();
-    const g = lerEstadoGuardado();
-    setGuardado(g);
-    setLido(true);
-    if (g) definirVersaoUso(g.versao);
   }, []);
 
   const consulta = useQuery({

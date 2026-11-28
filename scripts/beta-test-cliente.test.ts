@@ -6,6 +6,7 @@ import {
   ESTADO_SEGURO,
   dadosTecnicos,
   estadoFinal,
+  estadoInicial,
   guardarEstado,
   lerEstadoGuardado,
 } from "../src/lib/beta/cliente";
@@ -76,6 +77,13 @@ describe("estado do Beta", () => {
     expect(lerEstadoGuardado()).toBeNull();
     localStorage.setItem("empireBetaEstado", JSON.stringify({ modo: "xis", versao: "beta" }));
     expect(lerEstadoGuardado()).toBeNull();
+  });
+
+  test("estadoInicial usa o guardado, senão o seguro", () => {
+    expect(estadoInicial()).toEqual(ESTADO_SEGURO);
+    const e = { modo: "todos", podeVer: true, podeVoltar: true, versao: "beta", boasVindasVistas: true } as const;
+    guardarEstado(e);
+    expect(estadoInicial()).toEqual(e);
   });
 
   test("resposta do servidor ok é devolvida", async () => {
