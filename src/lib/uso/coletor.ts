@@ -27,6 +27,7 @@ const IGNORADOS = [
   "/api/auth/heartbeat",
   "/api/tv/presenca",
   "/api/notificacoes/push/inscrever",
+  "/api/beta/estado", // leitura de fundo do Beta (GET já não conta; evita contar se virar POST)
 ];
 // Lista de permissão: só segmentos que são palavras de rota (minúsculas ASCII, até 4
 // partes ligadas por hífen, até 32 caracteres) são mantidos; o resto vira `:id`.

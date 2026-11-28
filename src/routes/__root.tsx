@@ -366,6 +366,10 @@ function GlobalLinkModal({ onClose }: { onClose: () => void }) {
 
 import appCss from "../styles.css?url";
 import logoIcon from "@/assets/logo-icon.png";
+import { BetaProvider, useBeta } from "@/hooks/useBeta";
+import { mostrarFaixa, mostrarSelo } from "@/lib/beta/regras";
+import { SeloBeta } from "@/components/Beta/SeloBeta";
+import { FaixaVersaoAnterior, ALTURA_FAIXA } from "@/components/Beta/FaixaVersaoAnterior";
 import logoFull from "@/assets/logo-full.png";
 
 function NotFoundComponent() {
@@ -761,7 +765,11 @@ function AuthGate() {
   return (
     <EmpirePlayerProvider>
       <TvPlayerProvider>
-        <RootInner />
+        {/* BetaProvider fica DENTRO dos providers de player: eles não remontam
+            quando o estado do Beta muda (trocar de versão não corta o som). */}
+        <BetaProvider>
+          <RootInner />
+        </BetaProvider>
       </TvPlayerProvider>
     </EmpirePlayerProvider>
   );
@@ -802,6 +810,13 @@ function GlobalPersistentPlayers() {
 }
 
 function RootInner() {
+  const { estado: estadoBeta } = useBeta();
+  const comFaixa = mostrarFaixa(estadoBeta);
+  const comSelo = mostrarSelo(estadoBeta);
+  // Faixa "Versão anterior" (32 px) abaixo do topo: o conteúdo desce junto.
+  const alturaTopo = comFaixa
+    ? `calc(4rem + env(safe-area-inset-top) + ${ALTURA_FAIXA}px)`
+    : "calc(4rem + env(safe-area-inset-top))";
   const [isOpen, setIsOpen] = useState(false);
   const [showIdModal, setShowIdModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -936,6 +951,7 @@ function RootInner() {
         <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
         <span className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
+        <div className="flex min-w-0 items-center gap-1">
         <Link
           to="/"
           className="flex items-center gap-2.5 relative"
@@ -949,13 +965,17 @@ function RootInner() {
             />
             <span className="absolute inset-0 rounded-xl bg-primary/40 blur-lg opacity-60" />
           </div>
-          <span className="font-black italic uppercase tracking-tighter text-base leading-none max-[359px]:hidden">
+          <span
+            className={`font-black italic uppercase tracking-tighter text-base leading-none max-[359px]:hidden ${comSelo ? "max-[399px]:hidden" : ""}`}
+          >
             <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
               Empire
             </span>
             <span className="text-primary"> Hub</span>
           </span>
         </Link>
+        <SeloBeta />
+        </div>
         <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
           <BuscaRapida />
           <NotificationBell />
@@ -974,6 +994,8 @@ function RootInner() {
         </div>
       </nav>
 
+      <FaixaVersaoAnterior />
+
       {/* Hamburger Overlay Menu */}
       <AnimatePresence>
         {isOpen && (
@@ -983,7 +1005,7 @@ function RootInner() {
             exit={{ opacity: 0, x: 20 }}
             className="fixed inset-0 z-50 bg-background overflow-y-auto overscroll-contain"
             style={{
-              paddingTop: "calc(4rem + env(safe-area-inset-top))",
+              paddingTop: alturaTopo,
               paddingBottom: "calc(6rem + env(safe-area-inset-bottom))",
             }}
           >
@@ -1185,7 +1207,7 @@ function RootInner() {
         id="app-scroll"
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
         style={{
-          paddingTop: "calc(4rem + env(safe-area-inset-top))",
+          paddingTop: alturaTopo,
           paddingBottom: "6rem",
         }}
       >

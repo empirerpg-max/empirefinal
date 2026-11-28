@@ -1,6 +1,7 @@
 // Medição de uso (Empire Hub): contadores por dia no D1, sem dado pessoal além
 // do id do jogador (usado só para contar pessoas distintas).
 import type { D1DatabaseLike } from "./catalogoDbService";
+import { MOTIVOS_VOLTA } from "../../../src/lib/beta/regras";
 
 export type EventoUso = { evento: "tela" | "acao" | "caminho"; alvo: string; n: number };
 export type LoteUso = {
@@ -62,10 +63,12 @@ const TELA_RE = /^\/[^\u0000-\u001f\u007f←]*$/;
 const ACAO_API_RE = /^\/api(\/([a-z]+(-[a-z]+){0,3}|:id)?)*$/;
 // Ações que não são HTTP (usoGlobal()?.acao(...)): toda nova precisa entrar aqui.
 const ACOES_ESPECIAIS = ["buscar", "tocar_musica"];
+// Volta do Beta: só o código do motivo (lista fechada de regras.ts), nunca texto livre.
+const ACAO_BETA_VOLTAR_RE = new RegExp(`^beta:voltar:(${[...MOTIVOS_VOLTA, "sem_motivo"].join("|")})$`);
 const SEP_CAMINHO = " ← ";
 
 const telaValida = (t: string) => TELA_RE.test(t);
-const acaoValida = (a: string) => ACOES_ESPECIAIS.includes(a) || ACAO_API_RE.test(a);
+const acaoValida = (a: string) => ACOES_ESPECIAIS.includes(a) || ACAO_API_RE.test(a) || ACAO_BETA_VOLTAR_RE.test(a);
 function alvoValido(evento: EventoUso["evento"], alvo: string): boolean {
   if (evento === "tela") return telaValida(alvo);
   if (evento === "acao") return acaoValida(alvo);

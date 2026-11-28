@@ -148,3 +148,26 @@ CREATE TABLE IF NOT EXISTS tv_enquete_voto (enquete_id TEXT NOT NULL, jogador_id
 CREATE TABLE IF NOT EXISTS uso_diario (dia TEXT NOT NULL, versao TEXT NOT NULL, aparelho TEXT NOT NULL, evento TEXT NOT NULL, alvo TEXT NOT NULL, contagem INTEGER NOT NULL, PRIMARY KEY (dia, versao, aparelho, evento, alvo)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS uso_jogador_dia (dia TEXT NOT NULL, jogador TEXT NOT NULL, versao TEXT NOT NULL, PRIMARY KEY (dia, jogador)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS uso_jogador_tela_dia (dia TEXT NOT NULL, tela TEXT NOT NULL, jogador TEXT NOT NULL, PRIMARY KEY (dia, tela, jogador)) WITHOUT ROWID;
+-- Beta test: escolha de versão por jogador e reportes (também criadas sob demanda pelo app: betaService).
+CREATE TABLE IF NOT EXISTS beta_jogador (
+  jogador_id TEXT PRIMARY KEY,
+  versao TEXT,
+  boas_vindas_em INTEGER,
+  atualizado_em INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS beta_reporte (
+  id TEXT PRIMARY KEY,
+  jogador_id TEXT NOT NULL,
+  usuario TEXT NOT NULL,
+  versao TEXT NOT NULL,
+  tela TEXT NOT NULL,
+  rota TEXT NOT NULL,
+  texto TEXT NOT NULL,
+  motivo TEXT,
+  print_url TEXT NOT NULL DEFAULT '',
+  tecnico TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'novo',
+  criado_em INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS beta_reporte_status_data ON beta_reporte (status, criado_em DESC);
+CREATE INDEX IF NOT EXISTS beta_reporte_jogador_data ON beta_reporte (jogador_id, criado_em);
