@@ -8,6 +8,13 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Mesmo grupo de concorrência no deploy.yml e no preview-sala-tv.yml: os
+    # dois mexem no MESMO Worker (tanstack-start-app). Em 28/11 o `secret put`
+    # do deploy falhou porque a prévia subiu uma versão no meio. Um espera o
+    # outro terminar; nunca um cancela o outro (cancel-in-progress: false).
+    concurrency:
+      group: worker-tanstack-start-app
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
