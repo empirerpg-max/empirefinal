@@ -1,7 +1,7 @@
 // Leituras do Google com limite de tempo (28/11: uma leitura da aba
 // `usuarios` ficou pendurada ~45 min e, pelo `readInFlight`, prendeu todo
 // pedido seguinte da mesma aba no isolate). Escritas NUNCA têm limite.
-import { test, expect, beforeEach, mock } from "bun:test";
+import { test, expect, beforeEach, beforeAll, afterAll, mock, spyOn } from "bun:test";
 
 const R = new URL("../backend/src/", import.meta.url).pathname;
 mock.module(R + "google/service-account.ts", () => ({
@@ -39,6 +39,20 @@ const pendurar = (init: any) =>
   if (String(url).includes("/gviz/")) return new Response("a,b\n1,2\n", { status: 200 });
   return new Response(JSON.stringify({ values: [["a"], ["1"]] }), { status: 200 });
 };
+
+// Silencia os avisos/erros esperados do serviço durante os testes.
+let espioErro: ReturnType<typeof spyOn>;
+let espioAviso: ReturnType<typeof spyOn>;
+beforeAll(() => {
+  espioErro = spyOn(console, "error").mockImplementation(() => {});
+  espioAviso = spyOn(console, "warn").mockImplementation(() => {});
+});
+afterAll(() => {
+  espioErro.mockRestore();
+  espioAviso.mockRestore();
+  // Volta os limites ao padrão de produção.
+  svc.__definirLimitesDeTempoParaTeste({ leituraSheetsMs: 20_000, gvizMs: 10_000 });
+});
 
 beforeEach(() => {
   chamadas = [];
