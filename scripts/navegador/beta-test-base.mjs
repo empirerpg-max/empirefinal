@@ -50,6 +50,8 @@ async function novaPagina(width, estado, admin = false) {
       if (!temToken) p.estadoSemToken = (p.estadoSemToken || 0) + 1;
       return json(temToken ? { ok: true, ...estado } : { ok: true, modo: estado.modo, podeVer: false, podeVoltar: false, versao: 'anterior', boasVindasVistas: true });
     }
+    if (u.pathname === '/api/beta/escolha' && p.falharEscolha) return r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false, erro: 'Falha ao gravar.' }) });
+    if (u.pathname === '/api/notificacoes' && p.notificacoes) return json({ success: true, data: { items: p.notificacoes, unreadCount: p.notificacoes.length } });
     if (u.pathname === '/api/beta/escolha') { p.posts.escolha.push(req.postDataJSON()); return json({ ok: true, versao: req.postDataJSON().versao }); }
     if (u.pathname === '/api/beta/reporte') { p.posts.reporte.push(req.postDataJSON()); return json({ ok: true, id: 'R1' }); }
     if (u.pathname === '/api/beta/reportes') {
@@ -136,6 +138,30 @@ for (const w of [320, 390]) {
   rec(`(b) ${w}px selo com alvo de 40 px`, selo.height >= 40 && selo.width >= 40, selo);
   rec(`(b) ${w}px sem rolagem horizontal com selo`, await semRolagemH(p));
   if (w === 320) await foto(p, 'beta-b-selo-320.png');
+  await p.context().close();
+}
+
+// (b2) "Ir para o Beta test" falhou: toast de erro e a faixa continua
+{
+  const p = await novaPagina(390, ANTERIOR); p.falharEscolha = true; await abrir(p);
+  await p.getByRole('button', { name: 'Ir para o Beta test' }).click(); await p.waitForTimeout(700);
+  rec('(b2) troca falhou: toast "Não deu para abrir o Beta agora. Tente de novo."', await p.getByText('Não deu para abrir o Beta agora. Tente de novo.').isVisible());
+  rec('(b2) troca falhou: faixa continua e botão volta a ativar', await p.getByText('Versão anterior', { exact: true }).isVisible() && await p.getByRole('button', { name: 'Ir para o Beta test' }).isEnabled());
+  await p.context().close();
+}
+
+// (f) sino: reporte do Beta mostra o nome da tela, não a rota crua
+{
+  const p = await novaPagina(390, BETA, true);
+  p.notificacoes = [{ id: 'n1', evento: 'reporte_beta', autorNome: 'Ana', tipoMedia: 'beta', tituloMedia: '/', topicId: 'R1', comentario: 'quebrou', data: 'agora', lida: false }];
+  await abrir(p);
+  const sino = p.getByRole('button', { name: /notificações não lidas|^Notificações$/ });
+  if (await sino.count()) {
+    await sino.first().click(); await p.waitForTimeout(500);
+    const t = await texto(p);
+    const linhaTela = (t.split('enviou um reporte do Beta')[1] || '').split('\n').map((x) => x.trim()).filter(Boolean)[0];
+    rec('(f) sino: "enviou um reporte do Beta" com a tela "Início" (não "/")', linhaTela === 'Início', linhaTela);
+  } else rec('(f) sino visível para o admin', false);
   await p.context().close();
 }
 

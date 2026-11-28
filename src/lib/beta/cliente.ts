@@ -30,23 +30,36 @@ export function estadoFinal(servidor: EstadoBeta | null, guardado: EstadoBeta | 
   return servidor ?? guardado ?? ESTADO_SEGURO;
 }
 
-export function lerEstadoGuardado(): EstadoBeta | null {
+// Estado guardado por jogador: dois logins no mesmo aparelho não herdam o Beta um do outro.
+export function chaveEstadoGuardado(jogadorId: string): string {
+  return `${CHAVE}:${jogadorId}`;
+}
+
+/** queryKey do estado no React Query, também por jogador. */
+export function chaveConsultaEstado(jogadorId: string | null) {
+  return ["beta", "estado", jogadorId] as const;
+}
+
+/** Sem jogador → null (nunca lê o estado de outro). */
+export function lerEstadoGuardado(jogadorId: string | null): EstadoBeta | null {
+  if (!jogadorId) return null;
   try {
-    const bruto = localStorage.getItem(CHAVE);
+    const bruto = localStorage.getItem(chaveEstadoGuardado(jogadorId));
     return bruto ? estadoValido(JSON.parse(bruto)) : null;
   } catch {
     return null;
   }
 }
 
-/** Estado do primeiro desenho: o guardado, senão o seguro (app é ssr:false, então lê síncrono). */
-export function estadoInicial(): EstadoBeta {
-  return typeof window === "undefined" ? ESTADO_SEGURO : estadoFinal(null, lerEstadoGuardado());
+/** Estado do primeiro desenho: o guardado do jogador, senão o seguro (app é ssr:false, então lê síncrono). */
+export function estadoInicial(jogadorId: string | null): EstadoBeta {
+  return typeof window === "undefined" ? ESTADO_SEGURO : estadoFinal(null, lerEstadoGuardado(jogadorId));
 }
 
-export function guardarEstado(e: EstadoBeta): void {
+export function guardarEstado(e: EstadoBeta, jogadorId: string | null): void {
+  if (!jogadorId) return;
   try {
-    localStorage.setItem(CHAVE, JSON.stringify(e));
+    localStorage.setItem(chaveEstadoGuardado(jogadorId), JSON.stringify(e));
   } catch {
     // ignora: sem armazenamento, só perde o 1º desenho rápido
   }

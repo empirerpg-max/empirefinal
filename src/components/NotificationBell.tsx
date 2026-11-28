@@ -4,6 +4,7 @@ import { ArrowLeft, Bell, BellOff, BellRing, Bug, Heart, Loader2, MessageCircle,
 import { toast } from "sonner";
 import { useTelegramUser, haptic } from "@/lib/telegram";
 import { Switch } from "@/components/ui/switch";
+import { nomeDaTela } from "@/lib/uso/nomes";
 
 // "reporte_beta" só chega ao admin: não tem toggle em "O que receber no celular".
 type EventoPref = "comentario_forum" | "curtida_social" | "comentario_social";
@@ -322,7 +323,7 @@ export function NotificationBell() {
           </p>
           {(isSocial || isReporte) && n.tituloMedia && (
             <p className="text-[11px] text-muted-foreground/80 mt-1 line-clamp-1 break-words italic">
-              {n.tituloMedia}
+              {isReporte ? nomeDaTela(n.tituloMedia) : n.tituloMedia}
             </p>
           )}
           {n.comentario && (

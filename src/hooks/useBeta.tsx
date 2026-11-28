@@ -2,10 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 import { api } from "@/lib/api";
+import { getStoredLogin } from "@/components/LoginScreen";
+import { jogadorAtual } from "@/lib/jogador";
+import { useJogador } from "@/hooks/useJogador";
 import { opcoesConsulta } from "@/lib/consultas";
 import { acaoUsoVoltar, type MotivoVolta, type Versao } from "@/lib/beta/regras";
 import {
   ESTADO_SEGURO,
+  chaveConsultaEstado,
   dadosTecnicos,
   estadoFinal,
   estadoValido,
@@ -26,8 +30,6 @@ export type BetaContexto = {
   trocarVersao(v: Versao, extra?: { motivo?: MotivoVolta; texto?: string }): Promise<boolean>;
   reportar(r: Reporte): Promise<{ ok: true } | { ok: false; erro: string }>;
 };
-
-const CHAVE_CONSULTA = ["beta", "estado"] as const;
 
 // Fora do provider: estado seguro e funções que não fazem nada.
 const FORA: BetaContexto = {
@@ -60,20 +62,26 @@ function rotaAtual(): string {
 export function BetaProvider({ children }: { children: ReactNode }) {
   const telaAtual = useTelaAtual();
   const qc = useQueryClient();
-  // Primeiro desenho já com o estado guardado (app é ssr:false, leitura síncrona).
+  // Só monta com login (AuthGate): o id do login guardado já vale no 1º desenho.
+  const [idInicial] = useState<string | null>(() => jogadorAtual(getStoredLogin())?.id ?? null);
+  const { jogador } = useJogador();
+  const jogadorId = jogador?.id ?? idInicial;
+  const chave = chaveConsultaEstado(jogadorId);
+  // Primeiro desenho já com o estado guardado do jogador (app é ssr:false, leitura síncrona).
   const [guardado] = useState<EstadoBeta>(() => {
-    const e = estadoInicial();
+    const e = estadoInicial(idInicial);
     definirVersaoUso(e.versao);
     return e;
   });
-  const lido = true;
+  // Sem jogador: não consulta e fica no estado seguro.
+  const lido = !!jogadorId;
 
   useEffect(() => {
     instalarErrosRecentes();
   }, []);
 
   const consulta = useQuery({
-    queryKey: CHAVE_CONSULTA,
+    queryKey: chave,
     queryFn: async () => {
       const e = estadoValido(await api.betaEstado());
       if (!e) throw new Error("Estado do Beta inválido.");
@@ -87,11 +95,11 @@ export function BetaProvider({ children }: { children: ReactNode }) {
   const doServidor = consulta.data ?? null;
   useEffect(() => {
     if (!doServidor) return;
-    guardarEstado(doServidor);
+    guardarEstado(doServidor, jogadorId);
     definirVersaoUso(doServidor.versao);
-  }, [doServidor]);
+  }, [doServidor, jogadorId]);
 
-  const estado = estadoFinal(doServidor, guardado);
+  const estado = jogadorId ? estadoFinal(doServidor, jogadorId === idInicial ? guardado : null) : ESTADO_SEGURO;
   const carregado = lido && !consulta.isPending;
 
   const trocarVersao = useCallback<BetaContexto["trocarVersao"]>(
@@ -104,15 +112,15 @@ export function BetaProvider({ children }: { children: ReactNode }) {
         return false;
       }
       // Sem recarregar a página: o player continua tocando.
-      const atual = qc.getQueryData<EstadoBeta>(CHAVE_CONSULTA) ?? lerEstadoGuardado() ?? ESTADO_SEGURO;
+      const atual = qc.getQueryData<EstadoBeta>(chaveConsultaEstado(jogadorId)) ?? lerEstadoGuardado(jogadorId) ?? ESTADO_SEGURO;
       const novo: EstadoBeta = { ...atual, versao: v };
-      qc.setQueryData(CHAVE_CONSULTA, novo);
-      guardarEstado(novo);
+      qc.setQueryData(chaveConsultaEstado(jogadorId), novo);
+      guardarEstado(novo, jogadorId);
       definirVersaoUso(v);
       if (v === "anterior") usoGlobal()?.acao(acaoUsoVoltar(extra?.motivo));
       return true;
     },
-    [qc, telaAtual],
+    [qc, telaAtual, jogadorId],
   );
 
   const reportar = useCallback<BetaContexto["reportar"]>(

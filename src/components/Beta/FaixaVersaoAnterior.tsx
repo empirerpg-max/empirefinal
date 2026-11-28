@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { mostrarFaixa } from "@/lib/beta/regras";
 import { useBeta } from "@/hooks/useBeta";
 import { FolhaReportar } from "./FolhaReportar";
@@ -31,8 +32,9 @@ export function FaixaVersaoAnterior() {
           disabled={trocando}
           onClick={async () => {
             setTrocando(true);
-            await trocarVersao("beta");
+            const ok = await trocarVersao("beta");
             setTrocando(false);
+            if (!ok) toast.error("Não deu para abrir o Beta agora. Tente de novo.");
           }}
           className="shrink-0 whitespace-nowrap rounded-full bg-foreground px-2 py-1 font-bold leading-4 text-background disabled:opacity-50 active:scale-95 transition-transform"
         >

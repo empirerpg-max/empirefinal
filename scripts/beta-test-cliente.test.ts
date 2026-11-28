@@ -4,6 +4,8 @@ import { acaoDaRequisicao, ColetorUso } from "../src/lib/uso/coletor";
 import { limparLote } from "../backend/src/services/usoService";
 import {
   ESTADO_SEGURO,
+  chaveConsultaEstado,
+  chaveEstadoGuardado,
   dadosTecnicos,
   estadoFinal,
   estadoInicial,
@@ -61,29 +63,47 @@ describe("estado do Beta", () => {
 
   test("erro de rede mantém o estado guardado", async () => {
     const guardado = { modo: "todos", podeVer: true, podeVoltar: true, versao: "beta", boasVindasVistas: false } as const;
-    guardarEstado(guardado);
+    guardarEstado(guardado, "j1");
     g.fetch = async () => {
       throw new Error("sem rede");
     };
     const servidor = await api.betaEstado().catch(() => null);
-    expect(estadoFinal(servidor, lerEstadoGuardado())).toEqual(guardado);
+    expect(estadoFinal(servidor, lerEstadoGuardado("j1"))).toEqual(guardado);
   });
 
   test("guardado é usado antes da resposta e lixo no armazenamento é ignorado", () => {
     const e = { modo: "convidados", podeVer: true, podeVoltar: true, versao: "beta", boasVindasVistas: true } as const;
-    guardarEstado(e);
-    expect(estadoFinal(null, lerEstadoGuardado())).toEqual(e);
-    localStorage.setItem("empireBetaEstado", "{lixo");
-    expect(lerEstadoGuardado()).toBeNull();
-    localStorage.setItem("empireBetaEstado", JSON.stringify({ modo: "xis", versao: "beta" }));
-    expect(lerEstadoGuardado()).toBeNull();
+    guardarEstado(e, "j1");
+    expect(estadoFinal(null, lerEstadoGuardado("j1"))).toEqual(e);
+    localStorage.setItem("empireBetaEstado:j1", "{lixo");
+    expect(lerEstadoGuardado("j1")).toBeNull();
+    localStorage.setItem("empireBetaEstado:j1", JSON.stringify({ modo: "xis", versao: "beta" }));
+    expect(lerEstadoGuardado("j1")).toBeNull();
   });
 
   test("estadoInicial usa o guardado, senão o seguro", () => {
-    expect(estadoInicial()).toEqual(ESTADO_SEGURO);
+    expect(estadoInicial("j1")).toEqual(ESTADO_SEGURO);
     const e = { modo: "todos", podeVer: true, podeVoltar: true, versao: "beta", boasVindasVistas: true } as const;
-    guardarEstado(e);
-    expect(estadoInicial()).toEqual(e);
+    guardarEstado(e, "j1");
+    expect(estadoInicial("j1")).toEqual(e);
+  });
+
+  test("estado guardado é por jogador; sem jogador → seguro e nada gravado", () => {
+    expect(chaveEstadoGuardado("j1")).toBe("empireBetaEstado:j1");
+    expect(chaveConsultaEstado("j1")).toEqual(["beta", "estado", "j1"]);
+    expect(chaveConsultaEstado(null)).toEqual(["beta", "estado", null]);
+    const e = { modo: "todos", podeVer: true, podeVoltar: true, versao: "beta", boasVindasVistas: true } as const;
+    guardarEstado(e, "j1");
+    expect(lerEstadoGuardado("j1")).toEqual(e);
+    expect(lerEstadoGuardado("j2")).toBeNull();
+    expect(estadoInicial("j2")).toEqual(ESTADO_SEGURO);
+    // estado antigo sem id (de antes desta versão) não vale para ninguém
+    localStorage.setItem("empireBetaEstado", JSON.stringify(e));
+    expect(estadoInicial(null)).toEqual(ESTADO_SEGURO);
+    expect(lerEstadoGuardado(null)).toBeNull();
+    const antes = localStorage.length;
+    guardarEstado(e, null);
+    expect(localStorage.length).toBe(antes);
   });
 
   test("betaEstado manda o token guardado no cabeçalho (sem depender do fetch embrulhado)", async () => {
