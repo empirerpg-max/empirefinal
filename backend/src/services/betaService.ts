@@ -74,6 +74,13 @@ export async function marcarBoasVindas(db: D1DatabaseLike, jogadorId: string, ag
     .run();
 }
 
+// Sufixo de 3 dígitos: contador por isolate (começa aleatório), então ids do mesmo ms nunca repetem aqui.
+let sufixoId = Math.floor(Math.random() * 1000);
+function novoIdReporte(): string {
+  sufixoId = (sufixoId + 1) % 1000;
+  return `R${Date.now()}${String(sufixoId).padStart(3, "0")}`;
+}
+
 export async function criarReporte(
   db: D1DatabaseLike,
   r: NovoReporte,
@@ -86,14 +93,21 @@ export async function criarReporte(
     .bind(r.jogadorId, inicioDia)
     .first()) as { n: number } | null;
   if ((c?.n ?? 0) >= MAX_REPORTES_DIA) return { erro: "limite" };
-  const id = `R${Date.now()}${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
-  await db
-    .prepare(
-      "INSERT INTO beta_reporte (id, jogador_id, usuario, versao, tela, rota, texto, motivo, print_url, tecnico, status, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'novo', ?)",
-    )
-    .bind(id, r.jogadorId, r.usuario, r.versao, r.tela, r.rota, r.texto.slice(0, MAX_TEXTO), r.motivo, r.printUrl, r.tecnico.slice(0, MAX_TECNICO), agora)
-    .run();
-  return { id };
+  // Colisão de id (outro isolate no mesmo ms com o mesmo sufixo): tenta de novo com outro sufixo.
+  for (let tentativa = 0; ; tentativa++) {
+    const id = novoIdReporte();
+    try {
+      await db
+        .prepare(
+          "INSERT INTO beta_reporte (id, jogador_id, usuario, versao, tela, rota, texto, motivo, print_url, tecnico, status, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'novo', ?)",
+        )
+        .bind(id, r.jogadorId, r.usuario, r.versao, r.tela, r.rota, r.texto.slice(0, MAX_TEXTO), r.motivo, r.printUrl, r.tecnico.slice(0, MAX_TECNICO), agora)
+        .run();
+      return { id };
+    } catch (e) {
+      if (tentativa >= 4) throw e;
+    }
+  }
 }
 
 export async function listarReportes(

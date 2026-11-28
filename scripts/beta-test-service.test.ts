@@ -62,3 +62,11 @@ test("mudarStatusReporte inválido ou inexistente → false", async () => {
   expect(await B.mudarStatusReporte(db, "x", "zzz" as any)).toBe(false);
   expect(await B.mudarStatusReporte(db, "naoexiste", "visto")).toBe(false);
 });
+
+test("1000 reportes no mesmo instante (jogadores distintos) não colidem no id", async () => {
+  sqlite.run("DELETE FROM beta_reporte");
+  const rs = [];
+  for (let i = 0; i < 1000; i++) rs.push(await B.criarReporte(db, novo({ jogadorId: "m" + i }), T));
+  expect(rs.every((r: any) => r.id)).toBe(true);
+  expect(new Set(rs.map((r: any) => r.id)).size).toBe(1000);
+});
