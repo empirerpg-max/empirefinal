@@ -7,6 +7,7 @@
 // protegido e erros são engolidos. Seguro no SSR (só age com `window`).
 
 import { ColetorUso, aparelhoPelaLargura, telasDoLote, type LoteUso } from "./coletor";
+import type { Versao } from "@/lib/beta/regras";
 import { getStoredSessionToken } from "@/components/LoginScreen";
 
 export type MedicaoUso = {
@@ -20,6 +21,13 @@ const ROTA_ENVIO = "/api/uso";
 const PREFIXO_TELAS = "uso-telas-";
 
 let instancia: MedicaoUso | null = null;
+// Versão do app que o jogador está usando (Beta ou anterior); vai em cada lote.
+let versaoUso: Versao = "anterior";
+
+/** Define a versão que os próximos lotes de uso carregam. */
+export function definirVersaoUso(v: Versao): void {
+  versaoUso = v === "beta" ? "beta" : "anterior";
+}
 
 const SEM_EFEITO: MedicaoUso = { tela() {}, acao() {}, parar() {} };
 
@@ -77,7 +85,7 @@ export function iniciarMedicaoUso(): MedicaoUso {
     lote: LoteUso & { token?: string };
     confirmar: () => void;
   } | null => {
-    const lote = coletor.retirarLote("anterior", aparelhoPelaLargura(window.innerWidth));
+    const lote = coletor.retirarLote(versaoUso, aparelhoPelaLargura(window.innerWidth));
     if (!lote) return null;
     const token = getStoredSessionToken();
     const dia = diaUtc();

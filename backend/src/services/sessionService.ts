@@ -122,12 +122,20 @@ export function extractBearerToken(request: Request): string | null {
  * aba Usuários.
  */
 export async function requestProvesAdmin(request: Request): Promise<boolean> {
+  return requestProvesAdminOuFalha(request).catch(() => false);
+}
+
+/**
+ * Igual a requestProvesAdmin, mas se a leitura da planilha falhar ela LANÇA o erro em vez de
+ * responder "não é admin" — quem guarda o resultado em cache (Beta) precisa saber a diferença.
+ */
+export async function requestProvesAdminOuFalha(request: Request): Promise<boolean> {
   const token = extractBearerToken(request);
   const payload = await verifySessionToken(token);
   if (!payload) return false;
   if (payload.id.trim() === ADMIN_TG_ID) return true;
 
-  const rows = await googleSheetsService.usuarios.readValues("Usuários").catch(() => []);
+  const rows = await googleSheetsService.usuarios.readValues("Usuários");
   if (rows.length < 2) return false;
   const header = rows[0];
   const idxId = header.findIndex((h) => normalizeComparison(h) === normalizeComparison("ID"));
