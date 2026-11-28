@@ -102,14 +102,6 @@ function montarPush(params: RegistrarNotificacaoParams): {
       tag: `curtida-${topicId}`,
     };
   }
-  if (evento === "reporte_beta") {
-    return {
-      title: "🐞 Novo reporte do Beta",
-      body: `${autorNome}${tituloMedia ? ` em ${truncar(tituloMedia, 60)}` : ""}: "${truncar(comentario, 100)}"`,
-      url: "/beta-admin",
-      tag: "reporte-beta",
-    };
-  }
   if (evento === "comentario_social") {
     return {
       title: "💬 Novo comentário",

@@ -33,13 +33,12 @@ export interface PushSubscriptionJson {
   keys: { p256dh: string; auth: string };
 }
 
-export type TipoNotificacao = "comentario_forum" | "curtida_social" | "comentario_social" | "reporte_beta";
+export type TipoNotificacao = "comentario_forum" | "curtida_social" | "comentario_social";
 
 export const TIPOS_NOTIFICACAO: TipoNotificacao[] = [
   "comentario_forum",
   "curtida_social",
   "comentario_social",
-  "reporte_beta",
 ];
 
 export type NotifPrefs = Record<TipoNotificacao, boolean>;
@@ -48,7 +47,6 @@ export const DEFAULT_PREFS: NotifPrefs = {
   comentario_forum: true,
   curtida_social: true,
   comentario_social: true,
-  reporte_beta: true,
 };
 
 interface KvLike {
